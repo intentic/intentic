@@ -28,8 +28,8 @@ const desktop = computed(() => desktopVersion() !== undefined);
  *
  * `downloads` is off wherever the step itself now leads with an installer for the reader's own machine: the
  * two offers were the same offer, and the one on the card is the one with a verb on it. It stays ON for the
- * reader whose card has no button: a Mac, or the cloud lane, where the app is nothing to do with the machine
- * being set up but is still the thing that will manage it afterwards. */
+ * reader whose card has no button, a Mac, where the app is nothing to do with the machine being set up but is
+ * still the thing that will manage it afterwards. */
 const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?: boolean }>();
 </script>
 

@@ -1,24 +1,14 @@
 import { randomBytes } from "node:crypto";
-import {
-    apiContract,
-    AnnounceRefusalSchema,
-    BootReportSchema,
-    HostedStatusSchema,
-    SandboxCloudSchema,
-    SetupReportSchema,
-} from "@intentic-app/api-contract";
+import { apiContract, AnnounceRefusalSchema, BootReportSchema, HostedStatusSchema, SetupReportSchema } from "@intentic-app/api-contract";
 import { Prisma } from "@intentic-app/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
-import { GrantedRoleSchema, localHostname, sandboxSubdomain } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
-import { CloudCredentialError, CloudProviderError } from "./cloud/common.js";
-import { cloudCreate, cloudOptions } from "./cloud/index.js";
-import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly.js";
 import {
@@ -140,7 +130,6 @@ const toSummary = (
         setupReport: unknown;
         bootReport: unknown;
         announceRefusal: unknown;
-        cloud: unknown;
         // The hosted lane's machine record, every query feeding this summary includes the relation, so a
         // rename or an announce can never silently strip the hosted badge from the browser's row. Optional
         // (not just nullable) as the same shield the report parse below gives rows from before a schema
@@ -161,9 +150,6 @@ const toSummary = (
     const boot = BootReportSchema.safeParse(sandbox.bootReport);
     // And for the refusal record, which the announce route writes whole.
     const refusal = AnnounceRefusalSchema.safeParse(sandbox.announceRefusal);
-    // Same shield for the cloud stamp (cloudProvision wrote it validated; the stored serverId is dropped by
-    // the parse, the browser has no use for it).
-    const cloud = SandboxCloudSchema.safeParse(sandbox.cloud);
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -174,7 +160,6 @@ const toSummary = (
         setupReport: report.success ? report.data : null,
         bootReport: boot.success ? boot.data : null,
         announceRefusal: refusal.success ? refusal.data : null,
-        cloud: cloud.success ? cloud.data : null,
         hosted:
             sandbox.hosted === null || sandbox.hosted === undefined
                 ? null
@@ -311,74 +296,6 @@ export const sandboxRoutes = {
             throw error;
         }
     }),
-    // The cloud lane's credential check + catalog: spend the pasted provider credential on the provider's own
-    // region/size/price listing (cloud/index.ts), then drop it with the request, the `zones` contract. Both
-    // named refusals become BAD_REQUESTs the wizard can render; anything else (network, surprise shapes)
-    // propagates like every other handler's unexpected failure.
-    cloudOptions: os.sandbox.cloudOptions.handler(async ({ context, input }) => {
-        requireUser(context);
-        try {
-            return await cloudOptions(input.credentials);
-        } catch (error) {
-            if (error instanceof CloudCredentialError || error instanceof CloudProviderError) {
-                throw new ORPCError(`BAD_REQUEST`, { message: error.message });
-            }
-            throw error;
-        }
-    }),
-    /* Create the ONE machine in the user's own cloud account whose first boot runs this sandbox's setup code
-     * (cloud/user-data.ts). Requires a LIVE intentic-mode code: the machine boots headless with no Cloudflare
-     * of its own, so only the platform-provisioned tunnel can make it reachable, and a dead code would build
-     * a machine that boots to a 404. The wizard mints (its lane defaults to intentic mode) before calling
-     * this, so the gate only fires on a stale tab.
-     *
-     * The credential is request-scoped here exactly as in cloudOptions, after this response the platform
-     * cannot reach the machine again, which is why the non-secret residue (provider, server name, location)
-     * is stamped on the row: it is everything the UI can ever say about where the machine lives. The server
-     * name is derived from the tunnel id, so the machine in the provider's console visibly matches the
-     * sandbox-<id> hostname the user already sees. */
-    cloudProvision: os.sandbox.cloudProvision.handler(async ({ context, input }) => {
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        if (sandbox.setupCode === null || sandbox.setupCodeExpiresAt === null || sandbox.setupCodeExpiresAt < new Date()) {
-            throw new ORPCError(`BAD_REQUEST`, { message: `no live setup code; reopen the setup screen and retry` });
-        }
-        const payload =
-            typeof sandbox.setupPayload === `string`
-                ? (JSON.parse(decryptSecret(context.config, sandbox.setupPayload)) as Record<string, string>)
-                : {};
-        if (payload[`SANDBOX_HOSTNAME`] === undefined) {
-            throw new ORPCError(`BAD_REQUEST`, {
-                message: `setup targets your own Cloudflare; cloud machines need the provided tunnel`,
-            });
-        }
-        const connectToken = decryptSecret(context.config, sandbox.token);
-        const name = `intentic-${sandboxSubdomain(sandboxIdFromToken(connectToken) ?? sandbox.id)}`;
-        const userData = cloudInitUserData({
-            scriptOrigin: context.config.scriptOrigin,
-            platformUrl: context.config.api.url,
-            setupCode: sandbox.setupCode,
-        });
-        let serverId: string;
-        try {
-            serverId = (await cloudCreate(input.credentials, { name, location: input.location, size: input.size, userData })).serverId;
-        } catch (error) {
-            if (error instanceof CloudCredentialError || error instanceof CloudProviderError) {
-                throw new ORPCError(`BAD_REQUEST`, { message: error.message });
-            }
-            // Surface WHY like setupCode's tunnel provisioning, a raw throw serializes as a bare
-            // "Internal server error" in the wizard.
-            if (error instanceof Error) {
-                throw new ORPCError(`BAD_GATEWAY`, { message: error.message });
-            }
-            throw error;
-        }
-        const updated = await context.prisma.sandbox.update({
-            where: { id: sandbox.id },
-            data: { cloud: { provider: input.credentials.provider, serverId, serverName: name, location: input.location } },
-            include: { hosted: true },
-        });
-        return toSummary(updated, `owner`, context);
-    }),
     // The hosted lane's front door: whether this platform runs sandboxes at all, and how many more the caller
     // may create under the per-user allowance. The editor's zero-click first run and the wizard's lead card
     // both read this before offering anything.
@@ -401,9 +318,9 @@ export const sandboxRoutes = {
         };
     }),
     /* Give an existing sandbox a machine on intentic's own provider, the lane with no command, no code, no
-     * paste. Shaped after cloudProvision on purpose: the ROW is created the ordinary way on arrival, and
-     * choosing this lane moves a MACHINE, never the sandbox, so the wizard can switch lanes without losing
-     * the name and address the user already has.
+     * paste, and the one a browser arrival now takes without being asked. The ROW is created the ordinary way
+     * on arrival, and taking this lane moves a MACHINE, never the sandbox, so stepping off it onto the
+     * reader's own computer keeps the name and address they already have.
      *
      * The tunnel comes first (already claimed from the pool by `create`, else provisioned here) because the
      * machine env must carry the connector token and public URL; then the machine is created and the daemon's

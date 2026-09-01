@@ -384,3 +384,39 @@ Two mechanical notes worth keeping, because each cost a wrong turn:
 Not changed, and not by accident: not a word of copy, not one control, not one lane, not one
 default. The decisions recorded above all still hold — this is the same page, in the stone the
 page before it is cut from.
+
+## The question, withdrawn, 2026-09-01
+
+The constraint at the top of this document — *do not funnel everyone into the hosted lane* —
+was withdrawn by the owner, and with it the premise every recommendation above rests on. The
+page no longer asks where the sandbox runs. It answers, off the surface it is being read on
+([`setupArrival.ts`](../_editor/web/src/pages/setupArrival.ts)):
+
+- **A browser** gets a machine of ours, started on arrival, and the boot to watch while it
+  starts. A browser has no machine to offer; everything it could do to the reader's own
+  computer needs a terminal or an installer first, and the platform can hand them a working
+  sandbox in seconds instead.
+- **The desktop app** installs on the computer it is running on, the moment the setup code
+  mints. Asking "which machine?" inside an app somebody downloaded to run a sandbox on this
+  computer is asking somebody who walked into a room which room they would like to be in.
+- **Everything else** — an explicit `?machine=`, the app's *not on this computer* link
+  (`?elsewhere=1`), a refused provision, a resumed errand — lands on the picker, which is now
+  the fallback rather than the front door.
+
+**The third rung is gone entirely**, not hidden: the lane that created a VM in the reader's own
+Hetzner, DigitalOcean or Oracle account is deleted from the contract, the api, the database and
+the wizard. Its first step was "create an API key in your provider's console", which is the
+hardest opening ask this product ever made, put to somebody ninety seconds past sign-up. The
+`?machine=` contract is therefore `hosted|mine`, and `/where-it-runs` compares two rungs.
+
+What this costs, stated plainly: every browser sign-up now spends a hosted machine, where before
+the default was the reader's own computer and the hosted rung was a click. The two mechanisms
+that were already load-bearing carry it — the hour allowance metered per account, and the
+idle-stop that sleeps a machine nobody is connected to — and the fold-out under the boot card
+(*Other ways to set up*) is the way off it, which hands the machine back when the other rung is
+actually taken.
+
+What is worth measuring now is not per-rung conversion but the two failure shapes this trades
+for: a hosted machine started for somebody who wanted their own (visible as an early switch off
+the rung, or a `?machine=mine` arrival right after a hosted one), and capacity refusals, which
+used to be a click nobody had made yet and are now the first thing a new account sees.

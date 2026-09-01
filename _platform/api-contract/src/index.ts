@@ -14,8 +14,6 @@ import {
     AdminUserListSchema,
     ClaimableNamesSchema,
     ClaimChallengeSchema,
-    CloudCredentialsSchema,
-    CloudOptionsSchema,
     CreatorStateSchema,
     CfTokenSchema,
     CfZonesSchema,
@@ -88,23 +86,10 @@ export const sandboxContract = {
     // for the deploy engine's apps), not for sandbox reachability, which is self-hosted now. The token is used
     // for that one call and discarded: never persisted, never logged.
     zones: oc.route({ method: "POST", path: "/sandbox/zones" }).input(CfTokenSchema).output(CfZonesSchema),
-    // The cloud lane (schemas.ts "the cloud lane"): `cloudOptions` validates a pasted provider credential by
-    // spending it on the provider's own catalog (regions + sizes with live prices); `cloudProvision` spends it
-    // once more to create the ONE VM in the user's account whose first boot runs the sandbox's live setup code
-    //, so it requires a fresh `setupCode` mint (mode intentic) first, exactly like the command lane. The
-    // credential is request-scoped both times (the zones contract): never persisted, logged, or stored.
-    cloudOptions: oc
-        .route({ method: "POST", path: "/sandbox/cloud-options" })
-        .input(z.object({ credentials: CloudCredentialsSchema }))
-        .output(CloudOptionsSchema),
-    cloudProvision: oc
-        .route({ method: "POST", path: "/sandbox/cloud-provision" })
-        .input(z.object({ sandboxId: z.string(), credentials: CloudCredentialsSchema, location: z.string(), size: z.string() }))
-        .output(SandboxSummarySchema),
-    /* The HOSTED lane, shaped exactly like the cloud one above: the sandbox ROW is created the ordinary way
-     * (`create`, on arrival, whatever lane the user ends up taking), and this pair only decides whether a
-     * machine the PLATFORM runs is attached to it. That symmetry is the point, choosing a lane in the wizard
-     * moves a machine, never the sandbox, so a switch keeps the name, the row and the address it already has.
+    /* The HOSTED lane: the sandbox ROW is created the ordinary way (`create`, on arrival, whatever the reader
+     * ends up running it on), and this pair only decides whether a machine the PLATFORM runs is attached to
+     * it. That separation is the point, taking a lane moves a machine, never the sandbox, so a switch keeps
+     * the name, the row and the address it already has.
      *
      * `hostedOffer` says whether this platform runs sandboxes at all and how many more the caller may have
      * (the editor's zero-click first run and the lane's card both gate on it). `hostedProvision` creates the
@@ -140,8 +125,8 @@ export const sandboxContract = {
         .output(z.object({ ok: z.boolean() })),
     /* Does this platform hand out addresses at all, the question `setupCode` used to answer only by failing.
      * Shaped like `hostedOffer` and read beside it on arrival, so the wizard knows which lanes exist before it
-     * draws them: a platform with no tunnel fabric can offer neither the pasted command nor a cloud machine,
-     * and its reader belongs in the attach lane from the first frame rather than after a mint 404s. */
+     * draws them: a platform with no tunnel fabric cannot offer the pasted command, and its reader belongs in
+     * the attach lane from the first frame rather than after a mint 404s. */
     addressOffer: oc.route({ method: "GET", path: "/sandbox/address-offer" }).output(AddressOfferSchema),
     setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput).output(SetupCodeSchema),
     emailSetupLink: oc

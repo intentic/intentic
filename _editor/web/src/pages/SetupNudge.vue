@@ -15,7 +15,6 @@
 import { CopyButton, Notice } from "@intentic/ui";
 
 /* The reader this is addressed to:
- *   `cloud`   : a machine was created and hasn't claimed; the provider's console holds the boot log
  *   `emailed` : a phone that mailed itself the link and hasn't opened it on the other computer
  *   `terminal`: the command is on screen and was, apparently, never pasted anywhere
  *   `phone`   : a phone with the command still folded away, which has not been told anything wrong yet
@@ -25,15 +24,11 @@ import { CopyButton, Notice } from "@intentic/ui";
  *   `button`  : in the app, with nothing pressed yet */
 const {
     variant,
-    cloudName = ``,
-    cloudProvider = ``,
     stalled = false,
     command = ``,
     copyable = false,
 } = defineProps<{
-    variant: "cloud" | "emailed" | "terminal" | "phone" | "install" | "downloaded" | "app" | "button";
-    cloudName?: string;
-    cloudProvider?: string;
+    variant: "emailed" | "terminal" | "phone" | "install" | "downloaded" | "app" | "button";
     // Past the long fuse: stop assuming the command was never run and start helping the person whose terminal
     // answered back instead. Only the `terminal` reader has a terminal to be told about.
     stalled?: boolean;
@@ -50,11 +45,7 @@ const emit = defineEmits<{ copied: [] }>();
     <Notice tone="warning" icon="clock">
         <span class="flex flex-col gap-2">
             <p>
-                <span v-if="variant === `cloud`" class="min-w-0">
-                    <span class="font-medium">Still building.</span> Check {{ cloudName }} in your {{ cloudProvider }} console. Its boot log is
-                    <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh sandbox here is always safe.
-                </span>
-                <span v-else-if="variant === `emailed`" class="min-w-0">
+                <span v-if="variant === `emailed`" class="min-w-0">
                     <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host your sandbox. The
                     command is waiting there.
                 </span>

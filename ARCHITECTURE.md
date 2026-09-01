@@ -107,8 +107,10 @@ flowchart TB
   either credential, so a platform breach can read the stored URL but **cannot drive any sandbox**:
   a breach's blast radius is bounded to identity + the sandbox URL.
 
-  **The HOSTED lane is the stated exception to that boundary.** A user who chooses "we run it for you"
-  (or lands on it as the zero-command first run) gets a sandbox whose machine the platform creates on
+  **The HOSTED lane is the stated exception to that boundary**, and since onboarding stopped asking it is
+  what every browser arrival gets: the setup page starts one on arrival rather than opening on a picker
+  (`setupArrival.ts`), and the desktop app is the surface that installs locally instead. Such a user gets a
+  sandbox whose machine the platform creates on
   intentic's own provider account (Fly, one microVM + one persistent volume per sandbox, each app on its
   own private network: [_platform/api/src/sandbox/hosted/](_platform/api/src/sandbox/hosted/)) and
   deliberately keeps the way back into: wake on the next visit, stop, destroy on delete. The command
@@ -302,12 +304,8 @@ survive reconnects. Its subsystems:
 a bootstrap shim: it gets Docker on, fetches the `ic` host-side CLI ([_sandbox/ic](_sandbox/ic)) and hands the
 flow to `ic sandbox connect`: so is the desktop app ([_editor/desktop-app](_editor/desktop-app)) not a third
 way: it *spawns that same `connect.sh`*, which is what makes its onboarding identical to the pasted one rather
-than a second implementation to keep in step. Nor is the setup wizard's **cloud lane** (a machine created in
-the *user's own* Hetzner/DigitalOcean/Oracle account for someone (a phone, usually) with no computer to
-paste into): the VM's cloud-init user-data is that same one-liner run headlessly, claiming the same setup
-code ([\_platform/api/src/sandbox/cloud/](_platform/api/src/sandbox/cloud/); the provider credential is
-request-scoped, the platform keeps no way back into the machine). Every lane then reaches the box the same
-way, and there is only one way: the daemon dials ONE outbound WebSocket to the ingress and presents the
+than a second implementation to keep in step. Every lane then reaches the box the same way, and there is only
+one way: the daemon dials ONE outbound WebSocket to the ingress and presents the
 platform-signed grant naming `<id> = sha256(connectToken).slice(0, 12)`
 ([tunnel-ids.ts](_sandbox/sandbox-contract/src/tunnel-ids.ts)); the edge reads the `Host` header of each
 request and sends it down that sandbox's tunnel.
@@ -1015,11 +1013,12 @@ them by spawning a process, never by import:
 
 Who pays for scale is a design decision, not an accident:
 
-- **Compute is user-owned.** Every sandbox runs on the user's PC (`connect.sh`), the user's server
-  (the `workspace` provider), or a VM the setup wizard's cloud lane creates **in the user's own cloud
-  account** (billed by their provider to them; the platform spends the pasted credential once and stores
-  none of it). There is no intentic-operated fleet, scheduler, or capacity manager:
-  agent turns, dev servers, and builds cost intentic nothing. (Corollary: intentic sets no `--cpus` cap;
+- **Compute is user-owned past the starter.** Every sandbox but one shape runs on the user's PC
+  (`connect.sh`) or the user's server (the `workspace` provider): no scheduler, no capacity manager, and
+  agent turns, dev servers and builds cost intentic nothing. The exception is the **hosted starter**, the
+  machine a browser arrival is given (Fly, one microVM per sandbox), which intentic does pay for: it is
+  bounded by an hour allowance per account and by the idle-stop that puts it to sleep the moment nobody is
+  connected, and it is the rung a user leaves the moment they want power rather than convenience. (Corollary: intentic sets no `--cpus` cap;
   a sandbox that saturates the CPU is the user's machine's problem. Memory is the one exception, and it
   is a narrow one: the local shape carries a `--memory`/`--memory-swap` cap, because user-owned compute
   still means a runaway build must not be able to take the user's desktop down with it, and a cgroup is

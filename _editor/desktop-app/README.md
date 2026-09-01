@@ -319,13 +319,14 @@ Two more things the screen gained at the same time:
 
 The list above is a machine being asked for administrator, a 600 MB download and a restart, and some of the
 people reading it are on a PC where none of that will happen: a locked-down work laptop, a machine too small,
-an account with no admin. The browser has offered a cloud machine and a hosted one all along; the app hid them
-on the argument that "this computer" is the whole point of being in it. That holds right up until this
-computer cannot, and then it is a dead end.
+an account with no admin. The browser has handed that reader a machine we host all along; the app hid it on
+the argument that "this computer" is the whole point of being in it. That holds right up until this computer
+cannot, and then it is a dead end.
 
-So the requirements card carries one quiet line (*Not on this computer? Run it in the cloud instead*) which
-hands the window back to the SPA's setup page at `?elsewhere=1`, where those rungs are open. Local stays the
-loud, preselected default everywhere else, including the same page reached any other way.
+So the requirements card carries one quiet line (*Not on this computer? Run it on a machine we host*) which
+hands the window back to the SPA's setup page at `?elsewhere=1`, the one arrival there that starts nothing on
+its own and shows both rungs instead. Local stays the loud, preselected default everywhere else, including the
+same page reached any other way.
 
 ## Sign-in never happens in the webview
 
@@ -413,8 +414,8 @@ less:
 **How a link gets in** depends on whether the app is already running, and the two paths share nothing but the
 url. If it is, the OS starts a second copy and `tauri-plugin-single-instance` forwards that copy's argv to the
 first over DBus. If it is not, the OS starts the app *with* the link in argv: which is the path a first-time
-user takes (install, click **Set up on this computer**, nothing running yet) and it needs two things the warm
-path does not:
+user takes (install the app, sign in, and let its setup page hand this computer the code; nothing running yet)
+and it needs two things the warm path does not:
 
 - **`%u` on the installed entry's `Exec`.** A handler without a field code is launched with no arguments at all
   (desktop-entry spec), so it wins the lookup and then drops every link it wins. Tauri's bundler writes the
@@ -448,7 +449,7 @@ install's outcome was invisible. It now sends named events of its own
 | `desktop_install_started` / `_finished` | a handed-over setup runs | outcome, duration, exit code, and the step it stopped on |
 | `desktop_install_dismissed` | the setup card is closed | whether the run was still going, and how far it had got |
 | `desktop_install_stopped` | the user ends a run with **Stop** | how far it had got |
-| `desktop_install_elsewhere` | the requirements card's cloud escape hatch is taken | which prerequisites made them take it |
+| `desktop_install_elsewhere` | the requirements card's hosted escape hatch is taken | which prerequisites made them take it |
 | `desktop_install_restart` | Windows is restarted **or signed out of** mid-setup | which of the two, and which prerequisites asked for it |
 | `desktop_install_resumed` / `_resume_expired` | the app comes back after that restart | how long the parked setup sat there |
 | `desktop_recreate_started` / `_finished` | an update or an environment rebuild | the same, plus which of the two, and whether it came from this screen or from the SPA's card |

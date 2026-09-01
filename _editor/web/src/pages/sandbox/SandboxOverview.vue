@@ -395,17 +395,17 @@ const save = async (): Promise<void> => {
             </dl>
         </Card>
 
-        <!-- THE LADDER'S NEXT RUNG, on hosted sandboxes only (owners: a member can't create sandboxes for the
-             owner). The hosted box is deliberately small; when it starts feeling tight, the honest upgrades
-             already exist as setup lanes, and the best one is free. Points at /setup, where every rung lives. -->
+        <!-- THE OTHER PLACE IT COULD RUN, on hosted sandboxes only (owners: a member can't create sandboxes
+             for the owner). The hosted box is deliberately small; when it starts feeling tight there is
+             exactly one upgrade, and it is free, because it is hardware the reader already owns. Points at
+             /setup, which is where moving a sandbox onto it happens. -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
             <div class="flex items-center gap-2 text-sm font-medium text-content"><Icon name="bolt" class="text-link" /> Need more power?</div>
             <p class="text-xs leading-relaxed text-muted">
-                This sandbox is a small starter machine we host for you. When it feels tight, add a bigger home for your work: a
-                <span class="text-content">free 12&nbsp;GB machine</span> on Oracle's Always-Free tier, a machine in your own cloud, or
-                <span class="text-content">your own computer</span>: the only rung with your GPU on it.
+                This sandbox is a small starter machine we host for you. When it feels tight, move it to
+                <span class="text-content">your own computer</span>: no hour limit, nothing metered, and the only place your GPU is.
             </p>
-            <RouterLink to="/setup" class="text-xs text-link hover:underline">See the options →</RouterLink>
+            <RouterLink to="/setup" class="text-xs text-link hover:underline">Set it up there →</RouterLink>
         </Card>
 
         <!-- A newer sandbox image has shipped: the non-blocking, host-run update prompt (self-hides otherwise). -->

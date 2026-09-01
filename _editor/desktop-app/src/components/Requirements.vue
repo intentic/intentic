@@ -188,13 +188,13 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
 
         <!-- THE WAY OUT THAT IS NOT GIVING UP, and the only place in this app that offers one.
              Everything above is a machine being asked for administrator, a 600 MB download and a restart, and
-             some of the people reading it are on a PC where none of that is going to happen. The browser has
-             offered a cloud machine and a hosted one all along; the app hid them on the argument that "this
-             computer" is the whole point of being here: true until this computer cannot, and then it is a
-             dead end. One quiet line, under the loud default. -->
+             some of the people reading it are on a PC where none of that is going to happen. The browser hands
+             that reader a machine we run, in seconds; the app hid it on the argument that "this computer" is
+             the whole point of being here: true until this computer cannot, and then it is a dead end. One
+             quiet line, under the loud default. -->
         <button v-if="!busy" type="button" :class="ui.textAction(`text-2xs`)" @click="emit(`elsewhere`)">
-            <Icon name="cloud" class="shrink-0" />
-            <span>Not on this computer? Run it in the cloud instead</span>
+            <Icon name="server" class="shrink-0" />
+            <span>Not on this computer? Run it on a machine we host</span>
         </button>
     </div>
 </template>

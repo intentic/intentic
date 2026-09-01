@@ -180,7 +180,6 @@ const resolve = async (): Promise<void> => {
         const endpoint = await selectEndpoint({
             daemonUrl: url,
             token: sandbox.token,
-            cloud: sandbox.cloud,
             hosted: sandbox.hosted,
             // Forwarded, never recomputed: the platform owns the certificate's zone and this row is where it
             // says so (endpoint.ts Addressing).

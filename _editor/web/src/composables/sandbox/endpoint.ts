@@ -58,12 +58,11 @@ export interface Endpoint {
 }
 
 /* What the selection needs to know about a sandbox: its public address, the token the loopback port derives
- * from, and the two machine records that answer where it runs. Deliberately shaped as the fields a
+ * from, and the machine record that answers where it runs. Deliberately shaped as the fields a
  * `SandboxSummary` already carries, so a caller forwards facts rather than computing a verdict. */
 export interface Addressing {
     readonly daemonUrl: string;
     readonly token: string | undefined;
-    readonly cloud: object | null;
     readonly hosted: object | null;
     /* The name the daemon's loopback listener is certified under, as the PLATFORM reports it (its
      * `localHostname` on the sandbox summary). Null or absent where there is no certified shortcut to reach.
@@ -78,18 +77,18 @@ export interface Addressing {
 }
 
 /* Could the machine that runs this sandbox be the one this browser is on? NOT "is it", that is the question
- * the module header refuses, and it stays refused. This is the cheap NO: in two of the creation lanes the
- * platform built the machine itself and knows exactly where it is, its own hosted VM, or a machine in the
- * user's cloud provider account, and neither is ever a loopback hop from a browser.
+ * the module header refuses, and it stays refused. This is the cheap NO: when the platform hosts the machine
+ * itself it knows exactly where it is, on Fly, in a region it chose, which is never a loopback hop from a
+ * browser.
  *
  * Worth its own gate rather than being left to the probe, because a probe here is not free. It is the app's
  * only reach for the machine the browser runs on, and Chrome answers that reach with a Local Network Access
  * prompt, so probing a sandbox that provably cannot be local spends the user's permission dialog, and their
  * reading of what this app does with their computer, on an address that could never have answered.
  *
- * Every other lane genuinely might be local: a `docker run` on the desktop in front of them, a sandbox
- * attached behind their own domain. Those keep the probe. */
-export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "cloud" | "hosted">): boolean => sandbox.cloud === null && sandbox.hosted === null;
+ * Anything else genuinely might be local: a `docker run` on the desktop in front of them, a sandbox attached
+ * behind their own domain. Those keep the probe. */
+export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "hosted">): boolean => sandbox.hosted === null;
 
 /* The sandbox's 12-hex id, from the connect token this browser already holds, the WebCrypto twin of the
  * daemon/CLI/platform's `sandboxIdFromToken` (@intentic/sandbox-contract/tunnel-ids, which is node-only
@@ -225,8 +224,8 @@ export const probeEndpoint = (endpoint: Endpoint, expectedSandboxId: string, fet
  * is the registry's own address, so a sandbox whose every probe failed is still addressable rather than broken.
  *
  * A candidate with NOTHING AFTER IT is taken on trust, and only the tunnel is ever in that position. Qualifying
- * it would be spending a request to decide between it and nothing, and for the two lanes where the platform
- * placed the machine itself (a hosted VM, a cloud machine) it is the only candidate there has ever been. The
+ * it would be spending a request to decide between it and nothing, and for a machine the platform placed
+ * itself (a hosted VM) it is the only candidate there has ever been. The
  * loopback forms are never taken on trust at any position: a port is not a sandbox, and adopting whatever
  * happens to hold one would point this sandbox's session, uploads and terminals at another daemon. */
 export const selectEndpoint = async (sandbox: Addressing, fetchImpl: typeof fetch = fetch): Promise<Endpoint> => {

@@ -71,7 +71,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/where-it-runs/": {
         title: "Where your intentic workspace runs",
         description:
-            "Run your coding agents on our servers, on your own computer, or on a server in your own cloud account. What each costs, what it asks of you, and what the install does.",
+            "Run your coding agents on our servers or on your own computer. What each costs, what it asks of you, and what the install does.",
         datePublished: "2026-08-29",
     },
     /* What shipped, in the words of the people it shipped for. Its ENTRIES come from the published GitHub

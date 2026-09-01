@@ -9,7 +9,7 @@ The onboarding tier: one journey through the product's front door, run once per 
 - Walk the install path a user walks (the wizard, the bytes it renders, the container that comes up) and
   assert the platform sees the sandbox connected and the browser can talk to it.
 - Give every path the same seeded account and the same assertions, so a regression in signing in or in
-  chatting is found once rather than four times or not at all.
+  chatting is found once rather than three times or not at all.
 
 ## Why it is not more specs in `_tools/e2e`
 
@@ -25,13 +25,13 @@ one never does: through provisioning, into a real daemon the wizard's own instru
             { "id": "api", "label": "Platform api", "note": "branch image", "accent": "3" },
             { "id": "pg", "label": "Postgres", "accent": "neutral" },
             { "id": "up", "label": "fake-upstream", "note": "stand-in model", "accent": "5" },
-            { "id": "box", "label": "Sandbox", "note": "compose / cli / cloud / desktop", "accent": "2" }],
+            { "id": "box", "label": "Sandbox", "note": "compose / cli / desktop", "accent": "2" }],
   "edges": [{ "from": "browser", "to": "web" }, { "from": "browser", "to": "api" }, { "from": "browser", "to": "box" },
             { "from": "api", "to": "pg" }, { "from": "api", "to": "up" },
             { "from": "box", "to": "api" }] }
 ```
 
-What to notice: only the sandbox differs between the four onboarding paths. Everything else is stood up once,
+What to notice: only the sandbox differs between the onboarding paths. Everything else is stood up once,
 which is why a path costs one adapter rather than a suite of its own.
 
 ## What it covers today, and what it does not
@@ -107,7 +107,7 @@ reproducing the run to get one.
 - [src/docker.ts](src/docker.ts): where the world has to live, and the check that says so when it cannot.
 - [src/containers.ts](src/containers.ts): containers on a network whose subnet we chose, so addresses are
   known before anything starts.
-- [src/provisioner.ts](src/provisioner.ts): the one thing that differs between the four paths.
+- [src/provisioner.ts](src/provisioner.ts): the one thing that differs between the paths.
 - [src/provisioners/compose.ts](src/provisioners/compose.ts): the wizard's own bytes, run the way a user runs
   them.
 - [src/seed.ts](src/seed.ts): the signed-in account, and how far a seeded one can carry a journey.

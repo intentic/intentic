@@ -45,7 +45,7 @@ const warnMail = (config: Config, sandboxName: string, days: number) => ({
         heading: `"${sandboxName}" has been sitting idle`,
         // Says the whole thing: what goes, what stays, what stops it, and the one alternative that makes the
         // question never come up again. No urgency theatre, the remedy really is to open it.
-        body: `We run this sandbox's machine for free, and free machines are removed after a few weeks unopened. Open it and nothing happens, the timer resets. If you don't, in ${days} days the machine and the files on it are deleted. The sandbox itself, its name and its address all stay, so you can give it a new machine whenever you like. Running it on a computer of your own, or on your own cloud account, keeps everything indefinitely and has no limits at all.`,
+        body: `We run this sandbox's machine for free, and free machines are removed after a few weeks unopened. Open it and nothing happens, the timer resets. If you don't, in ${days} days the machine and the files on it are deleted. The sandbox itself, its name and its address all stay, so you can give it a new machine whenever you like. Running it on a computer of your own keeps everything indefinitely and has no limits at all.`,
         action: `Open the sandbox`,
         link: config.webOrigin,
     }),

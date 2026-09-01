@@ -34,14 +34,13 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { desktopInstaller, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand, scriptSource } from "../environments/scriptCommand";
-import SetupCloud from "./SetupCloud.vue";
 import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
-import { cloudProviderMeta } from "./setupCloud";
+import { arrivalFor, type Arrival } from "./setupArrival";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
@@ -53,6 +52,13 @@ import { useSiteFaces } from "../composables/useSiteFaces";
 /* The setup gate's destination (outside the workspace shell). Setup asks for no identity decisions: the
  * sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts), and that name stays
  * out of onboarding. It can be changed later in the workspace, where it is useful for telling machines apart.
+ *
+ * AND IT ASKS FOR NO MACHINE DECISION EITHER, WHICH IS THE NEWEST THING ABOUT IT. The surface the reader came
+ * in on answers that (setupArrival.ts): a browser gets a machine started for it and watches it boot, the
+ * desktop app installs on the computer it is running on, and everything below is what is LEFT when neither
+ * answer can be taken, or when the reader asks for the options by name. The picker is still all here, and
+ * every word of the reasoning below still holds for the reader who reaches it, it is simply no longer the
+ * first screen of the product.
  *
  * THE ADDRESS IS REPORTED BY STEP 2 rather than by step 1, because it is a consequence of the rung rather than
  * a fact about the sandbox, and because a hex hostname in the page's first position is three lines a stranger
@@ -68,9 +74,7 @@ import { useSiteFaces } from "../composables/useSiteFaces";
  * command carries only that code and the connect script redeems it at POST /setup/claim for the real values, so no
  * raw token lands in shell history. Step 2 also offers desktop sync (on by default): the choice + folder ride the
  * same code (SYNC_DIR + a platform-minted single-use SYNC_PAIR_TOKEN in the payload), so the one pasted command
- * additionally enrolls the sync agent after the sandbox boots: no second paste. Step 2 also carries the CLOUD
- * MACHINE choice (`machine` below, SetupCloud.vue): no computer to paste into, so one is created in the user's
- * own cloud account and its first boot claims this same code headlessly. Once running, the DAEMON announces
+ * additionally enrolls the sync agent after the sandbox boots: no second paste. Once running, the DAEMON announces
  * its URL + liveness to the platform; this page just polls sandbox.list for a fresh lastSeenAt and then opens the
  * workspace: the browser never resolves the sandbox hostname here, so no DNS race can wedge setup. That wait is
  * step 2's own footer rather than a step of its own: it asks the user for nothing, so a card of its own was chrome
@@ -158,9 +162,9 @@ const mode = ref<"intentic" | "own">(`intentic`);
  *
  * IT STARTS UNKNOWN RATHER THAN TRUE, and that is the whole of the fix it exists for. Assuming the offer was
  * there meant a platform without it drew the machine ladder in full, minted against a route that answers
- * "not here", and then took the cloud rung back off screen: two options that appeared for one round-trip and
+ * "not here", and then took the own-computer rung back off screen: a rung that appeared for one round-trip and
  * vanished, over an address line left spinning on "Preparing your intentic domain…" forever, because nothing
- * told it the answer would never come. Unknown draws neither, so nothing has to be retracted. */
+ * told it the answer would never come. Unknown draws no rung at all, so nothing has to be retracted. */
 const intenticAvailable = ref<boolean | undefined>(undefined);
 // This platform mints addresses: the answer is in, and it is yes. The lanes that need one gate on this.
 const addressed = computed(() => intenticAvailable.value === true);
@@ -317,36 +321,33 @@ const commandVisible = computed(() => (desktop.value || mobile.value || appFirst
 // Compose declares its own env, so neither switch under the command applies to it, but "no tab is on screen
 // at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
 const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
-/* WHICH MACHINE runs step 2: the computer the user already has (the command / handoff / app button), or a
- * new one created in THEIR cloud account (SetupCloud.vue). A phone starts on `cloud` only until the offers
- * land: the hosted rung takes the phone's default the moment it is offered (see arrive()), because a phone
- * can finish it alone off a single tap, where `cloud` opens on a credential paste, the hardest possible
- * opening ask, and the email handoff asks for a second computer. `cloud` stays the phone's fallback on a
- * platform that doesn't host, for the original reason: it is the one classic lane a phone finishes alone.
- * The picker is hidden inside the desktop app (the app IS a computer the user has: its one
- * button is the step there), so `machine` stays `mine` in it by construction.
- *
- * The cloud machine claims the SAME minted setup code the command would, so everything downstream: the
- * locked gate, the claim stamp, the stage report, the announce watch: is untouched; only the card's content
- * and the wait's wording switch on this. It needs the intentic-provided tunnel (the machine boots headless,
- * with no Cloudflare of its own), so the form yields to a pointer at step 1 while `mode` says `own`. */
-const machine = ref<"hosted" | "mine" | "cloud">(mobile.value ? `cloud` : `mine`);
+/* WHICH MACHINE runs step 2: one we start and run (`hosted`), or the computer the user already has (the
+ * command / the app's button / the phone's email handoff). It is set by the ARRIVAL rather than by the
+ * reader (setupArrival.ts): a browser is given ours, the desktop app installs on the computer it is running
+ * in, and the picker below only decides this for the reader who reached it. */
+const machine = ref<"hosted" | "mine">(`mine`);
 
-/* THE OTHER RUNGS, INSIDE THE APP: hidden by default, never absent.
+/* WHAT THIS ARRIVAL DID BY ITSELF, decided in setupArrival.ts once the offers and the sandbox row have
+ * landed. `choose` until then, which is also what the page draws while it is still reading, so nothing is
+ * ever folded away on the strength of an answer that has not come back yet. */
+const arrival = ref<Arrival>(`choose`);
+
+/* THE RUNGS THE ARRIVAL DID NOT TAKE: folded away, never absent.
  *
- * They used to be hard-excluded here on the argument above: the app IS a computer the user has, so a picker
+ * Inside the desktop app they used to be hard-excluded: the app IS a computer the user has, so a picker
  * offering them a different one is scenery. That holds right up until this computer cannot run it: no WSL2,
  * no Docker, a locked-down work laptop, a machine too small, and then the app has nothing to say and the
- * user has nowhere to go. The app's own requirements screen now links here for exactly that reader
+ * user has nowhere to go. The app's own requirements screen links here for exactly that reader
  * (`?elsewhere=1`, desktop-app/src/App.vue), and a link into a page that still hides what it promised would
  * be worse than not offering it.
  *
- * So: local stays the loud default in the app, unchanged and preselected, and the other rungs sit behind one
- * quiet link. `elsewhere` is what opens them: set by the link from the requirements screen, or by that link.
- */
+ * The same argument now covers the browser, because the browser now takes an answer of its own too: a page
+ * that has already started a machine for the reader must not also ask them which machine they want, and it
+ * must not pretend the other rung stopped existing. So: whichever rung the arrival took is the loud one, and
+ * the rest sit behind one quiet link. `elsewhere` is what opens them, from that link or from the app's. */
 const elsewhere = ref(route.query[`elsewhere`] === `1`);
-// Inside the app the other rungs are one click away rather than on screen; outside it, nothing is hidden.
-const elsewhereOffered = computed(() => !desktop.value || elsewhere.value);
+// The picker is on screen when the arrival could answer nothing for itself, or when the reader asked for it.
+const elsewhereOffered = computed(() => arrival.value === `choose` || elsewhere.value);
 
 /* The picker's own row, and the one reason it needs a handle: the link that reveals it sits UNDER the card, and
  * the rungs it reveals appear ABOVE it. Opened silently, all the reader sees is the page growing and the button
@@ -358,10 +359,9 @@ const showOtherMachines = async (): Promise<void> => {
     await nextTick();
     ladderRow.value?.scrollIntoView({ behavior: `smooth`, block: `center` });
 };
-const cloudOffered = computed(() => addressed.value && elsewhereOffered.value);
 /* The pasted command is an address away from being useless: the script it runs redeems a setup code, and a
- * platform that mints none has nothing for it to redeem. So this rung stands on the same offer the cloud one
- * does: including in the desktop app, where the button IS the command. */
+ * platform that mints none has nothing for it to redeem. So this rung stands on the address offer, including
+ * in the desktop app, where the button IS the command. */
 const commandOffered = computed(() => addressed.value);
 
 /* --- the hosted lane (machine === `hosted`) ---
@@ -376,7 +376,9 @@ const commandOffered = computed(() => addressed.value);
  * mis-click cost a person their place in the flow. */
 // The platform's offer, read on arrival. Null until answered; a platform without the route reads as disabled.
 const hostedOffer = ref<HostedOffer | null>(null);
-const hostedOffered = computed(() => hostedOffer.value?.enabled === true && elsewhereOffered.value);
+// Whether the PLATFORM hosts, and nothing about whether the picker is currently drawing the rung: folding is
+// `ladderShown`'s job, and reading the fold in here is what made "is a machine takeable" depend on it too.
+const hostedOffered = computed(() => hostedOffer.value?.enabled === true);
 /* Is there a provision lane to be in at all: a machine we can start, or an address we can put on one the
  * reader starts. With neither, the way BACK to it (the attach lane's last line) is a promise this platform
  * cannot keep, and the attach lane is not a detour off the flow but the whole of it. */
@@ -443,55 +445,44 @@ const bootReport = ref<SandboxSummary[`bootReport`]>(null);
 const announceRefusal = ref<SandboxSummary[`announceRefusal`]>(null);
 // Whether the daemon has ever checked in. Read off the poll rather than off `created` for the same reason.
 const announced = ref(false);
-// The provisioned machine's display facts (SandboxCloudSchema): set by the provision response (or a resumed
-// row that was provisioned last visit), and the switch that turns the cloud form into its summary line.
-const cloudMachine = ref<SandboxSummary[`cloud`]>(null);
-// The company's NAME, never the picker's pitch: every use below is inside a sentence, and `label` carries
-// the free tier's sales line ("Oracle: free 12 GB"), which reads as a typo the moment it lands mid-clause.
-const cloudProviderName = computed(() => (cloudMachine.value === null ? `` : cloudProviderMeta(cloudMachine.value.provider).name));
-// The provision response is a fresher row (it carries the cloud stamp): adopt it, then let the ordinary
-// claim → report → announce watch narrate the machine's first boot.
-const onProvisioned = (summary: SandboxSummary): void => {
-    created.value = summary;
-    cloudMachine.value = summary.cloud;
-};
-
-/* THE LADDER: the machine choice as a range of power rather than a binary, each rung captioned by what it
- * costs and what it buys.
+/* THE LADDER: the machine choice as a pair, each rung captioned by what it costs and what it buys, for the
+ * reader who reached the picker rather than being answered by their arrival.
  *
  * IT IS A PICKER AND ONE CAPTION, and it has to stay that. The shape this replaced tried to say the same
- * thing with surfaces: a tinted panel for the hosted offer, a bordered list of the other two under it, the
+ * thing with surfaces: a tinted panel for the hosted offer, a bordered list of the others under it, the
  * chosen one ringed inside that list, and the command's own tab track and code frame under THAT: six framed
  * surfaces deep before a single instruction. Nesting is what a reader pays for structure, and a
- * three-item structure does not need paying for. Weight belongs in the words (the rung order, the caption)
+ * two-item structure does not need paying for. Weight belongs in the words (the rung order, the caption)
  * and in what is on screen at all, never in another box around it.
  *
  * The rungs are the lanes that already exist; this picker is just the honest map: instant-and-small (hosted)
- * → a free 12 GB cloud machine or a paid one (SetupCloud's providers, Oracle's Always-Free first) → the
- * reader's own hardware (the most power, and the only GPU story anyone can offer). */
-/* CARDS, NOT CHIPS. This is the decision the whole rest of onboarding hangs off, whether the reader ever
- * opens a terminal, what the box can do, and who pays for it, and it spent one release as three small pills
- * with a caption underneath, which is the control this design system uses for Preview/Source. A pill row
- * shows only the labels, so the two things that actually decide the answer (what you get, what it asks of
- * you) were invisible until after you had already picked; and the pill for the lane you were on looked
- * exactly like the pill for the lane that would delete it.
+ * → the reader's own hardware (the most power, and the only GPU story anyone can offer). There used to be a
+ * third between them, a machine created in the reader's own Hetzner / DigitalOcean / Oracle account, and it
+ * is gone: it opened on a cloud API credential paste, which is the hardest opening ask this product ever
+ * made, in service of a machine the middle rung already gives away and the outer rung already beats. */
+/* CARDS, NOT CHIPS. This is the decision the rest of onboarding hangs off for anyone who has to make it,
+ * whether they ever open a terminal, what the box can do, and who pays for it, and it spent one release as
+ * small pills with a caption underneath, which is the control this design system uses for Preview/Source. A
+ * pill row shows only the labels, so the two things that actually decide the answer (what you get, what it
+ * asks of you) were invisible until after you had already picked; and the pill for the lane you were on
+ * looked exactly like the pill for the lane that would delete it.
  *
  * So: one card per rung, each stating its own trade in the reader's terms, with the cost as a badge, a
  * layout that can be READ before it is clicked. The order is the ladder's: instant and small, then your own
- * hardware, then a machine you rent.
+ * hardware.
  *
  * READ, THOUGH: NOT STUDIED. The first version of these cards put the whole trade on every card at once:
- * three paragraphs, side by side, above the one command the reader came here to run. Three columns of prose
- * is not a picker; nobody compares three paragraphs, they skim the titles and pick, which means the paragraphs
+ * paragraphs, side by side, above the one command the reader came here to run. Columns of prose
+ * is not a picker; nobody compares paragraphs, they skim the titles and pick, which means the paragraphs
  * cost attention and bought nothing. A card is an icon, a name, a price and three or four words.
  *
- * What that leaves out lands where it is ACTED on rather than skimmed: the free machine's disk is described on
- * the card that creates it, next to the button, and "or don't use a terminal at all" sits under the whole row
- * as the fourth answer it is. `meta` is the badge, `note` the few words under it. */
+ * What that leaves out lands where it is ACTED on rather than skimmed: the hosted machine's disk is described
+ * on the card that creates it, next to the button, and "or don't use a terminal at all" sits under the whole
+ * row as the answer it is. `meta` is the badge, `note` the few words under it. */
 /* `value` doubles as the drawing's name (SetupRungArt): a rung and the picture of where its machine lives are
  * the same fact, and an `icon` field beside them was a second place for that fact to be wrong. */
 interface MachineOption {
-    readonly value: "hosted" | "mine" | "cloud";
+    readonly value: "hosted" | "mine";
     readonly title: string;
     readonly meta: string;
     readonly note: string;
@@ -520,9 +511,9 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
               },
           ]
         : []),
-    /* The two rungs where the machine is the READER'S. Neither says more than its three lines, because there
-     * is no more to say: "Your CPUs, your RAM, your GPU" is a poem about owning a computer, addressed to
-     * somebody who owns one, and "no hour limit, nothing expires" is the badge again in a longer coat. */
+    /* The rung where the machine is the READER'S. It says no more than its three lines, because there is no
+     * more to say: "Your CPUs, your RAM, your GPU" is a poem about owning a computer, addressed to somebody
+     * who owns one, and "no hour limit, nothing expires" is the badge again in a longer coat. */
     ...(commandOffered.value
         ? [
               {
@@ -540,29 +531,15 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
               },
           ]
         : []),
-    ...(cloudOffered.value
-        ? [
-              {
-                  value: `cloud` as const,
-                  /* WHOSE MACHINE IT IS BELONGS IN THE TITLE, and it is the only thing this rung has to say
-                   * that the one above it doesn't: we host one too, and the difference is the account it
-                   * lives in and the bill. It used to be "A new cloud machine" over "In your own cloud
-                   * account": a title and a note that spent their two lines saying "cloud" twice, so the
-                   * card's last line, the one place left to tell the reader something they don't know, was
-                   * a paraphrase of its first. It names the three providers instead: somebody who already
-                   * has a Hetzner account recognises this rung as theirs from the picker, without opening
-                   * it. */
-                  title: `My cloud account`,
-                  meta: `From free · 12 GB`,
-                  note: `Oracle, Hetzner or DigitalOcean`,
-              },
-          ]
-        : []),
 ]);
 /* Shown once there is a CHOICE to make. A picker over one rung is not a picker: it is a card describing the
  * only thing on offer, which is what the step under it already does, and while the offers are still being
  * read there is nothing honest to draw at all. */
 const ladderShown = computed(() => elsewhereOffered.value && ladderOptions.value.length > 1);
+/* …and the reverse: the arrival answered, so the rung it did not take is folded away and there is a link to
+ * be offered. Read off the same two facts the picker is, so the link can never promise a row that would come
+ * back empty. */
+const otherMachinesFolded = computed(() => !elsewhereOffered.value && ladderOptions.value.length > 1);
 
 /* A RUNG CHOSEN BEFORE THIS PAGE, off `?machine=`: the contract the public site's /where-it-runs cards link
  * through. That page is where a stranger can be told what each rung costs and asks of them at the length the
@@ -570,7 +547,7 @@ const ladderShown = computed(() => elsewhereOffered.value && ladderOptions.value
  * who has just read three paragraphs about running it on their own computer and clicked the button under
  * them has MADE the choice; re-asking it here is the page telling them their click meant nothing.
  *
- * Validated against `ladderOptions` rather than against the three literals, so a rung this platform does not
+ * Validated against `ladderOptions` rather than against the two literals, so a rung this platform does not
  * offer (no address mint, no hosted allowance) is ignored and the ordinary default stands. A stale link from
  * a cached page then costs nothing: the reader lands on a working picker, never on a step that cannot unlock.
  * Read once, on arrival: it is where the reader came FROM, not a control, so a lane switch here must not be
@@ -633,12 +610,10 @@ const targetKey = computed<string | undefined>(() => {
 const commandReady = computed(() => setup.value !== null && mintedFor.value === targetKey.value);
 /* Desktop sync is an option ON THE PASTED COMMAND: it rides it as an env var, and the folder it names is
  * derived from the address the mint just provisioned. So it exists exactly where that command does: not
- * before a code is minted, not on the compose tab (that file declares its own env), and not in the lanes that
- * run no command of the reader's at all: a cloud machine boots with its own copy, a hosted one was born
- * holding everything. It survives the command being FOLDED away in the app, where it rides the handoff too. */
-const syncOffered = computed(
-    () => commandReady.value && !composeShown.value && (commandVisible.value || desktop.value) && !(machine.value === `cloud` && cloudOffered.value),
-);
+ * before a code is minted, not on the compose tab (that file declares its own env), and not in the lane that
+ * runs no command of the reader's at all: a hosted machine was born holding everything. It survives the
+ * command being FOLDED away in the app, where it rides the handoff too. */
+const syncOffered = computed(() => commandReady.value && !composeShown.value && (commandVisible.value || desktop.value));
 // `.title` rather than the NoticeModel itself: interpolated whole, it renders as its own JSON.
 const lockedReason = computed(() => {
     // The one state that is not a wait: there is no command coming, so the lock says what is true and the card
@@ -733,9 +708,7 @@ const handoff = computed<Handoff>(() => {
     if (claimedAt.value !== null || report.value !== null) {
         return `claimed`;
     }
-    // A provisioned cloud machine is the strongest form of "handed": it will run the command on its own first
-    // boot, so from here the wait is on the provider's boot rather than on the user.
-    return copied.value || launched.value || cloudMachine.value !== null ? `handed` : `yours`;
+    return copied.value || launched.value ? `handed` : `yours`;
 });
 
 /* The card escalates on its own, because the failure it guards against is silent: someone who has not realised
@@ -786,9 +759,6 @@ const hostedWait = computed(() =>
 // A phone gets the same long fuse, for the same reason in a different shape: the step is a walk to another
 // machine BY CONSTRUCTION there, and the handoff above says so before the command is even reached, so forty
 // seconds would fire at someone who has understood perfectly and is halfway to their desk.
-// A cloud machine's fuse is the longest: its first boot legitimately spends minutes on cloud-init + a Docker
-// install + the image pull before anything can claim, and a nudge inside that window would accuse a machine
-// that is doing exactly what it should.
 // Downloading an installer, running it and signing in again is minutes of work this page cannot see any of,
 // so the own-computer lane borrows the phone's long fuse while the app is the path. It drops back to forty
 // seconds the moment the command is unfolded, because from then on the wait IS about a clipboard again.
@@ -803,9 +773,7 @@ const onDownload = (): void => {
     actedAt.value = Date.now();
     track(`desktop_installer_downloaded`, { platform: installer.value?.platform ?? `unknown` });
 };
-const nudgeAfterMs = computed(() =>
-    cloudMachine.value !== null ? 6 * 60_000 : composeShown.value || mobile.value || installing.value ? 3 * 60_000 : 40_000,
-);
+const nudgeAfterMs = computed(() => (composeShown.value || mobile.value || installing.value ? 3 * 60_000 : 40_000));
 // And when it stops assuming the command was never run, and starts helping the person whose terminal errored.
 const STALLED_MS = 3 * 60_000;
 // A claimed code with no daemon behind it yet: the first image pull is genuinely slow, so this waits much
@@ -823,13 +791,10 @@ const waitedMs = computed(() => (waitedFrom.value === undefined ? 0 : now.value 
 const nudging = computed(() => handoff.value !== `claimed` && waitedMs.value > nudgeAfterMs.value);
 const stalled = computed(() => handoff.value !== `claimed` && waitedMs.value > STALLED_MS);
 /* WHICH READER THE CORRECTION IS ADDRESSED TO (SetupNudge renders the prose). The decision lives here because
- * the state does: a created cloud machine that never claimed sends you to the provider's boot log; a phone
- * that mailed itself the link needs the mail opened on the other computer, not a terminal; and in the app the
- * button IS the path, so "paste this somewhere" would contradict the step above it. */
+ * the state does: a phone that mailed itself the link needs the mail opened on the other computer, not a
+ * terminal; and in the app the button IS the path, so "paste this somewhere" would contradict the step above
+ * it. */
 const nudgeVariant = computed(() => {
-    if (cloudMachine.value !== null) {
-        return `cloud` as const;
-    }
     if (mobile.value && emailed.value) {
         return `emailed` as const;
     }
@@ -851,10 +816,8 @@ const nudgeVariant = computed(() => {
     return launched.value ? (`app` as const) : (`button` as const);
 });
 // Copying again is only an answer for the reader who has a command and hasn't run it: never for a phone whose
-// clipboard was never the blocked step, and never for a machine that will fetch the command itself.
-const nudgeCopyable = computed(
-    () => commandVisible.value && runTab.value !== `compose` && !(mobile.value && emailed.value) && cloudMachine.value === null,
-);
+// clipboard was never the blocked step.
+const nudgeCopyable = computed(() => commandVisible.value && runTab.value !== `compose` && !(mobile.value && emailed.value));
 const slowBuild = computed(
     () =>
         report.value === null &&
@@ -1181,7 +1144,7 @@ const restartHosted = async (): Promise<void> => {
  * A failure in either direction leaves the reader where they were, with a reason on the card: the previous
  * design deleted and recreated the sandbox around every crossing, so one mis-click threw away the row and,
  * when the provision then failed, silently landed them in a different lane with no explanation. */
-const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> => {
+const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
     const prev = machine.value;
     if (creating.value || hostedBusy.value) {
         return;
@@ -1457,7 +1420,6 @@ const touched = (row: SandboxSummary): boolean =>
     (row.lastSeenAt ?? null) !== null ||
     (row.setupCodeClaimedAt ?? null) !== null ||
     (row.setupReport ?? null) !== null ||
-    (row.cloud ?? null) !== null ||
     (row.hosted ?? null) !== null;
 
 const arrive = async (): Promise<void> => {
@@ -1477,19 +1439,6 @@ const arrive = async (): Promise<void> => {
     ]);
     hostedOffer.value = offer;
     intenticAvailable.value = address.enabled;
-    /* The picker's default may not survive the offers, in two ways. On a platform that mints no addresses,
-     * `mine` and `cloud` both point at a step that can only sit locked while the machine we host sits
-     * unoffered behind a hidden picker. And a PHONE takes the hosted rung whenever it is on offer: `cloud`
-     * earned the phone default by being the one lane a phone finishes alone, but it opens on a cloud
-     * credential paste: the hosted rung finishes alone too, off a single tap. */
-    if (hostedOffered.value && !hostedSpent.value && (mobile.value || !commandOffered.value)) {
-        machine.value = `hosted`;
-    }
-    /* …and a rung the reader picked on the site outranks both defaults, including the phone one. The device
-     * default is a GUESS at what this reader can finish; an explicit click is not a guess. A phone that
-     * arrives on `?machine=mine` is somebody reading on their phone about the desktop they are sitting at,
-     * and the handoff (SetupHandoff) is exactly the step that case already has. */
-    machine.value = requestedMachine() ?? machine.value;
     const requested = route.query[`sandbox`];
     const named = typeof requested === `string` ? rows.find((entry) => entry.id === requested) : undefined;
     const unfinished = rows.some((entry) => entry.lastSeenAt !== null)
@@ -1498,24 +1447,83 @@ const arrive = async (): Promise<void> => {
     const found = named ?? unfinished;
     if (found?.role !== `owner`) {
         await autoCreate();
-        fallBackToAttach();
+    } else {
+        sandbox.select(found.id);
+        created.value = found;
+        resuming.value = touched(found);
+        // A resumed sandbox that was provisioned last visit continues as the story it is: a hosted machine may
+        // still be booting, or asleep, which the wake reflex handles.
+        if ((found.hosted ?? null) !== null) {
+            machine.value = `hosted`;
+            hostedSince.value = Date.now();
+        }
+    }
+    /* A RUNG THE READER PICKED BEFORE THIS PAGE outranks whatever the arrival would have chosen, in both
+     * directions: it preselects the picker AND it is handed to `arrivalFor` as the reader's own answer. A
+     * phone that arrives on `?machine=mine` is somebody reading on their phone about the desktop they are
+     * sitting at, and the handoff (SetupHandoff) is exactly the step that case already has. */
+    const asked = requestedMachine();
+    if (asked !== undefined) {
+        machine.value = asked;
+    }
+    /* WHAT THIS PAGE DOES WITHOUT BEING ASKED, off the surface it is being read on (setupArrival.ts). Decided
+     * here rather than on mount because every input to it is one of the two reads above: the offers, and
+     * whether the row on screen is somebody's unfinished errand. */
+    arrival.value = arrivalFor({
+        inApp: desktop.value,
+        touched: resuming.value,
+        hostedOffered: hostedOffered.value,
+        hostedSpent: hostedSpent.value,
+        commandOffered: commandOffered.value,
+        requestedMachine: asked,
+        elsewhere: elsewhere.value,
+    });
+    fallBackToAttach();
+    // The attach lane is the whole flow when the page falls back to it: nothing on the provision spine, and so
+    // nothing for an arrival to start.
+    if (lane.value === `attach`) {
         return;
     }
-    sandbox.select(found.id);
-    created.value = found;
-    resuming.value = touched(found);
-    // A resumed sandbox that was provisioned last visit continues as the story it is: hosted machines may
-    // still be booting (or asleep: the wake reflex handles that), and cloud machines hold a code the command
-    // lane must not re-ask for.
-    if ((found.hosted ?? null) !== null) {
+    /* THE BROWSER'S ANSWER, TAKEN. A machine is started here rather than behind "Start my machine", because
+     * that button was the last thing between somebody who had signed up ninety seconds ago and a working
+     * product, and it asked them to confirm a choice they had not been given anything to make it with. The
+     * card under it is the boot they are now watching (hostedWait.ts), and the page leaves for the workspace
+     * the moment the daemon reports in.
+     *
+     * A REFUSAL PUTS THE PICKER BACK. Capacity weather, an allowance already spent somewhere else, a bad
+     * provider credential: the reason is on the card (`hostedError`), and the reader needs the other rung
+     * visible beside it, not folded behind a link that reads like an aside. */
+    if (arrival.value === `hosted`) {
         machine.value = `hosted`;
-        hostedSince.value = Date.now();
-    } else if (found.cloud !== null) {
-        machine.value = `cloud`;
-        cloudMachine.value = found.cloud;
+        if (!(await provisionHosted())) {
+            arrival.value = `choose`;
+        }
+        return;
     }
-    fallBackToAttach();
+    // The app's answer is this computer, and the handoff below fires it the moment there is a code to hand.
+    if (arrival.value === `local`) {
+        machine.value = `mine`;
+    }
 };
+
+/* THE APP'S HANDOFF, FIRED THE MOMENT THERE IS SOMETHING TO HAND OVER.
+ *
+ * `local` is decided on arrival, but the setup code it hands over is minted a round-trip later (the mint
+ * watcher below), so the arrival cannot make this call itself. It is the same button the app's step 2 draws,
+ * pressed by the page: inside the app, "which machine" was never a real question, and neither was "may we
+ * start", because installing the sandbox on this computer is the whole reason the app was downloaded.
+ *
+ * ONE SHOT, guarded by a flag rather than by the watcher's own arity: a re-mint is an ordinary event here (a
+ * lane switch, "use a new sandbox instead", a failed mint retried), and every one of them would otherwise
+ * re-open the app's installer window behind a reader who has moved on to something else. */
+const handedOff = ref(false);
+watch([arrival, commandReady], () => {
+    if (arrival.value !== `local` || !commandReady.value || handedOff.value) {
+        return;
+    }
+    handedOff.value = true;
+    runHere();
+});
 
 onMounted(async () => {
     try {
@@ -1538,7 +1546,7 @@ onMounted(async () => {
  * So the row is a DRAFT until something happens that only somebody who means it would do, and leaving without
  * one of those discards it. Every clause below is an act, not a guess from elapsed time:
  *   • the command is on a clipboard, in an inbox, or handed to the app: it may already be running somewhere
- *   • a machine exists (ours or the reader's cloud account): there is hardware behind this row now
+ *   • a machine of ours exists: there is hardware behind this row now
  *   • a machine redeemed the code, or reported on its run: the sandbox is being built as we speak
  *   • the daemon checked in, or an attach bound one: it is a workspace, not a draft
  *
@@ -1553,7 +1561,6 @@ const committed = computed(
         claimedAt.value !== null ||
         report.value !== null ||
         announced.value ||
-        cloudMachine.value !== null ||
         hostedRow.value !== null,
 );
 
@@ -1594,17 +1601,19 @@ const startFresh = (): void => {
     // A resumed hosted sandbox being walked away from keeps existing (it is the user's, with their files):
     // but the fresh one starts on the classic lane: the hosted allowance is likely spent on the row being left.
     hostedSince.value = undefined;
-    if (machine.value === `hosted`) {
-        machine.value = mobile.value ? `cloud` : `mine`;
-    }
+    machine.value = `mine`;
+    /* AND THE ARRIVAL IS SPENT. "Use a new sandbox instead" is the one act on this page that is unambiguously
+     * the reader taking the wheel, so the replacement row lands on the picker rather than on another machine
+     * started for them: starting a second one behind somebody who has just said "not that one" is the move
+     * this whole rule exists to prevent. It also releases the app's one-shot handoff below from a code that
+     * belonged to the abandoned row. */
+    arrival.value = `choose`;
+    handedOff.value = false;
     // The handoff belonged to the abandoned sandbox's command: a copy already made, a setup already handed to
     // the app, and a claim already recorded are all facts about a machine the next sandbox has nothing to do with.
     copied.value = false;
     launched.value = false;
     claimedAt.value = null;
-    // The provisioned machine belongs to the abandoned sandbox: the next one has no machine yet, and keeping
-    // the stamp would freeze its mint (see the watcher below) for a VM that claims someone else's code.
-    cloudMachine.value = null;
     subdomain.value = ``;
     derivedPrefix.value = ``;
     // The attach lane's inputs described the sandbox being abandoned: a stale domain would otherwise be sitting
@@ -1657,12 +1666,6 @@ watch(
         clearTimeout(mintTimer);
         const key = targetKey.value;
         if (key === undefined || created.value === null || mintedFor.value === key) {
-            return;
-        }
-        // A provisioned cloud machine boots holding THE minted code: re-minting would overwrite it
-        // server-side and the machine's claim would find a code that no longer exists. Once one exists, the
-        // code is frozen with it.
-        if (cloudMachine.value !== null) {
             return;
         }
         mintTimer = setTimeout(() => void mint(key), 500);
@@ -1789,10 +1792,24 @@ watch(commandReady, (ready) => {
                 <h1 class="mast-headline"><span class="entry-display">Set up your workspace</span><span class="entry-stop">.</span></h1>
 
                 <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
-                     work the attach lane doesn't do. -->
+                     work the attach lane doesn't do.
+                     …AND IT MUST NOT ASK WHEN THE PAGE DIDN'T. "Pick where it runs" is written for a reader in
+                     front of the picker, and since the arrival started answering for itself (setupArrival.ts)
+                     most readers are not: a browser lands on a machine of ours already booting, and the app on
+                     its own install. Left as it was, the masthead put a decision to somebody the page had
+                     already decided for, four inches above the card doing it. So the question is asked only
+                     while it IS a question, keyed on the picker actually being drawn rather than on the
+                     arrival, which also covers the platform that offers exactly one rung and therefore no
+                     picker at all. -->
                 <p class="mast-lede">
                     <template v-if="lane === `attach`">Point intentic at the sandbox you're already running. One address, and you're in.</template>
-                    <template v-else>Pick where it runs. You'll be working in it in a minute or two.</template>
+                    <template v-else-if="ladderShown">Pick where it runs. You'll be working in it in a minute or two.</template>
+                    <template v-else-if="machine === `hosted`">We're starting a machine for you. You'll be working in it in about a minute.</template>
+                    <template v-else-if="desktop">Setting it up on this computer. You'll be working in it in a minute or two.</template>
+                    <!-- A browser on a platform that hosts nothing: one rung, so no picker, and nothing has
+                         started, because starting it is the reader's move. Names the lane without claiming
+                         work that has not begun. -->
+                    <template v-else>It runs on a computer of yours. You'll be working in it in a minute or two.</template>
                 </p>
             </header>
 
@@ -2357,6 +2374,22 @@ watch(commandReady, (ready) => {
                                     </template>
                                 </p>
                             </template>
+
+                            <!-- THE WAY OFF A MACHINE NOBODY ASKED FOR. A browser arrives here with the machine
+                                 already starting (setupArrival.ts), which is the point, but a page that has
+                                 taken a decision on the reader's behalf owes them the other answer in plain
+                                 sight rather than a support article. One line, in the same words the app's own
+                                 fold-out uses. It REVEALS the rung rather than taking it: the machine is handed
+                                 back when the other rung is actually chosen (`chooseMachine`), so a reader who
+                                 opens this to read what the alternative is has not thereby destroyed anything. -->
+                            <nav
+                                v-if="otherMachinesFolded"
+                                aria-label="Other ways to set up"
+                                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
+                            >
+                                <span>Other ways to set up:</span>
+                                <button type="button" :class="ui.linkButton()" @click="showOtherMachines">Run it on my own computer</button>
+                            </nav>
                         </template>
 
                         <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready: a
@@ -2381,234 +2414,213 @@ watch(commandReady, (ready) => {
                             </div>
                         </template>
                         <template v-else>
-                            <template v-if="machine === `cloud` && cloudOffered">
-                                <!-- The machine boots headless with no Cloudflare of its own, so only the
-                                     intentic-provided tunnel can make it reachable: a step-2 own-zone pick has
-                                     to be walked back before the form is any use. -->
-                                <p v-if="mode !== `intentic`" class="flex items-start gap-2 text-xs text-muted">
-                                    <Icon name="info-circle" class="mt-0.5 shrink-0" />
-                                    <span>Cloud machines use intentic's domain. Switch the address above back to intentic's to create one.</span>
+                            <!-- Inside the desktop app the terminal is gone: one click hands this same setup code to the
+                             app, which runs the same connect script on this machine and streams what it says into
+                             its manager window. So in the app this IS the step: a line of consequence, the button
+                             that causes it, and a way out for someone who wanted a server after all.
+                             It used to be a tinted, bordered panel carrying its own "Run it on this computer"
+                             heading with a primary button inside: the step title, the panel heading and the button
+                             label all saying the same sentence, three boxes deep, inside a card that already has a
+                             border. The title above names the machine, so the button only has to name the verb:
+                             which is also the shape the app's other two handoffs use (HostRecreate, the
+                             environment card), and there is no reason onboarding should be the loud one. -->
+                            <template v-if="desktop">
+                                <p class="text-xs text-muted">
+                                    Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it
+                                    answers. No terminal.
                                 </p>
-                                <!-- Provisioned: the form's work is done, and the one fact worth keeping on screen
-                                     is where the machine lives: the wait below narrates the rest. -->
-                                <p v-else-if="cloudMachine" class="flex items-start gap-2 text-xs text-muted">
-                                    <Icon name="check" class="mt-0.5 shrink-0 text-success" />
-                                    <span class="min-w-0">
-                                        <span class="text-content">{{ cloudMachine.serverName }}</span> was created in your
-                                        {{ cloudProviderName }} account ({{ cloudMachine.location }}). It sets itself up from first boot.
-                                    </span>
-                                </p>
-                                <SetupCloud v-else-if="created" :sandbox-id="created.id" @provisioned="onProvisioned" />
-                            </template>
-                            <template v-else>
-                                <!-- Inside the desktop app the terminal is gone: one click hands this same setup code to the
-                                 app, which runs the same connect script on this machine and streams what it says into
-                                 its manager window. So in the app this IS the step: a line of consequence, the button
-                                 that causes it, and a way out for someone who wanted a server after all.
-                                 It used to be a tinted, bordered panel carrying its own "Run it on this computer"
-                                 heading with a primary button inside: the step title, the panel heading and the button
-                                 label all saying the same sentence, three boxes deep, inside a card that already has a
-                                 border. The title above names the machine, so the button only has to name the verb:
-                                 which is also the shape the app's other two handoffs use (HostRecreate, the
-                                 environment card), and there is no reason onboarding should be the loud one. -->
-                                <template v-if="desktop">
-                                    <p class="text-xs text-muted">
-                                        Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it
-                                        answers. No terminal.
-                                    </p>
-                                    <Button label="Set it up now" class="w-full justify-center md:w-fit" @click="runHere">
-                                        <template #icon><Icon name="bolt" /></template>
-                                    </Button>
-                                </template>
-
-                                <!-- …and in a browser, the same answer one install earlier: the app, for the
-                                     machine this reader is on. One button and nothing else: the sentence that
-                                     would sell it is the sentence the reader is already deciding without, and the
-                                     app's own first screen is the branch above, where the button finishes the job.
-                                     `secondary` is deliberately NOT used here: this is the step, and the only
-                                     other thing on the card is a muted link.
-                                     `w-fit` AND NOT `w-auto`, which every primary on this page now shares: the
-                                     card is a flex COLUMN, so a child whose cross size is `auto` is stretched to
-                                     its width no matter what `w-auto` asks for, and the button meant to be as
-                                     wide as its label came out as a 760px bar of accent across the card. A
-                                     definite width opts out of the stretch; `self-start` also would, but it
-                                     silently top-aligns the same class used in a flex row. -->
-                                <Button
-                                    v-if="appFirst && installer"
-                                    as="a"
-                                    :href="installer.href"
-                                    :label="`Download for ${installer.label}`"
-                                    class="w-full justify-center md:w-fit"
-                                    @click="onDownload"
-                                >
-                                    <template #icon><Icon name="download" /></template>
+                                <Button label="Set it up now" class="w-full justify-center md:w-fit" @click="runHere">
+                                    <template #icon><Icon name="bolt" /></template>
                                 </Button>
-
-                                <!-- On a phone, the step's actual next move: see SetupHandoff.vue. It goes ABOVE the
-                                 command because the command is the thing it is redirecting people away from, and a
-                                 correction printed underneath what it corrects is read second or not at all. It is
-                                 no longer gated on the command being on screen: it is what the step IS here, and the
-                                 command is the thing folded behind it. -->
-                                <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
-
-                                <!-- ONE ROW OF ALTERNATIVES, NOT A STACK OF DISCLOSURES. There were two, one under
-                                     the other, each opening with a question: "Can't run it on this computer? See
-                                     the other options" over "Running it on a server instead? Show the command".
-                                     Two chevrons under the one button that matters, asking the reader to work out
-                                     which of two overlapping questions was theirs (a server IS another computer),
-                                     and each promising only to reveal something rather than naming it.
-                                     They are not the same KIND of thing, which is why folding them into one
-                                     disclosure would have been wrong too: the first changes WHERE the sandbox runs
-                                     (a machine we host, or one in the reader's own cloud account), the second
-                                     changes HOW this one is started (a command instead of a button). So: one quiet
-                                     line saying these are the alternatives, and each alternative named by its
-                                     outcome. Nothing to open to find out what is on offer, and neither one wearing
-                                     the weight of a second call to action. -->
-                                <nav
-                                    v-if="desktop || mobile || appFirst"
-                                    aria-label="Other ways to set up"
-                                    class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
-                                >
-                                    <span>Other ways to set up:</span>
-                                    <!-- The rungs the app keeps folded away, opened by name. Only in the app: in a
-                                         browser they are already on screen, and a link offering what the reader can
-                                         already see sends them looking for something else. -->
-                                    <template v-if="desktop && !elsewhere && (addressed || hostedOffer?.enabled)">
-                                        <button type="button" :class="ui.linkButton()" @click="showOtherMachines">
-                                            Use a hosted or cloud machine
-                                        </button>
-                                        <span aria-hidden="true" class="text-subtle">·</span>
-                                    </template>
-                                    <button type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
-                                        <template v-if="showCommand">Hide the command</template>
-                                        <template v-else-if="desktop">Show the command for a server</template>
-                                        <template v-else>Show the command</template>
-                                    </button>
-                                </nav>
-
-                                <div v-if="commandVisible" class="flex flex-col gap-2">
-                                    <!-- One line, because the title already gave the instruction and nobody reads the second
-                             sentence of a step they are trying to get through. All this adds is the bit the title
-                             can't: WHICH machine, which is why it belongs to the COMMAND and not to the step, and
-                             why it is no longer above a button whose whole selling point is that there is no
-                             terminal. In the app (where this computer already has a button of its own) the machine
-                             that runs this is by construction not the one reading it.
-                             Not on a phone: the line that opened this disclosure already said who copying is for,
-                             and repeating it here would be the third sentence in a card about a fourth device. -->
-                                    <p v-if="!mobile" class="flex items-center gap-2.5 text-xs text-muted">
-                                        <Icon name="terminal" class="shrink-0 text-link" />
-                                        <span class="min-w-0">
-                                            <template v-if="desktop"
-                                                >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
-                                            >
-                                            <template v-else>Paste it into a terminal: this computer, or any server you have a shell on.</template>
-                                        </span>
-                                    </p>
-                                    <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
-                             340px line wrapped every label to two lines. The copy button leaves that row with
-                             it: a chip stranded on a line of its own under the tabs, one row above the thing
-                             it copies, was the loose end on this card. Beside the tabs on a desktop, under the
-                             command on a phone; either way it is next to what it acts on. -->
-                                    <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
-                                        <SegmentedControl
-                                            v-model="runTab"
-                                            :options="runTabOptions"
-                                            :stretch="mobile"
-                                            class="[&>button]:py-1 [&>button]:text-xs"
-                                        />
-                                        <CopyButton
-                                            v-if="!mobile && runTab !== `compose`"
-                                            :text="selectedCommand"
-                                            label="Copy"
-                                            class="text-xs"
-                                            @copied="onCopied"
-                                        />
-                                    </div>
-                                    <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
-                                    <template v-else>
-                                        <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
-                                 nine lines of env vars between the button that copies it and the step that
-                                 comes next. The dev command is the long one, but even the hosted one-liner
-                                 wraps to four lines at 390px.
-                                 No label. It read "Terminal", to stop a dark monospace box being taken for a
-                                 documentation snippet, but the line above the block already says to paste this
-                                 into a terminal, so it was a heading restating the sentence directly above it,
-                                 and a row of chrome between the Copy button and the thing it copies. -->
-                                        <Code
-                                            :code="selectedCommand"
-                                            :lang="selectedCommandLang"
-                                            :wrap="true"
-                                            :copyable="false"
-                                            :clamp-lines="mobile ? 4 : undefined"
-                                        />
-                                        <!-- Full width and touch-sized, directly under the command: the reader who
-                                 opened this disclosure came for the clipboard, so here, and only here: copying
-                                 is the action. `secondary`, because the primary on this card is the email
-                                 handoff above it and two filled buttons make the reader choose twice. -->
-                                        <CopyButton
-                                            v-if="mobile"
-                                            :text="selectedCommand"
-                                            label="Copy command"
-                                            :stretch="true"
-                                            severity="secondary"
-                                            @copied="onCopied"
-                                        />
-                                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev, connect.sh
-                                 rebuilds it from this checkout on every run (layer-cached), so the pasted command is
-                                 self-sufficient and never runs a stale image after sandbox edits. Folded shut: it is a
-                                 note to whoever is developing intentic itself, not a step in setting a sandbox up.
-                                 Gated on the same condition as the tag it describes: asked for the released script,
-                                 this command builds nothing, and a note promising otherwise would be the only thing
-                                 on screen still claiming it. -->
-                                        <details v-if="buildsFromCheckout" class="text-xs text-warning">
-                                            <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
-                                                <Icon name="box" class="shrink-0" />
-                                                <span class="min-w-0">Local dev: builds from your checkout</span>
-                                                <Icon name="chevron-down" class="shrink-0 text-subtle" />
-                                            </summary>
-                                            <p class="mt-1 pl-6">
-                                                This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that. Every run
-                                                rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
-                                                minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
-                                            </p>
-                                        </details>
-                                    </template>
-                                </div>
-
-                                <!-- THE ONE SWITCH THAT IS A DECISION, UNDER THE COMMAND IT REWRITES. `sudo` is a
-                                 claim about the reader's own machine, and its answer is visible in the line one
-                                 row up, so it stays where the line is. Desktop sync used to sit beside it and no
-                                 longer does: it is on unless somebody objects, and a default at full contrast
-                                 beside a command reads as a second question to settle before pasting. It lives in
-                                 the reference column now (and, where there is no column, under the command).
-                                 Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
-                                 there is no switch here and the Docker prerequisite is left to the panel, which
-                                 names the reboot a first Windows install may want. And only while the command is
-                                 on screen: it rewrites one token of a line, which is no kind of offer when the
-                                 line itself is folded away.
-                                 The <label> stops at the option's NAME rather than wrapping the row: a label
-                                 toggles on any click inside it, and the caption beside it mentions `sudo`: text
-                                 people select and read. -->
-                                <div
-                                    v-if="environment.production && commandVisible && runTab === `unix`"
-                                    class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted"
-                                >
-                                    <label class="flex cursor-pointer items-center gap-2">
-                                        <Checkbox v-model="hasDocker" :binary="true" size="small" />
-                                        <span class="shrink-0 text-content">I already have Docker</span>
-                                    </label>
-                                    <span class="min-w-0">
-                                        <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
-                                        <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
-                                    </span>
-                                </div>
-
-                                <!-- …and sync itself, for the widths with no reference column to put it in. Sync
-                                     outlives the command in the APP, where it rides the desktop handoff too, so it
-                                     survives the command being folded away there. Only the compose tab drops it
-                                     outright: that file declares its own env. -->
-                                <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
                             </template>
+
+                            <!-- …and in a browser, the same answer one install earlier: the app, for the
+                                 machine this reader is on. One button and nothing else: the sentence that
+                                 would sell it is the sentence the reader is already deciding without, and the
+                                 app's own first screen is the branch above, where the button finishes the job.
+                                 `secondary` is deliberately NOT used here: this is the step, and the only
+                                 other thing on the card is a muted link.
+                                 `w-fit` AND NOT `w-auto`, which every primary on this page now shares: the
+                                 card is a flex COLUMN, so a child whose cross size is `auto` is stretched to
+                                 its width no matter what `w-auto` asks for, and the button meant to be as
+                                 wide as its label came out as a 760px bar of accent across the card. A
+                                 definite width opts out of the stretch; `self-start` also would, but it
+                                 silently top-aligns the same class used in a flex row. -->
+                            <Button
+                                v-if="appFirst && installer"
+                                as="a"
+                                :href="installer.href"
+                                :label="`Download for ${installer.label}`"
+                                class="w-full justify-center md:w-fit"
+                                @click="onDownload"
+                            >
+                                <template #icon><Icon name="download" /></template>
+                            </Button>
+
+                            <!-- On a phone, the step's actual next move: see SetupHandoff.vue. It goes ABOVE the
+                             command because the command is the thing it is redirecting people away from, and a
+                             correction printed underneath what it corrects is read second or not at all. It is
+                             no longer gated on the command being on screen: it is what the step IS here, and the
+                             command is the thing folded behind it. -->
+                            <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
+
+                            <!-- ONE ROW OF ALTERNATIVES, NOT A STACK OF DISCLOSURES. There were two, one under
+                                 the other, each opening with a question: "Can't run it on this computer? See
+                                 the other options" over "Running it on a server instead? Show the command".
+                                 Two chevrons under the one button that matters, asking the reader to work out
+                                 which of two overlapping questions was theirs (a server IS another computer),
+                                 and each promising only to reveal something rather than naming it.
+                                 They are not the same KIND of thing, which is why folding them into one
+                                 disclosure would have been wrong too: the first changes WHERE the sandbox runs
+                                 (a machine we host instead of this one), the second changes HOW this one is
+                                 started (a command instead of a button). So: one quiet line saying these are
+                                 the alternatives, and each alternative named by its outcome. Nothing to open
+                                 to find out what is on offer, and neither one wearing the weight of a second
+                                 call to action. -->
+                            <nav
+                                v-if="desktop || mobile || appFirst || otherMachinesFolded"
+                                aria-label="Other ways to set up"
+                                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
+                            >
+                                <span>Other ways to set up:</span>
+                                <!-- The rung the arrival did not take, opened by name. Only while it is folded:
+                                     a link offering what the reader can already see on the row above sends them
+                                     looking for something else. -->
+                                <template v-if="otherMachinesFolded">
+                                    <button type="button" :class="ui.linkButton()" @click="showOtherMachines">
+                                        Use a machine we host
+                                    </button>
+                                    <span aria-hidden="true" class="text-subtle">·</span>
+                                </template>
+                                <button type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
+                                    <template v-if="showCommand">Hide the command</template>
+                                    <template v-else-if="desktop">Show the command for a server</template>
+                                    <template v-else>Show the command</template>
+                                </button>
+                            </nav>
+
+                            <div v-if="commandVisible" class="flex flex-col gap-2">
+                                <!-- One line, because the title already gave the instruction and nobody reads the second
+                         sentence of a step they are trying to get through. All this adds is the bit the title
+                         can't: WHICH machine, which is why it belongs to the COMMAND and not to the step, and
+                         why it is no longer above a button whose whole selling point is that there is no
+                         terminal. In the app (where this computer already has a button of its own) the machine
+                         that runs this is by construction not the one reading it.
+                         Not on a phone: the line that opened this disclosure already said who copying is for,
+                         and repeating it here would be the third sentence in a card about a fourth device. -->
+                                <p v-if="!mobile" class="flex items-center gap-2.5 text-xs text-muted">
+                                    <Icon name="terminal" class="shrink-0 text-link" />
+                                    <span class="min-w-0">
+                                        <template v-if="desktop"
+                                            >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
+                                        >
+                                        <template v-else>Paste it into a terminal: this computer, or any server you have a shell on.</template>
+                                    </span>
+                                </p>
+                                <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
+                         340px line wrapped every label to two lines. The copy button leaves that row with
+                         it: a chip stranded on a line of its own under the tabs, one row above the thing
+                         it copies, was the loose end on this card. Beside the tabs on a desktop, under the
+                         command on a phone; either way it is next to what it acts on. -->
+                                <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                                    <SegmentedControl
+                                        v-model="runTab"
+                                        :options="runTabOptions"
+                                        :stretch="mobile"
+                                        class="[&>button]:py-1 [&>button]:text-xs"
+                                    />
+                                    <CopyButton
+                                        v-if="!mobile && runTab !== `compose`"
+                                        :text="selectedCommand"
+                                        label="Copy"
+                                        class="text-xs"
+                                        @copied="onCopied"
+                                    />
+                                </div>
+                                <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
+                                <template v-else>
+                                    <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
+                             nine lines of env vars between the button that copies it and the step that
+                             comes next. The dev command is the long one, but even the hosted one-liner
+                             wraps to four lines at 390px.
+                             No label. It read "Terminal", to stop a dark monospace box being taken for a
+                             documentation snippet, but the line above the block already says to paste this
+                             into a terminal, so it was a heading restating the sentence directly above it,
+                             and a row of chrome between the Copy button and the thing it copies. -->
+                                    <Code
+                                        :code="selectedCommand"
+                                        :lang="selectedCommandLang"
+                                        :wrap="true"
+                                        :copyable="false"
+                                        :clamp-lines="mobile ? 4 : undefined"
+                                    />
+                                    <!-- Full width and touch-sized, directly under the command: the reader who
+                             opened this disclosure came for the clipboard, so here, and only here: copying
+                             is the action. `secondary`, because the primary on this card is the email
+                             handoff above it and two filled buttons make the reader choose twice. -->
+                                    <CopyButton
+                                        v-if="mobile"
+                                        :text="selectedCommand"
+                                        label="Copy command"
+                                        :stretch="true"
+                                        severity="secondary"
+                                        @copied="onCopied"
+                                    />
+                                    <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev, connect.sh
+                             rebuilds it from this checkout on every run (layer-cached), so the pasted command is
+                             self-sufficient and never runs a stale image after sandbox edits. Folded shut: it is a
+                             note to whoever is developing intentic itself, not a step in setting a sandbox up.
+                             Gated on the same condition as the tag it describes: asked for the released script,
+                             this command builds nothing, and a note promising otherwise would be the only thing
+                             on screen still claiming it. -->
+                                    <details v-if="buildsFromCheckout" class="text-xs text-warning">
+                                        <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                                            <Icon name="box" class="shrink-0" />
+                                            <span class="min-w-0">Local dev: builds from your checkout</span>
+                                            <Icon name="chevron-down" class="shrink-0 text-subtle" />
+                                        </summary>
+                                        <p class="mt-1 pl-6">
+                                            This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that. Every run
+                                            rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
+                                            minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
+                                        </p>
+                                    </details>
+                                </template>
+                            </div>
+
+                            <!-- THE ONE SWITCH THAT IS A DECISION, UNDER THE COMMAND IT REWRITES. `sudo` is a
+                             claim about the reader's own machine, and its answer is visible in the line one
+                             row up, so it stays where the line is. Desktop sync used to sit beside it and no
+                             longer does: it is on unless somebody objects, and a default at full contrast
+                             beside a command reads as a second question to settle before pasting. It lives in
+                             the reference column now (and, where there is no column, under the command).
+                             Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
+                             there is no switch here and the Docker prerequisite is left to the panel, which
+                             names the reboot a first Windows install may want. And only while the command is
+                             on screen: it rewrites one token of a line, which is no kind of offer when the
+                             line itself is folded away.
+                             The <label> stops at the option's NAME rather than wrapping the row: a label
+                             toggles on any click inside it, and the caption beside it mentions `sudo`: text
+                             people select and read. -->
+                            <div
+                                v-if="environment.production && commandVisible && runTab === `unix`"
+                                class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted"
+                            >
+                                <label class="flex cursor-pointer items-center gap-2">
+                                    <Checkbox v-model="hasDocker" :binary="true" size="small" />
+                                    <span class="shrink-0 text-content">I already have Docker</span>
+                                </label>
+                                <span class="min-w-0">
+                                    <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
+                                    <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
+                                </span>
+                            </div>
+
+                            <!-- …and sync itself, for the widths with no reference column to put it in. Sync
+                                 outlives the command in the APP, where it rides the desktop handoff too, so it
+                                 survives the command being folded away there. Only the compose tab drops it
+                                 outright: that file declares its own env. -->
+                            <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
                         </template>
 
                         <!-- The wait's whole job, as the footer of the step it reports on: now saying WHICH of the two
@@ -2652,13 +2664,8 @@ watch(commandReady, (ready) => {
                                         <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker. The first run takes
                                         a few minutes.
                                     </template>
-                                    <!-- Handed off three ways, and the next move differs: a copied command still has to
-                                         be pasted, the app already has everything and is opening its own window, and a
-                                         cloud machine is booting with nothing left for anyone to do. -->
-                                    <template v-else-if="handoff === `handed` && cloudMachine">
-                                        <span class="font-medium text-content">Machine created.</span> Its first boot installs Docker and your
-                                        sandbox, usually a few minutes. This page opens your workspace the moment it answers.
-                                    </template>
+                                    <!-- Handed off two ways, and the next move differs: a copied command still has to be
+                                         pasted, where the app already has everything and is opening its own window. -->
                                     <template v-else-if="handoff === `handed` && launched">
                                         <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window. This page
                                         opens your workspace the moment it answers.
@@ -2670,10 +2677,6 @@ watch(commandReady, (ready) => {
                                          they could act on: the one fact this state has is whose move it is, so
                                          it says that instead. In the app there is no command to name and the
                                          button has a label, so it names the button. -->
-                                    <template v-else-if="machine === `cloud` && cloudOffered">
-                                        <span class="font-medium text-content">Waiting for you to create the machine.</span> Paste a credential above,
-                                        then create it: nothing runs, or costs anything, until you do.
-                                    </template>
                                     <template v-else-if="desktop && !commandVisible">
                                         <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
                                         it up now" above.
@@ -2715,8 +2718,6 @@ watch(commandReady, (ready) => {
                                 v-if="nudging"
                                 class="xl:hidden"
                                 :variant="nudgeVariant"
-                                :cloud-name="cloudMachine?.serverName ?? ``"
-                                :cloud-provider="cloudProviderName"
                                 :stalled="stalled"
                                 :command="selectedCommand"
                                 :copyable="nudgeCopyable"
@@ -2733,15 +2734,8 @@ watch(commandReady, (ready) => {
                                      send a phone whose command is folded away to an app window that only exists on
                                      a desktop. -->
                                 <span class="min-w-0"
-                                    >Picked up a while ago, still no sandbox. Check
-                                    {{
-                                        launched
-                                            ? `the Intentic window`
-                                            : cloudMachine
-                                              ? `the machine's boot log in your ${cloudProviderName} console`
-                                              : `that terminal`
-                                    }}
-                                    for an error. It's safe to re-run.</span
+                                    >Picked up a while ago, still no sandbox. Check {{ launched ? `the Intentic window` : `that terminal` }} for an
+                                    error. It's safe to re-run.</span
                                 >
                             </p>
                         </div>
@@ -2780,8 +2774,6 @@ watch(commandReady, (ready) => {
                     <SetupNudge
                         v-if="nudging"
                         :variant="nudgeVariant"
-                        :cloud-name="cloudMachine?.serverName ?? ``"
-                        :cloud-provider="cloudProviderName"
                         :stalled="stalled"
                         :command="selectedCommand"
                         :copyable="nudgeCopyable"

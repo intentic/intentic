@@ -662,12 +662,13 @@ fn park_setup(app: &AppHandle, args: SetupArgs) {
 
 /* A SETUP THIS APP NEVER SAW ITS OWN WINDOW ASK FOR — so ask, before anything runs.
  *
- * A parked setup runs immediately, and the consent for that is the SPA's own "Set up on this computer"
- * button, which states what it does in the sentence directly above it. That argument holds for exactly one of
- * the three directions a link arrives from. An `intentic://setup` from the OS is a link ANY page can navigate
- * to, and all the user was shown before it got here is the browser's "Open Intentic?" — a question about
- * opening an app, answered by someone who is about to get a container, a tunnel putting it on the internet,
- * and (with `syncDir`) a folder of theirs mirrored into it.
+ * A parked setup runs immediately, and the consent for that is having installed, opened and signed into this
+ * app to run a sandbox on this computer: its setup page hands the code over on arrival rather than asking
+ * again (setupArrival.ts). That argument holds for exactly one of the three directions a link arrives from,
+ * the app's own window. An `intentic://setup` from the OS is a link ANY page can navigate to, and all the
+ * user was shown before it got here is the browser's "Open Intentic?" — a question about opening an app,
+ * answered by someone who is about to get a container, a tunnel putting it on the internet, and (with
+ * `syncDir`) a folder of theirs mirrored into it.
  *
  * So this says those things out loud and defaults to no. It is the same shape as the `state` nonce on an auth
  * handoff (auth.rs): a request this process cannot tie to something it started is not one it acts on.
@@ -688,7 +689,8 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
             "Something asked Intentic to set up a sandbox on this computer.\n\n\
              That starts a container here and publishes it on the internet, where it is reachable by whoever \
              the setup link came from.{sync}\n\n\
-             If you did not just choose \"Set up on this computer\" in Intentic, cancel this.",
+             Intentic sets itself up from its own window, so nothing you did in the app asked for this. \
+             If you were not expecting it, cancel.",
         ))
         .title("Set up a sandbox on this computer?")
         .kind(MessageDialogKind::Warning)

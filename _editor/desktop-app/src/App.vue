@@ -554,9 +554,9 @@ const dismissSetup = async (): Promise<void> => {
  * list this button sits under is the moment where that premise is being tested hardest: a PC with no WSL2
  * and no Docker is being asked for administrator, a 600 MB download and a restart, and some of those readers
  * are on a machine where none of that is going to happen: a work laptop, a locked-down build, a PC too
- * small for it. Until now the app had nothing to say to them, while the browser has offered a machine in
- * their own cloud account and one we host for them all along; it was hidden here on the argument that "this
- * computer" is the whole point of being in the app.
+ * small for it. Until now the app had nothing to say to them, while the browser has handed that reader a
+ * machine we host all along; it was hidden here on the argument that "this computer" is the whole point of
+ * being in the app.
  *
  * It is the point right up until it cannot work, and then it is a dead end. Local stays the loud default and
  * this stays one quiet line under it, in the one place where it is the more useful answer.
@@ -631,10 +631,14 @@ const loadResumable = async (): Promise<void> => {
     await runSetup();
 };
 
-/* A parked setup RUNS on arrival rather than waiting to be asked. The SPA's "Set up on this computer" button
- * is the consent: it says what this does, in the sentence directly above it, and repeating the question on
- * a screen the user did not open is what made the handoff read as a second, unrelated installer. The guard in
- * `runSetup` is what keeps the two ways in here (the event, and the read below on mount) to one run.
+/* A parked setup RUNS on arrival rather than waiting to be asked, and inside the app nothing asked for it
+ * either: the SPA's setup page hands this computer the code the moment one mints, because "which machine?"
+ * was never a real question in a window somebody downloaded, installed and signed into in order to run a
+ * sandbox on this computer (setupArrival.ts). Downloading and opening the app IS the consent; repeating the
+ * question on a screen the user did not open is what made the handoff read as a second, unrelated installer.
+ * The one thing still asked for separately is administrator, on the requirements screen, because that is a
+ * different ask from "install my sandbox here". The guard in `runSetup` is what keeps the two ways in here
+ * (the event, and the read below on mount) to one run.
  *
  * That consent only covers a link the SPA's own window navigated to. One arriving from the OS, which any page
  * can send, on nothing more than a browser's "Open Intentic?": is asked about in windows.rs BEFORE it is

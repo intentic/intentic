@@ -1,7 +1,7 @@
 /* WHAT THE APP READS BEFORE A TEST GETS A WORD IN, stood up once for the whole package.
  *
- * Three globals, all reached at IMPORT rather than from a test body, which is why they live in a setup file
- * and not in a beforeAll: by the time a hook runs, the module that needed them has already thrown.
+ * Four globals, three of them reached at IMPORT rather than from a test body, which is why they live in a
+ * setup file and not in a beforeAll: by the time a hook runs, the module that needed them has already thrown.
  *
  * `matchMedia` is the design system barrel's (useDevice), so any suite that touches @intentic/ui needs it
  * before its first import evaluates. matches:false everywhere keeps the device DESKTOP, the form factor whose
@@ -29,6 +29,15 @@ globalThis.ResizeObserver ??= class {
     unobserve(): void {}
     disconnect(): void {}
 } as unknown as typeof globalThis.ResizeObserver;
+
+/* The fourth is jsdom's own gap rather than a global the app installs: `Element.scrollIntoView` is not
+ * implemented there at all, and a view that reveals something by scrolling to it (Setup's ladder, the chat
+ * rail) calls it from an async handler, where the resulting TypeError is an UNHANDLED REJECTION. Vitest fails
+ * the whole run on those while every assertion still passes, which reads as "the suite is green but the
+ * package is red". A no-op is the honest stub: nothing under jsdom can observe a scroll position anyway. */
+if (typeof Element !== "undefined") {
+    Element.prototype.scrollIntoView ??= (): void => {};
+}
 
 // Only under jsdom: the node-environment suites have no `window`, and nothing they import reads one.
 if (typeof window !== "undefined") {

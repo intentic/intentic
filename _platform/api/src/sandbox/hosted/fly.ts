@@ -1,12 +1,12 @@
 import { z } from "zod";
 import type { FlyMachineConfig } from "@intentic/sandbox-run/fly";
 
-/* Fly Machines, the HOSTED lane's provider: a plain-fetch client against the documented Machines API, the
- * ../cloud house rule (no provider SDK dependencies), but the OPPOSITE credential stance. The cloud adapters
- * spend a user-pasted token and drop it with the request; here the token is intentic's OWN (config.hosted),
- * lives for the platform's lifetime, and the platform deliberately KEEPS the way back into every machine it
- * creates, start, stop, destroy. That inversion is the hosted lane's whole trade and is documented where the
- * trust model lives (ARCHITECTURE.md); this file just talks to the API.
+/* Fly Machines, the HOSTED lane's provider: a plain-fetch client against the documented Machines API, and no
+ * provider SDK dependency, which is the house rule for anything that talks to somebody else's control plane.
+ * The token is intentic's OWN (config.hosted), lives for the platform's lifetime, and the platform
+ * deliberately KEEPS the way back into every machine it creates, start, stop, destroy. That is the hosted
+ * lane's whole trade and is documented where the trust model lives (ARCHITECTURE.md); this file just talks to
+ * the API.
  *
  * Topology: one Fly APP per sandbox (apps are free), created on its OWN private network. Fly's 6PN spans an
  * org by default, and two strangers' sandboxes must not share a LAN. The app name is <prefix>-<sandbox id>,

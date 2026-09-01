@@ -412,7 +412,6 @@ describe(`adminUserDetail`, () => {
                         setupReport: { stage: `pulling-image`, failed: [], at: `x` },
                         bootReport: null,
                         announceRefusal: null,
-                        cloud: null,
                         hosted: { region: `arn`, appName: `intentic-sbx-1`, wokeAt: new Date(`2026-08-25T08:00:00Z`), idleWarnedAt: null },
                         members: [{ email: `bob@example.com`, role: `collaborator`, acceptedAt: null }],
                     },

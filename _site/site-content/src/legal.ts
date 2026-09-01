@@ -91,7 +91,7 @@ export const privacyDoc: LegalDoc = {
         {
             heading: "Sandboxes you run yourself",
             paragraphs: [
-                "When your sandbox runs on your own machine, your own server or your own cloud account, your code, files, credentials and everything your agent produces stay there. The platform stores the address and the token needed to reach it, and nothing of what is inside. Traffic between your browser and your sandbox passes through our tunnel provider to reach you, encrypted end to end.",
+                "When your sandbox runs on your own machine or your own server, your code, files, credentials and everything your agent produces stay there. The platform stores the address and the token needed to reach it, and nothing of what is inside. Traffic between your browser and your sandbox passes through our tunnel provider to reach you, encrypted end to end.",
             ],
         },
         {

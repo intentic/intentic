@@ -3671,10 +3671,6 @@
           "what": ": Better Auth (Google sign-in + the desktop one-time-token handoff). Sign-in has"
         },
         {
-          "path": "_platform/api/src/sandbox/cloud/index.ts",
-          "what": ": the cloud lane's provider switch; one plain-fetch adapter per provider beside it (Oracle's request signing in src/sandbox/cloud/oci-sign.ts, the first-boot script in src/sandbox/cloud/user-data.ts)."
-        },
-        {
           "path": "_platform/api/src/config.ts",
           "what": "(@puristic/env config; src/prisma.ts) client factory; src/types.ts: the shared Prisma type."
         }

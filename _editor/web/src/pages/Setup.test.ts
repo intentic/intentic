@@ -6,6 +6,12 @@
 // in any form: no field, no pencil, nothing to press to grow one. It belongs in the workspace, where there are
 // several machines to tell apart. These mount the real page and read the first frame: that a sandbox exists
 // without anyone naming it, and that arriving on one already made does NOT make a second.
+//
+// AND THE MACHINE IS NOT ASKED FOR EITHER. The page answers off the surface it is read on (setupArrival.ts):
+// a browser gets a machine of ours started for it on arrival, the desktop app installs on the computer it is
+// running on, and the picker is what is left for the arrivals neither answer fits. So most tests below mount
+// into a world where the platform hosts NOTHING (the default `hostedOffer`), which is the one that leaves the
+// command lane on screen; the ones about the picker say so by asking for it (`?machine=`, `?elsewhere=1`).
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -135,7 +141,6 @@ const sandboxRow = (overrides: Partial<SandboxSummary> = {}): SandboxSummary =>
         token: `tok`,
         role: `owner`,
         providedTunnel: false,
-        cloud: null,
         hosted: null,
         ...overrides,
     }) as SandboxSummary;
@@ -166,9 +171,8 @@ const mount = async (): Promise<HTMLElement> => {
 };
 
 // A button whose whole label is this word: the "is there a Create button gating step 1" question, asked
-// precisely. Substring matching answers it wrongly now that the ladder's cloud card says "Created in your own
-// cloud account", which is prose about a machine rather than a control standing between the reader and their
-// sandbox.
+// precisely. Substring matching answers it wrongly, because the rungs are prose about a machine rather than
+// controls standing between the reader and their sandbox, and a rung's own words can contain a button's.
 const buttonLabelled = (text: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === text);
 
@@ -253,14 +257,11 @@ it(`discards the sandbox it made when the reader leaves without committing`, asy
 });
 
 // …and the acts that keep it are acts, never guesses. A machine exists now: there is hardware behind this row,
-// and deleting it on the way past would be throwing away the thing the reader just started.
+// and deleting it on the way past would be throwing away the thing the reader just started. In a browser the
+// act is the ARRIVAL itself, which is what starting a machine for somebody means.
 it(`keeps the sandbox once a machine has been started for it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
-    const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
-    hostedRung!.click();
-    await nextTick();
-    buttonLabelled(`Start my machine`)!.click();
+    await mount();
     await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
     leave();
     expect(remove).not.toHaveBeenCalled();
@@ -296,12 +297,12 @@ it(`says nothing about the sandbox until the arrival read answers`, async () => 
     await nextTick();
     expect(buttonLabelled(`Try again`)).toBeUndefined();
     expect(el.textContent).not.toContain(`Connect it by domain`);
-    // …and once it does answer, the page is itself again.
+    // …and once it does answer, the page is itself again: a row, and the address being minted for it.
     answer([]);
     await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
-    expect(el.querySelector(`[role="radiogroup"]`)).not.toBeNull();
+    expect(el.textContent).toContain(`Preparing your intentic domain`);
 });
 
 // "Add sandbox" from a shell that already has one: the default counts past the names the account holds rather
@@ -342,66 +343,88 @@ it(`does say where you left off once something has actually happened to the sand
     expect(el.textContent).toContain(`Use a new sandbox instead`);
 });
 
-/* ON A PLATFORM THAT HOSTS, A FRESH SANDBOX DEFAULTS TO THE READER'S OWN COMPUTER.
- * The ladder offers the hosted machine beside it, and starting one is one click to that rung. */
-it(`defaults a fresh sandbox to the reader's own computer, with hosted available on the ladder`, async () => {
+/* IN A BROWSER, THE MACHINE IS OURS AND IT IS ALREADY STARTING. This is the change the whole arrival exists
+ * for: a browser has no machine to offer, everything it could do to the reader's computer needs a terminal or
+ * an installer first, and the platform can hand them a working sandbox in seconds. So the page does that and
+ * shows them the boot, rather than opening on a picker they signed up ninety seconds ago to be shown. */
+it(`starts a machine of ours for a browser, on arrival`, async () => {
     // Not `…Once`: the offer is the account's remaining allowance, and the page asks again every time it
     // spends or hands back a machine. A platform that hosts goes on hosting between two reads of it.
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     // The row is created the ordinary way: the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
-    expect(hostedProvision).not.toHaveBeenCalled();
-    expect(el.textContent).not.toContain(`Starting the machine`);
-    // Default rung is the reader's own computer, never the hosted machine
-    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
-    const hostedRung = rungs.find((card) => card.textContent?.includes(`Start instantly`));
-    const mineRung = rungs.find((card) => card.textContent?.includes(`My own computer`));
-    expect(mineRung?.getAttribute(`aria-checked`)).toBe(`true`);
-    expect(hostedRung?.getAttribute(`aria-checked`)).toBe(`false`);
-    expect(buttonLabelled(`Start my machine`)).toBeUndefined();
-
-    // Clicking the hosted rung reveals the commitment and Start my machine
-    hostedRung!.click();
-    await nextTick();
-    expect(buttonLabelled(`Start my machine`)).toEqual(expect.any(Object));
-    expect(el.textContent).toContain(`don't back it up`);
-
-    buttonLabelled(`Start my machine`)!.click();
     await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
     await nextTick();
     // The wait names its steps rather than asserting one sentence at every problem: see hostedWait.ts.
     expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).toContain(`Putting it on the internet`);
+    // Nothing was asked, so nothing is on screen to answer: no picker, and no button to press to begin.
+    expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+    expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 });
 
-/* A PHONE'S DEFAULT RUNG IS THE HOSTED MACHINE, whenever one is on offer. `cloud` held the phone default for
- * being the one lane a phone could finish alone, but it opens on a cloud credential paste, the hardest
- * possible first ask. The hosted rung finishes alone too, off a single tap. */
-it(`defaults a phone to the hosted rung when one is offered`, async () => {
+/* …AND THE OTHER ANSWER IS ONE LINE AWAY, never a support article. A page that decided for the reader owes
+ * them the rung it did not take in plain sight; revealing it starts and destroys nothing, because a reader
+ * opening it to READ what the alternative is has not chosen it yet. */
+it(`offers the rung it did not take, without taking it`, async () => {
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    expect(el.textContent).toContain(`Other ways to set up`);
+    buttonLabelled(`Run it on my own computer`)!.click();
+    await nextTick();
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs).toHaveLength(2);
+    expect(rungs.find((card) => card.textContent?.includes(`Start instantly`))?.getAttribute(`aria-checked`)).toBe(`true`);
+    expect(hostedRelease).not.toHaveBeenCalled();
+});
+
+/* THE MASTHEAD MUST NOT ASK A QUESTION THE PAGE ANSWERED. "Pick where it runs" is written for somebody in
+ * front of the picker, and since the arrival started answering for itself most readers are not: it stood over
+ * a machine already booting, putting a decision to a reader four inches above the card taking it. Keyed on
+ * the picker being DRAWN rather than on the arrival, so it also covers the platform with one rung and
+ * therefore no picker. */
+it(`says what is happening rather than asking, when the arrival answered`, async () => {
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    expect(el.textContent).toContain(`We're starting a machine for you`);
+    expect(el.textContent).not.toContain(`Pick where it runs`);
+});
+
+it(`asks where it runs only while the picker is on screen`, async () => {
+    query.value = { elsewhere: `1` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(2);
+    expect(el.textContent).toContain(`Pick where it runs`);
+});
+
+/* A PHONE IS A BROWSER, and gets the same answer for a stronger version of the same reason: it is the one
+ * surface with no way at all to run a sandbox on the machine reading the page. */
+it(`starts a machine for a phone too`, async () => {
     mobileDevice.value = true;
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
-    expect(hostedRung?.getAttribute(`aria-checked`)).toBe(`true`);
-    // The rung is described, never taken: nothing is provisioned until the button under it is pressed.
-    expect(hostedProvision).not.toHaveBeenCalled();
-    expect(buttonLabelled(`Start my machine`)).toEqual(expect.any(Object));
-    // No credential ask on a phone's first frame: the cloud rung is one tap away, never the opener.
-    expect(el.textContent).not.toContain(`Private key`);
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    expect(el.textContent).toContain(`Starting the machine`);
+    expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 });
 
 /* A RUNG ALREADY CHOSEN, off `?machine=`: the public site's /where-it-runs cards link through it. That page
  * has the room to say what each rung costs and asks of you, which this one does not and should not; the
- * price of the split is that a click there has to survive the trip. Landing back on the default rung would
- * make the reader choose twice and teach them the first choice was decoration. */
-it(`opens on the rung the reader chose before arriving`, async () => {
-    query.value = { machine: `cloud` };
+ * price of the split is that a click there has to survive the trip. It outranks the arrival's own answer in
+ * BOTH directions, so "set up on my computer" opens that step instead of starting a machine nobody asked
+ * for, and the picker is back because a reader who chose is a reader who is choosing. */
+it(`opens on the rung the reader chose before arriving, and starts nothing`, async () => {
+    query.value = { machine: `mine` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
-    expect(rungs.find((card) => card.textContent?.includes(`My cloud account`))?.getAttribute(`aria-checked`)).toBe(`true`);
+    expect(rungs.find((card) => card.textContent?.includes(`My own computer`))?.getAttribute(`aria-checked`)).toBe(`true`);
     expect(rungs.find((card) => card.textContent?.includes(`Start instantly`))?.getAttribute(`aria-checked`)).toBe(`false`);
+    expect(hostedProvision).not.toHaveBeenCalled();
 });
 
 // …and it outranks the DEVICE default, which is only ever a guess at what this reader can finish. A phone on
@@ -417,15 +440,18 @@ it(`lets a chosen rung override the phone default`, async () => {
 });
 
 /* A LINK FOR A RUNG THIS PLATFORM DOES NOT OFFER IS IGNORED, not honoured into a dead step. The site is
- * cached and its cards are the same HTML for every platform; a self-hoster who mints no addresses would
- * otherwise land arrivals on a command lane that can never unlock, from a link they cannot edit. */
+ * cached and its cards are the same HTML for every platform; a self-hoster who hosts nothing would otherwise
+ * land arrivals on a machine that is never coming, from a link they cannot edit. With the hosted rung gone
+ * there is one thing left on offer, so there is no picker either: a picker over one rung is a card
+ * describing the only answer, which is what the step under it already is. */
 it(`ignores a rung the platform is not offering`, async () => {
     query.value = { machine: `hosted` };
     hostedOffer.mockResolvedValue({ enabled: false, remaining: 0 });
+    setupCode.mockResolvedValue(MINTED);
     const el = await mount();
-    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
-    expect(rungs.some((card) => card.textContent?.includes(`Start instantly`))).toBe(false);
-    expect(rungs.find((card) => card.textContent?.includes(`My own computer`))?.getAttribute(`aria-checked`)).toBe(`true`);
+    expect(hostedProvision).not.toHaveBeenCalled();
+    expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+    await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
 });
 
 /* THE HOSTNAME IS NOT THE FIRST THING A STRANGER READS. It used to be the second line of the card that opens
@@ -433,6 +459,10 @@ it(`ignores a rung the platform is not offering`, async () => {
  * hatch ("Use a different address") beside it, above the only choice on the page. It is a consequence of the
  * rung, so it reports itself on the card the rung chose, next to the command that carries it. */
 it(`reports the address on the run card rather than above the choice`, async () => {
+    // A reader who is choosing, since the question is where the address sits RELATIVE to the choice: the
+    // arrivals that answer for themselves have no picker to measure against.
+    query.value = { machine: `mine` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
     await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
@@ -488,16 +518,18 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
-    hostedRung!.click();
-    await nextTick();
-    buttonLabelled(`Start my machine`)!.click();
     await vi.waitFor(() => expect(el.textContent).toContain(`no capacity right now`));
     // The row the page made on arrival carries on: not deleted, not made again in another lane.
     expect(create).toHaveBeenCalledTimes(1);
     expect(remove).not.toHaveBeenCalled();
     // The way out is the same button, now saying what pressing it would be.
     expect(buttonLabelled(`Try again`)).toEqual(expect.any(Object));
+    /* AND THE PICKER IS BACK. The arrival's answer was refused, so the reader is the one who has to answer
+     * now, and the rung they can actually take must be beside the reason rather than behind a link that
+     * reads like an aside. */
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs).toHaveLength(2);
+    expect(rungs.find((card) => card.textContent?.includes(`My own computer`))).toEqual(expect.any(Object));
 });
 
 // A hosted sandbox resumed mid-boot (the tab closed during "starting") continues as the hosted story it is:
@@ -544,10 +576,14 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
 /* THE LADDER IS CARDS, AND A SWITCH MOVES A MACHINE: NOT THE SANDBOX. Picking another rung on a hosted
  * sandbox hands its machine back and keeps the row: same id, same name, no delete-and-recreate. */
 it(`offers the rungs as readable cards, each stating its trade`, async () => {
-    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    // `?elsewhere=1`: the link the desktop app's requirements screen offers when THIS computer cannot run
+    // it, and the one arrival that shows the picker without starting anything.
+    query.value = { elsewhere: `1` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
+    expect(hostedProvision).not.toHaveBeenCalled();
     const cards = [...el.querySelectorAll(`[role="radio"]`)];
-    expect(cards).toHaveLength(3);
+    expect(cards).toHaveLength(2);
     // Not a bare label each: the cost and what it asks of you are on the card, before it is clicked.
     expect(cards[0]?.textContent).toContain(`Start instantly`);
     expect(cards[0]?.textContent).toContain(`Free`);
@@ -562,10 +598,11 @@ it(`offers the rungs as readable cards, each stating its trade`, async () => {
 /* THE FREE LANE'S PRICE IS ON ITS CARD, AND SO IS WHAT HAPPENS AFTER IT. "Free" alone, in the place a reader
  * looks for the cost, is the version of this that has to be corrected later, and so is a ceiling with no
  * answer to "and then?", which is the question a price is read to settle.
- * The sentences that go with it are NOT on the card: three rungs of small print, side by side, is not a
+ * The sentences that go with it are NOT on the card: two rungs of small print, side by side, is not a
  * picker. They follow the selection, one rung's worth at a time. */
 it(`states the hour ceiling and what follows it on the hosted card, with the small print beside the button`, async () => {
-    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
+    query.value = { elsewhere: `1` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     const el = await mount();
     const hosted = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)][0];
     expect(hosted?.textContent).toContain(`40h a month, more with membership`);
@@ -579,7 +616,8 @@ it(`states the hour ceiling and what follows it on the hosted card, with the sma
 
 // A member has no ceiling, so a member is shown none: the absence of the block is the whole contract.
 it(`says nothing about hours to someone they do not apply to`, async () => {
-    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    query.value = { elsewhere: `1` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     const hosted = [...el.querySelectorAll(`[role="radio"]`)][0];
     expect(hosted?.textContent).toContain(`ready in seconds`);
@@ -590,11 +628,10 @@ it(`says nothing about hours to someone they do not apply to`, async () => {
 it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
-    hostedRung!.click();
-    await nextTick();
-    buttonLabelled(`Start my machine`)!.click();
+    // The arrival started it; the reader opens the rung it did not take and steps off.
     await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    buttonLabelled(`Run it on my own computer`)!.click();
+    await nextTick();
     const mine = (): HTMLButtonElement =>
         [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`)) as HTMLButtonElement;
     // The rungs are disabled while the machine is being made AND while the allowance that made it is re-read:
@@ -647,16 +684,19 @@ it(`opens on the attach lane, with no spinner, when the platform mints no addres
     expect(buttonLabelled(`← Get a domain from intentic instead`)).toBeUndefined();
 });
 
-/* The hosted rung survives an addressless platform: its machine is born holding its own tunnel, so it is the
+/* The hosted lane survives an addressless platform: its machine is born holding its own tunnel, so it is the
  * one lane that never needed a mint. The reader stays on the provision spine: with no ladder, since there is
  * nothing left to choose between: rather than being sent to attach a sandbox they do not have. */
 it(`keeps the hosted lane when the platform hosts but mints no addresses`, async () => {
-    addressOffer.mockResolvedValueOnce({ enabled: false });
-    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    addressOffer.mockResolvedValue({ enabled: false });
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    expect(buttonLabelled(`Start my machine`)).toEqual(expect.any(Object));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+    // …and nothing points at the rung this platform cannot deliver: there is no command to paste.
+    expect(el.textContent).not.toContain(`Other ways to set up`);
 });
 
 /* …and when that hosted machine is already spent, the rung is offered but not TAKEABLE, which is the same

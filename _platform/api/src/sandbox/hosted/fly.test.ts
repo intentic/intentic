@@ -13,7 +13,7 @@ import {
     updateMachine,
 } from "./fly.js";
 
-// The cloud.test.ts fetch stub: route by method + URL substring, record calls for payload assertions.
+// The fetch stub: route by method + URL substring, record calls for payload assertions.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {

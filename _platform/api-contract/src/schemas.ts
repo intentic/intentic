@@ -572,33 +572,18 @@ export const HostedStatusSchema = z.object({
 });
 export type HostedStatus = z.infer<typeof HostedStatusSchema>;
 
-// The clouds the setup wizard's cloud lane can provision a machine in, each is an adapter in the api's
-// sandbox/cloud/. Hetzner and DigitalOcean are the paid x86 paths; Oracle is the Always-Free ARM path
-// (A1.Flex inside the user's own free-tier allowance).
-export const CloudProviderSchema = z.enum(["hetzner", "digitalocean", "oracle"]);
-
-// Oracle's famous A1 refusal, as the one phrase BOTH sides agree on: the adapter writes it into every
-// capacity refusal (oracle.ts, including the all-domains-exhausted one), and the wizard reads it to offer
-// its keep-trying-while-this-tab-is-open retry. A shared constant because a copy-edit to the message must not
-// silently turn the retry offer off.
-export const ORACLE_CAPACITY_PHRASE = `no free-tier ARM capacity`;
-export type CloudProvider = z.infer<typeof CloudProviderSchema>;
-
-// Where the cloud lane put a sandbox's machine, the non-secret residue of a provision, stamped on the row.
-// serverName is the name visible in the provider's own console, which is exactly what the delete warning
-// needs the user to go find.
-export const SandboxCloudSchema = z.object({
-    provider: CloudProviderSchema,
-    serverName: z.string(),
-    location: z.string(),
-});
-export type SandboxCloud = z.infer<typeof SandboxCloudSchema>;
-
-// The HOSTED lane's machine as the browser sees it. SandboxCloudSchema's counterpart with the opposite
-// stance: the platform created this machine on its OWN provider account and keeps the way back in, so its
-// presence is an affordance, not residue: an unreachable hosted daemon means "call sandbox.wake and keep
-// probing", never "it's gone". Deliberately no live machine state, wake is idempotent (waking a running
-// machine is a no-op), so the browser needs no second source of truth beside the daemon's own answer.
+/* The HOSTED lane's machine as the browser sees it: the platform created it on its OWN provider account and
+ * keeps the way back in, so its presence is an affordance rather than residue: an unreachable hosted daemon
+ * means "call sandbox.wake and keep probing", never "it's gone". Deliberately no live machine state, wake is
+ * idempotent (waking a running machine is a no-op), so the browser needs no second source of truth beside the
+ * daemon's own answer.
+ *
+ * There used to be a counterpart with the opposite stance, `SandboxCloudSchema`, for a lane that created ONE
+ * VM in the user's own Hetzner, DigitalOcean or Oracle account off a pasted API token. It is gone, and so is
+ * every trace of it: a sandbox now runs either on a machine the platform hosts or on a computer the reader
+ * already owns, and onboarding picks between those two by which surface the reader arrived on rather than by
+ * asking. A third answer whose first step was "create an API key in your provider's console" was the answer
+ * nobody could take on the screen where it was offered. */
 export const SandboxHostedSchema = z.object({
     region: z.string(),
     /* Whether this machine came WARM from the pool (image already on its host, boots in seconds) or was
@@ -635,8 +620,8 @@ export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 
 /* Whether this platform can give a sandbox an address of its own, the tunnel fabric behind `setupCode`. A
  * platform that has not stood one up (the self-hoster's default) mints no codes at all, so the pasted-command
- * and cloud-machine lanes cannot finish on it, and the wizard must say so BEFORE it draws them. Asking the
- * mint was the only way to find out, which meant offering lanes first and retracting them a round-trip later. */
+ * lane cannot finish on it, and the wizard must say so BEFORE it draws it. Asking the mint was the only way to
+ * find out, which meant offering the lane first and retracting it a round-trip later. */
 export const AddressOfferSchema = z.object({ enabled: z.boolean() });
 export type AddressOffer = z.infer<typeof AddressOfferSchema>;
 
@@ -678,14 +663,9 @@ export const SandboxSummarySchema = z.object({
      * The platform owns the zone, so the platform says the name. One field ends the guessing on both sides
      * (the daemon asks for it too, over /sandbox/local-dns). */
     localHostname: z.string().nullable(),
-    // Where the cloud lane created this sandbox's machine (sandbox.cloudProvision), null for every other
-    // creation path. Display metadata only, never a credential: the platform cannot reach the machine again
-    // (the provider token was request-scoped), so this exists to SAY so, the switcher badge and the delete
-    // dialog's "the machine in your <provider> account keeps running, remove it there" warning read it.
-    cloud: SandboxCloudSchema.nullable(),
-    // The hosted lane's live machine record (sandbox.hostedCreate), null for every other creation path. The
-    // opposite of `cloud` above by design: the delete dialog warns the MACHINE dies with the sandbox, and an
-    // unreachable daemon with `state` ≠ started means "wake it", not "it's gone".
+    // The hosted lane's live machine record (sandbox.hostedCreate), null for a sandbox running on a computer
+    // the reader owns. The delete dialog warns the MACHINE dies with the sandbox, and an unreachable daemon
+    // with `state` ≠ started means "wake it", not "it's gone".
     hosted: SandboxHostedSchema.nullable(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
@@ -781,52 +761,6 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
  * provisions nothing at all. */
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
 export type SetupCode = z.infer<typeof SetupCodeSchema>;
-
-// ---- the cloud lane: provision the machine itself, in the USER'S cloud account ----
-//
-// The command lane assumes a machine exists; this lane is for the user (a phone, most often) who has none.
-// They paste a provider credential, pick a region and size, and the platform creates ONE VM in THEIR account
-// whose first-boot script runs the exact published one-liner with the sandbox's live setup code, from there
-// the ordinary claim → report → announce states narrate progress. The credential follows the CfTokenSchema
-// contract exactly: request-scoped, used for the provider calls of that one request, then discarded, never
-// persisted, logged, or stored. The platform keeps no way back into the machine; only SandboxCloudSchema's
-// display facts survive.
-//
-// Oracle's credential is not a bearer token: OCI signs every request with an RSA API key. The console's
-// "add API key" dialog emits a config snippet (user/tenancy OCID, fingerprint, region), the user pastes
-// that verbatim plus the key PEM, and the adapter parses both (a malformed paste is a BAD_REQUEST naming
-// what's missing, not a signature failure later).
-export const CloudCredentialsSchema = z.discriminatedUnion("provider", [
-    z.object({ provider: z.literal("hetzner"), token: z.string().min(1) }),
-    z.object({ provider: z.literal("digitalocean"), token: z.string().min(1) }),
-    z.object({ provider: z.literal("oracle"), config: z.string().min(1), privateKey: z.string().min(1) }),
-]);
-export type CloudCredentials = z.infer<typeof CloudCredentialsSchema>;
-
-// One pickable region/size, priced from the provider's own catalog API at options time, live numbers, so the
-// wizard never shows a stale price it hard-coded. Prices are monthly and in the provider's billing currency;
-// Oracle's one shape carries 0/USD (inside the Always-Free allowance) with the caveat in the wizard's copy.
-export const CloudLocationSchema = z.object({ id: z.string(), label: z.string() });
-export const CloudSizeSchema = z.object({
-    id: z.string(),
-    label: z.string(),
-    cpus: z.number(),
-    memoryGb: z.number(),
-    diskGb: z.number(),
-    monthlyPrice: z.number(),
-    currency: z.string(),
-});
-// Fetching the options doubles as the credential check: a bad paste fails here, before anything is created.
-// defaults preselect the cheapest workable pick so the mobile flow is credential → Create.
-export const CloudOptionsSchema = z.object({
-    locations: z.array(CloudLocationSchema),
-    sizes: z.array(CloudSizeSchema),
-    defaultLocation: z.string(),
-    defaultSize: z.string(),
-});
-export type CloudOptions = z.infer<typeof CloudOptionsSchema>;
-export type CloudLocation = z.infer<typeof CloudLocationSchema>;
-export type CloudSize = z.infer<typeof CloudSizeSchema>;
 
 // ---- workspace state: the Overview / topology read-model ----
 //
@@ -1379,8 +1313,6 @@ export const AdminUserSandboxSchema = z.object({
             idleWarnedAt: z.iso.datetime().nullable(),
         })
         .nullable(),
-    // The cloud lane's display stamp, verbatim (provider/region/server id — never a credential by design).
-    cloud: z.unknown().nullable(),
     members: z.array(z.object({ email: z.email(), role: z.string(), accepted: z.boolean() })),
 });
 

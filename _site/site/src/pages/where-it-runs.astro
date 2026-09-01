@@ -5,24 +5,27 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 
-/* THE DECISION, TAKEN BEFORE THE SIGN-IN.
+/* THE DECISION, TAKEN BEFORE THE SIGN-IN — AND THE ONLY PLACE IT IS STILL A QUESTION.
  *
- * The app's /setup screen asks one real question — where does the sandbox run — and it is an infrastructure
- * question with pricing attached, put to somebody who has not seen the product yet. That screen is right to
- * stay a picker and one caption: it is read by people who have already committed, and every attempt to
- * explain the choice ON it has correctly been rejected as copy that goes unread or reads as over-explaining.
+ * /setup does not ask any more. It answers off the surface the reader arrived on: a browser gets a machine we
+ * run, started on arrival, and the desktop app installs on the computer it is running on (setupArrival.ts).
+ * That is right for somebody who has just signed up and has not seen the product, because "where does the
+ * sandbox run" is an infrastructure question with pricing attached and they have nothing to answer it with.
  *
- * The explaining has to happen somewhere, though, and this is the somewhere. A page with no session, no code
- * to mint and no spinner can afford the paragraphs, and its reader is exactly the person the app's version
- * cannot serve: still deciding, not signed in, and one back button from gone. So this page carries the whole
- * trade — what each rung costs, what it asks of you, what it does to your machine and what removes it — and
- * hands the ANSWER to /setup through `?machine=`, which opens on the rung chosen here rather than asking
- * again (Setup.vue's `requestedMachine`).
+ * The reader here is the opposite person: still deciding, not signed in, one back button from gone, and
+ * asking exactly that question on purpose. A page with no session, no code to mint and no spinner can afford
+ * the paragraphs, so this page carries the whole trade — what each rung costs, what it asks of you, what it
+ * does to your machine and what removes it — and hands the ANSWER to /setup through `?machine=`, which
+ * outranks the arrival's own guess in both directions (Setup.vue's `requestedMachine`).
  *
  * WHAT IT MUST NOT DO IS SELL A RUNG. The product's identity is agents on hardware you own; the hosted rung
- * is a convenience with a real cost behind it. So the three cards are the same size, in the ladder's own
- * order, and none of them is preselected, tagged or tinted. The ordering is instant-and-small → your own
- * hardware → a machine you rent, which is the app's, so a reader who sees both surfaces sees one product.
+ * is a convenience with a real cost behind it. So the two cards are the same size, in the ladder's own order,
+ * and neither is preselected, tagged or tinted. The ordering is instant-and-small → your own hardware, which
+ * is the app's, so a reader who sees both surfaces sees one product.
+ *
+ * THERE USED TO BE A THIRD, a VM in the reader's own Hetzner / DigitalOcean / Oracle account. It is gone
+ * everywhere, and this page is where its absence is most visible by design: a rung whose first step was
+ * "create an API key in your provider's console" cannot be chosen by the person this page is written for.
  *
  * NOT IN THE BAR, deliberately, and for the reason nav.ts already gives about /download: a permanent tab
  * beside "Create your workspace" offers two openings where there is one, and most people who take it are
@@ -44,7 +47,7 @@ const rungs = [
         whose: "Our servers",
         asks: "One click. No install, nothing to run, no account anywhere else.",
         body: "We start a machine for you and hand your workspace back in seconds. It is the fastest way to see what the product is, and the only rung that asks nothing of a computer you own.",
-        limits: "The hours are awake hours: a workspace nobody is working in is not spending them. When you want more power or no ceiling, switch to either rung below and keep the same workspace.",
+        limits: "The hours are awake hours: a workspace nobody is working in is not spending them. When you want more power or no ceiling, switch to the rung beside this one and keep the same workspace.",
         cta: "Start instantly",
     },
     {
@@ -54,18 +57,8 @@ const rungs = [
         whose: "Your laptop or desktop",
         asks: "An installer on Windows and Linux, or one pasted command anywhere else.",
         body: "Your CPUs, your RAM, your GPU, your files. Agents work at the speed of the machine you already paid for, and nothing is metered because nothing of ours is running.",
-        limits: "It needs Docker; the installer and the command both offer to install it if it is missing. Your computer has to be awake for your agents to work.",
+        limits: "It needs Docker; the installer and the command both offer to install it if it is missing. Your computer has to be awake for your agents to work. A server you rent counts as your own computer here: the same pasted command sets one up.",
         cta: "Set up on my computer",
-    },
-    {
-        machine: "cloud",
-        title: "My cloud account",
-        cost: "From free · 12 GB on Oracle's always-free tier",
-        whose: "A server in your own cloud account",
-        asks: "An API key from Oracle, Hetzner or DigitalOcean, pasted once.",
-        body: "A machine that is awake when your laptop is shut, billed by your provider rather than by us, on an account that stays yours if you stop using intentic.",
-        limits: "This is the longest first step of the three: creating an API key on your provider is a few minutes of their console. Pick it when you want an always-on machine you own the bill for.",
-        cta: "Use my cloud account",
     },
 ] as const;
 
@@ -110,10 +103,10 @@ const consequences = [
         </section>
 
         <section class="mx-auto max-w-5xl px-6 pb-16">
-            {/* Three equal columns, in the app's own rung order, none of them preselected or tagged. A reader
-                picking where their code lives should be choosing between three descriptions, not agreeing
-                with a recommendation. */}
-            <div class="grid items-stretch gap-4 lg:grid-cols-3">
+            {/* Two equal columns, in the app's own rung order, neither preselected or tagged. A reader picking
+                where their code lives should be choosing between two descriptions, not agreeing with a
+                recommendation. */}
+            <div class="grid items-stretch gap-4 lg:grid-cols-2">
                 {
                     rungs.map((rung) => (
                         <div class="flex flex-col gap-4 border border-line bg-surface p-6">
@@ -138,8 +131,9 @@ const consequences = [
                 }
             </div>
             <p class="mt-4 max-w-copy text-xs text-subtle">
-                Every button above goes to the same place: a Google sign-in, then the setup screen opened on the rung you picked. No card,
-                and nothing starts running until you act on that screen.
+                Both buttons go to the same place: a Google sign-in, then the setup screen opened on the rung you picked. No card, either
+                way. "Start instantly" starts your machine the moment you land, and you watch it boot; "Set up on my computer" puts the
+                installer and the command in front of you and runs nothing until you do.
             </p>
         </section>
 
@@ -147,8 +141,8 @@ const consequences = [
             <div class="border border-line bg-surface p-6">
                 <h2 class="text-lg font-semibold text-content">What the install actually does</h2>
                 <p class="mt-2 max-w-copy text-sm text-muted">
-                    Both rungs that use a machine of yours run the same script. On Windows and Linux the desktop app runs it for you; anywhere
-                    else it is one line you paste. Either way, this is all of it.
+                    The rung that uses a machine of yours runs one script. On Windows and Linux the desktop app runs it for you; anywhere else
+                    it is one line you paste. Either way, this is all of it.
                 </p>
                 <div class="mt-6 grid gap-x-10 gap-y-5 sm:grid-cols-2">
                     {
@@ -186,8 +180,9 @@ const consequences = [
                 <div class="flex flex-col gap-2">
                     <h2 class="text-base font-semibold text-content">Rather not use a terminal?</h2>
                     <p class="max-w-copy text-sm text-muted">
-                        <a href="/download/" class="text-link hover:underline">The desktop app</a> does the "my own computer" rung with a
-                        button instead of a command. It runs the same script, on Windows and Linux. On a Mac, the command is still the path.
+                        <a href="/download/" class="text-link hover:underline">The desktop app</a> does the "my own computer" rung without a
+                        command: install it, sign in, and it sets your sandbox up on that computer by itself. It runs the same script, on Windows
+                        and Linux. On a Mac, the command is still the path.
                     </p>
                 </div>
             </div>

@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 /* WHO SENT THIS LINK — the whole of what this app can know about whether to believe it.
  *
- * `App` is a navigation the workspace window made itself: the SPA's own "Set up on this computer" button,
- * which says what it does in the sentence above it. `External` is everything else — the OS protocol handler
+ * `App` is a navigation the workspace window made itself: the SPA's setup page handing this computer the
+ * code it just minted, which is what the app was opened to do. `External` is everything else — the OS protocol handler
  * and a second instance's argv — where the link is one ANYBODY can put on a page, in an email or in a chat
  * message, and all the OS showed the user before handing it over was "Open Intentic?".
  *

@@ -19,7 +19,7 @@ const CERT_HOST = `abc123def456.local.example.com`;
 
 // A sandbox with no machine record: the ordinary self-hosted lane, which is the one that might be a loopback
 // hop away. The two records are what the cases below vary.
-const anywhere = { cloud: null, hosted: null, localHostname: CERT_HOST };
+const anywhere = { hosted: null, localHostname: CERT_HOST };
 
 // The daemon's answer to GET /health. `id` undefined models a daemon too old to name itself.
 const health = (id: string | undefined): Response =>
@@ -62,24 +62,21 @@ it(`ranks by multiplexing, not by distance: the HTTP/1.1 address is last`, async
 });
 
 it(`offers no loopback candidate for a machine the platform put somewhere this browser is not`, async () => {
-    // The two lanes where the platform created the machine itself and knows where it is. Probing either would
-    // spend the browser's Local Network Access prompt: the "is this app looking around my computer" dialog:
-    // on an address that could never have answered.
-    const hosted = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: { state: `started` } });
+    // The lane where the platform created the machine itself and knows where it is. Probing it would spend the
+    // browser's Local Network Access prompt: the "is this app looking around my computer" dialog: on an
+    // address that could never have answered.
+    const hosted = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } });
     expect(hosted).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
-    const cloud = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: { provider: `hetzner` }, hosted: null });
-    expect(cloud).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
 
     // …and the verdict itself, which is a cheap NO and never a yes: no machine record means the sandbox MIGHT
     // be a loopback hop away, which is the whole reason the probe still exists.
     expect(couldBeOnThisMachine(anywhere)).toBe(true);
-    expect(couldBeOnThisMachine({ cloud: null, hosted: { state: `started` } })).toBe(false);
-    expect(couldBeOnThisMachine({ cloud: { provider: `hetzner` }, hosted: null })).toBe(false);
+    expect(couldBeOnThisMachine({ hosted: { state: `started` } })).toBe(false);
 });
 
 it(`never reaches for the machine when the sandbox cannot be on it`, async () => {
     const fetchMock = vi.fn();
-    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: { state: `started` } }, fetchMock)).toEqual({
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
         kind: `tunnel`,
         base: TUNNEL,
     });
@@ -92,11 +89,11 @@ it(`drops the certified candidate when the platform reports no loopback name`, a
      * loopback-certificate path switched off, a row whose token yields no id. It is a normal state, not a
      * failure, and it reads the same whether the reason is configuration or a sandbox behind somebody's own
      * bare domain. The tunnel carries it, and plain http is still there for the outage. */
-    const candidates = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: null, localHostname: null });
+    const candidates = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: null, localHostname: null });
     expect(candidates.map((candidate) => candidate.kind)).toEqual([`tunnel`, `local-insecure`]);
 
     // An older platform that does not report the field at all is the same answer, not a crash.
-    const legacy = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: null });
+    const legacy = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: null });
     expect(legacy.map((candidate) => candidate.kind)).toEqual([`tunnel`, `local-insecure`]);
 });
 
@@ -176,7 +173,7 @@ it(`takes the tunnel on trust when nothing ranks below it`, async () => {
     // Qualifying the last candidate spends a request to choose between it and nothing. For a sandbox on a
     // machine the platform placed elsewhere it is also the only candidate there has ever been.
     const fetchMock = vi.fn();
-    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: { state: `started` } }, fetchMock)).toEqual({
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
         kind: `tunnel`,
         base: TUNNEL,
     });

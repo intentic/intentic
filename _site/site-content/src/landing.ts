@@ -372,9 +372,9 @@ export const landingContent: LandingContent = {
         ],
         commandNote: "It sets up your workspace on your own computer. Nothing is deployed anywhere and no ports are opened.",
         // Named as a comparison, not as an alternative: "run it somewhere else" invites the reader to leave
-        // the command they are looking at, while "one of three" tells them the command is a choice they are
-        // allowed to check. The link goes to the page that states all three trades in full.
-        commandChoice: { lead: "This is one of three machines it can run on.", cta: "Compare them" },
+        // the command they are looking at, while "one of two" tells them the command is a choice they are
+        // allowed to check. The link goes to the page that states both trades in full.
+        commandChoice: { lead: "This is one of two machines it can run on.", cta: "Compare them" },
         desktop: {
             lead: "Rather not touch a terminal?",
             cta: "Get the app for Windows or Linux",

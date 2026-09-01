@@ -58,7 +58,6 @@ export const adminUserDetail = async (prisma: PrismaClient, idOrEmail: string, n
                     setupReport: true,
                     bootReport: true,
                     announceRefusal: true,
-                    cloud: true,
                     hosted: { select: { region: true, appName: true, wokeAt: true, idleWarnedAt: true } },
                     members: { select: { email: true, role: true, acceptedAt: true } },
                 },
@@ -141,7 +140,6 @@ export const adminUserDetail = async (prisma: PrismaClient, idOrEmail: string, n
                       idleWarnedAt: sandbox.hosted.idleWarnedAt?.toISOString() ?? null,
                   }
                 : null,
-            cloud: sandbox.cloud ?? null,
             members: sandbox.members.map((member) => ({ email: member.email, role: member.role, accepted: member.acceptedAt !== null })),
         })),
         memberOf: memberships.map((row) => ({

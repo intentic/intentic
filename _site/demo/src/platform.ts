@@ -33,9 +33,7 @@ export const DEMO_SANDBOX: SandboxSummary = {
     // the loopback-certificate path switched off reports, so the shell takes the same branch a visitor's
     // browser would and never reaches for 127.0.0.1.
     localHostname: null,
-    // The demo's sandbox is a local one, not something the cloud lane provisioned, and not one the
-    // platform hosts.
-    cloud: null,
+    // The demo's sandbox is a local one, not a machine the platform hosts.
     hosted: null,
 };
 

@@ -136,8 +136,7 @@ export const configSchema = z.object({
      *
      * `flyApiToken` is the switch (org rides along, a token without an org cannot place a machine). The rest
      * sizes the starter box: deliberately small and cheap, because the lane's job is "signed in → working
-     * sandbox in seconds", and the wizard's ladder (Oracle free tier, your cloud, your machine) is the answer
-     * for power, not a bigger bill here. */
+     * sandbox in seconds", and the reader's own computer is the answer for power, not a bigger bill here. */
     hosted: z
         .object({
             // Org-scoped Fly API token (fly tokens create -o <org>). HOSTED_FLY_API_TOKEN.
@@ -375,9 +374,8 @@ export const configSchema = z.object({
             maxServicesPerOwner: z.coerce.number().int().positive().default(5),
         })
         .prefault({}),
-    // Where the connect bootstrap scripts are served from, the cloud lane bakes `${scriptOrigin}/connect`
-    // into a new VM's first-boot script (sandbox/cloud/user-data.ts), the same URL the setup wizard's
-    // copy-paste command uses. A self-hosted platform points this at its own site. SCRIPT_ORIGIN.
+    // Where the connect bootstrap scripts are served from: the URL the setup wizard's copy-paste command and
+    // the desktop app's handoff both fetch. A self-hosted platform points this at its own site. SCRIPT_ORIGIN.
     scriptOrigin: z.url().default(`https://intentic.dev`),
     api: z
         .object({

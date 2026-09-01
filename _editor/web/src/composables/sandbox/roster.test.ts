@@ -18,7 +18,6 @@ const row = (over: Partial<SandboxSummary>): SandboxSummary =>
         token: `tok`,
         role: `owner`,
         providedTunnel: false,
-        cloud: null,
         hosted: null,
         ...over,
     }) as SandboxSummary;
