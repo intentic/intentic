@@ -3,6 +3,7 @@ import { DiffStat } from "@intentic/ui";
 import { computed } from "vue";
 import { useLayout } from "../composables/useLayout";
 import type { LineStat } from "../composables/workspace/codeStat";
+import { addedIn, shownStat, weightFill } from "../composables/workspace/changeWeight";
 
 /* A changed file's +/− IN THE READING THE SURFACE IS SHOWING: the review's rows and headings, and the bar over
  * the open diff. Every one of them renders this rather than DiffStat directly, because the choice it makes has
@@ -25,9 +26,15 @@ import type { LineStat } from "../composables/workspace/codeStat";
  *
  * A change that is ENTIRELY comments would otherwise render as +0 −0, which is the badge's way of saying "a
  * rename" and reads as nothing happened. It says what it is instead, and stays in the list: something did change
- * here, and hiding the row would be the reader's decision to make, not this component's. */
+ * here, and hiding the row would be the reader's decision to make, not this component's.
+ *
+ * AND HOW BIG IT IS AGAINST ITS NEIGHBOURS (`of`), which is the same question asked of a whole list at once and
+ * therefore belongs here rather than in either panel: the rail has to be scaled by the reading the badge beside
+ * it is drawing, or the two are two answers to one question forty pixels apart. See changeWeight.ts for why the
+ * rail exists at all, and why its scale is compressive. Rows pass `of`; headings and the diff toolbar do not,
+ * because their neighbours are not a set anyone ranks. */
 
-const { code, counting, additions, deletions } = defineProps<{
+const { code, counting, additions, deletions, of } = defineProps<{
     // Code-only counts, once the file has been read and stripped. Absent when the file has no grammar to strip:
     // whose pane shows every line it has, making git's numbers the honest ones.
     code?: LineStat;
@@ -38,6 +45,8 @@ const { code, counting, additions, deletions } = defineProps<{
     // Git's own, comments included.
     additions?: number;
     deletions?: number;
+    // The most any one file in this list ADDED. Present ⇒ draw the rail, scaled to it.
+    of?: number;
 }>();
 
 const { showComments } = useLayout();
@@ -47,7 +56,7 @@ const stripped = computed(() => !showComments.value);
 // Git's count standing in for one that has not been worked out yet, and therefore the one reading here that is
 // allowed to change. Drawn at half weight, said in the hover.
 const provisional = computed(() => stripped.value && counting === true);
-const shown = computed(() => (stripped.value && code !== undefined ? code : { additions, deletions }));
+const shown = computed(() => shownStat(stripped.value, { code, counting: counting === true }, additions, deletions));
 const commentsOnly = computed(
     () => stripped.value && !provisional.value && code?.additions === 0 && code.deletions === 0 && ((additions ?? 0) > 0 || (deletions ?? 0) > 0),
 );
@@ -66,6 +75,22 @@ const hint = computed<string | undefined>(() => {
     }
     return commentsOnly.value ? `Only comments changed, ${full.value} of them` : `Code only · ${full.value} counting comments`;
 });
+
+/* --- the rail ------------------------------------------------------------------------------------------------
+ * How much new code this file is, against the file that brought the most in this list. See changeWeight.ts for
+ * why it measures additions rather than total churn, and why its scale is compressive.
+ *
+ * A ROW THAT ADDS NOTHING GETS NO RAIL, which is a gap in the column rather than an empty track, and the
+ * difference matters: an empty track beside `−1353` would rank a large deletion as the smallest thing on screen,
+ * where nothing at all reads as "no new code here" — which is what a deletion is, and is true. The deletion is
+ * still on the row, in red, beside a status letter that already says D.
+ *
+ * NO TOOLTIP, deliberately. The rail sits a few pixels from the number it is scaled to, so a hover would repeat
+ * what the reader is already looking at, once per row, in a list the pointer crosses constantly. */
+const fill = computed<number | undefined>(() => {
+    const added = addedIn(shown.value);
+    return of === undefined || of <= 0 || added <= 0 ? undefined : weightFill(added, of);
+});
 </script>
 
 <template>
@@ -83,4 +108,16 @@ const hint = computed<string | undefined>(() => {
         <DiffStat :additions="shown.additions" :deletions="shown.deletions" />
     </span>
     <DiffStat v-else :additions="shown.additions" :deletions="shown.deletions" />
+    <!-- AFTER the numbers, which is what makes the rails a column: the counts are variable width, so a bar
+         placed before them would start at a different x on every row and there would be nothing to compare. At
+         the row's right edge they share an edge and a width, and the eye reads down them. Decorative to a screen
+         reader: the number it announces is the same fact, said exactly. -->
+    <span
+        v-if="fill !== undefined"
+        class="flex h-[3px] w-5 shrink-0 overflow-hidden rounded-full bg-overlay"
+        :class="provisional ? 'opacity-50' : ''"
+        aria-hidden="true"
+    >
+        <span class="h-full rounded-full bg-success" :style="{ width: `${fill * 100}%` }"></span>
+    </span>
 </template>

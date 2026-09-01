@@ -17,6 +17,7 @@ import { useToolCalls } from "../../composables/chat/useToolCalls";
 import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";
 import { type DiffOpen, useLayout } from "../../composables/useLayout";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
+import { useChangeWeight } from "../../composables/workspace/changeWeight";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
@@ -36,6 +37,7 @@ const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
 // The review lists' reading, the same preference the Changes panel's own header toggle flips.
 const { groupByModule } = useChangeGrouping();
+const { largestFirst } = useChangeWeight();
 // How much of an agent's working-out a transcript shows, the same preference the chat's own readout row flips,
 // which is where somebody staring at a run mark will reach for it; this is where they'll look to decide it once.
 const { showToolCalls } = useToolCalls();
@@ -213,6 +215,16 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <RowGroup label="Changes">
             <Row as="label" icon="box" title="Group by module" description="Group files by package in review lists.">
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
+            </Row>
+            <!-- The reorder half of "which of these files matters" (composables/workspace/changeWeight.ts). The
+                 other half, the rail beside every row's +/−, is always on and has nothing to switch. -->
+            <Row
+                as="label"
+                icon="sort-desc"
+                title="Most added first"
+                description="Order review lists by how much each file added, instead of by path, within each package."
+            >
+                <template #control><ToggleSwitch v-model="largestFirst" /></template>
             </Row>
             <!-- Not `as=\"label\"`, unlike the switches around it: a label wrapping three buttons hands every
                  click on the description to the first of them. -->

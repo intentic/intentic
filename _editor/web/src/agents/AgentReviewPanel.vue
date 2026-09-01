@@ -26,7 +26,9 @@ import DiffToolbar from "../pages/workspace/viewers/DiffToolbar.vue";
 import FileDiffPane from "../pages/workspace/viewers/FileDiffPane.vue";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../composables/workspace/changeModules";
 import { useChangeGrouping } from "../composables/workspace/useChangeGrouping";
+import { addedIn, sumShown, useChangeWeight, type ShownStat } from "../composables/workspace/changeWeight";
 import ChangeRowName from "../components/ChangeRowName.vue";
+import ChangeOrderButton from "../components/ChangeOrderButton.vue";
 import ModuleLabel from "../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
@@ -182,6 +184,18 @@ const filtered = computed<readonly AgentReviewFile[]>(() => {
 const { countOf } = useCodeStats();
 const codeOf = (file: AgentReviewFile): CodeCount => countOf(agentStatKey(agentId, file.repo, file.change.path, at));
 
+/* WHICH OF THESE FILES CARRIES THE CHANGE, which is the question this list was worst at answering and the reason
+ * changeWeight.ts exists: read the note there for the rail, the order, and why they are two mechanisms. What
+ * this panel owns is the SCOPE of each.
+ *
+ * The rail's scale is the most-added row the list is currently SHOWING (`filtered`, not every file the agent
+ * touched), because it is a comparison between the things on screen: narrowing to Blocked and being told those
+ * four files are all tiny — against a 400-line file the filter is hiding — would be comparing them to something
+ * the reader cannot see. */
+const { readingOf, bySize } = useChangeWeight();
+const readingOfRow = (file: AgentReviewFile): ShownStat => readingOf(codeOf(file), file.change.additions, file.change.deletions);
+const heaviest = computed(() => filtered.value.reduce((most, file) => Math.max(most, addedIn(readingOfRow(file))), 0));
+
 // The box's name for the conflict report's crossing row, and the crossing itself. Read here rather than passed
 // down from the page: the panel already holds `at`, and a name threaded through two components is a name that
 // goes stale the day somebody renames a sandbox.
@@ -205,6 +219,11 @@ interface GroupStats {
      * reader clicked one of its rows. */
     readonly code: CodeCount;
     readonly blocked: number;
+    /* What most-added-first orders this heading by: the sum of what its rows are SHOWING, which is a pair of
+     * plain numbers whatever state they are in. Not read off `code` above, which is deliberately undefined for a
+     * heading with one unsettled row under it (a part-sum is not a sum) — an order is a total ordering or it is
+     * nothing, so this takes the reading each row is actually drawing and adds those up. */
+    readonly reading: ShownStat;
 }
 const codeSumOf = (files: readonly AgentReviewFile[]): CodeCount =>
     sumCounts(files.map((file) => ({ count: codeOf(file), additions: file.change.additions, deletions: file.change.deletions })));
@@ -213,6 +232,7 @@ const statsOf = (files: readonly AgentReviewFile[]): GroupStats => ({
     deletions: files.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
     code: codeSumOf(files),
     blocked: files.filter((file) => file.blocked !== undefined).length,
+    reading: sumShown(files.map(readingOfRow)),
 });
 // The whole review, for the list header: every file, not the filtered ones, exactly as its git totals are.
 const reviewCode = computed(() => codeSumOf(changes.files.value));
@@ -238,7 +258,12 @@ const groups = computed<readonly RepoGroup[]>(() => {
     for (const [repo, files] of byRepo) {
         built.push({ repo, files, ...statsOf(files) });
     }
-    return built;
+    /* Most-added-first reaches the REPOS too, and only here: a repo heading in this list is a grouping and a pair
+     * of totals, nothing more, so putting the repo that holds the change at the top costs the reader nothing. The
+     * workspace's Changes panel deliberately does NOT do this to its repos — there a repo row is an operable
+     * thing (its own sync pills, its own discard, its own failure) and shuffling those is a different kind of
+     * surprise than reordering a list of files. */
+    return bySize(built, (group) => group.reading);
 });
 
 /* The same reading the workspace's Changes panel offers, from the same preference (useChangeGrouping) and
@@ -268,9 +293,12 @@ const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
         const view = moduleView(group.files, (file) => file.change.path, changes.modulesOf(group.repo), group.repo, groupByModule.value);
         const buckets: ReviewBucket[] = [];
         for (const bucket of view.buckets) {
-            buckets.push({ ...bucket, ...statsOf(bucket.rows) });
+            // Biggest first INSIDE a package before the packages themselves are ordered, so the ask is applied at
+            // every scope the list has headings for rather than flattening the one thing a reader navigates by.
+            const rows = bySize(bucket.rows, readingOfRow);
+            buckets.push({ ...bucket, rows, ...statsOf(rows) });
         }
-        views.set(group.repo, { buckets, named: view.named });
+        views.set(group.repo, { buckets: bySize(buckets, (bucket) => bucket.reading), named: view.named });
     }
     return views;
 });
@@ -685,6 +713,11 @@ const endResize = (event: PointerEvent): void => {
                     <span class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
                         <Icon name="check" class="text-2xs" />{{ changes.viewedCount.value }}/{{ changes.count.value }}
                     </span>
+                    <!-- The stronger half of "show me what matters": the rails on the rows rank the list without
+                         moving it, and this reorders it, at repo, package and row scope alike. At the bar's
+                         right edge, where this panel's other actions live, and shared verbatim with the
+                         workspace's Changes panel, which offers the same preference from its own bar. -->
+                    <ChangeOrderButton />
                 </div>
 
                 <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
@@ -813,7 +846,15 @@ const endResize = (event: PointerEvent): void => {
                                                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
                                                 v-tooltip.right="'Not yet landed in your workspace'"
                                             ></span>
-                                            <ReviewStat v-bind="codeOf(file)" :additions="file.change.additions" :deletions="file.change.deletions" />
+                                            <!-- `of` is what turns the badge into a rail as well: how much new
+                                     code this file is against the most any file on screen brought, so the list
+                                     can be ranked by scanning instead of by reading thirty pairs of digits. -->
+                                            <ReviewStat
+                                                v-bind="codeOf(file)"
+                                                :additions="file.change.additions"
+                                                :deletions="file.change.deletions"
+                                                :of="heaviest"
+                                            />
                                         </button>
                                         <button
                                             type="button"

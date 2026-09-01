@@ -40,6 +40,7 @@ import { filesToEntries } from "./dropEntries";
 import { explorerShows } from "./explorerFilter";
 import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
+import ChangeOrderButton from "../../components/ChangeOrderButton.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import WorkspaceScopeChip from "./WorkspaceScopeChip.vue";
 import { workspaceAgent } from "../../composables/workspace/workspaceScope";
@@ -391,6 +392,10 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="filter" class="text-base" />
                 </button>
+                <!-- How the change list underneath reads: biggest first, or git's path order. Only over Changes,
+                     since it is the only segment it says anything about, and the same control the desktop
+                     sidebar and the agent review offer. -->
+                <ChangeOrderButton v-if="segment === 'changes'" shell="h-10 w-10 rounded-lg active:bg-overlay" glyph="text-base" />
                 <!-- One refresh for the row, refetching whichever segment is showing: the Changes panel below
                      no longer carries a header row (and its own refresh) of its own. -->
                 <button

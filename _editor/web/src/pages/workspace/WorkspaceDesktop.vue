@@ -13,6 +13,7 @@ import { usePanels } from "../../composables/extensions/usePanels";
 import { personaStartDirs } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { lensPersonaId, reachOf, reachSentence } from "../../composables/workspace/personaReach";
+import ChangeOrderButton from "../../components/ChangeOrderButton.vue";
 import { workspaceAgent } from "../../composables/workspace/workspaceScope";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
@@ -787,6 +788,10 @@ const endResize = (event: PointerEvent): void => {
                          the switch's "Changes" tab already titles the panel and carries its count, so a second
                          line below it spent height restating both before a single file was named. -->
                     <template v-if="layout.sidebarPanel.value === 'changes'">
+                        <!-- How the list underneath READS: biggest changes first, or git's path order. Here
+                             rather than in the panel for the same reason Refresh is: the panel deliberately has
+                             no header row of its own, and this row is already titled "Changes". -->
+                        <ChangeOrderButton />
                         <button
                             type="button"
                             :class="ui.iconButton()"

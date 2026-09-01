@@ -37,6 +37,7 @@ import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../composables/workspace/changeModules";
 import type { OpenMode } from "./workspaceTabs";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
+import { addedIn, sumShown, useChangeWeight, type ShownStat } from "../../composables/workspace/changeWeight";
 import { useModules } from "../../composables/workspace/useModules";
 import ChangeRowName from "../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
@@ -464,10 +465,21 @@ const sectionViews = computed<ReadonlyMap<string, SectionView>>(() => {
     const views = new Map<string, SectionView>();
     for (const repo of scannable.value) {
         for (const section of sidesOf(repo)) {
-            views.set(
-                JSON.stringify([repo.repo, section.side]),
-                moduleView(section.changes, (change) => change.path, modulesOf(repo.repo), repo.repo, groupByModule.value),
+            const view = moduleView(section.changes, (change) => change.path, modulesOf(repo.repo), repo.repo, groupByModule.value);
+            const reading = (change: GitChange): ShownStat => readingOfRow(repo.repo, section.side, change);
+            /* Most added first, when that is the asked-for reading (changeWeight.ts): inside a package, and then
+             * across the packages, so the ask reaches every scope this list has headings for without flattening
+             * the hierarchy that staging depends on.
+             *
+             * IT STOPS THERE. The SIDES keep git's order, because conflicts-then-staged-then-unstaged is a
+             * sequence of meanings rather than a list of sizes, and the REPOS keep theirs, because a repo row
+             * here is an operable thing — its own sync pills, its own discard, its own failure line — and
+             * reordering controls under a pointer is a different act from reordering a list of files. */
+            const buckets = bySize(
+                view.buckets.map((bucket) => ({ ...bucket, rows: bySize(bucket.rows, reading) })),
+                (bucket) => sumShown(bucket.rows.map(reading)),
             );
+            views.set(JSON.stringify([repo.repo, section.side]), { buckets, named: view.named });
         }
     }
     return views;
@@ -521,6 +533,31 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
  * number: git's, at half weight, until the code's replaces it (ReviewStat). */
 const { countOf } = useCodeStats();
 const codeOf = (repo: string, side: GitDiffSide, path: string): CodeCount => countOf(workingStatKey(repo, side, path));
+
+/* WHICH OF THESE FILES CARRIES THE CHANGE. In a 270px sidebar this is the question the panel was least able to
+ * answer: the ± is four characters of 3xs mono at the far edge, so finding the one file that matters meant
+ * reading every row's pair of digits and holding a maximum in your head. changeWeight.ts holds the rule and the
+ * reasoning; this panel supplies the two scopes.
+ *
+ * The rail's scale is the most-added row the panel is SHOWING — every repo and every side, so the comparison
+ * spans the one scroll the reader is looking down, but narrowed by the origin filter, since a lit chip means the
+ * other agent's 400-line file is not on screen to be compared against. A folded repo still counts: folding is
+ * "give me back some column", and rescaling every visible rail because a group was collapsed would be the fold
+ * reaching somewhere it was never asked to. */
+const { readingOf, bySize } = useChangeWeight();
+const readingOfRow = (repo: string, side: GitDiffSide, change: GitChange): ShownStat =>
+    readingOf(codeOf(repo, side, change.path), change.additions, change.deletions);
+const heaviest = computed(() => {
+    let most = 0;
+    for (const repo of scannable.value) {
+        for (const section of sidesOf(repo)) {
+            for (const change of section.changes) {
+                most = Math.max(most, addedIn(readingOfRow(repo.repo, section.side, change)));
+            }
+        }
+    }
+    return most;
+});
 
 // --- row selection (a list selection, NOT a commit target) -------------------------------------------------
 // Ordinary click/ctrl/shift list selection, exactly as VSCode's SCM list works, and for exactly one purpose:
@@ -1851,10 +1888,16 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                                 +{{ originsOf(group, change.path).length - 2 }}
                                             </span>
                                         </span>
+                                        <!-- `of` is what turns the badge into a rail as well: 20px of bar,
+                                         scaled to the most any row in this panel added, so the list can be
+                                         ranked by scanning rather than by reading every pair of digits down its
+                                         edge. It is the one thing here allowed to take width from the path, and
+                                         it earns it: the path says WHAT changed, and nothing said HOW MUCH. -->
                                         <ReviewStat
                                             v-bind="codeOf(group.repo, section.side, change.path)"
                                             :additions="change.additions"
                                             :deletions="change.deletions"
+                                            :of="heaviest"
                                         />
                                     </button>
                                     <!-- The row's half of the same rule: the index verb is always on screen. It

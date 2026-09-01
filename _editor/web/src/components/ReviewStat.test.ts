@@ -17,6 +17,7 @@ interface Props {
     counting?: boolean;
     additions?: number;
     deletions?: number;
+    of?: number;
 }
 
 const render = (props: Props): HTMLElement => {
@@ -107,5 +108,56 @@ describe(`<ReviewStat>`, () => {
         expect(host.textContent).toContain(`+54`);
         expect(host.querySelector(`.opacity-50`)).toBeNull();
         expect(host.querySelector(`[data-tip]`)).toBeNull();
+    });
+});
+
+/* The rail: the same badge asked how much new code this file is against the rest of the list. What matters is
+ * that it agrees with the numbers printed beside it — a bar scaled off a reading the badge is not showing would
+ * be two answers to one question, a few pixels apart — and that it draws nothing where there is nothing to rank. */
+const rail = (host: HTMLElement): HTMLElement | null => host.querySelector<HTMLElement>(`span[aria-hidden="true"]`);
+// The bar's own length as a share of its track.
+const fill = (host: HTMLElement): string | undefined => (rail(host)?.firstElementChild as HTMLElement | undefined)?.style.width;
+
+describe(`<ReviewStat> rail`, () => {
+    it(`draws nothing at all unless the caller says what to scale against`, async () => {
+        await withComments(false);
+        expect(rail(render({ code: { additions: 12, deletions: 3 }, additions: 12, deletions: 3 }))).toBeNull();
+    });
+
+    it(`fills the track for the file that added the most in the list`, async () => {
+        await withComments(false);
+        expect(fill(render({ code: { additions: 50, deletions: 10 }, additions: 60, deletions: 12, of: 50 }))).toBe(`100%`);
+    });
+
+    /* THE INVARIANT WORTH PINNING. This file's git additions (34) are eleven times its code additions (3), and
+     * the badge is printing the code ones. Scaled against a list whose biggest addition is 34, a bar drawn off
+     * git's number would be full; off the number on screen it is a third of the track. */
+    it(`scales to the reading the badge is showing, not to git's`, async () => {
+        await withComments(false);
+        expect(fill(render({ code: { additions: 3, deletions: 0 }, additions: 34, deletions: 8, of: 34 }))).not.toBe(`100%`);
+    });
+
+    it(`follows the reader back to git's numbers when the comments come on`, async () => {
+        await withComments(true);
+        expect(fill(render({ code: { additions: 3, deletions: 0 }, additions: 34, deletions: 8, of: 34 }))).toBe(`100%`);
+    });
+
+    /* A DELETION IS NOT THE SMALLEST THING IN THE LIST, it is a row with no new code in it, and an empty track
+     * would say the first of those. This is the case that made the measure additions rather than churn: with the
+     * rail scaled by total change, one removed bundle sets the top of the scale and buries everything else. */
+    it(`stays off a row that added nothing, however much it removed`, async () => {
+        await withComments(false);
+        expect(rail(render({ code: { additions: 0, deletions: 1353 }, additions: 0, deletions: 1353, of: 131 }))).toBeNull();
+    });
+
+    it(`stays away from a row whose size is unknown rather than drawing a zero`, async () => {
+        await withComments(false);
+        expect(rail(render({ counting: false, of: 50 }))).toBeNull();
+    });
+
+    it(`marks a rail standing on a provisional count the same way the numbers are marked`, async () => {
+        await withComments(false);
+        const host = render({ counting: true, additions: 54, deletions: 0, of: 54 });
+        expect(rail(host)?.className).toContain(`opacity-50`);
     });
 });

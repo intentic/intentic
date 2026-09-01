@@ -106,6 +106,7 @@ export type IconName =
     | "sitemap"
     | "slack"
     | "sliders-h"
+    | "sort-desc"
     | "sparkles"
     | "spinner"
     | "square"
@@ -265,6 +266,11 @@ export const ICONS: Record<IconName, string> = {
     // one has to find it here or fall to a generic speech bubble, which is what it did.
     slack: "ri:slack-line",
     "sliders-h": "ri:equalizer-line",
+    /* BIGGEST FIRST: the reading-order toggle on both review lists (composables/workspace/changeWeight.ts). Bars
+     * of decreasing length, which is the same encoding the rail beside each row uses, so the button and what it
+     * does to the list are drawn in one language. `sort-number-desc` is the neighbouring glyph and is not used:
+     * its 9→1 annotation is mush at the 12px these bars are drawn at. */
+    "sort-desc": "ri:sort-desc",
     sparkles: "ri:sparkling-line",
     spinner: "ri:loader-4-line",
     square: "ri:checkbox-blank-line",
