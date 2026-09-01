@@ -396,6 +396,13 @@ export interface PlanLimitRow {
     // A credential that can no longer be refreshed. Nothing to do with headroom, everything to do with whether
     // this account can serve a turn, so it rides the same row and surfaces in the same attention list.
     readonly needsReauth: boolean;
+    /* WHETHER THIS ROW IS A CHOICE. A provider's own account is picked by name (the composer's footer offers
+     * them one per row); a translator subscription is not, CLIProxyAPI holds every auth file and balances turns
+     * across them by itself. The two lists this row is built from are the only place that difference is known,
+     * so it is recorded here rather than re-derived from the provider: Grok is served BOTH ways, so no rule
+     * over provider names can answer it. Read by any surface that has to decide whether to list a pool's
+     * accounts or stand them in for with one line (chatCapacity's rows). */
+    readonly routed: boolean;
 }
 
 // What a row is built from, in the two lists' common terms, the daemon's key for the account, who it says it
@@ -407,6 +414,7 @@ interface PlanLimitSource {
     readonly identity: string | undefined;
     readonly attached: AccountUsage | undefined;
     readonly needsReauth: boolean;
+    readonly routed: boolean;
 }
 
 const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLimitRow => {
@@ -426,6 +434,7 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLim
         stale: usage !== undefined && isStale(usage),
         readable: reportsPlanLimits(provider),
         needsReauth: source.needsReauth,
+        routed: source.routed,
     };
 };
 
@@ -443,6 +452,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
                     identity: account.email === account.label ? undefined : account.email,
                     attached: account.usage,
                     needsReauth: account.needsReauth === true,
+                    routed: false,
                 }),
             ),
         ),
@@ -457,6 +467,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
                     identity: undefined,
                     attached: account.usage,
                     needsReauth: false,
+                    routed: true,
                 }),
             ),
         ),

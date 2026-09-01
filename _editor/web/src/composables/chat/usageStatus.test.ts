@@ -552,6 +552,7 @@ describe(`plan-limit aggregates`, () => {
         stale: false,
         readable: true,
         needsReauth: false,
+        routed: false,
         ...over,
     });
 

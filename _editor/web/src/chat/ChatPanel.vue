@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { Button, Icon, useDevice, ui } from "@intentic/ui";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { railFitsBeside } from "../composables/chat/chatCapacity";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { openRunSessions } from "../composables/chat/openRun";
-import { DEFAULT_RAIL_WIDTH } from "../composables/rail";
+import { DEFAULT_RAIL_WIDTH, railWidth } from "../composables/rail";
 import { chatOnRail, chatWide } from "../composables/chat/chatSurface";
 import { useChat } from "../composables/chat/useChat";
 import { useChatFloating } from "../composables/chat/chatFloating";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { MIN_PANE_PX, useLayout } from "../composables/useLayout";
 import { toAppPx, uiLength } from "../composables/uiScale";
+import ChatCapacityRail from "./ChatCapacityRail.vue";
 import ChatPane from "./ChatPane.vue";
 import ChatRunGraph from "./ChatRunGraph.vue";
 import ChatTabs from "./ChatTabs.vue";
@@ -101,6 +103,57 @@ const shown = computed<Conversation[]>(() => {
 // A split is what is DRAWN, not what was asked for: a claimed column nobody filled must not make a
 // single-pane panel offer its per-column ×.
 const split = computed(() => shown.value.length > 1);
+
+/* --- The headroom rail ---------------------------------------------------------------------------
+ * WHICH SUBSCRIPTIONS STILL HAVE ROOM, down the right edge, in the width the panes cannot use. The rule and
+ * the reasoning are chatCapacity's (railFitsBeside); what belongs here is the measurement it is fed and the
+ * one place the rail is allowed to appear.
+ *
+ * THE PANEL'S OWN WINDOW, AND NOWHERE ELSE. Every other home this panel has sits inside the app's shell, where
+ * the Usage tab is a click away on the icon rail and the composer's picker is a click away under the caret. A
+ * popped-out chat is the one surface with neither: it is a window of its own, so "how much of my plan is left"
+ * costs a trip back to another window, and the answer decides whether the next thing the reader types is worth
+ * sending. The /chat area is deliberately excluded for that reason rather than for a layout one — it is the
+ * same panel at the same width, but the shell around it already answers this.
+ *
+ * MEASURED, NOT ASSUMED. The window is resizable, the chat list beside it is draggable, and the pane count
+ * moves on its own when a workflow run opens a band — so the only honest input is the panel's real width,
+ * watched. Off the PANEL rather than the window: the measurement must not change when the rail appears, or the
+ * rule would feed itself and the column would flicker at its own threshold. It doesn't: the panel is the whole
+ * of the window's content either way, and the rail is drawn out of its slack.
+ *
+ * Zero until measured, so the rail cannot flash onto a window whose width has not been read yet. The
+ * observer's first callback lands before the first paint, so nothing is ever seen at this value.
+ */
+const panelWidth = ref(0);
+let panelObserver: ResizeObserver | undefined;
+const stopMeasuring = (): void => {
+    panelObserver?.disconnect();
+    panelObserver = undefined;
+};
+watch(
+    root,
+    (el) => {
+        stopMeasuring();
+        // A component-test DOM has no ResizeObserver, and a panel rendered there is not being looked at:
+        // nothing measures, so the rail stays off, which is the layout every one of those tests is written for.
+        if (el === undefined || typeof ResizeObserver === `undefined`) {
+            return;
+        }
+        panelObserver = new ResizeObserver(([entry]) => {
+            panelWidth.value = toAppPx(entry?.contentRect.width ?? 0);
+        });
+        panelObserver.observe(el);
+    },
+    { immediate: true },
+);
+onBeforeUnmount(stopMeasuring);
+
+// `tabs: false` is a caller that draws no list of its own (the mobile agent route), so there is no rail taking
+// width off the panes: asking for it back would be charging them for a column that isn't there.
+const showsCapacity = computed(
+    () => floating.value && !mobile.value && railFitsBeside(panelWidth.value, tabs ? railWidth.value : 0, shown.value.length),
+);
 
 // Past the width floor the panes stop shrinking and the row scrolls, so the focused one has to be brought back
 // into view: the same courtesy the rail does for the focused tab. `nearest` is a no-op on a pane already on
@@ -381,6 +434,13 @@ const endResize = (event: PointerEvent): void => {
                 />
             </div>
         </div>
+
+        <!-- WHAT THE READER CAN RUN NEXT, in the room the panes have no use for. Last in the row and outside
+             the pane column on purpose: it belongs to the WINDOW, not to any one chat, exactly as the chat list
+             on the other edge does. It yields to the panes rather than competing with them — adding a column
+             takes its width back without asking (see showsCapacity), which is why the pane-fit above does not
+             count it. -->
+        <ChatCapacityRail v-if="showsCapacity" />
     </div>
 </template>
 
