@@ -60,8 +60,6 @@ const duration = computed(() => formatDuration(props.run.durationSeconds));
 // beats repeating the branch and sha that the line below already carries.
 const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));
-const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
-
 /* WHICH MODEL THIS ROW'S FIX WILL SPEND, and the caret that re-points it for this failure alone. Seeded from
  * the sandbox's agent-run list, which is also what the daemon will resolve if nobody touches it: asked of the
  * host rather than read here, so the two cannot disagree about what a click costs.
@@ -231,13 +229,7 @@ const startFix = (): void => {
 
         <!-- Expanded: the run's job graph -->
         <template #below>
-            <!-- The heading is known before the jobs are, so it stays real text and only the graph band is a
-                 placeholder: sized to DagGraph's own floor (150px) so the row settles once, not twice. -->
             <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
-                <div class="flex items-center justify-between">
-                    <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
-                    <span class="skeleton h-2.5 w-40"></span>
-                </div>
                 <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
                     <template v-for="i in 3" :key="i">
                         <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
@@ -246,17 +238,7 @@ const startFix = (): void => {
                 </div>
             </div>
 
-            <div v-else-if="stages.length > 0" class="flex flex-col gap-2">
-                <div class="flex items-center justify-between">
-                    <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
-                    <!-- The pan/zoom instructions that used to live here are on the canvas now, as controls
-                         rather than as a sentence about controls. -->
-                    <span class="text-2xs text-subtle">
-                        {{ stages.length }} {{ stages.length === 1 ? `stage` : `stages` }} · {{ jobCount }} {{ jobCount === 1 ? `job` : `jobs` }}
-                    </span>
-                </div>
-                <PipelineDagGraph :stages="stages" :recurring="recurring" @expand="fullscreen = true" />
-            </div>
+            <PipelineDagGraph v-else-if="stages.length > 0" :stages="stages" :recurring="recurring" @expand="fullscreen = true" />
 
             <div v-else-if="run.failedJobs?.length">
                 <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">Failed jobs</div>

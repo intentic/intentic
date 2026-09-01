@@ -66,7 +66,7 @@ const hint = computed<string>(() => {
     <span
         v-tooltip.bottom="hint"
         :aria-label="hint"
-        class="flex w-fit shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link"
+        class="flex w-fit shrink-0 items-center gap-1 rounded-full bg-primary-600/15 py-px pl-1.5 pr-2.5 text-2xs font-semibold text-link"
     >
         <Icon name="send" class="shrink-0 text-2xs" />
         Unsent
