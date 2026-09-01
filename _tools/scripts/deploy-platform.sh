@@ -50,7 +50,9 @@ until curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null 2>&1; do
         echo "error: $PLATFORM_DEPLOY_STACK did not come back healthy within 180s of the deploy." >&2
         echo "  The api container runs 'migrate deploy' and then a schema-vs-datamodel check before it serves." >&2
         echo "  Read its logs for which one it stopped on — a schema difference means the DATABASE has drifted" >&2
-        echo "  from the migrations (CI proves the migrations themselves replay into schema.prisma)." >&2
+        echo "  from the migrations (CI proves the migrations themselves replay into schema.prisma), and" >&2
+        echo "  'Error: P3009' means a migration FAILED against this database once and is now blocking every" >&2
+        echo "  migration behind it, which no redeploy clears: _platform/prisma/README.md has the runbook." >&2
         exit 1
     fi
     printf '.'

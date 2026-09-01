@@ -269,13 +269,20 @@ jobs:
       - shell: bash
         run: bash _tools/scripts/lint-workflows.sh
 
-  # THE ONE THING ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, and that
-  # replaying it produces schema.prisma. check-migrations.sh carries the full account; the short version is
+  # THE THINGS ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, that every
+  # new entry on it can apply to a database which already holds rows, and that replaying the lot produces
+  # schema.prisma. check-migrations.sh carries the full account; the short version is
   # that a `challenge` column was added by editing a migration every deployed database had already applied,
   # Prisma never re-ran it, and desktop sign-in returned an unhandled 500 in production for a week while every
   # job in this file stayed green. It could not have been otherwise: every database CI builds is created FRESH
   # from that same edited file, so the fresh ones were right, the deployed one was wrong, and each was
   # perfectly consistent with itself. Only the history can say so, which is why this job reads the history.
+  #
+  # The rows half was added by the same lesson told the other way round: `tunnelId` arrived as ADD COLUMN NOT
+  # NULL with no default — a statement Postgres runs on an empty table and refuses on a used one — so it passed
+  # here, failed on the live database, and P3009'd every deploy after it until it was fixed forward by hand.
+  # An empty database cannot notice the difference, and every database this job builds is empty; reading the
+  # statement is the only place the difference exists before production finds it.
   #
   # A JOB OF ITS OWN rather than a step in preflight, for the two things it needs and preflight does not:
   # `fetch-depth: 0` (preflight checks out shallow — the immutability half is a diff against the merge base),

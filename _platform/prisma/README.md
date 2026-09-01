@@ -33,9 +33,29 @@ The **database layer**: the Prisma schema, the generated client, and the migrati
   databases are all built fresh from the edited file: stayed green throughout. To change a schema, add a
   migration. Two things now enforce that, and both will fail rather than let it recur:
   [check-migrations.sh](../../_tools/scripts/check-migrations.sh) in the `migrations` CI job (the history is
-  append-only, and replaying it into an empty database reproduces `schema.prisma` exactly), and the api image,
-  which diffs its own database against this schema at boot and refuses to serve if they disagree
-  ([Dockerfile](../api/Dockerfile)).
+  append-only, every new entry can apply to a database that has rows, and replaying it into an empty database
+  reproduces `schema.prisma` exactly), and the api image, which diffs its own database against this schema at
+  boot and refuses to serve if they disagree ([Dockerfile](../api/Dockerfile)).
+- **A new column is nullable first, or it has a default.** `ADD COLUMN … NOT NULL` with no `DEFAULT` is the one
+  statement Postgres accepts on an empty table and refuses on a used one, so writing it means writing a
+  migration that can only ever apply where there is nothing in the table. `tunnelId` was written that way
+  (`20260831120000_ingress_reachability`, "fresh-state reshape, pre-launch, no users"): green in CI, where every
+  database is built fresh, and dead on the live one — and a FAILED migration is a wall, not a bad night, because
+  `migrate deploy` then refuses every later migration too (P3009), so the api's boot chain stopped at its first
+  step and the platform served nothing until it was repaired. Write the three steps instead: add the column
+  nullable, `UPDATE` it to the value each existing row implies, then `ALTER COLUMN … SET NOT NULL`. A column no
+  existing row implies a value for wants a `DEFAULT`, which fills them for you. Check 2 of the script above
+  fails the pipeline on the shape rather than the deploy on the consequence.
+- **Recovering a migration that failed in production** (`Error: P3009`, which the api container prints on repeat
+  and the deploy job reports as "did not come back healthy"). Prisma rolls the statement back but keeps the
+  failed row, and nothing pending applies until that row is resolved — no redeploy clears it. Fix it forward:
+  write the repair as a NEW migration whose statements are guarded (`IF EXISTS` / `IF NOT EXISTS`, an `UPDATE …
+  WHERE … IS NULL`) so it is a no-op on every database where the original succeeded, then, once that image is
+  built, tell the live database to stop waiting on the name it will never run:
+  `docker compose exec api bun node_modules/prisma/build/index.js migrate resolve --applied <migration_name>
+  --config node_modules/@intentic-app/prisma/prisma.config.ts`, and redeploy. The name is recorded as done, the
+  repair supplies what the name promised, and the boot-time schema diff is what proves the result before the api
+  serves a request. `20260901190000_tunnel_id_backfill` is the worked example.
 - Run the CI check locally before pushing a schema change: it is the same script:
   `pnpm db:up && MIGRATION_CHECK_DATABASE_URL=postgresql://app:app@localhost:5440/app bash _tools/scripts/check-migrations.sh`
   (any empty, disposable Postgres will do; it gets every migration replayed into it).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The two things about the migration history that nothing else in this pipeline can see.
+# The three things about the migration history that nothing else in this pipeline can see.
 #
 #   check-migrations.sh [<base ref>]        # default: origin/${GITHUB_BASE_REF:-main}
 #
@@ -16,15 +16,26 @@
 #      migration that re-runs somewhere and is skipped elsewhere. New directories are the only allowed change,
 #      and are what a schema change is supposed to add.
 #
-#   2. THE MIGRATIONS AND THE SCHEMA AGREE. Replay the whole history into an empty database and diff the result
+#   2. A NEW MIGRATION CAN RUN ON A DATABASE THAT HAS ROWS. `ADD COLUMN … NOT NULL` with no `DEFAULT` is the
+#      one statement Postgres refuses on any table that is not empty — the existing rows would need a value it
+#      never supplies — so a migration carrying it is not "risky on production", it is a migration that can
+#      only ever apply where there is nothing to lose. Which is precisely the database check 3 builds, and
+#      every database a developer resets. THIS IS NOT HYPOTHETICAL EITHER: 20260831120000_ingress_reachability
+#      added `tunnelId` that way, green here, and stopped dead on the live database with "column tunnelId of
+#      relation sandbox contains null values". Prisma records a failure as a WALL, not a skip — `migrate
+#      deploy` answers P3009 for every later migration too — so the api's boot chain never reached its second
+#      step and the platform served nothing until it was fixed forward by hand
+#      (20260901190000_tunnel_id_backfill). Add the column nullable, fill it, then constrain it.
+#
+#   3. THE MIGRATIONS AND THE SCHEMA AGREE. Replay the whole history into an empty database and diff the result
 #      against schema.prisma. Catches the other half of the same class — a schema.prisma edited with no
 #      migration written for it — which is equally invisible to a suite whose client is generated from the very
-#      file being checked. Skipped, loudly, when no database is offered, so a developer can run check 1 alone.
+#      file being checked. Skipped, loudly, when no database is offered, so a developer can run 1 and 2 alone.
 #
 # Together they hold the invariant the deployed database actually depends on: the migration list is append-only,
-# and replaying it produces the schema the code is compiled against. The API image re-checks the second one
-# against its OWN database at boot (see _platform/api/Dockerfile) — this is the check that keeps that one from
-# ever having something to say.
+# every entry on it can apply to a database that has been in use, and replaying the lot produces the schema the
+# code is compiled against. The API image re-checks the last one against its OWN database at boot (see
+# _platform/api/Dockerfile) — this is the check that keeps that one from ever having something to say.
 #
 # The clock starts at the commit that added this file. 20260802140000_desktop_handoff still carries the edit
 # that caused all of the above, because reverting it would itself be a modified migration — and a check whose
@@ -97,6 +108,65 @@ done < <([ -n "$MERGE_BASE" ] && git ls-tree -r --name-only "$MERGE_BASE" -- "$M
 
 if [ -n "$MERGE_BASE" ] && [ "$failed" -eq 0 ]; then
     echo "  ✓ all $(git ls-tree -r --name-only "$MERGE_BASE" -- "$MIGRATIONS" | grep -c '/migration\.sql$') migrations on $BASE are unchanged here"
+fi
+
+# NEW MIGRATIONS ONLY. History is not re-litigated: the migration that taught this check its lesson is on main
+# and stays there byte for byte (check 1 says why), and what it should have said is said forward, by
+# 20260901190000_tunnel_id_backfill. Nothing is exempted — a file simply stops being new once it is on the base
+# ref, which is the same clock check 1 runs on.
+echo "==> new migrations can run on a database that has rows"
+if [ -z "$MERGE_BASE" ]; then
+    echo "  ↓ skipped — with no predecessor commit, nothing here can be told apart from history."
+else
+    # A COLUMN CLAUSE is what gets judged, not a statement: `ALTER TABLE x DROP COLUMN a, ADD COLUMN b TEXT NOT
+    # NULL` is one statement carrying two, and only the second is the problem. Split on commas at paren depth 0,
+    # so a `NUMERIC(10,2)` stays in one piece, and drop `--` comments first — a migration's rationale quotes SQL
+    # often enough that scanning it would flag the explanation rather than the code.
+    scan_clauses() {
+        awk '
+            function judge(clause,   upper) {
+                upper = toupper(clause)
+                if (upper ~ /ADD +COLUMN/ && upper ~ /NOT +NULL/ && upper !~ /DEFAULT/) {
+                    gsub(/^ +| +$/, "", clause)
+                    print clause
+                }
+            }
+            { line = $0; sub(/--.*/, "", line); gsub(/[ \t]+/, " ", line); sql = sql " " line }
+            END {
+                depth = 0
+                for (i = 1; i <= length(sql); i++) {
+                    c = substr(sql, i, 1)
+                    if (c == "(") { depth++ } else if (c == ")") { depth-- }
+                    if ((c == "," || c == ";") && depth == 0) { judge(clause); clause = "" } else { clause = clause c }
+                }
+                judge(clause)
+            }
+        ' "$1"
+    }
+    fresh=0
+    for path in "$MIGRATIONS"/*/migration.sql; do
+        [ -f "$path" ] || continue
+        if git cat-file -e "$MERGE_BASE:$path" 2>/dev/null; then
+            continue
+        fi
+        name="$(name_of "$path")"
+        fresh=$((fresh + 1))
+        while IFS= read -r clause; do
+            [ -n "$clause" ] || continue
+            echo "  ✗ $name — $clause" >&2
+            echo "      Postgres accepts this on an EMPTY table only: every row already there would need the" >&2
+            echo "      value the statement never gives it. So it passes here, where the database is built" >&2
+            echo "      fresh, and stops the deploy on the one that has been in use — where a FAILED migration" >&2
+            echo "      also blocks every migration after it (P3009) until someone resolves it by hand." >&2
+            echo "      Write the three steps instead: ADD COLUMN nullable, UPDATE it to the value each" >&2
+            echo "      existing row implies, ALTER COLUMN … SET NOT NULL. A column no existing row implies a" >&2
+            echo "      value for wants a DEFAULT, which fills them for you." >&2
+            failed=1
+        done < <(scan_clauses "$path")
+    done
+    if [ "$failed" -eq 0 ]; then
+        echo "  ✓ $fresh new migration(s), none adding a column a used database would have to invent a value for"
+    fi
 fi
 
 echo "==> the migration history replays into schema.prisma"
