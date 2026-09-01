@@ -47,7 +47,8 @@
  * declarations and 3 were real. Output like that is what teaches everyone to read a red type check as
  * "baseline failures" and land anyway.
  *
- * 3. LOCKFILE: every dependency specifier in a package.json is the one the lockfile recorded.
+ * 3. LOCKFILE: every dependency specifier in a package.json, and every version in the catalog, is the one the
+ * lockfile recorded.
  *
  * `pnpm install --frozen-lockfile` is the first line of every CI job, and ERR_PNPM_OUTDATED_LOCKFILE is what it
  * says when someone edited a package.json without installing. That is a pure comparison between two files in
@@ -60,6 +61,13 @@
  * so it cannot import one. The `importers:` block it reads is the flattest, most stable region of the v9 format
  * (importer at 2 spaces, dependency block at 4, name at 6, `specifier:` at 8), and a shape it stops recognizing
  * is a shape this reports as drift rather than passing in silence.
+ *
+ * The CATALOG half is the same comparison against the lockfile's other copy of the manifest, and it was added
+ * after the first half let a bump through: an importer may record a `catalog:` specifier verbatim, in which
+ * case matching it against the manifest compares `"catalog:"` to `"catalog:"` and passes for every version the
+ * catalog could name. So `pnpm-workspace.yaml` moved to a new SDK, the lockfile stayed on the old one, this
+ * gate said 92 importers agreed, and the install that reconciled node_modules landed in the middle of the test
+ * run it was supposed to precede.
  *
  * 4. FORK BOUNDARY: no job of a fork-triggerable workflow reaches the self-hosted fleet from a fork.
  *
@@ -397,6 +405,50 @@ for (const line of readFileSync(join(root, "pnpm-workspace.yaml"), "utf8").split
     catalogs.get(catalogName).set(unquote(mapping[1]), unquote(mapping[2]));
 }
 
+/* THE SAME CATALOGS AS THE LOCKFILE RECORDED THEM, which is a second copy of the manifest and therefore a
+ * second thing that can go stale. pnpm snapshots every catalog entry an importer resolved through into a
+ * `catalogs:` region of its own, and `--frozen-lockfile` compares pnpm-workspace.yaml against THAT: a version
+ * bumped in the catalog and not installed is ERR_PNPM_OUTDATED_LOCKFILE, exactly like an edited package.json.
+ *
+ * The check above cannot see it, and the comment on it says why without drawing the conclusion: an importer
+ * records a `catalog:` specifier verbatim OR resolved, and where it is verbatim the comparison is `"catalog:"`
+ * against `"catalog:"`, which is true for every version the catalog could possibly name. Every importer in
+ * this lockfile takes the SDK that way. So the whole family of "renovate bumped the catalog, nobody
+ * installed" landed green through 92 importers and cost a push: node_modules disagreed with the manifest, the
+ * daemon's install started relinking `@anthropic-ai/claude-agent-sdk` 13s into `pnpm test`, and two suites
+ * died on `Cannot find package` at an import that had been fine all morning and was fine on the re-run.
+ *
+ * Read with the same scanner, one level deeper than the manifest's: `catalogs:` at column 0, the catalog's
+ * name at 2, a dependency at 4, and its `specifier:`/`version:` pair at 6. The SPECIFIER is the comparable
+ * half, it is the catalog's own text; `version:` is what that text resolved to and is only equal to it while
+ * every entry is an exact pin, which is a property of this catalog and not of the format. */
+const catalogued = new Map();
+let recordedCatalog, cataloguedEntry;
+for (const line of lockfile) {
+    if (/^\S/.test(line)) {
+        recordedCatalog = line.startsWith("catalogs:") ? "" : undefined;
+        continue;
+    }
+    if (recordedCatalog === undefined) {
+        continue;
+    }
+    const named = /^ {2}(\S.*?):[ \t]*$/.exec(line);
+    if (named) {
+        recordedCatalog = unquote(named[1]);
+        catalogued.set(recordedCatalog, new Map());
+        continue;
+    }
+    const dependency = /^ {4}(\S.*?):[ \t]*$/.exec(line);
+    if (dependency) {
+        cataloguedEntry = unquote(dependency[1]);
+        continue;
+    }
+    const pinned = /^ {6}specifier:[ \t]*(.*?)[ \t]*$/.exec(line);
+    if (pinned) {
+        catalogued.get(recordedCatalog)?.set(cataloguedEntry, unquote(pinned[1]));
+    }
+}
+
 /* What a package.json declares, flattened to `name -> { specifier, required }`.
  *
  * Compared as one set against the union of the importer's blocks rather than block by block, because which
@@ -472,6 +524,38 @@ for (const { at: importer, dir } of recorded.size === 0 ? [] : importers) {
 for (const importer of recorded.keys()) {
     if (!importers.some(({ at: known }) => known === importer)) {
         drift.push(`${importer}: an importer in the lockfile with no package.json, the package was removed without installing`);
+    }
+}
+
+/* The catalogs, compared where both copies speak: an entry the lockfile snapshotted has to still say what
+ * pnpm-workspace.yaml says, and has to still be in pnpm-workspace.yaml at all.
+ *
+ * Only where both speak, because the two are not the same set and the difference is legitimate. pnpm records
+ * an entry once some importer resolves through it, so a catalog may hold versions nothing has claimed yet:
+ * three here (`@oxlint/plugins`, `sharp`, `zod`) are reached through `overrides` rather than a `catalog:`
+ * specifier, have never been in the lockfile's snapshot, and are not drift. Absent-from-the-lockfile is
+ * therefore silent; DIFFERENT is the whole signal, and the reverse direction (in the snapshot, gone from the
+ * manifest) is the deletion half of it, which resolves to nothing on the next install. */
+for (const [name, entries] of catalogs) {
+    const snapshot = catalogued.get(name);
+    if (snapshot === undefined) {
+        continue;
+    }
+    for (const [dependency, specifier] of entries) {
+        const was = snapshot.get(dependency);
+        if (was !== undefined && was !== specifier) {
+            drift.push(`catalog ${name}: ${dependency} is ${specifier}, the lockfile records ${was}`);
+        }
+    }
+    for (const dependency of snapshot.keys()) {
+        if (!entries.has(dependency)) {
+            drift.push(`catalog ${name}: ${dependency} is in the lockfile but no longer in pnpm-workspace.yaml`);
+        }
+    }
+}
+for (const name of catalogued.keys()) {
+    if (!catalogs.has(name)) {
+        drift.push(`catalog ${name}: a catalog in the lockfile that pnpm-workspace.yaml no longer declares`);
     }
 }
 
@@ -1088,7 +1172,10 @@ if (reports.some(([, lines]) => lines.length > 0)) {
 }
 console.log(`typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one`);
 console.log(`test budgets: every package running vitest names its ceiling instead of inheriting the 5s hang detector`);
-console.log(`lockfile: ${importers.length} importers record the specifiers their package.json declares`);
+console.log(
+    `lockfile: ${importers.length} importers record the specifiers their package.json declares, and ` +
+        `${catalogued.values().reduce((all, entries) => all + entries.size, 0)} catalogued versions are the ones pnpm-workspace.yaml names`,
+);
 console.log(`fork boundary: no self-hosted job is reachable from a fork's pull request`);
 console.log(`release headings: writer and both parsers spell the same two sections`);
 console.log(
