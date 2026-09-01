@@ -211,6 +211,9 @@ export interface AgentRequest {
      * moment pays nothing, not even the bookkeeping. */
     readonly turnEndingRules?: readonly Rule[];
     readonly runRuleCommand?: TurnRuleCommand;
+    // Which projects the daemon is installing, asked only when a turn-ending command has already failed: a
+    // check run against a tree being rewritten has measured nothing (rules/turn-ending.ts).
+    readonly dependencyInstalling?: () => Promise<readonly string[]>;
     // Told when one of them actually said something, so the settings list can show which rules are earning
     // their place and which have been silent for three weeks.
     readonly onRuleFired?: (rule: Rule) => void;
@@ -726,6 +729,7 @@ const baseOptions = (
             turnEndingHooks(request.turnEndingRules ?? [], {
                 isolation: request.isolation?.plan,
                 runCommand: request.runRuleCommand,
+                installing: request.dependencyInstalling,
                 cwd: request.cwd,
                 onFired: request.onRuleFired,
             }),
@@ -985,7 +989,10 @@ const permissionGate =
              * and summarised it in the adjacent prose would otherwise be asking for a yes to a document the reader
              * cannot see. When no prose was emitted, the document itself became `text` above and needs no duplicate
              * attachment. */
-            const document = adjacent !== undefined && documents.latest !== undefined && documents.latest.markdown.length > text.length ? documents.latest : undefined;
+            const document =
+                adjacent !== undefined && documents.latest !== undefined && documents.latest.markdown.length > text.length
+                    ? documents.latest
+                    : undefined;
             push({ kind: "plan", requestId: id, text, ...(document === undefined ? {} : { document }) });
             const { reply, resolved } = await wait(request.signal);
             push(resolved);

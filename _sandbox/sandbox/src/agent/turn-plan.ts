@@ -12,6 +12,8 @@ import {
     capabilitiesOf,
     envSuffix,
 } from "@intentic/sandbox-contract";
+import { shellQuote } from "@intentic/sandbox-run/quote";
+import { type IsolationAnchor, nsenterPrefix } from "../agents/isolation.js";
 import { admitTurn, readMemoryHeadroom } from "../platform/memory-admission.js";
 import { createFreshnessResolver } from "../dependencies/registry-freshness.js";
 import { createWorkspacePins } from "../dependencies/workspace-pins.js";
@@ -189,6 +191,17 @@ export const conversationExperimentArm = (conversationId: string | undefined, ho
     const bucket = createHash("sha256").update(`iq-search:${conversationId}`).digest().readUInt32BE(0) / 0x1_0000_0000;
     return bucket >= holdout;
 };
+
+/* A RULE'S COMMAND RUNS WHERE THE TURN DID, and for an isolated turn that means inside its namespace.
+ *
+ * Same hop the Bash tool's rewrite makes (agent-terminals.ts), for the same reason and by the same primitive.
+ * Without it the check runs in the pane's own namespace, the daemon's, cwd'd at the worktree, where every
+ * dependency tree is an empty directory: `pnpm lint` cannot find its own linter, `pnpm verify` cannot find a
+ * type checker, and the gate reports a red tree that does not exist. `bash -c` with the whole command quoted,
+ * because a rule's command is a SHELL LINE (`cd intentic && pnpm lint && pnpm verify`) and nsenter takes an
+ * argv: handed over unquoted, everything after the first `&&` would run outside the namespace. */
+export const ruleCommandIn = (command: string, anchor: IsolationAnchor | undefined): string =>
+    anchor === undefined ? command : `${nsenterPrefix(anchor.pid, anchor.cwd)}bash -c ${shellQuote(command)}`;
 
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     /* CAPACITY BEFORE ANYTHING ELSE, and above the dispatch so it covers every provider arm rather than the
@@ -674,7 +687,10 @@ export const planHarnessTurn = async (
     const { oauthToken, refreshOauthToken, endpoint, allowance, trial } = resolved.credentials;
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities, a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.
-    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken),
+    const tools = [
+        ...services.tools,
+        ...mcpToolsOf(granted),
+        ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken),
         ...webextToolsOf(granted, services.config.sandbox.port, services.webextBridgeToken),
     ];
     const {
@@ -999,13 +1015,20 @@ export const planHarnessTurn = async (
                       },
                       runRuleCommand: (command: string, timeoutMs: number) =>
                           runRuleCommand(services, {
-                              command,
+                              command: ruleCommandIn(command, context.base.isolation?.anchor),
                               timeoutMs,
                               cwd: context.localCwd,
                               session: CHECKS_SESSION,
                               window: "checks",
                               outputBytes: TURN_RULE_OUTPUT_BYTES,
                           }),
+                      // Asked only after such a command has failed, so this costs a healthy turn nothing: a
+                      // check measured while its dependency tree is being rewritten is not a verdict on the
+                      // work (rules/turn-ending.ts).
+                      dependencyInstalling: async () =>
+                          (await services.dependencies.status())
+                              .filter((project) => project.state === "installing")
+                              .map((project) => (project.dir === "" ? "the workspace root" : project.dir)),
                   }
                 : {}),
             // The sniffer's rulebook, forwarded only when the owner wrote a rule, same no-hook economy.

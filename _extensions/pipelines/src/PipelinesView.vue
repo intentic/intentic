@@ -6,11 +6,10 @@ import {
     Notice,
     noticeOf,
     PageAction,
+    Picker,
+    type PickerOption,
+    type PickerOptions,
     ProgressRing,
-    RepoRail,
-    type RepoRailAll,
-    type RepoRailGroup,
-    type RepoRailRow,
     RowGroup,
     SplitView,
     type AgentRunChoice,
@@ -26,10 +25,10 @@ import { type RepoStanding, repoStandings, standingNote } from "./repoStandings"
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
 
-/* Pipelines: a DevOps-grade CI dashboard. A rail scopes the board to one repository or to all of them, summary
- * counts sit above the list, runs are grouped by repo, and each row auto-fetches its jobs and renders an inline
- * GitLab-style connected-circles pipeline graph. Clicking a stage circle pops over job details; clicking the
- * chevron expands a full horizontal job flow. */
+/* Pipelines: a DevOps-grade CI dashboard. A top-bar picker scopes the board to one repository or to all of them,
+ * summary counts sit above the list, runs are grouped by repo, and each row auto-fetches its jobs and renders an
+ * inline GitLab-style connected-circles pipeline graph. Clicking a stage circle pops over job details; clicking
+ * the chevron expands a full horizontal job flow. */
 
 const api = host();
 const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
@@ -65,44 +64,48 @@ const scopeRepo = computed<string | undefined>({
 const sections = computed(() => (scope.value === undefined ? standings.value.filter((standing) => !standing.silent) : [scope.value]));
 const scopedRuns = computed<readonly PipelineRun[]>(() => (scope.value === undefined ? runs.value : scope.value.runs));
 
-/* WHAT THE RAIL LISTS. ONE NUMBER PER ROW, and it is BROKEN BRANCHES: the same edge-not-level rule as the rail
- * badge (ciStreaks), so a repository three runs deep in one breakage says "1" and not "3". A repository that is
- * fine says 0, and that zero is worth printing: a board you cannot use to confirm there is nothing wrong is only
- * half a board. But a number is only worth printing where a zero MEANS something: in the silent group nothing
- * has ever run, so "0 branches failing" would be a claim about a repository nobody has heard from.
+/* WHICH REPOSITORY THE BOARD SHOWS IS A CHOICE IN THE TOP BAR, not a column down the side of it.
  *
- * The second fact a row could carry (a webhook that never registered, so the numbers beside it may be stale) is
- * the number's COLOUR rather than a second number, and `standingNote` is where the whole state is spelled out.
+ * It was a 16rem rail listing every repository with a count beside it, on the reasoning that "is anything red
+ * anywhere" is the first question a CI board answers and a column of counts answers it at a glance. What that
+ * left out is what this board's body actually IS: a run's job graph, drawn left to right, and the widest thing
+ * in the app. Sixteen rems of permanent chrome went on a choice made once a session, and the diagram it was
+ * taking the width from had to be panned to be read. Documentation picks its repository from the top bar
+ * already, so this is the app's one answer to "which repo am I looking at" rather than a second one.
  *
- * The vendor glyph rather than a folder: which host a repository is on decides where its runs come from and where
- * "open pipelines" lands, and it is free here: the sections below already carry it.
+ * Nothing is lost with the column. ONE NUMBER PER ROW, still BROKEN BRANCHES (ciStreaks' edge-not-level rule, so
+ * a repository three runs deep in one breakage says one and not three), now the picker row's own annotation, and
+ * still absent in the silent group, where "0 failing" would be a claim about a repository nobody has heard from.
+ * The sections below are ordered worst-first whatever is picked, and the sidebar badge still says when something
+ * has gone red while you were elsewhere.
  *
- * The repositories with no runs at all are a LABELLED GROUP at the bottom rather than rows mixed into the list: an
- * empty repository and a healthy one both show nothing, and the heading is what tells them apart. Only that group
- * is named: a heading over everything else would name a distinction nobody is making. */
-const railRow = (standing: RepoStanding): RepoRailRow => ({
+ * The repositories with no runs at all are a LABELLED GROUP at the bottom rather than rows mixed into the list:
+ * an empty repository and a healthy one both show nothing, and the heading is what tells them apart. */
+const ALL_REPOS = ``;
+
+const repoOption = (standing: RepoStanding): PickerOption => ({
     value: standing.repo.repo,
     label: standing.repo.repo,
+    // The vendor glyph rather than a folder: which host a repository is on decides where its runs come from and
+    // where "open pipelines" lands, and it is free here, the sections below already carry it.
     icon: standing.repo.host,
-    meta: standing.silent ? `` : String(standing.failing),
-    tone: standing.failing > 0 ? `text-danger` : standing.repo.hookWarning === undefined ? `` : `text-warning`,
-    tooltip: standingNote(standing),
+    /* The whole standing, not just the count: a picker row has the width for it where a rail row had one number
+     * and a tint. `standingNote` leads with the failing branches, which is what makes it safe in a slot that
+     * TRUNCATES, the first clause is the one worth reading and it is the one that survives. */
+    description: standingNote(standing),
     mono: true,
 });
 
-const railGroups = computed<RepoRailGroup[]>(() => [
-    { key: `reporting`, rows: standings.value.filter((standing) => !standing.silent).map(railRow) },
-    { key: `silent`, label: `No runs yet`, rows: standings.value.filter((standing) => standing.silent).map(railRow) },
-]);
-
-const railAll = computed<RepoRailAll>(() => {
+const repoOptions = computed<PickerOptions>(() => {
+    const reporting = standings.value.filter((standing) => !standing.silent);
+    const silent = standings.value.filter((standing) => standing.silent);
     const failing = standings.value.reduce((sum, standing) => sum + standing.failing, 0);
-    return {
-        icon: `bolt`,
-        meta: String(failing),
-        tone: failing > 0 ? `text-danger` : ``,
-        tooltip: failing === 0 ? `Nothing failing anywhere` : `${failing} branches failing across the workspace`,
-    };
+    const everywhere = failing === 0 ? `Nothing failing` : `${failing} branch${failing === 1 ? `` : `es`} failing`;
+    return [
+        { options: [{ value: ALL_REPOS, label: `All repositories`, icon: `bolt`, description: everywhere }] },
+        ...(reporting.length > 0 ? [{ options: reporting.map(repoOption) }] : []),
+        ...(silent.length > 0 ? [{ label: `No runs yet`, options: silent.map(repoOption) }] : []),
+    ];
 });
 
 // Which jobs keep breaking: free of extra requests, since the rows already load these same job lists.
@@ -226,6 +229,17 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         :description="scope === undefined ? `CI runs on your workspace repos' GitHub and GitLab remotes.` : `CI runs on ${scope.repo.project}.`"
     >
         <template #actions>
+            <!-- Only where there is a choice to make: over one repository this would be a control pointing at the
+                 only thing on screen. -->
+            <Picker
+                v-if="repos.length > 1"
+                :model-value="scopeRepo ?? ALL_REPOS"
+                :options="repoOptions"
+                variant="ghost"
+                aria-label="Repository"
+                placeholder="Repository"
+                @update:model-value="(next) => (scopeRepo = next === ALL_REPOS ? undefined : next)"
+            />
             <!-- No `hint`: the vendor is what the glyph already says, and the project is what the
                  label already says. A hint here would only be the same fact a third time. -->
             <PageAction
@@ -240,13 +254,6 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         <template #strips>
             <Notice v-if="error" :of="noticeOf(error)" />
             <Notice v-if="actionError" :of="noticeOf(actionError)" />
-        </template>
-
-        <!-- Only where there is a choice to make. An index over one repository is 16rem of chrome pointing at the
-             only thing on screen, and unlike Maintenance, whose report always carries the workspace root
-             alongside, a workspace with exactly one CI-mapped repo is an ordinary case here. -->
-        <template v-if="repos.length > 1" #rail>
-            <RepoRail v-model="scopeRepo" :groups="railGroups" :all="railAll" memory="pipelines.repo" />
         </template>
 
         <template #detail>

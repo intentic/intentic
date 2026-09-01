@@ -2,14 +2,14 @@ import { isAbsolute } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule, RuleBuiltin } from "@intentic/sandbox-contract";
+import { createRemovalLedger, type FileReader, readWorkspaceFile, type RemovalLedger, verifyRemovalsMessage } from "../agent/agent-removals.js";
 import {
-    createRemovalLedger,
-    type FileReader,
-    readWorkspaceFile,
-    type RemovalLedger,
-    verifyRemovalsMessage,
-} from "../agent/agent-removals.js";
-import { commandExitCode, createVerificationLedger, type ScriptsProbe, type VerificationLedger, verifyEditsMessage } from "../agent/agent-verification.js";
+    commandExitCode,
+    createVerificationLedger,
+    type ScriptsProbe,
+    type VerificationLedger,
+    verifyEditsMessage,
+} from "../agent/agent-verification.js";
 import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessage } from "../agent/agent-viewing.js";
 import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
@@ -100,6 +100,13 @@ export interface TurnEndingDeps {
     readonly read?: FileReader | undefined;
     readonly git?: GitRunner | undefined;
     readonly now?: number | undefined;
+    /* WHICH PROJECTS THE DAEMON IS INSTALLING RIGHT NOW, asked only when a command has already failed.
+     *
+     * agent-deps.ts says in as many words that "no install runs while a turn is live", and builds its own
+     * caching on that premise. It does not hold: the daemon queues a reinstall when a lockfile moves under it,
+     * and one of those ran from end to end of a live turn while this check reported its tree as red. So the
+     * question is asked HERE, after the fact, where the answer is still true, rather than assumed anywhere. */
+    readonly installing?: (() => Promise<readonly string[]>) | undefined;
 }
 
 // The two records this moment keeps. `removal` exists only when a rule standing here reads it: it snapshots
@@ -112,6 +119,47 @@ interface Ledgers {
     // would cost more than the one it saves. (`removal` is the exception because it READS FILES.)
     readonly view: ViewLedger;
 }
+
+/* WHETHER A FAILING COMMAND MEASURED ANYTHING AT ALL, and this moment used to report the two identically.
+ *
+ * rule-command.ts already draws half the line: `error` means the command never ran, and so "has said nothing
+ * anyone should be sent to fix". It arrived here anyway and went back as "Repair that before finishing".
+ *
+ * The other half is a command that DID run and could only fail. While the daemon reinstalls a project,
+ * `node_modules` is being rewritten underneath it: a linter's own binary comes and goes, a package that landed
+ * on main minutes ago has no install yet, and a bumped one's types no longer match its sources. `pnpm lint`
+ * then exits 1 saying `oxlint: not found` — a fact about the tree, not about the diff. Reported as a verdict it
+ * cost four turns of hunting for a fault in work that was fine, while the daemon's own `deps status` said
+ * "installing right now" the whole time.
+ *
+ * Undefined ⇒ the failure is a real verdict and is reported as one. Asked ONLY of a failure, so a healthy turn
+ * never pays for the question, and only of a run that actually happened. */
+const measuredNothing = async (run: RuleCommandRun, deps: TurnEndingDeps): Promise<readonly string[] | undefined> => {
+    if (run.status === "error") {
+        return [];
+    }
+    if (deps.installing === undefined) {
+        return undefined;
+    }
+    // A question that cannot be answered leaves the verdict standing: silence here would excuse a genuine
+    // failure, which is the same mistake made from the other side.
+    const installing = await deps.installing().catch(() => []);
+    return installing.length > 0 ? installing : undefined;
+};
+
+// Said instead of a verdict, and worded so nobody goes looking for a fault in the diff. It still continues the
+// turn: one more round is exactly what this needs, since the tree usually settles inside it.
+const nothingMeasured = (label: string, command: string, run: RuleCommandRun, installing: readonly string[]): string =>
+    [
+        `Before finishing, "${label}" could not measure anything:`,
+        `\`${command}\``,
+        installing.length > 0
+            ? `a dependency install is running (${installing.join(", ")}), so node_modules is being rewritten under it.`
+            : run.output.slice(-COMMAND_OUTPUT_BYTES),
+        `That is not a verdict on this turn's work and nothing here needs repairing. Re-run it once the tree settles, or say plainly that the check could not run.`,
+    ]
+        .filter((line) => line !== "")
+        .join("\n");
 
 /* WHAT EACH BUILT-IN ASKS OF THE TURN, as a total table over the name rather than a chain of ifs: a built-in
  * added to the contract is a compile error here until it is answered, which is the only thing that keeps a rule
@@ -152,6 +200,10 @@ const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers
         if (run.status === "passed" || run.status === "cancelled") {
             return undefined;
         }
+        const unmeasured = await measuredNothing(run, deps);
+        if (unmeasured !== undefined) {
+            return nothingMeasured(rule.label, command, run, unmeasured);
+        }
         const why = run.timedOut === true ? `timed out after ${Math.round(timeoutMs / 1000)}s` : `exited ${run.exitCode ?? "abnormally"}`;
         return [
             `Before finishing, "${rule.label}" ran this and it ${why}:`,
@@ -178,8 +230,14 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
      * asking that question about: it reads every file the turn is about to edit, before each first edit. That
      * is cheap next to the edit itself and it is not free, so a workspace that has not asked for the check does
      * not pay for the snapshot. The proof ledger stays unconditional because the CONDITIONS need it. */
-    const wantsRemovals = rules.some((rule) => rule.enabled && rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === "verify-removals");
-    const ledgers: Ledgers = { verification: createVerificationLedger(), removal: wantsRemovals ? createRemovalLedger() : undefined, view: createViewLedger() };
+    const wantsRemovals = rules.some(
+        (rule) => rule.enabled && rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === "verify-removals",
+    );
+    const ledgers: Ledgers = {
+        verification: createVerificationLedger(),
+        removal: wantsRemovals ? createRemovalLedger() : undefined,
+        view: createViewLedger(),
+    };
     const { removal } = ledgers;
     const read = deps.read ?? readWorkspaceFile;
     let followUps = 0;

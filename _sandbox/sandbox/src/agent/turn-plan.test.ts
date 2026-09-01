@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
 import type { AgentRequest } from "./agent.js";
-import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-plan.js";
+import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
 
 /* WHAT A TURN IS ALLOWED TO RUN ON, and what it is handed once it may. Every case here used to be reachable
@@ -37,7 +37,6 @@ vi.mock("../browser/browser-tools.js", () => ({
  * cases that need a REAL tree (a dependency notice, a skill catalogue read off disk) are asserted where one can
  * be built: turn-plan.integration.test.ts. The seams themselves live in turn-plan.testing.ts, shared with it. */
 const IQ_PLUGIN_DIR = new URL("../../../../_search/iq/plugin/", import.meta.url).pathname;
-
 
 beforeEach(() => {
     credentials.mockReset();
@@ -211,7 +210,6 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
     expect(offered).toMatchObject({ account: "xai" });
 });
 
-
 test("iq search teaching reaches native Codex and OpenCode as the shipped nudge, not the full skill Claude loads", async () => {
     const settings = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
         get: async () => SandboxSettingsSchema.parse({ iqSearch: true }),
@@ -257,7 +255,6 @@ test("iq search holdout assigns one balanced arm deterministically per conversat
     expect(arms).toEqual(new Set([true, false]));
 });
 
-
 test("the account the credential resolver answered with becomes the turn's attribution key", async () => {
     const plan = await planTurn(harnessServices(), turn(), context);
 
@@ -265,7 +262,6 @@ test("the account the credential resolver answered with becomes the turn's attri
 });
 
 // --- what the runtime's declared record takes off the request ---------------------------------------------
-
 
 // The route has already folded the turn's posture into the request by the time an arm is picked, so these are
 // context edits rather than turn edits: the same shape planTurn sees in production.
@@ -514,4 +510,25 @@ test("a native runtime is told the workspace conventions; the Claude Code loop i
 
     const claude = await planTurn(harnessServices(), turn(), context);
     expect((claude as { request: AgentRequest }).request.systemAppend).toBeUndefined();
+});
+
+/* A RULE'S TURN-ENDING COMMAND HAS TO RUN INSIDE THE TURN, and for a long time it ran beside it.
+ *
+ * The check is spawned into a tmux pane, and the tmux server lives in the DAEMON's namespace, cwd'd at the
+ * worktree. A git worktree carries tracked files only, so every dependency tree there is an EMPTY directory —
+ * they exist solely as overlay mounts inside the turn's namespace (agents/isolation.ts). So the workspace's own
+ * `cd intentic && pnpm lint && pnpm verify` came back `sh: 1: oxlint: not found` on every isolated turn, and
+ * the model was told to repair a diff that was fine.
+ *
+ * `bash -c` with the whole line quoted is the other half: a rule's command is a shell line and nsenter takes an
+ * argv, so handed over bare, everything after the first `&&` would run outside the namespace again. */
+test("a rule's command enters the turn's namespace, and only when there is one", () => {
+    const anchored = ruleCommandIn(`cd intentic && pnpm lint`, { pid: 4242, cwd: `/work`, plan: {} as never, dispose: () => undefined });
+    expect(anchored).toContain(`nsenter --mount=/proc/4242/ns/mnt`);
+    expect(anchored).toContain(`--wdns=/work`);
+    // The whole line is one argument, so the `&&` is the inner shell's rather than the outer one's.
+    expect(anchored).toMatch(/bash -c '.*pnpm lint.*'/u);
+
+    // An unisolated turn already runs where it means to; wrapping it would only add a process.
+    expect(ruleCommandIn(`pnpm lint`, undefined)).toBe(`pnpm lint`);
 });

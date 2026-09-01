@@ -215,10 +215,12 @@ describe("the verify-removals built-in", () => {
         set: (path: string, content: string | undefined) => (content === undefined ? delete files[path] : (files[path] = content)),
     });
 
-    const git = (rows: readonly (readonly [string, number, string])[]): GitRunner => async () => ({
-        stdout: rows.map(([hash, at, subject]) => [hash, String(at), subject].join("\u001f")).join("\n"),
-        stderr: "",
-    });
+    const git =
+        (rows: readonly (readonly [string, number, string])[]): GitRunner =>
+        async () => ({
+            stdout: rows.map(([hash, at, subject]) => [hash, String(at), subject].join("\u001f")).join("\n"),
+            stderr: "",
+        });
 
     // 400 days before the fixed clock the deps carry, so "untouched for a long time" is stated, not waited for.
     const NOW = Date.UTC(2026, 7, 28);
@@ -231,7 +233,12 @@ describe("the verify-removals built-in", () => {
 
     test("a defended line that went is put back in front of the turn", async () => {
         const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `${SLEEP}\nconst kept = 1;\n` });
-        const hooks = armed([REMOVALS], { cwd: WORKSPACE_ROOT, read: files.read, git: git([["a91d33", OLD, "fix: export dies on cold replica"]]), now: NOW });
+        const hooks = armed([REMOVALS], {
+            cwd: WORKSPACE_ROOT,
+            read: files.read,
+            git: git([["a91d33", OLD, "fix: export dies on cold replica"]]),
+            now: NOW,
+        });
         await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         files.set(`${WORKSPACE_ROOT}/src/a.ts`, `const kept = 1;\n`);
         const nudge = await stop(hooks);
@@ -241,7 +248,12 @@ describe("the verify-removals built-in", () => {
 
     test("adding code says nothing, whatever its history", async () => {
         const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `const kept = 1;\n` });
-        const hooks = armed([REMOVALS], { cwd: WORKSPACE_ROOT, read: files.read, git: git([["a91d33", OLD, "fix: export dies on cold replica"]]), now: NOW });
+        const hooks = armed([REMOVALS], {
+            cwd: WORKSPACE_ROOT,
+            read: files.read,
+            git: git([["a91d33", OLD, "fix: export dies on cold replica"]]),
+            now: NOW,
+        });
         await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         files.set(`${WORKSPACE_ROOT}/src/a.ts`, `const kept = 1;\n${SLEEP}\n`);
         expect(await stop(hooks)).toBeUndefined();
@@ -250,7 +262,12 @@ describe("the verify-removals built-in", () => {
     // Both built-ins stand at this moment and read different halves of the same turn; one budget, one follow-up.
     test("it rides the same follow-up as the proof ledger", async () => {
         const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `${SLEEP}\n` });
-        const hooks = armed([VERIFY, REMOVALS], { cwd: WORKSPACE_ROOT, read: files.read, git: git([["a91d33", OLD, "fix: export dies on cold replica"]]), now: NOW });
+        const hooks = armed([VERIFY, REMOVALS], {
+            cwd: WORKSPACE_ROOT,
+            read: files.read,
+            git: git([["a91d33", OLD, "fix: export dies on cold replica"]]),
+            now: NOW,
+        });
         await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         files.set(`${WORKSPACE_ROOT}/src/a.ts`, ``);
@@ -395,6 +412,42 @@ describe("a command rule", () => {
     // ran is exactly the failure this whole area exists to prevent.
     test("on a turn with no runner says nothing at all", async () => {
         expect(await stop(armed([failing]))).toBeUndefined();
+    });
+
+    /* A CHECK RUN AGAINST A TREE BEING REWRITTEN HAS MEASURED NOTHING. Mid-install the linter's own binary comes
+     * and goes, so `pnpm lint` exits 1 on `oxlint: not found` — a fact about node_modules, not about the diff.
+     * Reported as a verdict it sends the model hunting through work that is fine, which is what happened for
+     * four turns before this existed. */
+    test("that failed while an install was running is not reported as a verdict", async () => {
+        const hooks = armed([failing], {
+            runCommand: async () => ({ status: "failed", exitCode: 1, output: "sh: 1: oxlint: not found" }),
+            installing: async () => ["intentic"],
+        });
+        const nudge = await stop(hooks);
+        expect(nudge).toContain("could not measure anything");
+        expect(nudge).toContain("intentic");
+        expect(nudge).toContain("nothing here needs repairing");
+        expect(nudge).not.toContain("Repair that before finishing");
+    });
+
+    test("that failed on a settled tree is still a verdict", async () => {
+        const hooks = armed([failing], {
+            runCommand: async () => ({ status: "failed", exitCode: 2, output: "3 problems" }),
+            installing: async () => [],
+        });
+        const nudge = await stop(hooks);
+        expect(nudge).toContain("exited 2");
+        expect(nudge).toContain("Repair that before finishing");
+    });
+
+    // rule-command.ts's own contract: `error` means the command never ran, and so "has said nothing anyone
+    // should be sent to fix". This moment used to send them to fix it anyway.
+    test("that never ran at all asks for no repair", async () => {
+        const hooks = armed([failing], run({ status: "error", output: "no such cwd" }));
+        const nudge = await stop(hooks);
+        expect(nudge).toContain("could not measure anything");
+        expect(nudge).toContain("no such cwd");
+        expect(nudge).not.toContain("Repair that before finishing");
     });
 });
 

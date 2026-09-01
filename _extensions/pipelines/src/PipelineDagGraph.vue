@@ -67,13 +67,17 @@ const dag = computed(() => pipelineDag(stages, focus.value));
  * is a third narrower and reads fine, because a card holding a list of jobs is not the same object as a card
  * holding a paragraph, and it does not want the same air. */
 const NODE_WIDTH = 184;
-const JOB_ROW_HEIGHT = 26;
+const JOB_ROW_HEIGHT = 28;
 // Split over the card's two ends, so a single-job card is not a bare strip with text jammed against its border.
-const CARD_PADDING_Y = 8;
-// The layout's air, tightened from the default pair for the same reason: between two columns, and between two
-// cards in one. dagre is told both (see dagLayout.ts), and the band height below counts with them.
-const RANK_SEP = 56;
-const NODE_SEP = 14;
+const CARD_PADDING_Y = 12;
+/* The layout's air: between two columns, and between two cards in one. dagre is told both (see dagLayout.ts) and
+ * the band height below counts with them.
+ *
+ * Tighter than the default pair, which is measured for a graph of few large cards, but not as tight as the first
+ * pass made it. At a 14px gap under 34px cards a column read as one striped block rather than as a stack of
+ * cards, which is the cramped look; the gap has to stay a visible fraction of the card beside it. */
+const RANK_SEP = 64;
+const NODE_SEP = 20;
 
 // A card is its rows: dagre is told this per node rather than being handed one size for all of them.
 const cardHeight = (cluster: PipelineJobCluster): number => cluster.jobs.length * JOB_ROW_HEIGHT + CARD_PADDING_Y;
@@ -166,7 +170,7 @@ const caption = computed(() => {
         >
             <template #node="{ node }">
                 <!-- The rows fill the card, so this is where the graph learns which job the pointer is on. -->
-                <div class="relative flex h-full w-full flex-col justify-center py-1">
+                <div class="relative flex h-full w-full flex-col justify-center py-1.5">
                     <!-- The trace's own card, ringed whole: see focusedCard. -->
                     <span v-if="node.id === focusedCard" class="pointer-events-none absolute inset-0 rounded-md ring-1 ring-inset ring-link"></span>
                     <div

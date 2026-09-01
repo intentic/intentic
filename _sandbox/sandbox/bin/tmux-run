@@ -44,8 +44,30 @@ name="${3:-run}"
 # What the filter is told this command IS. Only the filter sees it — the pane runs, logs and reports $cmd.
 : "${agentcmd:=$cmd}"
 
-# Fail open: any tmux failure below must degrade to running the command plainly, never break the caller.
-fallback() { exec bash -c "$cmd"; }
+# WHEN THIS DID NOT RUN WHERE IT WAS MEANT TO, SAY SO.
+#
+# Fail open: any tmux failure below must degrade to running the command plainly, never break the caller. That
+# part is right and stays. What was wrong was doing it SILENTLY. A degraded run is indistinguishable from an
+# ordinary one — same stdout, same exit code — while the pane, the capture file, the output filter and the
+# terminal log are all absent, and the pane's own `nsenter` (which is what puts the command in the turn's view)
+# is gone with them. So a command that ran somewhere other than where it asked to reported nothing about it,
+# and every occurrence had to be re-derived from first principles: the pre-land gate's "oxlint: not found" cost
+# four turns of guessing at a mechanism nobody could see.
+#
+# One line is the whole fix. It cannot repair anything; it names what happened at the moment it happens, which
+# is the difference between a diagnosable fault and a mystery.
+fallback() {
+    reason="${1:-tmux unavailable}"
+    # Asked only on the way out, so a healthy command pays nothing for it. A namespace this wrapper was told to
+    # reach tmux from and cannot is the cause of everything above, and the one condition invisible from outside.
+    if [ -n "${INTENTIC_TMUX_NS:-}" ] && ! nsenter "--mount=$INTENTIC_TMUX_NS" -- true 2>/dev/null; then
+        reason="$reason; mount namespace $INTENTIC_TMUX_NS is unreachable"
+    fi
+    # stderr, not stdout: stdout is the tool RESULT and belongs to the command. And `--`, because the line
+    # starts with dashes.
+    printf -- '--- intentic: ran outside a terminal pane (%s): no live view, no capture, no output filter\n' "$reason" >&2
+    exec bash -c "$cmd"
+}
 
 # EVERY tmux call below is made from the mount namespace named by $INTENTIC_TMUX_NS (set per turn by
 # src/agent/agent.ts, and only for an isolated one).
@@ -63,7 +85,7 @@ fallback() { exec bash -c "$cmd"; }
 # (src/agent/agent-terminals.ts) — the pane still runs the command in the worktree. Unset var (the daemon's
 # own runner, an unisolated turn) means this process is already where the server belongs, so there is no hop.
 # Resolved to a path once because the wrapper below calls the FUNCTION, which must not find itself by name.
-tmuxbin="$(command -v tmux)" || fallback
+tmuxbin="$(command -v tmux)" || fallback "no tmux on PATH"
 hop=()
 [ -n "${INTENTIC_TMUX_NS:-}" ] && hop=(nsenter "--mount=$INTENTIC_TMUX_NS" --)
 tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" "$@"; }
@@ -71,7 +93,7 @@ tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" "$@"; }
 # Named so the daemon's temp sweep can attribute it (platform/reaper.ts matches the intentic-run- prefix):
 # the soft-timeout path below deliberately leaves this dir behind for the still-running command to tee into,
 # and a SIGKILLed wrapper skips its trap — both used to be permanent /tmp residents.
-d="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")" || fallback
+d="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")" || fallback "no capture dir under ${TMPDIR:-/tmp}"
 printf '%s\n' "$cmd" > "$d/cmd"
 : > "$d/out"
 # Runner executed inside the pane. tee mirrors output to the pane tty AND the capture file; PIPESTATUS[0]
@@ -145,9 +167,9 @@ create() { tmux new-session -d -s "$session" "${window[@]}"; }
 # expected racy miss ("duplicate session" / "can't find session"); the retry's failure is the real one and must
 # reach the caller, and only then does fail-open drop the command out of tmux entirely.
 if tmux has-session -t "=$session" 2>/dev/null; then
-    pane="$(attach 2>/dev/null)" || pane="$(create)" || fallback
+    pane="$(attach 2>/dev/null)" || pane="$(create)" || fallback "tmux would not open a window in session $session"
 else
-    pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback
+    pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback "tmux would not open a window in session $session"
 fi
 [ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
 

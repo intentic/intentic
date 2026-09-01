@@ -13,8 +13,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
 
 - [src/usePipelines.ts](src/usePipelines.ts): the run list, from the connected provider.
 - [src/repoStandings.ts](src/repoStandings.ts): how loudly each repository is asking, which is the board's order.
-- [src/PipelinesView.vue](src/PipelinesView.vue): the board, and the rows it hands the kit's `<RepoRail>` for the
-  scope column: all repositories, or one.
+- [src/PipelinesView.vue](src/PipelinesView.vue): the board, and the options it hands the kit's `<Picker>` for the
+  top bar's scope: all repositories, or one.
 - [src/pipelineDag.ts](src/pipelineDag.ts): jobs and their dependencies as a drawable graph, and the grouping of
   identically-wired jobs into one card.
 - [src/PipelineDagGraph.vue](src/PipelineDagGraph.vue): that graph on a canvas, with the hover that traces one
@@ -33,11 +33,17 @@ inside the view rather than gating the tile.
 
 - A red run is not automatically news. `ciStreaks.ts` exists because badging every failure trains the eye to skip
   the badge, which costs more than the missed signal it was meant to catch.
-- The rail NARROWS, it does not select. "All repositories" is where the board opens, because the first question a
-  CI board answers is "is anything red anywhere": which is why this is a column with counts and not the
-  repository dropdown Documentation uses, where you are always reading exactly one repository's pages.
-- A repository with no runs is a rail row, not a card. A repository with a `hookWarning` is not: the warning is
-  usually the reason it looks silent, so hiding it would hide the answer along with the question.
+- Which repository the board shows is a picker in the TOP BAR, the same control Documentation picks its
+  repository with, and "All repositories" is where it opens: the first question a CI board answers is "is
+  anything red anywhere". It was a 16rem rail of counts down the left, and the reason it is not any more is what
+  this board's body actually is: a run's job graph, the widest thing in the app. Permanent chrome for a choice
+  made once a session was costing the diagram the width it needed to be read. Each row of the picker still
+  carries its repository's whole standing (`standingNote`, failing branches first, so the clause worth reading is
+  the one that survives truncation), the sections below are ordered worst-first whatever is picked, and the
+  sidebar badge still says when something went red while you were elsewhere.
+- A repository with no runs is a picker row under "No runs yet", not a card in the body. A repository with a
+  `hookWarning` is a card: the warning is usually the reason it looks silent, so hiding it would hide the answer
+  along with the question.
 - A card in the job graph is a GROUP of jobs, not a job. Jobs whose incoming and outgoing edges are identical are
   the same story told N times, and drawing one card each meant drawing every edge between two stages: a 12-leg
   test stage after a build is 24 arrows that say one thing. Grouped, it is one. Nothing is hidden by it, every

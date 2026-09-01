@@ -19,10 +19,14 @@ R=selftest-race
 #   INTENTIC_RUN_FILTER — off for the cases below, which assert on RAW capture; the filter block at the bottom
 #       turns it on for itself. Left inherited it is whatever the host sandbox's "Clean command output" switch
 #       implies (off exports 0), so the filter cases would quietly assert nothing.
+#   INTENTIC_TURN_OWNER — the owner-stamp case asserts what an UNSTAMPED run does, and inside a real turn this
+#       is set, so the wrapper stamped the conversation's own id and the case failed on a true statement. The
+#       stamped half of that case exports it per command, which is the only place it should come from here.
 LOGS="$(mktemp -d)"
 F=""
 export INTENTIC_TERMINAL_LOGS_DIR="$LOGS/terminals"
 export INTENTIC_RUN_FILTER=0
+unset INTENTIC_TURN_OWNER
 mkdir -p "$INTENTIC_TERMINAL_LOGS_DIR"
 # One cleanup for the whole run — a second `trap ... EXIT` later would silently replace this one, not add to it.
 cleanup() {
@@ -145,4 +149,17 @@ out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" -c 'p
 out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" "$S" 'echo ignored' run)"
 [ "$out" = "ARGV1=echo ignored" ] || { echo "FAIL: filter got '$out' with no -c (want the executed command)"; exit 1; }
 
-echo "PASS: tmux-run returns full output + real exit code, -e env, -c filter command, output cap, soft timeout + filter behave"
+# A DEGRADED RUN SAYS SO. Falling back to a plain `bash -c` when tmux is unreachable is correct — a tmux fault
+# must never cost the caller its command — but doing it silently made a run with no pane, no capture and no
+# filter indistinguishable from an ordinary one, and a command that ran outside the view it asked for reported
+# nothing at all. `/proc/0/ns/mnt` is a namespace that cannot exist, so every tmux call goes through an nsenter
+# that fails, which is exactly the shape of the fault this line exists to name.
+err="$F/fallback.err"
+out="$(INTENTIC_TMUX_NS=/proc/0/ns/mnt bash "$W" "$S" 'echo plain; exit 3' fallback 2>"$err")"; rc=$?
+[ "$rc" = 3 ] || { echo "FAIL: degraded run exited $rc (want the command's own 3)"; exit 1; }
+[ "$out" = "plain" ] || { echo "FAIL: degraded run lost the command's output, got '$out'"; exit 1; }
+grep -q 'ran outside a terminal pane' "$err" || { echo "FAIL: degraded run said nothing: '$(cat "$err")'"; exit 1; }
+# And it names the CAUSE rather than only the symptom: the namespace it was told to reach tmux from is gone.
+grep -q 'is unreachable' "$err" || { echo "FAIL: degraded run did not name the unreachable namespace: '$(cat "$err")'"; exit 1; }
+
+echo "PASS: tmux-run returns full output + real exit code, -e env, -c filter command, output cap, soft timeout + filter, honest fallback"
