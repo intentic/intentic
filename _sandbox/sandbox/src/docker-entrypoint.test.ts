@@ -20,3 +20,11 @@ describe(`hosted VM entrypoint`, () => {
         expect(enter).toBeGreaterThan(link);
     });
 });
+
+/* Reachability used to be an entrypoint-managed zrok agent whose bind/reclaim loop this file pinned. The daemon
+ * dials its own ingress tunnel now (SANDBOX_GRANT/INGRESS_URL), so the entrypoint must carry none of that. */
+describe(`entrypoint reachability`, () => {
+    it(`carries no tunnel agent machinery — the daemon dials the ingress itself`, () => {
+        expect(entrypoint).not.toMatch(/zrok2|ZROK_|share public|zrok\.log/);
+    });
+});

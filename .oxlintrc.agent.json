@@ -63,7 +63,6 @@
                 "_deploy/engine/**",
                 "_site/demo/**",
                 "_tools/fake-upstream/**",
-                "_tools/fake-zrok/**",
                 "_platform/example-provider/**",
                 "_sandbox/connector-runtime/**",
                 "_sandbox/acp-bridge/**",
