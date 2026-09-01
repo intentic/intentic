@@ -28,9 +28,10 @@ import { uuid } from "./uuid";
  *   · `here`  , and that window is this one.
  *   · `shows` , this window is the one that draws the panel: `here`, or nobody else is floating it.
  * Three computed views of one fact, and no branch anywhere asks "who owns it". A window that goes away without
- * saying so is a heartbeat that stops, which every other window notices within STALE_MS: the same mechanism
- * that reports a dock reports a crash, a killed window and a webview that swallowed its unload handlers, so
- * there is no state the app can be left stuck in.
+ * saying so stops beating and stops holding its liveness token (`lockName` below, which is what tells a window
+ * the browser has merely stopped running on time from one that is gone), and every other window notices within
+ * STALE_MS: the same mechanism that reports a dock reports a crash, a killed window and a webview that swallowed
+ * its unload handlers, so there is no state the app can be left stuck in.
  *
  * DUPLICATES CANNOT SURVIVE, by construction rather than by named-window luck. Every floating window hears
  * every other one's heartbeat, and one that hears an OLDER claim for its own panel closes itself. Whatever
@@ -51,8 +52,10 @@ export type FloatingPanel = `chat` | `terminal` | `preview`;
 const floatingPath = (panel: FloatingPanel): string => `${import.meta.env.BASE_URL}floating/${panel}`;
 
 // How often a floating window says it is there, and how long its silence has to last before the rest of the app
-// writes it off. The gap between them is deliberate and it is what a RELOAD of a floating window fits through:
-// it goes quiet for a load and comes back well inside the deadline, so no other window flashes its column.
+// even CONSIDERS writing it off. The gap between them is deliberate and it is what a RELOAD of a floating window
+// fits through: it goes quiet for a load and comes back well inside the deadline, so no other window flashes its
+// column. It does not have to cover a window whose timers the browser has throttled or stopped, which no
+// deadline could: the liveness token below is what answers for that one.
 const HEARTBEAT_MS = 750;
 const STALE_MS = 2500;
 const SWEEP_MS = 500;
@@ -103,18 +106,103 @@ const publish = (): void => {
     elsewhere.value = next;
 };
 
+/* THE LIVENESS TOKEN: one Web Lock per claim, held by a floating window for as long as its realm exists.
+ *
+ * WHY A BEAT IS NOT ENOUGH ON ITS OWN, which is the whole reason this exists. A beat is a timer, and a timer in
+ * a MINIMIZED window is not one the browser runs on time: a minimized window is a hidden page, Chrome throttles
+ * a hidden page's timers to about one a second at once and to about one a MINUTE once it has been hidden five
+ * minutes, and may freeze the page outright. Nothing about that window has changed, the panel is still out there
+ * with all of its state, and the user PUT IT AWAY rather than closed it. But a beat a minute read against a
+ * 2.5-second deadline is a killed window, so every other window used to reclaim the panel out from under it: the
+ * rail grew its Chat tile back, an app whose chat lives on the rail navigated itself to /chat, and a second live
+ * copy of the conversation mounted here until the window nobody dismissed came back.
+ *
+ * A lock is immune to every bit of that, because holding it is not something the window DOES on a schedule. It
+ * is a fact about the realm: held while it exists, released BY THE BROWSER when it stops existing. A throttled
+ * window, a frozen one and a wedged one all keep it; a closed, crashed or killed one cannot.
+ *
+ * So the two signals answer different questions and a claim is retired only when both agree it is over: the beat
+ * says how recently that window spoke, which is what rides out a reload (the realm and its token are both gone
+ * for a moment and come back), and the token says whether its realm is there at all. An explicit `gone` is
+ * neither — it is the window saying so itself, and it retires the claim on the spot.
+ *
+ * NAMED AFTER THE CLAIM, id and all, so a request is always uncontended: two windows racing for one panel ask
+ * for two different locks and both are granted immediately. Arbitration between them is the oldest-claim rule
+ * and nothing else — this lock is a heartbeat that cannot be throttled, never a mutex. */
+const lockName = (panel: FloatingPanel, id: string): string => `intentic.floating.${panel}.${id}`;
+
+/** Hold one for this realm's lifetime, and hand back the way to let it go early (the floating route unmounting
+ *  while the window stays open: a lost session bounced to /login, the last sandbox deselected). Where Web Locks
+ *  is missing — an old browser, a page served without a secure context — this is a no-op and the beat decides on
+ *  its own, exactly as it did before the token existed. */
+const holdLiveness = (name: string): (() => void) => {
+    if (globalThis.navigator?.locks === undefined) {
+        return () => undefined;
+    }
+    let drop: (() => void) | undefined;
+    let dropped = false;
+    void navigator.locks
+        .request(
+            name,
+            () =>
+                // The API's own idiom: the lock is held for as long as this promise is pending. Granting can
+                // land a task after the release (a route that unmounts in the same tick it mounted), so the
+                // flag is checked here rather than assumed.
+                new Promise<void>((resolve) => {
+                    if (dropped) {
+                        resolve();
+                        return;
+                    }
+                    drop = resolve;
+                }),
+        )
+        .catch(() => undefined); // refused: the beat carries this window on its own
+    return () => {
+        dropped = true;
+        drop?.();
+    };
+};
+
+/* WHICH TOKENS WERE HELD as of the last look, across every window of this origin. Kept as a snapshot the sweep
+ * reads synchronously and refreshes on its way out, because `query()` answers a promise while presence is what
+ * the app renders off: a set at most one sweep old, which is a fifth of the deadline it guards, and stale only
+ * ever in the direction of leaving a panel where it is for another 500ms. */
+let heldLocks: ReadonlySet<string> = new Set();
+let looking = false;
+
+const lookAtLocks = (): void => {
+    if (globalThis.navigator?.locks === undefined || looking) {
+        return;
+    }
+    looking = true;
+    void navigator.locks
+        .query()
+        .then((state) => {
+            heldLocks = new Set((state.held ?? []).flatMap((lock) => (lock.name === undefined ? [] : [lock.name])));
+        })
+        // There but unwilling to answer. The beat decides alone, which is where this file stood before.
+        .catch(() => {
+            heldLocks = new Set();
+        })
+        .finally(() => {
+            looking = false;
+        });
+};
+
 let sweep: ReturnType<typeof setInterval> | undefined;
 
-// Written off, one panel at a time, the moment a floating window's silence outlasts the deadline. The sweep runs
-// only while there is something to sweep, so an app with nothing floating pays nothing for this.
+// Written off, one panel at a time, once a floating window's silence outlasts the deadline AND its realm is gone
+// with it. The sweep runs only while there is something to sweep, so an app with nothing floating pays nothing
+// for this.
 const startSweeping = (): void => {
     if (sweep !== undefined) {
         return;
     }
+    lookAtLocks();
     sweep = setInterval(() => {
         const now = Date.now();
         for (const [panel, sighting] of sightings) {
-            if (now - sighting.seenAt > STALE_MS) {
+            if (now - sighting.seenAt > STALE_MS && !heldLocks.has(lockName(panel, sighting.id))) {
                 sightings.delete(panel);
             }
         }
@@ -122,7 +210,9 @@ const startSweeping = (): void => {
         if (sightings.size === 0 && sweep !== undefined) {
             clearInterval(sweep);
             sweep = undefined;
+            return;
         }
+        lookAtLocks();
     }, SWEEP_MS);
 };
 
@@ -240,6 +330,9 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
     const since = Date.now();
     mine.value = panel;
 
+    // Taken before the first beat, so this window is never announced without the thing that proves it is here.
+    const dropLiveness = holdLiveness(lockName(panel, id));
+
     let lastFrame = ``;
     const beat = (): void => {
         post({ kind: `here`, panel, id, since });
@@ -280,8 +373,10 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
     };
     claimants.add(heard);
 
-    // Saying so on the way out is the fast path, not the mechanism: a window that dies without getting here is
-    // written off by its own silence a couple of seconds later, which is why there is nothing else to clean up.
+    /* Saying so on the way out is the fast path, not the mechanism: a window that dies without getting here has
+     * its token released by the browser and is written off a couple of seconds later, which is why there is
+     * nothing else to clean up. The token is deliberately NOT dropped here — this fires for a page going into
+     * the back/forward cache too, and a restored one resumes this very claim. */
     const leaving = (): void => {
         rememberOwnFrame(panel);
         post({ kind: `gone`, panel, id });
@@ -295,6 +390,7 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
         if (mine.value === panel) {
             mine.value = undefined;
         }
+        dropLiveness();
         leaving();
     };
     if (getCurrentScope() !== undefined) {
@@ -319,7 +415,9 @@ export const receiveFloatingNote = (note: FloatingNote): void => {
         startSweeping();
     } else if (note.kind === `gone` && sightings.get(note.panel)?.id === note.id) {
         // Matched on id, because a LOSING window's farewell must not retire the winner it just lost to: both
-        // announce the same panel, and the loser's `gone` lands after the winner's `here`.
+        // announce the same panel, and the loser's `gone` lands after the winner's `here`. Taken at its word
+        // without consulting the token: that window has just SAID it is going, which is better evidence than
+        // anything the sweep could infer, and its lock is released a moment behind the note.
         sightings.delete(note.panel);
         publish();
     }

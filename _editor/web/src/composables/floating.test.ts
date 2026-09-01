@@ -21,16 +21,40 @@ const size = () => ({ width: 800, height: 600 });
 // between two of them is settled.
 const here = (panel: `chat` | `terminal` | `preview`, id: string, since = 1_000) => ({ kind: `here` as const, panel, id, since });
 
+/* THE OTHER SIGNAL: the token a floating window holds for as long as its realm exists, which is what tells a
+ * window the browser has stopped running on time from a window that is gone. jsdom has no Web Locks, so every
+ * test that does not install this runs the beat-only path a browser without them takes. */
+let lockedNames: Set<string> | undefined;
+
+const stubLocks = (held: readonly string[]) => {
+    const names = new Set(held);
+    lockedNames = names;
+    Object.defineProperty(navigator, `locks`, {
+        value: { query: () => Promise.resolve({ held: [...names].map((name) => ({ name })), pending: [] }) },
+        configurable: true,
+    });
+    return { drop: (): void => names.clear() };
+};
+
 beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     localStorage.clear();
 });
 
-afterEach(() => {
+afterEach(async () => {
+    /* EVERY TEST ENDS WITH THE ARRANGEMENT EMPTY, which is also the state a fresh window starts in. The module
+     * is a singleton and its sweep is one interval: dropping the fake clock while that interval is live leaves a
+     * dead id standing in for a running timer, `startSweeping` sees a sweep it thinks is already going, and the
+     * next test that needs one silently never gets it. So the tokens go first and the clock is run out until
+     * every claim has been retired and the sweep has stood itself down. */
+    lockedNames?.clear();
+    await vi.advanceTimersByTimeAsync(10_000);
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, `locks`);
+    lockedNames = undefined;
 });
 
 describe(`a panel nobody floats`, () => {
@@ -84,6 +108,29 @@ describe(`a panel floating in another window`, () => {
         expect(surface.shows.value).toBe(false);
     });
 
+    /* A MINIMIZED WINDOW IS NOT A CLOSED ONE, and no deadline can tell them apart: a minimized window is a
+     * hidden page, and the browser throttles a hidden page's timers to about one a minute once it has been
+     * hidden five minutes (and may stop them altogether), so the window the user PUT AWAY falls as silent as the
+     * one they killed. Without the token, the panel was reclaimed out from under a chat still sitting on the
+     * second screen: the rail grew its Chat tile back and a second live copy of the conversation mounted here. */
+    it(`leaves the panel out there while that window is only minimized`, async () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const locks = stubLocks([`intentic.floating.chat.w-1`]);
+        receiveFloatingNote(here(`chat`, `w-1`));
+
+        // Twenty-four deadlines' worth of silence, without one beat in it. Its realm is still there.
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(surface.floats.value).toBe(true);
+        expect(surface.shows.value).toBe(false);
+
+        // And when that window really goes, the browser drops the token with it: no beat, no realm, no claim.
+        locks.drop();
+        await vi.advanceTimersByTimeAsync(2_000);
+
+        expect(surface.shows.value).toBe(true);
+    });
+
     it(`raises that window instead of opening a second one`, () => {
         const surface = createFloatingSurface(`chat`, size);
         const open = vi.fn((_url: string, _target: string, _features: string) => null);
@@ -130,6 +177,40 @@ describe(`the floating window itself`, () => {
 
         expect(surface.here.value).toBe(false);
         expect(floatingWindowPanel.value).toBeUndefined();
+    });
+
+    /* The claimant's half of the reading above: hold a token nobody has to remember to renew, and let it go
+     * only when this window stops being the panel's window while staying open (a lost session bounced to
+     * /login). A window that is closed, crashed or killed never gets here and the browser does it instead. */
+    it(`takes a token for its claim and gives it back when it stops being that window`, async () => {
+        const asked: string[] = [];
+        let letGo = false;
+        Object.defineProperty(navigator, `locks`, {
+            value: {
+                request: (name: string, hold: () => Promise<void>) => {
+                    asked.push(name);
+                    return hold().then(() => {
+                        letGo = true;
+                    });
+                },
+                query: () => Promise.resolve({ held: [], pending: [] }),
+            },
+            configurable: true,
+        });
+
+        const release = claim(`chat`, vi.fn());
+        await vi.advanceTimersByTimeAsync(1);
+
+        // Named after the CLAIM, id and all, so two windows racing for one panel are granted both tokens at
+        // once and neither queues behind the other: the oldest-claim rule settles that, never this lock.
+        expect(asked).toHaveLength(1);
+        expect(asked[0]).toMatch(/^intentic\.floating\.chat\..+/u);
+        expect(letGo).toBe(false);
+
+        release();
+        await vi.advanceTimersByTimeAsync(1);
+
+        expect(letGo).toBe(true);
     });
 
     it(`closes itself when any window asks it to dock`, () => {
