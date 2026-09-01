@@ -47,7 +47,10 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
             </li>
             <li class="flex items-start gap-2">
                 <Icon name="cloud" class="mt-0.5 shrink-0 text-link" />
-                <span class="min-w-0">Opens a <span class="text-content">private Cloudflare tunnel</span>, no inbound ports</span>
+                <!-- The fabric changed under this line and the line did not: it named Cloudflare long after
+                     the box stopped dialling one. What the reader is weighing has not changed — nothing is
+                     opened ON their machine — so the promise is the same and only the vendor claim goes. -->
+                <span class="min-w-0">Dials <span class="text-content">out</span> to reach your browser, no inbound ports</span>
             </li>
         </ul>
 

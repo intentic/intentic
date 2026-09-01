@@ -41,6 +41,7 @@ import SetupRunDetails from "./SetupRunDetails.vue";
 import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
 import { arrivalFor, type Arrival } from "./setupArrival";
+import { lanesFor, type OfferRead } from "./setupLanes";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
@@ -170,6 +171,17 @@ const intenticAvailable = ref<boolean | undefined>(undefined);
 const addressed = computed(() => intenticAvailable.value === true);
 // …and it is no. Distinct from "not yet": the first is a fact to state on the card, the second is a wait.
 const addressless = computed(() => intenticAvailable.value === false);
+
+/* THE TWO ARRIVAL READS, KEPT AS READS rather than flattened to their values, because "the platform said no"
+ * and "the platform never answered" are different screens and used to be the same one. `arrive` fills both;
+ * `lanes` below is what turns them into a verdict (setupLanes.ts).
+ *
+ * They start `unreachable` because that is literally true before the calls land, and nothing consults them
+ * until `loaded` — the same reason `intenticAvailable` starts undefined rather than true. A 404 from a
+ * platform too old to carry the route is an ANSWER and is recorded as one; only a call that failed is
+ * unreachable. */
+const addressRead = ref<OfferRead<boolean>>({ kind: `unreachable` });
+const hostedRead = ref<OfferRead<{ enabled: boolean; remaining: number }>>({ kind: `unreachable` });
 
 // --- setup code state (both paths) ---
 // The minted {code, hostname, expiresAt} for the currently chosen target; the command carries only the code.
@@ -397,18 +409,18 @@ const hostedRow = computed(() => created.value?.hosted ?? null);
 // one. The card still renders (hiding an option the reader was just offered elsewhere explains nothing); it
 // says why it cannot be taken instead.
 const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
-/* Is there a lane on the provision spine the reader can actually take: an address for a machine of theirs,
- * a machine of ours still to claim, or one they already have. With none of the three, that spine can only
- * render a step that never unlocks. */
-const anyLaneTakeable = computed(() => addressed.value || (hostedOffered.value && !hostedSpent.value) || hostedRow.value !== null);
-/* …so the page opens on the lane that still works, and says why once it gets there. Called only once the
- * sandbox row is settled: a RESUMED hosted sandbox is a lane of its own, its machine already exists, and
- * reading the offers alone would have sent it here. Never fires on a platform that mints addresses. */
-const fallBackToAttach = (): void => {
-    if (!anyLaneTakeable.value) {
-        lane.value = `attach`;
-    }
-};
+/* WHAT THE PROVISION SPINE CAN OFFER, decided in setupLanes.ts off the two arrival reads and the row's own
+ * hardware. Four answers, and three of them are things to SAY rather than a lane to take.
+ *
+ * THE PAGE USED TO MOVE THE READER INSTEAD. With nothing takeable it set `lane = "attach"` on their behalf,
+ * so a brand-new account met a form asking for the address of a sandbox it did not have — and, because a
+ * failed offer read was indistinguishable from a platform that provisions nothing, ONE DROPPED REQUEST was
+ * enough to do it. Both halves of that are fixed here: the reads are three-valued (setupLanes.ts), and
+ * nothing switches lanes but the reader. `lane` is now written only by `setLane`. */
+const lanes = computed(() => lanesFor({ address: addressRead.value, hosted: hostedRead.value, hasMachine: hostedRow.value !== null }));
+// There is a lane to take, so the ladder and the run step are worth drawing. Everything else is a card that
+// explains itself and leaves the attach link where it has always been.
+const laneTakeable = computed(() => lanes.value.kind === `takeable`);
 /* The free lane's awake-hour budget, or null for anyone it does not apply to: a member, or a platform
  * running without a ceiling. The distinction is the whole point of reading it here: `null` means the cards
  * below say nothing about hours at all, rather than showing a member a limit they do not have. */
@@ -1422,23 +1434,40 @@ const touched = (row: SandboxSummary): boolean =>
     (row.setupReport ?? null) !== null ||
     (row.hosted ?? null) !== null;
 
+/* ONE ARRIVAL OFFER READ, with the rule that separates the two failures in a single place rather than twice.
+ *
+ * A 404 IS AN ANSWER: a platform too old to carry the route, or one that has the feature switched off,
+ * genuinely provisions nothing, and recording that is correct. A timeout, a dropped connection or a 500 says
+ * nothing at all about the platform — and it used to be recorded as "provisions nothing" anyway, which is what
+ * put a form asking for a domain in front of people whose only problem was one lost request (setupLanes.ts).
+ *
+ * Resolve-then-call so even a client missing the method entirely lands in the catch rather than in mount. */
+const readOffer = <T,>(call: () => Promise<T>, absent: T): Promise<OfferRead<T>> =>
+    Promise.resolve()
+        .then(async (): Promise<OfferRead<T>> => ({ kind: `answered`, value: await call() }))
+        .catch((err: unknown): OfferRead<T> => (isNotFound(err) ? { kind: `answered`, value: absent } : { kind: `unreachable` }));
+
+/* Put the two reads where the rest of the page looks for them. Three destinations because they answer three
+ * different questions: `lanes` needs to know whether we were ANSWERED, the ladder needs the offer's numbers,
+ * and the address line needs "no" and "not yet" kept apart — which is why `intenticAvailable` goes back to
+ * undefined on a lost read rather than to false. Undefined draws a spinner and nothing has to be retracted;
+ * false would print "this platform hands out no addresses" on the strength of a request that failed. */
+const recordOffers = (hosted: OfferRead<HostedOffer>, address: OfferRead<AddressOffer>): void => {
+    hostedRead.value = hosted;
+    addressRead.value = address.kind === `answered` ? { kind: `answered`, value: address.value.enabled } : { kind: `unreachable` };
+    hostedOffer.value = hosted.kind === `answered` ? hosted.value : { enabled: false, remaining: 0 };
+    intenticAvailable.value = address.kind === `answered` ? address.value.enabled : undefined;
+};
+
 const arrive = async (): Promise<void> => {
-    const [rows, offer, address] = await Promise.all([
+    // The two offers land together with the row list, so the ladder and the address line are right on their
+    // first frame instead of correcting themselves a round-trip later.
+    const [rows, hosted, address] = await Promise.all([
         sandbox.list(),
-        // An older platform without the route reads as "doesn't host": the classic lanes carry on unchanged.
-        // Resolve-then-call so even a client missing the method entirely lands in the catch, not in mount.
-        Promise.resolve()
-            .then(() => apiClient.sandbox.hostedOffer())
-            .catch((): HostedOffer => ({ enabled: false, remaining: 0 })),
-        // WHAT THIS PLATFORM CAN REACH A SANDBOX WITH, asked before anything is drawn: the two offers land
-        // together, so the ladder and the address line are right on their first frame instead of correcting
-        // themselves a round-trip later. A platform that cannot answer is one that mints nothing.
-        Promise.resolve()
-            .then(() => apiClient.sandbox.addressOffer())
-            .catch((): AddressOffer => ({ enabled: false })),
+        readOffer(() => apiClient.sandbox.hostedOffer(), { enabled: false, remaining: 0 }),
+        readOffer(() => apiClient.sandbox.addressOffer(), { enabled: false }),
     ]);
-    hostedOffer.value = offer;
-    intenticAvailable.value = address.enabled;
+    recordOffers(hosted, address);
     const requested = route.query[`sandbox`];
     const named = typeof requested === `string` ? rows.find((entry) => entry.id === requested) : undefined;
     const unfinished = rows.some((entry) => entry.lastSeenAt !== null)
@@ -1478,10 +1507,11 @@ const arrive = async (): Promise<void> => {
         requestedMachine: asked,
         elsewhere: elsewhere.value,
     });
-    fallBackToAttach();
-    // The attach lane is the whole flow when the page falls back to it: nothing on the provision spine, and so
-    // nothing for an arrival to start.
-    if (lane.value === `attach`) {
+    /* Nothing on the provision spine can be taken, so there is nothing for an arrival to START — but the page
+     * stays on that spine and says which of the four things is true (`lanes`, setupLanes.ts). It used to move
+     * the reader onto the attach lane here instead, which is how a fresh account met a form asking for the
+     * address of a sandbox it had never run. */
+    if (!laneTakeable.value) {
         return;
     }
     /* THE BROWSER'S ANSWER, TAKEN. A machine is started here rather than behind "Start my machine", because
@@ -1503,6 +1533,21 @@ const arrive = async (): Promise<void> => {
     // The app's answer is this computer, and the handoff below fires it the moment there is a code to hand.
     if (arrival.value === `local`) {
         machine.value = `mine`;
+    }
+};
+
+/* ASK THE PLATFORM AGAIN, the one button on the `unreachable` card.
+ *
+ * Safe to run twice, and that is a property of `arrive` rather than an assumption made here: it re-reads the
+ * offers, and it finds the row it may already have created through the same `unfinished` lookup a reload uses,
+ * so a retry adopts that draft instead of leaving a second one behind. `loaded` goes back down for the round
+ * trip so the card is replaced by the arrival spinner rather than sitting there looking ignored. */
+const retryArrival = async (): Promise<void> => {
+    loaded.value = false;
+    try {
+        await arrive();
+    } finally {
+        loaded.value = true;
     }
 };
 
@@ -1803,6 +1848,10 @@ watch(commandReady, (ready) => {
                      picker at all. -->
                 <p class="mast-lede">
                     <template v-if="lane === `attach`">Point intentic at the sandbox you're already running. One address, and you're in.</template>
+                    <!-- Nothing to start, so the lede must not promise a minute or two of anything. It reads
+                         off the same verdict the card below does, which is what keeps the two from telling a
+                         reader different stories four inches apart. -->
+                    <template v-else-if="loaded && !laneTakeable">Here's what this platform can do for you.</template>
                     <template v-else-if="ladderShown">Pick where it runs. You'll be working in it in a minute or two.</template>
                     <template v-else-if="machine === `hosted`">We're starting a machine for you. You'll be working in it in about a minute.</template>
                     <template v-else-if="desktop">Setting it up on this computer. You'll be working in it in a minute or two.</template>
@@ -1996,6 +2045,68 @@ watch(commandReady, (ready) => {
                         </p>
                     </div>
 
+                    <!-- NOTHING ON THE PROVISION SPINE CAN BE TAKEN, and this card is what replaced moving the
+                         reader onto the attach lane on their behalf.
+
+                         That move was the bug: a form asking for the address of a sandbox you are already
+                         running is exactly right for the person who has one, and unanswerable for the fresh
+                         account that made up almost everyone who saw it. Worse, it fired on a LOST READ as
+                         readily as on a real answer, so a single dropped request reframed the product as
+                         something you supply the infrastructure for.
+
+                         So the page stays where it is and says which of the three things is true. The attach
+                         lane keeps its link — one line, below, in the words the reader who wants it would use
+                         — and is never entered without a click. -->
+                    <div v-if="loaded && lane === `provision` && !laneTakeable" class="flex flex-col items-start gap-3 py-1">
+                        <!-- We could not ask. A retry, not a verdict: claiming the platform provisions nothing
+                             on the strength of a request that failed is the specific lie this case exists to
+                             stop telling. -->
+                        <template v-if="lanes.kind === `unreachable`">
+                            <Notice
+                                :of="{
+                                    tone: `warning`,
+                                    title: `We couldn't reach the platform to see what it can start for you.`,
+                                    detail: `Nothing is wrong with your account — the check itself didn't get through.`,
+                                }"
+                            />
+                            <Button label="Try again" class="w-full justify-center md:w-fit" @click="retryArrival">
+                                <template #icon><Icon name="refresh" /></template>
+                            </Button>
+                        </template>
+                        <!-- The allowance is spent. A cheerful fact with a specific remedy — but the remedy is
+                             only named when it EXISTS: "Back to workspace" sits in the masthead on
+                             `otherWorkspace`, which needs a sandbox that has actually reported in. The machine
+                             holding the allowance may be one that has not (still booting, or stopped), and
+                             pointing at a button that is not on screen is the sort of small lie that teaches a
+                             reader to stop trusting the page. -->
+                        <template v-else-if="lanes.kind === `spent`">
+                            <Notice
+                                :of="{
+                                    tone: `info`,
+                                    title: `Your free machine is already running another sandbox.`,
+                                    detail: otherWorkspace
+                                        ? `Open that one from the top of this page, or connect a sandbox you're running yourself.`
+                                        : `Connect a sandbox you're running yourself instead.`,
+                                }"
+                            />
+                        </template>
+                        <!-- A self-hosted platform with no fabric. Attach is not a fallback here, it is the
+                             whole product, so this states it as a fact about the deployment rather than as a
+                             failure. -->
+                        <template v-else>
+                            <Notice
+                                :of="{
+                                    tone: `info`,
+                                    title: `This platform doesn't start sandboxes or hand out addresses.`,
+                                    detail: `It connects to one you're already running.`,
+                                }"
+                            />
+                        </template>
+                        <button type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
+                            Already running a sandbox somewhere? Connect it by domain →
+                        </button>
+                    </div>
+
                     <!-- Step 2: run the sandbox, and the whole reason this page loses people. A copy-paste command is
                  no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
                  publisher, no preview of what will happen, no list of what it changes, no uninstaller.
@@ -2125,7 +2236,11 @@ watch(commandReady, (ready) => {
                          big enough to carry the ornament: an elbow at each corner and the mark astride the top
                          rail, exactly as the sign-in gate wears them. Everything above it is a choice; this is
                          the consequence, and it should look like the thing you have arrived at. -->
-                    <section v-if="created && lane === `provision`" class="entry-frame work-card run-card flex flex-col gap-4">
+                    <!-- `laneTakeable` because a run step with nothing behind it is a step that can never
+                         unlock: no address to mint a code against, no machine to start, so the card would sit
+                         there locked, narrating a wait for a command that is never coming. The card above
+                         says what is actually true instead. -->
+                    <section v-if="created && lane === `provision` && laneTakeable" class="entry-frame work-card run-card flex flex-col gap-4">
                         <span class="entry-corner entry-corner-tl"></span>
                         <span class="entry-corner entry-corner-tr"></span>
                         <span class="entry-corner entry-corner-bl"></span>
@@ -2750,7 +2865,7 @@ watch(commandReady, (ready) => {
                      one, 44 mono characters at text-xs) needs to sit on a single line inside the card's
                      padding. At 18rem it wrapped into three lines: the undo read as a paragraph. -->
                 <aside
-                    v-if="created && lane === `provision` && machine !== `hosted`"
+                    v-if="created && lane === `provision` && laneTakeable && machine !== `hosted`"
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"
                 >
                     <!-- The plain plate: one rule, one panel, no ornament. Reference material is not a

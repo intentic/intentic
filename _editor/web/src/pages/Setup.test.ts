@@ -669,7 +669,7 @@ it(`offers the hosted rung again once its machine has been handed back`, async (
  * the page took that as nothing at all: it had already offered the rungs that need an address, so they
  * flashed and vanished, over an address line that spun on "Preparing your intentic domain…" for as long as
  * anyone was willing to watch. Nothing is minted here and nothing is offered that cannot be delivered. */
-it(`opens on the attach lane, with no spinner, when the platform mints no addresses`, async () => {
+it(`states what an addressless platform can do, without spinning and without opening a form`, async () => {
     addressOffer.mockResolvedValueOnce({ enabled: false });
     const el = await mount();
     // Not asked for: the code the platform has already said it will not mint.
@@ -677,11 +677,36 @@ it(`opens on the attach lane, with no spinner, when the platform mints no addres
     expect(el.textContent).not.toContain(`Preparing your intentic domain`);
     // No rungs to retract: the ladder was never drawn, because there was never more than one thing on offer.
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
-    // What IS on offer, and why it is the only thing here.
-    expect(el.textContent).toContain(`Connect your sandbox`);
+    // The fact, stated as a fact about the deployment.
     expect(el.textContent).toContain(`doesn't start sandboxes or hand out addresses`);
-    // …and no way back to a lane that cannot finish: both labels of that link promise a machine or an address.
-    expect(buttonLabelled(`← Get a domain from intentic instead`)).toBeUndefined();
+    /* AND THE READER IS NOT PUT IN FRONT OF A FORM TO PROVE IT. This used to switch to the attach lane on
+     * their behalf, which is right for somebody already running a sandbox and unanswerable for the fresh
+     * account that is most of who arrives here. The lane is one labelled click away and never taken for them. */
+    expect(el.textContent).not.toContain(`Connect your sandbox`);
+    expect(el.textContent).toContain(`Already running a sandbox somewhere?`);
+});
+
+/* THE FAILURE THAT USED TO LOOK IDENTICAL TO THE ONE ABOVE. Both offer reads throwing said nothing whatever
+ * about the platform, and the page recorded it as "provisions nothing" and moved the reader to the domain
+ * form — so one dropped request reframed the product as something you supply the infrastructure for. */
+it(`offers a retry, not a verdict, when the offers could not be read at all`, async () => {
+    addressOffer.mockRejectedValueOnce(new Error(`network`));
+    hostedOffer.mockRejectedValueOnce(new Error(`network`));
+    const el = await mount();
+    expect(el.textContent).toContain(`couldn't reach the platform`);
+    expect(el.textContent).not.toContain(`doesn't start sandboxes`);
+    expect(el.textContent).not.toContain(`Connect your sandbox`);
+    expect(buttonLabelled(`Try again`)?.disabled).toBe(false);
+});
+
+/* …but a 404 IS an answer. A platform too old to carry the route, or one with the feature switched off, really
+ * does provision nothing, and saying so is correct rather than a guess. */
+it(`treats a missing offer route as an answer rather than a lost read`, async () => {
+    addressOffer.mockRejectedValueOnce(Object.assign(new Error(`nope`), { code: `NOT_FOUND` }));
+    hostedOffer.mockRejectedValueOnce(Object.assign(new Error(`nope`), { code: `NOT_FOUND` }));
+    const el = await mount();
+    expect(el.textContent).toContain(`doesn't start sandboxes or hand out addresses`);
+    expect(el.textContent).not.toContain(`couldn't reach the platform`);
 });
 
 /* The hosted lane survives an addressless platform: its machine is born holding its own tunnel, so it is the
@@ -700,13 +725,16 @@ it(`keeps the hosted lane when the platform hosts but mints no addresses`, async
 });
 
 /* …and when that hosted machine is already spent, the rung is offered but not TAKEABLE, which is the same
- * nothing as having no rungs at all. The reader belongs in the attach lane rather than in front of a hosted
- * card that refuses and a locked step behind a picker the page has hidden for having one option. */
-it(`falls to the attach lane when the only rung left is a hosted machine already spent`, async () => {
+ * nothing as having no rungs at all. It gets its own sentence rather than the addressless one, because the
+ * remedy is specific and good news: the machine exists, it is just busy being another sandbox. */
+it(`names the spent allowance instead of a missing fabric`, async () => {
     addressOffer.mockResolvedValueOnce({ enabled: false });
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 0 });
     const el = await mount();
     expect(hostedProvision).not.toHaveBeenCalled();
-    expect(el.textContent).toContain(`Connect your sandbox`);
     expect(setupCode).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`already running another sandbox`);
+    // Not the wrong diagnosis: this platform hosts perfectly well, it is the allowance that is spent.
+    expect(el.textContent).not.toContain(`doesn't start sandboxes`);
+    expect(el.textContent).not.toContain(`Connect your sandbox`);
 });
