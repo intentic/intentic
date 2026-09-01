@@ -18,6 +18,7 @@ import {
 } from "../composables/agents/agentStatus";
 import { sessionCategory } from "../composables/sessionCategory";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
+import { boxNameOf } from "../composables/agents/fleetScope";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
@@ -913,6 +914,20 @@ const closeTab = (event: Event, id: string): void => {
                                      puts its OriginMark in the card body. -->
                                 <OriginMark :origin="originOf(c)" compact />
                                 <WorkflowMark :workflow="agent?.workflow" compact />
+                                <!-- WHICH SANDBOX IT LIVES IN, when that is not this one (Conversation.box). A
+                                     provenance mark like the two beside it, and the one fact about a row here
+                                     that the composer cannot be relied on to carry: the strip is what a reader
+                                     scans to pick a chat, and two rows that look identical can be running on
+                                     two different machines. Named in the tooltip, since the glyph can only say
+                                     "somewhere else". -->
+                                <span
+                                    v-if="c.box.value !== undefined"
+                                    v-tooltip.top="`Runs in “${boxNameOf.get(c.box.value!) ?? `another sandbox`}”`"
+                                    class="flex shrink-0 items-center"
+                                    :aria-label="`Runs in ${boxNameOf.get(c.box.value!) ?? `another sandbox`}`"
+                                >
+                                    <Icon name="boxes" class="text-2xs text-subtle" />
+                                </span>
                                 <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>

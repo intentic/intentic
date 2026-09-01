@@ -20,8 +20,9 @@ import {
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
-import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxError, sandboxRequestVia } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
+import { invalidateAgentTranscript } from "./agentTranscript";
 import { AUTO_CONTINUE_PROGRESS_MS, AUTO_CONTINUE_TRIES, autoContinueDelay } from "./autoContinue";
 import type { PickUp } from "./pickUp";
 import { clampEffort } from "./effortScale";
@@ -302,6 +303,49 @@ export class Conversation {
      * that pretended otherwise would silently do nothing. Design: docs/remote-runners-plan.md in the
      * workspace this sandbox serves. */
     readonly runner = ref<string | undefined>();
+
+    /* WHICH SANDBOX THIS CONVERSATION LIVES IN: a sandbox id, or undefined for the box this browser is pointed
+     * at, which is what every conversation in this app was until now and what almost all of them still are.
+     *
+     * IT IS AN ADDRESS, NOT A MODE. Every daemon call this object makes, the send, the attach it renders from,
+     * steer, stop, reply, rewind, the transcript read, an attachment's bytes, goes through `this.at`, so one
+     * field decides the whole correspondence and no half of it can end up talking to a different machine than
+     * the other half. That is the entire mechanism: `sandboxSession` keys its bearers by sandbox id and
+     * `sandboxRequestVia` takes the id, so a turn in another box is the same protocol at another address.
+     *
+     * WHAT IT DOES NOT MOVE. The workspace around the composer is still THIS box's: the file tree the @-mention
+     * popover completes from, the editor's open file, the personas and the provider accounts. Those are
+     * properties of a machine, not of a conversation (docs/across-sandboxes-design.md §3), so a remote
+     * conversation does not send them and the composer stops offering them (see `remote` in ChatPane and the
+     * omissions in turnRequestBody's caller below). The model and provider DO cross: a model id is the
+     * provider's, not the box's, and the target daemon resolves it against its own catalog and its own account.
+     *
+     * CHOSEN BEFORE THE FIRST TURN AND LATCHED THEN, exactly like `runner` above and for a stronger reason: the
+     * daemon that has the conversation's record, its worktree and its session is the only one that can run its
+     * next turn. The picker offers it while `registered` is false and reads afterwards. */
+    readonly box = ref<string | undefined>();
+
+    // The reach every request in this class is aimed with (composables/sandbox/sandboxClient.ts): the box above,
+    // in the vocabulary the daemon client and agentActions already speak, where undefined means the active one.
+    private get at(): string | undefined {
+        return this.box.value;
+    }
+
+    /* A CONVERSATION IN ANOTHER BOX IS REGISTERED BY ITS ACK, because no roster frame will ever say so here:
+     * `registered` latches on the fleet stream and this browser streams ONE sandbox. The ack is the same fact
+     * arriving from the other end, the daemon has opened the registry entry this turn runs under, and it is
+     * exactly the fact the latch exists to hold: without it a remote tab stays a "draft" for good, drawing a
+     * phantom New-agent card on the board next to the real card the All-sandboxes read brings back for it.
+     *
+     * A no-op for a conversation in this box, which keeps its roster-frame latch: that one is later but it is
+     * the daemon's own account of its registry, and a send that is refused after the ack (a turn the entry
+     * never got) would otherwise leave a card claiming a registration nothing made. Called on the send path's
+     * ack alone (see send). */
+    private latchRemoteRegistration(): void {
+        if (this.box.value !== undefined) {
+            this.registered.value = true;
+        }
+    }
 
     // Whether the fleet has ever known this conversation. The board's DRAFT card exists to bridge exactly one
     // gap, "New agent" pressed → the first roster frame that registers it, and that crossing happens once, so
@@ -923,7 +967,7 @@ export class Conversation {
         if (index === undefined || bubble < 0) {
             return false;
         }
-        const response = await sandboxRequest(`/agent/rewind`, jsonBody(`POST`, { conversationId: this.conversationId, index }));
+        const response = await sandboxRequestVia(this.at, `/agent/rewind`, jsonBody(`POST`, { conversationId: this.conversationId, index }));
         if (!response.ok) {
             this.error.value =
                 response.status === 409 ? `This agent is running a turn, stop it before going back.` : `That message can no longer be gone back to.`;
@@ -1055,7 +1099,7 @@ export class Conversation {
      * that tells the user which audience missed the message. */
     async placeAsAgent(text: string): Promise<boolean> {
         const path = `/agents/${encodeURIComponent(this.conversationId)}/place`;
-        const response = await sandboxRequest(path, jsonBody(`POST`, { text }));
+        const response = await sandboxRequestVia(this.at, path, jsonBody(`POST`, { text }));
         if (!response.ok) {
             this.error.value =
                 response.status === 409
@@ -1240,7 +1284,7 @@ export class Conversation {
             ...mentionPaths(text).filter((path) => !attachments.some((file) => file.path === path)),
         ];
         try {
-            const response = await sandboxRequest(`/agent`, {
+            const response = await sandboxRequestVia(this.at, `/agent`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
                 signal: controller.signal,
@@ -1251,6 +1295,7 @@ export class Conversation {
                         title: this.title.value,
                         isolated: this.isolated.value,
                         runner: this.runner.value,
+                        box: this.box.value,
                         mode: this.mode.value,
                         settings,
                         resume,
@@ -1292,10 +1337,11 @@ export class Conversation {
             this.pendingForkOf.value = undefined;
             const { run } = (await response.json()) as { run: string };
             this.turnAccepted = true;
+            this.latchRemoteRegistration();
             // The bubble drawn before the daemon had named anything now belongs to a run, and says so, which is
             // what lets a later attach to this same run take it back instead of drawing its answer underneath.
             this.transcript.claimRun(openedBubbleId, run);
-            await followRun(this.conversationId, run, { ...this.sink, ensureTurn: (head) => ({ ...turn, run: head.run }) }, controller);
+            await followRun(this.conversationId, run, { ...this.sink, ensureTurn: (head) => ({ ...turn, run: head.run }) }, controller, this.at);
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
             const stopped = err instanceof DOMException && err.name === `AbortError`;
@@ -1364,8 +1410,24 @@ export class Conversation {
         // describes the next message, so this is exactly where it goes. A no-op for every other ending.
         this.noticeSwappedModel();
         this.persist();
+        this.dropStaleRemoteTranscript();
         this.scheduleAutoContinue(ranForMs);
         void this.drainQueue();
+    }
+
+    /* THE WARMED TRANSCRIPT OF A CONVERSATION IN ANOTHER BOX IS NOW ONE TURN OLD.
+     *
+     * For a conversation in THIS box the roster watch does this: a status change is the one moment the daemon's
+     * record can have grown, and it invalidates the cached read (useAgents). A box this browser does not stream
+     * has no such moment, so the turn ending HERE is the signal, and this window is the only thing that has it.
+     *
+     * Without it, a remote tab closed and reopened in the same session replays the copy read before the turn: a
+     * transcript ending one turn early, which is the exact answer that cache invalidation exists to prevent.
+     * Cheap and idempotent, and a no-op for every local conversation. */
+    private dropStaleRemoteTranscript(): void {
+        if (this.box.value !== undefined) {
+            invalidateAgentTranscript(this.conversationId, this.box.value);
+        }
     }
 
     /* THE STANDING PRESS, SCHEDULED, run at the end of every turn, and does nothing for nearly all of them.
@@ -1570,7 +1632,7 @@ export class Conversation {
             await this.stopping;
         }
         try {
-            const response = await sandboxRequest(`/agent/resume`, {
+            const response = await sandboxRequestVia(this.at, `/agent/resume`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
                 body: JSON.stringify({ conversationId: this.conversationId }),
@@ -1693,7 +1755,7 @@ export class Conversation {
      * request is answered, so there is no gap where the message is neither queued nor on screen. */
     private async deliverSteer(message: QueuedMessage): Promise<boolean> {
         const paths = message.attachments.map((file) => file.path);
-        const delivered = await postTurnControl(`/agent/steer`, {
+        const delivered = await postTurnControl(this.at, `/agent/steer`, {
             conversationId: this.conversationId,
             text: message.text,
             ...(paths.length > 0 ? { attachments: paths } : {}),
@@ -1713,7 +1775,7 @@ export class Conversation {
         if (!this.streaming.value) {
             return;
         }
-        const stopping = postTurnControl(`/agent/stop`, { conversationId: this.conversationId }).then(() => undefined);
+        const stopping = postTurnControl(this.at, `/agent/stop`, { conversationId: this.conversationId }).then(() => undefined);
         this.stopping = stopping;
         void stopping.finally(() => {
             if (this.stopping === stopping) {
@@ -1819,7 +1881,7 @@ export class Conversation {
             return { userMessageId, run: head.run, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
         };
         try {
-            return await followRun(this.conversationId, undefined, { ...this.sink, ensureTurn }, controller);
+            return await followRun(this.conversationId, undefined, { ...this.sink, ensureTurn }, controller, this.at);
         } finally {
             this.probe = undefined;
             if (engaged) {
@@ -1848,7 +1910,7 @@ export class Conversation {
         }
         this.deciding.value = new Set(this.deciding.value).add(id);
         try {
-            if (!(await postTurnControl(`/agent/reply`, body))) {
+            if (!(await postTurnControl(this.at, `/agent/reply`, body))) {
                 this.error.value = failure;
                 return false;
             }

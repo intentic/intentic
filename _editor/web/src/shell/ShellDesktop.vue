@@ -7,7 +7,7 @@ import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, init
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
-import { useAgents } from "../composables/agents/useAgents";
+import { agentsBadge, agentsScopeNote } from "../composables/agents/agentsTile";
 import { useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
@@ -68,6 +68,15 @@ interface AreaTile extends RailSeat {
     // What the tile says without being opened. The same shape core areas and extensions both fill, so the rail
     // renders ONE badge element instead of a hardcoded span per route.
     readonly badge?: ViewBadge;
+    /* A STANDING FACT ABOUT THE TILE'S SUBJECT, not news from it: drawn as a small glyph in the corner the badge
+     * does not use, in the rail's quiet ink, and never in a tone. The badge answers "what happened", this
+     * answers "what is this tile currently about", and they are separate elements because a `mark` REPLACES the
+     * count (see the badge's own note) and one of the two claims would have to go.
+     *
+     * The Agents tile's cross-sandbox scope is the only one today, and it is what the field is for: a reader
+     * standing in Workspace has no other way to know the board's count is about four machines. Kept general
+     * because the shape is: any tile whose subject can widen owes the same sentence. */
+    readonly note?: { readonly icon: IconName; readonly text: string };
     // Set on a seat being held for a tile that hasn't loaded yet: drawn dim and inert, never badged. See
     // railMemory.ts for why the rail draws seats it does not yet have tiles for.
     readonly ghost?: boolean;
@@ -79,7 +88,11 @@ interface AreaTile extends RailSeat {
 // so it belongs in the tile's own label rather than on a second anchor 16px wide. It matters more since the
 // badge grew a `mark`: a glyph states only THAT something is waiting, and the sentence carrying how much is
 // then the only place the amount exists.
-const tileLabel = (tile: AreaTile): string => (tile.badge?.tooltip === undefined ? tile.label : `${tile.label} · ${tile.badge.tooltip}`);
+//
+// The note joins on the same terms and comes LAST: news before standing facts, because the reader hovering a
+// badged tile is asking what happened, not what the tile is about. Both are glyphs a few pixels wide, and this
+// sentence is where each of them is written out.
+const tileLabel = (tile: AreaTile): string => [tile.label, tile.badge?.tooltip, tile.note?.text].filter((part) => part !== undefined).join(` · `);
 
 /* The desktop chrome of the post-login shell: a square-tile rail, the shared Claude Code chat panel, and a
  * workspace outlet for the active area. Layout is a three-column CSS grid; the chat width is driven by a
@@ -99,8 +112,8 @@ const { reachable } = useSandbox();
 const changes = useChanges();
 // And so does a push the user started and then navigated away from: the run's only presence outside the panel.
 const pushFlow = usePushFlow();
-// "Agents need you" (pending plans/questions, land conflicts, unread finishes) badges the Agents tile.
-const { attention: agentAttention } = useAgents();
+// "Agents need you" (pending plans/questions, land conflicts, unread finishes) badges the Agents tile, over
+// whichever sandboxes the board is currently reading: see agentsTile.ts, which the phone's tab bar draws too.
 const layout = useLayout();
 const { iconRailSize } = useIconRailSize();
 // Only what the LAYOUT needs: a chat in a window of its own is a collapsed column, in EVERY other window,
@@ -259,15 +272,11 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         // a bubble (Chat above), a branching tree. The reasoning, and what it rules out, is on `robot` in the
         // icon table.
         icon: `robot`,
-        ...(agentAttention.value > 0
-            ? {
-                  badge: {
-                      count: agentAttention.value,
-                      // Phrased to follow the tile's name, which tileLabel puts in front of it: "Agents · 3 need you".
-                      tooltip: `${agentAttention.value} need${agentAttention.value === 1 ? `s` : ``} you`,
-                  },
-              }
-            : {}),
+        // Both readings come from agentsTile.ts, which is also what the phone's tab bar draws: the count follows
+        // the board's scope, and the note says so when it is wide (with the boxes that didn't answer named).
+        // Phrased to follow the tile's name, which tileLabel puts in front of them: "Agents · 3 need you".
+        ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
+        ...(agentsScopeNote.value === undefined ? {} : { note: { icon: `boxes` as IconName, text: agentsScopeNote.value } }),
     },
     {
         id: `workspace`,
@@ -631,17 +640,35 @@ useKeybindings();
             <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
             <span class="mb-1 icon-rail-divider h-px bg-line"></span>
 
-            <!-- The navigation tiles, in bands (Work / Judge / Know: see RAIL_GROUPS) separated by the same
-                 hairline the rail already uses for its other seams. A 44px column has no room for a heading, so
-                 the gap between runs IS the heading; the mobile menu, which has the width, spells them out.
-                 THIS is the one part of the rail that scrolls: see .icon-rail-nav.
+            <!-- The navigation tiles, in bands (Work / Judge / Know: see RAIL_GROUPS) separated by WHITESPACE,
+                 never by a line. A 44px column has no room for a heading, so the gap between runs IS the
+                 heading; the mobile menu, which has the width, spells them out. THIS is the one part of the
+                 rail that scrolls: see .icon-rail-nav.
+
+                 ONE DEVICE PER JOB, and this is the half of that rule the bands hold up. The rail draws exactly
+                 three kinds of thing in one column: who you are here (the switcher, presence), where you work
+                 (these tiles and the More door), and what is running on the machine right now (VPN, ports,
+                 browsers, subagents, the terminal). A hairline marks each of those two boundaries and nothing
+                 else, so a line in this rail means "different kind of thing" and always has.
+
+                 The bands used to be drawn with the same hairline, which made five identical seams saying two
+                 different things, and left the reader to guess which was which from position alone. The guess
+                 they landed on was a scope boundary: with the chat docked (chatHome defaults to `side`) the run
+                 opens Agents, Workspace, Preview, and the first line under it read as "the views above are
+                 about all your sandboxes, the ones below are about this box". It never meant that. Agents is
+                 the only surface with a scope at all, it is a setting the reader chose rather than a property
+                 of the tile, and the tile says so itself now (see agentsTile's mark and its badge).
 
                  Navigation remains live while the daemon catches up: cached views are still useful, and the
                  workspace gate itself decides whether there is anything truthful to paint. Actions inside a
                  view keep using exact reachability. -->
             <div class="icon-rail-nav flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
-                    <span v-if="at > 0" class="my-1 icon-rail-divider h-px bg-line"></span>
+                    <!-- The band seam: air, in the same quantity the hairline's box used to take, so the run's
+                         rhythm is unchanged and only the line is gone. aria-hidden because a band boundary is a
+                         reading aid for the eye; the tiles carry their own labels and a screen reader walks them
+                         as one list, which is what the list IS. -->
+                    <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
                     <template v-for="tile in band.items" :key="tile.to">
                         <!-- A SEAT BEING HELD, not a tile: this one was in the rail last time and hasn't loaded
                              back yet (railMemory.ts). It draws the glyph it will draw, dim and pulsing, so the
@@ -680,6 +707,15 @@ useKeybindings();
                             >
                                 <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
                                 <template v-else>{{ badgeText(tile.badge) }}</template>
+                            </span>
+                            <!-- The tile's standing note (AreaTile.note): the OPPOSITE corner from the badge, so
+                                 the two never overlap on a tile carrying both, and in the rail's muted ink with
+                                 no plate behind it: it is not an errand and must not compete with a count that
+                                 is. Hidden from assistive tech because its sentence is already in the tile's own
+                                 aria-label, where a screen reader reaches it as part of the link rather than as a
+                                 second nameless element. -->
+                            <span v-if="tile.note" class="absolute bottom-0.5 left-0.5 flex leading-none text-subtle" aria-hidden="true">
+                                <Icon :name="tile.note.icon" class="text-[0.6rem]" />
                             </span>
                         </RouterLink>
                     </template>
@@ -895,8 +931,18 @@ useKeybindings();
  * (9 nav tiles fit at 945px, 11 at 1080px). */
 .icon-rail > *,
 .icon-rail-tile,
+.icon-rail-band,
 .icon-rail-divider {
     flex-shrink: 0;
+}
+
+/* A BAND BOUNDARY INSIDE THE NAVIGATION RUN, drawn as air. One gap unit, so a band seam is three of them
+ * (gap + this + gap) against one within a band: the same three-to-one rhythm the hairline's box carried, minus
+ * the 3px the line and its margins spent (9px → 6px at compact size). It scales with the rail, because the gap
+ * it copies is `rail()`-derived like every other length in the column, and it costs the scrolling run slightly
+ * LESS height than the line did, which is the direction to err on a column that runs out of fold. */
+.icon-rail-band {
+    height: var(--icon-rail-gap);
 }
 
 /* The one part that gives. The nav tiles are the run that grows without bound (one per extension activation), so

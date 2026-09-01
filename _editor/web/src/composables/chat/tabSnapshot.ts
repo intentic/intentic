@@ -18,6 +18,12 @@ export interface StoredTab {
     readonly conversationId: string;
     // Whether the conversation runs in its own isolated worktree rather than on the shared /work tree.
     readonly isolated: boolean;
+    /* WHICH SANDBOX THIS CONVERSATION LIVES IN (Conversation.box), absent for the overwhelming majority, which
+     * live in the box this browser is pointed at. Persisted because it is the tab's ADDRESS: a restored tab
+     * that lost it would re-attach to the active daemon, find no run of that id, and draw an agent that is
+     * working somewhere else as one that stopped. It rides the summons channel too, so the same conversation
+     * opened in a second window talks to the same daemon. */
+    readonly box?: string;
     // Whether the fleet has ever registered this conversation (Conversation.registered). Persisted so a reload
     // doesn't hand every open agent tab back to the board as a fresh draft card while the first roster frame
     // is still in flight, and never at all for one whose agent has since been archived.
@@ -98,6 +104,7 @@ export interface StoredTab {
 export const snapshotTab = (conversation: Conversation): StoredTab => ({
     conversationId: conversation.conversationId,
     isolated: conversation.isolated.value,
+    box: conversation.box.value,
     registered: conversation.registered.value,
     provider: conversation.provider.value,
     account: conversation.account.value,
@@ -220,6 +227,9 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         conversationId: raw[`conversationId`],
         // A tab that names no tree runs in its own worktree, the default a fresh one gets.
         isolated: raw[`isolated`] !== false,
+        // ...and one that names no sandbox lives in the box this browser is pointed at, which is what every
+        // tab stored before this feature existed means, and what almost every tab stored since means too.
+        ...(typeof raw[`box`] === `string` && raw[`box`] !== `` ? { box: raw[`box`] as string } : {}),
         // ...and one that doesn't say the fleet knows it is a draft until a roster frame says otherwise.
         registered: raw[`registered`] === true,
         draft: raw[`draft`],

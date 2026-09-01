@@ -3,14 +3,24 @@ import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../sandbox/sandboxClient", () => ({
-    sandboxRequest: vi.fn(),
-    sandboxJson: vi.fn(),
-    sandboxError: vi.fn(async (response: Response) => {
-        const body = (await response.json()) as { message?: string; error?: string };
-        return new Error(body.message ?? body.error ?? `Request failed (${response.status}).`);
-    }),
-}));
+vi.mock("../sandbox/sandboxClient", () => {
+    const sandboxRequest = vi.fn();
+    const sandboxJson = vi.fn();
+    return {
+        sandboxRequest,
+        sandboxJson,
+    /* The reach-aimed pair, on the real client's terms: `undefined` is the active box, which is every call
+     * these tests make. They delegate to the mocks above so the assertions stay written against one spy per
+     * verb rather than two that would have to agree. */
+        sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
+            init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
+        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) => (init === undefined ? sandboxJson(path) : sandboxJson(path, init)),
+        sandboxError: vi.fn(async (response: Response) => {
+            const body = (await response.json()) as { message?: string; error?: string };
+            return new Error(body.message ?? body.error ?? `Request failed (${response.status}).`);
+        }),
+    };
+});
 // Same window.env chain via analytics; send() only fires a milestone event through track.
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 // Same window.env chain via useApi; the tab persistence only reads activeSandboxId + reachable.

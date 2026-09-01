@@ -433,6 +433,13 @@ const fleet = computed<FleetAgent[]>(() => {
                 unread: false,
                 unsent: unsentIds.has(conversation.conversationId),
                 preview,
+                /* WHERE THIS DRAFT WILL RUN, when it is not here. A tab aimed at another sandbox
+                 * (Conversation.box) is still a draft in THIS browser and belongs on this board, since a draft
+                 * exists nowhere else, but the card has to carry the box or every action on it would address
+                 * the wrong daemon and its chip would claim work about to happen somewhere else. From its first
+                 * turn on, the card comes from that box's own roster instead (fleetScope.otherFleet), which is
+                 * what the ack-time registration latch hands over (Conversation.latchRemoteRegistration). */
+                ...(conversation.box.value === undefined ? {} : { sandboxId: conversation.box.value }),
             };
             if (conversation.title.value !== null) {
                 draft.title = conversation.title.value;
@@ -1178,11 +1185,15 @@ export const agentSeed = (
         | "tierHold"
         | "status"
         | "branch"
+        | "sandboxId"
     >,
 ): AgentTabSeed => ({
     id: agent.id,
     provider: agent.provider,
     harness: agent.harness,
+    // The box the card came from, so a tab opened for an agent in another sandbox is addressed there rather
+    // than asking this daemon about a conversation it has never heard of (AgentTabSeed.sandboxId).
+    ...(agent.sandboxId !== undefined ? { sandboxId: agent.sandboxId } : {}),
     ...(agent.branch !== undefined ? { branch: agent.branch } : {}),
     /* A client-only card, a draft, a refused send, a turn the daemon has not filed yet, is NOT a
      * registered conversation, and claiming so here would erase the card under the click and pin the empty

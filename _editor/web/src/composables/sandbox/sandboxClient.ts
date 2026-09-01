@@ -45,6 +45,17 @@ export async function sandboxRequestAt(sandboxId: string, path: string, init?: R
     return requestTo(targetFor(sandboxId), path, init);
 }
 
+/* THE SAME CALL AIMED BY A REACH: a sandbox id, or `undefined` meaning the active box. The two entry points
+ * above stay as they are, because which one a call site names is a decision worth reading; this is for the
+ * callers that HOLD the decision as a value and would otherwise each write the same ternary.
+ *
+ * That is what a conversation homed in another sandbox is (Conversation.box): one object whose whole
+ * correspondence, send, attach, steer, stop, transcript, has to go to the same daemon, chosen once when it was
+ * created. Nine ternaries agreeing about that is nine chances for one of them not to. */
+export async function sandboxRequestVia(at: string | undefined, path: string, init?: RequestInit): Promise<Response> {
+    return at === undefined ? sandboxRequest(path, init) : sandboxRequestAt(at, path, init);
+}
+
 // A non-2xx daemon response, carrying the HTTP status so callers can branch on it (e.g. a 404 on a file read
 // means the file was deleted → close its tab) without matching the daemon's message text.
 export class SandboxHttpError extends Error {
@@ -109,6 +120,12 @@ export async function sandboxJsonAt<T>(sandboxId: string, path: string, init?: R
     return (await response.json()) as T;
 }
 
+// The reach-aimed read, on `sandboxRequestVia`'s terms: `undefined` is the active box. For the callers holding
+// a reach as a value (agentActions' mutations, a conversation's own box).
+export async function sandboxJsonVia<T>(at: string | undefined, path: string, init?: RequestInit): Promise<T> {
+    return at === undefined ? sandboxJson<T>(path, init) : sandboxJsonAt<T>(at, path, init);
+}
+
 // Raw bytes for binary preview (images / PDF), where a utf8 decode would corrupt the file. `at` names the
 // sandbox when the bytes are not in the active one, which is what lets a review of an agent in another box
 // render its screenshots rather than fetching the active daemon's answer for a path it has never heard of.
@@ -140,11 +157,25 @@ const UPLOAD_STALL_MS = 60_000;
 // `&offset=` that the daemon writes in place. slice() stays lazy (still streams from disk), each part gets a
 // fresh stall watchdog, and a failed part rejects the whole call, the caller's retry re-sends from part 0,
 // which is idempotent because offset writes just overwrite.
-export async function sandboxUpload(path: string, body: Blob, opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal }): Promise<void> {
-    const target = currentSandboxTarget();
+// `opts.at` names the sandbox when the bytes do not belong in the active one, the same trailing reach
+// `sandboxBlob` takes: a file dropped on a conversation homed in another box has to land on THAT box's disk,
+// since the path this returns is the one the prompt will tell that daemon to read.
+// Resolved once, before the first part goes up, so a multi-part upload cannot pair one box's bearer with
+// another's address halfway through (SandboxTarget is a snapshot for exactly this reason).
+const uploadTarget = (at: string | undefined): SandboxTarget => {
+    const target = at === undefined ? currentSandboxTarget() : targetFor(at);
     if (target === undefined) {
         throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
     }
+    return target;
+};
+
+export async function sandboxUpload(
+    path: string,
+    body: Blob,
+    opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal; at?: string },
+): Promise<void> {
+    const target = uploadTarget(opts?.at);
     const signal = opts?.signal;
     for (let offset = 0; offset === 0 || offset < body.size; offset += CHUNK_BYTES) {
         if (signal?.aborted) {

@@ -13,10 +13,18 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 // The daemon, stubbed at the one seam the list reaches it through, so the archive probe below can be asserted
 // as the call it is, rather than inferred from a card that did or didn't fill in.
-vi.mock("../composables/sandbox/sandboxClient", () => ({
-    sandboxJson: vi.fn(async () => ({ agents: [] })),
-    sandboxRequest: vi.fn(),
-}));
+vi.mock("../composables/sandbox/sandboxClient", () => {
+    const sandboxJson = vi.fn(async () => ({ agents: [] }));
+    const sandboxRequest = vi.fn();
+    return {
+        sandboxJson,
+        sandboxRequest,
+        // The reach-aimed pair: `undefined` is the active box, which is every call this suite makes.
+        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) => sandboxJson(),
+        sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
+            init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
+    };
+});
 
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";

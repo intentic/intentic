@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { type AgentCommand, isTrialProvider, loopDesignLine } from "@intentic/sandbox-contract";
 import { turnInFlight } from "../composables/agents/agentStatus";
+import { boxNameOf, scopeOffered } from "../composables/agents/fleetScope";
 import { useAgents } from "../composables/agents/useAgents";
 import { modeMeta } from "../composables/chat/catalog";
 import {
@@ -406,12 +407,32 @@ const grow = (): void => {
     growTextarea(input.value, MAX_COMPOSER_HEIGHT);
 };
 
-// Files staged for the next turn, and the three ways they arrive (useChatAttachments).
-const staging = useChatAttachments({ attachments, reachable, connected });
+/* WHERE THIS CONVERSATION LIVES, and everything that follows from it being somewhere else.
+ *
+ * `box` is undefined for the overwhelming majority of chats: the sandbox this browser is pointed at. When it
+ * names another one (the placement picker's "Other sandboxes"), the turn runs on THAT daemon and this pane is
+ * one of its renderers, which is the same relationship every window already has to a detached run: the only
+ * thing that changed is which machine it is detached on.
+ *
+ * What the pane does with it is refuse to offer the things that are about THIS machine, since they would name
+ * files, accounts and personas the other daemon has never heard of. Each refusal is at its own control, with
+ * the reason, rather than as one banner over a composer that then half-works. */
+const conversationBox = computed(() => chat.value.box.value);
+const remote = computed(() => conversationBox.value !== undefined);
+// The name to put on it, from the roster rather than copied onto the conversation: the box's name is the box's
+// to change, and a chat holding its own copy would go stale the moment somebody renamed it.
+const remoteName = computed(() => (conversationBox.value === undefined ? undefined : (boxNameOf.value.get(conversationBox.value) ?? `another sandbox`)));
+
+// Files staged for the next turn, and the three ways they arrive (useChatAttachments). The bytes go to the
+// conversation's own box: the path they land on is what the prompt will tell that daemon to read.
+const staging = useChatAttachments({ attachments, reachable, connected, at: conversationBox });
 const { dragDepth } = staging;
 
-// The chip that offers the file the user is looking at (useEditorContextChip).
+// The chip that offers the file the user is looking at (useEditorContextChip)…
 const { target: editorTarget, include: includeEditorContext, label: editorChipLabel, forSend: editorContextForSend } = useEditorContextChip();
+// …offered only for a conversation that runs where that file is. The send drops the field for a remote one
+// anyway (turnRequest.ts), and a chip that can be pressed and then silently ignored is worse than no chip.
+const editorChip = computed(() => editorTarget.value !== undefined && !remote.value);
 
 // The composer Send is usable whenever there is something to send: text, a finished attachment, or a queued
 // message waiting to go out, regardless of what the conversation is doing: a message written mid-turn is
@@ -430,12 +451,18 @@ const staged = computed(() => draft.value.trim().length > 0 || attachments.value
  * turn has nowhere to place into: the pill appears with the first turn, like the agent itself does. */
 const voiceAgent = ref(false);
 
-/* WHERE THE NEXT AGENT RUNS (runners/, docs/remote-runners-plan.md in the workspace). The pill appears only
- * when this sandbox has runners at all, or when this conversation is already placed on one: a control whose
- * only option is "here" is noise in a row that is already dense, and every sandbox starts with no runners. */
+/* WHERE THE NEXT AGENT RUNS: this sandbox, one of its runners, or ANOTHER SANDBOX on this account
+ * (ChatPlacementMenu owns the three-way argument). The pill appears only when there is somewhere else to
+ * choose, or when this conversation is already placed somewhere: a control whose only option is "here" is
+ * noise in a row that is already dense, and a fresh account has neither a runner nor a second box.
+ *
+ * `scopeOffered` is the same test the board's scope control uses, deliberately: "is there a second connected
+ * sandbox to be about" is one question, and two surfaces answering it apart is how they come to disagree. */
 const { runners: pairedRunners } = useRunners();
-const placementLabel = computed(() => props.conversation.runner.value ?? `Here`);
-const placementShown = computed(() => pairedRunners.value.length > 0 || props.conversation.runner.value !== undefined);
+const placementLabel = computed(() => remoteName.value ?? props.conversation.runner.value ?? `Here`);
+const placementShown = computed(
+    () => pairedRunners.value.length > 0 || scopeOffered.value || props.conversation.runner.value !== undefined || remote.value,
+);
 const placeable = computed(() => props.conversation.registered.value || agentById(props.conversation.conversationId) !== undefined);
 
 // The badge that says what the next message is run THROUGH: a loop, a workflow, or nothing (useRunThrough).
@@ -681,7 +708,7 @@ const placeDraft = async (): Promise<void> => {
         return;
     }
     // The warmed transcript cache now ends one row early: the same signal a settled turn sends.
-    invalidateAgentTranscript(props.conversation.conversationId);
+    invalidateAgentTranscript(props.conversation.conversationId, props.conversation.box.value);
     history.value?.record(text);
     // Disarm: speaking as the agent is a deliberate act each time (see voiceAgent).
     voiceAgent.value = false;
@@ -862,7 +889,12 @@ const commandMatches = computed<readonly AgentCommand[]>(() => {
 });
 const mentionPopover = ref<InstanceType<typeof ChatMentionPopover>>();
 const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
-const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value);
+/* NOT FOR A CONVERSATION THAT LIVES IN ANOTHER BOX. The popover completes against THIS workspace's file tree
+ * (ChatMentionPopover's search is an active-sandbox read), and the paths it would offer are paths the daemon
+ * being written to has never seen: an @-mention that resolves to nothing is a turn refused at the door, or
+ * worse, a same-named file on the wrong machine. Typing `@` is then an ordinary character, which is the
+ * correct amount of ceremony for a thing that cannot be answered here. */
+const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && !remote.value);
 const commandOpen = computed(() => !mentionOpen.value && commandMatches.value.length > 0 && !popoverDismissed.value);
 
 // Put the picked text into the draft and land the caret after it, keeping the textarea focused.
@@ -1405,12 +1437,14 @@ watch(
                             >
                                 <ChatMentionPopover v-if="mentionOpen" ref="mentionPopover" :query="activeMention?.query ?? ''" @pick="pickMention" />
                                 <ChatCommandPopover v-if="commandOpen" ref="commandPopover" :commands="commandMatches" @pick="pickCommand" />
-                                <div v-if="attachments.length > 0 || editorTarget !== undefined" class="flex flex-wrap gap-2 px-3 pt-3">
+                                <div v-if="attachments.length > 0 || editorChip" class="flex flex-wrap gap-2 px-3 pt-3">
                                     <!-- Editor-context chip: off by default, one click attaches the open file /
                                      selection to the next message: the inverse of VSCode Claude Code. Sized
-                                     like the attachment chips beside it. -->
+                                     like the attachment chips beside it. Absent on a conversation that lives in
+                                     another sandbox: the file it names is open in THIS workspace, at a path the
+                                     daemon being written to has no reason to have (see `editorChip`). -->
                                     <button
-                                        v-if="editorTarget !== undefined"
+                                        v-if="editorChip"
                                         type="button"
                                         class="ui-chip rounded-lg px-2 py-1.5 text-xs"
                                         :class="includeEditorContext ? `ui-chip-on` : `border-dashed border-line`"
@@ -1586,10 +1620,15 @@ watch(
                                         </button>
 
                                         <!-- WHERE IT RUNS, the last of the right-hand group and the one that is
-                                         about the machine rather than the message: this sandbox, or a runner of
-                                         its own on another computer. Hidden entirely until there is a runner to
-                                         choose, and read-only once the conversation has run, because placement is
-                                         part of a conversation's identity (ChatPlacementMenu). -->
+                                         about the machine rather than the message: this sandbox, a runner of its
+                                         own on another computer, or another sandbox on this account. Hidden
+                                         entirely until there is somewhere else to choose, and read-only once the
+                                         conversation has run, because placement is part of a conversation's
+                                         identity (ChatPlacementMenu).
+
+                                         The glyph follows the KIND of place: a stack of boxes once the chat
+                                         lives in another sandbox, the single machine otherwise, so the pill says
+                                         which of the three answers is in force before its label is read. -->
                                         <button
                                             v-if="placementShown"
                                             ref="placementPill"
@@ -1599,7 +1638,7 @@ watch(
                                             :aria-expanded="placementOpen"
                                             aria-label="Where this runs"
                                         >
-                                            <Icon name="desktop" class="text-2xs text-link" />
+                                            <Icon :name="remote ? `boxes` : `desktop`" class="text-2xs text-link" />
                                             <span class="@max-lg:hidden">{{ placementLabel }}</span>
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
@@ -1615,7 +1654,14 @@ watch(
                                          mode rather than leading the group: a bare glyph at the group's edge is
                                          the easiest thing in the row to read as decoration, and the one pill
                                          whose unset state most needs to be noticed cannot afford that. -->
+                                        <!-- ABSENT ON A CHAT THAT LIVES IN ANOTHER SANDBOX. A persona is a card in
+                                             one daemon's record, so the id this pill would set names nothing over
+                                             there and the send drops it (turnRequest.ts): the turn is an ordinary
+                                             attended chat on that box's own accounts, and a pill that pretended
+                                             otherwise would be promising an identity to a machine that has never
+                                             heard of it. -->
                                         <button
+                                            v-if="!remote"
                                             ref="personaPill"
                                             type="button"
                                             class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"

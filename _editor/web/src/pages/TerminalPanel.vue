@@ -132,7 +132,9 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
         return;
     }
     const note = helpNote.value.trim();
-    await postTurnControl(`/agent/reply`, { kind: `terminal_help`, requestId: open.requestId, helped, ...(note === `` ? {} : { note }) });
+    // `undefined`: this box. Terminals are sandbox-global and this panel is the active sandbox's, so the reply
+    // goes to the daemon holding the PTY that asked (see postTurnControl).
+    await postTurnControl(undefined, `/agent/reply`, { kind: `terminal_help`, requestId: open.requestId, helped, ...(note === `` ? {} : { note }) });
     helpNote.value = ``;
 };
 

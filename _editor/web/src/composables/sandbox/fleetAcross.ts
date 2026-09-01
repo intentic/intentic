@@ -265,6 +265,25 @@ export const boxAttention = (box: BoxFleet): number | undefined => {
     return box.agents.filter((agent) => blocked(agent) || unread(agent)).length + box.held.length;
 };
 
+/* READ IT WHERE IT LIVES. `useAgents.markSeen` writes the roster this browser streams, so it is a no-op for an
+ * agent in another box: it looks the id up in the local registry, finds nothing, and returns. That was correct
+ * while a distant agent could only be read from a card. It stopped being correct the moment a conversation
+ * could be HELD here and run there (Conversation.box): a chat the user is sitting in front of would go on
+ * counting toward "needs you" for good, which is the one thing a badge may never do.
+ *
+ * The optimistic patch matters as much as the POST: the next poll is up to 45 seconds away, and a count that
+ * stays lit for that long after the user read the thing is indistinguishable from one that is stuck. Failures
+ * are swallowed exactly as the local one swallows them, the next read is the correction. */
+export const markSeenAcross = (sandboxId: string, agentId: string): void => {
+    const box = boxes.value[sandboxId];
+    if (box === undefined) {
+        return;
+    }
+    const seenAt = Date.now();
+    write(sandboxId, { sandbox: box.sandbox, agents: box.agents.map((agent) => (agent.id === agentId ? { ...agent, seenAt } : agent)) });
+    void sandboxJsonAt(sandboxId, `/agents/${encodeURIComponent(agentId)}/seen`, { method: `POST` }).catch(() => undefined);
+};
+
 // The same count keyed by sandbox id, for the surfaces that hold a row rather than a box (the switcher).
 export const attentionByBox = computed<ReadonlyMap<string, number | undefined>>(
     () => new Map(otherBoxes.value.map((box) => [box.sandbox.id, boxAttention(box)])),

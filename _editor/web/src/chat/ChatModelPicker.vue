@@ -30,7 +30,7 @@ const { conversation } = defineProps<{ conversation: Conversation }>();
  * teleports behind a `v-if="open"` and BottomSheet does the same, in both ChatPanel and SuggestedSessionBox.
  * These are the refs of the conversation as it was at mount, so a host that swapped the prop in place would go
  * on editing the previous one. Remount, don't rebind. */
-const { provider, harness, model, thinking, fast, fastOffered, fastMode, tierHold, tierAnswer, streaming, account, capabilities } = conversation;
+const { provider, harness, model, thinking, fast, fastOffered, fastMode, tierHold, tierAnswer, streaming, account, capabilities, box } = conversation;
 
 // The sandbox-wide automatic-tier mode, which decides what the tier block below is allowed to show: a dead
 // control is worse than none, and this feature has two modes that can produce one (see tierHoldOffered).
@@ -40,6 +40,14 @@ const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
 // Whether the shared block has anything to say for this provider: the one thing this component needs from it
 // BEFORE rendering it, since the footer's border and padding belong to whoever draws them.
 const { hasContent } = usePickerAccounts(provider, harness);
+
+/* WHO SERVES THE TURN IS THE HOST BOX'S BUSINESS WHEN THE HOST BOX IS NOT THIS ONE. An account id is a key in
+ * one daemon's credential store, so a conversation homed in another sandbox sends no account at all and that
+ * daemon serves the turn on its own first account for the provider (turnRequest.ts). The rows are therefore
+ * hidden rather than shown inert: a list of THIS box's logins under a turn none of them will pay for is the
+ * picker asserting something it cannot make true. The MODEL list above stays, because a model id belongs to
+ * the provider rather than to a box and does cross. */
+const accountsShown = computed(() => hasContent.value && box.value === undefined);
 
 // Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session).
 const unpickable = (entry: PickerEntry): boolean => streaming.value && entry.provider !== provider.value;
@@ -133,7 +141,7 @@ const tierNotice = computed<string | undefined>(() => {
  * routed subscriptions, the harness axis and a standing refusal; everything after it is this conversation's own
  * runtime, and a rule drawn above nothing is what this check exists to prevent. */
 const footerVisible = computed(
-    () => hasContent.value || provider.value === `claude` || limitations.value.length > 0 || tierHoldOffered.value || tierNotice.value !== undefined,
+    () => accountsShown.value || provider.value === `claude` || limitations.value.length > 0 || tierHoldOffered.value || tierNotice.value !== undefined,
 );
 </script>
 
@@ -166,6 +174,7 @@ const footerVisible = computed(
                      straight through and the panel stays open, because these are settings of the session you
                      are in rather than an answer someone is waiting on. -->
                 <PickerAccounts
+                    v-if="accountsShown"
                     :provider="provider"
                     :harness="harness"
                     :account="account"

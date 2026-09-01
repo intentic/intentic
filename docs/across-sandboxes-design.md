@@ -102,6 +102,12 @@ catches in Komodo's `live` flag, where "registered" was rendered as "healthy".
 
 ## 6. Read and land anywhere. Converse where it lives
 
+> **Superseded in part — see section 14.** The rule below held for a year and its reasoning is still the
+> reason the *board* offers a crossing on a remote card. What changed is that the composer can now home a
+> conversation in another sandbox outright, so "converse where it lives" became "the conversation lives
+> wherever you sent it, and this window renders it". Read this section for why replying was hard, then 14 for
+> what it cost to make it easy.
+
 This is the action rule, and it falls out of the code rather than out of taste.
 
 Review, land, discard, archive, stop and approve-a-held-wake are stateless calls addressed by agent id.
@@ -280,3 +286,44 @@ dimmed two cards for one land and, in the drag's case, acted on the wrong agent.
 **Still open.** Project grouping waits on a remote URL in `GitRemoteState` (section 4). The running-process
 indicator (section 8) is unbuilt, so watching another box's pre-push run still means crossing to it. Undo
 stays per sandbox, as section 12 proposed.
+
+## 14. Starting work in another sandbox, from the composer
+
+Section 6 said a reply is a crossing, and the board still offers one. The complaint that reopened it was the
+other half: **you could not START a conversation anywhere but the box you were standing in.** Sending a task
+to a second machine meant switching the whole app to it — section 1's cold start — and then switching back,
+which is a poor trade for "also run this over there".
+
+**A conversation has a home box.** `Conversation.box` is a sandbox id, or undefined for the box this browser
+is pointed at, and it is an ADDRESS rather than a mode: every daemon call the object makes (`/agent`,
+`/agent/attach`, steer, stop, reply, rewind, the transcript read, an attachment's bytes) goes through
+`sandboxRequestVia(this.at, …)`. One field decides the whole correspondence, so no half of it can end up
+talking to a different machine than the other half.
+
+**Nothing new was needed underneath.** A turn already runs as a detached run on a daemon with every window
+merely rendering it (`turnStream`), `sandboxSession` already keys bearers by sandbox, and `targetFor` already
+resolves any box. What section 6 called "a far larger change" was true of the ALTERNATIVE reading — making the
+chat singleton multi-box — and false of this one: the singleton still holds one list of tabs, and a tab knows
+where it talks.
+
+**What does not cross, and why each one is refused at its own control rather than in a banner.** A remote
+conversation carries no account (an account id is one daemon's store key; omitting it is already "use your
+first account for this provider"), no persona (a card in one daemon's record; a named card that cannot be
+found is the fail-closed case), no editor context and no `@`-mention completions (paths in THIS workspace),
+and no runner (paired to the sandbox that made it). The model and provider DO cross: a model id belongs to the
+provider, and the target daemon resolves it against its own catalog or refuses at the door in a sentence the
+composer shows. `turnRequest.ts` states each omission next to the field it drops.
+
+**The registration latch had to grow a second source.** `registered` latches on a roster frame, and this
+browser streams one sandbox, so a remote conversation would have stayed a "draft" for good — drawing a phantom
+New-agent card beside the real card the All-sandboxes read brings back for it. The daemon's ack of the first
+send is the same fact from the other end, and that is what latches it (`latchRemoteRegistration`).
+
+**`open` and `unsent` stopped being false for a distant card.** They were hardcoded on the reasoning that a
+summary read from another daemon has no tab; now it can, so `otherFleet` joins against this browser's tabs on
+`(id, sandbox)`. That pair is the identity rule section 13 already found, applied to one more place.
+
+**What is still a crossing.** The BOARD's remote card opens its review and offers "Open in `<sandbox>`", as
+section 6 describes: opening a distant agent as a local tab would also have to answer what `markSeen`,
+archive and the watch marker mean at a distance, all of which write through the active daemon's roster. The
+seed carries the box already (`AgentTabSeed.sandboxId`), so that is a wiring job rather than a design one.

@@ -1,6 +1,6 @@
 import { type AgentEvent, type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFrames } from "@intentic/sandbox-contract";
-import { sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
+import { sandboxRequestVia } from "../sandbox/sandboxClient";
 import { acquireStreamSlot } from "../sandbox/streamBudget";
 
 /* HOW THIS WINDOW TALKS TO A RUNNING TURN. A turn EXECUTES as a detached run on the sandbox daemon (POST /agent
@@ -58,6 +58,17 @@ export const followRun = async (
     initialRun: string | undefined,
     renderer: RunRenderer,
     controller: AbortController,
+    /* WHICH DAEMON IS RUNNING IT: undefined for the box this browser is pointed at, a sandbox id for a
+     * conversation homed elsewhere (Conversation.box). The attach is an ordinary authenticated request and the
+     * bearer store is keyed by sandbox already, so following a turn in another box costs this argument and
+     * nothing else: the frames, the cursor, the backoff and the replay boundary are the same protocol wherever
+     * the run is. It rides every re-attach in the loop below, so a stream that drops and resumes cannot come
+     * back pointed at the active box.
+     *
+     * Required rather than defaulted, in a signature where every other argument is: a stream aimed at the wrong
+     * daemon renders someone else's turn into this transcript, so "which box" is a question every caller answers
+     * out loud. */
+    at: string | undefined,
 ): Promise<boolean> => {
     // The resume cursor, held here because nothing outside this loop reads it: `run` latches the run being
     // rendered, `after` the last seq delivered, and every re-attach picks up from the pair.
@@ -132,7 +143,7 @@ export const followRun = async (
         }
         let response: Response;
         try {
-            response = await sandboxRequest(`/agent/attach`, {
+            response = await sandboxRequestVia(at, `/agent/attach`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
                 signal: controller.signal,
@@ -197,11 +208,12 @@ export const followRun = async (
     }
 };
 
-// Posts a turn-control message to the platform side-channel, which relays it to the sandbox daemon.
-// Returns whether it succeeded.
-export const postTurnControl = async (path: string, body: unknown): Promise<boolean> => {
+// Posts a turn-control message (steer, stop, reply) to the daemon running the turn: `at` is the conversation's
+// own box, on followRun's terms above, because a stop that reached the wrong daemon would report success for a
+// turn still running. Returns whether it succeeded.
+export const postTurnControl = async (at: string | undefined, path: string, body: unknown): Promise<boolean> => {
     try {
-        const response = await sandboxRequest(path, jsonBody(`POST`, body));
+        const response = await sandboxRequestVia(at, path, jsonBody(`POST`, body));
         return response.ok;
     } catch {
         return false;

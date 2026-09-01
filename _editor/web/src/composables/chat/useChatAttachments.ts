@@ -3,7 +3,7 @@ import { reactive, type Ref, ref } from "vue";
 import { collectDroppedFiles } from "../../pages/workspace/dropEntries";
 import { forgetPreview, rememberPreview } from "./attachmentPreviews";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
+import { sandboxJsonVia, sandboxUpload } from "../sandbox/sandboxClient";
 import type { PendingAttachment } from "./conversation";
 import type { ChatAttachment } from "./transcript";
 import { uuid } from "../uuid";
@@ -25,6 +25,10 @@ export const useChatAttachments = (composer: {
     readonly reachable: Ref<boolean>;
     /** No account, no turn to attach them to. */
     readonly connected: Ref<boolean>;
+    /** Which sandbox's disk these bytes belong on: this pane's conversation's box, undefined for the active
+     * one. The path staged here is what the prompt tells that daemon to read, so an upload that landed in the
+     * wrong box would produce a turn asking for a file that is not there. */
+    readonly at: Ref<string | undefined>;
 }) => {
     // Depth counter (enter/leave fire per descendant) drives the drop ring on this pane. Per PANE rather than
     // per panel: with several open, a dropped screenshot belongs to the chat it was dropped on.
@@ -59,6 +63,7 @@ export const useChatAttachments = (composer: {
         composer.attachments.value = [...composer.attachments.value, entry];
         sandboxUpload(`/workspace/upload?path=${encodeURIComponent(entry.path)}`, file, {
             signal: controller.signal,
+            ...(composer.at.value === undefined ? {} : { at: composer.at.value }),
             onProgress: (loaded) => {
                 entry.progress = file.size > 0 ? loaded / file.size : 1;
             },
@@ -87,7 +92,7 @@ export const useChatAttachments = (composer: {
                 // Fire-and-forget: drop the uploaded uuid dir; on failure the orphan stays visible in the
                 // workspace tree, deletable there.
                 const dir = attachment.path.slice(0, attachment.path.lastIndexOf(`/`));
-                sandboxJson(`/workspace/entry`, jsonBody(`DELETE`, { path: dir })).catch(() => undefined);
+                sandboxJsonVia(composer.at.value, `/workspace/entry`, jsonBody(`DELETE`, { path: dir })).catch(() => undefined);
             }
             composer.attachments.value = composer.attachments.value.filter((entry) => entry.id !== attachment.id);
         },

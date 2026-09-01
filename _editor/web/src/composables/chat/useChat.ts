@@ -50,7 +50,7 @@ import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
-import { sandboxError, sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxError, sandboxJson, sandboxRequest, sandboxRequestVia } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { showsPanel } from "../floating";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -225,6 +225,9 @@ const restoreTab = (tab: StoredTab): Conversation => {
     const conversation = new Conversation(tab.conversationId);
     conversation.isolated.value = tab.isolated;
     conversation.registered.value = tab.registered;
+    // Before anything else that could talk to a daemon: this is the tab's ADDRESS, and a hydrate that ran
+    // against the active box first would ask the wrong one about a conversation it has never heard of.
+    conversation.box.value = tab.box;
     // The posture isn't part of the snapshot (it is a per-task choice, not a preference), a restored tab
     // starts from the mode its tree calls for, same as a fresh one.
     conversation.modePick.value = startingMode(conversation.isolated.value);
@@ -1486,6 +1489,10 @@ export const reveal = ({ verb, entries, focus, caret }: Reveal): Conversation | 
  * and isolated conversations alike, so no provider store or placement gets a separate open path. */
 export interface AgentTabSeed {
     id: string;
+    /* WHICH SANDBOX THE AGENT LIVES IN, absent for the box this browser is pointed at, which is every card the
+     * streamed roster produces. A seed that carries one opens a tab addressed at THAT daemon
+     * (Conversation.box): the same conversation, rendered here, running there. */
+    sandboxId?: string;
     sessionId?: string;
     title?: string;
     provider: AgentProvider;
@@ -1519,6 +1526,9 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
         // isolated-by-default posture.
         isolated: registered ? agent.branch !== undefined : true,
         registered,
+        // The tab's address, carried through the same fold every window applies (see summon.ts): a summoned
+        // remote tab talks to the same daemon in the second window as in the one that opened it.
+        box: agent.sandboxId,
         provider: agent.provider,
         harness: agent.harness,
         account: agent.account,
@@ -1769,9 +1779,13 @@ const loadSessions = async (query?: string): Promise<void> => {
 
 // Read a session's transcript from the daemon's session store, for both the history menu and the restored-tab
 // rehydration watch. Returns undefined when the daemon has nothing, having reported it on the conversation.
+//
+// From the CONVERSATION's own box: a provider session is minted by the runtime that ran the turn and stored
+// beside it, so a tab homed in another sandbox has to ask that daemon (Conversation.box). Asking the active one
+// about a session id it never minted is a 404 dressed up as "could not open that conversation".
 const fetchTranscript = async (conversation: Conversation, id: string): Promise<RestoredMessage[] | undefined> => {
     try {
-        const response = await sandboxRequest(`/sessions/${encodeURIComponent(id)}`);
+        const response = await sandboxRequestVia(conversation.box.value, `/sessions/${encodeURIComponent(id)}`);
         if (!response.ok) {
             conversation.error.value = `Could not open that conversation.`;
             return undefined;
@@ -1795,7 +1809,7 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
  * rather than about the network. */
 const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTranscript | undefined> => {
     try {
-        return await agentTranscript(conversation.conversationId);
+        return await agentTranscript(conversation.conversationId, conversation.box.value);
     } catch {
         conversation.error.value = `Could not open that conversation.`;
         return undefined;

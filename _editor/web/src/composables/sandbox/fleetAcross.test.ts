@@ -15,10 +15,11 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 vi.mock("./useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-vi.mock("./sandboxClient", () => ({ sandboxJsonAt: vi.fn() }));
+const sandboxJsonAt = vi.fn();
+vi.mock("./sandboxClient", () => ({ sandboxJsonAt }));
 vi.mock("../queryPersistence", () => ({ queryClient: { setQueryData: vi.fn() } }));
 
-const { boxAttention } = await import("./fleetAcross");
+const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
 type BoxFleet = Parameters<typeof boxAttention>[0];
 
 const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
@@ -73,5 +74,43 @@ describe("what one other box is holding for its owner", () => {
 
     it("says zero, not unknown, for a box that answered with nothing waiting", () => {
         expect(boxAttention(box({ agents: [agent({ updatedAt: 100, seenAt: 500 })] }))).toBe(0);
+    });
+});
+
+/* READING ONE OF THOSE AGENTS FROM HERE. `useAgents.markSeen` writes the roster this browser streams and so is
+ * a no-op for an agent in another box, which was fine while a distant agent could only be looked at on a card
+ * and stopped being fine when a conversation could be held here and run there (Conversation.box): the chat in
+ * front of the user would have gone on counting toward "needs you" for good. */
+describe("marking an agent in another box as read", () => {
+    const roster = (over: Partial<AgentSummary> = {}): { agents: AgentSummary[]; rev: number } => ({
+        agents: [agent({ id: `a1`, updatedAt: 500, seenAt: 100, ...over })],
+        rev: 1,
+    });
+
+    it("stamps this browser's copy and tells that box's own daemon", async () => {
+        sandboxes.value = [
+            { id: `sbx-here`, name: `Desk`, lastSeenAt: `2026-01-01T00:00:00Z` },
+            { id: `sbx-other`, name: `Laptop`, lastSeenAt: `2026-01-01T00:00:00Z` },
+        ];
+        sandboxJsonAt.mockResolvedValue(roster());
+        const release = subscribe();
+        await vi.waitFor(() => expect(otherBoxes.value[0]?.state).toBe(`ready`));
+        expect(boxAttention(otherBoxes.value[0]!)).toBe(1);
+
+        markSeenAcross(`sbx-other`, `a1`);
+
+        // The optimistic half: the next poll is up to 45 seconds out, and a count still lit that long after the
+        // user read the thing is indistinguishable from one that is stuck.
+        expect(boxAttention(otherBoxes.value[0]!)).toBe(0);
+        expect(sandboxJsonAt).toHaveBeenCalledWith(`sbx-other`, `/agents/a1/seen`, { method: `POST` });
+        release();
+    });
+
+    // A box this store has never read has no copy to stamp, and writing to it would be a claim about a roster
+    // nothing here has seen.
+    it("says nothing to a box it has never read", () => {
+        sandboxJsonAt.mockClear();
+        markSeenAcross(`sbx-unknown`, `a1`);
+        expect(sandboxJsonAt).not.toHaveBeenCalled();
     });
 });

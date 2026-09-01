@@ -25,6 +25,7 @@ export type IconName =
     | "bolt"
     | "book"
     | "box"
+    | "boxes"
     | "check"
     | "check-circle"
     | "check-square"
@@ -143,6 +144,11 @@ export const ICONS: Record<IconName, string> = {
     bolt: "ri:flashlight-line",
     book: "ri:book-open-line",
     box: "ri:box-3-line",
+    /* MORE THAN ONE SANDBOX, the plural of `box` above: the stacked sheets read as "several of the same thing"
+     * where `box`'s single crate reads as "the one you are in". Used where a surface is about the account's
+     * boxes rather than this one (the rail's Agents tile while the board reads across, the composer's
+     * placement rows), so the two glyphs answer "here" and "everywhere" as a pair. */
+    boxes: "ri:stack-line",
     check: "ri:check-line",
     "check-circle": "ri:checkbox-circle-line",
     "check-square": "ri:checkbox-line",

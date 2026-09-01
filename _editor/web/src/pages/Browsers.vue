@@ -206,7 +206,9 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
         return;
     }
     const note = helpNote.value.trim();
-    await postTurnControl(`/agent/reply`, { kind: `browser_help`, requestId: help.requestId, helped, ...(note === `` ? {} : { note }) });
+    // `undefined`: this box. A browser session is a property of the machine it runs on and this view only ever
+    // lists the active sandbox's, so the reply goes where the browser is (see postTurnControl).
+    await postTurnControl(undefined, `/agent/reply`, { kind: `browser_help`, requestId: help.requestId, helped, ...(note === `` ? {} : { note }) });
     helpNote.value = ``;
     // Handing back while still driving would leave the owner's keystrokes racing the agent's next move.
     if (helped) {

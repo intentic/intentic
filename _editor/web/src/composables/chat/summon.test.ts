@@ -5,7 +5,18 @@
 // chats is ignored whole.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
+vi.mock("../sandbox/sandboxClient", () => {
+    const sandboxRequest = vi.fn();
+    const sandboxJson = vi.fn();
+    // The reach-aimed pair: `undefined` is the active box, which is every call this suite makes.
+    return {
+        sandboxRequest,
+        sandboxJson,
+        sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
+            init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
+        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) => (init === undefined ? sandboxJson(path) : sandboxJson(path, init)),
+    };
+});
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 vi.mock("../sandbox/useSandbox", async () => {
     const { ref } = await import("vue");

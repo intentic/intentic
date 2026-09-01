@@ -22,12 +22,28 @@ import { usageStatusByAccount } from "./usageStatus";
 // `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
 // sandbox stores sandboxRequest reaches for at import time). It keeps the half this file depends on: the daemon
 // puts its own sentence for a refusal on `message`, and reading it is the whole point of the path below.
-vi.mock("../sandbox/sandboxClient", () => ({
-    sandboxRequest: vi.fn(),
-    sandboxError: async (response: Response) => new Error(((await response.json()) as { message: string }).message),
-}));
+// WHERE each call was aimed, recorded beside WHAT it was: the reach is the one argument that decides which
+// daemon a conversation is talking to, and it is invisible in the path. Hoisted so the mock factory can see it.
+const { reachSpy } = vi.hoisted(() => ({ reachSpy: vi.fn<(at: string | undefined, path: string) => void>() }));
+vi.mock("../sandbox/sandboxClient", () => {
+    const sandboxRequest = vi.fn();
+    return {
+        sandboxRequest,
+        /* The reach-aimed call, on the real client's terms: `undefined` is the active box, which is what all
+         * but the cross-sandbox tests mean. It delegates to the spy above so every existing assertion stays
+         * written against one mock per verb rather than two that would have to agree, and records the reach on
+         * the way through for the ones that are about it. */
+        sandboxRequestVia: (at: string | undefined, path: string, init?: RequestInit) => {
+            reachSpy(at, path);
+            return init === undefined ? sandboxRequest(path) : sandboxRequest(path, init);
+        },
+        sandboxError: async (response: Response) => new Error(((await response.json()) as { message: string }).message),
+    };
+});
 const { sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
+// Every path this conversation addressed at a given box, in order.
+const pathsAimedAt = (at: string | undefined): string[] => reachSpy.mock.calls.filter(([box]) => box === at).map(([, path]) => path);
 
 // A model-invalid error dynamically imports useChat to reload the provider's live catalog; stub it (and spy) so
 // the test doesn't pull in the whole useChat module (router/sandbox side effects). vi.hoisted so the spy exists
@@ -3662,5 +3678,68 @@ describe(`Conversation sent time`, () => {
         ]);
 
         expect(conversation.messages.value.map((message) => message.sentAt)).toEqual([1_767_225_600_000, undefined]);
+    });
+
+    /* A CONVERSATION THAT LIVES IN ANOTHER SANDBOX. One field decides the whole correspondence
+     * (Conversation.box), and the property worth pinning is that NO leg of it is left pointing at the box this
+     * browser happens to be showing: a send that crossed while its attach did not would start a turn nobody
+     * ever sees, and a stop that stayed home would report success over a turn still running.
+     *
+     * Written against the reach rather than the path, because that argument is the entire difference between
+     * the two cases and it is invisible in a URL. */
+    describe(`homed in another sandbox`, () => {
+        const remote = (): Conversation => {
+            const conversation = new Conversation(`c-elsewhere`);
+            conversation.box.value = `sbx-there`;
+            return conversation;
+        };
+
+        it(`starts the turn on that box's daemon and follows the run there`, async () => {
+            const conversation = remote();
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]));
+
+            await conversation.send(`do it over there`, settings);
+
+            expect(pathsAimedAt(`sbx-there`)).toEqual([`/agent`, `/agent/attach`]);
+            expect(pathsAimedAt(undefined)).toEqual([]);
+        });
+
+        /* THE ACK IS ITS REGISTRATION. `registered` normally latches on a roster frame, and this browser
+         * streams one sandbox, so without this the tab would stay a "draft" for good and draw a phantom
+         * New-agent card beside the real one the All-sandboxes read brings back for it. */
+        it(`counts as registered from the daemon's ack, since no roster frame here will ever say so`, async () => {
+            const conversation = remote();
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+
+            expect(conversation.registered.value).toBe(false);
+            await conversation.send(`start`, settings);
+            expect(conversation.registered.value).toBe(true);
+        });
+
+        // …and a conversation in THIS box keeps the roster-frame latch: the ack is not evidence of a registry
+        // entry when there is a stream that says so properly.
+        it(`leaves a local conversation's registration to the roster`, async () => {
+            const conversation = new Conversation(`c-here`);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+
+            await conversation.send(`start`, settings);
+
+            expect(conversation.registered.value).toBe(false);
+            expect(pathsAimedAt(undefined)).toEqual([`/agent`, `/agent/attach`]);
+        });
+
+        // Stop is the side channel, and it has to reach the daemon actually running the turn.
+        it(`stops the turn at the box running it`, async () => {
+            const conversation = remote();
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+
+            const sending = conversation.send(`long one`, settings);
+            await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+            conversation.stop();
+            await sending;
+
+            expect(pathsAimedAt(`sbx-there`)).toContain(`/agent/stop`);
+            expect(pathsAimedAt(undefined)).toEqual([]);
+        });
     });
 });

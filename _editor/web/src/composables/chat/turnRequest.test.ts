@@ -96,6 +96,42 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, settings: { ...settings, tierHold: true } }))).toMatchObject({ tierHold: true });
     });
 
+    /* A TURN ADDRESSED TO ANOTHER SANDBOX MAY NOT NAME THIS ONE'S THINGS. Each of these three is a key in one
+     * daemon's own stores, so carrying them across would pin the turn to a credential, a persona card or a
+     * file path the daemon being asked has never had. The failure they prevent is quiet: the target daemon
+     * would refuse the send (or, for the persona, fail closed and reach no account at all) over settings the
+     * user did not knowingly send anywhere. */
+    it(`sends no account of this box's when the turn runs in another sandbox`, () => {
+        const settingsWithAccount = { ...settings, account: `acct-here` };
+        expect(wire(turnRequestBody({ ...base, settings: settingsWithAccount }))).toMatchObject({ account: `acct-here` });
+        expect(wire(turnRequestBody({ ...base, settings: settingsWithAccount, box: `sbx-there` }))).not.toHaveProperty(`account`);
+    });
+
+    it(`sends no persona and no editor context when the turn runs in another sandbox`, () => {
+        const sent = wire(
+            turnRequestBody({
+                ...base,
+                box: `sbx-there`,
+                settings: { ...settings, actsAs: `work` },
+                editorContext: { file: `src/app.ts` },
+            }),
+        );
+        expect(sent).not.toHaveProperty(`actsAs`);
+        expect(sent).not.toHaveProperty(`editorContext`);
+    });
+
+    // A runner is paired to the sandbox that made it, so its id names nothing in another box. The picker keeps
+    // the two mutually exclusive; this is the wire refusing to carry a pair that should never arrive.
+    it(`drops a runner placement when the turn runs in another sandbox`, () => {
+        expect(wire(turnRequestBody({ ...base, runner: `rig`, box: `sbx-there` }))).not.toHaveProperty(`placement`);
+    });
+
+    // What DOES cross: the model belongs to the provider rather than to a box, and the target daemon resolves
+    // it against its own catalog. A remote turn that lost its model would silently run on another one.
+    it(`still names the provider and model when the turn runs in another sandbox`, () => {
+        expect(wire(turnRequestBody({ ...base, box: `sbx-there` }))).toMatchObject({ agent: `claude`, model: `opus` });
+    });
+
     it(`omits an absent title, attachments and editor context rather than sending empties`, () => {
         const bare = wire(turnRequestBody(base));
         expect(bare).not.toHaveProperty(`title`);

@@ -1,6 +1,6 @@
 import type { AgentHarness, AgentProvider, RestoredMessage } from "@intentic/sandbox-contract";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
-import { sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxRequestVia } from "../sandbox/sandboxClient";
 import { supportsRoute } from "../sandbox/useDaemonRoutes";
 import { AGENTS } from "../queryKeys";
 import type { SessionRef } from "./turnRequest";
@@ -37,14 +37,22 @@ import type { SessionRef } from "./turnRequest";
  * all of it. */
 export type AgentTranscript = { readonly session?: SessionRef; readonly messages: RestoredMessage[] } | "gone";
 
-export const agentTranscriptKey = (conversationId: string): unknown[] => [...AGENTS.of(conversationId, `transcript`), UNPERSISTED];
+/* `at` is the box holding the conversation, undefined for the active one, and it belongs in the KEY as much as
+ * in the request: two sandboxes can hold one conversation id (a workspace cloned onto a second machine, a
+ * conversation resumed there), so identity here is (id, sandbox) like everywhere else that decides an action.
+ * `ofSandbox` puts the id in the same last position `of` appends the active one to, which is what keeps these
+ * entries inside the per-sandbox sweep rather than beside it. */
+export const agentTranscriptKey = (conversationId: string, at?: string): unknown[] => [
+    ...(at === undefined ? AGENTS.of(conversationId, `transcript`) : AGENTS.ofSandbox(at, conversationId, `transcript`)),
+    UNPERSISTED,
+];
 
 // A turn is what makes a transcript wrong, see the header. Called wherever the daemon reports one settled.
-export const invalidateAgentTranscript = (conversationId: string): void =>
-    void queryClient.invalidateQueries({ queryKey: agentTranscriptKey(conversationId) });
+export const invalidateAgentTranscript = (conversationId: string, at?: string): void =>
+    void queryClient.invalidateQueries({ queryKey: agentTranscriptKey(conversationId, at) });
 
-const read = async (conversationId: string): Promise<AgentTranscript> => {
-    const response = await sandboxRequest(`/agents/${encodeURIComponent(conversationId)}/transcript`);
+const read = async (conversationId: string, at: string | undefined): Promise<AgentTranscript> => {
+    const response = await sandboxRequestVia(at, `/agents/${encodeURIComponent(conversationId)}/transcript`);
     /* The 404 is only believed when the daemon ADVERTISES this route. A daemon older than this browser answers
      * 404 for a route it simply doesn't have (see useDaemonRoutes), and reading that as "your agent is gone"
      * would unregister every open agent tab in the app against a sandbox that is merely behind. */
@@ -83,9 +91,9 @@ const TRANSCRIPT_GC_MS = 30 * 60 * 1000;
  * the QUERY rather than a function that fetches it. A wish that carries a key and a separate "how to read it" is
  * a wish whose two halves can disagree about where the answer lands, which is exactly how the loader once ended
  * up re-reading one thing forever (composables/prefetch/warmQuery). */
-export const agentTranscriptQuery = (conversationId: string) => ({
-    queryKey: agentTranscriptKey(conversationId),
-    queryFn: () => read(conversationId),
+export const agentTranscriptQuery = (conversationId: string, at?: string) => ({
+    queryKey: agentTranscriptKey(conversationId, at),
+    queryFn: () => read(conversationId, at),
     staleTime: Infinity,
     gcTime: TRANSCRIPT_GC_MS,
     // No retry, for the same reason the file diffs don't: a daemon hiccup during a read-ahead would turn one
@@ -94,4 +102,5 @@ export const agentTranscriptQuery = (conversationId: string) => ({
     retry: false as const,
 });
 
-export const agentTranscript = (conversationId: string): Promise<AgentTranscript> => queryClient.fetchQuery(agentTranscriptQuery(conversationId));
+export const agentTranscript = (conversationId: string, at?: string): Promise<AgentTranscript> =>
+    queryClient.fetchQuery(agentTranscriptQuery(conversationId, at));

@@ -16,12 +16,16 @@ vi.mock("../sandbox/useSandbox", () => ({ useSandbox: () => ({ sandboxes, active
 // fleetAcross's own business and is tested there.
 const otherBoxes = ref<unknown[]>([]);
 const silentBoxes = ref<unknown[]>([]);
-vi.mock("../sandbox/fleetAcross", () => ({ otherBoxes, silentBoxes, subscribe: vi.fn(), refreshAcross: vi.fn() }));
+// `boxAttention` is the store's own per-box reading, stubbed to the two answers it can give: a number, or
+// undefined for a box that has never answered (the case the sum below must not turn into a zero).
+const boxAttention = (box: { attention?: number }): number | undefined => box.attention;
+vi.mock("../sandbox/fleetAcross", () => ({ otherBoxes, silentBoxes, boxAttention, subscribe: vi.fn(), refreshAcross: vi.fn() }));
 
 const landOnAfterSwitch = vi.fn();
 vi.mock("../sandbox/sandboxScreen", () => ({ landOnAfterSwitch }));
 
-const { boxNameOf, isRemote, openInSandbox, otherFleet, partialAnswer, fleetScope, readingAcross, scopeOffered } = await import("./fleetScope");
+const { acrossAttention, boxNameOf, isRemote, openInSandbox, otherFleet, partialAnswer, fleetScope, readingAcross, scopeOffered } =
+    await import("./fleetScope");
 
 const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
 const agent = (over: Partial<AgentSummary>): AgentSummary =>
@@ -143,6 +147,21 @@ describe("what the board says when its answer is partial", () => {
         silentBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, []), boxOf(`sbx-pi`, `Pi`, [])];
         expect(partialAnswer.value).toContain(`Laptop`);
         expect(partialAnswer.value).toContain(`Pi`);
+    });
+});
+
+describe("how much the other boxes are owed", () => {
+    it("adds up what every other box says it needs", () => {
+        otherBoxes.value = [{ ...(boxOf(`sbx-laptop`, `Laptop`, []) as object), attention: 2 }, { ...(boxOf(`sbx-pi`, `Pi`, []) as object), attention: 3 }];
+        expect(acrossAttention.value).toBe(5);
+    });
+
+    /* A BOX THAT HAS NEVER ANSWERED CONTRIBUTES NOTHING AND BLOCKS NOTHING. The switcher can draw a dash on its
+     * row because it has a row per box; a badge has one digit, so the unknown is told beside it in words
+     * (agentsTile.scopeNote) rather than being smuggled into the number or suppressing it. */
+    it("skips a box that has never answered rather than counting it as zero or giving up", () => {
+        otherBoxes.value = [{ ...(boxOf(`sbx-laptop`, `Laptop`, []) as object), attention: 2 }, { ...(boxOf(`sbx-pi`, `Pi`, []) as object), attention: undefined }];
+        expect(acrossAttention.value).toBe(2);
     });
 });
 

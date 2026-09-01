@@ -83,6 +83,21 @@ export const turnRequestBody = (input: {
     // The runner this conversation executes on, on its FIRST turn; absent = this sandbox. The daemon latches
     // it with the conversation's identity, so later turns need not (and cannot usefully) repeat it.
     readonly runner?: string | undefined;
+    /* WHICH SANDBOX IS BEING ASKED, which is not a field on the wire at all: it is the ADDRESS this body is
+     * posted to (Conversation.box → sandboxRequestVia). It is here because three of the fields below name
+     * things that exist in ONE daemon's stores, and a body assembled for another box must not carry them:
+     *
+     *   `account`   an account id is a key in the box's own credential store. Omitted, which already means
+     *               "the daemon picks its first account for this provider", so the turn runs on the target
+     *               box's own credentials, the only ones it has.
+     *   `actsAs`    a persona is a card in the box's record. A named card that cannot be found is the one case
+     *               the daemon answers with nothing at all, so the remote turn is an ordinary attended chat.
+     *   `editorContext` the file open in THIS workspace's editor, at a path the other box has no reason to have.
+     *
+     * The model and provider DO cross, deliberately: a model id belongs to the provider, not to the box, and
+     * the target daemon resolves it against its own catalog (or refuses at the door, in a sentence the composer
+     * shows). `runner` is dropped for the same reason as `account`: runners are paired to one sandbox. */
+    readonly box?: string | undefined;
     readonly mode: PermissionMode;
     readonly settings: TurnSettings;
     // The session this turn resumes, when the selection still matches the runtime/account that minted it.
@@ -94,46 +109,54 @@ export const turnRequestBody = (input: {
     // Uploaded attachments plus @-mentioned workspace paths, the daemon resolves both the same way.
     readonly attachmentPaths: readonly string[];
     readonly editorContext: EditorContext | undefined;
-}) => ({
-    prompt: input.text,
-    // The display title (derived at send or user-chosen) seeds a fresh registry entry, so a renamed draft
-    // keeps its title through its first turn; existing entries keep theirs.
-    ...(input.title !== null ? { title: input.title } : {}),
-    ...(input.attachmentPaths.length > 0 ? { attachments: input.attachmentPaths } : {}),
-    agent: input.settings.agent,
-    // The stable conversation identity + the worktree opt-in: an isolated turn runs in this conversation's
-    // own git worktree (branch agent/<conversationId>) instead of /work.
-    conversationId: input.conversationId,
-    ...(input.isolated ? { isolated: true } : {}),
-    // Where it runs. Omitted for this sandbox, which is what every conversation that never touches the
-    // placement picker sends, so the ordinary chat's request is byte-for-byte what it always was.
-    ...(input.runner !== undefined ? { placement: { kind: `runner` as const, id: input.runner } } : {}),
-    // `native` is the daemon's default, so only `claude-code` rides the wire, that's what routes codex/grok
-    // through the translator under the Claude Code loop.
-    ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),
-    // Which connected account of the provider serves the turn; omitted ⇒ the daemon picks the first.
-    account: input.settings.account,
-    // The persona this turn wears. Omitted when none is picked, which for an attended chat means "every
-    // connected account", sending an empty string instead would name a card that does not exist, and a named
-    // card that cannot be found is the one case the daemon answers with nothing at all.
-    ...(input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
-    sessionId: input.resume?.id,
-    ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
-    // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then resolves the
-    // provider's live catalog default server-side.
-    model: input.settings.model || undefined,
-    effort: input.settings.effort,
-    thinking: input.settings.thinking,
-    // Sent only when asked for. `false` and "not asked" mean the same thing to the daemon, and omitting keeps
-    // the body honest about which turns actually reached for a paid speed-up.
-    ...(input.settings.fast ? { fast: true } : {}),
-    // Always sent, unlike `fast`: false and "not asked" mean DIFFERENT things here, because the daemon keeps
-    // the hold on the conversation's entry and an omitted field would leave yesterday's veto standing.
-    tierHold: input.settings.tierHold,
-    // The turn's STARTING permission posture. The daemon hands it straight to the SDK, so all four modes are
-    // real: 'plan' proposes-then-executes, 'default' prompts per tool on the permission card, 'acceptEdits'
-    // auto-accepts edits, 'bypassPermissions' asks nothing.
-    permissionMode: input.mode,
-    // The opt-in editor-context chip: the file (and selection) the user chose to attach.
-    ...(input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
-});
+}) => {
+    // Everything a conversation homed in another sandbox may not say about this one, in one place, so a field
+    // added below cannot quietly start crossing (see `box` above).
+    const here = input.box === undefined;
+    return {
+        prompt: input.text,
+        // The display title (derived at send or user-chosen) seeds a fresh registry entry, so a renamed draft
+        // keeps its title through its first turn; existing entries keep theirs.
+        ...(input.title !== null ? { title: input.title } : {}),
+        ...(input.attachmentPaths.length > 0 ? { attachments: input.attachmentPaths } : {}),
+        agent: input.settings.agent,
+        // The stable conversation identity + the worktree opt-in: an isolated turn runs in this conversation's
+        // own git worktree (branch agent/<conversationId>) instead of /work.
+        conversationId: input.conversationId,
+        ...(input.isolated ? { isolated: true } : {}),
+        // Where it runs. Omitted for this sandbox, which is what every conversation that never touches the
+        // placement picker sends, so the ordinary chat's request is byte-for-byte what it always was. A runner
+        // is one sandbox's paired machine, so it never rides a body addressed to another box.
+        ...(here && input.runner !== undefined ? { placement: { kind: `runner` as const, id: input.runner } } : {}),
+        // `native` is the daemon's default, so only `claude-code` rides the wire, that's what routes codex/grok
+        // through the translator under the Claude Code loop.
+        ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),
+        // Which connected account of the provider serves the turn; omitted ⇒ the daemon picks the first, which
+        // is also the only honest answer when the daemon being asked is not the one holding this selection.
+        account: here ? input.settings.account : undefined,
+        // The persona this turn wears. Omitted when none is picked, which for an attended chat means "every
+        // connected account", sending an empty string instead would name a card that does not exist, and a named
+        // card that cannot be found is the one case the daemon answers with nothing at all.
+        ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
+        sessionId: input.resume?.id,
+        ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
+        // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then resolves the
+        // provider's live catalog default server-side.
+        model: input.settings.model || undefined,
+        effort: input.settings.effort,
+        thinking: input.settings.thinking,
+        // Sent only when asked for. `false` and "not asked" mean the same thing to the daemon, and omitting keeps
+        // the body honest about which turns actually reached for a paid speed-up.
+        ...(input.settings.fast ? { fast: true } : {}),
+        // Always sent, unlike `fast`: false and "not asked" mean DIFFERENT things here, because the daemon keeps
+        // the hold on the conversation's entry and an omitted field would leave yesterday's veto standing.
+        tierHold: input.settings.tierHold,
+        // The turn's STARTING permission posture. The daemon hands it straight to the SDK, so all four modes are
+        // real: 'plan' proposes-then-executes, 'default' prompts per tool on the permission card, 'acceptEdits'
+        // auto-accepts edits, 'bypassPermissions' asks nothing.
+        permissionMode: input.mode,
+        // The opt-in editor-context chip: the file (and selection) the user chose to attach, which is a path in
+        // THIS workspace and so stays here.
+        ...(here && input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
+    };
+};

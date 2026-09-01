@@ -2,6 +2,7 @@
 import { useDevice } from "@intentic/ui";
 import { defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { watchAgentsScope } from "../composables/agents/agentsTile";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "../composables/mainWindow";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
@@ -25,6 +26,11 @@ const ShellMobile = defineAsyncComponent(() => import("./ShellMobile.vue"));
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
 useExtensionHost();
+/* Keep the other sandboxes' fleets live while the board's scope is wide, because from here on the Agents
+ * badge is about them too (composables/agents/agentsTile.ts). Device-independent by nature, both chromes draw
+ * that badge, so one subscription here rather than one per shell: the rail and the tab bar would otherwise
+ * start and stop the same poll as the viewport crossed the breakpoint. */
+watchAgentsScope();
 // Pull every view's chunk in the background once the shell is up (idempotent; see router/prefetch.ts): the
 // half of "navigation never waits" that makes the outlines a cold-network-only sight.
 onMounted(prefetchViewsAtIdle);

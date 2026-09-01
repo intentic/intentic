@@ -4,7 +4,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { useAgents } from "../composables/agents/useAgents";
+import { agentsBadge, agentsScopeNote } from "../composables/agents/agentsTile";
 import { useDraftsTile } from "./mobileTabs";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { pushBadge } from "../composables/workspace/pushBadge";
@@ -37,9 +37,11 @@ interface Tab {
      * matching alone lit both of them at once and neither tab answered "where am I". Absent on a tab whose
      * path is its own. */
     readonly panel?: "files" | "changes";
+    // A standing fact about what the tab is currently ABOUT, drawn as a corner glyph and spelled out in the
+    // tab's label: the desktop rail's AreaTile.note, on a bar that badges by exactly the same rules.
+    readonly note?: { readonly icon: IconName; readonly text: string };
 }
 
-const { attention } = useAgents();
 const changes = useChanges();
 const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
@@ -81,9 +83,10 @@ const tabs = computed<readonly Tab[]>(() => [
         to: `/agents`,
         label: `Agents`,
         icon: `robot`,
-        ...(attention.value > 0
-            ? { badge: { count: attention.value, tooltip: `${attention.value} need${attention.value === 1 ? `s` : ``} you` } }
-            : {}),
+        // The desktop rail's tile, on a phone: one derivation (agentsTile.ts) for both, so a count that follows
+        // the board's scope cannot follow it in one shell and not the other.
+        ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
+        ...(agentsScopeNote.value === undefined ? {} : { note: { icon: `boxes` as IconName, text: agentsScopeNote.value } }),
     },
     { to: `/workspace`, label: `Files`, icon: `file-tree`, panel: `files` },
     {
@@ -99,9 +102,10 @@ const tabs = computed<readonly Tab[]>(() => [
     { to: `/menu`, label: `Menu`, icon: `bars`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);
 
-// ONE label per tab, badge included: the rail's tileLabel rule. A badge is a glyph or a bare number, so the
-// sentence saying what it counts has nowhere else to go on a form factor with no hover.
-const tabLabel = (tab: Tab): string => (tab.badge?.tooltip === undefined ? tab.label : `${tab.label} · ${tab.badge.tooltip}`);
+// ONE label per tab, badge and note included: the rail's tileLabel rule, in the order it uses (news, then the
+// standing fact). A badge is a glyph or a bare number and the note is a 10px glyph, so on a form factor with no
+// hover this label is the ONLY place either of them is written out, which is what a screen reader gets.
+const tabLabel = (tab: Tab): string => [tab.label, tab.badge?.tooltip, tab.note?.text].filter((part) => part !== undefined).join(` · `);
 
 const route = useRoute();
 /* A tab is active for its route AND any sub-path (a file open on /workspace): `active-class` compares params
@@ -145,6 +149,11 @@ const isNavActive = (tab: Tab): boolean => {
                 >
                     <Icon v-if="tab.badge.mark !== undefined" :name="tab.badge.mark as IconName" />
                     <template v-else>{{ badgeText(tab.badge) }}</template>
+                </span>
+                <!-- The standing note, in the corner the badge does not use and in the muted ink: same rule as
+                     the rail's tile, same reason it is aria-hidden (the label above already carries it). -->
+                <span v-if="tab.note" class="absolute -bottom-1 -left-2 flex leading-none text-subtle" aria-hidden="true">
+                    <Icon :name="tab.note.icon" class="text-[0.6rem]" />
                 </span>
             </span>
             <span class="text-2xs font-medium">{{ tab.label }}</span>
