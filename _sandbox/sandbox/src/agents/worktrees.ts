@@ -281,11 +281,32 @@ export const createAgentWorktrees = (
      * seventeen of eighteen worktrees with the state dir fully live in `git status`; an agent's in-flight edit
      * to a workspace extension was swept into a different conversation's land, on main, under a subject about
      * something else. Reading the file costs the same single spawn and cannot be answered by a sibling.
+     *
+     * THE PATTERN ALONE IS NOT ENOUGH, and the third incident is the mirror image of the first. Inside the
+     * agent's namespace the excluded path is NOT empty: the bind puts main's live state dir there, so every
+     * versioned entry git believes it left out of the checkout is, as far as git can see, present. Git treats a
+     * present-but-skipped file as the user having put it back, and a plain `git status` clears its
+     * skip-worktree bit. From then on the entry is an ordinary tracked file that the pattern says should NOT be
+     * on disk, and the next tree reset — `reset --hard`, `stash`, `rebase --autostash`, `rebase --abort`, all
+     * of them ordinary moves for an agent told to rebase — re-applies the pattern by UNLINKING it. Through the
+     * bind, that unlink lands on main's file: fourteen config files gone from the workspace, deleted by no land
+     * and so attributed to nobody, which the Changes panel renders as the user's own doing. A rebase that
+     * brings a NEW versioned entry down from main takes the same road without the status step: git leaves it
+     * checked-in-but-present ("left despite sparse patterns") and the reset that follows removes it.
+     *
+     * `sparse.expectFilesOutsideOfPatterns` is git's own switch for exactly this shape: files outside the
+     * patterns are expected to be present, so the bit is never cleared, a new entry arrives skipped, and no
+     * reset has anything to remove. The flag is repo config, shared like `core.sparseCheckout`, and set beside
+     * it. The marker line in the pattern file is what carries the change to worktrees that converged before
+     * it existed: the guard compares the whole text, so a pattern from before the flag is re-converged once,
+     * and the `read-tree -mu HEAD` that follows (run outside the namespace, where the path really is empty)
+     * puts the bit back on any entry a status inside the namespace has already stripped.
      */
     const excludeSharedState = async (dir: string): Promise<void> => {
         // Everything at the root, then the one exclusion. `--no-cone` spelling: cone mode takes directories to
-        // KEEP and cannot express "all of it except this".
-        const pattern = `/*\n!/${STATE_DIR}/\n`;
+        // KEEP and cannot express "all of it except this". The comment line is the convergence marker (see
+        // the header): bump it whenever what this function writes beside the pattern changes.
+        const pattern = `# intentic: shared state dir, present through the bind\n/*\n!/${STATE_DIR}/\n`;
         const printed = (await git(dir, ["rev-parse", "--git-path", "info/sparse-checkout"])).stdout.trim();
         const target = isAbsolute(printed) ? printed : join(dir, printed);
         if ((await readFile(target, "utf8").catch(() => undefined)) === pattern) {
@@ -295,8 +316,12 @@ export const createAgentWorktrees = (
         await writeFile(target, pattern);
         try {
             await git(dir, ["config", "core.sparseCheckout", "true"]);
+            // The bind makes every skipped entry look present from inside the namespace; this tells git that
+            // is expected, so it neither un-skips them on a status nor unlinks them on a reset (see header).
+            await git(dir, ["config", "sparse.expectFilesOutsideOfPatterns", "true"]);
             // Applies the pattern to the checkout that is already on disk: the state dir's files leave the
-            // worktree and their index entries take git's skip-worktree bit.
+            // worktree and their index entries take git's skip-worktree bit. Outside the namespace, so a
+            // re-converge over an entry a status inside it has un-skipped finds nothing on disk to remove.
             await git(dir, ["read-tree", "-mu", "HEAD"]);
         } catch (error) {
             /* The pattern file is now the convergence marker, so a half-applied state must not leave one
@@ -335,9 +360,7 @@ export const createAgentWorktrees = (
             // Ahead of the early return: a healthy worktree is exactly the one that still needs converging, and
             // this is the only line every turn of every existing conversation passes through.
             if (repo === "root") {
-                await excludeSharedState(target).catch((error: unknown) =>
-                    logger.warn({ err: error, repo }, "agents: state-dir exclusion failed"),
-                );
+                await excludeSharedState(target).catch((error: unknown) => logger.warn({ err: error, repo }, "agents: state-dir exclusion failed"));
             }
             return;
         }
@@ -363,9 +386,7 @@ export const createAgentWorktrees = (
         }
         // A restored checkout is a fresh one as far as the state dir goes: `worktree add` writes the whole tree.
         if (repo === "root") {
-            await excludeSharedState(target).catch((error: unknown) =>
-                logger.warn({ err: error, repo }, "agents: state-dir exclusion failed"),
-            );
+            await excludeSharedState(target).catch((error: unknown) => logger.warn({ err: error, repo }, "agents: state-dir exclusion failed"));
         }
     };
 

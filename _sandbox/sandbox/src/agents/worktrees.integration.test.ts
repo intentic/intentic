@@ -575,3 +575,76 @@ test("a second conversation's worktree excludes the state dir too, though the fi
         expect(await sh(cwd, "status", "--short")).toBe("");
     }
 });
+
+/* THE UNLINK THROUGH THE BIND (worktrees.ts excludeSharedState, third incident).
+ *
+ * Inside the namespace the excluded path is main's live state dir, so every skipped entry is present as far as
+ * git can see. Without `sparse.expectFilesOutsideOfPatterns` a `git status` reads that as "the user put it
+ * back" and clears the skip-worktree bit, and the next tree reset re-applies the pattern by unlinking the file —
+ * main's file. The bind is simulated by writing the tracked content at the worktree's own state path, which is
+ * the same view git gets in production.
+ */
+const commitConfig = async (work: string, content: string, message: string): Promise<void> => {
+    await mkdir(join(work, ".intentic", "config"), { recursive: true });
+    await writeFile(join(work, ".intentic", "config", "settings.json"), content);
+    await sh(work, "add", "-A", "--force", ".intentic/config/settings.json");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
+};
+
+test("a versioned entry present through the bind survives a status and every kind of tree reset", async () => {
+    const { work, worktrees } = await setup();
+    await commitConfig(work, '{"model":"v1"}\n', "config v1");
+    const conversation = await worktrees.ensure("c1", []);
+    const bound = join(conversation.cwd, ".intentic", "config");
+    await mkdir(bound, { recursive: true });
+    await writeFile(join(bound, "settings.json"), '{"model":"v1"}\n');
+    await writeFile(join(bound, "draft.json"), "an unversioned file the agent wrote\n");
+
+    // The status that used to strip the bit.
+    await sh(conversation.cwd, "status", "--short");
+    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
+    // The resets that used to unlink. Each is an ordinary move for an agent told to rebase.
+    await sh(conversation.cwd, "reset", "--hard", "HEAD");
+    // A stash needs something of its own to save; the state dir must ride through untouched either way.
+    await writeFile(join(conversation.cwd, "CLAUDE.md"), "edited\n");
+    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "stash", "-u");
+    await sh(conversation.cwd, "stash", "pop");
+    expect(await readFile(join(bound, "settings.json"), "utf8")).toBe('{"model":"v1"}\n');
+    expect(existsSync(join(bound, "draft.json"))).toBe(true);
+    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
+});
+
+// The road without the status step: a rebase bringing a NEW versioned entry down from main used to leave it
+// checked in but present ("left despite sparse patterns"), and the reset after it removed the file.
+test("a versioned entry a rebase brings down from main arrives skipped: the reset after it removes nothing", async () => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    await commitConfig(work, '{"model":"v1"}\n', "config v1");
+    const bound = join(conversation.cwd, ".intentic", "config");
+    await mkdir(bound, { recursive: true });
+    await writeFile(join(bound, "settings.json"), '{"model":"v1"}\n');
+
+    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "main");
+    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
+    await sh(conversation.cwd, "reset", "--hard", "HEAD");
+    expect(await readFile(join(bound, "settings.json"), "utf8")).toBe('{"model":"v1"}\n');
+});
+
+// A worktree converged before the flag existed carries the old pattern text; the guard compares the whole file,
+// so the next turn re-converges it: flag set, and a bit an earlier status stripped is put back.
+test("a worktree from before the flag is re-converged on its next turn", async () => {
+    const { work, worktrees } = await setup();
+    await commitConfig(work, '{"model":"v1"}\n', "config v1");
+    const conversation = await worktrees.ensure("c1", []);
+    const patternFile = await sh(conversation.cwd, "rev-parse", "--git-path", "info/sparse-checkout");
+    await writeFile(patternFile, "/*\n!/.intentic/\n");
+    await sh(conversation.cwd, "config", "--unset", "sparse.expectFilesOutsideOfPatterns");
+    await sh(conversation.cwd, "update-index", "--no-skip-worktree", ".intentic/config/settings.json");
+
+    await worktrees.ensure("c1", conversation.repos);
+
+    expect(await sh(conversation.cwd, "config", "--get", "sparse.expectFilesOutsideOfPatterns")).toBe("true");
+    expect(await readFile(patternFile, "utf8")).toContain("!/.intentic/\n");
+    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
+    expect(await sh(conversation.cwd, "status", "--short")).toBe("");
+});

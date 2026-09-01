@@ -376,3 +376,14 @@ test("the claim expires when the user commits: a file that goes dirty again is t
     await writeFile(join(work, "app.ts"), `${edited(1)}mine\n`);
     expect(await origins.forRepo("root", work)).toEqual({});
 });
+
+// A deletion is a row like any other: the agent that removed the file owns the `D` the panel shows, and the
+// span read with `--name-only` names a deleted path exactly as it names an added one.
+test("a file the agent DELETED is credited to the agent", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await rm(join(conversation.cwd, "other.ts"));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(await sh(work, "status", "--porcelain")).toContain("D other.ts");
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)));
+    expect(await origins.forRepo("root", work)).toEqual({ "other.ts": ["c1"] });
+});
