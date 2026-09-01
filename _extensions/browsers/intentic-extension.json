@@ -36,7 +36,7 @@
                 "install": "https://microsoftedge.microsoft.com/addons/detail/intentic",
                 "catalog": {
                     "name": "Your Edge",
-                    "logo": "microsoftedge",
+                    "icon": "globe",
                     "description": "Your own Edge, on the sites you allow, while you watch.",
                     "category": "machines",
                     "hint": "The same connector as Chrome — Edge is Chromium, and the extension is the same one. Worth its own card when Edge is where the work accounts are signed in.",
