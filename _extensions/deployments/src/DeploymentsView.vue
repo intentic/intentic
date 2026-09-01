@@ -263,7 +263,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
          page and the content is in a different scrollport, and the reader's place is lost on every remount.
          AcceptanceView and AutomationsView are the same shape and were already written this way. -->
     <Page width="wide">
-        <PageHeader title="Deployments" description="Container health, incidents and one-click redeploys across your Komodo.">
+        <PageHeader title="Deployments">
             <template #actions>
                 <PageAction v-if="stacksUrl !== undefined" icon="box" label="Open Komodo stacks" :href="stacksUrl" />
             </template>

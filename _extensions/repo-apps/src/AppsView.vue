@@ -82,9 +82,6 @@ const kindOf = (kind: string | undefined): AppKind => {
 const appRows = computed(() => apps.value.map((app) => ({ ...app, badge: kindOf(app.kind) })));
 
 const headerTitle = computed(() => (props.monorepo ? `Apps` : `Tests`));
-const headerDescription = computed(() =>
-    props.monorepo ? `Start your apps, open a live preview, and run their tests.` : `Run this repo's vitest suites.`,
-);
 
 // Vitest projects split into: this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
 const grouped = computed(() =>
@@ -220,7 +217,7 @@ onMounted(async () => {
     <div class="flex h-full min-h-0 flex-col">
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
             <Page width="wide">
-                <PageHeader :title="headerTitle" :description="headerDescription">
+                <PageHeader :title="headerTitle">
                     <template #actions>
                         <template v-if="monorepo">
                             <PageAction v-if="stopped.length > 0" icon="play" label="Start all" primary :disabled="busy" @click="startAll" />

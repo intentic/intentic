@@ -326,10 +326,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
     <WorkflowRunPage v-else-if="watching" :key="watching.runId" :run="watching" @close="backToList()" />
 
     <Page v-else width="wide">
-        <PageHeader
-            title="Workflows"
-            description="Shapes you point at a job: a run of agent sessions handing results down the line, or one session repeating until a bar is cleared."
-        >
+        <PageHeader title="Workflows">
             <template #actions>
                 <!-- Two kinds of design, two ways in. The loop is the secondary one because it is the smaller
                      idea, not the lesser one: a workflow is what most people come here for, and a loop is what

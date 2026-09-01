@@ -11,7 +11,7 @@ import InfraDeclare from "./InfraDeclare.vue";
 <template>
     <div class="scrollbar-thin h-full min-h-0 overflow-auto">
         <Page width="wide">
-            <PageHeader title="Infrastructure" description="Run your own services on your own server." />
+            <PageHeader title="Infrastructure" />
             <InfraDeclare />
         </Page>
     </div>

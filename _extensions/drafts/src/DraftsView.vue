@@ -378,11 +378,6 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
         title="Drafts"
         scroll="page"
         :scroll-key="railScope"
-        :description="
-            activeScope.key === ``
-                ? `Posts your agent prepared for you to approve.`
-                : `${activeScope.label} posts your agent prepared for you to approve.`
-        "
     >
         <!-- Whole-page banners: the countdown speaks for every platform, and a file that could not be parsed
              has no platform to be filed under. Both belong above the split rather than inside the slice. -->

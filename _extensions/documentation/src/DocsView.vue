@@ -196,7 +196,6 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
         title="Documentation"
         scroll="page"
         :scroll-key="`${repo}/${page ?? ``}`"
-        :description="`Plain-language orientation for ${label}, written by agents and reviewed by you.`"
         mobile="swap"
         :detail-open="page !== undefined"
     >

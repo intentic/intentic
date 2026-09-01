@@ -102,7 +102,7 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
     <!-- `scroll="page"`: a feed, so the page scrolls it. There is no rail on this screen at all, which makes the
          clamp even harder to defend — it was a scrollbar inside a card inside a page, in aid of keeping an index
          on screen that does not exist here. -->
-    <SplitView title="Issues" scroll="page" description="Bugs your own users hit, grouped so one crash is one row however many people it reached.">
+    <SplitView title="Issues" scroll="page">
         <!-- Above the split rather than inside it: a failure to read the inbox is not about any one row. -->
         <template #strips>
             <NoticeStack :of="[actionError, listNotice]" />

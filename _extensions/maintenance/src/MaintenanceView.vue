@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CHORE_KINDS, CHORES, type ChoreVerdict, repoLabel, repoName } from "@intentic/sandbox-contract/chores";
+import { CHORE_KINDS, CHORES, type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
 import {
     Button,
     Notice,
@@ -270,7 +270,6 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
         title="Maintenance"
         scroll="page"
         :scroll-key="`${repo ?? ``}/${filter}`"
-        :description="`What ${repo === undefined ? `this workspace` : repoLabel(repo)} is owed, what measured it, and what has already been done about it.`"
     >
         <template #actions>
             <SegmentedControl

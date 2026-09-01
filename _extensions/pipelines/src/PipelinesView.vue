@@ -226,7 +226,6 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         title="Pipelines"
         scroll="page"
         :scroll-key="scopeRepo"
-        :description="scope === undefined ? `CI runs on your workspace repos' GitHub and GitLab remotes.` : `CI runs on ${scope.repo.project}.`"
     >
         <template #actions>
             <!-- Only where there is a choice to make: over one repository this would be a control pointing at the

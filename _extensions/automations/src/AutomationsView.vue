@@ -252,7 +252,7 @@ const toggleDetail = (id: string): void => {
 
 <template>
     <Page width="wide">
-        <PageHeader title="Automations" description="Wake your agent on a schedule, a webhook, a live provider event, or your fleet's own work.">
+        <PageHeader title="Automations">
             <template #actions>
                 <PageAction icon="plus" label="New automation" primary @click="createOpen = true" />
             </template>

@@ -106,7 +106,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 <template>
     <div class="scrollbar-thin h-full min-h-0 overflow-auto">
         <Page width="full">
-            <PageHeader title="Live status" description="The realized state of your infrastructure: planned resources and live deployments.">
+            <PageHeader title="Live status">
                 <template #info>
                     <InfoHint label="Live status">
                         <span class="block text-sm font-medium text-content">Live status</span>

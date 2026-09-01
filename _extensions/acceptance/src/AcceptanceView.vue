@@ -381,10 +381,7 @@ const run = async (model: PickedModel): Promise<void> =>
          the bottom of the viewport while the list scrolls under it (RunControls), so it stays reachable without
          a docked bar and without crowding the header. -->
     <Page width="wide">
-        <PageHeader
-            title="Acceptance"
-            description="User stories and their acceptance criteria, walked through the running app by agents driving browsers."
-        >
+        <PageHeader title="Acceptance">
             <template #actions>
                 <!-- One Refresh for the whole page. The dev-server states are as re-readable as the stories
                      are, and a panel started from Preview while this was open is exactly the staleness someone
