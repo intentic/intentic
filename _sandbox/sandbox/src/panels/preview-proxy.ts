@@ -1,6 +1,6 @@
 import http from "node:http";
 import https from "node:https";
-import { panelFromHost, portSlotFromHost, publicSlotFromHost } from "@intentic/sandbox-contract";
+import { panelFromHost, portSlotFromHost, publicSlotFromHost, sandboxSubdomain } from "@intentic/sandbox-contract";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PublicHandler } from "../public/public-serve.js";
 import { escapeHtml, interstitial, type Refusal } from "./interstitial.js";
@@ -34,6 +34,15 @@ export interface PreviewProxyDeps {
     readonly slotTargetOf: SlotResolver;
     readonly sandboxId?: string | undefined;
     readonly outbox?: { readonly slot: string; readonly serve: PublicHandler } | undefined;
+    /* The daemon's own port, which makes this proxy the container's single front door.
+     *
+     * The ingress carries EVERY hostname this sandbox answers to — its daemon address and all its preview,
+     * port and outbox addresses — down one tunnel, and that tunnel forwards to one port. Something inside the
+     * container has to tell them apart by Host, and this proxy is already the thing that reads the Host to do
+     * exactly that, so the daemon becomes one more upstream behind it rather than a second door needing a
+     * second dispatcher. Undefined ⇒ nothing routes to the daemon here (the loopback lanes, where the browser
+     * reaches the daemon's port directly and this proxy only ever sees previews). */
+    readonly daemonPort?: number | undefined;
 }
 
 // What one request resolves to: an upstream to dial, the outbox's static handler, the proxy's own probe, or a
@@ -76,60 +85,96 @@ const asLocalhost = (headers: http.IncomingHttpHeaders, target: PortTarget): htt
     return rewritten;
 };
 
-const resolveRequest = async (req: http.IncomingMessage, deps: PreviewProxyDeps): Promise<Resolved> => {
-    const probing = (req.url ?? "").split("?")[0] === PREVIEW_PROBE_PATH;
-    const panel = panelFromHost(req.headers.host, deps.sandboxId);
-    if (panel !== undefined) {
-        const upstream = await deps.panelOf(panel);
-        const name = escapeHtml(panel);
-        if (probing) {
-            return {
-                kind: "probe",
-                body: {
-                    proxy: "intentic-preview",
-                    target: "panel",
-                    name: panel,
-                    state: upstream.state,
-                    ...(upstream.state === "several" ? { servers: upstream.servers } : {}),
-                },
-            };
-        }
-        if (upstream.state === "serving") {
-            return upstream.assigned
-                ? { kind: "proxy", dial: "127.0.0.1", port: upstream.port, scheme: "http", headers: req.headers }
-                : {
-                      kind: "proxy",
-                      dial: "127.0.0.1",
-                      port: upstream.port,
-                      scheme: "http",
-                      headers: asLocalhost(req.headers, { port: upstream.port, host: "127.0.0.1", scheme: "http" }),
-                  };
-        }
-        if (upstream.state === "starting") {
-            return {
-                kind: "refused",
-                status: 502,
-                title: "Preview is starting",
-                message: `"${name}" is starting and hasn't opened a port yet: its terminal in the sandbox shows how far it has got`,
-            };
-        }
-        if (upstream.state === "several") {
-            // Naming them IS the answer: one hostname cannot stand for three dev servers, and the user is the
-            // only one who knows which of them they meant.
-            const listed = upstream.servers.map((server) => escapeHtml(`${server.dir ?? name}:${server.port}`)).join(", ");
-            return {
-                kind: "refused",
-                status: 502,
-                title: "Several servers here",
-                message: `"${name}" is running ${upstream.servers.length} dev servers on ports of their own (${listed}), so this one address can't stand for it: forward the one you want from the Ports view and preview that`,
-            };
-        }
+// The leftmost DNS label of a Host header, which is the whole of what routing here reads.
+const labelOf = (host: string | undefined): string => host?.split(":")[0]?.split(".")[0] ?? "";
+
+/* THE DAEMON'S OWN ADDRESS, which is the one host reaching this proxy that is not a preview at all.
+ *
+ * Its own function rather than a clause in `resolveRequest`, because it shares nothing with the three rules
+ * below it: they ask which of this sandbox's previews is meant, and this asks whether a preview was meant at
+ * all. Answering undefined means "not the daemon", never "the daemon is unavailable".
+ *
+ * Host passes through UNTOUCHED, unlike a panel's or a forwarded port's. Those are arbitrary user apps whose
+ * framework host checks only ever knew localhost, so rewriting buys their cooperation and costs nothing. The
+ * daemon is the opposite case: it derives its own origin from this header and gates on it, so a rewrite to
+ * localhost would make every request arriving from the edge look like it came from somewhere else. The probe
+ * path is not intercepted here either — on this host that is the daemon's route to answer, not this proxy's. */
+const daemonUpstream = (req: http.IncomingMessage, deps: PreviewProxyDeps): Resolved | undefined => {
+    const { daemonPort, sandboxId } = deps;
+    if (daemonPort === undefined || sandboxId === undefined || sandboxId === "") {
+        return undefined;
+    }
+    if (labelOf(req.headers.host) !== sandboxSubdomain(sandboxId)) {
+        return undefined;
+    }
+    return { kind: "proxy", dial: "127.0.0.1", port: daemonPort, scheme: "http", headers: req.headers };
+};
+
+/* WHAT A PANEL'S HOSTNAME SERVES RIGHT NOW: the busiest of the rules, and the only one whose answer depends on
+ * the state of something the user started. Lifted out of `resolveRequest` so that function stays a list of
+ * "which kind of address is this", which is the one decision it is actually making. */
+const panelUpstream = async (req: http.IncomingMessage, deps: PreviewProxyDeps, panel: string, probing: boolean): Promise<Resolved> => {
+    const upstream = await deps.panelOf(panel);
+    const name = escapeHtml(panel);
+    if (probing) {
+        return {
+            kind: "probe",
+            body: {
+                proxy: "intentic-preview",
+                target: "panel",
+                name: panel,
+                state: upstream.state,
+                ...(upstream.state === "several" ? { servers: upstream.servers } : {}),
+            },
+        };
+    }
+    if (upstream.state === "serving") {
+        return upstream.assigned
+            ? { kind: "proxy", dial: "127.0.0.1", port: upstream.port, scheme: "http", headers: req.headers }
+            : {
+                  kind: "proxy",
+                  dial: "127.0.0.1",
+                  port: upstream.port,
+                  scheme: "http",
+                  headers: asLocalhost(req.headers, { port: upstream.port, host: "127.0.0.1", scheme: "http" }),
+              };
+    }
+    if (upstream.state === "starting") {
         return {
             kind: "refused",
             status: 502,
-            title: "Preview isn't running",
-            message: `panel "${name}" is not running, start it from the ${name} entry in the sidebar`,
+            title: "Preview is starting",
+            message: `"${name}" is starting and hasn't opened a port yet: its terminal in the sandbox shows how far it has got`,
         };
+    }
+    if (upstream.state === "several") {
+        // Naming them IS the answer: one hostname cannot stand for three dev servers, and the user is the
+        // only one who knows which of them they meant.
+        const listed = upstream.servers.map((server) => escapeHtml(`${server.dir ?? name}:${server.port}`)).join(", ");
+        return {
+            kind: "refused",
+            status: 502,
+            title: "Several servers here",
+            message: `"${name}" is running ${upstream.servers.length} dev servers on ports of their own (${listed}), so this one address can't stand for it: forward the one you want from the Ports view and preview that`,
+        };
+    }
+    return {
+        kind: "refused",
+        status: 502,
+        title: "Preview isn't running",
+        message: `panel "${name}" is not running, start it from the ${name} entry in the sidebar`,
+    };
+};
+
+const resolveRequest = async (req: http.IncomingMessage, deps: PreviewProxyDeps): Promise<Resolved> => {
+    const probing = (req.url ?? "").split("?")[0] === PREVIEW_PROBE_PATH;
+    const daemon = daemonUpstream(req, deps);
+    if (daemon !== undefined) {
+        return daemon;
+    }
+    const panel = panelFromHost(req.headers.host, deps.sandboxId);
+    if (panel !== undefined) {
+        return panelUpstream(req, deps, panel, probing);
     }
     const slot = portSlotFromHost(req.headers.host, deps.sandboxId);
     if (slot !== undefined) {
@@ -168,12 +213,22 @@ const dialUpstream = (upstream: Extract<Resolved, { kind: "proxy" }>, req: http.
         ...(upstream.scheme === "https" ? { rejectUnauthorized: false } : {}),
     });
 
-// The preview reverse proxy: the Cloudflare tunnel routes preview hostnames to this one port (per-label
-// ingress rules on the intentic-provided path, the whole `*.<zone>` wildcard on the own-Cloudflare path), and
-// the Host header's first DNS label picks what answers, `preview-<panel>-<sandboxId>` → the panel's dev
-// server, `port-<slot>-<sandboxId>` → the slot's forwarded port, `public-<slot>-<sandboxId>` → the workspace's
-// outbox as static files (public/public-serve.ts). A non-preview host (a stray subdomain the wildcard also
-// catches) → 404. Everything here is public, no auth in front of the proxy.
+/* THE CONTAINER'S FRONT DOOR. The ingress carries every hostname this sandbox answers to down ONE tunnel, and
+ * that tunnel forwards to ONE port, so the Host header's first DNS label is what picks the answer here:
+ *   `sandbox-<sandboxId>`         → the daemon itself (deps.daemonPort), Host untouched
+ *   `preview-<panel>-<sandboxId>` → the panel's dev server
+ *   `port-<slot>-<sandboxId>`     → the slot's forwarded port
+ *   `public-<slot>-<sandboxId>`   → the workspace's outbox as static files (public/public-serve.ts)
+ * Anything else — a stray subdomain the wildcard also catches — → 404.
+ *
+ * The daemon route is what this grew when reachability stopped being per-name. Under the tunnel fabrics before
+ * it, the edge held a rule per hostname (per-label ingress rules on the intentic-provided path, the whole
+ * `*.<zone>` wildcard on the own-Cloudflare path) and could hand the daemon's own address to a different port
+ * than the previews'. One tunnel cannot: the edge routes to a sandbox, and which port inside that sandbox is
+ * this container's business. So the dispatch moved in here, where the Host was already being read.
+ *
+ * PREVIEWS ARE PUBLIC, no auth in front of them — and the daemon route changes nothing about that, because the
+ * daemon does its own gating on the other side of the hop. */
 export const createPreviewProxy = (deps: PreviewProxyDeps): http.Server => {
     const server = http.createServer((req, res) => {
         void (async () => {

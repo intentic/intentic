@@ -1,0 +1,33 @@
+{
+    "name": "@intentic/ingress",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "src/main.ts",
+    "scripts": {
+        "dev": "bun --watch --env-file=../../.env ./src/main.ts",
+        "start": "bun ./src/main.ts",
+        "typecheck": "tsgo --noEmit",
+        "docker:release": "bash ../../_tools/scripts/docker-release.sh ingress --prune",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@intentic/constants": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@puristic/env": "catalog:",
+        "pino": "catalog:",
+        "pino-pretty": "catalog:",
+        "tslib": "catalog:",
+        "ws": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/ws": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "bun": "catalog:",
+        "vitest": "catalog:"
+    }
+}

@@ -220,7 +220,9 @@ const LOOSE = {
 const ROOTS = {
     desktop: ["@intentic/desktop-app", "@intentic/desktop-smoke", "@intentic/desktop-smoke-windows"],
     images: [...imagePayload],
-    platform: ["@intentic-app/api", "@intentic-app/web"],
+    // The edge rides this trigger even though it is `@intentic/`-namespaced rather than `@intentic-app/`: what
+    // groups these three is that one pipeline builds and rolls them together, not what they are called.
+    platform: ["@intentic-app/api", "@intentic-app/web", "@intentic/ingress"],
 };
 for (const [trigger, names] of Object.entries(ROOTS)) {
     for (const name of names) {

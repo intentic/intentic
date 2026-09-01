@@ -156,6 +156,16 @@ const configSchema = z.object({
             host: z.string().default("0.0.0.0"),
             // This sandbox's public URL (set by connect.{sh,ps1} after the tunnel is created).
             publicUrl: z.string().default(""),
+            /* THE PLATFORM-SIGNED PROOF OF WHO THIS SANDBOX IS (SANDBOX_GRANT), presented on the tunnel
+             * upgrade and nowhere else. Every lane that can make a sandbox reachable puts it here: the setup
+             * code's payload, the compose file, a hosted machine's env.
+             *
+             * It is a capability, so it is marked secret — but it is a narrow one, and worth being precise
+             * about: it says "the bearer is sandbox <id>" and buys exactly one thing, the right to serve that
+             * sandbox's hostnames at the edge. It cannot mint anything, cannot read anything, and is refused
+             * outright once the sandbox row is deleted. Empty ⇒ this daemon dials no tunnel and is reachable
+             * only over loopback. */
+            grant: z.string().default("").meta({ secret: true }),
             /* THE ONLY WAY PAST THE AUTH FLOOR (main.ts requireAuthWhenReachable), and it exists for exactly one
              * caller: the gated e2e tiers. They must set a CONNECT_TOKEN, the desktop-sync surface derives its
              * ssh hostname from one and answers 409 without it, and they drive every route with no credential
@@ -201,6 +211,15 @@ const configSchema = z.object({
              * re-run it over work; and applying it keeps the definition's consent shape, the overlay lands as
              * a proposal for the owner, never as an approved build. */
             definitionSeed: z.string().default(""),
+        })
+        .prefault({}),
+    /* THE EDGE THIS SANDBOX DIALS to become reachable (@intentic/ingress). One address, outbound, presented
+     * with `sandbox.grant` — there is nothing to enable, claim or bind, so this is the whole of the
+     * configuration reachability now takes. Empty ⇒ no tunnel: a loopback-only sandbox, which is what a test,
+     * a `local` profile and a platform with no fabric all are. INGRESS_URL. */
+    ingress: z
+        .object({
+            url: z.string().default(""),
         })
         .prefault({}),
     preview: z

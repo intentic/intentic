@@ -28,6 +28,7 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
                 port: 8787,
                 host: "0.0.0.0",
                 publicUrl: "",
+                grant: "",
                 allowUnauthenticated: false,
                 environmentHash,
                 name: "intentic-sandbox-demo",

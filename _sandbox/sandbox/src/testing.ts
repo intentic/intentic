@@ -81,6 +81,7 @@ export const testConfig: Config = {
         port: 8787,
         host: "0.0.0.0",
         publicUrl: "",
+        grant: "",
         allowUnauthenticated: false,
         name: "",
         image: "",
@@ -90,6 +91,8 @@ export const testConfig: Config = {
         previousImage: "",
         definitionSeed: "",
     },
+    // No edge to dial: a test daemon is loopback-only, which is a supported posture rather than a gap.
+    ingress: { url: "" },
     preview: { port: 5173 },
     google: { clientId: "" },
     acmeDirectoryUrl: "",

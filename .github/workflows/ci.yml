@@ -525,7 +525,10 @@ jobs:
     needs: preflight
     uses: ./.github/workflows/verify.yml
     with:
-      filters: "--filter=@intentic-app/*..."
+      # @intentic/ingress rides this gate rather than only verify-core's, because this job is the one thing
+      # that decides whether production rolls — and the edge is now part of what rolls. A package shipped by a
+      # pipeline it is not verified by is a package that can ship broken.
+      filters: "--filter=@intentic-app/*... --filter=@intentic/ingress..."
     secrets: inherit
 
   # THE PROVIDER CONFORMANCE GATE: every provider's REAL CLI, driven by the real adapter, against a local
@@ -1097,7 +1100,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web
+      - run: pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web --filter=@intentic/ingress
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
       - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/deploy-platform.sh
         shell: bash

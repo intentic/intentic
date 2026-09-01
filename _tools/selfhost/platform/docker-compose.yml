@@ -139,12 +139,45 @@ services:
             POSTHOG_ASSETS_HOST: ${POSTHOG_ASSETS_HOST:-us-assets.i.posthog.com}
         networks: [intentic-platform]
 
+    # THE EDGE EVERY SANDBOX IS REACHED THROUGH (@intentic/ingress). Sandboxes dial it outbound and prove who
+    # they are with a grant the api signs; it routes each request to the tunnel whose sandbox id the Host name
+    # ends in. Nothing is provisioned per sandbox, so this holds no credential that can create anything: the
+    # PUBLIC half of the pair here, the private half only on the api.
+    #
+    # TWO PUBLIC NAMES HAVE TO REACH THIS PORT for the lane to work, and neither is optional:
+    #   ingress.${INGRESS_ZONE}   the address containers dial (INGRESS_URL)
+    #   *.${INGRESS_ZONE}         every sandbox hostname, since they are all labels under the same wildcard
+    # One wildcard DNS record and one wildcard certificate serve both, which is what makes a sandbox cost zero
+    # DNS records. Point them here through the same tunnel the api and web use, or through any reverse proxy —
+    # this process speaks plain HTTP and expects TLS to terminate in front of it.
+    #
+    # Leave the whole service out (and INGRESS_SIGNING_KEY unset on the api) to run a platform with no fabric:
+    # setup then offers only the attach lane and the hosted lane is off.
+    ingress:
+        image: ghcr.io/intentic/ingress:${INTENTIC_IMAGE_TAG:-latest}
+        pull_policy: always
+        restart: unless-stopped
+        logging: *logging
+        environment:
+            # The matching PUBLIC half of INGRESS_SIGNING_KEY (SPKI PEM, newlines and all):
+            #   openssl pkey -in ingress-key.pem -pubout
+            # Required — the process exits rather than start unable to verify.
+            INGRESS_PUBLIC_KEY: ${INGRESS_PUBLIC_KEY:?generate an ed25519 pair; the private half is the api's INGRESS_SIGNING_KEY}
+            # Where to ask whether a sandbox still exists, which is the whole of revocation. Reached by service
+            # name so the question never leaves this network. Unset ⇒ the check is off and every validly-signed
+            # grant registers.
+            PLATFORM_URL: ${INGRESS_PLATFORM_URL:-http://api:6480}
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+        networks: [intentic-platform]
+
     cloudflared:
         image: cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
         restart: unless-stopped
         logging: *logging
         command: tunnel --no-autoupdate run --token ${PLATFORM_TUNNEL_TOKEN:?set PLATFORM_TUNNEL_TOKEN in .env}
-        depends_on: [web, api]
+        # The edge rides this tunnel too when the wildcard is routed through it; the dependency is ordering
+        # only, and cloudflared retries an origin that is not up yet either way.
+        depends_on: [web, api, ingress]
         networks: [intentic-platform]
 
 networks:

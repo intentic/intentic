@@ -329,3 +329,40 @@ test("the probe answers for an unforwarded slot too, which is a live address wit
         state: "unforwarded",
     });
 });
+
+/* THE DAEMON'S OWN ADDRESS, which is not a preview and arrives here anyway.
+ *
+ * The edge carries every hostname this sandbox answers to down ONE tunnel, and that tunnel forwards to ONE
+ * port, so this proxy is the container's front door: it is what tells `sandbox-<id>` apart from a preview. The
+ * fabrics before this one held a rule per hostname and could route the daemon's address to a different port
+ * out there; one tunnel cannot, so the dispatch moved in here. */
+test("the sandbox's own hostname reaches the daemon, with its Host intact", async () => {
+    const daemonPort = await listen(
+        http.createServer((req, res) => {
+            res.writeHead(200, { "content-type": "text/plain" });
+            res.end(`daemon saw ${req.headers.host ?? "?"}${req.url ?? ""}`);
+        }),
+    );
+    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345", daemonPort }));
+
+    const response = await raw(proxyPort, "sandbox-abcdef012345.sbx.example.test", "/health");
+
+    expect(response.status).toBe(200);
+    // Host passes through untouched, unlike a panel's: the daemon derives its own origin from it and gates on it.
+    expect(response.body).toBe("daemon saw sandbox-abcdef012345.sbx.example.test/health");
+});
+
+test("another sandbox's daemon hostname is not this sandbox's to serve", async () => {
+    const daemonPort = await listen(http.createServer((_req, res) => res.end("daemon")));
+    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345", daemonPort }));
+
+    expect((await raw(proxyPort, "sandbox-0123456789ab.sbx.example.test", "/health")).status).toBe(404);
+});
+
+// The loopback lanes pass no daemon port: the browser reaches that port directly there, and this proxy only
+// ever sees previews.
+test("with no daemon port there is no daemon route", async () => {
+    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345" }));
+
+    expect((await raw(proxyPort, "sandbox-abcdef012345.sbx.example.test", "/health")).status).toBe(404);
+});

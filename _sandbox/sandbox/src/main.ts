@@ -71,6 +71,7 @@ import { onTurnSettled, turnRunMetrics } from "./agent/turn-runs.js";
 import { browserSessionMetrics } from "./browser/browser-sessions.js";
 import { unmaskableSecrets } from "./agent/agent-redaction.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
+import { startIngressTunnelWhenConfigured } from "./platform/ingress-tunnel.js";
 import { createLoopbackListener } from "./platform/loopback-listener.js";
 import { restoreAuthorizedKeys } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
@@ -414,6 +415,10 @@ const main = async (): Promise<void> => {
               panelOf: services.panelUpstreamOf,
               slotTargetOf: services.portForwards.targetOf,
               sandboxId: sandboxIdFromToken(config.connectToken),
+              // …and the daemon's own address, which makes this proxy the container's single front door. The
+              // edge routes to a SANDBOX and forwards down one tunnel to one port, so which port inside the
+              // container serves a given hostname is decided here rather than out there.
+              daemonPort: config.sandbox.port,
               outbox:
                   config.connectToken === ""
                       ? undefined
@@ -421,6 +426,26 @@ const main = async (): Promise<void> => {
           });
     previewProxy?.listen(config.preview.port, host);
     shutdown.push(() => previewProxy?.close());
+
+    /* HOW THE WORLD REACHES THIS SANDBOX, and it is one outbound dial (platform/ingress-tunnel.ts).
+     *
+     * It lives HERE, in the daemon, rather than in the entrypoint that used to arrange it, and that move is
+     * the whole shape of the change: reachability stopped being state somebody provisions before the process
+     * starts (an account, a claimed name, a bound share, a predecessor to evict) and became a signature this
+     * container was handed and presents. Nothing is created, so nothing leaks and nothing has to be reclaimed.
+     *
+     * Gated on the front door existing, not merely on the config: the tunnel forwards every hostname to the
+     * preview proxy, so without one there is nowhere to forward to. A daemon with no grant, no edge or no
+     * proxy is simply loopback-only — a test, a `local` profile, a platform running no fabric — which is a
+     * posture, never a failure. */
+    const ingressTunnel = startIngressTunnelWhenConfigured({
+        url: config.ingress.url,
+        grant: config.sandbox.grant,
+        targetPort: config.preview.port,
+        frontDoor: traits.extraListeners,
+        log: (message, error) => (error === undefined ? logger.info(message) : logger.warn({ err: error }, message)),
+    });
+    shutdown.push(() => ingressTunnel?.close());
 
     // Phone home: announce this sandbox's URL to the platform registry (once per boot, retried until acked,
     // see platform/announce.ts), so the setup wizard sees it come online without any browser→sandbox probing.
