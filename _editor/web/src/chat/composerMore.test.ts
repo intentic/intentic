@@ -3,7 +3,7 @@
  * rule is the thing worth pinning, and because the two halves must never both be true, which is a property of
  * the table and not of any component that draws it. */
 import { expect, it } from "vitest";
-import { type ComposerControlSituation, CONTROL_ORDER, overflowRows, ridesRow } from "./composerMore";
+import { type ComposerControlSituation, CONTROL_ORDER, DESCRIPTION_LIMIT, overflowRows, ridesRow } from "./composerMore";
 
 // An ordinary isolated chat that has run a turn: nothing set, everything offered.
 const PLAIN: ComposerControlSituation = {
@@ -82,4 +82,17 @@ it(`carries the current value and a sentence on every overflow row`, () => {
     expect(rows.every((row) => row.description.length > 0)).toBe(true);
     // The mode row names the posture this chat is actually in, so a main-tree chat's menu doesn't say "Auto".
     expect(overflowRows(chat({ mode: `plan`, startingMode: `plan` }))[0]?.value).toBe(`Plan`);
+});
+
+/* THE ONE-LINE RULE, ASSERTED RATHER THAN TRUSTED. The menu's descriptions wrapped once already and doubled its
+ * height; the strings are literals a few lines apart, so the only thing that keeps them short is something that
+ * fails when they aren't. Checked across EVERY mode, since the mode row is the one whose text used to be
+ * inherited from a picker written to a different brief. */
+it(`keeps every description to a single line`, () => {
+    const modes = [`default`, `acceptEdits`, `plan`, `bypassPermissions`] as const;
+    for (const mode of modes) {
+        for (const row of overflowRows(chat({ mode, startingMode: mode }))) {
+            expect(row.description.length, `${row.label}: "${row.description}"`).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
+        }
+    }
 });

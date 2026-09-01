@@ -58,8 +58,16 @@ export interface ComposerMoreRow {
     readonly label: string;
     /** What it is set to right now. Always the default, since a control set to anything else has left the menu. */
     readonly value: string;
+    /** One line, and it has to STAY one line: see {@link DESCRIPTION_LIMIT}. */
     readonly description: string;
 }
+
+/* ONE LINE EACH, AND THE LIMIT IS TESTED. Roughly 45 characters fit across a w-80 panel at text-2xs (11px), so
+ * this sits well under it. A wrapping description is not a cosmetic complaint: four rows of two lines is a menu
+ * half again as tall as it needs to be, and the descriptions stop being glanceable exactly when the reader is
+ * scanning for the one row they want. Say the thing the LABEL cannot and stop — the value column beside it
+ * already reports the current setting, so none of these has to repeat it. */
+export const DESCRIPTION_LIMIT = 40;
 
 /** Whether the control exists for this chat at all. A control that isn't offered is in neither place. */
 const offeredIn = (situation: ComposerControlSituation): Record<ComposerControl, boolean> => ({
@@ -97,35 +105,21 @@ export const ridesRow = (situation: ComposerControlSituation): Record<ComposerCo
 const rowFor = (control: ComposerControl, situation: ComposerControlSituation): ComposerMoreRow => {
     switch (control) {
         case `mode`: {
-            // The mode's own meta, read off the live value rather than off the default: they are equal wherever
-            // this is reached, and reading the live one keeps the row honest if that ever stops being true.
+            /* The mode's icon and word, read off the live value rather than off the default: they are equal
+             * wherever this is reached, and reading the live one keeps the row honest if that ever stops being
+             * true. NOT its MODE_META description, which is written for the mode PICKER, where a sentence per
+             * option is the teaching and four of them are read side by side. Here there is one, it sits under a
+             * label and beside the answer, and the long form ("Propose a plan and wait for your approval before
+             * running") wrapped to two lines on the main-tree chats that get it. */
             const meta = modeMeta(situation.mode);
-            return { key: control, icon: meta.icon, label: `Agent mode`, value: meta.label, description: meta.description };
+            return { key: control, icon: meta.icon, label: `Agent mode`, value: meta.label, description: `How much it may do before asking.` };
         }
         case `persona`:
-            return {
-                key: control,
-                icon: `users`,
-                label: `Acts as`,
-                value: `Anyone`,
-                description: `Speak through one persona's accounts, and only that person's.`,
-            };
+            return { key: control, icon: `users`, label: `Acts as`, value: `Anyone`, description: `One persona's accounts only.` };
         case `runThrough`:
-            return {
-                key: control,
-                icon: `fork`,
-                label: `Run through`,
-                value: `Just this chat`,
-                description: `Repeat this message until a goal is met, or hand it to a workflow.`,
-            };
+            return { key: control, icon: `fork`, label: `Run through`, value: `Just this chat`, description: `Loop it, or run a workflow.` };
         case `voice`:
-            return {
-                key: control,
-                icon: `robot`,
-                label: `Write as agent`,
-                value: `Off`,
-                description: `Place your words into the transcript in the agent's voice, with no reply.`,
-            };
+            return { key: control, icon: `robot`, label: `Write as agent`, value: `Off`, description: `Lands in the transcript, no reply.` };
     }
 };
 
