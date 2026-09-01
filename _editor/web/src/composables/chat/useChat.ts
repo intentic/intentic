@@ -287,14 +287,14 @@ const restoreTab = (tab: StoredTab): Conversation => {
         conversation.actsAs.value = tab.actsAs;
     }
     if (tab.session !== undefined) {
-        // A session resumes only on the account that minted it, so it keeps its OWN pin rather than adopting the
-        // tab's: forging the match would resume another account's session, and faking a mismatch would retire a
-        // live one at the next send. Its harness moves with the tab.
-        conversation.session.value = {
-            ...tab.session,
-            account: tab.session.account ?? rememberedAccountFor(tab.session.provider),
-            harness: conversation.harness.value,
-        };
+        /* The session comes back exactly as it was stored, all three bindings included: a session resumes only
+         * on the runtime and account that minted it, so forging the match would resume another account's
+         * session and faking a mismatch would retire a live one at the next send.
+         *
+         * Nothing is filled in from the tab here, which is the point — a missing account means no stored
+         * account minted this session (the container's env token, a translator subscription), and standing the
+         * remembered pick in its place invented the very agreement `resumes` exists to test. */
+        conversation.session.value = tab.session;
     }
     if (tab.forkOf !== undefined) {
         // The fork linkage, back where send() looks for it. Until the fork's first turn is accepted this is the
@@ -1529,7 +1529,16 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
         tier: agent.tier,
         tierHold: agent.tierHold,
         title: agent.title,
-        session: agent.sessionId === undefined ? undefined : { id: agent.sessionId, provider: agent.provider, account: agent.account },
+        /* The session with the whole of what the registry says minted it. `agent.account` serves both fields
+         * here and means two different things by design: as the tab's pick it is where the NEXT turn goes, and
+         * on the session it is what the LAST one ran under, which the registry recorded from the turn's own
+         * frame (so an unpinned turn names the account that actually paid, not the first one connected). They
+         * start equal because opening a card is asking to carry on where it left off; a switch made afterwards
+         * moves the pick alone, and the divider then says what that costs. */
+        session:
+            agent.sessionId === undefined
+                ? undefined
+                : { id: agent.sessionId, provider: agent.provider, harness: agent.harness, account: agent.account },
         draft: ``,
         attachments: [],
         queued: [],
@@ -1873,13 +1882,20 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
             setConversations(conversations.value, activeId.value, `unlatch-registered`);
         } else {
             restored = transcript.messages;
-            if (transcript.sessionId !== undefined) {
-                conversation.session.value = {
-                    id: transcript.sessionId,
-                    provider: conversation.provider.value,
-                    account: conversation.account.value,
-                    harness: conversation.harness.value,
-                };
+            /* THE SESSION AS THE DAEMON HAS IT, binding included, which is the only place the binding exists.
+             *
+             * This used to build the ref out of the TAB's own picks, and a tab's picks are what its NEXT turn
+             * would use, not what the session was minted with. The two part company the moment anyone switches
+             * account mid-chat, and the lie then ran both ways at once: switching back to the account that
+             * actually holds the session announced "your next message starts a fresh session" and then went and
+             * started one, re-seeding the whole transcript against a cold prompt cache; staying on the other
+             * account promised a resume and sent that session's id out under a credential that never minted it.
+             * Same forgery for the provider and the harness, one runtime switch away from the same outcome.
+             *
+             * A record with no session leaves the ref alone: the daemon is saying this conversation has nothing
+             * to resume from ITS store, which is not the same as saying the tab's own session ref is wrong. */
+            if (transcript.session !== undefined) {
+                conversation.session.value = transcript.session;
             }
         }
     }

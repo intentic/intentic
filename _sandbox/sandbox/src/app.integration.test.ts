@@ -572,7 +572,13 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
      * default mode (settings.autoTier "shadow") and says so on its own frame, which the daemon adds ahead of
      * the adapter's stream. What this test is about is that the adapter's own frames arrive intact. */
     const frames = await runAgentTurn(client, { prompt: "do it" });
-    expect(frames.filter((frame) => frame.kind !== "preamble" && frame.kind !== "tier")).toEqual(events);
+    /* The session frame carries the account the daemon RESOLVED for the turn (this suite's store answers
+     * "default"), the same stamp the usage and rate-limit frames wear and for a sharper reason: a session
+     * resumes only under the credential that minted it, and an unattributed one leaves the client binding it to
+     * whatever its own tab happens to be picking. Everything else arrives exactly as the adapter streamed it. */
+    expect(frames.filter((frame) => frame.kind !== "preamble" && frame.kind !== "tier")).toEqual(
+        events.map((event) => (event.kind === "session" ? { ...event, account: "default" } : event)),
+    );
     // Attribution: pending user changes are captured BEFORE the agent runs, so the turn snapshot is agent-only.
     expect(triggers).toEqual(["user", "turn"]);
 });

@@ -1059,9 +1059,12 @@ async function* runTurn(
     }
     mark("plan");
     const { run } = plan;
-    // The provider account that serves this turn, the attribution key stamped onto the usage/rate-limit frames
-    // and the activity log below.
+    // The provider account that serves this turn, the attribution key stamped onto the session/usage/rate-limit
+    // frames and the activity log below.
     const resolvedAccount = plan.account;
+    // The stamp itself, spread into every frame that carries the attribution, so the four sites that answer
+    // "whose account was this" cannot drift into answering it three different ways.
+    const attribution: { account?: string } = resolvedAccount !== undefined ? { account: resolvedAccount } : {};
     let request = plan.request;
     // Bring every repo with a remote up to its latest commit before the agent reads the tree, so the turn works
     // on current code. Clean-only fast-forward, a dirty/diverged/detached repo is left as-is and its stale state
@@ -1247,7 +1250,7 @@ async function* runTurn(
                 provider,
                 direction: "system",
                 turnId,
-                ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                ...attribution,
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
                 ...(title !== undefined ? { title } : {}),
@@ -1352,17 +1355,26 @@ async function* runTurn(
             }
             if (event.kind === "session") {
                 sessionId = event.sessionId;
+                /* WHOSE CREDENTIAL THIS SESSION IS ON, said by the only party that knows. A turn naming no
+                 * account is served by whichever connected one has the most headroom (harness-credentials.ts),
+                 * so the client's pick answers a different question, and a client that stamped it onto the
+                 * session would then announce a fresh session for the account actually holding it, and retire a
+                 * resumable one on the next send. Both readers of this stamp take it from here: the registry
+                 * files it beside the session id (agents-registry's `session` case, which is what the reopened
+                 * tab reads back), and the browser binds its live session ref with it. */
+                yield { ...event, ...attribution };
+                continue;
             } else if (event.kind === "usage") {
                 usage = sumUsage(usage, event);
                 const { kind: _kind, ...rest } = usage;
                 usageExtra = rest;
                 // Attribute the per-turn totals (and the account-wide rate-limit snapshot) to the account that
                 // served the turn, so the client keys its usage displays by account.
-                yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
+                yield { ...event, ...attribution };
                 continue;
             } else if (event.kind === "rate_limit_info") {
                 limitReset = event.resetsAt ?? limitReset;
-                yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
+                yield { ...event, ...attribution };
                 continue;
             } else if (event.kind === "account_usage") {
                 // Persist the windows as well as streaming them, so the account picker can report this
@@ -1374,7 +1386,7 @@ async function* runTurn(
                         .record(resolvedAccount, { windows: event.windows, measuredAt: Date.now() })
                         .catch((error: unknown) => services.logger.warn({ err: error }, "account usage: snapshot write failed"));
                 }
-                yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
+                yield { ...event, ...attribution };
                 continue;
             } else if (event.kind === "plan") {
                 record({ type: "turn.plan", content: event.text, extra: { requestId: event.requestId } });
@@ -1402,7 +1414,7 @@ async function* runTurn(
                         harness: input.harness ?? "native",
                         ...(event.code !== undefined ? { code: event.code } : {}),
                         ...(request.model !== undefined ? { model: request.model } : {}),
-                        ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                        ...attribution,
                         ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
                         ...(sessionId !== undefined ? { sessionId } : {}),
                         // `reason`, not `message`: the logger's messageKey IS `message` (see logger.ts), so a
@@ -1443,7 +1455,7 @@ async function* runTurn(
                                       : "auth",
                             message: event.message,
                             // Routed turns have no account to name: CLIProxyAPI picks the auth file itself.
-                            ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                            ...attribution,
                         })
                         .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: write failed"));
                 }
@@ -1635,7 +1647,7 @@ async function* runTurn(
         services.usage
             .record({
                 provider,
-                ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                ...attribution,
                 ...(request.model !== undefined ? { model: request.model } : {}),
                 // Empty as well as absent: the wire allows `model: ""` and the Codex path treats it as "the
                 // catalog default", so recording it would write a pick nobody made (turn-plan.ts line 545).

@@ -279,11 +279,14 @@ const model = computed(() => {
     }
     return category.value === undefined ? undefined : providerLabel(props.agent.provider);
 });
-/* ...AND WHICH LOGIN PAYS FOR IT (accountChip), on the card beside the model and the branch. A sandbox holding
+/* ...AND WHICH LOGIN PAID FOR IT (accountChip), on the card beside the model and the branch. A sandbox holding
  * a personal plan and a work one spends a real choice per session, made in the composer and, until now, visible
- * nowhere afterwards. Read from the window's account list rather than carried on the card, because the summary
+ * nowhere afterwards. The daemon records the account that actually SERVED each turn (from the turn's own
+ * session frame), so this is a fact about the work on the card rather than a reading of the composer's current
+ * pick — which is a different question, answered in the composer, and may well name another account after a
+ * mid-chat switch. Read from the window's account list rather than carried on the card, because the summary
  * records an id and an id here is a UUID; a name the sandbox cannot resolve (a routed provider's pooled
- * subscription, an account disconnected since) draws nothing at all. */
+ * subscription, a turn on the container's env token, an account disconnected since) draws nothing at all. */
 const account = computed(() => accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account));
 /* A nameless card, named for what it IS: a tab waiting to be typed into, a past conversation whose session
  * never earned a title, or an agent whose own naming has yet to land.

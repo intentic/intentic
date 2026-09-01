@@ -937,6 +937,17 @@ describe(`abandoned drafts`, () => {
  * for the same reason, one provider later. Each widening asked "does this agent's provider keep a store we can
  * read?", when the answer that ends the bug is that the DAEMON keeps the store: it records what it streams
  * (sessions/transcript-record.ts), so the question no longer has to be asked. */
+/* What the daemon says each of these agents' sessions is bound to, its registry entry's own record of the last
+ * turn, keyed by conversation id so the fixture answers per agent exactly as the route does. */
+const SESSION_BINDINGS: Record<string, { provider: string; harness: string; account?: string }> = {
+    a1: { provider: `gemini`, harness: `native`, account: `acct-work` },
+    a2: { provider: `codex`, harness: `claude-code`, account: `acct-work` },
+    a3: { provider: `codex`, harness: `native`, account: `acct-work` },
+    a4: { provider: `claude`, harness: `native`, account: `acct-work` },
+    // The chat somebody switched accounts in: its session was minted on `acct-work` whatever its tab now picks.
+    a6: { provider: `claude`, harness: `native`, account: `acct-work` },
+};
+
 describe(`opening a fleet agent`, () => {
     beforeEach(() => {
         storage.clear();
@@ -945,11 +956,18 @@ describe(`opening a fleet agent`, () => {
         // paints: the finished-lane case the board's cards are mostly made of.
         sandboxRequestMock.mockImplementation((path: string) => {
             if (path.endsWith(`/transcript`)) {
+                const agent = path.split(`/`)[2] ?? ``;
                 return Promise.resolve({
                     ok: true,
                     json: () =>
                         Promise.resolve({
                             sessionId: `current-sdk-session`,
+                            /* THE SESSION'S BINDING RIDES WITH ITS ID (AgentTranscriptSchema), the registry's
+                             * record of what actually minted it, which is why the answer differs per agent here
+                             * the way the daemon's does. The client adopts a session only when the daemon says
+                             * what it is bound to: that trio is what the next send compares its picks against,
+                             * and filling any of it in from the tab is the forgery this field exists to end. */
+                            ...SESSION_BINDINGS[agent],
                             messages: [
                                 { role: `user`, text: `What model are you?` },
                                 { role: `assistant`, text: `Gemini.` },
@@ -1033,6 +1051,38 @@ describe(`opening a fleet agent`, () => {
 
         await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a3/transcript`);
+    });
+
+    /* WHOSE SESSION IS IT, when the tab's account pick and the session's account are not the same one, which is
+     * every chat somebody switched accounts in (a spent allowance is how most of them got there).
+     *
+     * The reported bug, end to end: the board's card named the account that ran the turn, the composer named the
+     * tab's pick, and hydrating stamped the PICK onto the session ref. So switching the composer back to the
+     * account actually holding the session announced "your next message starts a fresh session", and then went
+     * and started one, re-seeding the whole transcript against a cold prompt cache; leaving it on the other
+     * account promised a resume and would have sent that session's id out under a credential that never minted
+     * it. The daemon names the binding now (AgentTranscriptSchema) and the client takes it as given. */
+    it(`binds a reopened session to the account the daemon recorded, not to the tab's pick`, async () => {
+        const conversation = openAgentConversation({
+            id: `a6`,
+            sessionId: `sess-b`,
+            provider: `claude`,
+            harness: `native`,
+            // The pick this tab was left on, which is NOT what its last turn ran under.
+            account: `acct-personal`,
+        });
+
+        await vi.waitFor(() => expect(conversation.session.value?.id).toBe(`current-sdk-session`));
+        expect(conversation.session.value?.account).toBe(`acct-work`);
+        expect(conversation.account.value).toBe(`acct-personal`);
+
+        // Back onto the account that holds it: nothing is retired, so there is nothing to announce.
+        conversation.selectAccount(`acct-work`);
+        expect(conversation.messages.value.some((message) => message.role === `notice`)).toBe(false);
+
+        // ...and away from it again, which genuinely does cost a fresh session, so it says so.
+        conversation.selectAccount(`acct-personal`);
+        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.startsWith(`Switched to Claude`))).toBe(true);
     });
 });
 

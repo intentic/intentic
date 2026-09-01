@@ -37,14 +37,12 @@ describe(`accountBadge`, () => {
         expect(accountBadge(accounts, `a`)).toEqual({ label: `Work`, hint: `Runs on Work (bob@acme.com · Acme)` });
     });
 
-    /* A session that picked nothing runs on the provider's first connection, which is how the daemon itself
-     * resolves it (providerAccounts.effectiveAccount). The chip says which one; the hover says it is a reading
-     * of how the next turn will run rather than a fact about the last. */
-    it(`resolves an unpicked session the way the daemon does, and says that is what it did`, () => {
-        expect(accountBadge(accounts, undefined)).toEqual({
-            label: `Work`,
-            hint: `No account was picked here, so turns run on Work (bob@acme.com · Acme), the first one connected`,
-        });
+    /* A conversation the daemon recorded no account for was served by nothing this sandbox stores (the
+     * container's env token, a translator subscription), so the card says nothing. Guessing the first
+     * connection was a confident name for an account that had never run the session — and the composer guesses
+     * from the other end, so the two guesses disagreed in public, which is the report this rule comes from. */
+    it(`says nothing about a conversation no stored account served`, () => {
+        expect(accountBadge(accounts, undefined)).toBeUndefined();
     });
 
     // An id is a UUID, so a name the sandbox cannot resolve is worse than silence: a routed provider whose pool

@@ -42,7 +42,7 @@ import { TranscriptClock } from "./transcriptClock";
 import { rememberedModelFor, rememberedProviderFor, startingMode, turnDefaults } from "./turnDefaults";
 import { TurnFailures } from "./turnFailures";
 import type { TurnEffect } from "./turnReducer";
-import { type SessionRef, type TurnSettings, resumes, turnRequestBody } from "./turnRequest";
+import { type SessionRef, type TurnSettings, boundSession, resumes, turnRequestBody } from "./turnRequest";
 import { type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
 import { formatReset, formatUtilization, modelAllowance, planHeadroom, SPENT_PERCENT, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 import { mentionPaths, mentionedPathTokens } from "./useMentions";
@@ -1142,8 +1142,15 @@ export class Conversation {
         this.isolated.value = false;
         // ...and a turn on the tree the user is looking at plans before it touches anything.
         this.modePick.value = startingMode(false);
-        // The history menu lists Claude sessions only, so a restored conversation resumes on Claude, under the
-        // current default Claude account (the transcript carries no account of its own).
+        /* The history menu lists Claude sessions only, so a restored conversation resumes on Claude, under the
+         * current default Claude account.
+         *
+         * The ONE place a session's account is still assumed rather than told, and deliberately: a raw runtime
+         * session is not a fleet conversation, so no registry entry names what served it (the /sessions routes
+         * carry messages and nothing else). The assumption is at least self-consistent, the pin it takes is the
+         * one the next send will go out under, so the pair agrees and nothing announces a switch nobody made.
+         * A fleet conversation never comes through here: it is opened by conversation id, and the daemon states
+         * its binding (AgentTranscriptSchema). */
         const account = rememberedAccountFor(`claude`);
         this.session.value = { id: sessionId, provider: `claude`, account, harness: `native` };
         this.provider.value = `claude`;
@@ -2089,9 +2096,15 @@ export class Conversation {
     private applyEffect(effect: TurnEffect, turn: TurnContext): void {
         switch (effect.kind) {
             case `session`:
-                // Captured with the turn's provider/account so a later mismatch (a mid-chat switch) is
-                // detectable at send time.
-                this.session.value = { id: effect.sessionId, provider: turn.provider, account: turn.account, harness: turn.harness };
+                /* Captured with the runtime and credential it was minted under, so a later mismatch (a mid-chat
+                 * switch) is detectable at send time.
+                 *
+                 * The ACCOUNT comes off the frame whenever the daemon named one, and only falls back to what
+                 * this turn asked for when it did not. They differ exactly where it matters: a turn that names
+                 * no account is served by whichever connected one has headroom, so an automation's session,
+                 * reattached in a tab, would otherwise be bound to nobody, and the tab's first send would
+                 * announce, and take, a fresh session over one that resumes perfectly well. */
+                this.session.value = boundSession(effect.sessionId, turn, effect.account);
                 return;
             case `worktree`:
                 // First frame of an isolated turn: which branch/base this conversation works on.

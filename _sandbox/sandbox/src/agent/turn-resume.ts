@@ -565,6 +565,17 @@ export const createTurnResumeScheduler = (services: Services, wake: WakeFn, inte
     };
 };
 
+/* WHOSE ACCOUNT A REHYDRATED SESSION IS ON, for the `session` frame the placeholder re-emits. Read off the
+ * registry rather than off the journalled turn: the entry holds the account that actually served this
+ * conversation (recorded from the live turn's own frame), where the turn holds only what its request asked
+ * for, which for an automation or a channel mention is nothing at all. The client binds its session ref to
+ * whatever this frame says, so a blank here would let a reattached tab bind the session to its own current
+ * pick and then quietly retire it on the next send. */
+const sessionAccount = (services: Services, conversationId: string): { account?: string } => {
+    const account = services.agents.entry(conversationId)?.account;
+    return account === undefined ? {} : { account };
+};
+
 /* A TURN THAT WAS WAITING FOR THE USER when the daemon died is still waiting for them after it comes back.
  *
  * Its journal entry carries the raised cards verbatim (`parked`, turn-journal.ts), and this restores them
@@ -698,7 +709,7 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
             // The session first: it re-binds the conversation to the partial work, and the pump folds it back
             // into the journal entry, without it a second restart would rehydrate a turn with no session.
             if (sessionId !== undefined) {
-                yield see({ kind: "session", sessionId });
+                yield see({ kind: "session", sessionId, ...sessionAccount(svc, conversationId) });
             }
             // Waiters go up before their frames go out (restoreRequest registers on the wait call), so a reply
             // racing the replay cannot land in the gap and 404.

@@ -102,7 +102,7 @@ describe(`reading a tab snapshot`, () => {
                         draft: `half a sentence`,
                         provider: `codex`,
                         harness: `claude-code`,
-                        session: { id: `sess-1`, provider: `codex` },
+                        session: { id: `sess-1`, provider: `codex`, harness: `claude-code` },
                         title: `Fix the login handler`,
                         attachments: [{ name: `pic.png`, path: `${STATE_DIR}/records/artifacts/attachments/u1/pic.png` }, { name: 42 }],
                         queued: [{ text: `also the tests`, attachments: [] }, { attachments: [] }],
@@ -118,7 +118,7 @@ describe(`reading a tab snapshot`, () => {
             draft: `half a sentence`,
             provider: `codex`,
             harness: `claude-code`,
-            session: { id: `sess-1`, provider: `codex` },
+            session: { id: `sess-1`, provider: `codex`, harness: `claude-code` },
             title: `Fix the login handler`,
             attachments: [{ name: `pic.png`, path: `.intentic/records/artifacts/attachments/u1/pic.png` }],
             queued: [{ text: `also the tests`, attachments: [] }],
@@ -158,7 +158,7 @@ describe(`reading a tab snapshot`, () => {
                         draft: ``,
                         provider: `claude`,
                         account: `acct-work`,
-                        session: { id: `sess-1`, provider: `claude`, account: `acct-personal` },
+                        session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-personal` },
                         attachments: [],
                         queued: [],
                     },
@@ -238,7 +238,7 @@ describe(`reading a tab snapshot`, () => {
                         draft: ``,
                         provider: `claude`,
                         account: ``,
-                        session: { id: `sess-1`, provider: `claude`, account: 42 },
+                        session: { id: `sess-1`, provider: `claude`, harness: `native`, account: 42 },
                         attachments: [],
                         queued: [],
                     },
@@ -248,7 +248,35 @@ describe(`reading a tab snapshot`, () => {
 
         const restored = readTabSnapshot(`sb1`)?.tabs[0];
         expect(restored).not.toHaveProperty(`account`);
-        expect(restored?.session).toEqual({ id: `sess-1`, provider: `claude` });
+        expect(restored?.session).toEqual({ id: `sess-1`, provider: `claude`, harness: `native` });
+    });
+
+    /* A session is read back with the WHOLE of what minted it or not at all, the fork linkage's rule and for a
+     * sharper reason: the trio is what the next send compares its picks against, so an entry missing its
+     * runtime would be completed from the tab, and a tab's picks are what its NEXT turn would use. That
+     * forgery is what made switching back to the account holding a session announce, and then spend, a fresh
+     * one. Dropped, the tab simply has no session to resume, which the daemon's own record then supplies. */
+    it(`drops a session that reads back without what minted it, rather than completing it from the tab`, () => {
+        session.set(
+            KEY,
+            JSON.stringify({
+                active: `a`,
+                tabs: [
+                    {
+                        conversationId: `a`,
+                        draft: ``,
+                        provider: `claude`,
+                        harness: `native`,
+                        account: `acct-work`,
+                        session: { id: `sess-1`, provider: `claude` },
+                        attachments: [],
+                        queued: [],
+                    },
+                ],
+            }),
+        );
+
+        expect(readTabSnapshot(`sb1`)?.tabs[0]?.session).toBeUndefined();
     });
 });
 

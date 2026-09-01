@@ -48,7 +48,10 @@ const tab = (conversationId: string, title: string, sessionId: string, actsAs?: 
     effort: `high`,
     thinking: true,
     ...(actsAs === undefined ? {} : { actsAs }),
-    session: { id: sessionId, provider: `claude` },
+    // The session with what minted it, all of it: a ref missing its runtime is dropped on restore (a session
+    // nothing can decide "does my next message resume this?" with is worse than none), and these tabs exist to
+    // come back as chats mid-conversation.
+    session: { id: sessionId, provider: `claude`, harness: `claude-code`, account: `acc_claude_demo` },
     title,
     draft: ``,
     attachments: [],

@@ -49,7 +49,9 @@ session.set(
                 provider: `claude`,
                 account: `first`,
                 harness: `native`,
-                session: { id: `sess-a`, provider: `claude`, account: `first` },
+                // Stored with the whole of what minted it: a session read back without its runtime is dropped
+                // rather than completed from the tab's own picks (tabSnapshot.readSession).
+                session: { id: `sess-a`, provider: `claude`, harness: `native`, account: `first` },
                 attachments: [],
                 queued: [],
             },

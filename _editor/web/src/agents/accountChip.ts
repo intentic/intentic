@@ -55,15 +55,19 @@ export interface AccountBadge {
 
 /**
  * The account chip for a session, or nothing when this sandbox cannot name one — a provider whose turns are
- * routed through the translator's own pool (nobody picks those), an account disconnected since the turn ran, or
- * a window whose account list has not landed yet. A raw id is a UUID, so naming one badly is worse than silence.
+ * routed through the translator's own pool (nobody picks those), a turn served by the container's env token, an
+ * account disconnected since the turn ran, or a window whose account list has not landed yet. A raw id is a
+ * UUID, so naming one badly is worse than silence.
  *
- * `picked` is what the session RECORDED (AgentSummary.account). Absent, it resolves the way the daemon itself
- * resolves an unpicked turn — the provider's first connected account (providerAccounts.effectiveAccount) — and
- * the hint says so, because that is a reading of how the next turn will run rather than a fact about the last.
+ * `ran` is what the daemon RECORDED for this conversation (AgentSummary.account): the account that actually
+ * served its last turn, which for a turn that named none is the one the daemon chose by headroom rather than
+ * the first on any list. Absent means nothing this sandbox stores paid for it, so the card says nothing. It
+ * used to fall back to the first connected account and explain itself in the hint, which put a confident name
+ * on a card for an account that had never run the session — the same guess the composer makes from the other
+ * end, and the two disagreed in public.
  */
-export const accountBadge = (accounts: readonly OauthAccount[], picked: string | undefined): AccountBadge | undefined => {
-    const entry = picked === undefined ? accounts[0] : accounts.find((account) => account.id === picked);
+export const accountBadge = (accounts: readonly OauthAccount[], ran: string | undefined): AccountBadge | undefined => {
+    const entry = accounts.find((account) => account.id === ran);
     if (entry === undefined) {
         return undefined;
     }
@@ -76,6 +80,6 @@ export const accountBadge = (accounts: readonly OauthAccount[], picked: string |
             entry.label,
             accounts.map((account) => account.label),
         ),
-        hint: picked === undefined ? `No account was picked here, so turns run on ${whole}, the first one connected` : `Runs on ${whole}`,
+        hint: `Runs on ${whole}`,
     };
 };

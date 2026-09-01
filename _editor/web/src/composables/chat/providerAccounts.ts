@@ -51,9 +51,13 @@ export const providerRefusals = ref<Record<string, ProviderRefusal>>({});
  * Written by useChat (loadAccountStatus / resetChat), and false again for each new sandbox. */
 export const accountsLoaded = ref(false);
 
-// The account a turn actually runs on when the conversation hasn't picked one: the daemon resolves undefined
-// to its first account, so any reader of account-KEYED state (the usage map above all) must resolve the same
-// way, looking up `undefined` misses entries the daemon filed under the real id.
+/* The account a turn PROBABLY runs on when the conversation hasn't picked one, for readers of account-keyed
+ * state (the usage map above all), where looking up `undefined` misses every entry filed under a real id.
+ *
+ * A guess, and the only one left in this client: the daemon serves an unnamed turn from whichever connected
+ * account has the most headroom (agent/harness-credentials.ts), which no browser can compute. Everything that
+ * has to be RIGHT about the account, the session's binding and the card's chip, is told by the daemon instead
+ * (the `session` frame, AgentSummary.account); this is a first-guess for a meter, not a claim about a turn. */
 export const effectiveAccount = (provider: AgentProvider, picked: string | undefined): string | undefined =>
     picked ?? providerAccounts.value[provider]?.[0]?.id;
 

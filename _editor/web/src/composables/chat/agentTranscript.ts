@@ -1,8 +1,9 @@
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, RestoredMessage } from "@intentic/sandbox-contract";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { supportsRoute } from "../sandbox/useDaemonRoutes";
 import { AGENTS } from "../queryKeys";
+import type { SessionRef } from "./turnRequest";
 
 /* A REGISTERED AGENT'S TRANSCRIPT AS A CACHED READ, so the browser asks the daemon for it ONCE however many
  * surfaces want it.
@@ -25,10 +26,16 @@ import { AGENTS } from "../queryKeys";
  * turn is, and a turn ending already invalidates this (useAgents' roster watch), so a warmed transcript can
  * never be older than the card that opens it. */
 
-// The one distinction that matters to the caller: NOT_FOUND is the daemon saying this conversation has no
-// registry entry any more (discarded, or a store that lost it), where a thrown request or any other status says
-// only that we could not ask right now.
-export type AgentTranscript = { readonly sessionId?: string; readonly messages: RestoredMessage[] } | "gone";
+/* The one distinction that matters to the caller: NOT_FOUND is the daemon saying this conversation has no
+ * registry entry any more (discarded, or a store that lost it), where a thrown request or any other status says
+ * only that we could not ask right now.
+ *
+ * `session` is the resumable session AND what it is bound to, folded into the one shape the chat decides with
+ * (SessionRef). The wire sends the four flat, and reading them apart is what let a caller adopt an id while
+ * filling its runtime and credential in from its own tab — the pair that decides whether the next message
+ * resumes or opens a fresh session, answered by the side that cannot know. Present only when the daemon named
+ * all of it. */
+export type AgentTranscript = { readonly session?: SessionRef; readonly messages: RestoredMessage[] } | "gone";
 
 export const agentTranscriptKey = (conversationId: string): unknown[] => [...AGENTS.of(conversationId, `transcript`), UNPERSISTED];
 
@@ -47,8 +54,25 @@ const read = async (conversationId: string): Promise<AgentTranscript> => {
     if (!response.ok) {
         throw new Error(`Could not open that conversation.`);
     }
-    const body = (await response.json()) as { sessionId?: string; messages?: RestoredMessage[] };
-    return { ...(body.sessionId !== undefined ? { sessionId: body.sessionId } : {}), messages: body.messages ?? [] };
+    const body = (await response.json()) as {
+        sessionId?: string;
+        provider?: AgentProvider;
+        harness?: AgentHarness;
+        account?: string;
+        messages?: RestoredMessage[];
+    };
+    /* The id WITH the runtime that minted it, or nothing: a session that cannot say where it resumes cannot
+     * answer the only question it is read for ("does my next message resume this?"), and half-answering it is
+     * what the caller used to paper over with its own picks. A daemon that sends the id alone (one older than
+     * this browser) is left to the tab's own recorded ref, which at least came from a turn that really ran.
+     *
+     * The account rides along and is allowed to be absent, because absent is a real answer: no stored account
+     * served this conversation (the container's env token, a translator subscription). */
+    const bound =
+        body.sessionId !== undefined && body.provider !== undefined && body.harness !== undefined
+            ? { id: body.sessionId, provider: body.provider, harness: body.harness, account: body.account }
+            : undefined;
+    return { ...(bound !== undefined ? { session: bound } : {}), messages: body.messages ?? [] };
 };
 
 // Long enough that a board left open keeps every card it warmed; short enough that a session spent elsewhere

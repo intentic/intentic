@@ -59,9 +59,10 @@ const {
 
 const { mobile } = useDevice();
 
-// A pin the provider no longer holds resolves the way the DAEMON resolves it (to the first account) rather
-// than to nothing: the highlight has to name what will actually run, and a folded list showing the pinned row
-// has to have a row to show.
+// A pin the provider no longer holds falls to the first row rather than to nothing: the highlight has to name
+// something, and a folded list showing the pinned row has to have a row to show. It is the list's own first
+// guess and nothing more — an unnamed turn is served by whichever account has headroom, which is the daemon's
+// to decide (agent/harness-credentials.ts) and is reported back on the turn's own session frame.
 const activeAccountId = computed(() => {
     const pinned = accountRows.value.find((row) => row.id === account);
     return (pinned ?? accountRows.value[0])?.id;

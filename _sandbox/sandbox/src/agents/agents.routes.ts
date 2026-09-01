@@ -169,7 +169,24 @@ export const createAgentsRoutes = (services: Services) => {
             const agent = entryOf(input.id);
             const sessionId = sdkSessionIdOf(agent);
             const messages = await services.transcripts.read(agent);
-            return { ...(sessionId !== undefined ? { sessionId } : {}), messages };
+            /* WHAT THAT SESSION IS BOUND TO rides with it: the runtime and the credential it was minted under,
+             * which is the entry's own record of the last turn (the registry files the account with the id, see
+             * its `session` case). The client cannot work these out — its tab holds the picks the NEXT turn
+             * would use, and after a mid-chat switch those are exactly the ones the session does NOT belong to,
+             * so a client filling them in itself announced a fresh session for the account actually holding it
+             * and retired a resumable session on the next send. Only sent with a session; there is nothing to
+             * bind otherwise. */
+            return {
+                ...(sessionId !== undefined
+                    ? {
+                          sessionId,
+                          provider: agent.provider,
+                          harness: agent.harness,
+                          ...(agent.account !== undefined ? { account: agent.account } : {}),
+                      }
+                    : {}),
+                messages,
+            };
         }),
         /* SPEAK AS THE AGENT, the user's words appended to the record as an assistant row, no turn behind them,
          * no reply. Marked `placed` so a HUMAN re-reading the transcript can tell (the flag never reaches any

@@ -186,6 +186,33 @@ const statusOf = (
     return entryStatus === "idle" ? landing : entryStatus;
 };
 
+/* WHICH SESSION THIS CONVERSATION IS ON AND WHOSE ACCOUNT IT IS, as one fact, from the turn's `session` frame.
+ *
+ * The two travel together because they are only useful together: a provider session resumes solely under the
+ * credential that minted it, so an id filed without its account tells a reopened tab nothing about whether its
+ * next message continues this conversation or opens a fresh one at the price of the whole transcript.
+ *
+ * The FRAME's account, never the request's. A turn that names no account is served by whichever connected one
+ * has the most headroom (agent/harness-credentials.ts), so what begin() could record — the client's pin, when
+ * it sent one — is blank for every automation, channel mention and webchat turn, and merely a request for the
+ * rest. A frame carrying none (the container's env token, a translator subscription) leaves what is there:
+ * silence means "no stored account served this", not "forget the one that did".
+ *
+ * Pure and outside the closure, like statusOf above: it is a rule worth stating and testing on its own. */
+const sessionBinding = (
+    entry: Pick<PersistedAgent, "sessionId" | "account"> | undefined,
+    frame: { readonly sessionId: string; readonly account?: string | undefined },
+): { readonly sessionId: string; readonly account?: string } | undefined => {
+    // A conversation whose entry has gone (archived, purged) mid-turn has nothing to bind, the same
+    // non-answer recordTier gives: there is no next turn for the value to be read by.
+    if (entry === undefined) {
+        return undefined;
+    }
+    const account = frame.account ?? entry.account;
+    const moved = entry.sessionId !== frame.sessionId || entry.account !== account;
+    return moved ? { sessionId: frame.sessionId, ...(account !== undefined ? { account } : {}) } : undefined;
+};
+
 // The registry input of any conversation turn, the fields begin() records onto the entry. Placement is kept
 // here rather than inferred from the provider: isolated conversations own a branch; workspace conversations do
 // not, while both share the same identity, status and transcript lifecycle.
@@ -1078,9 +1105,12 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                      * it was without this write. The turn journal carries the same id for the same reason, and
                      * turn-resume reads THAT for the turn it is recovering; this is what makes the id survive
                      * every other way a turn can end badly. */
+                    // AND WHOSE ACCOUNT IT IS ON, in the same write and by the same rule (sessionBinding), which
+                    // is what a reopened tab reads back to decide whether its next message resumes this session.
                     const entry = entryOf(id);
-                    if (entry !== undefined && entry.sessionId !== event.sessionId) {
-                        replace({ ...entry, sessionId: event.sessionId });
+                    const binding = sessionBinding(entry, event);
+                    if (entry !== undefined && binding !== undefined) {
+                        replace({ ...entry, ...binding });
                         void persist();
                     }
                     // The turn's own prompt has been waiting for exactly this id (see begin), file it so the

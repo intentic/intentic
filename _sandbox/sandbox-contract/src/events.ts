@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentProviderSchema, PermissionModeSchema } from "./schemas/agent.js";
+import { AgentHarnessSchema, AgentProviderSchema, PermissionModeSchema } from "./schemas/agent.js";
 import { AgentSummarySchema, LandConflictSchema } from "./schemas/agents.js";
 import { RateLimitInfoSchema } from "./schemas/claude-gate.js";
 import { FastModeStateSchema } from "./schemas/fast-mode.js";
@@ -437,8 +437,24 @@ export const SessionTranscriptSchema = z.object({
             "The conversation, in order. Each block of the agent's prose is its own message with the tools that block introduced, which is what reproduces the way it actually unfolded.",
         ),
 });
+/* THE RECORD A REOPENED TAB IS REBUILT FROM: the messages, plus what the session behind them is BOUND to.
+ *
+ * A provider session is minted on one runtime under one credential, and it resumes only there, so a client
+ * deciding whether its next message continues this conversation or starts a fresh one needs all four facts
+ * together. The client cannot derive the last three: its tab holds the picks the NEXT turn would use, which
+ * after a mid-chat switch are exactly the ones the session does not belong to. Stamping those onto the session
+ * is what made switching BACK to the account that minted it announce a fresh session and then retire a
+ * perfectly resumable one, spending the whole transcript again on a cold prompt cache.
+ *
+ * All optional, and absent together on a conversation that has no session to resume. */
 export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
     sessionId: z.string().optional().describe("The provider session behind the last turn, when there is one."),
+    provider: AgentProviderSchema.optional().describe("Which provider minted that session."),
+    harness: AgentHarnessSchema.optional().describe("Which runtime minted it: a session resumes only on the loop that opened it."),
+    account: z
+        .string()
+        .optional()
+        .describe("Which stored account it belongs to, as the daemon resolved it. Absent when no stored account paid for the turn."),
 });
 
 /* WHAT A PUBLISHED CONVERSATION'S PAGE IS HANDED, the whole of it, baked into the page as one JSON block.
@@ -522,7 +538,22 @@ export type ParkedCard = z.infer<typeof ParkedCardSchema>;
 // `parentToolUseId` tags frames produced inside a subagent (Task tool); `subagent`/`subagent_update` report the
 // subagent itself, keyed by the same tool_use id those tagged frames carry.
 export const AgentEventSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("session"), sessionId: z.string() }),
+    /* THE SESSION THIS TURN IS RUNNING, and the credential it belongs to.
+     *
+     * `account` is the account the daemon RESOLVED for the turn, which is not always the one the request named:
+     * a turn that names none is given the connected account with the most headroom (agent/harness-credentials.ts),
+     * so "the client's pick" and "who is paying" are different questions and only the daemon can answer the
+     * second. It rides here because a session belongs to the credential that minted it — that pairing is what
+     * decides whether the next message resumes this session or opens a fresh one — and a client that stamped its
+     * own pick onto the session instead would announce a fresh session for the account that actually holds it.
+     *
+     * Absent when the turn ran on the container's env token or on a translator subscription, where there is no
+     * stored account to name. */
+    z.object({
+        kind: z.literal("session"),
+        sessionId: z.string(),
+        account: z.string().optional().describe("Which stored account this session belongs to, as the daemon resolved it for the turn."),
+    }),
     /* WHERE AN ISOLATED TURN IS STANDING: the conversation's worktree identity, its branch (agent/<id>) and
      * the ROOT repo's short base sha. First frame of the turn, before any provider frames, and again each time
      * the branch MOVES underneath it, which is why `base` names where the branch sits now rather than the

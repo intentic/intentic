@@ -227,9 +227,18 @@ test("agents.search matches titles and later lines, across the archive", async (
     await runAgentTurn(client, { prompt: "fix the login bug", conversationId: "conv1", isolated: true });
     await runAgentTurn(client, { prompt: "tidy the readme", conversationId: "conv2", isolated: true });
 
-    // The session the REGISTRY recorded from the turn's own frame, never re-derived from where the turn ran.
+    /* The session the REGISTRY recorded from the turn's own frame, never re-derived from where the turn ran,
+     * AND what that session is bound to. The binding rides along because the client cannot work it out: its tab
+     * holds the picks its NEXT turn would use, which after a mid-chat switch are exactly the ones the session
+     * does not belong to, and a client filling them in itself announced a fresh session for the credential
+     * actually holding this one. The account is the one the daemon RESOLVED for the turn (this fixture's
+     * store answers "default"), not what the request asked for — these turns name no account at all, which is
+     * the shape every automation, channel mention and webchat turn arrives in. */
     expect(await client.agents.transcript({ id: "conv1" })).toEqual({
         sessionId: "sess-1",
+        provider: "claude",
+        harness: "native",
+        account: "default",
         messages: [
             { role: "user", text: "restored words" },
             { role: "assistant", text: "landAgent lives in laneDrop.ts" },

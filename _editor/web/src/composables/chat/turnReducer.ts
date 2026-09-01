@@ -67,8 +67,12 @@ export interface TurnContext {
  *  conversation-level refs, cross-conversation stores, or genuine side effects, and applying them is a flat
  *  switch with no logic in it, which is exactly the point: the logic is above, and it is pure. */
 export type TurnEffect =
-    // The session the next matching turn resumes. The caller stamps it with the turn's provider/account/harness.
-    | { readonly kind: "session"; readonly sessionId: string }
+    /* The session the next matching turn resumes, and the ACCOUNT the daemon resolved for it, which is not
+     * always the one this turn asked for: a turn naming no account is served by whichever connected one has
+     * headroom. The caller stamps the provider/harness from the turn (those the client does decide) and takes
+     * the account from here whenever the daemon named one, because only the daemon knows whose credential the
+     * session was actually minted under, and that is what decides whether the next message resumes it. */
+    | { readonly kind: "session"; readonly sessionId: string; readonly account?: string }
     | { readonly kind: "worktree"; readonly branch: string; readonly base: string; readonly unenforced?: boolean }
     // The posture the RUNNING turn is in, the agent's own EnterPlanMode, or where a plan approval landed.
     | { readonly kind: "liveMode"; readonly mode: PermissionMode }
@@ -784,7 +788,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `commands`:
             return step(state, { kind: `commands`, items: event.items });
         case `session`:
-            return step(state, { kind: `session`, sessionId: event.sessionId });
+            return step(state, { kind: `session`, sessionId: event.sessionId, account: event.account });
         case `worktree`:
             return step(event.sync === undefined ? state : prependTurnNotice(state, syncLine(event.sync)), {
                 kind: `worktree`,

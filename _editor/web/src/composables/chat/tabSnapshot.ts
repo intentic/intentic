@@ -1,6 +1,7 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { Conversation } from "./conversation";
 import type { PickUp, PickUpReason } from "./pickUp";
+import type { SessionRef } from "./turnRequest";
 import { forgetWindowState, readWindowState, writeWindowState } from "../windowStore";
 
 /* Where a sandbox's open chat tabs live between page loads: session/provider identity, title, and the composer
@@ -63,11 +64,15 @@ export interface StoredTab {
     // narrowing must not follow the user into their next chat), so this store is the only thing standing
     // between a picked persona and a page reload. Absent ⇒ the ordinary chat, every account reachable.
     readonly actsAs?: string;
-    // `account` is the one the SESSION was minted on, which is not always the tab's current pick, a mid-chat
-    // switch takes effect at the next send, and until then the two differ on purpose (that difference is what
-    // retires the session then). Restoring both keeps a reload from either forging the match or faking the
-    // mismatch.
-    readonly session?: { id: string; provider: AgentProvider; account?: string };
+    /* The session and the WHOLE of what it is bound to (SessionRef: the runtime and the credential that minted
+     * it), none of which is always the tab's current pick. A mid-chat switch takes effect at the next send, and
+     * until then the two differ on purpose — that difference is what retires the session then. Storing the
+     * session's own trio keeps a reload from either forging the match or faking the mismatch, and it decides
+     * real money: a lie either way costs a resumable session and re-reads the whole transcript on a cold cache.
+     *
+     * A session with no `account` is one no stored account minted (the container's env token, a translator
+     * subscription), which is a fact about it, not a gap to fill in from the tab. */
+    readonly session?: SessionRef;
     /* Where this tab was cut from, while it is a fork whose first turn the daemon has not accepted yet, until
      * that send, this linkage exists nowhere but the client (Conversation.pendingForkOf). Persisted because the
      * gap between the cut and the send is exactly when a tab can be rebuilt from this snapshot (a reload, the
@@ -106,11 +111,10 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     tierHold: conversation.tierHold.value,
     tier: conversation.lastTier.value,
     harness: conversation.harness.value,
-    session: conversation.session.value && {
-        id: conversation.session.value.id,
-        provider: conversation.session.value.provider,
-        account: conversation.session.value.account,
-    },
+    // The session ref verbatim (SessionRef IS this shape), never rebuilt field by field from the conversation's
+    // picks: the two are the same object exactly until someone switches something, which is the one moment this
+    // has to be right.
+    session: conversation.session.value,
     forkOf: conversation.pendingForkOf.value,
     title: conversation.title.value ?? undefined,
     draft: conversation.draft.value,
@@ -168,17 +172,36 @@ const readPickUp = (raw: unknown): { pickUp?: PickUp } => {
     return { pickUp: { reason, ...(typeof readyAt === `number` && Number.isFinite(readyAt) ? { readyAt } : {}) } };
 };
 
+/* The session, read back WHOLE or not at all: what it is bound to is what it is read for, so an entry missing
+ * its provider or its runtime names a session nothing can decide with, and completing it from the tab's own
+ * picks would answer "does my next message resume this?" with the tab's plans for the NEXT one. `account` is
+ * the exception and not a gap: a session no stored account minted (the container's env token, a translator
+ * subscription) genuinely has none. */
+const readSession = (raw: unknown): { session?: SessionRef } => {
+    const session = typeof raw === `object` && raw !== null ? (raw as Record<string, unknown>) : undefined;
+    if (session === undefined || typeof session[`id`] !== `string` || !validProvider(session[`provider`])) {
+        return {};
+    }
+    if (session[`harness`] !== `claude-code` && session[`harness`] !== `native`) {
+        return {};
+    }
+    const account = session[`account`];
+    return {
+        session: {
+            id: session[`id`],
+            provider: session[`provider`],
+            harness: session[`harness`],
+            account: typeof account === `string` && account !== `` ? account : undefined,
+        },
+    };
+};
+
 // One entry, or undefined when it carries no usable identity or draft. Skipped rather than fatal: a single
 // unreadable tab must not cost the user every other chat they had open.
 const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
     if (typeof raw[`conversationId`] !== `string` || raw[`conversationId`] === `` || typeof raw[`draft`] !== `string`) {
         return undefined;
     }
-    const session = raw[`session`] as Record<string, unknown> | null | undefined;
-    const validSession =
-        typeof session === `object` && session !== null && typeof session[`id`] === `string` && validProvider(session[`provider`])
-            ? { id: session[`id`] as string, provider: session[`provider`], ...readText(`account`, session[`account`]) }
-            : undefined;
     // The fork linkage, read back whole or not at all: a partial one would make the first send name a source
     // the daemon then copies the wrong prefix of, which is worse than the fresh start losing it means.
     const fork = raw[`forkOf`] as Record<string, unknown> | null | undefined;
@@ -216,7 +239,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...(typeof raw[`tierHold`] === `boolean` ? { tierHold: raw[`tierHold`] } : {}),
         ...(raw[`tier`] === `fast` || raw[`tier`] === `standard` ? { tier: raw[`tier`] as `fast` | `standard` } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),
-        ...(validSession !== undefined ? { session: validSession } : {}),
+        ...readSession(raw[`session`]),
         ...(validForkOf !== undefined ? { forkOf: validForkOf } : {}),
         ...(typeof raw[`title`] === `string` ? { title: raw[`title`] } : {}),
     };

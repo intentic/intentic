@@ -45,6 +45,19 @@ export interface SessionRef {
     readonly harness: AgentHarness;
 }
 
+/* A SESSION, BOUND TO WHAT MINTED IT, from the turn that produced it and the daemon's own word on the account.
+ *
+ * The account is the only one of the three the client cannot state: a turn naming none is served by whichever
+ * connected account has headroom (the daemon's rule), so the pick this turn went out with is a request, not an
+ * answer. Taken from the `session` frame wherever the daemon named one, which is every turn served by a stored
+ * account, and falling back to what was asked for only when it did not (an env-token or translator turn, where
+ * there is no stored account either way). */
+export const boundSession = (
+    sessionId: string,
+    turn: { readonly provider: AgentProvider; readonly account: string | undefined; readonly harness: AgentHarness },
+    resolvedAccount: string | undefined,
+): SessionRef => ({ id: sessionId, provider: turn.provider, account: resolvedAccount ?? turn.account, harness: turn.harness });
+
 /* WHETHER A SESSION SURVIVES THE NEXT SEND. A provider mints a session on one runtime under one credential, so
  * all three have to still match the selection for it to resume; any one of them moving retires it and the next
  * turn starts a fresh session seeded with the transcript so far. Written once because two places ask it about

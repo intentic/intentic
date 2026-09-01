@@ -1,11 +1,17 @@
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, RestoredMessage } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { REVIEW_AGENT_ID } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
-/** The transcript route's body: `AgentTranscriptSchema`, the restored messages, plus the session they came from. */
+/* The transcript route's body: `AgentTranscriptSchema`, the restored messages, plus the session they came from
+ * AND what it is bound to. The binding is not decoration: a reopened tab decides whether its next message
+ * resumes this session or starts a fresh one by comparing all three against its own picks, so a body carrying
+ * the id alone leaves the chat unable to answer it (and the client refuses to guess). */
 interface AgentTranscript {
     readonly sessionId?: string;
+    readonly provider?: AgentProvider;
+    readonly harness?: AgentHarness;
+    readonly account?: string;
     readonly messages: readonly RestoredMessage[];
 }
 
@@ -65,6 +71,9 @@ const USERS_ROUTE_AFTER = `export const deleteUser = async (id: string) => {
 
 const SOFT_DELETES: AgentTranscript = {
     sessionId: `ses_01j9soft`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
     messages: [
         {
             role: `user`,
@@ -158,6 +167,9 @@ const SOFT_DELETES: AgentTranscript = {
  * conversation into an operations dashboard. */
 const MAYA_SUPPORT: AgentTranscript = {
     sessionId: `ses_01j9maya`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
     messages: [
         {
             role: `user`,
@@ -198,6 +210,9 @@ const MAYA_SUPPORT: AgentTranscript = {
  * final word on what goes out. */
 const OWEN_LAUNCH: AgentTranscript = {
     sessionId: `ses_01j9owen`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
     messages: [
         {
             role: `user`,
@@ -224,6 +239,9 @@ const OWEN_LAUNCH: AgentTranscript = {
  * thing about what they are for. */
 const PRIYA_PAYOUTS: AgentTranscript = {
     sessionId: `ses_01j9priya`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
     messages: [
         {
             role: `user`,

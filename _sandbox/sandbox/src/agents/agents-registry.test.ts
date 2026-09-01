@@ -165,6 +165,48 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.sessionId).toBe("sess-2");
     });
 
+    /* AND THE ACCOUNT THAT MINTED IT, from the same frame, because a session id is only useful with one: a
+     * session resumes solely under the credential it was opened on, so the card names who paid and a reopened
+     * tab can tell whether its next message continues this conversation or spends a fresh session on it.
+     *
+     * The FRAME's account, not the request's. A turn that names no account is served by whichever connected one
+     * has the most headroom, which is every automation, channel mention and webchat turn — all of them used to
+     * leave this blank while a real account paid, and the board then named the first account on the list. */
+    it("records the account that actually served the turn, whatever the request asked for", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+
+        // No account on the request: this is the automation's shape, and the daemon picked one by headroom.
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "session", sessionId: "sess-1", account: "acct-work" });
+        await registry.setTitle("c1", "Fix the login bug", "user");
+        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-1", account: "acct-work" });
+
+        // A frame with no account at all (the container's env token, a translator subscription) says "no stored
+        // account served this", which is not the same as "forget the one that did".
+        registry.observe("c1", { kind: "session", sessionId: "sess-2" });
+        await registry.finish("c1", 2_000);
+        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-2", account: "acct-work" });
+    });
+
+    // A turn that moves onto another account (the first one's allowance ran out mid-conversation) takes the
+    // record with it: the card and the reopened tab both answer for the credential holding the session NOW.
+    it("moves the recorded account when a later turn runs on a different one", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn({ account: "acct-work" }), 1_000);
+        registry.observe("c1", { kind: "session", sessionId: "sess-1", account: "acct-work" });
+        await registry.finish("c1", 2_000);
+
+        await registry.begin(turn({ account: "acct-personal" }), 3_000);
+        registry.observe("c1", { kind: "session", sessionId: "sess-2", account: "acct-personal" });
+        await registry.finish("c1", 4_000);
+
+        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-2", account: "acct-personal" });
+    });
+
     it("clearSession drops the pointer so the next turn opens a fresh provider thread", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
