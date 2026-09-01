@@ -407,7 +407,7 @@ watch(
     <!-- Clipped to its own surface. Everything inside is height-bounded, and this is the guard that says so:
          a block that outgrows the column used to paint straight down the page past the card ground, so the
          report ran on over the shell's own background with the rail stopping short beside it. -->
-    <div class="flex h-full min-h-0 overflow-hidden bg-card">
+    <div class="lane-ground-card flex h-full min-h-0 overflow-hidden bg-card">
         <!-- Nothing to show. Not an error: plenty of turns never start an agent, so this describes the surface
              instead of reporting a fault, the way the Browsers area's empty state does. FILTERED IS ITS OWN
              SENTENCE: a card counts the children an agent has started for its whole life, while this list holds

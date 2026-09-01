@@ -9,6 +9,12 @@
      this tall is read a screen at a time and a card only means "finished" while the lane it belongs to is
      still on screen. Its text starts where a card's content does, so the lane reads down one left edge.
 
+     THE CAP'S CORNERS SURVIVE PINNING ONLY BECAUSE THE SURFACE DECLARES ITS GROUND. A radius shows what is
+     behind it, and behind a pinned cap is the lane's own fill, so the corners are painted back on in the
+     ground's colour (`.lane-header` in styles.css). That colour is `--lane-ground`, set by the surface that
+     paints it — `lane-ground-card` on the floating chat's panel and /subagents, canvas everywhere else. A new
+     host of this component either paints canvas or says what it paints.
+
      THE SCROLLER A LANE SITS IN MUST NOT CARRY TOP PADDING. A scroll container's padding insets where its
      sticky children come to rest but not where it clips, so a padded scroller pins this header below its own
      top edge and leaves a strip the cards scroll through in full view above the cap. Pad the frame AROUND the

@@ -183,8 +183,60 @@
         --lane-fill: color-mix(in srgb, var(--color-content) 3%, var(--color-canvas));
         background: var(--lane-fill);
     }
+    /* WHAT THE SLAB LIES ON, declared by whoever paints it rather than guessed at by the lane. Only one thing
+     * reads it — the pinned cap's corners, below — but that one thing cannot be right without it. Canvas is
+     * the default because most surfaces paint canvas; the two that ground lanes on the card surface say so
+     * beside their own `bg-card`. It inherits, so it is set once per surface and not once per lane. */
+    :root {
+        --lane-ground: var(--color-canvas);
+    }
+    .lane-ground-card {
+        --lane-ground: var(--color-card);
+    }
+    /* …and back again, for the one surface that paints canvas INSIDE a card-ground host: the docked chat's
+       sheet, which is a canvas box floating over a card-ground panel (ChatTabs). */
+    .lane-ground-canvas {
+        --lane-ground: var(--color-canvas);
+    }
     .lane-header {
         background: var(--lane-fill);
+    }
+    /* THE PINNED CAP KEEPS ITS ROUNDED CORNERS. A radius shows what is BEHIND it, and the moment a lane scrolls
+     * under its own cap what is behind the cap is the lane's own fill: the corners fill in with the header's
+     * exact colour and the slab reads as a hard rectangle butting into the top of the list. Reported from the
+     * floating chat, which is where a rail is tall enough to scroll a lane under its cap in the first place.
+     *
+     * The corners are painted back on: one wedge per top corner, cut to the radius the cap itself is cut to.
+     * At rest they land exactly on the lane's own corners, where the same ground already shows, and change
+     * nothing; pinned, they are the whole cap.
+     *
+     * THE COLOUR IS `--lane-ground`, NOT CANVAS, and that distinction is the entire bug this went through once
+     * already. A lane is mixed FROM canvas, so it is tempting to read canvas as what surrounds one — but that
+     * is only true of the docked sheet. The floating chat's rail and /subagents both stand on the CARD surface,
+     * where the same slab reads as a trough rather than a step up (Subagents.vue argues it), and a cap painting
+     * canvas into its corners there paints a hole a shade darker than the lane it is capping. So the ground is
+     * declared by whoever paints it and inherits down: `lane-ground-card` on the two card-ground hosts, canvas
+     * everywhere else. A host that grounds lanes on some third surface restates it or gets canvas corners.
+     *
+     * Cutting the corner at the SCROLLER instead — a radius on the scroll box, no colour to know — cannot do
+     * it: a classic scrollbar takes its width out of that box, so the clip lands ten pixels right of the lane's
+     * own edge and rounds the wrong corner while leaving the lane's square. */
+    .lane-header::before,
+    .lane-header::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        height: var(--radius-xl);
+        width: var(--radius-xl);
+        pointer-events: none;
+    }
+    .lane-header::before {
+        left: 0;
+        background: radial-gradient(circle at 100% 100%, transparent var(--radius-xl), var(--lane-ground) 0);
+    }
+    .lane-header::after {
+        right: 0;
+        background: radial-gradient(circle at 0 100%, transparent var(--radius-xl), var(--lane-ground) 0);
     }
 
     /* A SESSION CARD — the one surface the fleet board (AgentCard), the workflow row (WorkflowRunCard) and

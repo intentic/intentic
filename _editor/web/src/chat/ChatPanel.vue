@@ -357,7 +357,7 @@ const endResize = (event: PointerEvent): void => {
          column you touch least. Navigation before content, and the scroll you use against the frame. -->
     <div
         ref="root"
-        class="chat-panel relative flex h-full min-h-0 overflow-hidden bg-card"
+        class="chat-panel lane-ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
         :class="[chatWide ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
     >
         <div
