@@ -543,6 +543,53 @@ describe(`per-tab drafts`, () => {
         expect(useChat().conversations.value).toHaveLength(1);
         expect(useChat().draft.value).toBe(``);
     });
+
+    /* HOW LONG THE MESSAGE HAS BEEN STANDING (Conversation.draftAt), which is what the unsent marks on the board
+     * and the chat rail report and the one fact that separates a sentence broken off a minute ago from one
+     * abandoned last week. */
+    it(`stamps a composer the first time it holds something unsent, and clears it when that goes`, async () => {
+        const clock = vi.spyOn(Date, `now`).mockReturnValue(1_000);
+        try {
+            const chat = useChat();
+            expect(chat.active.value.draftAt.value).toBeUndefined();
+
+            chat.draft.value = `half a sentence`;
+            await nextTick();
+            expect(chat.active.value.draftAt.value).toBe(1_000);
+
+            /* ...AND IT DOES NOT MOVE AS THE MESSAGE GROWS. The age is of the message, not of its last
+             * keystroke, and a stamp that advanced per character would also churn the draft echo's publish key,
+             * which is deliberately built to stop changing once the preview settles (draftEcho). */
+            clock.mockReturnValue(5_000);
+            chat.draft.value = `half a sentence, then the other half`;
+            await nextTick();
+            expect(chat.active.value.draftAt.value).toBe(1_000);
+
+            chat.draft.value = ``;
+            await nextTick();
+            expect(chat.active.value.draftAt.value).toBeUndefined();
+        } finally {
+            clock.mockRestore();
+        }
+    });
+
+    // Persisted with the draft, because a stamp kept only in memory restarts at "just now" every time the window
+    // does: a four-day-old abandoned sentence would come back from every reload looking like live work.
+    it(`restores the age of a draft rather than re-stamping it as freshly written`, async () => {
+        const clock = vi.spyOn(Date, `now`).mockReturnValue(1_000);
+        try {
+            useChat().draft.value = `half a sentence`;
+            await nextTick(); // flush the stamp and the persistence watch
+
+            clock.mockReturnValue(9_000);
+            resetChat(); // same restore path as a page refresh
+            await nextTick();
+
+            expect(useChat().conversations.value[0]!.draftAt.value).toBe(1_000);
+        } finally {
+            clock.mockRestore();
+        }
+    });
 });
 
 /* The composer's pills (model, reasoning effort, extended thinking) describe the CHAT they sit under, so they

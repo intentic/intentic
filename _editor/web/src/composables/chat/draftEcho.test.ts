@@ -95,7 +95,18 @@ describe(`elsewhereDrafts`, () => {
         popOut();
         receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [{ id: `c1`, preview: `fix the login redirect` }] });
 
-        expect(elsewhereDrafts.value.get(`c1`)).toBe(`fix the login redirect`);
+        expect(elsewhereDrafts.value.get(`c1`)).toEqual({ id: `c1`, preview: `fix the login redirect` });
+    });
+
+    /* ...AND HOW LONG THEY HAVE BEEN STANDING. The words alone leave the board's mark able to say only that a
+     * message exists, and a sentence broken off a minute ago and one abandoned four days back are the same mark
+     * without this. It rides the note rather than being guessed at the receiving end, because the instant belongs
+     * to the composer and this window has never seen it. */
+    it(`carries when each composer first held its message`, () => {
+        popOut();
+        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [{ id: `c1`, preview: `fix the login redirect`, at: 1_700 }] });
+
+        expect(elsewhereDrafts.value.get(`c1`)?.at).toBe(1_700);
     });
 
     // A snapshot, never a patch: the note that arrives IS the list, so a message that has been sent (or cleared)

@@ -88,6 +88,11 @@ export interface StoredTab {
     readonly forkOf?: { conversationId: string; keep: number; files: "then" | "now" };
     readonly title?: string;
     readonly draft: string;
+    // When this composer first held something unsent (Conversation.draftAt), so the unsent mark's age survives
+    // a reload: stamped in memory it would restart at "just now" every time the window did, which is the one
+    // reading that turns a four-day-old abandoned sentence into something that looks like live work. Absent
+    // whenever nothing is standing unsent, and on a tab that has never been touched.
+    readonly draftAt?: number;
     readonly attachments: { name: string; path: string }[];
     // Messages submitted while a turn ran that hadn't reached the agent yet, user-written text, so a refresh
     // must not swallow them. They restore as queued (not as draft, which would collide with the real draft)
@@ -125,6 +130,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     forkOf: conversation.pendingForkOf.value,
     title: conversation.title.value ?? undefined,
     draft: conversation.draft.value,
+    draftAt: conversation.draftAt.value,
     attachments: conversation.attachments.value.filter((file) => file.status === `done`).map((file) => ({ name: file.name, path: file.path })),
     queued: conversation.queued.value.map((message) => ({
         text: message.text,
@@ -159,6 +165,11 @@ const readAttachments = (raw: unknown): { name: string; path: string }[] =>
 // restore already falls back from.
 const readText = <K extends string>(key: K, raw: unknown): { [P in K]?: string } =>
     typeof raw === `string` && raw !== `` ? ({ [key]: raw } as { [P in K]?: string }) : {};
+
+// The same, for one recorded INSTANT. Finite or nothing: an age computed from a NaN renders as garbage on the
+// card that shows it, and every mark that reads one of these is true without it.
+const readStamp = <K extends string>(key: K, raw: unknown): { [P in K]?: number } =>
+    typeof raw === `number` && Number.isFinite(raw) ? ({ [key]: raw } as { [P in K]?: number }) : {};
 
 const PICK_UP_REASONS: readonly PickUpReason[] = [`stopped`, `limit`, `outage`];
 
@@ -252,6 +263,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readSession(raw[`session`]),
         ...(validForkOf !== undefined ? { forkOf: validForkOf } : {}),
         ...(typeof raw[`title`] === `string` ? { title: raw[`title`] } : {}),
+        ...readStamp(`draftAt`, raw[`draftAt`]),
     };
 };
 

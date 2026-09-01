@@ -23,8 +23,8 @@ import { useSandbox } from "../sandbox/useSandbox";
  *     every panel while booting, before the holder's roll-call arrives, so `showsPanel` is not proof of
  *     ownership and letting it publish makes a half-restored strip overwrite the real one;
  *   · the holder's FIRST snapshot is published even when empty. A reload is a new JS realm, so suppressing its
- *     empty snapshot leaves the last realm's non-empty note alive on every dashboard: the stale "Unsent
- *     message" badge whose chat opens onto an empty composer.
+ *     empty snapshot leaves the last realm's non-empty note alive on every dashboard: the stale unsent chip
+ *     whose chat opens onto an empty composer.
  * A window drawing the docked chat reads its own conversations and ignores every echo, so docked chats need no
  * publisher at all and no stale note can outrank the composer itself.
  *
@@ -34,11 +34,15 @@ import { useSandbox } from "../sandbox/useSandbox";
  *
  * Scoped by sandbox and same-origin, the boundaries the summons channel already keeps (summon.ts). */
 
-// One chat with words in it: the tab's id, and the first few of those words (empty when what is unsent is an
-// attachment or a queued message rather than typed text, the card then wears the mark without a new name).
+// One chat with words in it: the tab's id, the first few of those words (empty when what is unsent is an
+// attachment or a queued message rather than typed text, the card then wears the mark without a new name), and
+// when the composer first held them (Conversation.draftAt), so a mark drawn in another window can say how long
+// the message has been standing and not merely that it exists. Absent when a restored tab was persisted without
+// one: the mark is true without an age.
 export interface UnsentDraft {
     readonly id: string;
     readonly preview: string;
+    readonly at?: number;
 }
 
 type DraftNote =
@@ -76,14 +80,14 @@ const post = (note: DraftNote): void => {
 
 const shows = showsPanel(`chat`);
 
-// What another window last said it was holding. A snapshot, never a patch: the last note wins, the same
-// presence pattern the agent roster follows.
-const heard = shallowRef<ReadonlyMap<string, string>>(new Map());
-const NOTHING: ReadonlyMap<string, string> = new Map();
+// What another window last said it was holding, by conversation id. A snapshot, never a patch: the last note
+// wins, the same presence pattern the agent roster follows.
+const heard = shallowRef<ReadonlyMap<string, UnsentDraft>>(new Map());
+const NOTHING: ReadonlyMap<string, UnsentDraft> = new Map();
 
 /** The unsent drafts this window is NOT holding: what the board joins against. Empty whenever this window draws
  *  the chat itself, since then its own conversations are the answer and an echo could only be a stale copy. */
-export const elsewhereDrafts: ComputedRef<ReadonlyMap<string, string>> = computed(() => (shows.value ? NOTHING : heard.value));
+export const elsewhereDrafts: ComputedRef<ReadonlyMap<string, UnsentDraft>> = computed(() => (shows.value ? NOTHING : heard.value));
 
 /** THE OTHER HALF OF THAT RULE, and the one every reader outside this module has to apply for itself: exactly
  *  one window speaks for a composer, so while the chat is drawn somewhere else this window's OWN conversations
@@ -93,7 +97,7 @@ export const elsewhereDrafts: ComputedRef<ReadonlyMap<string, string>> = compute
  *  objects it already built, frozen with whatever was in their composers at the moment the panel left. A reader
  *  that took the UNION of the two halves therefore latched those words permanently: the send happened out in the
  *  floating window, which cleared its own mark and published an empty snapshot, while the dashboard went on
- *  wearing "Unsent message" for a message that no longer existed anywhere. Nothing can retract a local draft in a
+ *  wearing its unsent chip for a message that no longer existed anywhere. Nothing can retract a local draft in a
  *  window whose composer the user cannot reach.
  *
  *  It reads optimistically during boot (`showsPanel`: a window believes it draws every panel until a holder's
@@ -136,7 +140,7 @@ export const receiveDraftNote = (note: DraftNote): void => {
     if (note.sandbox !== useSandbox().activeSandboxId.value) {
         return;
     }
-    heard.value = new Map(note.drafts.map((draft) => [draft.id, draft.preview]));
+    heard.value = new Map(note.drafts.map((draft) => [draft.id, draft]));
 };
 
 channel?.addEventListener(`message`, (event: MessageEvent<DraftNote>) => receiveDraftNote(event.data));

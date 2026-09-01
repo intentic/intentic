@@ -232,6 +232,10 @@ const restoreTab = (tab: StoredTab): Conversation => {
     // starts from the mode its tree calls for, same as a fresh one.
     conversation.modePick.value = startingMode(conversation.isolated.value);
     conversation.draft.value = tab.draft;
+    // The age of what is in that composer, restored with it: the stamping watch below only ever fills an EMPTY
+    // stamp, so a tab that comes back holding words keeps the instant it first held them instead of being
+    // re-stamped as freshly written by its own restore.
+    conversation.draftAt.value = tab.draftAt;
     conversation.attachments.value = tab.attachments.map((file) => ({
         id: uuid(),
         name: file.name,
@@ -352,8 +356,35 @@ restoreTabs();
  * Nothing is exchanged between the two windows and nothing has to be handed over: the seed is the handoff. */
 const showsChat = showsPanel(`chat`);
 
+/* WHEN EACH COMPOSER FIRST HELD SOMETHING UNSENT (Conversation.draftAt), stamped here and nowhere else.
+ * Something arrives in a composer by five routes — typing, an upload finishing, a message queued behind a
+ * running turn, a fork seeding the box, an edit mode handing back the draft it displaced — and a stamp written
+ * at each of them is five chances to miss one, so this watches the FLAG all five feed instead.
+ *
+ * THE EDGE, BOTH WAYS: an empty stamp is filled the first time a chat reads as unsent, and cleared the moment it
+ * stops being one. Filling only the EMPTY ones is what makes it idempotent, and that is what lets a restored tab
+ * keep the instant it was persisted with (restoreTab) rather than being re-stamped as fresh by its own restore.
+ *
+ * The key is the flags alone, so it runs on a transition or on the list changing and never per keystroke. That
+ * is load-bearing for the echo below, which carries the stamp: one that moved with every character would undo
+ * exactly what that publish key is shaped to avoid. */
+watch(
+    () => conversations.value.map((conversation) => `${conversation.conversationId}:${conversation.unsent.value ? 1 : 0}`).join(`,`),
+    () => {
+        for (const conversation of conversations.value) {
+            if (!conversation.unsent.value) {
+                conversation.draftAt.value = undefined;
+            } else if (conversation.draftAt.value === undefined) {
+                conversation.draftAt.value = Date.now();
+            }
+        }
+    },
+    { immediate: true },
+);
+
 // The stringified getter touches every persisted field, so tab open/close/switch, keystrokes, uploads finishing
-// and session commits all write through automatically.
+// and session commits all write through automatically. Registered AFTER the stamp above so a draft's first
+// keystroke persists with its stamp in the same flush rather than one behind it.
 // ponytail: writes per keystroke; the blob is tiny, throttle if profiling shows jank.
 watch(
     () =>
@@ -378,21 +409,26 @@ watch(showsChat, (shows) => {
 });
 
 /* ...and the same strip, told to the windows that are NOT drawing it, cut down to the one fact only this
- * window can know: which chats hold words that have not gone out, and the first few of them (draftEcho has the
- * whole argument). It is what keeps the fleet board's card for a draft alive while the chat is popped out, and
- * what lets that card wear the message's opening words instead of "New agent".
+ * window can know: which chats hold words that have not gone out, the first few of them, and how long they have
+ * been standing (draftEcho has the whole argument). It is what keeps the fleet board's card for a draft alive
+ * while the chat is popped out, what lets that card wear the message's opening words instead of "New agent",
+ * and what lets its unsent mark say how old the message is from another window.
  *
- * A stringified getter, like the snapshot above: the previews stop changing after the first line or so, and
- * from then on typing publishes nothing. Gated on drawing the panel, since a window that isn't is repeating
- * hearsay, and the gate is IN the key so that becoming the drawing window publishes at once rather than at the
- * next keystroke. */
+ * A stringified getter, like the snapshot above: the previews stop changing after the first line or so, the
+ * stamp only moves on the edge into unsent (the watch above), and from then on typing publishes nothing. Gated
+ * on drawing the panel, since a window that isn't is repeating hearsay, and the gate is IN the key so that
+ * becoming the drawing window publishes at once rather than at the next keystroke. */
 watch(
     () =>
         showsChat.value
             ? JSON.stringify(
                   conversations.value
                       .filter((conversation) => conversation.unsent.value)
-                      .map((conversation) => ({ id: conversation.conversationId, preview: draftPreview(conversation.draft.value) ?? `` })),
+                      .map((conversation) => ({
+                          id: conversation.conversationId,
+                          preview: draftPreview(conversation.draft.value) ?? ``,
+                          at: conversation.draftAt.value,
+                      })),
               )
             : undefined,
     (json) => {

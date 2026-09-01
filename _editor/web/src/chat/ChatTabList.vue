@@ -24,9 +24,11 @@ import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
 import RailCard from "../components/RailCard.vue";
 import RailLane from "../components/RailLane.vue";
+import UnsentMark from "../components/UnsentMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
 import { relativeTime, statusIcon, statusLabel } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
+import { draftPreview } from "../composables/chat/draftEcho";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import ChatShareDialog from "./ChatShareDialog.vue";
@@ -892,22 +894,16 @@ const closeTab = (event: Event, id: string): void => {
                                     class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
                                     >{{ unreadBadge(agent)!.label }}</span
                                 >
-                                <!-- WORDS OF THE USER'S STILL IN THIS CHAT'S COMPOSER, as a CHIP and not a lone
-                                     glyph. It sits with the two chips above rather than off among the marks,
-                                     because it answers their question ("why should I look at this one") and
-                                     answers it about the reader's own unfinished business, the one thing on
-                                     this row that nobody else can clear. The bare paper plane it replaces was
-                                     a 10px mark in a row of marks: findable once you knew it was there, and
-                                     invisible while skimming, which is precisely when a half-written message
-                                     gets lost. The board's card says it in the same words. -->
-                                <span
-                                    v-if="c.unsent.value"
-                                    v-tooltip.top="'You have an unsent message here'"
-                                    class="flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
-                                    aria-label="Unsent message"
-                                >
-                                    <Icon name="send" class="text-2xs" />Unsent
-                                </span>
+                                <!-- WORDS OF THE USER'S STILL IN THIS CHAT'S COMPOSER. It sits with the two
+                                     chips above rather than off among the marks, because it answers their
+                                     question ("why should I look at this one") and answers it about the
+                                     reader's own unfinished business, the one thing on this row that nobody
+                                     else can clear. The board's card draws the very same component, which is
+                                     what keeps the two surfaces from drifting into two marks again.
+                                     Read from the CONVERSATION and not from the fleet entry: this rail only
+                                     ever renders in the window drawing the chat, so the composer beside it is
+                                     the truth, and an off-roster chat keeps a populated mark. -->
+                                <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" :now="now" />
                                 <!-- Came in from outside (a Discord mention, a visitor, a webhook), and
                                      off the board, still open: both are marks about the card's PROVENANCE
                                      rather than its name, so they ride the meta line the way the board

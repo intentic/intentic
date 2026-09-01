@@ -100,6 +100,10 @@ describe(`reading a tab snapshot`, () => {
                     {
                         conversationId: `a`,
                         draft: `half a sentence`,
+                        // When the composer first held it, which is the whole reason this is persisted rather
+                        // than kept in memory: an age that restarts at "just now" on every reload makes a
+                        // sentence abandoned days ago look like live work.
+                        draftAt: 1_700,
                         provider: `codex`,
                         harness: `claude-code`,
                         session: { id: `sess-1`, provider: `codex`, harness: `claude-code` },
@@ -116,6 +120,7 @@ describe(`reading a tab snapshot`, () => {
             isolated: true,
             registered: false,
             draft: `half a sentence`,
+            draftAt: 1_700,
             provider: `codex`,
             harness: `claude-code`,
             session: { id: `sess-1`, provider: `codex`, harness: `claude-code` },
@@ -225,6 +230,20 @@ describe(`reading a tab snapshot`, () => {
         expect(restored).not.toHaveProperty(`model`);
         expect(restored).not.toHaveProperty(`effort`);
         expect(restored).not.toHaveProperty(`thinking`);
+    });
+
+    // The mark that reads this stamp is true without it, and an age computed from a NaN renders as garbage on the
+    // card, so an unusable one is dropped rather than carried.
+    it(`drops a draft stamp that isn't a finite instant`, () => {
+        session.set(
+            KEY,
+            JSON.stringify({
+                active: `a`,
+                tabs: [{ conversationId: `a`, draft: `half a sentence`, draftAt: `this morning`, attachments: [], queued: [] }],
+            }),
+        );
+
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).not.toHaveProperty(`draftAt`);
     });
 
     it(`drops an account that isn't a usable id, leaving the restore to fall back`, () => {

@@ -451,6 +451,21 @@ export class Conversation {
     readonly draft = ref(``);
     readonly attachments = ref<PendingAttachment[]>([]);
 
+    /* WHEN THIS COMPOSER FIRST HELD SOMETHING UNSENT, so the marks that report it (UnsentMark, on the fleet
+     * board's card and the chat rail's row) can say how long the message has been standing rather than only
+     * that it exists. That is the fact triage actually turns on: a sentence abandoned four days ago and one
+     * broken off mid-word a minute ago are the same mark today.
+     *
+     * THE EDGE, NOT THE LAST KEYSTROKE. It is stamped when `unsent` goes false→true and cleared when it goes
+     * back (useChat holds the one watcher that does it, so every route into a draft — typing, an upload
+     * landing, a queued message, a restore — is covered by watching the flag itself rather than each of them).
+     * A per-keystroke timestamp would also churn the draft echo's publish key, which is deliberately built to
+     * stop changing once the preview settles (draftEcho).
+     *
+     * Persisted with the draft (tabSnapshot), because an age that resets to "just now" on every reload is
+     * worse than no age at all. Absent while the composer is empty. */
+    readonly draftAt = ref<number | undefined>();
+
     /* ASKING THIS TURN AGAIN, IN DIFFERENT WORDS, the composer aimed at a message already in the transcript
      * rather than at the end of it. Set by beginEdit, cleared by cancelEdit or by the send that spends it.
      *

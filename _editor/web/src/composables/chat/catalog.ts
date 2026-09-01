@@ -86,9 +86,14 @@ export const statusTabClass = (status: ConversationStatus): string => {
     return ``;
 };
 
-// Compact relative time for the history list (e.g. "5m", "3h", "2d", else a short date).
-export const relativeTime = (ms: number): string => {
-    const diff = Date.now() - ms;
+/* Compact relative time for the history list (e.g. "5m", "3h", "2d", else a short date).
+ *
+ * `now` is for the callers that hold a TICK (the board's cards, the chat rail): reading the clock here makes the
+ * answer invisible to Vue, so a component whose other props are still — a card sitting on a draft nobody is
+ * touching — renders the age it was first built with and keeps it forever. Passing the tick in makes the age
+ * depend on it. Everyone else omits it and gets the clock, which is what a one-shot render wants. */
+export const relativeTime = (ms: number, now = Date.now()): string => {
+    const diff = now - ms;
     const min = Math.round(diff / 60000);
     if (min < 1) {
         return `just now`;

@@ -314,10 +314,21 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
      * chat's composer visible to the board it is no longer beside). False for a chat being written to on
      * another device, whose composer nothing here has an account of. */
     readonly unsent: boolean;
-    // The opening words of those unsent words, for a card that has no name of its own yet: a draft is named by
-    // the first turn it sends, so until then the message IS the only name it has. Absent once a title lands, and
-    // absent for a chat holding an attachment rather than typed text.
+    /* THE OPENING WORDS OF THAT UNSENT MESSAGE, read twice on the card and by two readers with different needs.
+     *
+     * It NAMES a card that has nothing else to be called: a draft is named by the first turn it sends, so until
+     * then the message is the only name it has (AgentCard.displayTitle, where a real title outranks it).
+     *
+     * And it is the whole content of the unsent MARK's hover (UnsentMark), on every card that wears one — the
+     * named and the nameless alike. That is why it is not confined to the untitled ones: the mark's own label
+     * can only say that a message exists, and which message it is, is the thing the reader needs to decide
+     * whether to go back to it.
+     *
+     * Absent for a chat whose unsent something is an attachment or a queued message rather than typed text. */
     readonly preview?: string;
+    // When that composer first held something unsent (Conversation.draftAt), so the mark can say how long the
+    // message has been standing. Absent on a tab restored from a snapshot that carried no stamp.
+    readonly draftAt?: number;
 }
 
 // How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
@@ -380,6 +391,15 @@ const clientStatus = (conversation: Conversation): ClientAgentStatus => {
     return conversation.messages.value.length > 0 || conversation.session.value !== undefined ? `resumed` : `draft`;
 };
 
+/* ONE COMPOSER'S UNSENT CONTENTS, as the board reads them: the opening words of the message standing in it and
+ * the instant it first held something. Both optional and for different reasons — there are no words when what is
+ * unsent is an attachment or a message queued behind a running turn, and no instant on a tab restored from a
+ * snapshot that predates the stamp — so every card that carries one is drawn to be true without either. */
+interface UnsentTab {
+    readonly preview?: string;
+    readonly at?: number;
+}
+
 // Attention first, then live turns + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
@@ -397,14 +417,23 @@ const fleet = computed<FleetAgent[]>(() => {
      * onto another screen and the card over here claiming there was nothing in it. Taking BOTH, which is what
      * this used to do, fails the other way round and is the bug it replaces: a window that is not drawing the
      * chat keeps its tab objects frozen at the moment the panel left, so a message sent out in the floating
-     * window cleared its mark out there and left this board wearing "Unsent message" for words that no longer
+     * window cleared its mark out there and left this board wearing an unsent chip for words that no longer
      * existed anywhere. */
     const elsewhere = elsewhereDrafts.value;
-    const unsentIds = new Set(
-        drawsChat.value
-            ? conversations.value.filter((conversation) => conversation.unsent.value).map((conversation) => conversation.conversationId)
-            : elsewhere.keys(),
-    );
+    const unsent: ReadonlyMap<string, UnsentTab> = drawsChat.value
+        ? new Map(
+              conversations.value
+                  .filter((conversation) => conversation.unsent.value)
+                  .map((conversation): [string, UnsentTab] => [
+                      conversation.conversationId,
+                      { preview: draftPreview(conversation.draft.value), at: conversation.draftAt.value },
+                  ]),
+          )
+        : new Map(
+              // The publisher has already folded its previews (draftEcho), so the empty string here means the
+              // same as an absent one: unsent, but an attachment or a queued message rather than typed words.
+              [...elsewhere].map(([id, draft]): [string, UnsentTab] => [id, { preview: draft.preview || undefined, at: draft.at }]),
+          );
     // A draft is a conversation the fleet has never heard of. NOT one that is merely absent from the live
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
@@ -417,11 +446,11 @@ const fleet = computed<FleetAgent[]>(() => {
              * when that is another one. A board of drafts otherwise says "New agent" as many times as there are
              * cards, at the one moment the reader is trying to tell them apart.
              *
-             * The same source as the mark above, never a fallback from one to the other: a stale local draft is
-             * exactly as wrong as a name as it is as a mark. Both halves go through the same fold, which is also
-             * what turns "unsent, but an attachment rather than words" into no name at all: such a card wears the
-             * mark and keeps its "New agent". */
-            const preview = draftPreview(drawsChat.value ? conversation.draft.value : (elsewhere.get(conversation.conversationId) ?? ``));
+             * The same source as the mark, never a fallback from one to the other: a stale local draft is exactly
+             * as wrong as a name as it is as a mark, so both come out of the one join above. That is also what
+             * turns "unsent, but an attachment rather than words" into no name at all: such a card wears the mark
+             * and keeps its "New agent". */
+            const tab = unsent.get(conversation.conversationId);
             const draft: FleetAgent = {
                 id: conversation.conversationId,
                 status: clientStatus(conversation),
@@ -431,8 +460,9 @@ const fleet = computed<FleetAgent[]>(() => {
                 attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
                 open: true,
                 unread: false,
-                unsent: unsentIds.has(conversation.conversationId),
-                preview,
+                unsent: tab !== undefined,
+                preview: tab?.preview,
+                draftAt: tab?.at,
                 /* WHERE THIS DRAFT WILL RUN, when it is not here. A tab aimed at another sandbox
                  * (Conversation.box) is still a draft in THIS browser and belongs on this board, since a draft
                  * exists nowhere else, but the card has to carry the box or every action on it would address
@@ -496,20 +526,27 @@ const fleet = computed<FleetAgent[]>(() => {
      * says "archived" on its face (AgentCard reads archivedAt) so it can't be mistaken for live work. */
     const held: FleetAgent[] = [];
     for (const agent of archived.value) {
-        if (unsentIds.has(agent.id) && !carded.has(agent.id)) {
+        const tab = unsent.get(agent.id);
+        if (tab !== undefined && !carded.has(agent.id)) {
             // A COPY, never the archive list's own entry: `open` and `unsent` are true of this window's tab and
             // not of the filed-away agent, and writing them onto the stored row would leave the archive claiming
-            // both long after the tab is closed.
-            held.push({ ...agent, open: true, unsent: true });
+            // both long after the tab is closed. The words and the age ride along for the same reason: they
+            // describe the composer, not the filed-away agent.
+            held.push({ ...agent, open: true, unsent: true, preview: tab.preview, draftAt: tab.at });
         }
     }
     return [
-        ...registry.value.map((agent): FleetAgent => ({
-            ...agent,
-            open: openIds.has(agent.id),
-            unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
-            unsent: unsentIds.has(agent.id),
-        })),
+        ...registry.value.map((agent): FleetAgent => {
+            const tab = unsent.get(agent.id);
+            return {
+                ...agent,
+                open: openIds.has(agent.id),
+                unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
+                unsent: tab !== undefined,
+                preview: tab?.preview,
+                draftAt: tab?.at,
+            };
+        }),
         ...held,
         ...drafts,
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);

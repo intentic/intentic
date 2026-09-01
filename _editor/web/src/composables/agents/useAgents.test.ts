@@ -313,15 +313,22 @@ describe("draft cards", () => {
         const { receiveDraftNote } = await import("../chat/draftEcho");
         const { receiveFloatingNote } = await import("../floating");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
-        receiveDraftNote({ kind: `drafts`, sandbox: undefined, drafts: [{ id: `fresh`, preview: `fix the login redirect` }] });
+        receiveDraftNote({ kind: `drafts`, sandbox: undefined, drafts: [{ id: `fresh`, preview: `fix the login redirect`, at: 1_700 }] });
         // The tab as this window holds it: opened by the summons that made it, and empty, because the typing
         // happened out there.
         const conversation = new Conversation(`fresh`);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
-        expect(useAgents().lanes.value.active.map((card) => ({ id: card.id, preview: card.preview, unsent: card.unsent }))).toEqual([
-            { id: `fresh`, preview: `fix the login redirect`, unsent: true },
-        ]);
+        // The age comes off the note too, for the same reason the words do: the composer is a window away, so
+        // there is nothing here to derive it from, and a mark that guessed would report this window's own boot.
+        expect(
+            useAgents().lanes.value.active.map((card) => ({
+                id: card.id,
+                preview: card.preview,
+                unsent: card.unsent,
+                draftAt: card.draftAt,
+            })),
+        ).toEqual([{ id: `fresh`, preview: `fix the login redirect`, unsent: true, draftAt: 1_700 }]);
 
         receiveDraftNote({ kind: `drafts`, sandbox: undefined, drafts: [] });
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
@@ -332,7 +339,7 @@ describe("draft cards", () => {
      * A window that is not drawing the chat keeps the tab objects it already built, frozen with whatever was in
      * their composers when the panel left (it forgets the stored strip, not the in-memory one). The board counted
      * those AND the echo, so the send went out in the popped-out window, which cleared its own composer and
-     * published an empty snapshot, and the card over here went on wearing "Unsent message" for a message that no
+     * published an empty snapshot, and the card over here went on wearing an unsent chip for a message that no
      * longer existed anywhere: nothing this window could do would ever clear a composer it is not showing. */
     it("drops the mark when the popped-out chat says the message went, whatever this window's frozen tab holds", async () => {
         const { receiveDraftNote } = await import("../chat/draftEcho");
@@ -352,6 +359,25 @@ describe("draft cards", () => {
         expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, unsent: card.unsent }))).toEqual([{ id: `a1`, unsent: false }]);
 
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+    });
+
+    /* THE WORDS AND THE AGE ON A CARD THAT ALREADY HAS A NAME, which is where the mark is read most often and
+     * where it could say least. `preview` used to be confined to the NAMELESS cards, since naming them is what it
+     * was added for, so a long-running agent with a half-written follow-up in its composer wore a mark able to
+     * report only that some message existed: not which one, and not whether it was broken off a minute ago or
+     * abandoned last week. Both are the whole content of that mark's hover (UnsentMark), so the join carries them
+     * for every unsent card and AgentCard keeps a real title in front of the preview. */
+    it("carries the message's words and its age on a card that has a title of its own", () => {
+        setAgents([registered(`a1`)], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        conversation.draft.value = `and one more thing`;
+        conversation.draftAt.value = 1_700;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(useAgents().lanes.value.finished.map((card) => ({ preview: card.preview, draftAt: card.draftAt }))).toEqual([
+            { preview: `and one more thing`, draftAt: 1_700 },
+        ]);
     });
 
     /* AN UNREGISTERED CONVERSATION CARRYING AN ERROR IS NOT A DRAFT. The only way one gets here is that its send

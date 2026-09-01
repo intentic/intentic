@@ -7,6 +7,7 @@ import { requestLandAgent } from "../composables/agents/agentActions";
 import { refreshAcross } from "../composables/sandbox/fleetAcross";
 import { useRole } from "../composables/sandbox/useRole";
 import OriginMark from "../components/OriginMark.vue";
+import UnsentMark from "../components/UnsentMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";
 import {
@@ -528,18 +529,10 @@ const grab = (event: PointerEvent): void => {
 
             <!-- WORDS OF THE USER'S STILL SITTING IN THIS CHAT'S COMPOSER (FleetAgent.unsent). Leads the body,
                  above even provenance: everything else on this card is the agent's account of itself, and this
-                 one line is the reader's own unfinished business: the only thing here that no one but them can
-                 clear. It is the whole reason such a card is on the board at all (see `fleet`, which lifts an
-                 ARCHIVED session back onto the lanes for it), so a card that came back without saying why would
-                 read as the archive leaking.
-                 The composer's own send glyph, in the link hue the board spends on "an offer to act" (the same
-                 one Ready-to-land wears): nothing is wrong here, so none of the warning colours apply. The
-                 text itself is deliberately NOT shown: a board is read at a glance, often over someone's
-                 shoulder, and a half-written message is the most private thing this app holds. -->
-            <p v-if="agent.unsent" class="flex min-w-0 items-center gap-2 text-2xs text-link" v-tooltip.top="'You have an unsent message here'">
-                <Icon name="send" class="shrink-0 text-2xs" />
-                <span class="truncate font-medium">Unsent message</span>
-            </p>
+                 one mark is the reader's own unfinished business. The whole of it — the chip's form, its wording
+                 and what its hover carries — lives in UnsentMark, which the chat rail's row draws too: the same
+                 fact drawn twice by hand is how the two surfaces came to say it in two different shapes. -->
+            <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
 
             <!-- WHY IT DIED. The daemon carries this only while the card still reads as failed (AgentSummary's
                  `failure`), so no state check belongs here: its presence IS the state. Above provenance and
