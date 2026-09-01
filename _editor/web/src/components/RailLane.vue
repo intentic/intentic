@@ -37,14 +37,17 @@ defineProps<{
 
 <template>
     <section class="lane flex min-w-0 flex-col rounded-xl">
-        <!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `px-3 py-2`, cards inset `px-2` from the
+        <!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `h-8 px-3`, cards inset `px-2` from the
              slab's edge with `gap-2` between them (the <section> in AgentsView). They were a few pixels tighter
              here, and that is exactly the drift the two lists cannot afford: a rail row and a board card are one
              card in two frames, and a card sitting nearer its lane's edge in one of them reads as a different
              component rather than as the same one at another width.
              The header is opaque and ends exactly where the first card begins, so it paints over whatever that
-             card draws at its top edge while the lane scrolls under it. -->
-        <header class="lane-header sticky top-0 z-10 flex items-center gap-2 rounded-t-xl px-3 py-2">
+             card draws at its top edge while the lane scrolls under it.
+             THE HEIGHT IS FIXED for the board's reason (AgentsView says it at length): `#actions` is one lane's
+             — "Clear" on Finished — and a cap that grew around a 26px button gave that lane a taller cap than
+             the lanes above and below it, which down a rail reads as three headers that disagree. -->
+        <header class="lane-header sticky top-0 z-10 flex h-8 shrink-0 items-center gap-2 rounded-t-xl px-3">
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>

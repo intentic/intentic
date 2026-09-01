@@ -15,7 +15,16 @@ import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { type FleetLane, reviewAction, unregistered, watching } from "../composables/agents/agentStatus";
 import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, useAgents, windowFinished } from "../composables/agents/useAgents";
-import { boxNameOf, fleetScope, isRemote, openInSandbox, otherFleet, partialAnswer, readingAcross, scopeOffered } from "../composables/agents/fleetScope";
+import {
+    boxNameOf,
+    fleetScope,
+    isRemote,
+    openInSandbox,
+    otherFleet,
+    partialAnswer,
+    readingAcross,
+    scopeOffered,
+} from "../composables/agents/fleetScope";
 import { refreshAcross, subscribe as watchOtherBoxes } from "../composables/sandbox/fleetAcross";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { hold } from "../composables/notifications";
@@ -905,7 +914,9 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
 // for a registered agent, so there is always a detail to land on.
 const agentHref = (agent: FleetAgent): string =>
     router.resolve(
-        isRemote(agent) ? { path: `/agents/${encodeURIComponent(agent.id)}`, query: { sandbox: agent.sandboxId } } : `/agents/${encodeURIComponent(agent.id)}`,
+        isRemote(agent)
+            ? { path: `/agents/${encodeURIComponent(agent.id)}`, query: { sandbox: agent.sandboxId } }
+            : `/agents/${encodeURIComponent(agent.id)}`,
     ).href;
 const reviewAgent = (agent: FleetAgent): void => {
     /* A card from another box opens its review WITHOUT opening a tab for it, and the omission is the point:
@@ -1285,8 +1296,18 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                          Stacked, the header also becomes the lane's marker while you scroll: three lanes down
                          one page is a page and a half of cards, and a card is only readable as "finished" if
                          the lane it belongs to is still on screen. It pins inside its own section, so it
-                         leaves with it rather than sitting over the next lane's cards. -->
-                    <header class="flex items-center gap-2.5 px-1 py-2" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
+                         leaves with it rather than sitting over the next lane's cards.
+
+                         ITS HEIGHT IS THE ROW'S, NOT ITS CONTENTS': the lanes are columns side by side, and a
+                         header that sizes to what it holds is a header only one lane can be right about.
+                         Finished is the lane that holds anything — the archive counter and "Clear" — and a
+                         26px button in a box that grew around it made that header eight pixels taller than
+                         the two beside it: the labels sat on two different lines and the first Finished card
+                         started below the first Active one, which reads as a column that has slipped rather
+                         than as a lane with an action in it. `h-8` is the app's control row (FilterBar, the
+                         diff toolbar) and clears the compact button, so every lane caps at the same line
+                         whether it carries actions or not. -->
+                    <header class="flex h-8 shrink-0 items-center gap-2.5 px-1" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
                         <template v-if="lane.key === 'finished' && archiveOpen">
                             <button
                                 type="button"
