@@ -6,7 +6,7 @@ import { GIT_CHANGES } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
 import { jsonBody } from "../sandbox/jsonBody";
 import { connectedSandboxes } from "../sandbox/roster";
-import { sandboxJsonAt } from "../sandbox/sandboxClient";
+import { sandboxJsonAt, sandboxJsonQuietly } from "../sandbox/sandboxClient";
 import { useSandbox } from "../sandbox/useSandbox";
 import { ahead, outgoingWork, unpublished } from "./outgoingWork";
 
@@ -75,7 +75,7 @@ const readBox = async (sandbox: SandboxSummary, force: boolean): Promise<void> =
     }
     inFlight.add(sandbox.id);
     try {
-        const body = await sandboxJsonAt<GitChangesResponse>(sandbox.id, `/git/changes`);
+        const body = await sandboxJsonQuietly<GitChangesResponse>(sandbox.id, `/git/changes`);
         write(sandbox.id, { sandbox, repos: body.repos, readAt: Date.now(), unreachable: false });
         // Filed under that box's own key, so the entry is swept by the same machinery that sweeps everything
         // else this browser remembers about it (sandboxQueryPredicate reads the id in the last position), and

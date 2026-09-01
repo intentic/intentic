@@ -2,6 +2,7 @@ import { computed, ref, watch } from "vue";
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "../browserStorage";
 import { useGoogleIdentity } from "../useGoogleIdentity";
+import { healthAnswers, sandboxIdOf } from "./endpoint";
 import { useSandbox } from "./useSandbox";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 
@@ -21,7 +22,19 @@ import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
  * user re-proves to Google only after a month away. The exchange is the ONLY road to a bearer for a named
  * sandbox: a daemon that will not mint one fails visibly rather than falling back to spending a raw Google
  * proof per call, which is a credential mode nobody chose and nothing reports. Loopback, where there is no
- * sandbox id to key a session by, is the one place the raw proof is still the answer. */
+ * sandbox id to key a session by, is the one place the raw proof is still the answer.
+ *
+ * ONLY A CALL SOMEBODY IS WAITING ON MAY ASK GOOGLE FOR ANYTHING, and that rule is what the `background` flag
+ * carries down from the call sites. The app reads across sandboxes now (fleetAcross, changesAcross), one poll
+ * per box, and a box this browser holds no session for takes the whole establishment path: mint a proof,
+ * exchange it. The mint is not quiet — One Tap is browser UI and the gate behind it covers the window — and
+ * the sign-in it asks for is not even about the sandbox the reader is looking at, since `needsSignIn` is one
+ * flag for the app and names no machine. Worse, a box that is OFF cannot complete the exchange, so nothing is
+ * ever stored for it and the next poll (and the next refresh) asks Google all over again: a stopped laptop in
+ * the account was enough to make every page load ask for a sign-in the workspace on screen did not need.
+ *
+ * So a background reader spends a credential already in hand and takes "no" for an answer, a foreground call
+ * may interrupt, and neither one prompts for a daemon that has not first been shown to be answering. */
 
 interface StoredSession {
     readonly token: string;
@@ -64,9 +77,21 @@ const { activeSandboxId } = useSandbox();
 // In-memory mirror of the persisted sessions (hydrated lazily per sandbox), so presentedEmail is reactive to
 // mints and invalidations without re-reading storage.
 const sessions = ref<Record<string, StoredSession>>({});
-// One in-flight establish per sandbox, so concurrent calls share a single Google mint + exchange.
-const inflight = new Map<string, Promise<SandboxBearer | undefined>>();
+/* One in-flight establish per sandbox, so concurrent calls share a single Google mint + exchange, carrying
+ * whether it may interrupt: a background establish cannot satisfy a caller who is standing there waiting, and
+ * adopting one would turn a press into a silent failure. Sharing goes the other way freely. */
+const inflight = new Map<string, { readonly pending: Promise<SandboxBearer | undefined>; readonly background: boolean }>();
 const renewing = new Set<string>();
+/* WHEN EACH SANDBOX LAST FAILED TO ESTABLISH, so a box that is not answering is asked once per cooldown rather
+ * than once per poll tick and once per page load. Foreground calls are never held back by it: a press is the
+ * user saying "now", and the reason they are pressing is usually that they just brought the machine back. */
+const ESTABLISH_COOLDOWN_MS = 30_000;
+const failedAt = new Map<string, number>();
+const noteEstablishFailure = (sandboxId: string): void => void failedAt.set(sandboxId, Date.now());
+const establishHolds = (sandboxId: string): boolean => {
+    const at = failedAt.get(sandboxId);
+    return at !== undefined && Date.now() - at < ESTABLISH_COOLDOWN_MS;
+};
 /* Invalidates async establishment/renewal already past an await. A late response may complete on the wire, but
  * it cannot write or return a credential after the thing that retired it.
  *
@@ -167,42 +192,86 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
     }
 };
 
-// The sign-in moment: mint a Google proof (silent for a returning Google session; One Tap / the rendered
-// gate otherwise) and exchange it. Network errors and malformed/non-2xx answers fail loudly: a daemon that
+/* IS THE DAEMON WE ARE ABOUT TO ASK FOR A SIGN-IN EVEN THERE? Its own identity-checked /health, the same one
+ * the transport qualifies addresses with, unauthenticated by design so it can be asked before any credential
+ * exists (endpoint.ts owns both the check and the reasoning).
+ *
+ * Asked ONLY on the path that would otherwise put Google on the screen, which is what keeps it off the price
+ * of an ordinary establishment: a browser holding a live proof exchanges it without a probe, and pays this one
+ * round trip exactly when the alternative is asking a person for a credential on behalf of a machine that
+ * might be switched off. A target with no connect token cannot be identity-checked, and a check we cannot make
+ * must not become a reason to refuse a sign-in, so it answers yes. */
+const daemonAnswers = async (target: SandboxTarget): Promise<boolean> => {
+    const token = target.connectToken;
+    return token === undefined || token === `` ? true : healthAnswers(target.base, await sandboxIdOf(token));
+};
+
+/* The proof this exchange will spend. A cached one costs nothing and is what the steady state uses; minting a
+ * fresh one is an interruption, so it belongs only to a caller somebody is waiting on, and only once the
+ * daemon has been shown to be answering. */
+const proveIdentity = async (target: SandboxTarget, background: boolean): Promise<string | undefined> => {
+    const held = await getIdToken({ interactive: false });
+    if (held !== undefined || background) {
+        return held;
+    }
+    return (await daemonAnswers(target)) ? getIdToken() : undefined;
+};
+
+// The sign-in moment: spend a Google proof (cached, or minted through One Tap / the rendered gate for a
+// foreground caller) and exchange it. Network errors and malformed/non-2xx answers fail loudly: a daemon that
 // cannot mint a session is broken, not old, and pretending otherwise would spend a raw Google proof per call.
-const establish = (target: SandboxTarget & { readonly sandboxId: string }): Promise<SandboxBearer | undefined> => {
+const establish = (target: SandboxTarget & { readonly sandboxId: string }, background: boolean): Promise<SandboxBearer | undefined> => {
     const generation = generationOf(target.sandboxId);
-    const pending = (async (): Promise<SandboxBearer | undefined> => {
-        let idToken = await getIdToken();
+    const pending: Promise<SandboxBearer | undefined> = (async (): Promise<SandboxBearer | undefined> => {
+        const idToken = await proveIdentity(target, background);
         if (idToken === undefined) {
             return undefined;
         }
         let minted = await exchange(target, idToken);
-        if (minted === `unauthorized`) {
+        if (minted === `unauthorized` && !background) {
             // A definitive verifier rejection means the cached Google proof is dead or malformed. Forget it
             // and let this same user action drive the interactive recovery once, rather than looping on it.
             clearCredential();
-            idToken = await getIdToken();
-            if (idToken === undefined) {
+            const replacement = await getIdToken();
+            if (replacement === undefined) {
                 return undefined;
             }
-            minted = await exchange(target, idToken);
+            minted = await exchange(target, replacement);
         }
         if (generationOf(target.sandboxId) !== generation) {
             return undefined;
         }
         if (minted === `unauthorized`) {
+            /* ONE BOX'S REFUSAL IS NOT EVIDENCE ABOUT THE CREDENTIAL when nobody asked this question. Clearing
+             * the proof also switches Google's automatic re-authentication off (useGoogleIdentity), so the next
+             * mint anywhere in the app is a visible gate rather than a silent renewal — far too much to spend
+             * on a poll of a machine the reader is not looking at, whose likelier explanations (a sandbox bound
+             * to another account, a member since removed) say nothing at all about the token. */
+            if (background) {
+                return undefined;
+            }
             clearCredential();
             throw new Error(`The sandbox rejected your Google sign-in.`);
         }
         write(target.sandboxId, minted);
         return { token: minted.token, kind: `session` };
-    })().finally(() => {
-        if (inflight.get(target.sandboxId) === pending) {
-            inflight.delete(target.sandboxId);
-        }
-    });
-    inflight.set(target.sandboxId, pending);
+    })()
+        .then((bearer) => {
+            if (bearer === undefined) {
+                noteEstablishFailure(target.sandboxId);
+            }
+            return bearer;
+        })
+        .catch((error: unknown) => {
+            noteEstablishFailure(target.sandboxId);
+            throw error;
+        })
+        .finally(() => {
+            if (inflight.get(target.sandboxId)?.pending === pending) {
+                inflight.delete(target.sandboxId);
+            }
+        });
+    inflight.set(target.sandboxId, { pending, background });
     return pending;
 };
 
@@ -226,29 +295,56 @@ const renew = async (target: SandboxTarget & { readonly sandboxId: string }, ses
 
 // The raw Google proof as a bearer, for the one caller that legitimately spends one: loopback mode, where
 // there is no sandbox id to key a session by.
-const googleBearer = async (): Promise<SandboxBearer | undefined> => {
-    const token = await getIdToken();
+const googleBearer = async (background: boolean): Promise<SandboxBearer | undefined> => {
+    const token = await getIdToken({ interactive: !background });
     return token === undefined ? undefined : { token, kind: `google` };
 };
 
-// The bearer for the active sandbox: a valid session (renewed in the background when due) or the freshly
-// established one. Undefined only when the user dismisses the sign-in gate.
-const getSessionToken = async (target = currentSandboxTarget()): Promise<SandboxBearer | undefined> => {
-    if (target === undefined || target.sandboxId === undefined) {
-        return googleBearer();
-    }
+// A stored session still good past the guard: hydrated into the reactive mirror if this window has not read it
+// yet, and slid forward in the background once it is close enough to expiry to be worth renewing.
+const servedSession = (target: SandboxTarget & { readonly sandboxId: string }): SandboxBearer | undefined => {
     const sandboxId = target.sandboxId;
     const stored = sessions.value[sandboxId] ?? readStored(sandboxId);
-    if (stored !== undefined && Date.now() < stored.expiresAt - EXPIRY_MARGIN_MS) {
-        if (sessions.value[sandboxId] === undefined) {
-            sessions.value = { ...sessions.value, [sandboxId]: stored };
-        }
-        if (Date.now() >= stored.expiresAt - RENEW_UNDER_MS) {
-            void renew({ ...target, sandboxId }, stored.token).catch(() => undefined);
-        }
-        return { token: stored.token, kind: `session` };
+    if (stored === undefined || Date.now() >= stored.expiresAt - EXPIRY_MARGIN_MS) {
+        return undefined;
     }
-    return inflight.get(sandboxId) ?? establish({ ...target, sandboxId });
+    if (sessions.value[sandboxId] === undefined) {
+        sessions.value = { ...sessions.value, [sandboxId]: stored };
+    }
+    if (Date.now() >= stored.expiresAt - RENEW_UNDER_MS) {
+        void renew(target, stored.token).catch(() => undefined);
+    }
+    return { token: stored.token, kind: `session` };
+};
+
+/* One establishment per sandbox at a time, and, for the readers that must not press, one per cooldown.
+ *
+ * An establish already out for this box answers this call too, unless it is the quiet kind and this caller is
+ * not: adopting a background attempt would settle a press with the silence a poll is content with. */
+const establishShared = (target: SandboxTarget & { readonly sandboxId: string }, background: boolean): Promise<SandboxBearer | undefined> => {
+    const running = inflight.get(target.sandboxId);
+    if (running !== undefined && (background || !running.background)) {
+        return running.pending;
+    }
+    if (background && establishHolds(target.sandboxId)) {
+        return Promise.resolve(undefined);
+    }
+    return establish(target, background);
+};
+
+/* The bearer for a sandbox: a valid session (renewed in the background when due) or a freshly established one.
+ * Undefined when there is none to be had without asking Google — the user dismissed the gate, or this is a
+ * `background` read, which is never allowed to ask (see the header). */
+const getSessionToken = async (
+    target = currentSandboxTarget(),
+    options?: { readonly background?: boolean },
+): Promise<SandboxBearer | undefined> => {
+    const background = options?.background === true;
+    if (target === undefined || target.sandboxId === undefined) {
+        return googleBearer(background);
+    }
+    const scoped = { ...target, sandboxId: target.sandboxId };
+    return servedSession(scoped) ?? establishShared(scoped, background);
 };
 
 /* A SIGN-IN NOBODY IS WAITING FOR ANY MORE, settled the moment the user points the workspace somewhere else.

@@ -196,10 +196,14 @@ const TUNNEL_PROBE_TIMEOUT_MS = 5000;
  * WebKit 171934), Chrome's Local Network Access permission being declined, nothing listening, a stranger
  * listening, an edge that does not answer: none are worth telling apart, and none are errors the user should
  * see. */
-export const probeEndpoint = async (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> => {
-    const budget = endpoint.kind === `tunnel` ? TUNNEL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS;
+export const healthAnswers = async (
+    base: string,
+    expectedSandboxId: string,
+    budgetMs = TUNNEL_PROBE_TIMEOUT_MS,
+    fetchImpl: typeof fetch = fetch,
+): Promise<boolean> => {
     try {
-        const response = await fetchImpl(`${endpoint.base}/health`, { cache: `no-store`, signal: AbortSignal.timeout(budget) });
+        const response = await fetchImpl(`${base}/health`, { cache: `no-store`, signal: AbortSignal.timeout(budgetMs) });
         if (!response.ok) {
             return false;
         }
@@ -209,6 +213,13 @@ export const probeEndpoint = async (endpoint: Endpoint, expectedSandboxId: strin
         return false;
     }
 };
+
+/* The same question asked of a CANDIDATE, which is where the two budgets live: a loopback that works answers in
+ * under a millisecond, an edge plus a hop to a cold container does not. Separate from the check itself because
+ * the credential layer asks it too, of an address it has already chosen (sandboxSession), and it is not
+ * choosing between candidates when it does. */
+export const probeEndpoint = (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> =>
+    healthAnswers(endpoint.base, expectedSandboxId, endpoint.kind === `tunnel` ? TUNNEL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS, fetchImpl);
 
 /* The first candidate that answers as the sandbox we mean, with the tunnel as the floor under all of them: it
  * is the registry's own address, so a sandbox whose every probe failed is still addressable rather than broken.

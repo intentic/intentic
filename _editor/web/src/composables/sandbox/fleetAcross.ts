@@ -5,7 +5,7 @@ import { blocked, turnInFlight } from "../agents/agentStatus";
 import { onScreen } from "../onScreen";
 import { queryClient } from "../queryPersistence";
 import { AGENTS } from "../queryKeys";
-import { sandboxJsonAt } from "./sandboxClient";
+import { sandboxJsonQuietly } from "./sandboxClient";
 import { connectedSandboxes } from "./roster";
 import { useSandbox } from "./useSandbox";
 
@@ -28,7 +28,13 @@ import { useSandbox } from "./useSandbox";
  * a press the user makes (which selects it, at which point it stops being this module's business).
  *
  * IT RUNS ONLY WHILE SOMETHING IS WATCHING. `subscribe()` is what starts the loop and its disposer is what
- * stops it, so a board on another route, or a window in the background, costs nothing at all. */
+ * stops it, so a board on another route, or a window in the background, costs nothing at all.
+ *
+ * IT NEVER ASKS THE READER FOR ANYTHING, which is why every call it makes goes through `sandboxJsonQuietly`.
+ * Reaching a box this browser holds no session for otherwise starts a Google sign-in, and that sign-in is
+ * window-wide UI raised on behalf of a machine nobody is looking at — worse, an unreachable box stores nothing,
+ * so it asked again on the next tick and the next page load. A quiet read spends the credential already in hand
+ * and takes no for an answer, which lands in the same place a dead tunnel does: `unreachable`. */
 
 // How often each sandbox is re-read while a surface is subscribed and the window is on screen. Slow on
 // purpose: this is ambient awareness of work happening elsewhere, not a live feed, and the sandbox the user is
@@ -109,7 +115,7 @@ const readBox = async (sandbox: SandboxSummary, force: boolean): Promise<void> =
     inFlight.add(sandbox.id);
     write(sandbox.id, { sandbox, state: readingState(boxes.value[sandbox.id]) });
     try {
-        const body = await sandboxJsonAt<{ agents: AgentSummary[]; rev: number; held?: AutomationApproval[] }>(sandbox.id, `/agents`);
+        const body = await sandboxJsonQuietly<{ agents: AgentSummary[]; rev: number; held?: AutomationApproval[] }>(sandbox.id, `/agents`);
         write(sandbox.id, { sandbox, state: `ready`, agents: body.agents, held: body.held ?? [], readAt: Date.now() });
         /* Filed in the shared cache under this sandbox's own key as well as in the store above. Nothing reads
          * it from there yet; what it buys is that these entries are swept by exactly the machinery that sweeps
@@ -281,7 +287,7 @@ export const markSeenAcross = (sandboxId: string, agentId: string): void => {
     }
     const seenAt = Date.now();
     write(sandboxId, { sandbox: box.sandbox, agents: box.agents.map((agent) => (agent.id === agentId ? { ...agent, seenAt } : agent)) });
-    void sandboxJsonAt(sandboxId, `/agents/${encodeURIComponent(agentId)}/seen`, { method: `POST` }).catch(() => undefined);
+    void sandboxJsonQuietly(sandboxId, `/agents/${encodeURIComponent(agentId)}/seen`, { method: `POST` }).catch(() => undefined);
 };
 
 // The same count keyed by sandbox id, for the surfaces that hold a row rather than a box (the switcher).

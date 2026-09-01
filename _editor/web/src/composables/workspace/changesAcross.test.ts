@@ -11,7 +11,7 @@ import type { RepoChanges } from "@intentic-app/api-contract";
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 vi.mock("../sandbox/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-vi.mock("../sandbox/sandboxClient", () => ({ sandboxJsonAt: vi.fn() }));
+vi.mock("../sandbox/sandboxClient", () => ({ sandboxJsonAt: vi.fn(), sandboxJsonQuietly: vi.fn() }));
 vi.mock("../sandbox/sandboxScreen", () => ({ landOnAfterSwitch: vi.fn() }));
 vi.mock("../queryPersistence", () => ({ queryClient: { setQueryData: vi.fn() } }));
 

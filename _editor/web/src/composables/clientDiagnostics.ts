@@ -104,6 +104,10 @@ const flush = (): void => {
                 keepalive: true,
             }),
             target,
+            // Reporting is never worth interrupting anyone for. If this browser has no credential in hand the
+            // report is lost, which is the same outcome as an unaddressed sandbox above, and strictly better
+            // than a sign-in gate raised by the error handler that was describing the last thing that broke.
+            { background: true },
         ).catch(() => undefined);
     } catch {
         // Unaddressed, unauthenticated, or a body that would not serialize. All of them mean this report is

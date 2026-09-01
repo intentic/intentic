@@ -1,4 +1,4 @@
-import { useSandboxSession } from "./sandboxSession";
+import { type SandboxBearer, useSandboxSession } from "./sandboxSession";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
@@ -77,6 +77,17 @@ const timedOut = (): SandboxTimeoutError => {
     return new SandboxTimeoutError();
 };
 
+/* THE CREDENTIAL THIS CALL WILL PRESENT, or the reason there is none, which are different sentences for the two
+ * kinds of caller. A press that cannot be authenticated is a person to talk to; a poll that cannot be is a box
+ * to draw as silent, and telling it to sign in would be an instruction about a machine it is not looking at. */
+const bearerFor = async (target: SandboxTarget, background: boolean): Promise<SandboxBearer> => {
+    const bearer = await getSessionToken(target, { background });
+    if (bearer === undefined) {
+        throw new Error(background ? `This browser holds no session for that sandbox yet.` : `Sign in with Google to reach your sandbox.`);
+    }
+    return bearer;
+};
+
 /* The one browser→daemon fetch policy, shared by raw and typed clients. A 401 proves middleware rejected the
  * request before its handler ran, so replaying it once is safe even for POST: invalidate exactly the rejected
  * bearer, establish against the SAME snapshotted target, and retry. No second retry means a real permission or
@@ -84,19 +95,28 @@ const timedOut = (): SandboxTimeoutError => {
  *
  * `deadline` bounds the wait for HEADERS and defaults to on: the callers that must switch it off are the few
  * that stream a body up (see uploadsBody), and defaulting the other way is how the hang got to be unbounded in
- * the first place. One deadline covers the retry too, deliberately, it is the CALL's budget, not the attempt's. */
-export const sandboxAuthenticatedFetch = async (request: Request, target = currentSandboxTarget(), deadline = true): Promise<Response> => {
+ * the first place. One deadline covers the retry too, deliberately, it is the CALL's budget, not the attempt's.
+ *
+ * `background` says NOBODY IS WAITING ON THIS ONE, which is the whole of what the credential layer needs to
+ * know to keep Google off the screen (sandboxSession's header states the rule). It travels with the request
+ * rather than being inferred from the target, because "is the user waiting" is a fact about the CALLER: the
+ * same box, on the same address, is polled by a ledger nobody is looking at and opened by a press, and only one
+ * of those may interrupt. A background call that has no credential in hand fails instead, which the ambient
+ * stores already read as "this box is not answering". */
+export const sandboxAuthenticatedFetch = async (
+    request: Request,
+    target = currentSandboxTarget(),
+    options?: { readonly deadline?: boolean; readonly background?: boolean },
+): Promise<Response> => {
     if (target === undefined) {
         throw new SandboxUnaddressedError();
     }
     if (!belongsTo(request, target)) {
         throw new DOMException(`The selected sandbox changed while this request was signing in.`, `AbortError`);
     }
-    const bearer = await getSessionToken(target);
-    if (bearer === undefined) {
-        throw new Error(`Sign in with Google to reach your sandbox.`);
-    }
-    const expiry = deadline ? AbortSignal.timeout(DEADLINE_MS) : undefined;
+    const background = options?.background === true;
+    const bearer = await bearerFor(target, background);
+    const expiry = options?.deadline === false ? undefined : AbortSignal.timeout(DEADLINE_MS);
     const signal = bounded(request, expiry);
     // Clone before the first fetch consumes a body. The retry owns an independent branch of the same bytes.
     const retrySource = request.clone();
@@ -117,7 +137,7 @@ export const sandboxAuthenticatedFetch = async (request: Request, target = curre
     // The refusal is attributed to the credential this request actually spent, not to whatever is on file by
     // the time the answer lands: see SandboxBearer for what re-reading it cost.
     rejectSessionToken(target, bearer);
-    const replacement = await getSessionToken(target);
+    const replacement = await getSessionToken(target, { background });
     if (replacement === undefined) {
         return response;
     }

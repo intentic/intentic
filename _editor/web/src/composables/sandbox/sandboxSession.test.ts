@@ -15,7 +15,15 @@ import "./sandboxSession";
 
 const state = vi.hoisted(() => ({
     idToken: `id-token` as string | undefined,
+    /* A proof ALREADY IN HAND, which is the whole of what a background reader may spend. Google's own layer
+     * serves its cached token without any UI and mints a new one with plenty (One Tap, then the app's gate), so
+     * the two are separate answers here rather than one token behind a counter. Undefined by default: the
+     * interesting case is the browser whose ~1h proof has aged out, which is every refresh after an hour. */
+    cachedIdToken: undefined as string | undefined,
     minted: 0,
+    // Whether the daemon this establishment is aimed at is answering its /health at all. A sign-in must never be
+    // asked for on behalf of a machine that is switched off.
+    daemonAnswers: true,
     // What the Google layer was ASKED to do with the credential: a session rejection must never reach either.
     cleared: 0,
     canceled: 0,
@@ -35,7 +43,12 @@ const state = vi.hoisted(() => ({
 
 vi.mock("../useGoogleIdentity", () => ({
     useGoogleIdentity: () => ({
-        getIdToken: async () => {
+        getIdToken: async (options?: { interactive?: boolean }) => {
+            // `interactive: false` is a caller with no standing to interrupt: it gets what Google can hand over
+            // in silence, and nothing at all otherwise. No prompt, so nothing to count and nothing to park on.
+            if (options?.interactive === false) {
+                return state.cachedIdToken;
+            }
             state.minted += 1;
             if (!state.mintParks) {
                 return state.idToken;
@@ -52,6 +65,15 @@ vi.mock("../useGoogleIdentity", () => ({
             state.canceled += 1;
         },
     }),
+}));
+/* The reachability question this module asks before it asks a PERSON for anything, stubbed at the seam rather
+ * than through a /health response: endpoint.ts owns that check and tests it there, and what matters here is
+ * only the answer it gives back. Everything else in the module is the real thing, since the target resolution
+ * underneath these tests rides on it. */
+vi.mock("./endpoint", async () => ({
+    ...(await vi.importActual<typeof import("./endpoint")>(`./endpoint`)),
+    healthAnswers: async () => state.daemonAnswers,
+    sandboxIdOf: async () => `sb-1`,
 }));
 // A real ref, not a getter: the module WATCHES the active sandbox (a switch settles a mint left parked for the
 // sandbox being left), and a watch source has to be one.
@@ -103,6 +125,8 @@ const load = async (): Promise<typeof import("./sandboxSession")> => {
 beforeEach(() => {
     stubStorage();
     state.idToken = `id-token`;
+    state.cachedIdToken = undefined;
+    state.daemonAnswers = true;
     state.minted = 0;
     state.cleared = 0;
     state.canceled = 0;
@@ -243,6 +267,95 @@ it(`resolves undefined when the user dismisses the sign-in gate. nothing to exch
     expect(fetchMock).not.toHaveBeenCalled();
 });
 
+/* NOBODY IS WAITING, SO NOBODY IS ASKED. The app reads across sandboxes on a timer now (fleetAcross,
+ * changesAcross: one poll per box, plus one per surface on every page load), and a box this browser holds no
+ * session for takes the whole establishment path. Its first step was a Google mint — browser UI, and behind it
+ * a window-wide gate — raised on behalf of a machine the reader is not looking at, with nothing on the gate
+ * able to name it. Worse, a box that cannot answer stores nothing, so the same prompt came back on the next
+ * tick and on the next refresh: one stopped laptop in the account was enough to make signing in feel constant. */
+const otherBox = { sandboxId: `sb-2`, base: `https://other.test`, connectToken: `connect-2` };
+
+it(`a background read with no proof in hand asks Google for nothing and exchanges nothing`, async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
+    expect(state.minted).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// The other half of the same rule: a poll that CAN establish still does, silently, and the box is then good for
+// a month. Refusing to reach for a credential is not refusing to use one.
+it(`a background read spends a proof already in hand`, async () => {
+    state.cachedIdToken = `cached-token`;
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse(`sess-sb2`));
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toEqual({ token: `sess-sb2`, kind: `session` });
+    expect(fetchMock.mock.calls[0]![1].headers).toMatchObject({ authorization: `Bearer cached-token` });
+    expect(state.minted).toBe(0);
+});
+
+/* A SIGN-IN IS ALWAYS ASKED FOR ON BEHALF OF A DAEMON, so that daemon has to be there. A stopped sandbox cannot
+ * complete the exchange whatever the reader does, so the prompt buys them nothing at all: no session is stored,
+ * and the next call asks again. The probe is the same identity-checked /health the transport qualifies
+ * addresses with, and it is paid only on the path that would otherwise put Google on the screen. */
+it(`will not raise a sign-in for a daemon that is not answering`, async () => {
+    state.daemonAnswers = false;
+    const fetchMock = vi.fn();
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    expect(await useSandboxSession().getSessionToken()).toBeUndefined();
+    expect(state.minted).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// A box that just failed is not asked again on every tick and every refresh. A press is never held back by the
+// cooldown, because the reason somebody presses is usually that they have this second brought the machine back.
+it(`holds a failed background establishment for a cooldown, but never a foreground one`, async () => {
+    state.cachedIdToken = `cached-token`;
+    const fetchMock = vi.fn(() => Promise.reject(new TypeError(`fetch failed`)));
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { getSessionToken } = (await load()).useSandboxSession();
+    await expect(getSessionToken(otherBox, { background: true })).rejects.toThrow(`fetch failed`);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The next poll tick, seconds later: the box is known not to be answering, so nothing goes out.
+    expect(await getSessionToken(otherBox, { background: true })).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(getSessionToken(otherBox)).rejects.toThrow(`fetch failed`);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+// Sharing an establishment goes one way only. A poll may settle for what a press produces; a press may not
+// settle for what a poll produces, since a poll is content with "no credential, then" and a person is not.
+it(`a press does not adopt an establishment a poll started`, async () => {
+    state.cachedIdToken = `cached-token`;
+    const answers: ((response: Response) => void)[] = [];
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => answers.push(resolve)));
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { getSessionToken } = (await load()).useSandboxSession();
+    void getSessionToken(otherBox, { background: true });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    void getSessionToken(otherBox);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    // ...while a second poll joins whichever one is out, rather than opening a third.
+    void getSessionToken(otherBox, { background: true });
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Both exchanges are answered rather than left parked: every previously loaded copy of this module still
+    // watches the shared active-sandbox ref, so an establishment left in flight here answers a LATER test's
+    // switch as a sign-in worth cancelling (the same reason `mintParks` is released in afterEach).
+    for (const answer of answers) {
+        answer(sessionResponse());
+    }
+    await new Promise((resolve) => setTimeout(resolve));
+});
+
 /* WHAT A 401 IS ALLOWED TO COST. The daemon session is a per-sandbox credential and the Google proof is the
  * ~1h thing that establishes it, so clearing the second is not a retry, it is a visible sign-in gate: the
  * mint that follows has no cached token to serve and `clearCredential` has switched Google's automatic
@@ -272,6 +385,23 @@ it(`…including when the other window's invalidate lands first`, async () => {
     invalidateSession(`sb-1`);
     rejectSessionToken(target, bearer!);
     expect(state.cleared).toBe(0);
+});
+
+/* …and a refusal from a box NOBODY ASKED ABOUT says nothing about the credential either. Clearing the proof
+ * turns Google's automatic re-authentication off, so the next mint anywhere in the app is a visible gate: far
+ * too much to spend on a poll of a machine the reader is not looking at, whose likelier explanations (a sandbox
+ * bound to another account, a member since removed) are not about the token at all. */
+it(`a background exchange refused with 401 keeps the Google proof`, async () => {
+    state.cachedIdToken = `cached-token`;
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn(async () => new Response(`no`, { status: 401 })),
+    );
+    const { useSandboxSession } = await load();
+    expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
+    expect(state.cleared).toBe(0);
+    expect(state.minted).toBe(0);
+    expect(localStorage.getItem(`intentic.session.sb-2`)).toBeNull();
 });
 
 // Loopback: no sandbox id to key a session by, so the raw Google proof is the bearer. It is the only caller

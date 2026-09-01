@@ -19,7 +19,7 @@ const { getSessionToken, rejectSessionToken } = useSandboxSession();
  * two together locate the cost: agree ⇒ the daemon; browser much larger ⇒ the tunnel, the token, or a queue in
  * here. `path` is stripped of its query so a hundred distinct file reads aggregate into one row.
  */
-const requestTo = async (target: SandboxTarget | undefined, path: string, init?: RequestInit): Promise<Response> =>
+const requestTo = async (target: SandboxTarget | undefined, path: string, init?: RequestInit, background = false): Promise<Response> =>
     trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
         if (target === undefined) {
             throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
@@ -27,7 +27,10 @@ const requestTo = async (target: SandboxTarget | undefined, path: string, init?:
         /* The headers deadline, minus the calls that send a body up: their headers cannot arrive until the
          * upload finishes, and a bundle restore is gigabytes (BundleCard). Decided here because this is the
          * last place the body is still the thing the caller passed rather than a stream. */
-        return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, !uploadsBody(init?.body));
+        return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, {
+            deadline: !uploadsBody(init?.body),
+            background,
+        });
     });
 
 export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
@@ -108,16 +111,39 @@ export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<
     return (await response.json()) as T;
 }
 
+// What the two reads below share, which is everything except who is waiting for the answer.
+const jsonAt = async <T,>(sandboxId: string, path: string, init: RequestInit | undefined, background: boolean): Promise<T> => {
+    const response = await requestTo(targetFor(sandboxId), path, init, background);
+    if (!response.ok) {
+        throw await sandboxError(response);
+    }
+    return (await response.json()) as T;
+};
+
 // The same read aimed at a named sandbox (see sandboxRequestAt). The route-drift checks inside `sandboxError`
 // are the active daemon's fingerprint and so are skipped here: another box's build is not one this browser has
 // ever handshaked with, and claiming "your sandbox is out of date" from the wrong fingerprint is worse than
 // passing the daemon's own words through.
 export async function sandboxJsonAt<T>(sandboxId: string, path: string, init?: RequestInit): Promise<T> {
-    const response = await sandboxRequestAt(sandboxId, path, init);
-    if (!response.ok) {
-        throw await sandboxError(response);
-    }
-    return (await response.json()) as T;
+    return jsonAt<T>(sandboxId, path, init, false);
+}
+
+/* THE SAME READ MADE BY NOBODY, which is a different kind of call and is spelled like one: the ambient stores
+ * that poll every OTHER sandbox the account owns (fleetAcross, changesAcross) and the marks that ride along
+ * with them.
+ *
+ * What a call may SPEND depends on whether a person is waiting for it. A box this browser holds no session for
+ * takes the whole establishment path, and its first step is a Google mint: One Tap is browser UI, and the app's
+ * own gate behind it covers the entire window. So a poll of a laptop that is switched off asked the reader to
+ * sign in to the workspace they were already using — on every refresh, about a machine they were not looking
+ * at, with nothing on the gate able to say which machine it was about. Quiet calls take the credential already
+ * in hand and, when there is none, fail: the stores above read that exactly as they read a dead tunnel, which
+ * is the honest answer for a box this browser cannot currently reach.
+ *
+ * Spelled apart from `sandboxJsonAt` for the reason that one is spelled apart from `sandboxJson`: it is a
+ * decision, it belongs where the call is written, and the few that make it should be findable. */
+export async function sandboxJsonQuietly<T>(sandboxId: string, path: string, init?: RequestInit): Promise<T> {
+    return jsonAt<T>(sandboxId, path, init, true);
 }
 
 // The reach-aimed read, on `sandboxRequestVia`'s terms: `undefined` is the active box. For the callers holding

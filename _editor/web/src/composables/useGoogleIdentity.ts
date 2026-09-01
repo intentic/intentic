@@ -226,6 +226,13 @@ const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
 /* A valid (not near-expiry) Google ID token, or undefined if GIS is unavailable or the user dismisses the
  * sign-in gate. Never hangs on a suppressed prompt, the guard surfaces the gate and waits for a real click.
  *
+ * `interactive: false` says the CALLER HAS NO STANDING TO INTERRUPT: it will take a credential already in
+ * hand, and take nothing at all rather than put Google on the screen. Every background reader is one of these,
+ * and the reason they exist as a category is that a mint is not a quiet operation, One Tap is browser UI and
+ * the gate behind it is a full-screen overlay for the whole window, so a poll that could reach for one turns
+ * "this app read a sandbox nobody is looking at" into "this app asked me to sign in again". A mint SOMEBODY
+ * ELSE started is still awaited, since the interruption has already been made and sharing it costs nothing.
+ *
  * `gate: false` says the CALLER is already showing a Google button of its own. The shared overlay would be a
  * second button on top of the first, and the timer that raises it would be five seconds of nothing first, so
  * the silent attempt simply races the caller's button, and whichever produces a credential settles this call.
@@ -237,10 +244,17 @@ const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
  * exists to exchange it, sometimes a whole setup later. A cached token one minute from death satisfies every
  * caller that acts immediately and strands that one, which is a workspace asking for Google again on the
  * screen right after a fresh install. Costing a mint here is the cheaper mistake. */
-const getIdToken = async (options?: { readonly gate?: boolean; readonly usableFor?: number }): Promise<string | undefined> => {
+const getIdToken = async (options?: {
+    readonly gate?: boolean;
+    readonly usableFor?: number;
+    readonly interactive?: boolean;
+}): Promise<string | undefined> => {
     const valid = cached(options?.usableFor ?? NEAR_EXPIRY_MS);
     if (valid !== undefined) {
         return valid;
+    }
+    if (options?.interactive === false) {
+        return inflight;
     }
     inflight ??= mint(options?.gate ?? true);
     return inflight;

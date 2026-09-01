@@ -263,6 +263,26 @@ but the active one, which delegates), `sandboxRequestAt` / `sandboxJsonAt` besid
 `QueryFamily.ofSandbox` in the key registry. `agentActions` grew a trailing `AgentReach` on land, discard,
 stop and request-land, and `askAgentToResolve` deliberately did not.
 
+**The credential layer did need changing, and section 10 was wrong to say it did not.** It was right about
+addressing: the bearers are keyed by sandbox id, the target is explicit, `sandbox.list()` hands the browser
+every credential a fan-out needs. What it missed is that establishing a bearer is not free of the reader.
+A box this browser holds no session for takes the whole establishment path, and its first step was a Google
+mint, which is One Tap and then a window-wide sign-in gate. `needsSignIn` is one flag for the app and names no
+machine, so a poll of a laptop that was switched off raised a sign-in over the workspace the user was already
+in, with nothing on the gate to say which sandbox it was about. Worse, a box that cannot answer stores nothing,
+so the prompt returned on the next tick and the next page load, and the Google proof it renewed lives about an
+hour: one stopped machine in the account made re-authentication feel constant.
+
+The rule now is that **only a call somebody is waiting on may ask Google for anything**. `sandboxJsonQuietly`
+is the fan-out's entry point (`background` down to `getSessionToken`, `interactive: false` down to
+`getIdToken`): it spends a proof already in hand, joins a mint somebody else started, and otherwise returns
+nothing, which the stores read exactly as they read a dead tunnel. Two smaller repairs came with it, both
+about not spending a person's attention on a machine's problem: a foreground establishment probes the daemon's
+identity-checked `/health` before it raises a gate, since a stopped box cannot complete the exchange however
+the reader answers; and a failed establishment is remembered per box for a cooldown, so a dead sandbox is
+asked once rather than once per poll tick and once per refresh. A press is never held back by that cooldown,
+because the reason somebody presses is usually that they have just brought the machine back.
+
 **Two stores, not one.** `fleetAcross.ts` polls `/agents` per box and `changesAcross.ts` polls `/git/changes`.
 Both are inert until a surface subscribes, and their watchers are registered by the first subscriber rather
 than at module scope, because `watch` reads its source to take a first value and importing a file should not

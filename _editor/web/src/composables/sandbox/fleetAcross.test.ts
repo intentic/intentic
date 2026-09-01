@@ -15,8 +15,8 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 vi.mock("./useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-const sandboxJsonAt = vi.fn();
-vi.mock("./sandboxClient", () => ({ sandboxJsonAt }));
+const sandboxJsonQuietly = vi.fn();
+vi.mock("./sandboxClient", () => ({ sandboxJsonQuietly }));
 vi.mock("../queryPersistence", () => ({ queryClient: { setQueryData: vi.fn() } }));
 
 const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
@@ -92,7 +92,7 @@ describe("marking an agent in another box as read", () => {
             { id: `sbx-here`, name: `Desk`, lastSeenAt: `2026-01-01T00:00:00Z` },
             { id: `sbx-other`, name: `Laptop`, lastSeenAt: `2026-01-01T00:00:00Z` },
         ];
-        sandboxJsonAt.mockResolvedValue(roster());
+        sandboxJsonQuietly.mockResolvedValue(roster());
         const release = subscribe();
         await vi.waitFor(() => expect(otherBoxes.value[0]?.state).toBe(`ready`));
         expect(boxAttention(otherBoxes.value[0]!)).toBe(1);
@@ -102,15 +102,15 @@ describe("marking an agent in another box as read", () => {
         // The optimistic half: the next poll is up to 45 seconds out, and a count still lit that long after the
         // user read the thing is indistinguishable from one that is stuck.
         expect(boxAttention(otherBoxes.value[0]!)).toBe(0);
-        expect(sandboxJsonAt).toHaveBeenCalledWith(`sbx-other`, `/agents/a1/seen`, { method: `POST` });
+        expect(sandboxJsonQuietly).toHaveBeenCalledWith(`sbx-other`, `/agents/a1/seen`, { method: `POST` });
         release();
     });
 
     // A box this store has never read has no copy to stamp, and writing to it would be a claim about a roster
     // nothing here has seen.
     it("says nothing to a box it has never read", () => {
-        sandboxJsonAt.mockClear();
+        sandboxJsonQuietly.mockClear();
         markSeenAcross(`sbx-unknown`, `a1`);
-        expect(sandboxJsonAt).not.toHaveBeenCalled();
+        expect(sandboxJsonQuietly).not.toHaveBeenCalled();
     });
 });
