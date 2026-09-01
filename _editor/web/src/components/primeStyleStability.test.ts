@@ -48,7 +48,7 @@ it(`loads every lazily reached PrimeVue component stylesheet during app install`
     await nextTick();
 
     const loaded = new Set(
-        [...document.head.querySelectorAll<HTMLStyleElement>(`style[data-primevue-style-id]`)].map((style) => style.dataset.primevueStyleId),
+        [...document.head.querySelectorAll<HTMLStyleElement>(`style[data-primevue-style-id]`)].map((style) => style.dataset[`primevueStyleId`]),
     );
     for (const component of [`button`, `checkbox`, `contextmenu`, `dialog`, `drawer`, `popover`, `toggleswitch`]) {
         expect(loaded).toContain(`${component}-variables`);

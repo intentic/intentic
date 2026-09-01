@@ -1,6 +1,7 @@
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH, hostOwnerId, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
-import { openIngressSession } from "@intentic/sandbox-contract/ingress-protocol";
+import { openIngressSession, type IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, createWebSocketStream, type WebSocket } from "ws";
 import { PING_INTERVAL_MS, startHeartbeat } from "./heartbeat.js";
@@ -49,6 +50,12 @@ export interface IngressServer {
 // The leftmost DNS label, which is what a 502 names. It is the string the reader recognises — their sandbox's
 // address — where the bare 12-hex id is something they have never seen.
 const labelOf = (host: string): string => host.split(`:`)[0]?.split(`.`)[0] ?? host;
+
+/* The peer's address, for a log line about a caller that failed the door. An `upgrade` listener is handed a
+ * `Duplex` because node makes no promise about the transport — it is a TCP socket here and a TLS one behind a
+ * terminator, and neither is guaranteed by the type. Ask, rather than assert: an address is a nicety in a
+ * refusal message, and nothing about the refusal depends on having one. */
+const remoteAddressOf = (socket: Duplex): string | undefined => (socket instanceof Socket ? socket.remoteAddress : undefined);
 
 /* An error on a HIJACKED socket. Once an upgrade has been taken off the server, node will never write a
  * response for us, so a refusal has to be a hand-written HTTP/1.1 head or the client waits for a timeout with
@@ -159,7 +166,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         const grant = Array.isArray(header) ? header[0] : header;
         const claim = grant === undefined || grant === `` ? undefined : verifyReachabilityGrant(options.publicKey, grant);
         if (claim === undefined) {
-            options.log({ remote: socket.remoteAddress }, `tunnel refused: no valid reachability grant`);
+            options.log({ remote: remoteAddressOf(socket) }, `tunnel refused: no valid reachability grant`);
             refuse(socket, 401, `Unauthorized`, `a tunnel presents a reachability grant`);
             return;
         }

@@ -27,7 +27,19 @@ import { vTooltip } from "./lib/tooltip.js";
  * mount immediately after installUi returns. */
 const stabilizedPrimeStyles = new WeakSet<HTMLStyleElement>();
 const primeStyleObservers = new WeakMap<Document, MutationObserver>();
-const primeComponentStyles = [ButtonStyle, CheckboxStyle, ContextMenuStyle, DialogStyle, DrawerStyle, PopoverStyle, ToggleSwitchStyle] as const;
+
+/* Every `primevue/<component>/style` entry ends in `export { XStyle as default }`, but its shipped declaration
+ * names only the class-name enum: no default, and the `BaseStyle` interface it does declare is missing the
+ * loader methods the runtime object carries. A default import therefore types as the module NAMESPACE, and
+ * every property read below is an error. This is the shape those modules actually export. */
+interface PrimeComponentStyle {
+    name: string;
+    getComponentTheme: () => { css?: string | undefined; style?: string | undefined };
+    load: (css: string | undefined, options: { name: string }) => unknown;
+    loadStyle: (options: { name: string }, style: string | undefined) => unknown;
+}
+const asComponentStyle = (style: unknown): PrimeComponentStyle => style as PrimeComponentStyle;
+const primeComponentStyles = [ButtonStyle, CheckboxStyle, ContextMenuStyle, DialogStyle, DrawerStyle, PopoverStyle, ToggleSwitchStyle].map(asComponentStyle);
 
 const stabilizePrimeStyle = (style: HTMLStyleElement): void => {
     if (stabilizedPrimeStyles.has(style)) {
@@ -83,7 +95,7 @@ const stabilizePrimeStyleWrites = (): void => {
  * boot, alongside PrimeVue's common theme, so navigating cannot change stylesheet ownership. */
 const preloadPrimeComponentStyles = (): void => {
     for (const style of primeComponentStyles) {
-        const component = style.getComponentTheme() ?? {};
+        const component = style.getComponentTheme();
         style.load(component.css, { name: `${style.name}-variables` });
         style.loadStyle({ name: `${style.name}-style` }, component.style);
     }
