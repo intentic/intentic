@@ -616,13 +616,6 @@
     background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
     border-color: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
 }
-/* A ROW BELOW A CARD'S BODY, ruled off from it: the answers, a running service's status line, a receipt, the
-   wait on a capability's setup. One class rather than `border-t border-line` restated at each of the eleven
-   sites, which is what let the eight cards drift apart in the first place — and the one place to change if a
-   skin wants a different rule (see .chat-card-header, which does exactly that). */
-.chat-card-row {
-    border-top: 1px solid var(--color-line);
-}
 /* THE TWO HALVES OF A HELD COMMAND (ChatCommandBlock): the fragment the gate stopped it for, and everything
    else. Both rules are drawn OVER Shiki's own colours, which arrive as inline styles on the same spans, so
    neither may set `color` — the grammar has to keep reading through both.
