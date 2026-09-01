@@ -548,6 +548,19 @@ describe(`ChatMessageView added-notes row`, () => {
         expect(element.textContent).not.toContain(`Reading the message below`);
     });
 
+    /* The row is a SIBLING of the prompt, never a child of it. `.chat-prompt` pins for the length of the turn,
+     * and everything inside it pins too: drawn in there the pill rode in the band above the answer for the whole
+     * run. What the pin is for is the question and what has kept it going; the machinery around it scrolls. */
+    it(`sits outside the prompt, so it never rides in the pinned band`, () => {
+        const element = mount({ id: 6, role: `user`, text: `fix the bug`, notes });
+
+        const pill = element.querySelector(`[aria-expanded]`);
+        expect(pill).not.toBeNull();
+        expect(pill!.closest(`.chat-prompt`)).toBeNull();
+        // …and still in the transcript's own column, one row under the bubble it qualifies.
+        expect(element.querySelector(`.chat-prompt`)).not.toBeNull();
+    });
+
     // A turn nobody added anything to says nothing: no row, no chevron, nothing to click.
     it(`stays out of the way of an ordinary message`, () => {
         expect(mount({ id: 5, role: `user`, text: `fix the bug` }).textContent).not.toContain(`Sent with your message`);

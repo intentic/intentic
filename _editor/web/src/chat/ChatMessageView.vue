@@ -1642,31 +1642,38 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             >↳ {{ trailer.label }}<template v-if="trailer.count > 1"> ×{{ trailer.count }}</template></span
         >
 
-        <!-- WHAT THE DAEMON ADDED TO WHAT THE AGENT READ (see `notesOpen`): one line naming each note, opening
-             to exactly the words it was given. Outside the branches above because it hangs off the user's own
-             message rather than replacing it. Full width and left-aligned even under a user bubble: this is
-             machine prose to be read, not something they said.
-             Open, it is capped and scrolls, for the reason .chat-prompt-open caps the bubble's own expansion at
-             45dvh: on a user message this row IS the sticky pinned prompt, so an unbounded panel would take the
-             panel over for as long as the turn runs. -->
-        <template v-if="message.notes?.length">
-            <button
-                type="button"
-                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-left text-2xs"
-                :aria-expanded="notesOpen"
-                @click="notesOpen = !notesOpen"
-            >
-                <Icon name="info-circle" class="shrink-0 text-2xs text-link" />
-                <span class="shrink-0 font-medium text-content">Sent with your message</span>
-                <span class="truncate text-subtle">{{ noteTitles }}</span>
-                <Icon :name="notesOpen ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs text-subtle" />
-            </button>
-            <div v-if="notesOpen" class="scrollbar-thin flex max-h-80 w-full flex-col gap-3 overflow-auto rounded-lg bg-overlay/60 px-3 py-2">
-                <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-1">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ note.title }}</span>
-                    <span class="whitespace-pre-wrap text-xs leading-relaxed text-muted">{{ noteBody(note.text) }}</span>
-                </div>
+    </div>
+
+    <!-- WHAT THE DAEMON ADDED TO WHAT THE AGENT READ (see `notesOpen`): one line naming each note, opening
+         to exactly the words it was given. Full width and left-aligned even under a user bubble: this is
+         machine prose to be read, not something they said.
+         A ROW OF ITS OWN, OUTSIDE THE PROMPT — which is the whole point of it being out here rather than the
+         last child of the box above. `.chat-prompt` pins as one element: everything inside it rides along for
+         the length of the turn, so this pill sat in the pinned band for as long as the answer ran, under every
+         prompt that carried notes (most visibly at the top of a popped-out chat, where the band is the first
+         thing on screen). What belongs in that band is the question and what has kept it going (`trailer`);
+         a disclosure of the machinery around it is transcript, and transcript scrolls away. Hiding it at the
+         pin threshold instead would have shrunk the sticky row's flow box exactly where it sticks, yanking
+         the answer up by its height — the same trap .chat-prompt-text's unconditional clamp avoids.
+         Open, it is capped and scrolls, for the reason .chat-prompt-open caps the bubble's own expansion at
+         45dvh: an unbounded panel of prepended context is a spec-sized wall between a prompt and its answer. -->
+    <div v-if="message.notes?.length" class="chat-message chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
+        <button
+            type="button"
+            class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-left text-2xs"
+            :aria-expanded="notesOpen"
+            @click="notesOpen = !notesOpen"
+        >
+            <Icon name="info-circle" class="shrink-0 text-2xs text-link" />
+            <span class="shrink-0 font-medium text-content">Sent with your message</span>
+            <span class="truncate text-subtle">{{ noteTitles }}</span>
+            <Icon :name="notesOpen ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs text-subtle" />
+        </button>
+        <div v-if="notesOpen" class="scrollbar-thin flex max-h-80 w-full flex-col gap-3 overflow-auto rounded-lg bg-overlay/60 px-3 py-2">
+            <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-1">
+                <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ note.title }}</span>
+                <span class="whitespace-pre-wrap text-xs leading-relaxed text-muted">{{ noteBody(note.text) }}</span>
             </div>
-        </template>
+        </div>
     </div>
 </template>
