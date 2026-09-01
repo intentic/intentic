@@ -20,7 +20,9 @@ import {
 
 const AT = "2026-09-01T00:00:00.000Z";
 
-const version = (name: string): void => mkdirSync(engineVersionDir("claude", name), { recursive: true });
+const version = (name: string): void => {
+    mkdirSync(engineVersionDir("claude", name), { recursive: true });
+};
 
 beforeEach(() => {
     process.env["INTENTIC_ENGINES_DIR"] = mkdtempSync(join(tmpdir(), "engine-store-"));
