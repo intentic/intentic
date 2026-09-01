@@ -383,25 +383,28 @@ export interface PipelineTrace {
 }
 
 /* One edge, styled by the cards it spans: tinted by what flowed along it so a failure's reach is traceable by
- * eye, and dashed into work that never ran rather than asserting "and then this happened".
+ * eye.
+ *
+ * EVERY EDGE IS ONE SOLID LINE. An arrow into a card whose jobs all skipped used to be DASHED, on the reasoning
+ * that a dash says "this handover never happened" rather than asserting that it did. What a dash actually says
+ * to a reader is "uncertain, or not real, or some other kind of thing" — a distinction they then have to look
+ * up, on a diagram whose whole job is to be read at a glance. And it was never the only witness: the skipped
+ * jobs carry their own glyph and their own muted row, one card away from the line asking the question. GitHub's
+ * own graph draws one weight for every edge for the same reason.
  *
  * While a job is focused the TRACE wins that tinting, in one colour for the whole line rather than two for its
  * two directions, which is the choice the vendors' own graphs make, and it stays out of a view where every
  * other colour on screen already means a status. Left-to-right says the direction; the accent only says
  * "you are on it". Everything off the line fades instead. */
 const linkEdge = (link: JobLink, clusterById: ReadonlyMap<string, PipelineJobCluster>, trace: PipelineTrace | undefined): DagEdge => {
-    const target = clusterById.get(link.to);
-    // Dashed only when NOTHING in the target card ran: one member that did makes this arrow a real handover.
-    const skipped = (status: PipelineStatus): boolean => status === `skipped` || status === `canceled`;
-    const dashed = target?.jobs.every((member) => skipped(member.job.status)) === true ? { dashed: true } : {};
     if (trace !== undefined) {
-        return trace.links.has(linkKey(link)) ? { ...link, accent: `text-link`, ...dashed } : { ...link, dimmed: true, ...dashed };
+        return trace.links.has(linkKey(link)) ? { ...link, accent: `text-link` } : { ...link, dimmed: true };
     }
     // A card's worst outcome tints what left it: a failure anywhere inside it is what a reader is tracing.
     const source = clusterById.get(link.from);
     const carried = (status: PipelineStatus): boolean => source?.jobs.some((member) => member.job.status === status) === true;
     const accent = carried(`failed`) ? { accent: `text-danger` } : carried(`running`) ? { accent: `text-info` } : {};
-    return { ...link, ...accent, ...dashed };
+    return { ...link, ...accent };
 };
 
 // Stages → the DagGraph model: one compound card per group of identically-wired jobs, one edge per pair of

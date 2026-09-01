@@ -230,12 +230,14 @@ const caption = computed(() => {
                     <span v-else class="text-subtle">Hover a job to trace its flow · click to pin it</span>
                 </div>
 
+                <!-- Two controls of one shape. A word beside a bare glyph gave the corner a wide button and a
+                     small square one, which reads as two unrelated things rather than as a pair. -->
                 <div class="absolute bottom-2.5 right-2.5 flex items-center gap-1">
                     <Button size="small" severity="secondary" v-tooltip.top="`Zoom out until the whole run is in frame`" @click="fitAll()">
                         Fit
                     </Button>
                     <Button v-if="!fill" size="small" severity="secondary" v-tooltip.top="`Open the job graph full screen`" @click="$emit(`expand`)">
-                        <Icon name="expand" class="text-2xs" />
+                        Expand
                     </Button>
                 </div>
             </template>

@@ -169,6 +169,14 @@ const extent = computed(() => {
 // DagEditor's padding, kept the same here so two components fitting the same kind of picture do not disagree
 // about how much room it gets.
 const PADDING = 0.08;
+/* The zoom below which a whole-graph fit stops being worth having. Above it, fitting everything wins over
+ * showing part of it larger (see applyFit).
+ *
+ * Deliberately well under the readable floor rather than just under it. The floor is what a CLAMPED view is
+ * drawn at, and it is set where a label is comfortable; this is the different question of when a whole picture
+ * stops being worth seeing at all, and the honest answer is much lower. A run needing 0.46 to fit its own
+ * dialog was refused at 0.55 and clipped instead — a diagram overflowing a frame it plainly had room for. */
+const LEGIBLE_FIT = 0.45;
 const FIT = computed(() => (magnify ? undefined : { padding: PADDING, maxZoom: 1 }));
 
 /* SHALLOW, and that is not an optimization: `ref()` deep-reactivates what it holds, and `reactive()` UNWRAPS
@@ -211,7 +219,17 @@ const applyFit = (store: VueFlowStore): void => {
         return;
     }
     const fitted = Math.min((frame.width * (1 - 2 * PADDING)) / box.width, (frame.height * (1 - 2 * PADDING)) / box.height, magnify ? 2 : 1);
-    if (fitted >= readableZoom) {
+    /* SHOWING EVERYTHING BEATS SHOWING IT SLIGHTLY LARGER, and this used to trade the wrong way round.
+     *
+     * The floor exists for the fit that lands near 0.3, where the labels stop being letters. It was applied as
+     * an exact threshold, so a graph that needed 0.78 to fit was refused it, clamped to 0.8, and one card
+     * pushed out of frame to gain two per cent of glyph — a diagram that visibly does not fit inside a frame it
+     * plainly had room for, which is the first thing anyone opening the view notices.
+     *
+     * So the floor keeps deciding what zoom a CLAMPED view uses, and a separate, lower bound decides WHETHER to
+     * clamp at all: anything that fits and can still be read is fitted. `min` so a caller asking for a lower
+     * floor than this is never held to a higher one. */
+    if (fitted >= Math.min(readableZoom, LEGIBLE_FIT)) {
         void store.fitView(FIT.value);
         return;
     }

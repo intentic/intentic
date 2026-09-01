@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type DagEdge, type DagNode, type DagPlacement, lanePath, layoutDag, layoutSignature } from "@intentic/ui/dag";
+import { type DagEdge, type DagNode, type DagPlacement, laneKey, lanePath, layoutDag, layoutSignature } from "@intentic/ui/dag";
 
 /* DagGraph refits its viewport when this signature changes. It lives here rather than in @intentic/ui because
  * the design system ships no test runner (same reason as figures.test.ts).
@@ -132,6 +132,28 @@ describe(`layoutDag`, () => {
         // be two lines drawn through each other for no reason at all.
         const aOnTop = topOf(placed, `a1`) < topOf(placed, `b1`);
         expect(topOf(placed, `a2`) < topOf(placed, `b2`)).toBe(aOnTop);
+    });
+
+    /* A LINE THAT ENTERS A CARD AND LEAVES THE OTHER SIDE READS AS GOING THROUGH IT, whatever the z-order says
+     * (the cards paint on top, so it is really passing behind). An edge used to run at its TARGET's row for the
+     * whole span, and every card in between sits at some row: nineteen of forty edges on this workspace's own CI
+     * run walked across a card's face. A spanning edge now turns twice — into a lane clear of what is in the
+     * way, then out of it into the target's row. */
+    it(`routes a spanning edge around the card in its way rather than across it`, () => {
+        const placed = place([node(`a`), node(`b`), node(`d`)], [edge(`a`, `b`), edge(`a`, `d`), edge(`b`, `d`)]);
+        // `b` is alone in the column between them, packed at the same top as `d`, so the target's own row is
+        // exactly the row that is blocked.
+        expect(columnOf(placed, `b`)).toBeGreaterThan(columnOf(placed, `a`));
+        expect(columnOf(placed, `d`)).toBeGreaterThan(columnOf(placed, `b`));
+        const lane = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
+        expect(lane).toHaveLength(2);
+        const top = topOf(placed, `b`);
+        expect(lane.every((point) => point.y <= top || point.y >= top + options.nodeHeight)).toBe(true);
+    });
+
+    it(`still turns once for a hop to the next column, which has nothing to avoid`, () => {
+        const placed = place([node(`a`), node(`b`)], [edge(`a`, `b`)]);
+        expect(placed.lanes.get(laneKey(`a`, `b`))).toHaveLength(1);
     });
 
     it(`still lays out a graph with a cycle in it`, () => {

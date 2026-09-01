@@ -236,22 +236,82 @@ const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: nu
     return packed;
 };
 
-// Where each edge turns: halfway across the gap it leaves its source column by, level with the source's handle.
+/* A box on the two axes the FLOW names rather than the two the screen does, so one implementation of the
+ * routing below serves a left-to-right graph and a top-to-bottom one. `along` runs with the flow (the columns
+ * march along it), `across` is the one a column is stacked on and a lane runs along. */
+const along = (box: PlacedNode, horizontal: boolean): { start: number; end: number } =>
+    horizontal ? { start: box.at.x, end: box.at.x + box.width } : { start: box.at.y, end: box.at.y + box.height };
+const across = (box: PlacedNode, horizontal: boolean): { start: number; end: number } =>
+    horizontal ? { start: box.at.y, end: box.at.y + box.height } : { start: box.at.x, end: box.at.x + box.width };
+
+/* WHICH LANE A LONG EDGE TAKES, and it is the difference between a line that passes a column and one that
+ * appears to go through it.
+ *
+ * An edge used to turn once, in the gutter after its source, and then run at its TARGET's row for the whole
+ * span. Every card in every column between them sits at some row, so that route walks straight across their
+ * faces: on the workspace's own CI run, nineteen of forty edges disappeared into one card and came out of the
+ * other side. They pass BEHIND the cards, which is why nobody could say what was wrong, only that it looked
+ * wrong — a line entering a box and leaving it reads as going through it whatever the z-order says.
+ *
+ * So a spanning edge picks the row that hits the FEWEST cards on its way: the target's own row (free, usually,
+ * for a short hop) or the middle of one of the gaps between the cards it has to pass. Fewest rather than none,
+ * honestly: columns are packed independently, so their gaps do not line up, and a lane free the whole way often
+ * does not exist. Ties go to the row nearest the target, which keeps the last rise short.
+ *
+ * Returns the target's own row when nothing is in the way, which is the one-turn route this had before. */
+const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly PlacedNode[], horizontal: boolean, gap: number): number => {
+    const mid = (box: PlacedNode): number => (across(box, horizontal).start + across(box, horizontal).end) / 2;
+    const home = mid(target);
+    // Only what stands BETWEEN them: a box whose whole span sits after the source's column and before the
+    // target's. The two endpoints are not obstacles to their own edge.
+    const between = boxes.filter(
+        (box) => along(box, horizontal).start >= along(source, horizontal).end && along(box, horizontal).end <= along(target, horizontal).start,
+    );
+    const blocked = (lane: number): number =>
+        between.filter((box) => lane > across(box, horizontal).start - 1 && lane < across(box, horizontal).end + 1).length;
+    if (between.length === 0 || blocked(home) === 0) {
+        return home;
+    }
+    // The gaps those cards leave, one candidate in the middle of each, plus the row the edge would have taken.
+    const gaps = between.flatMap((box) => [across(box, horizontal).start - gap / 2, across(box, horizontal).end + gap / 2]);
+    const candidates = [home, ...gaps];
+    return candidates.reduce((best, lane) => {
+        const better = blocked(lane) - blocked(best);
+        return better < 0 || (better === 0 && Math.abs(lane - home) < Math.abs(best - home)) ? lane : best;
+    }, home);
+};
+
+/* WHERE EACH EDGE TURNS. A short hop turns once, in the gutter it leaves its source column by, level with the
+ * source's handle: two cards a column apart have nothing between them to avoid.
+ *
+ * A SPANNING edge turns twice, which is the shape every vendor's run graph draws: out of the source, down (or
+ * up) into a lane in that first gutter, along the lane past everything in the way, then up into the target's
+ * own row in the last gutter before it, and in. `lanePath` renders any number of turns; these are the two that
+ * matter. */
 const turnPoints = (
     edges: readonly DagEdge[],
     boxes: ReadonlyMap<string, PlacedNode>,
     horizontal: boolean,
     gutter: number,
+    gap: number,
 ): Map<string, readonly DagPoint[]> => {
+    const all = [...boxes.values()];
     const turns = new Map<string, readonly DagPoint[]>();
+    const at = (alongValue: number, acrossValue: number): DagPoint =>
+        horizontal ? { x: alongValue, y: acrossValue } : { x: acrossValue, y: alongValue };
     for (const edge of edges) {
         const source = boxes.get(edge.from);
-        if (source !== undefined) {
-            const turn = horizontal
-                ? { x: source.at.x + source.width + gutter / 2, y: source.at.y + source.height / 2 }
-                : { x: source.at.x + source.width / 2, y: source.at.y + source.height + gutter / 2 };
-            turns.set(laneKey(edge.from, edge.to), [turn]);
+        const target = boxes.get(edge.to);
+        if (source === undefined || target === undefined) {
+            continue;
         }
+        const leaves = along(source, horizontal).end + gutter / 2;
+        const lane = laneAcross(source, target, all, horizontal, gap);
+        const handle = (across(source, horizontal).start + across(source, horizontal).end) / 2;
+        // One turn is enough when the lane IS the source's own row: the line leaves straight and arrives
+        // straight, and a second point on the same row would only be a corner with nothing to turn.
+        const arrives = along(target, horizontal).start - gutter / 2;
+        turns.set(laneKey(edge.from, edge.to), lane === handle || arrives <= leaves ? [at(leaves, lane)] : [at(leaves, lane), at(arrives, lane)]);
     }
     return turns;
 };
@@ -290,7 +350,7 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
     const packed = packColumns(placed, horizontal, nodeSep, orderColumns(columns, drawn, seeded));
     // The turns are measured off the PACKED boxes, not dagre's: a line has to leave the card where it now is.
     const boxes = new Map(placed.map((entry): [string, PlacedNode] => [entry.id, { ...entry, at: packed.get(entry.id) ?? entry.at }]));
-    return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep) };
+    return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep, nodeSep) };
 };
 
 /* ONE EDGE AS A RIGHT-ANGLED PATH THROUGH ITS TURNS, with the corners rounded.
