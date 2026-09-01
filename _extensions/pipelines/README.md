@@ -50,6 +50,13 @@ inside the view rather than gating the tile.
   500px of content into a 944px picture on this workspace's own CI run. Depth and a packed column are what the
   vendors' own run graphs draw, and the arrows pay for it: they leave a card horizontally, turn once in the gap
   after their column, and arrive horizontally, so a fan-out reads as one bus rather than a dozen diagonals.
+- Within a column, a card sits above another when its line continues sooner, and a card nothing waits on sinks to
+  the bottom. That is the third correction, and the one people actually name when they say a diagram is messy:
+  dagre optimises a crossing COUNT, and two orders with equally few crossings do not read equally. Its answer put
+  `ci-base` last in its column while the job it feeds was at the top of the next, and left the run's dead ends
+  (`migrations`, the e2e pair) in the middle of the spine, so following one branch meant zig-zagging across the
+  whole picture. Ordered by continuation, `changes → ci-base → ci-desktop → desktop-check` is a straight run
+  along the top, which is what GitHub's own view of the same workflow draws, column for column.
 - A `uses: ./.github/workflows/release.yml` job is drawn as the chain inside that file, not as one card. A run
   reports one job per job of the called file (`release / plan`, `release / publish`, …) and tells you nothing
   about how they were wired, so the daemon fetches the called file alongside the run's own and reads its `needs`

@@ -154,18 +154,69 @@ const boxOf = (node: DagNode<never>, options: DagLayoutOptions): { width: number
     height: node.height ?? options.nodeHeight,
 });
 
-/* dagre's ORDER within a column is what its crossing minimisation earned, and it is kept. Its COORDINATE along
- * that column is thrown away, and that is the whole of this pass.
+// A card nothing waits on has no continuation to be ordered by, and sorts after every card that has one.
+const LAST_IN_COLUMN = Number.MAX_SAFE_INTEGER;
+
+/* WHERE IN ITS COLUMN EACH CARD SITS, which is the difference between a flow you follow along the top of the
+ * picture and one you have to hunt down and back up again.
+ *
+ * dagre's crossing minimisation is the seed and the tiebreak, not the answer. It optimises a NUMBER, and two
+ * orders with equally few crossings do not read equally: on this workspace's own CI run it put `ci-base` last in
+ * its column while the job it feeds sat at the top of the next one, and left the run's dead ends (`migrations`,
+ * the e2e pair, the two nothing waits on) in the middle of the spine. Following one branch meant zig-zagging
+ * across the whole diagram.
+ *
+ * So a column is ordered by WHERE ITS LINE CONTINUES. Sweeping right to left, a card sits above another when its
+ * nearest continuation sits above the other's: nearest by column first, then by place within it, and a card
+ * nothing waits on sinks to the bottom. Ties keep dagre's order, so its work survives wherever this rule is
+ * indifferent. On the run above it reproduces GitHub's own ordering column for column. */
+const orderColumns = (columns: ReadonlyMap<string, number>, edges: readonly DagEdge[], seeded: readonly string[]): Map<string, number> => {
+    const targets = new Map<string, string[]>();
+    for (const edge of edges) {
+        targets.set(edge.from, [...(targets.get(edge.from) ?? []), edge.to]);
+    }
+    const members = new Map<number, string[]>();
+    for (const id of seeded) {
+        const column = columns.get(id) ?? 0;
+        members.set(column, [...(members.get(column) ?? []), id]);
+    }
+
+    const place = new Map<string, number>();
+    // The nearest place this card's line continues to. Only columns already ordered (strictly to the right) can
+    // answer, so an edge inside a column or back across one is no continuation and simply does not count.
+    const continuation = (id: string): readonly [number, number] =>
+        (targets.get(id) ?? []).reduce<readonly [number, number]>(
+            (best, to) => {
+                const at = place.get(to);
+                const column = columns.get(to);
+                if (at === undefined || column === undefined) {
+                    return best;
+                }
+                return column < best[0] || (column === best[0] && at < best[1]) ? [column, at] : best;
+            },
+            [LAST_IN_COLUMN, LAST_IN_COLUMN],
+        );
+
+    for (let column = Math.max(...members.keys(), 0); column >= 0; column -= 1) {
+        const ordered = (members.get(column) ?? [])
+            .map((id, seed) => ({ id, seed, key: continuation(id) }))
+            .toSorted((one, other) => one.key[0] - other.key[0] || one.key[1] - other.key[1] || one.seed - other.seed);
+        ordered.forEach((entry, index) => place.set(entry.id, index));
+    }
+    return place;
+};
+
+/* dagre's COORDINATE along a column is thrown away, and that is the whole of this pass.
  *
  * dagre places a node near the average of its neighbours so that edges come out straight, and pays for it in
  * empty space. On the workspace's own CI run it left gaps of 121, 204 and 391 pixels INSIDE one column, started
  * the second column four hundred pixels below the first, and drew 500px of content in a picture 944px tall.
  * Six columns each beginning somewhere different read as a scatter rather than as a flow.
  *
- * So every column is packed from the same top, one gap between cards, which is what GitHub's and GitLab's own
- * run graphs do. Edges give up their straightness and gain a step, which the elbow routing draws as a step; the
- * reader gains a block that can be taken in at once. */
-const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: number): Map<string, DagPoint> => {
+ * So every column is packed from the same top, one gap between cards, in the order orderColumns settled, which
+ * is what GitHub's and GitLab's own run graphs do. Edges give up their straightness and gain a step, which the
+ * elbow routing draws as a step; the reader gains a block that can be taken in at once. */
+const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: number, order: ReadonlyMap<string, number>): Map<string, DagPoint> => {
     const columns = new Map<number, PlacedNode[]>();
     for (const entry of placed) {
         const rank = Math.round(horizontal ? entry.at.x : entry.at.y);
@@ -174,7 +225,7 @@ const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: nu
     const packed = new Map<string, DagPoint>();
     for (const column of columns.values()) {
         let next = 0;
-        for (const entry of column.toSorted((a, b) => (horizontal ? a.at.y - b.at.y : a.at.x - b.at.x))) {
+        for (const entry of column.toSorted((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))) {
             packed.set(entry.id, {
                 x: horizontal ? entry.at.x - entry.width / 2 : next,
                 y: horizontal ? next : entry.at.y - entry.height / 2,
@@ -234,7 +285,9 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
         const at = graph.node(node.id);
         return { id: node.id, at: { x: at.x, y: at.y }, ...boxOf(node, options) };
     });
-    const packed = packColumns(placed, horizontal, nodeSep);
+    // dagre's own cross-axis order seeds the ordering pass, which is where its crossing work is kept.
+    const seeded = placed.toSorted((one, other) => (horizontal ? one.at.y - other.at.y : one.at.x - other.at.x)).map((entry) => entry.id);
+    const packed = packColumns(placed, horizontal, nodeSep, orderColumns(columns, drawn, seeded));
     // The turns are measured off the PACKED boxes, not dagre's: a line has to leave the card where it now is.
     const boxes = new Map(placed.map((entry): [string, PlacedNode] => [entry.id, { ...entry, at: packed.get(entry.id) ?? entry.at }]));
     return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep) };

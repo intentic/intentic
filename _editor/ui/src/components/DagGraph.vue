@@ -321,18 +321,23 @@ const toggle = (id: string): void => {
                 <button
                     type="button"
                     v-tooltip.top="data.tooltip"
-                    class="relative block h-full w-full overflow-hidden rounded-md border bg-canvas text-left transition-[colors,opacity]"
-                    :class="[
-                        data.id === selectedId ? `border-link ring-1 ring-link` : `border-line hover:border-line-strong`,
-                        // Faded, not hidden: a highlight is only useful if the run it is picked out of is still
-                        // readable beside it. At 0.3 the rest of a dark-canvas graph went to a smear of grey on
-                        // grey, so tracing one job cost you the picture it was in.
-                        data.dimmed === true ? `opacity-50` : ``,
-                    ]"
+                    class="relative block h-full w-full overflow-hidden rounded-md border bg-canvas text-left transition-colors"
+                    :class="data.id === selectedId ? `border-link ring-1 ring-link` : `border-line hover:border-line-strong`"
                     @click="toggle(data.id)"
                 >
                     <Handle type="target" :position="targetPosition" />
-                    <slot name="node" :node="data" :selected="data.id === selectedId" />
+                    <!-- THE CONTENT FADES, NOT THE CARD, and the difference is visible the moment a highlight is
+                         drawn: `opacity` on the box makes its BACKGROUND translucent too, so an edge running
+                         behind a faded card showed through the middle of its text as a strikethrough, on exactly
+                         the long spans a trace lights up. Fading the interior leaves the card opaque, which is
+                         what a card is for.
+
+                         Faded, not hidden: a highlight is only useful if the run it is picked out of is still
+                         readable beside it. At 0.3 the rest of a dark-canvas graph went to a smear of grey on
+                         grey, so tracing one job cost you the picture it was in. -->
+                    <div class="h-full w-full transition-opacity" :class="data.dimmed === true ? `opacity-45` : ``">
+                        <slot name="node" :node="data" :selected="data.id === selectedId" />
+                    </div>
                     <Handle type="source" :position="sourcePosition" />
                 </button>
             </template>

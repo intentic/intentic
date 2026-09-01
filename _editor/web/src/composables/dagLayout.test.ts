@@ -114,6 +114,26 @@ describe(`layoutDag`, () => {
         }
     });
 
+    it(`puts the card whose line continues above the one nothing waits on`, () => {
+        // `dead` and `feeder` share a column and only `feeder` leads anywhere, so it takes the top and the flow
+        // reads along it. dagre's own crossing minimisation is indifferent here and on the workspace's CI run
+        // answered the other way round, which left the run's dead ends sitting in the middle of its spine.
+        const placed = place(
+            [node(`root`), node(`dead`), node(`feeder`), node(`tail`)],
+            [edge(`root`, `dead`), edge(`root`, `feeder`), edge(`feeder`, `tail`)],
+        );
+        expect(columnOf(placed, `dead`)).toBe(columnOf(placed, `feeder`));
+        expect(topOf(placed, `feeder`)).toBeLessThan(topOf(placed, `dead`));
+    });
+
+    it(`keeps two parallel chains from crossing each other`, () => {
+        const placed = place([node(`a1`), node(`b1`), node(`a2`), node(`b2`)], [edge(`a1`, `a2`), edge(`b1`, `b2`)]);
+        // Whichever chain takes the top of the first column takes the top of the second: a crossing here would
+        // be two lines drawn through each other for no reason at all.
+        const aOnTop = topOf(placed, `a1`) < topOf(placed, `b1`);
+        expect(topOf(placed, `a2`) < topOf(placed, `b2`)).toBe(aOnTop);
+    });
+
     it(`still lays out a graph with a cycle in it`, () => {
         // Depth is undefined round a ring, so the first node the ring would leave unplaced is cut loose and
         // placed from whatever of its dependencies did resolve. What must not happen is nothing being placed.
