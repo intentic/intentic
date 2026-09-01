@@ -408,7 +408,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     /* The connected AI accounts and each provider's live model catalog. Without these the composer sits on
      * "Checking your AI accounts…" forever: the chat gates itself on knowing what it could run a turn WITH. One
      * connected Claude subscription and one Codex account is the honest shape of a working sandbox. */
-    [`GET`, `/claude/accounts`, () => json({ accounts: [DEMO_CLAUDE_ACCOUNT] } satisfies OauthAccountList)],
+    [`GET`, `/claude/accounts`, () => json({ accounts: [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] } satisfies OauthAccountList)],
     [`GET`, `/grok/accounts`, () => json({ accounts: [] } satisfies OauthAccountList)],
     // Codex authenticates ONLY through the translator (see access.ts), so this, not an oauth account, is what
     // makes the fleet's two Codex agents legible: a connected ChatGPT subscription their turns ran on.
@@ -568,6 +568,14 @@ const DEMO_CLAUDE_ACCOUNT: OauthAccount = {
     email: `ada@acme.dev`,
     organization: `Acme`,
     connectedAt: STARTED_AT - 30 * 24 * 3_600_000,
+};
+
+const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
+    id: `acc_claude_demo_2`,
+    label: `Claude Pro`,
+    email: `work@acme.dev`,
+    organization: `Acme`,
+    connectedAt: STARTED_AT - 12 * 24 * 3_600_000,
 };
 
 const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {

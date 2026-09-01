@@ -30,7 +30,8 @@ const { conversation } = defineProps<{ conversation: Conversation }>();
  * teleports behind a `v-if="open"` and BottomSheet does the same, in both ChatPanel and SuggestedSessionBox.
  * These are the refs of the conversation as it was at mount, so a host that swapped the prop in place would go
  * on editing the previous one. Remount, don't rebind. */
-const { provider, harness, model, thinking, fast, fastOffered, fastMode, tierHold, tierAnswer, streaming, account, capabilities, box } = conversation;
+const { provider, harness, model, thinking, fast, fastOffered, fastMode, tierHold, tierAnswer, streaming, generating, account, capabilities, box } =
+    conversation;
 
 // The sandbox-wide automatic-tier mode, which decides what the tier block below is allowed to show: a dead
 // control is worse than none, and this feature has two modes that can produce one (see tierHoldOffered).
@@ -178,7 +179,8 @@ const footerVisible = computed(
                     :provider="provider"
                     :harness="harness"
                     :account="account"
-                    :disabled="streaming"
+                    :accounts-locked="generating"
+                    :harness-locked="streaming"
                     @select-account="conversation.selectAccount($event)"
                     @select-harness="conversation.selectHarness($event)"
                     @navigate="emit(`selected`)"

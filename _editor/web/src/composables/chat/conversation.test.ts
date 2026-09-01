@@ -3,7 +3,7 @@ import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Conversation } from "./conversation";
-import { providerAccounts } from "./providerAccounts";
+import { providerAccounts, selectedAccountId } from "./providerAccounts";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
 import {
@@ -64,6 +64,12 @@ const seedTurnDefaults = (): void => {
     turnDefaults.provider.value = `claude`;
 };
 
+/* The account switcher writes a SANDBOX-WIDE preference, not a per-conversation ref (selectAccount →
+ * selectedAccountId), and with no account list loaded the remembered pick is authoritative
+ * (rememberedAccountFor's own note): a switch made in one test would otherwise seed every conversation built
+ * after it, and a session minted under no pick stops resuming for tests that never touched an account. */
+const accountPicks = { ...selectedAccountId.value };
+
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
 beforeEach(() => {
     seedTurnDefaults();
@@ -78,6 +84,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     seedTurnDefaults();
+    selectedAccountId.value = { ...accountPicks };
 });
 
 // One `data:` SSE frame, as the daemon's attach stream emits envelopes.
@@ -397,6 +404,57 @@ describe(`Conversation`, () => {
         await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
         conversation.selectProvider(`grok`);
         expect(conversation.provider.value).toBe(`claude`);
+        conversation.stop();
+        await turn;
+    });
+
+    /* THE ACCOUNT SWITCHER IS LIVE WHILE A CARD WAITS ON THE USER, which is the one place `streaming` was the
+     * wrong question to ask. A parked turn is streaming, the run is alive and the attach stream open, so the flag
+     * every mid-turn guard reads greyed the switcher out at exactly the moment it was worth reaching for: an
+     * allowance refused mid-conversation puts a card on screen, and "on an account that has headroom" is the
+     * answer to it. The write lands on the NEXT turn either way, the parked turn keeps the credential it spawned
+     * with, so nothing about the run in flight moves under it. */
+    it(`takes an account switch while a turn waits on a card, and holds its divider until the turn settles`, async () => {
+        const conversation = new Conversation(`c1`);
+        const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `question`, requestId: `q1`, questions }], { stayOpen: true }),
+        );
+        const turn = conversation.send(`ask me`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+
+        conversation.selectAccount(`with-room`);
+        expect(conversation.account.value).toBe(`with-room`);
+        // Nothing drawn yet: the transcript's tail belongs to the card, so a line there would sit between the
+        // question and the answer to it.
+        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+
+        conversation.stop();
+        await turn;
+
+        // Settled, the tail is the composer's again, and the line describes what the next message does: a fresh
+        // session, because the account that minted this one is no longer the one serving the conversation.
+        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`fresh session`))).toBe(true);
+
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+        await conversation.send(`go on`, conversation.turnSettings());
+        const secondBody = turnBodies()[1]!;
+        expect(secondBody[`account`]).toBe(`with-room`);
+        expect(`sessionId` in secondBody).toBe(false);
+    });
+
+    // ...and refused while the model is actually working, which is what `generating` is for. Mid-answer there is
+    // no question on screen that a switch is the answer to, and the pill would name an account that is not paying
+    // for the turn the user is watching.
+    it(`ignores an account switch while the model is generating`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+        const turn = conversation.send(`go`, settings);
+        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+
+        conversation.selectAccount(`with-room`);
+        expect(conversation.account.value).toBeUndefined();
+
         conversation.stop();
         await turn;
     });
@@ -1925,6 +1983,46 @@ describe(`Conversation`, () => {
         await expect(conversation.continueTurn()).resolves.toBe(CONTINUATIONS.plain);
 
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+    });
+
+    /* THE PRESS CARRIES WHO SERVES THE RE-RUN, which is the half of it that used to make the button useless in
+     * the case it exists for. A spent allowance is ONE account's refusal, so the move between the refusal and the
+     * press is the composer's account switcher, and a press that replayed the held turn's own account bounced off
+     * the same limit and reported it in the same words. Typing "Continue" by hand worked only because a send
+     * reads the composer's current selection, which is precisely what the press was ignoring. */
+    it(`re-runs the held turn on the account the composer has switched to`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-1` },
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: true } },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`ship the parser`, settings);
+        expect(conversation.session.value).toMatchObject({ id: `s-1` });
+
+        conversation.selectAccount(`with-room`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+                head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.switched), startedAt: Date.now() }),
+            }),
+        );
+        await expect(conversation.continueTurn()).resolves.toBeUndefined();
+
+        const press = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/resume`)!;
+        expect(JSON.parse(press[1]!.body as string)).toEqual({
+            conversationId: `c1`,
+            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
+        });
+        /* AND THE SESSION GOES WITH THE SWITCH. A provider session belongs to the credential that minted it, so
+         * the daemon opens a fresh one seeded from its own record: a window still pointing at s-1 would offer the
+         * next turn a session this conversation no longer runs on. */
+        expect(conversation.session.value).toBeUndefined();
+        // Still one turn and one user row: a press is the same request again, not a new message.
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
     /* THE STANDING PRESS MEETS THE ONE ENDING THAT KNOWS WHEN IT WILL WORK, which is where an interval ladder

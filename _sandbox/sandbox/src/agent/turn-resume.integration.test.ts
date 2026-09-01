@@ -1154,6 +1154,97 @@ test("a limit reached mid-flight keeps the session holding its work, and says so
     clearPendingResume("lim-2");
 });
 
+/* THE PRESS THAT FOLLOWS AN ACCOUNT SWITCH, which is the shape the press is actually made in: a spent allowance
+ * is ONE account's refusal, the composer's switcher is what a person reaches for on reading it, and a re-run that
+ * replayed the pinned account bounced off the same limit and reported it in the same words. The only way through
+ * was to type "Continue" by hand, because a send reads the composer's selection and this route did not. */
+test("a press on a switched account runs on it, and cannot take the old account's session with it", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({
+        input: { prompt: "ship the parser", conversationId: "lim-moved", isolated: true, account: "spent-one" },
+        sessionId: "s-real",
+        ran: true,
+    });
+
+    await fireLimitResume(services, heldWake(turns), "lim-moved", { agent: "claude", harness: "native", account: "with-room" });
+    await settle("lim-moved");
+
+    expect(turns[0]!.account).toBe("with-room");
+    /* AND THE SESSION GOES, which is not a detail: a provider session belongs to the credential that minted it,
+     * so the work behind s-real cannot be picked up on another account at all. The re-run opens a fresh one seeded
+     * from the daemon's record, exactly as a mid-chat account switch does on an ordinary send. */
+    expect(turns[0]!.sessionId).toBeUndefined();
+    // So the note may not be the mid-flight one: "continue from that point in this session" points at a session
+    // this turn does not have, and a model that goes looking finds nothing and starts over without saying so.
+    expect(turns[0]!.prompt).toMatch(/sent again on a different account/i);
+    expect(turns[0]!.prompt).toContain("ship the parser");
+
+    clearPendingResume("lim-moved");
+});
+
+// The other half of that rule, and the one that keeps the press cheap: a press naming the SAME routing is not a
+// switch, so the session holding the turn's work survives it. The held turn leaves provider and harness implicit
+// (absent ⇒ claude/native, the wire's own defaults) while the press spells both out, which is the ordinary case
+// and must not read as a move.
+test("a press that names the routing the turn already had resumes its session", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-same", isolated: true }, sessionId: "s-real", ran: true });
+
+    await fireLimitResume(services, heldWake(turns), "lim-same", { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
+    await settle("lim-same");
+
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.prompt).toMatch(/continue from that point/i);
+    // A same-provider model swap rides along without retiring anything, the rule an ordinary send follows
+    // (`resumes` in turnRequest.ts): the session outlives the model it was minted under.
+    expect(turns[0]!.model).toBe("claude-sonnet-4-5");
+
+    clearPendingResume("lim-same");
+});
+
+// A turn refused AT THE DOOR moves account the same way, and keeps its own note: nothing ran, so there is no work
+// to carry across and nothing for the switched note's "continue from that point" to point at.
+test("a press on a switched account still says nothing ran, when nothing ran", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({
+        input: { prompt: "ship the parser", conversationId: "lim-door", isolated: true, account: "spent-one", model: "claude-opus-4-1" },
+        sessionId: "s-void",
+        ran: false,
+    });
+
+    await fireLimitResume(services, heldWake(turns), "lim-door", { agent: "claude", harness: "native", account: "with-room" });
+    await settle("lim-door");
+
+    expect(turns[0]!.account).toBe("with-room");
+    expect(turns[0]!.prompt).toMatch(/no part of the request below/i);
+    // The press named no model (an unloaded catalog has no pick to send), so the refused turn's own stands rather
+    // than being blanked into the provider's default.
+    expect(turns[0]!.model).toBe("claude-opus-4-1");
+
+    clearPendingResume("lim-door");
+});
+
+// A press with nothing to say about routing is still the old press: every field comes off the held turn.
+test("a press that names no routing runs the turn exactly as it was", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({
+        input: { prompt: "ship the parser", conversationId: "lim-bare", isolated: true, account: "spent-one", agent: "codex", harness: "claude-code" },
+        sessionId: "s-real",
+        ran: true,
+    });
+
+    await fireLimitResume(services, heldWake(turns), "lim-bare");
+    await settle("lim-bare");
+
+    expect(turns[0]).toMatchObject({ account: "spent-one", agent: "codex", harness: "claude-code", sessionId: "s-real" });
+
+    clearPendingResume("lim-bare");
+});
+
 test("pressing again after a re-run was refused too states the note once, not once per press", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];

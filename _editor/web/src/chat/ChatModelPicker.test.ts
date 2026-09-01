@@ -60,6 +60,7 @@ const conversation = (pair: { provider: AgentProvider; harness: AgentHarness }):
         tierHold: ref(false),
         tierAnswer: ref(undefined),
         streaming: ref(false),
+        generating: computed(() => false),
         account: ref(undefined),
         capabilities: computed(() => capabilitiesOf(pair.provider, pair.harness)),
         selectModel: vi.fn(),

@@ -4,6 +4,7 @@ import {
     type AgentTurn,
     type ParkedCard,
     RESUME_NOTES,
+    type ResumeRouting,
     withoutResumeNote,
     withResumeNote,
 } from "@intentic/sandbox-contract";
@@ -227,6 +228,42 @@ export const recordLimitFailure = (failure: LimitFailure): void => {
 /** Whether a press on this conversation has a held turn to re-run, and what the strip may say about it. */
 export const pendingLimitFailure = (conversationId: string): LimitFailure | undefined => pendingLimit.get(conversationId);
 
+/* THE HELD TURN, POINTED AT WHOEVER SERVES IT NOW. Everything the turn IS comes off the held copy; the four
+ * fields that say who RUNS it come off the press, when the press names them.
+ *
+ * Written as destructure-then-add rather than a spread over the top, the same shape and the same reason as
+ * resumedTurn below: a press has to be able to UNSET what the failed turn carried (an account pin dropped in the
+ * composer, a model the catalog no longer offers), and a conditional add over a whole spread leaves the old
+ * value standing on exactly the path that means "not that one". */
+const reroutedInput = (input: AgentTurn & { conversationId: string }, routing: ResumeRouting | undefined): AgentTurn & { conversationId: string } => {
+    if (routing === undefined) {
+        return input;
+    }
+    const { agent: _agent, harness: _harness, account: _account, model: _model, ...rest } = input;
+    // A press with no model keeps the refused turn's: see ResumeRoutingSchema, an unloaded catalog has no pick to
+    // send and the turn's own is a better answer than none. The other three are the press's outright.
+    const model = routing.model ?? input.model;
+    return {
+        ...rest,
+        agent: routing.agent,
+        harness: routing.harness,
+        ...(routing.account !== undefined ? { account: routing.account } : {}),
+        ...(model !== undefined ? { model } : {}),
+    };
+};
+
+/* WHETHER THE HELD SESSION SURVIVES THE PRESS. A provider session belongs to the runtime and the credential that
+ * minted it, so re-pointing any of those three retires it exactly as a mid-chat switch does, and the re-run opens
+ * a fresh one seeded from the daemon's record (handoffHistory). The MODEL is deliberately not in the comparison:
+ * a same-provider model swap keeps its session, which is the client's own rule for an ordinary send (`resumes`
+ * in turnRequest.ts), and the two must not disagree about the same conversation.
+ *
+ * The defaults are the wire's: an absent `agent` is claude and an absent `harness` is native, so a press that
+ * spells out what the held turn left implicit is not read as a switch. */
+const movedRouting = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
+    routing !== undefined &&
+    (routing.agent !== (input.agent ?? "claude") || routing.harness !== (input.harness ?? "native") || routing.account !== input.account);
+
 /* RUN THE HELD TURN AGAIN, on a press. Undefined when there is nothing held (never stranded, superseded by a
  * later turn, or the daemon restarted and this map went with it) or when a turn is already running on the
  * conversation, which is what makes a second press free rather than doubled.
@@ -234,21 +271,37 @@ export const pendingLimitFailure = (conversationId: string): LimitFailure | unde
  * Nothing is consumed HERE: the entry is dropped by the turn this starts, through the same clearPendingResume
  * every turn start runs, and re-armed by recordLimitFailure on that turn's exit if the allowance refuses it
  * again, with a `ran` describing what THIS attempt did rather than what the last one did. So the press survives
- * being pressed and the map never holds a turn that a later turn has overtaken. */
-export const fireLimitResume = async (services: Services, wake: WakeFn, conversationId: string): Promise<TurnRun | undefined> => {
+ * being pressed and the map never holds a turn that a later turn has overtaken.
+ *
+ * THE PRESS MAY MOVE THE TURN TO ANOTHER ACCOUNT, and until it could, this route re-ran a refusal: a spent
+ * allowance is refused by one account, the composer's switcher is what a person reaches for, and a re-run that
+ * replayed the pinned account bounced off the same limit with the same sentence. So `routing` overrides the
+ * turn's own (ResumeRoutingSchema has the argument), which forks the fire three ways rather than two. */
+export const fireLimitResume = async (
+    services: Services,
+    wake: WakeFn,
+    conversationId: string,
+    routing?: ResumeRouting,
+): Promise<TurnRun | undefined> => {
     const held = pendingLimit.get(conversationId);
     if (held === undefined) {
         return undefined;
     }
-    // `restate` on both arms: the note has to describe THIS attempt's starting point, and a turn can cross
-    // between the two arms in either direction between presses (a refused turn that then runs and is cut off
-    // mid-flight; a mid-flight failure whose re-run is refused at the door by a window that has since closed).
+    const failure = { input: reroutedInput(held.input, routing), ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}) };
+    // `restate` on every arm: the note has to describe THIS attempt's starting point, and a turn can cross
+    // between them in any direction between presses (a refused turn that then runs and is cut off mid-flight; a
+    // mid-flight failure whose re-run is refused at the door by a window that has since closed; either of them
+    // moved onto a different account by the press that follows).
+    if (held.ran && !movedRouting(held.input, routing)) {
+        return startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.limit, { restate: true }));
+    }
+    /* FRESH ON BOTH REMAINING ARMS, for two different reasons. A turn that never ran left one unanswered message
+     * in a session that is worth less than the handoff (see resumedTurn's `fresh`); a turn that DID run cannot
+     * take its session onto another account at all. What separates them is only what the model is told. */
     return startConversationTurn(
         services,
         wake,
-        held.ran
-            ? resumedTurn(held, RESUME_NOTES.limit, { restate: true })
-            : resumedTurn(held, RESUME_NOTES.refused, { fresh: true, restate: true }),
+        resumedTurn(failure, held.ran ? RESUME_NOTES.switched : RESUME_NOTES.refused, { fresh: true, restate: true }),
     );
 };
 

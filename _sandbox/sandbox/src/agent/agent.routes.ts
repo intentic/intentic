@@ -1770,18 +1770,20 @@ export const createAgentRoutes = (services: Services) => {
             }
             return { run: run.id };
         }),
-        /* Run the turn a spent allowance refused, AGAIN, with everything it originally carried. NOT_FOUND when
-         * nothing is held, which is the answer to every way that happens (the failure was something else, a
-         * later turn superseded it, the daemon restarted) and tells the client to fall back to saying something
-         * itself. CONFLICT is deliberately absent: a turn already running on this conversation IS the press
-         * having landed, so a second press answers NOT_FOUND on the entry that turn's start cleared, and a user
-         * pressing twice is told nothing happened twice rather than shown an error the first press caused.
+        /* Run the turn a spent allowance refused, AGAIN, with everything it originally carried EXCEPT who serves
+         * it, which the press names because the press is usually the second half of an account switch
+         * (ResumeRoutingSchema). NOT_FOUND when nothing is held, which is the answer to every way that happens
+         * (the failure was something else, a later turn superseded it, the daemon restarted) and tells the client
+         * to fall back to saying something itself. CONFLICT is deliberately absent: a turn already running on this
+         * conversation IS the press having landed, so a second press answers NOT_FOUND on the entry that turn's
+         * start cleared, and a user pressing twice is told nothing happened twice rather than shown an error the
+         * first press caused.
          *
          * The re-run is a turn like any other (startConversationTurn), so it journals, notifies and records
          * identically; what makes it a repeat rather than a new message is the resume note on its prompt, which
          * every reader of a stored prompt already knows how to strip and to show as a notice. */
         resume: i.resume.handler(async ({ input }) => {
-            const run = await fireLimitResume(services, streamAgent, input.conversationId);
+            const run = await fireLimitResume(services, streamAgent, input.conversationId, input.routing);
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no held turn to run again for that conversation" });
             }

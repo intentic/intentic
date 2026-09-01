@@ -208,6 +208,17 @@ export class Conversation {
     // isn't generating, so the composer should drop the Stop spinner and show a ready Send (Claude Code style).
     readonly awaitingDecision = computed(() => this.messages.value.some(isAwaitingDecision));
 
+    /* THE MODEL IS ACTUALLY WORKING RIGHT NOW, which is a narrower thing than `streaming` and is the honest
+     * subject of every "not while a turn is running" rule.
+     *
+     * A turn parked on a card is streaming: the run is alive and the attach stream is open, so the flag stays
+     * true for as long as the card waits. The guards that reached for it therefore refused things a parked turn
+     * has no stake in, and the account switcher was the one that mattered: a person reading "the allowance is
+     * spent" on a card cannot re-point the chat at an account that isn't, which is the one move the situation
+     * calls for. What a parked turn genuinely cannot survive is a change to the RUNNING request (a provider
+     * switch retires the session it is running on), and those guards keep reading `streaming`. */
+    readonly generating = computed(() => this.streaming.value && !this.awaitingDecision.value);
+
     /* THE CARDS WHOSE ANSWER IS CURRENTLY IN THE AIR, by message id.
      *
      * A decision card is answered by ONE of several buttons: Allow once, Always allow, Deny; Approve, Keep
@@ -588,6 +599,14 @@ export class Conversation {
     // permanent by the next send (the segment cut).
     private pendingSwitchNoticeId: number | undefined;
 
+    /* A SWITCH MADE WHILE THE TURN WAS PARKED ON A CARD, owed a divider it could not be given at the time.
+     *
+     * The account switcher is live while a turn waits on the user (see selectAccount), and the transcript's tail
+     * in that moment belongs to the card, so the line that says what the NEXT message does cannot go under it.
+     * This carries the fact to the settle hook, which is where the divider belongs anyway, and it is what stops
+     * that hook from having to guess a switch out of a mismatched session ref (noticeMidTurnSwitch). */
+    private switchedMidTurn = false;
+
     /* THE MODEL THIS CONVERSATION IS ALREADY RUNNING ON: the pick the last SENT turn went out under, and the
      * only thing a same-provider model swap can be measured against.
      *
@@ -743,14 +762,25 @@ export class Conversation {
         this.tierHold.value = value;
     }
 
-    // Point the conversation's next turn at a specific account of its current provider (the account switcher).
-    // Mid-chat, an account change, like a provider change, retires the session at the next send.
+    /* Point the conversation's next turn at a specific account of its current provider (the account switcher).
+     * Mid-chat, an account change, like a provider change, retires the session at the next send.
+     *
+     * ALLOWED WHILE A CARD WAITS ON THE USER, which is the one guard here that reads `generating` rather than
+     * `streaming`, and the difference is the whole point of the two flags existing. This write lands on the NEXT
+     * turn: the parked turn keeps the credential it spawned with, whatever this says, so nothing about the run in
+     * flight moves under it. And the moment the rule mattered most was exactly the one it used to refuse, an
+     * allowance refused mid-conversation puts a card on screen, and the answer to it is usually "on a different
+     * account" — the switcher greyed out while the composer sat there ready to send was the app declining to be
+     * pointed at the fix.
+     *
+     * The divider is owed rather than drawn (see switchedMidTurn): the transcript's tail belongs to the card. */
     selectAccount(id: string): void {
-        if (this.streaming.value) {
+        if (this.generating.value) {
             return;
         }
         this.account.value = id;
         selectedAccountId.value = { ...selectedAccountId.value, [this.provider.value]: id };
+        this.switchedMidTurn = this.switchedMidTurn || this.streaming.value;
         this.refreshSwitchNotice();
     }
 
@@ -855,9 +885,11 @@ export class Conversation {
      * freezes it into the transcript at the segment cut.
      *
      * MID-STREAM IT WAITS. The transcript's tail belongs to the turn being typed into it, so a divider appended
-     * under a half-written answer would read as part of that answer. The one switch reachable while a turn runs
-     * is a same-provider model swap (selectModel's own rule, since it retires nothing), and endTurn asks again
-     * the moment the turn settles, which is where that divider belongs anyway. */
+     * under a half-written answer would read as part of that answer, and under a pending card it would sit between
+     * the question and the answer to it. Two switches are reachable while a turn is live, a same-provider model
+     * swap (selectModel's own rule, since it retires nothing) and an account re-point while the turn is parked on
+     * the user (selectAccount); endTurn asks again the moment the turn settles, which is where either divider
+     * belongs anyway. */
     private refreshSwitchNotice(): void {
         if (this.streaming.value) {
             return;
@@ -878,13 +910,20 @@ export class Conversation {
         this.pendingSwitchNoticeId = this.transcript.append({ role: `notice`, text });
     }
 
-    /* The settle hook's half of that, and deliberately only the MODEL half: a swap is the one switch reachable
-     * while a turn runs (every other one is refused mid-turn), so it is the only one that can have gone
-     * unannounced. Asking the whole question here instead would have every turn on a provider that mints no
-     * session ref end by announcing a switch nobody made, `resumes` being false for want of a session rather
-     * than for want of a match. It only ever ADDS a line, for the same reason: nothing pending survives a send. */
-    private noticeSwappedModel(): void {
-        const text = this.modelSwitchNotice();
+    /* The settle hook's half of that: the switches that were made WHILE the turn ran and so had nowhere to draw
+     * their line at the time. Two of them reach here, and they are asked in the order that keeps them to one line
+     * between them, the same order refreshSwitchNotice uses.
+     *
+     * THE SEGMENT HALF IS GATED ON `switchedMidTurn`, not asked outright, and the gate is the whole care in this
+     * method. Asking `segmentSwitchNotice` unconditionally would have every turn on a provider that mints no
+     * session ref end by announcing a switch nobody made, `resumes` being false for want of a session rather than
+     * for want of a match. The flag says a person really did re-point this conversation during the turn, which is
+     * the only thing that distinguishes the two.
+     *
+     * It only ever ADDS a line, for the same reason as before: nothing pending survives a send. */
+    private noticeMidTurnSwitch(): void {
+        const text = (this.switchedMidTurn ? this.segmentSwitchNotice() : undefined) ?? this.modelSwitchNotice();
+        this.switchedMidTurn = false;
         if (text !== undefined && this.pendingSwitchNoticeId === undefined) {
             this.pendingSwitchNoticeId = this.transcript.append({ role: `notice`, text });
         }
@@ -1247,12 +1286,7 @@ export class Conversation {
         const session = this.session.value;
         const resume = resumes(session, settings) ? session : undefined;
         if (resume === undefined) {
-            this.session.value = undefined;
-            // A turn that can't resume runs under a NEW sdk session, so it will run its Bash in a different
-            // tmux session, the remembered one belongs to the segment that just ended, and offering to watch
-            // it would point at a shell this conversation no longer uses.
-            this.agentTerminal.value = undefined;
-            this.agentBrowser.value = undefined;
+            this.cutSegment();
         }
         // The switch divider (if any) is frozen into the transcript, the segment cut happened.
         this.pendingSwitchNoticeId = undefined;
@@ -1420,10 +1454,11 @@ export class Conversation {
         this.providerRetry.value = undefined;
         this.turnStartedAt.value = undefined;
         this.failures.armRenewalProbe();
-        // A model swapped WHILE this turn ran held its divider back (refreshSwitchNotice won't write into a
-        // transcript a turn is still typing into). The turn is over, the tail is ours again, and the line
-        // describes the next message, so this is exactly where it goes. A no-op for every other ending.
-        this.noticeSwappedModel();
+        // A model swapped or an account re-pointed WHILE this turn ran held its divider back
+        // (refreshSwitchNotice won't write into a transcript a turn is still typing into). The turn is over, the
+        // tail is ours again, and the line describes the next message, so this is exactly where it goes. A no-op
+        // for every other ending.
+        this.noticeMidTurnSwitch();
         this.persist();
         this.dropStaleRemoteTranscript();
         this.scheduleAutoContinue(ranForMs);
@@ -1616,6 +1651,21 @@ export class Conversation {
         this.queued.value = [{ id: uuid(), ...held }, ...this.queued.value];
     }
 
+    /* WHAT THIS WINDOW DROPS WHEN THE NEXT TURN OPENS A FRESH PROVIDER SESSION, the bookkeeping half of a
+     * segment cut. The session ref goes because the credential or runtime that minted it is no longer the one
+     * serving this conversation; the terminal and browser go with it because a fresh sdk session runs its Bash in
+     * a different tmux session, so the remembered one belongs to the segment that just ended and offering to watch
+     * it would point at a shell this conversation no longer uses.
+     *
+     * Written once because two things cut a segment: an ordinary send under a switched selection, and the press
+     * that re-runs a held turn on a switched account (resumeHeldTurn). They used to do it in one place, which is
+     * why the press left this window pointed at a retired session. */
+    private cutSegment(): void {
+        this.session.value = undefined;
+        this.agentTerminal.value = undefined;
+        this.agentBrowser.value = undefined;
+    }
+
     // Release a hold placed by a failure the user has now fixed (reconnecting a revoked account) and let
     // whatever was held ride immediately. Nothing happens when the queue is empty, so calling it on every
     // conversation after a reconnect is safe.
@@ -1638,7 +1688,13 @@ export class Conversation {
      *
      * The request only starts the run; watching it is reattach's job, which is also what makes the press safe to
      * spam. A second press while the first one's turn is running finds `streaming` true and stops at the guard;
-     * one that slips past it is answered NOT_FOUND by a daemon whose held entry that turn has already cleared. */
+     * one that slips past it is answered NOT_FOUND by a daemon whose held entry that turn has already cleared.
+     *
+     * WHAT THE PRESS DOES CARRY IS WHO SERVES IT. The prompt and everything else about the turn stay on the
+     * daemon's own copy (see ResumeTurnSchema), but the routing is read off this conversation HERE, at the press,
+     * exactly as a send reads it at delivery: a spent allowance is one account's refusal, so the switcher in the
+     * composer is what a person reaches for between the refusal and this button, and a press that replayed the
+     * refused account bounced off the same limit and left typing the word by hand as the only way through. */
     async resumeHeldTurn(): Promise<boolean> {
         if (this.streaming.value || this.pickUp.value?.held === undefined) {
             return false;
@@ -1646,11 +1702,28 @@ export class Conversation {
         if (this.stopping !== undefined) {
             await this.stopping;
         }
+        const settings = this.turnSettings();
+        // The switch this press acts on is also a segment cut: the fresh session the daemon opens for it belongs
+        // to the new credential, so this window drops what belonged to the old one (see cutSegment).
+        if (!resumes(this.session.value, settings)) {
+            this.cutSegment();
+        }
+        this.pendingSwitchNoticeId = undefined;
         try {
             const response = await sandboxRequestVia(this.at, `/agent/resume`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify({ conversationId: this.conversationId }),
+                body: JSON.stringify({
+                    conversationId: this.conversationId,
+                    routing: {
+                        agent: settings.agent,
+                        harness: settings.harness,
+                        account: settings.account,
+                        // Same rule as an ordinary send (turnRequestBody): an empty pick is a catalog that hasn't
+                        // loaded, not a choice, and the daemon keeps the held turn's model rather than blanking it.
+                        model: settings.model || undefined,
+                    },
+                }),
             });
             if (!response.ok) {
                 /* The daemon is not holding it after all: it restarted, or another window has since run a turn

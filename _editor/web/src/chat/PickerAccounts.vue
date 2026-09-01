@@ -30,14 +30,25 @@ import ProviderLogo from "./ProviderLogo.vue";
  * three accounts are three rows, one click each, which is the case that was never broken. */
 
 const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness]; navigate: [] }>();
-const { provider, harness, account, disabled } = defineProps<{
+const { provider, harness, account, accountsLocked, harnessLocked } = defineProps<{
     provider: AgentProvider;
     harness: AgentHarness;
     // The explicitly pinned account, if there is one. Absent ⇒ the provider's first, the daemon's own default.
     account?: string | undefined;
-    // Choices this caller cannot make right now, the chat's mid-stream rule. The rows still render: what they
-    // say about headroom is worth reading while a turn is in flight, it just cannot be acted on.
-    disabled?: boolean;
+    /* THE TWO AXES LOCK SEPARATELY, because the chat's mid-turn rule is not one rule.
+     *
+     * Both writes land on the NEXT turn, but they are refused at different moments: the account may be re-pointed
+     * while a turn sits parked on a card (an allowance refusal is answered by switching accounts, and the card is
+     * exactly when a person needs to), while the harness waits for the turn to be over. The rows still render
+     * under either lock: what they say about headroom is worth reading whether or not it can be acted on.
+     *
+     * A LOCK HAS TO LOOK LIKE ONE, hence `ui-off` on both sets of controls. Since the two axes now disagree, a
+     * block where a dead row and a live one are drawn identically is worse than one where everything was dead:
+     * the reader clicks the account, nothing happens, and the panel has no way to say which of the two rules
+     * turned them away. The house fade is the whole answer — `.ui-off` keys on `:disabled`, so the prop above
+     * is still the single source of the rule and the styling follows it. */
+    accountsLocked?: boolean;
+    harnessLocked?: boolean;
 }>();
 
 const {
@@ -249,9 +260,9 @@ const pickAccount = (id: string): void => {
                 :key="a.id"
                 type="button"
                 :data-current="activeAccountId === a.id"
-                class="ui-row-select flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs max-md:min-h-11"
+                class="ui-row-select ui-off flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs max-md:min-h-11"
                 :class="{ 'ui-row-select-on': activeAccountId === a.id }"
-                :disabled="disabled"
+                :disabled="accountsLocked"
                 @click="pickAccount(a.id)"
             >
                 <!-- Name over identity, both truncating: the row grows by a line only for accounts that need one,
@@ -380,9 +391,9 @@ const pickAccount = (id: string): void => {
                 v-for="h in harnessOptions"
                 :key="h.value"
                 type="button"
-                class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
+                class="composer-ghost ui-off h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
                 :class="{ 'composer-active': harness === h.value }"
-                :disabled="disabled"
+                :disabled="harnessLocked"
                 :aria-pressed="harness === h.value"
                 @click="emit(`selectHarness`, h.value)"
             >

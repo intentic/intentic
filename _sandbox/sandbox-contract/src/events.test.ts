@@ -44,6 +44,20 @@ test("a re-run discloses as a notice, and the answered case as a note on the mes
     expect(answered).toEqual({ kind: "note", note: { title: expect.any(String), text: RESUME_NOTES.answered } });
 });
 
+/* THE THREE SPENT-ALLOWANCE NOTES OPEN ON THE SAME SENTENCE, and both readers of a note resolve it by PREFIX
+ * (withoutResumeNote, resumeDisclosure). So one of them growing into a prefix of another is a silent swap rather
+ * than a failure: a press that moved the turn onto an account with headroom would report itself as an ordinary
+ * re-run, and the reader would be told nothing about the one fact that explains why this press worked where the
+ * last one bounced. Each resolves to its own line, or this is broken. */
+test("the spent-allowance notes do not disclose as each other", () => {
+    const lines = (["limit", "switched", "refused"] as const).map((reason) => {
+        const disclosure = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES[reason]));
+        expect(disclosure?.kind).toBe("notice");
+        return disclosure?.kind === "notice" ? disclosure.text : reason;
+    });
+    expect(new Set(lines).size).toBe(3);
+});
+
 // Same guarantee withoutResumeNote gives: an ordinary prompt is not a resume of anything.
 test("a prompt that is not a resume discloses nothing", () => {
     expect(resumeDisclosure("just a question")).toBeUndefined();

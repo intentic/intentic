@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EditorContextSchema } from "./agent.js";
+import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "./agent.js";
 // Declared ABOVE both account shapes because both carry it: headroom is one idea in this product, not a Claude
 // idea that other providers imitate. A native account (OauthAccount) and a routed subscription
 // (TranslatorAccount) differ in who holds the credential and how the reading is taken, never in what a
@@ -237,19 +237,38 @@ export const SteerSchema = z
 // True cancel for the conversation's in-flight turn, aborts the agent daemon-side, unlike closing the
 // /agent fetch (which sends no cancel frame).
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1).describe("Which conversation's running turn to cancel.") });
-/* RUN THE HELD TURN AGAIN, and it carries a conversation id and NOTHING else, which is the entire point of it
- * existing as its own route rather than as a flag on a turn.
+/* WHO SERVES THE RE-RUN, the one part of a held turn a press is allowed to move, and the field that exists
+ * because leaving it out made the press useless in exactly the case it was built for.
  *
- * A spent allowance leaves a turn stranded that the daemon still holds in full: the prompt, the attachments, the
- * model, the effort, the mode, the worktree, the session that holds whatever it managed to do. Every one of
- * those is on the turn the daemon already has, and a client that re-derived them from its own transcript would
- * be re-deriving them from the STRIPPED copy it renders (no preamble notes, no attachment note, no model), which
- * is how a re-send comes to run a different turn from the one it claims to repeat.
+ * A spent allowance is a refusal by an ACCOUNT, and the fix a person reaches for is the account switcher in the
+ * composer: switch to one with headroom, press Continue. Replaying the turn with everything it carried replayed
+ * the refused account too, so the press bounced off the same limit, reported it in the same words, and the user's
+ * only way through was to type "Continue" by hand — a send, which reads the composer's current selection, which
+ * is the very thing the press was ignoring.
  *
- * So the caller says only WHICH conversation, and the daemon re-runs the turn it kept. What comes back is an
- * ordinary StartedTurn, and the caller then attaches to it exactly as it would to a turn somebody else started
- * (the resume note on the prompt is what tells an attaching window to reuse the bubble that is already there
- * instead of drawing the same message twice). */
+ * So the press carries WHO, and the daemon keeps WHAT. Everything that makes the turn the turn (the prompt, the
+ * attachments, the effort, the mode, the worktree, the session holding whatever it managed to do) stays on the
+ * daemon's own copy, because a client re-deriving those from its transcript would be re-deriving them from the
+ * STRIPPED copy it renders, which is how a re-send comes to run a different turn from the one it claims to
+ * repeat. Routing is the exception, and it is the exception on purpose: it is not a property of the request, it
+ * is the answer to "who pays for it", and the whole reason the user is pressing is that they have changed it. */
+export const ResumeRoutingSchema = z.object({
+    agent: AgentProviderSchema.describe("Which provider serves the re-run."),
+    harness: AgentHarnessSchema.describe("Which agentic loop runs it."),
+    account: z.string().optional().describe("Which of that provider's accounts pays for it. Leave it out for the first one."),
+    // Omitted rather than guessed: a client whose catalog hasn't loaded has no pick to send, and the turn's own
+    // model is a better answer than a blank one.
+    model: z.string().optional().describe("Which model. Leave it out to keep the one the refused turn named."),
+});
+export type ResumeRouting = z.infer<typeof ResumeRoutingSchema>;
+/* RUN THE HELD TURN AGAIN: which conversation, and who serves it now.
+ *
+ * What comes back is an ordinary StartedTurn, and the caller then attaches to it exactly as it would to a turn
+ * somebody else started (the resume note on the prompt is what tells an attaching window to reuse the bubble that
+ * is already there instead of drawing the same message twice). */
 export const ResumeTurnSchema = z.object({
     conversationId: z.string().min(1).describe("Which conversation's held turn to run again."),
+    routing: ResumeRoutingSchema.optional().describe(
+        "Who serves the re-run, when the conversation has been re-pointed since it was refused. Leave it out to run it on whatever the turn carried.",
+    ),
 });

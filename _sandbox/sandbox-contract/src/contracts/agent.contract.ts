@@ -74,7 +74,7 @@ export const agentContract = {
             path: "/agent/resume",
             summary: "Run a refused turn again",
             description:
-                "Sends the same turn again when the model provider's allowance refused it, with everything it originally carried. It repeats the request rather than adding a new message to the conversation, so pressing it twice costs nothing and the agent is never told to continue work it has not started.",
+                "Sends the same turn again when the model provider's allowance refused it, with everything it originally carried except who serves it: the caller may name a different provider, harness or account, which is the usual answer to a spent allowance. It repeats the request rather than adding a new message to the conversation, so pressing it twice costs nothing and the agent is never told to continue work it has not started.",
         })
         .input(ResumeTurnSchema)
         .output(StartedTurnSchema),

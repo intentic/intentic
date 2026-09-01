@@ -1147,10 +1147,17 @@ export const RESUME_NOTES = {
     auth: `The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. ${REPEATED}`,
     outage: `The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically. ${REPEATED}`,
     restart: `The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back. ${REPEATED}`,
-    /* A SPENT ALLOWANCE STRANDS A TURN IN TWO SHAPES, and they must not share a note.
+    /* A SPENT ALLOWANCE STRANDS A TURN IN THREE SHAPES, and they must not share a note.
      *
      * `limit` is the mid-turn one and reads like its three neighbours above: the session holds real work, and
      * carrying on from it is exactly right.
+     *
+     * `switched` is that same mid-turn stranding picked back up on a DIFFERENT account (or provider, or
+     * harness), which is what the composer's account switcher does between the refusal and the press. A session
+     * belongs to the credential that minted it, so this one cannot resume: it opens a fresh session seeded from
+     * the daemon's record. REPEATED's "already completed in this session" is therefore false where it counts —
+     * the work is in the carried-across conversation, not in this session's own history — and a model told to
+     * look for it there finds nothing and starts over silently.
      *
      * `refused` is the turn the provider turned away at the door, before the model read one word of it, and it
      * is the COMMONER of the two, because an allowance that is already spent refuses the first request it is
@@ -1162,6 +1169,8 @@ export const RESUME_NOTES = {
      * allowance is the user's own budget and stays their call to spend (turn-resume.ts), so what re-ran this
      * turn was a person pressing Continue. */
     limit: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again. ${REPEATED}`,
+    switched:
+        "The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again on a different account, which starts a fresh session. The conversation so far has been carried across above, including the part of the request that was already completed: continue from that point instead of starting over.",
     refused:
         "The model provider refused the previous attempt at this request outright, because its usage allowance was spent: no part of the request below was read or acted on, and nothing has been done towards it. It has been sent again, and starts from the beginning.",
     // A turn that was PARKED on the user when the daemon died: nothing re-runs at boot, the card is restored
@@ -1209,13 +1218,18 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     auth: { kind: "notice", text: "Claude sign-in renewed, this turn picked up where it left off." },
     outage: { kind: "notice", text: "The model provider came back, this turn picked up where it left off." },
     restart: { kind: "notice", text: "The sandbox came back, this turn picked up where it left off." },
-    /* THE ONE PAIR NOBODY AUTOMATED, said in the passive voice the other three earn honestly and these two do
-     * not: a person pressed Continue. Which is the whole reason these rows exist at all. A press used to append
-     * the word "Continue" as a message of its own, so a chat that bounced off a spent allowance four times read
-     * back as the user saying "Continue" four times to an agent that had answered none of them, and the provider
-     * session the model actually reads accumulated all four (plus a synthetic "No response requested." per
-     * press). One row for one press was never the problem; a row that claims the user said something new is. */
+    /* THE THREE NOBODY AUTOMATED, said in the passive voice the other three earn honestly and these do not: a
+     * person pressed Continue. Which is the whole reason these rows exist at all. A press used to append the word
+     * "Continue" as a message of its own, so a chat that bounced off a spent allowance four times read back as
+     * the user saying "Continue" four times to an agent that had answered none of them, and the provider session
+     * the model actually reads accumulated all four (plus a synthetic "No response requested." per press). One
+     * row for one press was never the problem; a row that claims the user said something new is.
+     *
+     * `switched` names the account because that is the fact the reader needs: they pressed the same button they
+     * pressed a minute ago, and the difference between the press that bounced and the press that worked is who
+     * served it. The line is also the only place a retired session is accounted for. */
     limit: { kind: "notice", text: "Sent again after the allowance ran out mid-turn, picking up where it left off." },
+    switched: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session." },
     refused: { kind: "notice", text: "Sent again after the allowance refused it: nothing had run." },
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };
