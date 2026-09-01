@@ -94,8 +94,8 @@ const secondary = computed<{ action: DeployAction; label: string } | undefined>(
 });
 
 /* Ragged on purpose: a log tail is lines of unequal length, and six identical bars read as a table. Six of
- * them, because <Code>'s own clamp is fourteen and a placeholder taller than the answer usually is would make
- * the block SHRINK when the real tail arrives, which is the one reflow an outline exists to prevent.
+ * them, because <Code>'s scroll viewport is fourteen lines and a placeholder taller than the answer usually
+ * is would make the block SHRINK when the real tail arrives, which is the one reflow an outline exists to prevent.
  *
  * FRACTIONS, NOT PERCENTAGES. An extension bundle is not scanned by the app's Tailwind build: it draws from the
  * class surface `extension-surface.css` promises, which enumerates the fraction scale and cannot enumerate an
@@ -239,8 +239,8 @@ const logText = computed(() => {
                 </div>
             </div>
             <!-- The shared code block: a copy button (a log tail's whole point is that it goes somewhere else)
-                 and a clamp, so a 200-line tail does not push the next row off the screen. -->
-            <Code v-else-if="logText !== ``" :code="logText" lang="log" label="Container log" :clamp-lines="14" />
+                 and a scroll viewport, so a 200-line tail stays in place instead of pushing the next row off screen. -->
+            <Code v-else-if="logText !== ``" :code="logText" lang="log" label="Container log" :scroll-lines="14" />
             <div v-else class="text-2xs text-subtle">No log output.</div>
         </template>
     </DisclosureRow>

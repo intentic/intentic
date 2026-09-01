@@ -51,6 +51,13 @@
         overflow-y: hidden;
     }
 
+    /* Same height budget as clamp, but scrolls inside the box — for log tails the reader scans in place. */
+    .ui-code.ui-code-scroll .shiki,
+    .ui-code.ui-code-scroll pre {
+        max-height: calc(var(--ui-code-clamp-lines) * 1lh + var(--spacing) * 2 + 2px);
+        overflow-y: auto;
+    }
+
     /* THE BOX <CodeField> STACKS ITS TWO HALVES IN. The coloured <pre> and the transparent <textarea> over it
      * occupy the same grid cell, so every property that can move a glyph has to be identical in both — which
      * is why this is one rule listing all of them rather than a class on each. Shiki's own <pre> is in the

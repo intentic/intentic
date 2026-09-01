@@ -16,6 +16,7 @@ const {
     copyable = true,
     wrap = false,
     clampLines,
+    scrollLines,
 } = defineProps<{
     code: string;
     // Shiki language id (e.g. `bash`, `powershell`); omit to render as plain text. Typed against the grammars
@@ -30,6 +31,9 @@ const {
      * to nine ragged lines of env vars, burying the step after it): the copy button works clamped, so the
      * full text is one tap away for whoever actually wants to read it. Omit for no clamp. */
     clampLines?: number;
+    /* Same height budget as `clampLines`, but the block scrolls inside it instead of expanding the page.
+     * For log tails and other output the reader scans in place rather than copying from a collapsed preview. */
+    scrollLines?: number;
 }>();
 
 // Passed straight through from the built-in copy button, for a caller whose flow turns on the copy having
@@ -46,6 +50,8 @@ const html = ref<string | undefined>(undefined);
  * what a short command on a wide screen gets. Observed rather than computed, and re-observed on resize. */
 const expanded = ref(false);
 const clamped = computed(() => clampLines !== undefined && !expanded.value);
+const scrolled = computed(() => scrollLines !== undefined);
+const maxLines = computed(() => clampLines ?? scrollLines);
 const block = ref<HTMLElement>();
 const overflowing = ref(false);
 // Kept visible once expanded: the measurement says "no more to show" the moment the clamp lifts, and a
@@ -97,8 +103,8 @@ watch(
 <template>
     <div
         class="ui-code"
-        :class="{ 'ui-code-wrap': wrap, 'ui-code-clamp': clamped, 'ui-code-copyable': copyable }"
-        :style="clampLines === undefined ? undefined : { '--ui-code-clamp-lines': clampLines }"
+        :class="{ 'ui-code-wrap': wrap, 'ui-code-clamp': clamped, 'ui-code-scroll': scrolled, 'ui-code-copyable': copyable }"
+        :style="maxLines === undefined ? undefined : { '--ui-code-clamp-lines': maxLines }"
     >
         <div class="flex flex-col gap-1.5">
             <!-- Only a LABEL earns a row of its own now. The copy button used to share one, which cost a
