@@ -9,7 +9,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { formatWeekdayTime, timeAgo } from "@intentic/ui/format";
 import { ref } from "vue";
-import { providerAccounts, translatorAccounts } from "./providerAccounts";
+import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
 
 // Every plan-limit window a turn ENDING IN THIS TAB reported, keyed by the account the daemon says served it,
 // the `account_usage` frame, read from the provider's usage endpoint at turn end. Account-wide within an
@@ -88,18 +88,63 @@ export const isSpent = (usage: AccountUsage | undefined): boolean => {
     return percent !== undefined && percent >= SPENT_PERCENT;
 };
 
+// The same threshold read the other way round, as the one thing that can answer a spent allowance: a reading
+// with room left in it. Named because two callers turn on it and they must not drift, the note that decides
+// whether a refusal still stands (answersRefusal) and the pin below that reads a standing one as a full pool.
+const hasRoom = (percent: number | undefined): boolean => percent !== undefined && percent < SPENT_PERCENT;
+
 /* The freshest reading for an account, given what the server attached to its row. Both sources are the same
  * AccountUsage; they differ only in how they arrive. The daemon's rides the accounts list (any provider, a
  * Claude snapshot it persisted, a routed subscription's quota it pulled), while the streamed one is pushed by a
  * turn ending in THIS tab, which no list fetched a moment earlier can know about. Newer `measuredAt` wins,
  * which for every provider but Claude simply means the daemon's. */
-export const liveUsage = (account: string, attached: AccountUsage | undefined): AccountUsage | undefined => {
+const freshest = (account: string, attached: AccountUsage | undefined): AccountUsage | undefined => {
     const streamed = usageStatusByAccount.value[account];
     if (streamed === undefined || attached === undefined) {
         return streamed ?? attached;
     }
     return streamed.measuredAt >= attached.measuredAt ? streamed : attached;
 };
+
+/* AND WHAT THE PLAN HAS SINCE REFUSED, which outranks both readings above, because a refusal knows the one
+ * thing no reading can produce.
+ *
+ * Every percentage here is POLLED and account-wide: read at a turn's end or on the five-minute sweep, and spent
+ * meanwhile by every other client on the same plan. The moment a pool actually runs out is therefore also the
+ * moment the reading describing it stops arriving, the endpoint has its own limits and the snapshot simply
+ * freezes at whatever it last said. That is how a weekly pool that had refused a turn went on reading "≥99%" on
+ * the composer for hours afterwards: honest as a floor, and no answer at all to the only question being asked
+ * in front of it, which is whether there is anything left. There is not. The plan said so.
+ *
+ * So a standing `limit` refusal reads its pool as FULL, the plain 100% the 5-hour window reaches by itself while
+ * the provider is still answering. The pool is the account's fullest one, the same rule the daemon uses to look
+ * up when the wait ends (accountLimitReset), because the pool that refused the turn is the pool that was
+ * binding it.
+ *
+ * ONLY WHERE THE REFUSAL NAMES THIS ACCOUNT. A native turn names the account it was serving; a routed one names
+ * nobody, since CLIProxyAPI picks the auth file itself, and pinning every subscription of that provider on one
+ * nameless refusal would say about each of them what is known about only one.
+ *
+ * IT SETTLES ITSELF, on the rule that settles the refusal note beside it: a reading taken since the refusal with
+ * room in it answers the refusal, and an answered refusal pins nothing. Nor can it feed itself and so outlive its
+ * own evidence. The surfaces judge that refusal against the very percentages this hands them, and both cases it
+ * fires in leave the verdict untouched: a reading OLDER than the refusal cannot answer it whatever figure it
+ * carries, and a reading taken since is only pinned where the raw figure is already at or above SPENT_PERCENT,
+ * which is where refusalNote keeps the refusal standing regardless. */
+const spentByRefusal = (account: string, usage: AccountUsage | undefined): AccountUsage | undefined => {
+    const binding = bindingWindow(usage);
+    if (usage === undefined || binding === undefined || binding.utilization >= 100) {
+        return usage;
+    }
+    const refusal = Object.values(providerRefusals.value).find((entry) => entry.kind === `limit` && entry.account === account);
+    if (refusal === undefined || (usage.measuredAt > refusal.at && hasRoom(Math.round(binding.utilization)))) {
+        return usage;
+    }
+    return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? { ...entry, utilization: 100 } : entry)) };
+};
+
+export const liveUsage = (account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
+    spentByRefusal(account, freshest(account, attached));
 
 /* The same merge for a caller that holds an account ID AND NOTHING ELSE, the composer chip, the picker's rows,
  * the sentence a refused turn prints. They are handed an account by the conversation, never the row it came
@@ -277,8 +322,12 @@ export const formatAge = (measuredAt: number, now: number = Date.now()): string 
 const STALE_AFTER_MS = 10 * 60_000;
 export const isStale = (usage: AccountUsage, now: number = Date.now()): boolean => now - usage.measuredAt > STALE_AFTER_MS;
 
-// A percentage, marked as a floor when the reading is old enough to have been overtaken elsewhere.
-export const formatUtilization = (percent: number, stale: boolean): string => `${stale ? `≥` : ``}${percent}%`;
+/* A percentage, marked as a floor when the reading is old enough to have been overtaken elsewhere.
+ *
+ * Never at 100. The mark says "this can only have climbed since", and a full pool has nowhere left to climb to,
+ * so "≥100%" claims a thing that cannot happen while reading as though the number were still in doubt. The one
+ * figure on this screen that is not a floor is the one that says the allowance is gone. */
+export const formatUtilization = (percent: number, stale: boolean): string => `${stale && percent < 100 ? `≥` : ``}${percent}%`;
 
 /* THE SAME BREAKDOWN AS ONE SENTENCE, the ring's accessible name, and nothing else. A screen reader gets no
  * hover, so the card that lists these pools as meters (UsageRing.vue) never reaches it; this line is how the
@@ -586,7 +635,7 @@ const answersRefusal = (refusal: ProviderRefusal, reading: RefusalReading): bool
     if (reading.measuredAt === undefined || reading.measuredAt <= refusal.at) {
         return false;
     }
-    return refusal.kind === `auth` ? !reading.needsReauth : reading.percent !== undefined && reading.percent < SPENT_PERCENT;
+    return refusal.kind === `auth` ? !reading.needsReauth : hasRoom(reading.percent);
 };
 
 /* WHAT HAS ANSWERED THIS REFUSAL, if anything, the clause the line ends with, and undefined while it still

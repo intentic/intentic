@@ -201,8 +201,10 @@ onBeforeUnmount(hide);
                          ring at all. -->
                     <p v-if="headroom.pools.length === 0" class="text-xs text-muted">Every pool has reset: the full allowance is available.</p>
 
-                    <!-- What the ≥ on each figure means, said only when there is one. -->
-                    <p v-if="headroom.stale" class="text-2xs leading-relaxed text-subtle">
+                    <!-- What the ≥ on each figure means, said only when there is one: a card whose every pool is
+                         full carries no mark to explain, and a note about floors under a set of hard 100s reads
+                         as though those were floors too. -->
+                    <p v-if="headroom.stale && headroom.pools.some((pool) => pool.percent < 100)" class="text-2xs leading-relaxed text-subtle">
                         ≥ these are floors: every device on the account spends the same pools.
                     </p>
                 </div>

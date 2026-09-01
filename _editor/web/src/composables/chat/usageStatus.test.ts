@@ -1,6 +1,6 @@
-import type { AccountUsage, OauthAccount, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
-import { providerAccounts, translatorAccounts } from "./providerAccounts";
+import type { AccountUsage, OauthAccount, ProviderRefusal, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract";
+import { afterEach, describe, expect, it } from "vitest";
+import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
 import {
     bindingWindow,
     formatAge,
@@ -128,6 +128,13 @@ describe(`isStale / formatUtilization`, () => {
         expect(isStale(usage({ measuredAt: now - 8 * 3_600_000 }), now)).toBe(true);
         expect(formatUtilization(98, false)).toBe(`98%`);
         expect(formatUtilization(98, true)).toBe(`≥98%`);
+    });
+
+    // A full pool has nowhere left to climb, so the floor mark would be claiming an impossibility while making
+    // the one certain figure on the card look like the doubtful ones around it.
+    it(`never marks a spent pool as a floor, however old the reading is`, () => {
+        expect(formatUtilization(100, true)).toBe(`100%`);
+        expect(formatUtilization(99, true)).toBe(`≥99%`);
     });
 });
 
@@ -327,6 +334,82 @@ describe(`liveUsage`, () => {
         usageStatusByAccount.value = { "claude-1": streamed };
         expect(liveUsage(`claude-1`, undefined)).toEqual(streamed);
         usageStatusByAccount.value = {};
+    });
+});
+
+/* A REFUSAL IS WORTH MORE THAN THE READING IT CONTRADICTS, the case these exist for: the pool that refuses a
+ * turn is also the pool whose reading stops arriving, so the snapshot freezes just short of full and the
+ * composer went on offering "≥99%" of an allowance that was gone. */
+describe(`liveUsage under a standing refusal`, () => {
+    const refusedFor = (over: Partial<ProviderRefusal> = {}): ProviderRefusal => ({
+        at: 1_000,
+        kind: `limit`,
+        message: `weekly limit reached`,
+        account: `claude-1`,
+        ...over,
+    });
+    const spent = (over: Partial<ProviderRefusal> = {}): Record<string, ProviderRefusal> => ({ claude: refusedFor(over) });
+    // Two pools, so what is pinned can be told apart from what is left alone.
+    const pools = (over: Partial<AccountUsage> = {}): AccountUsage =>
+        usage({ windows: [window({ kind: `five_hour`, utilization: 40 }), window({ kind: `seven_day`, utilization: 99.2 })], ...over });
+    const percentsOf = (reading: AccountUsage | undefined): (number | undefined)[] =>
+        (reading?.windows ?? []).map((entry) => entry.utilization);
+
+    afterEach(() => {
+        providerRefusals.value = {};
+    });
+
+    it(`reads the pool that refused as full, not as the floor the last reading left behind`, () => {
+        providerRefusals.value = spent();
+        // The reading predates the refusal, which is the ordinary case: the plan said no after it was taken.
+        expect(percentsOf(liveUsage(`claude-1`, pools({ measuredAt: 500 })))).toEqual([40, 100]);
+        // And the chip drawn off it says so plainly, rather than hedging a pool that is certainly gone.
+        const projected = planHeadroom(liveUsage(`claude-1`, pools({ measuredAt: 500 })));
+        expect(formatUtilization(projected?.percent ?? 0, true)).toBe(`100%`);
+    });
+
+    it(`pins only the pool that was binding, the others keep their own readings`, () => {
+        providerRefusals.value = spent();
+        const pinned = liveUsage(`claude-1`, pools({ measuredAt: 500 }));
+        expect(pinned?.windows.find((entry) => entry.kind === `five_hour`)?.utilization).toBe(40);
+        expect(pinned?.measuredAt).toBe(500);
+    });
+
+    it(`says nothing about an account the refusal did not name`, () => {
+        providerRefusals.value = spent();
+        const other = pools({ measuredAt: 500 });
+        expect(liveUsage(`claude-2`, other)).toBe(other);
+        // Nor about every subscription of a provider on one refusal a routed turn could not attribute.
+        providerRefusals.value = spent({ account: undefined });
+        expect(liveUsage(`claude-1`, other)).toBe(other);
+    });
+
+    it(`is the spent-allowance refusal alone: a credential or a seat says nothing about a pool`, () => {
+        const reading = pools({ measuredAt: 500 });
+        providerRefusals.value = spent({ kind: `auth`, message: `401` });
+        expect(liveUsage(`claude-1`, reading)).toBe(reading);
+        providerRefusals.value = spent({ kind: `entitlement`, message: `disabled for this seat` });
+        expect(liveUsage(`claude-1`, reading)).toBe(reading);
+    });
+
+    it(`lets go the moment a reading taken since finds room, the rule that settles the note beside it`, () => {
+        providerRefusals.value = spent();
+        const reopened = usage({ windows: [window({ utilization: 12 })], measuredAt: 2_000 });
+        expect(liveUsage(`claude-1`, reopened)).toBe(reopened);
+        // Measured since and STILL spent is the refusal being confirmed, not answered.
+        expect(percentsOf(liveUsage(`claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 100]);
+    });
+
+    /* THE PIN MUST NOT FEED ITSELF. The surfaces judge a refusal against the percentages they draw, so a pin
+     * that changed that verdict would keep itself alive for the week the store remembers the refusal. It cannot:
+     * it only ever fires where the raw figure already reads as spent, which is where the verdict is the same
+     * either way. */
+    it(`cannot keep itself standing, the verdict is the same on the pinned figure as on the raw one`, () => {
+        const refusal = refusedFor();
+        const verdict = (percent: number): boolean | undefined =>
+            refusalNote(refusal, [{ account: `claude-1`, measuredAt: 2_000, percent, needsReauth: false }], 5_000)?.current;
+        expect(verdict(99)).toBe(true);
+        expect(verdict(100)).toBe(true);
     });
 });
 
