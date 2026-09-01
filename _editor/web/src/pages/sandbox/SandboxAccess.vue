@@ -60,8 +60,8 @@ const email = ref(``);
 /* The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model: ONE
  * list, read by both controls that hand a tier out. The invite form and each roster row both use <Picker>:
  * the form puts it beside the address and Invite button (role is a refinement on who you're inviting, not a
- * step before you know the address), with the sentence for the pending choice on the line below; a roster row
- * uses the ghost variant because the row already has an address, a status pill and buttons on it. */
+ * step before you know the address); a roster row uses the ghost variant because the row already has an
+ * address, a status pill and buttons on it. */
 const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
     { label: `Viewer`, value: `viewer`, icon: `eye`, hint: `Can watch everything, agents, chats, files. Can't change anything.` },
     {
@@ -77,7 +77,6 @@ const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
         hint: `Can operate everything the owner can. The owner can revoke this access; the owner can't be revoked.`,
     },
 ];
-const roleHint = (role: GrantedRole): string => ROLE_OPTIONS.find((option) => option.value === role)?.hint ?? ``;
 const roleLabel = (role: MemberRole): string => role.charAt(0).toUpperCase() + role.slice(1);
 const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
@@ -395,7 +394,7 @@ const revoke = async (target: string): Promise<void> => {
                         </Notice>
                         <form class="flex flex-col gap-1.5" @submit.prevent="invite">
                             <!-- Address first, then role beside Invite: the primary flow is "who, send", and the tier
-                             is a refinement on that row. Collaborator preselected; the sentence below teaches
+                             is a refinement on that row. Collaborator preselected; the picker's own hints teach
                              the model without sitting between two unrelated controls. -->
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                                 <input
@@ -432,7 +431,6 @@ const revoke = async (target: string): Promise<void> => {
                                     </Button>
                                 </div>
                             </div>
-                            <p class="text-xs text-muted">{{ roleHint(inviteRole) }}</p>
                             <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
                                 <Icon name="exclamation-triangle" class="text-2xs" />
                                 Enter a valid email address.
@@ -472,14 +470,11 @@ const revoke = async (target: string): Promise<void> => {
             <Row
                 icon="shield"
                 title="Other browsers aren't listed"
-                description="Each browser keeps its own signed pass and the sandbox stores nothing per device, so there is no list to show — and no device that could quietly stay off one. Signing out covers all of them at once."
+                description="The sandbox doesn't track devices — each browser holds its own pass. Sign out everywhere still covers all of them."
             />
 
             <Row icon="sign-out" tone="danger" title="Sign out everywhere">
-                <template #description>
-                    Ends every pass, this browser's included, though you stay signed in here. Everyone else signs in again and gets back in only if
-                    they're still on the list above.
-                </template>
+                <template #description>Revokes every pass. You stay signed in here; everyone else must sign in again.</template>
                 <template #control>
                     <!-- Arming clears the last run's receipt: the row has one thing to say at a time, and
                          "every browser has been signed out" under a live "are you sure?" is two. -->

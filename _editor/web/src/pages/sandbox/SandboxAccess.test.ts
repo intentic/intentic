@@ -145,7 +145,7 @@ it(`names this browser and says why the others cannot be listed`, async () => {
     expect(shown()).toContain(`This browser`);
     expect(shown()).toContain(`owner@example.com · signed in until Sep 24, 2026`);
     expect(shown()).toContain(`Other browsers aren't listed`);
-    expect(shown()).toMatch(/stores nothing per device/);
+    expect(shown()).toMatch(/doesn't track devices/);
 });
 
 // A daemon predating the session exchange hands out no pass to quote an expiry for. Still signed in, and the
