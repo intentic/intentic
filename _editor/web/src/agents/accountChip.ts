@@ -8,8 +8,7 @@ import type { OauthAccount } from "@intentic/sandbox-contract";
  * one, or a pool of them with headroom left in different places — and which one a session spends is a real
  * decision the user makes in the composer and then cannot see anywhere afterwards. The board is where forty
  * sessions are read at once, so it is the one surface where "these three are on the work plan" is a fact rather
- * than a lookup. It rides the hover line beside the model and the branch, for the reason that line is revealed
- * rather than printed (see AgentCard): needed exactly, occasionally.
+ * than a lookup. It is always printed on the card beside the model and the branch (see AgentCard).
  *
  * ── THE SPELLING KEEPS THE FRONT, WHICH IS THE OPPOSITE OF A BRANCH ─────────────────────────────────────────
  * A branch loses its MIDDLE because both of its ends carry something (sessionChip.ts). An account name does not

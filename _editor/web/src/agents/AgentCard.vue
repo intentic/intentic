@@ -279,11 +279,11 @@ const model = computed(() => {
     }
     return category.value === undefined ? undefined : providerLabel(props.agent.provider);
 });
-/* ...AND WHICH LOGIN PAYS FOR IT (accountChip), beside the branch on the same revealed line and for the same
- * reason: a sandbox holding a personal plan and a work one spends a real choice per session, made in the
- * composer and, until now, visible nowhere afterwards. Read from the window's account list rather than carried
- * on the card, because the summary records an id and an id here is a UUID; a name the sandbox cannot resolve
- * (a routed provider's pooled subscription, an account disconnected since) draws nothing at all. */
+/* ...AND WHICH LOGIN PAYS FOR IT (accountChip), on the card beside the model and the branch. A sandbox holding
+ * a personal plan and a work one spends a real choice per session, made in the composer and, until now, visible
+ * nowhere afterwards. Read from the window's account list rather than carried on the card, because the summary
+ * records an id and an id here is a UUID; a name the sandbox cannot resolve (a routed provider's pooled
+ * subscription, an account disconnected since) draws nothing at all. */
 const account = computed(() => accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account));
 /* A nameless card, named for what it IS: a tab waiting to be typed into, a past conversation whose session
  * never earned a title, or an agent whose own naming has yet to land.
@@ -554,22 +554,14 @@ const grab = (event: PointerEvent): void => {
             <OriginMark :origin="agent.origin" />
             <WorkflowMark :workflow="agent.workflow" />
 
-            <!-- The row itself is revealed too when the MODEL is missing, which is the case where hiding the
-                 branch would otherwise leave a flex row holding one `display:none` child: no height of its own,
-                 but still a gap in the column above and below it. One display utility per state, chosen here
-                 rather than stacked in the class list: `hidden` and `flex` are the same property, and which
-                 wins between two plain utilities is Tailwind's emit order, not the order they are written. A
-                 variant (`group-hover:`) always sorts after its unvaried counterpart, so that pair is safe. -->
             <div
                 v-if="box !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
-                class="min-w-0 items-center gap-2 text-2xs text-subtle"
-                :class="box !== undefined || model !== undefined || mobile ? 'flex' : 'hidden group-hover:flex'"
+                class="flex min-w-0 items-center gap-2 text-2xs text-subtle"
             >
                 <!-- WHICH SANDBOX THIS AGENT IS IN, and only ever when that is not the one the reader is in.
-                     It leads the line and it does NOT hide behind a hover, unlike the session name and the
-                     account beside it: those are facts you go looking for, and this one changes what every
-                     other number on the card is about. A board mixing four machines' work in one Attention lane
-                     is only readable if each card says whose work it is without being asked.
+                     It leads the line and changes what every other number on the card is about. A board mixing
+                     four machines' work in one Attention lane is only readable if each card says whose work it
+                     is without being asked.
                      The box's own logo when it has one, so the chip matches the rail's sandbox tile and the
                      switcher row it came from, and the same monogram fallback when it does not. -->
                 <span
@@ -590,49 +582,17 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="desktop" class="text-2xs" />
                     {{ agent.runner }}
                 </span>
-                <!-- THE SESSION NAME IS REVEALED, NOT PRINTED, and the argument for that is the lane rather
-                     than the name. It is the only thing on this card anybody needs CHARACTER-EXACT: every
-                     other word here is read, not retyped: but "needed exactly, occasionally" and "shown on
-                     forty cards at once" are different claims, and it was answering the second while only ever
-                     being asked the first. A column of forty machine names in mono is the largest block of
-                     text on the board and the one nobody reads on the way past.
-                     ON HOVER, WHICH IS WHEN IT IS ASKED FOR. A pointer resting on a card is a reader who has
-                     stopped on it, which is exactly the moment the name becomes a fact about something rather
-                     than a row of noise. Revealed by `display`, not by opacity: an invisible chip that still
-                     holds its width leaves a gap in the line and puts a hover target under a pointer aiming
-                     at the card, and this line has no other reason to reserve space. Nothing moves vertically
-                    : the row exists either way, and only its own width changes.
-                     TOUCH GETS IT UNCONDITIONALLY. There is no hover on a phone, and a fact reachable only by
-                     a pointer is a fact a phone does not have: the same rule the card's hover actions follow.
-                     It stays a LABEL, not a control: a small target for a rare want, sitting mid-card in the
-                     path of the press that focuses the agent, is a target hit by accident more often than on
-                     purpose. Copying it is on the right-click menu (AgentsView), where the board keeps the
-                     decisions that are made about a card rather than to it; the full string is on its own
-                     hover, since what shows here is abbreviated (SessionChip). -->
-                <!-- ...AND WHO PAYS FOR IT, on the same reveal and for the same argument. Which of several
-                     connected logins a session spends is chosen once in the composer and was then readable
-                     nowhere: not on the card, not in the lane, not on the agent's own page. A board is the one
-                     surface that reads forty sessions at once, so it is where "these three are on the work
-                     plan, and that is why it is throttled" stops being a lookup. Like the name beside it, it is
-                     a LABEL and not a control (see `account`, and SessionChip's own note on why): nothing here
-                     is worth a small target in the path of the press that focuses the agent.
-                     The name is clipped from its end and the whole of it, with the identity the provider
-                     reported, is on its own hover (accountChip).
-                     Nothing is drawn when the sandbox cannot name the account: a pooled subscription nobody
-                     picks, or a login disconnected since the turn ran.
-                     The reveal rides a WRAPPER rather than the chips themselves, because `hidden` and their own
-                     `inline-flex` are both display utilities and which of them wins is Tailwind's emit order,
-                     not the order they are written in. A wrapper has no display of its own to argue with, and
-                     one wrapper over both keeps them appearing together as the single line they read as. -->
-                <span
-                    v-if="agent.branch !== undefined || account !== undefined"
-                    class="min-w-0 items-center gap-1.5"
-                    :class="mobile ? 'inline-flex' : 'hidden group-hover:inline-flex'"
-                >
+                <!-- THE SESSION NAME (SessionChip): abbreviated on the card, full string on the chip's hover.
+                     A LABEL, not a control — copying it is on the right-click menu (AgentsView). -->
+                <!-- WHO PAYS FOR IT (accountChip): clipped on the card, full identity on the chip's hover.
+                     Nothing is drawn when the sandbox cannot name the account. -->
+                <span v-if="agent.branch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
                     <span v-if="model !== undefined">·</span>
-                    <SessionChip v-if="agent.branch !== undefined" :branch="agent.branch" />
-                    <span v-if="agent.branch !== undefined && account !== undefined">·</span>
-                    <span v-if="account !== undefined" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
+                    <SessionChip :branch="agent.branch" />
+                </span>
+                <span v-if="account !== undefined" class="inline-flex min-w-0 shrink items-center gap-1">
+                    <span v-if="model !== undefined || agent.branch !== undefined">·</span>
+                    <span v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
                         <Icon name="user" class="shrink-0 text-2xs" />
                         <span class="truncate">{{ account.label }}</span>
                     </span>
