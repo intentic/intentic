@@ -143,8 +143,13 @@ export const boxImageOf = computed<ReadonlyMap<string, string>>(
  * claim, and a claim made on the strength of a request that never came back is the one this design refuses.
  *
  * So it says which boxes, by name, rather than a count. Two names is the common case, and a name is what tells
- * the reader whether the missing box is the one they care about. Undefined when everything answered. */
-export const partialAnswer = computed<string | undefined>(() => {
+ * the reader whether the missing box is the one they care about. Undefined when everything answered.
+ *
+ * TWO STRINGS RATHER THAN ONE SENTENCE, because it is said on a notification card now (AgentsView registers it
+ * as a `condition`) instead of a full-width strip pushed in above the lanes. A standing fact about the session
+ * belongs in the one lane this app floats them in, at the size the lane gives everything else; a header strip
+ * that shoves the board down the screen is the shape reserved for what the reader must act on. */
+export const partialAnswer = computed<{ readonly title: string; readonly detail: string } | undefined>(() => {
     if (!readingAcross.value) {
         return undefined;
     }
@@ -153,7 +158,11 @@ export const partialAnswer = computed<string | undefined>(() => {
         return undefined;
     }
     const names = silent.map((box) => box.sandbox.name);
-    return `${listNames(names)} ${names.length === 1 ? `isn't` : `aren't`} answering, so what's on this board leaves ${names.length === 1 ? `it` : `them`} out.`;
+    const one = names.length === 1;
+    return {
+        title: `${listNames(names)} ${one ? `isn't` : `aren't`} answering`,
+        detail: `This board leaves ${one ? `it` : `them`} out until ${one ? `it does` : `they do`}.`,
+    };
 });
 
 // Names of sandboxes, for a reader rather than for a count: three is where a list stops being read and starts

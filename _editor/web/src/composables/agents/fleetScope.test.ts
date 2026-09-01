@@ -139,14 +139,18 @@ describe("what the board says when its answer is partial", () => {
     it("names the box that did not answer", () => {
         fleetScope.value = `all`;
         silentBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, [])];
-        expect(partialAnswer.value).toContain(`Laptop`);
+        expect(partialAnswer.value?.title).toContain(`Laptop`);
+        expect(partialAnswer.value?.title).toContain(`isn't`);
+        expect(partialAnswer.value?.detail).toContain(`it`);
     });
 
     it("names several, and agrees with itself about number", () => {
         fleetScope.value = `all`;
         silentBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, []), boxOf(`sbx-pi`, `Pi`, [])];
-        expect(partialAnswer.value).toContain(`Laptop`);
-        expect(partialAnswer.value).toContain(`Pi`);
+        expect(partialAnswer.value?.title).toContain(`Laptop`);
+        expect(partialAnswer.value?.title).toContain(`Pi`);
+        expect(partialAnswer.value?.title).toContain(`aren't`);
+        expect(partialAnswer.value?.detail).toContain(`them`);
     });
 });
 

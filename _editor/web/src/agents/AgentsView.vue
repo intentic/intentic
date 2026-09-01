@@ -18,6 +18,7 @@ import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, us
 import { boxNameOf, fleetScope, isRemote, openInSandbox, otherFleet, partialAnswer, readingAcross, scopeOffered } from "../composables/agents/fleetScope";
 import { refreshAcross, subscribe as watchOtherBoxes } from "../composables/sandbox/fleetAcross";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import { hold } from "../composables/notifications";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { chatWide } from "../composables/chat/chatSurface";
@@ -267,6 +268,34 @@ onUnmounted(() => {
     releaseBoxes?.();
     releaseBoxes = undefined;
 });
+
+/* WHEN THE ANSWER IS PARTIAL, SAY SO. This is the only board in the app that can be three-fifths right, and an
+ * empty Attention lane is a claim: made on the strength of two requests that never came back, it is the worst
+ * thing this surface could assert. Named boxes rather than a count, because the name is what tells the reader
+ * whether the missing one is the one they came for.
+ *
+ * IN THE LANE, NOT ABOVE THE BOARD. It was a full-width strip under the header, which is the shape this app
+ * keeps for something the reader must act on — it costs a layout shift and pushes the lanes down the screen to
+ * report a fact nobody has to do anything about. It is a `condition` in the plainest sense (notifications.ts):
+ * true right now, stated for exactly as long as it holds, gone the moment those boxes answer, with no dismissal
+ * to record because nothing is owed. `Try again` rides along as the one press that could change the answer.
+ *
+ * Held from HERE rather than from notificationSources, because the reading it reports on happens only while
+ * this board is mounted and wide — the same lifetime as the subscription above. A card about boxes nobody is
+ * currently asking about would be a fact with no question behind it. */
+const releaseNotice = hold(`fleet-partial`, () => {
+    const partial = partialAnswer.value;
+    return partial === undefined
+        ? undefined
+        : {
+              kind: `condition`,
+              tone: `warning`,
+              title: partial.title,
+              detail: partial.detail,
+              actions: [{ label: `Try again`, severity: `secondary` as const, run: refreshAcross }],
+          };
+});
+onUnmounted(releaseNotice);
 
 const SCOPE_OPTIONS = [
     { label: `This sandbox`, value: `box` as const },
@@ -1175,26 +1204,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <span class="min-w-0 flex-1">{{ notice }}</span>
             <button type="button" aria-label="Dismiss" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissNotice">
                 <Icon name="times" class="text-2xs" />
-            </button>
-        </p>
-        <!-- WHEN THE ANSWER IS PARTIAL, SAY SO. This is the only board in the app that can be three-fifths
-             right, and an empty Attention lane is a claim: made on the strength of two requests that never came
-             back, it is the worst thing this surface could assert. Named boxes rather than a count, because the
-             name is what tells the reader whether the missing one is the one they came for.
-             Not the danger strip above and not dismissible: nothing is broken and nothing is owed. It is a
-             condition, so it states itself for as long as it holds and stops the moment those boxes answer. -->
-        <p
-            v-if="partialAnswer !== undefined"
-            class="flex shrink-0 items-center gap-2 border-b border-line bg-warning/10 px-3 py-1 text-2xs text-warning"
-        >
-            <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
-            <span class="min-w-0 flex-1">{{ partialAnswer }}</span>
-            <button
-                type="button"
-                class="shrink-0 rounded px-1.5 py-0.5 font-medium transition-colors hover:bg-overlay"
-                @click="refreshAcross()"
-            >
-                Try again
             </button>
         </p>
         <!-- What the counter's pulse cannot tell a screen reader. Covers every archive, quiet or not, so the
