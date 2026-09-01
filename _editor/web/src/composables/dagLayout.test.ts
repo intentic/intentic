@@ -134,21 +134,33 @@ describe(`layoutDag`, () => {
         expect(topOf(placed, `a2`) < topOf(placed, `b2`)).toBe(aOnTop);
     });
 
+    /* AN EDGE KEEPS ITS SOURCE'S ROW AND TURNS ONCE, AT THE END. Every line out of one card then starts on the
+     * same row and they overlap into a single stroke that peels apart near its targets, which is what a fan-out
+     * is supposed to look like. Turning early instead ran the line at the TARGET's row, so an edge to a card at
+     * the top of the picture hauled a stroke up and across the whole diagram, far from either of its ends. */
+    it(`keeps its source's row and turns once, in the gutter before its target`, () => {
+        const placed = place([node(`a`), node(`b`), node(`c`)], [edge(`a`, `b`), edge(`b`, `c`), edge(`a`, `c`)]);
+        const turns = placed.lanes.get(laneKey(`a`, `c`)) ?? [];
+        expect(turns).toHaveLength(1);
+        // On `a`'s row, not `c`'s, and in the last gutter: past `b`'s column rather than before it.
+        expect(turns[0]?.y).toBe(topOf(placed, `a`) + options.nodeHeight / 2);
+        expect(turns[0]?.x).toBeGreaterThan(columnOf(placed, `b`) + options.nodeWidth);
+    });
+
     /* A LINE THAT ENTERS A CARD AND LEAVES THE OTHER SIDE READS AS GOING THROUGH IT, whatever the z-order says
-     * (the cards paint on top, so it is really passing behind). An edge used to run at its TARGET's row for the
-     * whole span, and every card in between sits at some row: nineteen of forty edges on this workspace's own CI
-     * run walked across a card's face. A spanning edge now turns twice — into a lane clear of what is in the
-     * way, then out of it into the target's row. */
-    it(`routes a spanning edge around the card in its way rather than across it`, () => {
-        const placed = place([node(`a`), node(`b`), node(`d`)], [edge(`a`, `b`), edge(`a`, `d`), edge(`b`, `d`)]);
-        // `b` is alone in the column between them, packed at the same top as `d`, so the target's own row is
-        // exactly the row that is blocked.
-        expect(columnOf(placed, `b`)).toBeGreaterThan(columnOf(placed, `a`));
-        expect(columnOf(placed, `d`)).toBeGreaterThan(columnOf(placed, `b`));
-        const lane = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
-        expect(lane).toHaveLength(2);
-        const top = topOf(placed, `b`);
-        expect(lane.every((point) => point.y <= top || point.y >= top + options.nodeHeight)).toBe(true);
+     * (the cards paint on top, so it is really passing behind). Nineteen of forty edges on this workspace's own
+     * CI run walked across a card's face. Where its own row is blocked, an edge takes a lane instead: out into
+     * it early, along it, back out of it late, so the detour is only as long as the obstruction. */
+    it(`steps around a card standing on its row, and back onto it after`, () => {
+        // Two cards in the middle column leave a gap between them; `a` and the first of them share a row.
+        const placed = place([node(`a`), node(`b1`), node(`b2`), node(`d`)], [edge(`a`, `b1`), edge(`a`, `b2`), edge(`a`, `d`), edge(`b1`, `d`)]);
+        const turns = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
+        expect(turns).toHaveLength(2);
+        const clear = (point: { readonly y: number }): boolean =>
+            [`b1`, `b2`].every((id) => point.y <= topOf(placed, id) || point.y >= topOf(placed, id) + options.nodeHeight);
+        expect(turns.every(clear)).toBe(true);
+        // And the lane is INSIDE the picture: sailing above the topmost card is always free and always wrong.
+        expect(turns.every((point) => point.y > topOf(placed, `b1`))).toBe(true);
     });
 
     it(`still turns once for a hop to the next column, which has nothing to avoid`, () => {

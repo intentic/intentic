@@ -83,11 +83,13 @@ export interface DagPoint {
 export interface DagPlacement {
     // Each node's TOP-LEFT corner, by id, which is what a renderer positions with. dagre yields centres.
     readonly nodes: ReadonlyMap<string, DagPoint>;
-    /* WHERE EACH EDGE TURNS, keyed by `laneKey`, in the same coordinates as the nodes: the first gap after its
-     * source, so a line drops to its target's row immediately and then runs straight to it.
+    /* WHERE EACH EDGE TURNS, keyed by `laneKey`, in the same coordinates as the nodes: the LAST gap before its
+     * target, so a line keeps its source's row across the picture and changes row only on arrival.
      *
-     * Every edge leaving one column turns on the same x, which is what makes a fan-out read as one bus instead
-     * of a dozen separate diagonals, and it is what the vendors' own run graphs draw. */
+     * Every edge leaving one card therefore starts on the same row and they overlap into one stroke that peels
+     * apart near its targets, which is what makes a fan-out read as one line rather than a dozen diagonals, and
+     * it is what the vendors' own run graphs draw. An edge whose row is blocked carries a second turn (see
+     * turnPoints). */
     readonly lanes: ReadonlyMap<string, readonly DagPoint[]>;
 }
 
@@ -244,24 +246,29 @@ const along = (box: PlacedNode, horizontal: boolean): { start: number; end: numb
 const across = (box: PlacedNode, horizontal: boolean): { start: number; end: number } =>
     horizontal ? { start: box.at.y, end: box.at.y + box.height } : { start: box.at.x, end: box.at.x + box.width };
 
-/* WHICH LANE A LONG EDGE TAKES, and it is the difference between a line that passes a column and one that
- * appears to go through it.
+/* WHICH ROW A LONG EDGE TRAVELS ON, and the answer is ITS SOURCE'S, for as far as it can.
  *
- * An edge used to turn once, in the gutter after its source, and then run at its TARGET's row for the whole
- * span. Every card in every column between them sits at some row, so that route walks straight across their
- * faces: on the workspace's own CI run, nineteen of forty edges disappeared into one card and came out of the
- * other side. They pass BEHIND the cards, which is why nobody could say what was wrong, only that it looked
- * wrong — a line entering a box and leaving it reads as going through it whatever the z-order says.
+ * A line leaves a card and keeps that card's row until the last moment, then makes one turn into its target.
+ * Everything about how a graph reads follows from that:
  *
- * So a spanning edge picks the row that hits the FEWEST cards on its way: the target's own row (free, usually,
- * for a short hop) or the middle of one of the gaps between the cards it has to pass. Fewest rather than none,
- * honestly: columns are packed independently, so their gaps do not line up, and a lane free the whole way often
- * does not exist. Ties go to the row nearest the target, which keeps the last rise short.
+ *   - A FAN-OUT IS ONE LINE. Six edges out of one card all start on its row, so they overlap into a single
+ *     stroke and peel off one at a time as each target arrives. Turning early instead gave six separate lines
+ *     leaving one card, which is the "spaghetti" a reader means.
+ *   - A LINE STAYS NEAR WHAT IT CONNECTS. Turning early and running at the TARGET's row puts the long stroke
+ *     wherever the target happens to sit, so an edge to a card at the top of the picture hauled a line up and
+ *     across the whole diagram, far from either end. Nothing on screen explained where it came from.
  *
- * Returns the target's own row when nothing is in the way, which is the one-turn route this had before. */
+ * It is also, exactly, what GitHub's own run graph draws, which is the reference that keeps being right here.
+ *
+ * WHEN THE SOURCE'S ROW IS BLOCKED, and only then, the edge shifts to a lane: the row that hits the FEWEST
+ * cards standing between the two columns, nearest to the source's row. Fewest rather than none, honestly:
+ * columns are packed independently, so their gaps do not line up and a lane free the whole way often does not
+ * exist. A line entering a card and leaving the other side reads as going THROUGH it whatever the z-order says
+ * (the cards paint on top, so it really passes behind), and nineteen of forty edges did that before any of
+ * this. */
 const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly PlacedNode[], horizontal: boolean, gap: number): number => {
     const mid = (box: PlacedNode): number => (across(box, horizontal).start + across(box, horizontal).end) / 2;
-    const home = mid(target);
+    const home = mid(source);
     // Only what stands BETWEEN them: a box whose whole span sits after the source's column and before the
     // target's. The two endpoints are not obstacles to their own edge.
     const between = boxes.filter(
@@ -272,8 +279,17 @@ const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly Plac
     if (between.length === 0 || blocked(home) === 0) {
         return home;
     }
-    // The gaps those cards leave, one candidate in the middle of each, plus the row the edge would have taken.
-    const gaps = between.flatMap((box) => [across(box, horizontal).start - gap / 2, across(box, horizontal).end + gap / 2]);
+    /* The gaps those cards leave, one candidate in the middle of each, plus the row the edge would have taken.
+     *
+     * Bounded by the WHOLE picture's rows, so a lane outside it is never offered: past the topmost card or the
+     * bottom one is always free of obstacles and always the wrong answer, a stroke sailing along the outside of
+     * the diagram with nothing beside it to say what it belongs to. Bounded by the obstruction instead, one
+     * card between two columns would rule out its own two gaps, which are the only lanes there are. */
+    const first = Math.min(...boxes.map((box) => across(box, horizontal).start));
+    const last = Math.max(...boxes.map((box) => across(box, horizontal).end));
+    const gaps = between
+        .flatMap((box) => [across(box, horizontal).start - gap / 2, across(box, horizontal).end + gap / 2])
+        .filter((lane) => lane > first && lane < last);
     const candidates = [home, ...gaps];
     return candidates.reduce((best, lane) => {
         const better = blocked(lane) - blocked(best);
@@ -281,13 +297,16 @@ const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly Plac
     }, home);
 };
 
-/* WHERE EACH EDGE TURNS. A short hop turns once, in the gutter it leaves its source column by, level with the
- * source's handle: two cards a column apart have nothing between them to avoid.
+/* WHERE EACH EDGE TURNS, and it is LATE: in the last gutter before its target, not the first one after its
+ * source.
  *
- * A SPANNING edge turns twice, which is the shape every vendor's run graph draws: out of the source, down (or
- * up) into a lane in that first gutter, along the lane past everything in the way, then up into the target's
- * own row in the last gutter before it, and in. `lanePath` renders any number of turns; these are the two that
- * matter. */
+ * The ordinary edge therefore has ONE turn. It keeps its source's row all the way across, steps to the target's
+ * row in the gutter immediately before it, and goes in — so a fan-out leaves its card as a single stroke that
+ * peels apart near its targets, and no line is ever drawn far from both of its ends (see laneAcross).
+ *
+ * An edge whose source row is BLOCKED gets two turns instead: out into its lane in the first gutter, along the
+ * lane past whatever stands in the way, then to the target's row in the last gutter. `lanePath` renders any
+ * number of turns; these are the only two shapes this produces. */
 const turnPoints = (
     edges: readonly DagEdge[],
     boxes: ReadonlyMap<string, PlacedNode>,
@@ -306,12 +325,14 @@ const turnPoints = (
             continue;
         }
         const leaves = along(source, horizontal).end + gutter / 2;
+        // The gutter the line turns in, which is the LAST one: `max` because a backwards edge (a cycle dagre
+        // reversed, a graph laid out against its own flow) would otherwise be told to turn behind its source.
+        const arrives = Math.max(along(target, horizontal).start - gutter / 2, leaves);
         const lane = laneAcross(source, target, all, horizontal, gap);
         const handle = (across(source, horizontal).start + across(source, horizontal).end) / 2;
-        // One turn is enough when the lane IS the source's own row: the line leaves straight and arrives
-        // straight, and a second point on the same row would only be a corner with nothing to turn.
-        const arrives = along(target, horizontal).start - gutter / 2;
-        turns.set(laneKey(edge.from, edge.to), lane === handle || arrives <= leaves ? [at(leaves, lane)] : [at(leaves, lane), at(arrives, lane)]);
+        // Keeping its own row all the way is one turn. Shifting to a lane is two: into the lane early, out of it
+        // late, so the detour is only as long as the obstruction that caused it.
+        turns.set(laneKey(edge.from, edge.to), lane === handle ? [at(arrives, lane)] : [at(leaves, lane), at(arrives, lane)]);
     }
     return turns;
 };
