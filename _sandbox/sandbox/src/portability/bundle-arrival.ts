@@ -10,7 +10,7 @@ import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type Bundle
 import { extract, type Headers } from "tar-stream";
 import { repoGitDir } from "../history/history.js";
 import { resolveWithin, setWorkspaceMtime, writeStreamCounted } from "../workspace/workspace-files.js";
-import { ArrivalFormatError } from "./arrival-error.js";
+import { ArrivalFormatError } from "../arrival-error.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 

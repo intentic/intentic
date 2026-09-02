@@ -12,7 +12,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
 import { parse } from "smol-toml";
-import { ArrivalFormatError } from "./arrival-error.js";
+import { ArrivalFormatError } from "../arrival-error.js";
 import type { Services } from "../composition.js";
 import { baseImageOf, customPath } from "../environment/environment.js";
 import { remoteState } from "../git/remote.js";

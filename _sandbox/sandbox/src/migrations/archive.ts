@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import { extract, type Headers } from "tar-stream";
-import { ArrivalFormatError } from "../portability/arrival-error.js";
+import { ArrivalFormatError } from "../arrival-error.js";
 import { skipReason } from "./scan-policy.js";
 
 /* READING A FOREIGN HOME DIRECTORY OFF AN UPLOAD, a gzipped tar of `~/.hermes` (or wherever the source tool

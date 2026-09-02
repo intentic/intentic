@@ -63,7 +63,7 @@ import { createDefinitions } from "./portability/apply-definition.js";
 import { DefinitionFormatError, emitDefinitionToml, settingsDefinition } from "./portability/definition.js";
 import { publishWorkspace, workspaceRemote, WorkspaceRemoteError } from "./portability/workspace-repo.js";
 import { createArrivals } from "./portability/arrival.js";
-import { ArrivalFormatError, ArrivalStaleError } from "./portability/arrival-error.js";
+import { ArrivalFormatError, ArrivalStaleError } from "./arrival-error.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";

@@ -8,8 +8,11 @@
  * means the arrival routes catch ONCE, and a reader added later is answered correctly by construction rather
  * than by somebody remembering to widen a catch.
  *
- * It lives in a leaf module because the three readers that throw it sit in two directories (portability/ and
- * migrations/), and neither should have to import the other's surface to raise an error.
+ * It lives in a leaf module at the root of src/, above both subsystems that throw it, because the readers sit
+ * in two directories (portability/ and migrations/). Inside either one it would be a value edge from the other
+ * subsystem into it, and since the arrival pipeline in portability/ already calls the migrations readers, that
+ * edge closed a runtime cycle between the two (verify-daemon-boundaries.mjs). Raising an error is no reason to
+ * import another subsystem's surface.
  */
 export class ArrivalFormatError extends Error {}
 
