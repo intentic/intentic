@@ -89,8 +89,10 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
             <pre
                 class="chat-command-block overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
             ><code><template v-for="(line, index) in shown" :key="index"><span v-for="(piece, at) in line.pieces" :key="at" :style="piece.style" :class="piece.marked ? 'chat-command-mark' : 'chat-command-dim'">{{ piece.text }}</span>{{ index === shown.length - 1 ? "" : "\n" }}</template></code></pre>
-            <!-- The copy always carries the FULL text, never the clamped rendering: someone copying a command
-                 off this card is taking it somewhere to run or to read, and half of one is worse than none. -->
+            <!-- The copy carries the whole program the daemon sent, never the clamped rendering: someone
+                 copying a command off this card is taking it somewhere to read, and half of one is worse than
+                 none. On a shortened card that text is the excerpt, elision marker and all, which is visibly
+                 partial rather than quietly so; the full program is in the transcript with the tool call. -->
             <!-- Positioned by a box of its own: the button's root wears `relative` for its press spinner, and
                  an `absolute` handed to it from here is settled by Tailwind's utility order rather than by
                  this call site. -->
@@ -113,10 +115,15 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
                 {{ expanded ? `Show less` : `Show all ${lines.length} lines` }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
-            <!-- The daemon cut the program at 400 characters, and says so rather than letting the card end
+            <!-- The daemon spent 400 characters on this program and says so rather than letting the card end
                  mid-word: a reader who cannot see the tail should know there IS a tail. There is nothing to
-                 expand to here, the rest was never sent; it is in the transcript with the tool call. -->
-            <span v-if="program.truncated" class="text-2xs text-subtle">Shortened for this card.</span>
+                 expand to here, the rest was never sent; it is in the transcript with the tool call. What the
+                 excerpt DOES guarantee is the flagged fragment — the daemon keeps the head and a window around
+                 the mark, with the skipped middle written in as `[… N characters not shown …]` — so the thing
+                 the title is about is never the thing the shortening removed. -->
+            <span v-if="program.truncated" class="text-2xs text-subtle">{{
+                program.spans.length > 0 ? `Shortened for this card, kept around the flagged part.` : `Shortened for this card.`
+            }}</span>
         </div>
     </div>
 </template>

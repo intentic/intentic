@@ -99,6 +99,12 @@ export interface CommandGateOptions {
 // short enough that the card stays a card, the full text is in the transcript either way.
 const SHOWN = 400;
 
+/* HOW THE BUDGET IS SPLIT when the flagged fragment sits past a head-only cut. The head identifies what this
+ * is (`cat > repro.mjs <<'EOF'`, `pnpm exec …`); the rest is spent on the fragment the title is about, plus
+ * `LEAD` characters of run-up so the mark arrives with the words around it rather than mid-token. */
+const HEAD = 120;
+const LEAD = 40;
+
 /* WHAT IS ABOUT TO RUN, in the words the card will use. Carried by the caller rather than derived here, because
  * only the caller knows whether its runtime is about to run a shell line, a script, or a vendor tool call whose
  * own name the user has seen elsewhere in the transcript. */
@@ -121,26 +127,64 @@ const JS_SUBJECT: GateSubject = { toolName: JS_TOOL_NAME, displayName: "Run code
 // consequence, and which vendor tool carried it is in the transcript beside it either way.
 export const vendorSubject = (toolName: string): GateSubject => ({ toolName, displayName: "Run command", noun: "command", language: "bash" });
 
-/* THE PROGRAM AS THE CARD WILL HOLD IT: the head of it, and the marked fragments that survive the cut.
+// The fragments of one segment of the excerpt, clipped to it and moved onto the excerpt's own ruler: a span
+// straddling an edge would otherwise paint to the end of a string that ends somewhere else.
+const spansWithin = (spans: readonly CommandSpan[], from: number, to: number, shift: number): CommandSpan[] =>
+    spans
+        .filter((span) => span.start < to && span.end > from)
+        .map((span) => ({ start: Math.max(span.start, from) + shift, end: Math.min(span.end, to) + shift }));
+
+// What stands in for the characters between the two segments. Says how many rather than trailing off, and is
+// bracketed so it cannot be mistaken for part of the program it interrupts.
+const elision = (count: number): string => `\n[… ${count} character${count === 1 ? `` : `s`} not shown …]\n`;
+
+/* THE PROGRAM AS THE CARD WILL HOLD IT: enough of it to judge, with the marked fragments intact.
  *
  * The spans come from the classifier (matchCommand), so the card marks what the RULE fired on rather than
- * re-running the patterns in a browser and marking whatever a second copy of them found. Clipping them here is
- * what keeps that true after truncation: an offset past `SHOWN` points into text nobody was sent, and a span
- * left straddling the cut would paint to the end of a string that ends somewhere else. A hold whose every
- * fragment sits past the cut keeps its card and simply has nothing to mark, which is honest, the reason is
- * still in the title and the `Show all` toggle still reaches the rest.
+ * re-running the patterns in a browser and marking whatever a second copy of them found.
+ *
+ * A HEAD-ONLY CUT COULD THROW AWAY THE ONE THING THE CARD IS ABOUT. A heredoc that writes a script and then
+ * deletes a tree puts the `rm -rf` four hundred characters in, so "this command would delete files
+ * recursively" arrived over four hundred characters in which nothing deletes anything, and the reader was
+ * asked to take the title's word for it. So when the held class's fragments sit past the head, the budget is
+ * split: `HEAD` characters of the beginning, which is what identifies the program, then a window around the
+ * fragments themselves, with the skipped middle declared in place as `[… N characters not shown …]`. The two
+ * segments are the excerpt, `spans` are rebased onto it, and `truncated` still says there is more.
+ *
+ * Fragments past the window are dropped rather than left dangling — the window is sized by what fits, and a
+ * command with marks scattered over kilobytes cannot show all of them on a card. What it can promise is that
+ * the FIRST flagged fragment is always on the card, under the title that named it, and that the transcript
+ * beside the tool call has the whole program.
  *
  * ONLY THE HELD CLASS'S fragments. The title says which consequence stopped this ("would read credential
  * material"), so marking a second matched class's fragments beside it would point at text nobody is being asked
  * about, under a sentence that does not describe it. */
 const programAsk = (program: string, subject: GateSubject, matches: readonly CommandMatch[], held: CommandClass): ProgramAsk => {
-    const text = program.slice(0, SHOWN);
     const spans: readonly CommandSpan[] = matches.find((match) => match.commandClass === held)?.spans ?? [];
+    const language = subject.language;
+    if (program.length <= SHOWN) {
+        return { text: program, language, truncated: false, spans: [...spans] };
+    }
+    // The whole mark already lands inside a plain head cut, so take one: an elision that skips nothing is
+    // noise, and the beginning read in one piece is the most legible excerpt there is.
+    const first = spans[0];
+    if (first === undefined || first.end <= SHOWN) {
+        return { text: program.slice(0, SHOWN), language, truncated: true, spans: spansWithin(spans, 0, SHOWN, 0) };
+    }
+    const from = first.start - LEAD;
+    // The mark starts inside (or barely past) the head, and only its tail runs long: a head cut reaches it
+    // already, so widening to two segments would elide the run-up to a mark it is showing.
+    if (from <= HEAD) {
+        return { text: program.slice(0, SHOWN), language, truncated: true, spans: spansWithin(spans, 0, SHOWN, 0) };
+    }
+    const head = program.slice(0, HEAD);
+    const gap = elision(from - HEAD);
+    const window = program.slice(from, from + (SHOWN - HEAD));
     return {
-        text,
-        language: subject.language,
-        truncated: program.length > text.length,
-        spans: spans.filter((span) => span.start < text.length).map((span) => ({ start: span.start, end: Math.min(span.end, text.length) })),
+        text: `${head}${gap}${window}`,
+        language,
+        truncated: true,
+        spans: [...spansWithin(spans, 0, HEAD, 0), ...spansWithin(spans, from, from + window.length, head.length + gap.length - from)],
     };
 };
 

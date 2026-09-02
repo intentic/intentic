@@ -387,19 +387,51 @@ describe("the card's program", () => {
         await pending;
     });
 
-    /* A span pointing past the cut points into text nobody was sent. The card keeps its hold either way, it
-     * simply has nothing to mark, which is honest: the title still says what stopped it. */
-    test("truncation is declared, and marks past the cut are dropped rather than left dangling", async () => {
+    /* A long program whose mark is in the first four hundred characters is excerpted the plain way: the
+     * beginning, read in one piece, with the mark where it already was. */
+    test("a long program whose mark lands in the head is cut at the head, with no elision", async () => {
+        const gate = harness({ rules: { "secrets.access": "hold" } });
+        const command = `cat .env.production; ${"echo padding; ".repeat(40)}`;
+        const pending = gate.run(command);
+        await settled();
+        const { program } = cardOf(gate.events);
+        expect(program?.truncated).toBe(true);
+        expect(program?.text.length).toBe(400);
+        expect(program?.text).not.toContain(`not shown`);
+        expect(program?.spans.map((span) => program.text.slice(span.start, span.end))).toEqual([`.env.production`]);
+        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        await pending;
+    });
+
+    /* THE ONE THE SHORTENING MUST NOT REMOVE. The whole card is the sentence "this would read credential
+     * material" plus the evidence for it, so an excerpt that keeps four hundred characters of padding and
+     * drops the `cat .env` is the card asking to be taken on trust. The head still identifies the program,
+     * the skipped middle is declared in place, and the offsets land on the excerpt's own ruler. */
+    test("a mark past the head survives the shortening, with the skipped middle declared", async () => {
         const gate = harness({ rules: { "secrets.access": "hold" } });
         const command = `${"echo padding; ".repeat(40)}cat .env`;
         const pending = gate.run(command);
         await settled();
         const { program } = cardOf(gate.events);
         expect(program?.truncated).toBe(true);
-        expect(program?.text.length).toBe(400);
-        for (const span of program?.spans ?? []) {
-            expect(span.end).toBeLessThanOrEqual(400);
-        }
+        expect(program?.text).toContain(`cat .env`);
+        expect(program?.text).toMatch(/\[… \d+ characters not shown …\]/);
+        expect(program?.text.startsWith(command.slice(0, 120))).toBe(true);
+        expect(program?.spans.map((span) => program.text.slice(span.start, span.end))).toEqual([`.env`]);
+        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        await pending;
+    });
+
+    /* The shape that reported this: a script of imports and setup that deletes a tree at the end, held under
+     * "this script would delete files recursively" — a title whose evidence was exactly the part the old
+     * head-only cut dropped. */
+    test("a heredoc's recursive delete reaches the card even when the imports fill the head", async () => {
+        const gate = harness({ rules: { "files.destructive": "hold" } });
+        const code = `${Array.from({ length: 12 }, (_unused, at) => `import { thing${at} } from "node:fs/promises";`).join(`\n`)}\nawait rm(dir, { recursive: true });\n`;
+        const pending = gate.runCode(code);
+        await settled();
+        const { program } = cardOf(gate.events);
+        expect(program?.spans.map((span) => program.text.slice(span.start, span.end))).toEqual([`rm(dir, { recursive: true`]);
         resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });

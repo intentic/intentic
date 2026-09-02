@@ -45,7 +45,11 @@ export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 export const ProgramAskSchema = z.object({
     text: z.string().describe("What would run."),
     language: z.enum(["bash", "javascript"]).describe("Which of the two backends it is written for, named as the grammar that colours it."),
-    truncated: z.boolean().describe("Whether this is the head of a longer program, so the card can say so instead of ending mid-word."),
+    truncated: z
+        .boolean()
+        .describe(
+            "Whether this is an excerpt of a longer program, so the card can say so instead of ending mid-word. An excerpt always carries the flagged fragment: the beginning, then a window around the fragment, with any skipped middle written into the text as a bracketed count.",
+        ),
     spans: z
         .array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }))
         .describe("Which fragments of the text put it in the class that held it. Offsets into text, in order, never overlapping."),
