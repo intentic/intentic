@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Button, Card, Code, Notice, type NoticeModel, Row, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
+import { Button, Code, Notice, type NoticeModel, RowGroup, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
@@ -80,9 +80,9 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 </script>
 
 <template>
-    <Card v-if="proposal || pending || applied || recurring.length" class="flex flex-col gap-4">
-        <Row flush :heading="2" icon="box" title="Environment">
-            <template #control>
+    <RowGroup v-if="proposal || pending || applied || recurring.length" label="Environment">
+        <template #actions>
+            <div class="flex flex-wrap items-center justify-end gap-2">
                 <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />
                 <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="applied" dot />
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" label="pending rebuild" dot />
@@ -94,9 +94,10 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                          boolean now, like useUsage and useRegistry do for the same two refresh buttons. -->
                     <Icon name="refresh" class="text-sm" :spin="isFetching" />
                 </button>
-            </template>
-        </Row>
+            </div>
+        </template>
 
+        <div class="flex flex-col gap-4 p-5">
         <!-- What the sandbox has, in plain language. Leads in every state: including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
         <EnvironmentContents v-if="shown === `contents`" :groups="groups" :awaiting="awaiting" :loading="loading" :error="contentsError" />
@@ -175,5 +176,6 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         </template>
 
         <Notice v-if="actionNotice" :of="actionNotice" />
-    </Card>
+        </div>
+    </RowGroup>
 </template>

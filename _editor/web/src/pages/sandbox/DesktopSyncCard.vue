@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, ConfirmDialog, CopyButton, ui, Code, Row } from "@intentic/ui";
+import { Button, ConfirmDialog, CopyButton, ui, Code, RowGroup } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
 import { desktopVersion, openDesktopLink } from "../../environments/desktop";
@@ -99,9 +99,13 @@ onUnmounted(stop);
 </script>
 
 <template>
-    <Card id="desktop-sync" class="@container flex flex-col gap-4 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
-        <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
-            <Row flush :heading="2" icon="sync" title="Desktop sync" />
+    <RowGroup
+        id="desktop-sync"
+        label="Desktop sync"
+        class="@container transition-shadow"
+        :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''"
+    >
+        <template #actions>
             <!-- The pill follows the HEARTBEAT, not the enrollment record: a green \"Enabled\" over a machine that
                  stopped polling hours ago is the exact lie that let a lost pairing go unnoticed. -->
             <span
@@ -112,8 +116,9 @@ onUnmounted(stop);
                 <span class="h-1.5 w-1.5 rounded-full" :class="syncStopped ? 'bg-warning' : 'bg-success'"></span>
                 {{ syncStopped ? "Not syncing" : "Enabled" }}
             </span>
-        </div>
+        </template>
 
+        <div class="flex flex-col gap-4 p-5">
         <template v-if="available">
             <!-- Enabled: a machine holds sync. Show which, how to manage it, and an opt-in to move it here. -->
             <template v-if="enrolled">
@@ -330,5 +335,6 @@ onUnmounted(stop);
                 there.
             </p>
         </ConfirmDialog>
-    </Card>
+        </div>
+    </RowGroup>
 </template>

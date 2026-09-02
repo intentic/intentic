@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type EngineRow, EnginesViewSchema } from "@intentic-app/api-contract";
-import { BrandMark, Button, Card, Notice, type NoticeModel, Picker, type PickerOption, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
+import { BrandMark, Button, Notice, type NoticeModel, Picker, type PickerOption, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -82,9 +82,9 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
 </script>
 
 <template>
-    <Card class="flex flex-col gap-4">
-        <Row flush :heading="2" icon="cpu" title="Agent engines">
-            <template #control>
+    <RowGroup label="Agent engines">
+        <template #actions>
+            <div class="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge
                     v-if="updatable.length"
                     variant="warning"
@@ -94,11 +94,10 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
                 <button type="button" :class="ui.iconButton()" aria-label="Refresh" v-tooltip.top="'Refresh'" @click="query.refetch()">
                     <Icon name="refresh" class="text-sm" :spin="isFetching" />
                 </button>
-            </template>
-        </Row>
+            </div>
+        </template>
 
-        <RowGroup flat>
-            <Row v-for="engine in engines" :key="engine.id">
+        <Row v-for="engine in engines" :key="engine.id">
                 <template #lead="{ mark }">
                     <BrandMark :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
                 </template>
@@ -151,13 +150,12 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
                         {{ refused.version }} was refused: {{ refused.reason }}
                     </p>
                 </template>
-            </Row>
-        </RowGroup>
+        </Row>
 
-        <Notice v-if="actionNotice" v-bind="actionNotice" />
+        <Notice v-if="actionNotice" :of="actionNotice" class="m-3" />
 
-        <p v-if="view?.listReadAt === undefined" class="text-xs break-words text-muted">
+        <p v-if="view?.listReadAt === undefined" class="mx-4 mb-4 text-xs break-words text-muted">
             The recommended list at {{ view?.listSource }} has not been reachable from here, so recommended rows are showing whatever they last knew.
         </p>
-    </Card>
+    </RowGroup>
 </template>

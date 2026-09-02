@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
-import { Button, Card, ui, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge, vAction } from "@intentic/ui";
+import { Button, ui, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge, vAction } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -64,9 +64,8 @@ const sizeLabel = (bytes: number): string => {
 </script>
 
 <template>
-    <Card class="flex flex-col gap-4">
-        <Row flush :heading="2" icon="box" title="Move this sandbox" />
-
+    <RowGroup label="Move this sandbox">
+        <div class="flex flex-col gap-4 p-5">
         <template v-if="canOperate">
             <!-- THE ONE DECISION THIS CARD ASKS FOR, on the card's own surface. It used to sit in its own boxed
                  inset, which read as a second card inside the first for a border that said nothing the hairline
@@ -209,5 +208,6 @@ const sizeLabel = (bytes: number): string => {
         </template>
 
         <NoticeStack :of="[startError, importError, listNotice]" />
-    </Card>
+        </div>
+    </RowGroup>
 </template>

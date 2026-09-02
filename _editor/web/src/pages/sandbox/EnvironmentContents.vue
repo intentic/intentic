@@ -183,9 +183,9 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             />
         </div>
 
-        <!-- `flat`, because this list is already inside the Environment card: a bordered group per section drew a
-             frame around a surface painted in the card's own colour, so the section labels and the gap between
-             them do the grouping and the card stays the only frame. -->
+        <!-- `flat`, because this list is already inside the Environment group: a bordered group per section drew a
+             frame around a surface painted in the group's own colour, so the section labels and the gap between
+             them do the grouping and the group stays the only frame. -->
         <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
             <!-- The row's chevron used to ride in `#meta`, at the TRAILING edge among the facts, which is where
                  the verbs live and not where a reader looks for a disclosure. <DisclosureRow> puts it in the

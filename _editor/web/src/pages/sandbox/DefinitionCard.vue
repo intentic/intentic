@@ -12,7 +12,7 @@ import {
     type DefinitionReport,
     type WorkspaceRemote,
 } from "@intentic-app/api-contract";
-import { Button, Card, CopyButton, NoticeStack, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
+import { Button, CopyButton, NoticeStack, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import { computed, onMounted, ref } from "vue";
@@ -157,10 +157,8 @@ const cancel = (): Promise<void> =>
 </script>
 
 <template>
-    <Card class="flex flex-col gap-4">
-        <Row flush :heading="2" icon="file-edit" title="Sandbox definition" />
-
-        <template v-if="canOperate">
+    <RowGroup label="Sandbox definition">
+        <div class="flex flex-col gap-4 p-5">
             <!-- THE WORKSPACE REPO, as the one record it is: which repository, on which branch, and the two
                  things anyone does with a repository once it exists. It was a paragraph in a boxed inset,
                  which got both halves wrong. The box drew a second card inside the first for a border that
@@ -177,6 +175,7 @@ const cancel = (): Promise<void> =>
                  Held back until the read lands, because the two states are not equally cheap to be wrong
                  about: "Not published" carries a button that creates a repository, and drawing it for the beat
                  before the daemon answers offers that to owners who published months ago. -->
+            <template v-if="canOperate">
             <RowGroup v-if="plan === undefined && workspace !== undefined" flat label="Workspace">
                 <Row v-if="published !== undefined" :icon="published.icon">
                     <template #title
@@ -341,5 +340,6 @@ const cancel = (): Promise<void> =>
         </template>
 
         <NoticeStack :of="[deriveError, planError, applyError, diffError, workspaceError, publishError]" />
-    </Card>
+        </div>
+    </RowGroup>
 </template>

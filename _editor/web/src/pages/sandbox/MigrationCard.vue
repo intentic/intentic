@@ -8,7 +8,7 @@ import {
     type MigrationReport,
     type MigrationSource,
 } from "@intentic-app/api-contract";
-import { Button, Card, Code, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
+import { Button, Code, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -143,9 +143,8 @@ const cancel = (): Promise<void> =>
 </script>
 
 <template>
-    <Card class="flex flex-col gap-4">
-        <Row flush :heading="2" icon="upload" title="Arrive from another assistant" />
-
+    <RowGroup label="Arrive from another assistant">
+        <div class="flex flex-col gap-4 p-5">
         <template v-if="canOperate">
             <template v-if="plan === undefined">
                 <!-- THE OFFER THAT DELETES THE INSTRUCTIONS. A connected computer needs no archive, no
@@ -333,5 +332,6 @@ const cancel = (): Promise<void> =>
         </template>
 
         <NoticeStack :of="[planError, applyError]" />
-    </Card>
+        </div>
+    </RowGroup>
 </template>
