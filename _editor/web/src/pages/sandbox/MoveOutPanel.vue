@@ -155,11 +155,6 @@ const sizeLabel = (bytes: number): string => {
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ published.project }}</span></template
                 >
-                <template #description>
-                    Every definition carries it as <span class="font-mono">[workspace]</span>: notes, skills, personas, automations, designs and
-                    drafts.
-                </template>
-                <!-- The branch is a fact about the row, so it sits with the facts and stays unclickable. -->
                 <template v-if="workspace?.branch !== undefined" #meta>
                     <span class="inline-flex items-center gap-1"><Icon name="fork" />{{ workspace.branch }}</span>
                 </template>
@@ -183,11 +178,8 @@ const sizeLabel = (bytes: number): string => {
                  greyed-out control to find out why it is grey. -->
             <Row v-else icon="cloud-upload" title="Not published">
                 <template #description>
-                    <template v-if="host === undefined">Connect a GitHub or GitLab account first. That is what creates the repository.</template>
-                    <template v-else
-                        >Publish <span class="font-mono">/work</span> to carry this sandbox's own notes, skills, personas, automations, designs and
-                        drafts.</template
-                    >
+                    <template v-if="host === undefined">Connect a GitHub or GitLab account first.</template>
+                    <template v-else>Publish <span class="font-mono">/work</span>.</template>
                 </template>
                 <template #control>
                     <Button
@@ -209,8 +201,8 @@ const sizeLabel = (bytes: number): string => {
                      margin and all. -->
                 <template v-if="confirmingPublish" #below>
                     <p class="text-2xs text-subtle">
-                        Creates a private repository on {{ host }} and pushes <span class="font-mono">/work</span> to it. Nested repositories, the
-                        reference shelf, credentials, browser sessions and <span class="font-mono">.env</span> files stay behind.
+                        Creates a private repository on {{ host }} and pushes <span class="font-mono">/work</span>. Secrets and
+                        <span class="font-mono">.env</span> files stay behind.
                     </p>
                 </template>
             </Row>
@@ -240,9 +232,7 @@ const sizeLabel = (bytes: number): string => {
             <input ref="chooseCompare" type="file" accept=".toml,text/plain,application/toml" class="hidden" @change="compare" />
         </div>
         <p class="text-2xs text-subtle">
-            <span class="font-mono">sandbox.toml</span> is references only — repos, connections, secret NAMES, the overlay as source — so it is safe
-            to commit or hand around. A bundle is that same document plus the bytes nothing can reference: transcripts, checkpoints, unpushed
-            branches. Never publish one.
+            <span class="font-mono">sandbox.toml</span> is references only. A bundle adds the state; never publish one.
         </p>
 
         <ExportBundleDialog :open="exporting" :busy="starting" @cancel="exporting = false" @confirm="startExport" />
@@ -296,16 +286,12 @@ const sizeLabel = (bytes: number): string => {
                 </template>
             </Row>
         </RowGroup>
-        <p v-if="exports.length > 0" class="text-2xs text-subtle">
-            Exports stay on the sandbox until you delete them, so you can come back for one later.
-        </p>
 
         <!-- Drift: where this sandbox stands relative to the compared file. Agreement is a sentence, not an
              empty box, because "no differences" is the answer the check exists to give. -->
         <template v-if="diff !== undefined">
             <div v-if="diff.differences.length === 0" class="flex items-center gap-2">
                 <StatusBadge variant="success" label="in agreement" dot />
-                <p class="text-2xs text-subtle">This sandbox matches that definition.</p>
             </div>
             <RowGroup v-else flat label="Differences" :count="diff.differences.length">
                 <Row

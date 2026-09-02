@@ -16,7 +16,7 @@ import MoveOutPanel from "./MoveOutPanel.vue";
  * the other end brings in, and the reader can now see both ends of that sentence at once.
  *
  * THE HIERARCHY IS EYEBROW → PANEL → GROUP. The card's own name is <RowGroup>'s uppercase label, floating above
- * the surface; each half opens with a real heading and a sentence saying what it is for; and the lists inside
+ * the surface; each half opens with a one-word heading and nothing else; and the lists inside
  * (Workspace, Exports, Your computers) keep the small uppercase group labels they always had. Three registers,
  * so nothing has to compete with anything, and <RowGroup>'s own hairline between direct children draws the seam
  * between the halves for free.
@@ -33,37 +33,23 @@ const { canShip: canOperate } = useRole();
 </script>
 
 <template>
-    <RowGroup label="Move this sandbox" caption="Out of here as a file, or in from another sandbox or assistant.">
+    <RowGroup label="Move this sandbox">
         <template v-if="canOperate">
             <RowNote variant="block">
                 <div class="flex flex-col gap-4">
-                    <Row
-                        flush
-                        density="comfortable"
-                        :heading="3"
-                        icon="arrow-up-right"
-                        title="Take it elsewhere"
-                        description="Its shape as a file anyone may read, or its shape and its state as a private archive."
-                    />
+                    <Row flush density="comfortable" :heading="3" icon="arrow-up-right" title="Export" />
                     <MoveOutPanel />
                 </div>
             </RowNote>
 
             <RowNote variant="block">
                 <div class="flex flex-col gap-4">
-                    <Row
-                        flush
-                        density="comfortable"
-                        :heading="3"
-                        icon="arrow-down-left"
-                        title="Bring one in"
-                        description="A sandbox.toml, an environment bundle, or another assistant's setup — read, previewed, then applied."
-                    />
+                    <Row flush density="comfortable" :heading="3" icon="arrow-down-left" title="Import" />
                     <ArrivalPanel />
                 </div>
             </RowNote>
         </template>
 
-        <RowNote v-else icon="lock">Only the sandbox owner can move this sandbox in or out.</RowNote>
+        <RowNote v-else icon="lock">Owner only.</RowNote>
     </RowGroup>
 </template>

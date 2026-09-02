@@ -186,36 +186,28 @@ const cancel = (): Promise<void> =>
                 </Row>
             </RowGroup>
 
-            <!-- ONE PICKER, ONE SENTENCE. The formats are listed because a reader has to know what is
-                 acceptable, not because they have to declare which one they brought. -->
-            <div class="flex flex-col gap-2">
-                <div class="flex flex-wrap items-center gap-2">
-                    <Button
-                        :label="ready.length > 0 ? `Or choose a file` : `Choose a file`"
-                        size="small"
-                        :loading="planning"
-                        @click="chooseFile?.click()"
-                    >
-                        <template #icon><Icon name="upload" /></template>
-                    </Button>
-                    <input
-                        ref="chooseFile"
-                        type="file"
-                        accept=".toml,.gz,.tgz,text/plain,application/toml,application/gzip"
-                        class="hidden"
-                        @change="readFile"
-                    />
-                </div>
-                <p class="text-2xs text-subtle">
-                    A <span class="font-mono">sandbox.toml</span>, an environment bundle exported from another sandbox, or a packed Hermes or OpenClaw
-                    folder. Nothing is written until you have read what it would land.
-                </p>
+            <!-- ONE PICKER, NO QUESTION. The daemon tells the formats apart, so the reader never declares one. -->
+            <div class="flex flex-wrap items-center gap-2">
+                <Button
+                    :label="ready.length > 0 ? `Or choose a file` : `Choose a file`"
+                    size="small"
+                    :loading="planning"
+                    @click="chooseFile?.click()"
+                >
+                    <template #icon><Icon name="upload" /></template>
+                </Button>
+                <input
+                    ref="chooseFile"
+                    type="file"
+                    accept=".toml,.gz,.tgz,text/plain,application/toml,application/gzip"
+                    class="hidden"
+                    @change="readFile"
+                />
             </div>
 
-            <!-- The last reader: neither a connected machine nor a file yet. One question with an answer nobody
-                 has to look up, then exactly one command. -->
+            <!-- The last reader: neither a connected machine nor a file yet. Which assistant, then one command. -->
             <div v-if="picked === undefined" class="flex flex-wrap items-center gap-2">
-                <p class="text-2xs text-subtle">Leaving another assistant and need to pack it first?</p>
+                <p class="text-2xs text-subtle">Pack from</p>
                 <Button label="Hermes" size="small" severity="secondary" text @click="picked = `hermes`" />
                 <Button label="OpenClaw" size="small" severity="secondary" text @click="picked = `openclaw`" />
             </div>
@@ -224,13 +216,12 @@ const cancel = (): Promise<void> =>
                  told us which one is theirs. -->
             <div v-else-if="guide" class="flex flex-col gap-3">
                 <div class="flex items-center justify-between gap-2">
-                    <p class="text-xs text-content">Run this where {{ guide.label }} lives, then pick the file above:</p>
+                    <p class="text-xs text-content">Run on {{ guide.label }}:</p>
                     <button type="button" :class="ui.iconButton()" aria-label="Choose a different assistant" @click="picked = undefined">
                         <Icon name="times" class="text-sm" />
                     </button>
                 </div>
                 <Code :code="guide.command" lang="bash" :wrap="true" :copyable="true" />
-                <p class="text-2xs text-subtle">{{ guide.lands }}</p>
 
                 <!-- The three cliffs, each answered where a reader hits it. Folded shut so the person whose
                      assistant runs right here never reads past the command. -->
@@ -250,10 +241,6 @@ const cancel = (): Promise<void> =>
                         </div>
                     </details>
                 </div>
-
-                <!-- Said BEFORE the file exists, not after: a tarball of somebody's keys lives in Downloads
-                     forever if nobody mentions it while they are still thinking about it. -->
-                <p class="text-2xs text-warning">That file holds your keys. Delete it once it is in.</p>
             </div>
         </template>
 
@@ -262,7 +249,6 @@ const cancel = (): Promise<void> =>
         <template v-else>
             <div class="flex items-center gap-2">
                 <StatusBadge variant="info" :label="plan.name ?? SOURCE_LABELS[plan.source]" />
-                <p class="text-2xs text-subtle">Untick anything you don't want. Nothing is written until you bring it in.</p>
             </div>
             <RowGroup flat label="What would land">
                 <Row
@@ -302,7 +288,6 @@ const cancel = (): Promise<void> =>
                     :icon="withSecrets ? `unlock` : `lock`"
                     :tone="withSecrets ? `warning` : `default`"
                     title="Take the secret values too"
-                    description="Keys, tokens and stored logins from the file. Leave this off to bring everything else and enter credentials by hand; the report says what stayed behind."
                     class="cursor-pointer px-3.5 py-3"
                 >
                     <template #control>
@@ -342,7 +327,7 @@ const cancel = (): Promise<void> =>
         <template v-if="report">
             <div class="flex items-center gap-2">
                 <StatusBadge variant="success" label="arrived" dot />
-                <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }} landed.</p>
+                <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }}.</p>
             </div>
             <!-- The failure group wears the tone its heading always did: <RowGroup>'s label is a slot precisely
                  so a group whose subject is a failure can say so without the component learning about tones. -->
@@ -353,9 +338,7 @@ const cancel = (): Promise<void> =>
             <RowGroup v-if="report.needsAction.length > 0" flat label="Finish the arrival">
                 <Row v-for="action in report.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
-            <p v-if="report.refused.length > 0" class="text-2xs text-warning">
-                {{ report.refused.length }} entries were refused: the file carried paths this sandbox does not accept.
-            </p>
+            <p v-if="report.refused.length > 0" class="text-2xs text-warning">{{ report.refused.length }} refused.</p>
         </template>
 
         <NoticeStack :of="[planError, applyError]" />

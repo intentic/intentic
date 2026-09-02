@@ -175,16 +175,16 @@ const contents = [
     </p>
     <ul>
         <li>
-            <strong>Take it elsewhere → Download sandbox.toml</strong> derives the current file and names anything omitted from it. The
+            <strong>Export → Download sandbox.toml</strong> derives the current file and names anything omitted from it. The
             button beside it exports a bundle instead, which is the same document plus the bytes nothing can reference; it asks, before it
             starts packing, whether to write the secret values into the file. The answer is per export and starts at no.
         </li>
         <li>
-            <strong>Take it elsewhere → Compare against one</strong> writes nothing. It returns one line per difference, or says the sandbox
+            <strong>Export → Compare against one</strong> writes nothing. It returns one line per difference, or says the sandbox
             is in agreement.
         </li>
         <li>
-            <strong>Bring one in → Choose a file</strong> takes the definition and parses it into a checklist. Applicable items start
+            <strong>Import → Choose a file</strong> takes the definition and parses it into a checklist. Applicable items start
             selected; existing repo paths and connection ids are marked “already here” and are never overwritten. The same picker takes an
             environment bundle or a packed Hermes/OpenClaw folder — you do not tell it which you have, it reads the file and says.
         </li>
