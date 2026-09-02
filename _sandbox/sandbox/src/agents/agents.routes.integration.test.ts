@@ -63,6 +63,10 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
     const { agents } = await client.agents.list();
     expect(agents).toHaveLength(1);
     expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", branch: "agent/conv1", costUsd: 0.5, sessionId: "sess-iso" });
+    // A review always states how much of this agent's work stopped being a difference because the reader
+    // committed it, even when it is none: an empty list has to be able to say WHICH kind of empty it is, and a
+    // count that only sometimes rides along leaves the panel guessing (AgentChangesSchema).
+    expect(await client.agents.diff({ id: "conv1" })).toMatchObject({ absorbed: 0 });
 });
 
 test("a workspace turn follows the same registry lifecycle without inventing a branch", async () => {

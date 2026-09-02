@@ -9,7 +9,13 @@ import ReviewStat from "../components/ReviewStat.vue";
 import { stopAgent } from "../composables/agents/agentActions";
 import { boxNameOf, openInSandbox } from "../composables/agents/fleetScope";
 import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
-import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "../composables/agents/useAgentChanges";
+import {
+    AGENT_FILE_DIFF_OPTIONS,
+    agentFileDiffKey,
+    type AgentReviewFile,
+    readAgentFileDiff,
+    useAgentChanges,
+} from "../composables/agents/useAgentChanges";
 import { useSandboxQuery } from "../composables/sandbox/useSandboxQuery";
 import { useLayout } from "../composables/useLayout";
 import { toAppPx, uiLength } from "../composables/uiScale";
@@ -43,10 +49,12 @@ import { basename } from "@intentic/ui/path";
  *     unrelated jobs: what's in this changeset, narrow the list, end the session, so it stated the file count
  *     four times over and put Discard eight pixels from Land. The session half of it now lives in the page
  *     header above (AgentDetail); the two bars here are exactly as wide as the thing they describe.
- *   - LANDED WORK IS STILL WORK. The list is the agent's CUMULATIVE output (see useAgentChanges), not the
- *     not-yet-landed remainder. A clean turn auto-lands within milliseconds, so a remainder-scoped list showed
- *     an empty panel for everything the agent had just written. Rows carry `landed`; the toolbar counts what is
- *     left, and the SegmentedControl filters down to it.
+ *   - LANDED WORK IS STILL WORK, COMMITTED WORK IS NOT. The list is what the agent wrote that still DIFFERS
+ *     FROM MAIN (see useAgentChanges), which is neither the whole cumulative output nor the not-yet-landed
+ *     remainder. A clean turn auto-lands within milliseconds, so a remainder-scoped list showed an empty panel
+ *     for everything the agent had just written: landed rows stay, flagged, and the SegmentedControl filters
+ *     down to what "Land now" would apply. What retires a row is the user COMMITTING it, the one act that says
+ *     they are done reviewing it, and the count of those is `absorbed` (it is what the empty state reads).
  *   - A REVIEW HAS PROGRESS. Files can be ticked off as you look at them (viewed, GitHub-style), the toolbar
  *     shows the count, and `v` ticks the current file and advances, so a 30-file scan has a place to stop and
  *     resume rather than being a wall of paths. Whole HEADINGS tick too (ReviewGroupCheck, `⇧V`): the mark
@@ -189,6 +197,17 @@ const cross = (): void => {
         openInSandbox(at, agentId);
     }
 };
+
+/* THE OTHER EMPTY LIST: not "this agent wrote nothing" but "you have already taken all of it". The list holds
+ * what still differs from main, so committing an agent's every file empties it, and the difference matters
+ * because the two states want opposite next moves from the reader. Whose history it names follows the review's
+ * own subject: a cross-sandbox review is about a workspace on another machine. */
+const absorbedNote = computed(() => {
+    const history = remoteName.value === undefined ? `your workspace's history` : `${remoteName.value}'s history`;
+    return changes.absorbed.value === 1
+        ? `The one file this agent wrote is in ${history}, so nothing of it differs from main any more.`
+        : `All ${changes.absorbed.value} files this agent wrote are in ${history}, so nothing of it differs from main any more.`;
+});
 
 /* What a heading says about the rows under it: at BOTH scopes, because both fold. A collapsed heading is the
  * only thing left of its rows, so it has to carry what the rows would have said: how big the change is, and
@@ -638,12 +657,18 @@ const endResize = (event: PointerEvent): void => {
 
         <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading the agent's diff…</p>
         <div v-else-if="changes.count.value === 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-            <Icon name="file-edit" class="text-2xl text-subtle" />
+            <Icon :name="changes.absorbed.value > 0 ? 'check' : 'file-edit'" class="text-2xl text-subtle" />
+            <!-- AN EMPTY LIST IS TWO OPPOSITE FACTS, and which one it is decides the reader's next move. The
+                 list is what still differs from main, so an agent whose every file the user COMMITTED empties
+                 it exactly as an agent that has written nothing does, and the sentence below used to tell them
+                 both that the agent "hasn't changed any files" — over work the reader had accepted minutes
+                 earlier. `absorbed` is the daemon's count of the rows it retired for that reason. -->
+            <p v-if="changes.absorbed.value > 0" class="max-w-xs text-2xs text-muted">{{ absorbedNote }} Anything it writes next shows up here.</p>
             <!-- "Ask it in the chat" is the right next step only where there IS a chat for this agent. On a
                  review of one in another sandbox there is none on screen and there cannot be (its conversation
                  lives on that daemon), so the sentence names the crossing instead of pointing at a panel that
                  is showing a different conversation entirely. -->
-            <p v-if="remoteName !== undefined" class="max-w-xs text-2xs text-muted">
+            <p v-else-if="remoteName !== undefined" class="max-w-xs text-2xs text-muted">
                 This agent hasn't changed any files. Its conversation is in {{ remoteName }}: open it there to ask for something, and whatever it
                 writes shows up here.
             </p>

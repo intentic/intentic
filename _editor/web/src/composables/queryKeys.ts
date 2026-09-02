@@ -84,6 +84,22 @@ export const GIT_REPOS = family(`git`, `repos`);
 // ---- agents ----
 
 export const AGENTS = family(`agents`);
+
+/* ONE AGENT'S REVIEW, plus the predicate that reaches EVERY agent's, which is the shape a plain family cannot
+ * say: the agent id sits in the MIDDLE of the key, so there is no prefix that means "every agent's diff" and
+ * only that. `AGENTS.every` would take the transcripts with it, and a transcript is the most expensive read
+ * this app has; hand-rolling the predicate at each call site would put the `diff` segment back in two places,
+ * which is the drift this file exists to end.
+ *
+ * `matches` reaches the per-file diffs too (they are filed UNDER the list, see useAgentChanges), deliberately:
+ * whatever makes the list stale makes the rows it opens stale by the same act. */
+const DIFF = `diff`;
+export const AGENT_DIFF = {
+    of: (agentId: string): unknown[] => AGENTS.of(agentId, DIFF),
+    ofSandbox: (sandboxId: string, agentId: string): unknown[] => AGENTS.ofSandbox(sandboxId, agentId, DIFF),
+    matches: (key: readonly unknown[]): boolean => key[0] === AGENTS.every[0] && key[2] === DIFF,
+} as const;
+
 export const SESSIONS = family(`sessions`);
 export const SUBAGENTS = family(`subagents`);
 export const SUBAGENT_TRANSCRIPT = family(`subagent-transcript`);

@@ -12,7 +12,7 @@ import { sandboxJson, sandboxJsonAt } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 import { useAgents } from "./useAgents";
-import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
+import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
 
 /* The fleet's mutations, addressed by agent id, the true source for both surfaces that invoke them: the
  * review panel (useAgentChanges, which binds one agent to its diff query) and the board's drag-to-act drops,
@@ -260,7 +260,7 @@ export const invalidateAgentAction = async (id: string, at: AgentReach = undefin
         refreshChangesAcross();
     }
     await Promise.all([
-        queryClient.invalidateQueries({ queryKey: at === undefined ? AGENTS.of(id, `diff`) : AGENTS.ofSandbox(at, id, `diff`) }),
+        queryClient.invalidateQueries({ queryKey: at === undefined ? AGENT_DIFF.of(id) : AGENT_DIFF.ofSandbox(at, id) }),
         queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }),
         queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every }),
     ]);

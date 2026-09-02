@@ -13,7 +13,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { REASON_COPY } from "../composables/agents/conflictResolution";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { queryClient } from "../composables/queryPersistence";
-import { AGENTS, WORKSPACE_MODULES } from "../composables/queryKeys";
+import { AGENT_DIFF, WORKSPACE_MODULES } from "../composables/queryKeys";
 import { router } from "../router";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time
@@ -42,6 +42,9 @@ const AGENT = `a1`;
  * blocked, for two different causes, in two different repos. The third repo group holds none: the case that
  * proves a heading's count is per repo and not the report's total. */
 const changes: AgentChangesResponse = {
+    // Nothing of this agent's has reached the user's history, which is the state a refusal leaves: the empty
+    // state that reads this count is the subject of its own test below.
+    absorbed: 0,
     repos: [
         {
             repo: `root`,
@@ -51,7 +54,14 @@ const changes: AgentChangesResponse = {
                 // interesting one: git calls it the biggest file here, and eleven of its twelve added lines are
                 // comment, so the two readings disagree about where it belongs.
                 { path: `src/auth/session.ts`, status: `modified`, additions: 12, deletions: 3, code: { additions: 1, deletions: 0 }, landed: false },
-                { path: `src/auth/session.test.ts`, status: `modified`, additions: 8, deletions: 0, code: { additions: 8, deletions: 0 }, landed: false },
+                {
+                    path: `src/auth/session.test.ts`,
+                    status: `modified`,
+                    additions: 8,
+                    deletions: 0,
+                    code: { additions: 8, deletions: 0 },
+                    landed: false,
+                },
                 { path: `src/config.ts`, status: `modified`, additions: 2, deletions: 1, code: { additions: 2, deletions: 1 }, landed: false },
                 { path: `assets/logo.png`, status: `modified`, landed: false },
             ],
@@ -89,14 +99,14 @@ let app: App | undefined;
  * being reachable (useSandboxQuery), which no test drives, and the cache is where the real panel reads it from
  * anyway: this is the state a browser is in when it opens the review on a conflict it learned about from the
  * board. */
-const mount = async (modules: readonly WorkspaceModule[] = []): Promise<HTMLElement> => {
+const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChangesResponse): Promise<HTMLElement> => {
     // Empty by default: with no packages to group by, every path lands in one unnamed bucket and the list draws
     // repo headings only, which is what the tests that aren't about packages want.
     const repos: AgentChangesResponse[`repos`] = [];
     for (const repo of changes.repos) {
         repos.push(repo.repo === `root` ? { ...repo, modules: [...modules] } : repo);
     }
-    queryClient.setQueryData(AGENTS.of(AGENT, `diff`), { ...changes, repos } satisfies AgentChangesResponse);
+    queryClient.setQueryData(AGENT_DIFF.of(AGENT), seed ?? ({ ...changes, repos } satisfies AgentChangesResponse));
     const el = document.createElement(`div`);
     document.body.append(el);
     // The review's state is created by AgentDetail in the real page and handed down, so one instance serves
@@ -158,6 +168,23 @@ const filters = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`button`)]
         .map((button) => button.textContent?.trim() ?? ``)
         .filter((label) => /^(All|Blocked|Code|Tests|Not landed) \d+$/.test(label));
+
+/* AN EMPTY LIST IS TWO OPPOSITE FACTS, and the panel has to pick the right sentence for each. The list holds
+ * what still differs from main, so an agent whose every file the user COMMITTED empties it exactly as an agent
+ * that has written nothing does; `absorbed` is the only thing that separates them. */
+it(`tells an agent that wrote nothing from one whose work the user has committed`, async () => {
+    const wroteNothing = await mount([], { repos: [], absorbed: 0 });
+    expect(wroteNothing.textContent).toContain(`hasn't changed any files`);
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+    queryClient.clear();
+
+    const allCommitted = await mount([], { repos: [], absorbed: 3 });
+    expect(allCommitted.textContent).toContain(`All 3 files this agent wrote are in your workspace's history`);
+    expect(allCommitted.textContent).toContain(`nothing of it differs from main`);
+    expect(allCommitted.textContent).not.toContain(`hasn't changed any files`);
+});
 
 it(`marks each blocked row with its own cause, and leaves the rest of the review alone`, async () => {
     const el = await mount();

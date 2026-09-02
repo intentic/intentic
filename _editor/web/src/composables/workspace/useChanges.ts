@@ -19,7 +19,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { outgoingWork } from "./outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 import { resetEditBuffers } from "./useEditBuffers";
-import { GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../queryKeys";
+import { AGENT_DIFF, GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../queryKeys";
 
 /* The Changes review. VSCode's SCM model over the workspace's real repos, including git's index: each repo
  * reports `staged` (index vs HEAD, what a bare commit would record) and `unstaged` (worktree vs index, plus
@@ -218,7 +218,21 @@ export const changesKey = (): unknown[] => GIT_CHANGES.of();
 
 export const fetchChanges = (): Promise<GitChangesResponse> => sandboxJson<GitChangesResponse>(`/git/changes`);
 
-const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ queryKey: changesKey() });
+/* EVERY MUTATION IN THIS FILE GOES THROUGH HERE, and so does every agent review, because an agent's review is
+ * that agent's branch measured AGAINST THIS TREE (agents/agent-changes.ts presentInMain): which of its files
+ * your workspace is holding, and which of them your history has now taken. Committing a landing is what makes
+ * its rows stop being differences; discarding one is what puts them back under "Land now". Neither moves a sha
+ * anywhere, so nothing the agent's own surfaces watch could see it, and the review sat on its pre-commit answer
+ * until something else happened to refetch it.
+ *
+ * Fired from the mutation rather than left to the file-watcher frame that follows it (systemEvents does the
+ * same invalidation for writes this browser did not make): that one is throttled and skipped while a turn
+ * streams, and the press the user just made should not wait on either. */
+const invalidateChanges = (): Promise<void> =>
+    Promise.all([
+        queryClient.invalidateQueries({ queryKey: changesKey() }),
+        queryClient.invalidateQueries({ predicate: (query) => AGENT_DIFF.matches(query.queryKey) }),
+    ]).then(() => undefined);
 
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
     sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));

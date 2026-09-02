@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
  * the id came from. */
 vi.mock("./sandbox/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-here`] }));
 
-const { AGENTS, GIT_CHANGES } = await import("./queryKeys");
+const { AGENT_DIFF, AGENTS, GIT_CHANGES } = await import("./queryKeys");
 const { sandboxQueryPredicate } = await import("./sandbox/systemEventRouting");
 
 describe("ofSandbox", () => {
@@ -43,6 +43,23 @@ describe("ofSandbox", () => {
     // the same read: the same data, one cache entry, whichever way a caller asked for it.
     it("collapses onto of() when it names the active sandbox", () => {
         expect(AGENTS.ofSandbox(`sbx-here`, `a1`, `diff`)).toEqual(AGENTS.of(`a1`, `diff`));
+    });
+
+    /* THE ONE READING NO PREFIX CAN EXPRESS: every agent's diff, and only the diffs. The agent id sits in the
+     * middle of the key, so the family prefix would take the transcripts with it, and those are the most
+     * expensive read this app has. `matches` is what the workspace's own writes invalidate through, since a
+     * commit or a discard in the Changes panel changes what every open review says about its files. */
+    it("recognises any agent's diff in any box, and nothing else under the family", () => {
+        expect(AGENT_DIFF.of(`a1`)).toEqual(AGENTS.of(`a1`, `diff`));
+        expect(AGENT_DIFF.ofSandbox(`sbx-laptop`, `a1`)).toEqual(AGENTS.ofSandbox(`sbx-laptop`, `a1`, `diff`));
+        expect(AGENT_DIFF.matches(AGENT_DIFF.of(`a1`))).toBe(true);
+        expect(AGENT_DIFF.matches(AGENT_DIFF.ofSandbox(`sbx-laptop`, `a2`))).toBe(true);
+        // A per-file diff is filed UNDER the list, so the same predicate reaches it: one invalidation, both.
+        expect(AGENT_DIFF.matches([...AGENT_DIFF.of(`a1`), `file`, `root`, `src/app.ts`])).toBe(true);
+        // ...and the rest of the family is left alone.
+        expect(AGENT_DIFF.matches(AGENTS.of(`a1`, `transcript`))).toBe(false);
+        expect(AGENT_DIFF.matches(AGENTS.of())).toBe(false);
+        expect(AGENT_DIFF.matches(GIT_CHANGES.of())).toBe(false);
     });
 
     // `every` is unchanged by any of this: it is the bare path, and it still reaches every box's entries, which

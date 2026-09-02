@@ -113,9 +113,11 @@ const pressLand = (land: () => void): void => {
     }
     run(land);
 };
-// The cumulative land: "Land again" (see `away`). Through `run` like every other item, so the menu closes on
-// the press and the panel's own busy/error line owns the round trip.
-const relandNow = (): void => pressLand(() => changes.land(`check`, `cumulative`));
+// "Land again" (see `away`). The RUNG is not named here: the review decides it from the same landed-presence
+// reading `away` is (useAgentChanges land), so this item and the header's button cannot ask for different
+// spans of the same work. Through `run` like every other item, so the menu closes on the press and the panel's
+// own busy/error line owns the round trip.
+const relandNow = (): void => pressLand(() => changes.land());
 
 const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-overlay disabled:opacity-40 disabled:hover:bg-transparent max-md:py-3`;
 </script>

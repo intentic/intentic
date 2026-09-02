@@ -5,7 +5,7 @@ import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { desyncAgents, refreshAgents, setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
-import { GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../queryKeys";
+import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
 import { setPresenceUsers } from "../usePresence";
@@ -30,7 +30,19 @@ import { useSandbox } from "./useSandbox";
 // drag-dropped repo used to fire ~15 of them in 9 seconds. A second of staleness is imperceptible next to that.
 const CHANGES_REFRESH_MS = 1000;
 
-const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }), CHANGES_REFRESH_MS);
+const refreshChanges = throttleTrailing(() => {
+    void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
+    /* AND EVERY OPEN AGENT REVIEW WITH IT, because a review is not a reading of the agent's branch, it is that
+     * branch measured AGAINST THIS TREE: which of its files your workspace already holds, and which of them
+     * your history has taken (agents/agent-changes.ts presentInMain). Both move when the tree does, and neither
+     * moves a sha, so nothing else here could have noticed.
+     *
+     * That is the whole of the "the review is stale after I land and then accept some and discard some" report:
+     * the diff was pull-only and invalidated by a land made in THIS browser or by a change of the agent's
+     * status, and committing or discarding in the Changes panel is neither. The panel kept its pre-commit answer
+     * until something else happened to refetch it. */
+    void queryClient.invalidateQueries({ predicate: (query) => AGENT_DIFF.matches(query.queryKey) });
+}, CHANGES_REFRESH_MS);
 
 // Only to tell whether a workspace-replaced frame concerns the sandbox the user is LOOKING at, the storage
 // sweep is safe for any sandbox's frame, but the live re-scope must not blank the view of a different one.

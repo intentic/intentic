@@ -208,9 +208,13 @@ const status = computed(() => (fleetAgent.value === undefined ? undefined : agen
  * behind it is keyed by agent id, so this is also the only fetch. */
 // Empty until the agent is known to HAVE a review (registered, branch-backed), see useAgentChanges: this is
 // created for the page, which outlives the panel, so a draft agent must not send it looking for a diff.
+// The roster entry goes with it, because a land has to know whether work this agent already delivered has since
+// been taken back out of the workspace: that decides which rung the patch is measured from, and this page is
+// where the local and the cross-sandbox rosters have already been told apart (see `fleetAgent`).
 const changes = useAgentChanges(
     computed(() => (reviewable.value ? agentId.value : ``)),
     remoteBox,
+    fleetAgent,
 );
 // A remote agent has no conversation in this browser by construction, so nothing here is streaming its turn.
 // That is what the review's own offers read to decide whether a land would catch the agent mid-sentence, and
@@ -252,7 +256,9 @@ const pressLand = (): void => {
 };
 const confirmForceLand = async (): Promise<void> => {
     pendingForceLand.value = false;
-    await changes.land(`check`, `outstanding`, true);
+    // The rung is the review's own decision (useAgentChanges land), the same one a plain press gets: what the
+    // user answered here is the mid-write warning, not which span to measure from.
+    await changes.land(`check`, undefined, true);
 };
 
 // The role split on the toolbar's primary action: maintainers land, collaborators ask (the daemon floors the
@@ -290,7 +296,9 @@ const localOnly = computed(() => !remote.value);
  * so a box with a roster that simply lacks this id is a positive answer and gets a sentence that says so. A
  * bookmarked URL for a discarded agent lands there, which is the case the old wording described as a sandbox
  * failing to answer. */
-const heardFrom = computed(() => remoteBox.value !== undefined && otherBoxes.value.some((box) => box.sandbox.id === remoteBox.value && box.readAt !== undefined));
+const heardFrom = computed(
+    () => remoteBox.value !== undefined && otherBoxes.value.some((box) => box.sandbox.id === remoteBox.value && box.readAt !== undefined),
+);
 const remoteUnavailable = computed(() => {
     const name = remoteName.value ?? `That sandbox`;
     if (fleetAgent.value !== undefined) {

@@ -9,7 +9,7 @@ import type { OrpcContext } from "../context.js";
 import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
-import { agentRepoChanges, agentRepoReview, agentRepoModules, anchorOf } from "./agent-changes.js";
+import { agentRepoReview, agentRepoModules, anchorOf, presentInMain } from "./agent-changes.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { landAgent, outstandingConflicts } from "./land.js";
@@ -366,30 +366,47 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // The review shows the agent's CUMULATIVE output (anchor → worktree), so work stays inspectable after
-        // it lands, which is the normal case, clean turn completions auto-landing within ms of finishing.
-        // What landing changes is per-file: a second pass from `landedTip` names the remainder still waiting
-        // for "Land now" (everything, when nothing has landed yet), and every other file is flagged `landed`.
+        /* THE REVIEW IS THE AGENT'S WORK MEASURED AGAINST MAIN AS IT STANDS, asked of the tree at request time
+         * rather than assembled from what the last land recorded (agent-changes.ts presentInMain, which carries
+         * the full argument for why the sha-based reading kept drifting).
+         *
+         * A row survives while it is still a difference: work the user committed leaves the list, because it is
+         * theirs now and their own history is where it lives. Work sitting uncommitted in /work stays, flagged
+         * `landed`, since a clean turn auto-lands within ms of finishing and a list of leftovers would show an
+         * empty panel for work nobody had looked at. Work that landed and was then DISCARDED goes back to
+         * unflagged, which is what puts it under "Land now" again: nothing about it had moved a sha, so nothing
+         * in the old reading could tell.
+         *
+         * The per-file diff underneath keeps its merge-base anchor (see fileDiff below): membership and the
+         * flag answer "how does this stand against main", the diff answers "what did the agent write", and the
+         * two questions have different right answers. */
         diff: i.diff.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             const repos: AgentRepoChanges[] = [];
+            let absorbed = 0;
             for (const composed of entry.repos) {
                 try {
                     /* The one reading of this agent's delta (agent-changes.ts), the same call the land totals
-                     * for the card's counter, so the two surfaces cannot disagree about what the agent did.
-                     * The cumulative span keeps landed work inspectable (a clean turn auto-lands within ms of
-                     * finishing); the outstanding one is the land's own incremental span, and flags the rest. */
+                     * for the card's counter, so the two surfaces cannot disagree about what the agent did. */
                     const changes = await agentRepoReview(services.agentWorktrees, entry, composed);
                     if (changes.length === 0) {
                         continue;
                     }
-                    const pending =
-                        composed.landedTip === undefined
-                            ? new Set(changes.map((change) => change.path))
-                            : new Set((await agentRepoChanges(services.agentWorktrees, entry, composed, "outstanding")).map((change) => change.path));
+                    const present = await presentInMain(
+                        services.agentWorktrees,
+                        entry,
+                        composed,
+                        changes.map((change) => change.path),
+                    );
+                    absorbed += present.absorbed.size;
                     // Object.assign, not a spread: `changes` is this call's own freshly-parsed array, so the
                     // flag goes onto the objects that are about to be serialized and nothing is copied.
-                    const flagged = changes.map((change): AgentChange => Object.assign(change, { landed: !pending.has(change.path) }));
+                    const flagged = changes
+                        .filter((change) => !present.absorbed.has(change.path))
+                        .map((change): AgentChange => Object.assign(change, { landed: present.inWorkspace.has(change.path) }));
+                    if (flagged.length === 0) {
+                        continue;
+                    }
                     // The tree's own package layout, for the review to group those rows under (agent-changes.ts).
                     // Read here rather than looked up from /workspace/modules: that read walks /work, which cannot
                     // see a package living so far only in this agent's worktree.
@@ -408,7 +425,10 @@ export const createAgentsRoutes = (services: Services) => {
              * a spotless tree. The entry keeps the event; the probes answer for today (outstandingConflicts).
              * Omitted once nothing refuses anymore, a report with no rows is not a report. */
             const conflicts = entry.conflicts === undefined ? [] : await outstandingConflicts(services.agentWorktrees, entry);
-            return { repos, ...(conflicts.length > 0 ? { conflicts } : {}) };
+            // `absorbed` rides along so an EMPTY list can say which kind of empty it is: an agent that wrote
+            // nothing, or one whose every file the reader has already committed. Two opposite facts that would
+            // otherwise arrive as the same answer (see AgentChangesSchema).
+            return { repos, absorbed, ...(conflicts.length > 0 ? { conflicts } : {}) };
         }),
         // Against the same cumulative anchor as the list above: one row means one question, "what did this
         // agent do to this file", and its answer must not change the moment the work lands. (Diffing from

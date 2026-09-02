@@ -3,6 +3,7 @@ import { useAsyncAction } from "@intentic/ui/async";
 import {
     isTestPath,
     type AgentSpan,
+    type AgentSummary,
     type LandConflictReason,
     type LandMode,
     type LandResult,
@@ -11,17 +12,20 @@ import {
 import { computed, ref, watch, type Ref } from "vue";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxJson, sandboxJsonAt } from "../sandbox/sandboxClient";
-import { AGENTS } from "../queryKeys";
+import { AGENT_DIFF } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
+import { landedAway } from "./agentStatus";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "./useAgents";
 
-/* Per-agent isolated review, one conversation worktree's CUMULATIVE output (GET /agents/{id}/diff, the
- * AgentChanges wire shape: one flat set per repo, no staged/unstaged split, because a worktree the user never
- * checks out has no index they could stage into). Every row carries `landed`, so the panel can show the whole
- * body of work, the normal case, since a clean turn auto-lands within ms, while still telling apart what
- * "Land now" would still apply. The actions are land (patch the remainder into the main tree) and discard
+/* Per-agent isolated review: what one conversation's worktree still HAS THAT MAIN DOES NOT (GET
+ * /agents/{id}/diff, the AgentChanges wire shape: one flat set per repo, no staged/unstaged split, because a
+ * worktree the user never checks out has no index they could stage into). Every row carries `landed`, read off
+ * the tree rather than off what a land recorded, so the panel can show the whole body of work, the normal case,
+ * since a clean turn auto-lands within ms, while still telling apart what "Land now" would still apply. Files
+ * the user has COMMITTED are gone from the list and counted in `absorbed`: they are the user's own history now,
+ * not a difference against main. The actions are land (patch the remainder into the main tree) and discard
  * (drop worktree + branch + registry entry) instead of commit/discard. Parameterized by agent id, each review
  * panel instance owns its own query.
  *
@@ -63,7 +67,7 @@ const reviewFileKey = (repo: string, path: string): string => JSON.stringify([re
  * named only the id would serve box A's diff to box B's review panel. `ofSandbox` puts the box in the last
  * position, where `sandboxQueryPredicate` finds it. */
 export const agentChangesKey = (agentId: string, at?: string): unknown[] =>
-    at === undefined ? AGENTS.of(agentId, `diff`) : AGENTS.ofSandbox(at, agentId, `diff`);
+    at === undefined ? AGENT_DIFF.of(agentId) : AGENT_DIFF.ofSandbox(at, agentId);
 
 export const fetchAgentChanges = (agentId: string, at?: string): Promise<AgentChangesResponse> =>
     at === undefined
@@ -146,8 +150,14 @@ const askedByAgent = ref<ReadonlySet<string>>(new Set());
  * a file's before/after) and everything that SETTLES WORK (land, discard) is addressed by id and crosses. The
  * two that need a conversation do not: `askResolve` sends a message, and `setAutoLand`/`archive` go through
  * the fleet store, which is the active daemon's roster and holds nothing about another box. Those are absent
- * from a remote review rather than broken in it, and the panel offers the crossing in their place. */
-export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefined>) {
+ * from a remote review rather than broken in it, and the panel offers the crossing in their place.
+ *
+ * `agent` is this conversation's roster entry, HANDED IN rather than looked up, and the reason is which roster
+ * it would have to be looked up in: the local store for an agent here, the cross-sandbox one for an agent
+ * there. The page owning this review has already resolved that (AgentDetail's `fleetAgent`), so taking it as an
+ * argument keeps the choice in the one place that can make it, and keeps this module free of the store that
+ * reads other machines. What it is read for is `land`, below. */
+export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefined>, agent?: Ref<Pick<AgentSummary, `landedPresence`> | undefined>) {
     const reach = computed(() => at?.value);
     const { query, error } = useSandboxQuery(
         {
@@ -159,6 +169,12 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     );
 
     const repos = computed<readonly AgentRepoChanges[]>(() => query.data.value?.repos ?? []);
+
+    /* HOW MUCH OF THIS AGENT'S WORK STOPPED BEING A DIFFERENCE, because the user committed it. Those files have
+     * no row (the daemon lists what still differs from main, see AgentChangeSchema), and without the count an
+     * empty list would be indistinguishable from an agent that never wrote anything, which is the opposite
+     * fact and the opposite next move. */
+    const absorbed = computed(() => query.data.value?.absorbed ?? 0);
 
     /* THE PACKAGE LAYOUT the review groups this agent's rows under, read off the diff itself, never from the
      * workspace-wide /workspace/modules that the Changes panel uses. Same call shape as that one (useModules'
@@ -271,13 +287,25 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         }
     });
 
-    // `span` is `cumulative` only for "Land again", the way back after landed work was discarded from the
-    // workspace, where every sha says the work went in and only a reading from the branch's base can still see
-    // that it is gone (AgentSpanSchema).
+    /* WHICH RUNG A PRESS LANDS FROM, decided HERE rather than by each button, because the answer is a property
+     * of the agent and every press that gets it wrong is a press that applies nothing.
+     *
+     * `outstanding` is the increment since the last land, and it is empty the moment everything has landed. If
+     * the user then DISCARDS that work in the Changes panel, no sha moves: `landedTip` still says it went in, so
+     * the increment stays empty while the review, which now reads the tree, correctly lists those files as not
+     * in the workspace. A press on that list has to be measured from the branch's base to see them at all, and
+     * the land narrows it back per file on the way in (land.ts, classifyDelta's reverse probe drops every path
+     * the tree already holds), so it applies the missing part and re-applies nothing.
+     *
+     * `landedPresence` is the daemon's own per-path probe of that (landed-presence.ts), the same signal the card
+     * puts its "Land again" on. Reading it here is what stopped the header's button and the menu's item from
+     * disagreeing: only the menu made this decision, so the header's "Land now" applied an empty patch. */
+    const missing = computed(() => agent?.value !== undefined && landedAway(agent.value) !== undefined);
     // `force` carries the user's answer to the mid-write warning, see landAgent. A parked turn needs none.
-    const land = (mode: LandMode = `check`, span: AgentSpan = `outstanding`, force = false): Promise<void> =>
+    const land = (mode: LandMode = `check`, span?: AgentSpan, force = false): Promise<void> =>
         run(async () => {
-            resolving.value = (await landAgent(agentId.value, mode, span, force, reach.value)).resolving;
+            const rung: AgentSpan = span ?? (missing.value ? `cumulative` : `outstanding`);
+            resolving.value = (await landAgent(agentId.value, mode, rung, force, reach.value)).resolving;
             await invalidateAgentAction(agentId.value, reach.value);
         }, `Land failed.`);
 
@@ -320,6 +348,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         modulesOf,
         files,
         count,
+        absorbed,
         pending,
         blocked,
         additions,

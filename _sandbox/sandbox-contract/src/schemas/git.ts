@@ -391,16 +391,25 @@ export const RepoModulesSchema = z.object({
 export type RepoModules = z.infer<typeof RepoModulesSchema>;
 export const WorkspaceModulesSchema = z.object({ repos: z.array(RepoModulesSchema).describe("Every repository with the packages inside it.") });
 export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
-// One file an agent touched, plus whether that change is ALREADY in the main tree. The review lists the
-// agent's CUMULATIVE output (base → worktree), not just the not-yet-landed remainder, because landing is not
-// the end of the review: a clean turn auto-lands within milliseconds, and a list scoped to the remainder shows
-// the user an empty panel for work they never got to look at. `landed` is what still separates the two, the
-// remainder is what "Land now" would apply, and the panel filters on exactly this flag.
+/* One file an agent touched AND STILL DIFFERS FROM MAIN ON, plus whether the main working tree is already
+ * holding it. The list is what the conversation wrote measured against the main line as it stands right now,
+ * which takes three states to say and each one decides a different next move for the reader:
+ *
+ *   · main's history has this content: the user accepted it, it is their commit, and it is no longer a
+ *     difference against main. There is no row (see `absorbed` on the response).
+ *   · the main working tree has it, uncommitted: the steady state seconds after a land, waiting in the Changes
+ *     panel. A row, `landed: true`.
+ *   · neither: never landed, or landed and then discarded. A row, `landed: false`, and this is exactly what
+ *     "Land now" would apply.
+ *
+ * Landed work keeps its row on purpose: a clean turn auto-lands within milliseconds, so a list scoped to the
+ * outstanding remainder would show an empty panel for work nobody had looked at yet. What retires a row is the
+ * user committing it, which is the one act that says they are done reviewing it. */
 export const AgentChangeSchema = GitChangeSchema.extend({
     landed: z
         .boolean()
         .describe(
-            "Whether this change is already in the shared tree. The list is everything the conversation wrote, not just what is left over, because a clean turn merges in milliseconds and a list of leftovers would show an empty panel for work nobody had looked at yet.",
+            "Whether your workspace already holds this content. Read from the tree at request time, not from what a land recorded: discard a landed file in the Changes panel and this goes back to false, which is what puts it back under Land now.",
         ),
 });
 export type AgentChange = z.infer<typeof AgentChangeSchema>;
@@ -436,6 +445,16 @@ export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
  * than the last attempt. */
 export const AgentChangesSchema = z.object({
     repos: z.array(AgentRepoChangesSchema).describe("One entry per repository the conversation touched."),
+    /* HOW MUCH OF THE WORK IS NO LONGER A DIFFERENCE, so an empty list can say WHICH kind of empty it is. An
+     * agent that has written nothing and an agent whose every file the user committed both answer with no rows,
+     * and they are opposite facts: one is "ask it for something", the other is "it is all in your history". A
+     * count rather than the rows themselves, because that is the whole of what the surface needs to pick a
+     * sentence, and carrying the rows would put the list back where it started. */
+    absorbed: z
+        .number()
+        .describe(
+            "How many of this conversation's files your own history already carries, and which are therefore not listed as differences any more.",
+        ),
     conflicts: z
         .array(LandConflictSchema)
         .optional()
