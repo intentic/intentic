@@ -11,11 +11,22 @@
 # OpenMP runtime, installed explicitly so it survives.
 # Keep the build bounded by the same memory/CPU rule as the CUDA pack. Whisper is smaller, but bare `-j` still
 # means unlimited jobs under GNU Make and image fragments must not make host survival depend on project size.
+# THE SOURCE ARRIVES AS A TARBALL, NOT A CLONE, and that is not a style preference. GitHub answers an
+# unauthenticated `git-upload-pack` from datacenter egress with 401 and `WWW-Authenticate: Basic realm="GitHub"`
+# — the ref advertisement still returns 200, so the clone gets far enough to look healthy and then dies on
+# `could not read Username for 'https://github.com'`, which is git asking a build with no tty for a password.
+# It killed the `images` job mid-build. The archive endpoint is ordinary HTTPS with no git auth path in it, the
+# same way this image already fetches cloudflared, yq and the translator pack; a tag names the same commit
+# either way, and a shallow clone's .git was thrown away here regardless. No sha256 pin: GitHub generates these
+# archives on demand and has re-generated them with different bytes, so a digest would be a time bomb — the
+# prebuilt-binary downloads that ARE pinned (llamacpp) are pinned because nothing here compiles them.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.cache/ccache \
     apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 \
-    && git clone --depth 1 --branch v1.9.1 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \
+    && mkdir -p /tmp/whisper.cpp \
+    && curl -fsSL https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.1.tar.gz \
+        | tar -xz -C /tmp/whisper.cpp --strip-components=1 \
     && cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     && jobs="$(awk -v cpus="$(nproc)" '/^MemAvailable:/ { fits = int($2 / (2 * 1024 * 1024)); if (fits < 1) fits = 1; if (fits > cpus) fits = cpus; if (fits > 8) fits = 8; print fits }' /proc/meminfo)" \

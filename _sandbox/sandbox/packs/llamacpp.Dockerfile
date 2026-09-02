@@ -66,6 +66,10 @@
 # The sha256 is pinned, which the image's other pinned downloads (cloudflared, yq) do not do. A prebuilt
 # BINARY is a different trust proposition from source this image compiles itself: a moved release asset would
 # otherwise be executed unnoticed. ponytail: bump the two pins together, the digest belongs to the version.
+# The arm64 branch takes the tag's source ARCHIVE rather than cloning it, for the reason whisper.Dockerfile
+# spells out: GitHub answers an unauthenticated `git-upload-pack` from datacenter egress with a 401 Basic
+# challenge, and git then asks a tty-less build for a username and dies. The archive endpoint has no git auth
+# path in it. Unpinned by digest on purpose — GitHub regenerates these archives, so a sha256 would rot.
 #
 # WHY THE PIN IS WHERE IT IS, and the class of bug that moves it. llama-server converts every tool's JSON
 # schema into a grammar before it will serve a request, and it used to REFUSE a property that names no type
@@ -98,7 +102,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ;; \
     arm64) \
         apt-get install -y --no-install-recommends cmake ccache g++ make \
-        && git clone --depth 1 --branch "${LLAMACPP_VERSION}" https://github.com/ggml-org/llama.cpp /tmp/llama.cpp \
+        && mkdir -p /tmp/llama.cpp \
+        && curl -fsSL "https://github.com/ggml-org/llama.cpp/archive/refs/tags/${LLAMACPP_VERSION}.tar.gz" \
+            | tar -xz -C /tmp/llama.cpp --strip-components=1 \
         && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
             -DGGML_NATIVE=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \

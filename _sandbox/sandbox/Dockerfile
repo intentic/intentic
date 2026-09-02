@@ -87,7 +87,14 @@ RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
     && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' > /etc/ssh/sshd_config.d/intentic.conf
 # The terminal (system/terminal.ts) launches zsh with the oh-my-zsh "bira" theme + zsh-autosuggestions, so the
 # owner gets a real prompt and history autocomplete. Installed into root's home (the daemon/terminal run as
-# root); --depth=1 tracks the default branch (pin to a commit if reproducibility matters).
+# root); both take the default branch's source ARCHIVE (pin to a tag or commit if reproducibility matters).
+# Archives, not `git clone`, and the difference is whether this layer builds at all: GitHub answers an
+# unauthenticated `git-upload-pack` from datacenter egress with 401 and `WWW-Authenticate: Basic realm="GitHub"`,
+# and git turns that challenge into a username prompt that a build with no tty cannot answer — `could not read
+# Username for 'https://github.com'`, which is what took the `images` job down. The ref advertisement answers
+# 200 first, so the clone looks alive right up to the failure. Nothing here wanted the history anyway; --depth=1
+# said so, and neither directory is a repo the sandbox updates (omz's own updater is disabled below). Whisper's
+# pack fragment carries the same note for the same reason.
 #
 # THE HISTORY LIVES ON THE VOLUME, NOT IN THE CONTAINER. zsh-autosuggestions' default strategy is `history`: it
 # can only ghost-suggest what is in $HISTFILE, and oh-my-zsh leaves that at ~/.zsh_history — inside /root, the
@@ -115,8 +122,11 @@ RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
 # the group's stderr, so a missing /run/intentic/shell (no daemon has listened yet) is silent rather than a
 # line of noise above every prompt. They come after oh-my-zsh's source line because add-zsh-hook composes with
 # whatever omz and zsh-autosuggestions register there, and last-registered is simply last-run.
-RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh \
-    && git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
+RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
+    && curl -fsSL https://github.com/ohmyzsh/ohmyzsh/archive/refs/heads/master.tar.gz \
+        | tar -xz -C /root/.oh-my-zsh --strip-components=1 \
+    && curl -fsSL https://github.com/zsh-users/zsh-autosuggestions/archive/refs/heads/master.tar.gz \
+        | tar -xz -C /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions --strip-components=1 \
     && printf '%s\n' \
         'export ZSH="$HOME/.oh-my-zsh"' \
         'ZSH_THEME="bira"' \

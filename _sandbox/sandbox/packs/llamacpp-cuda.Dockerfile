@@ -32,6 +32,9 @@
 # this build because Docker Desktop's processes live in a different WSL PID namespace. Use available memory,
 # not total memory, so running sandboxes keep their headroom; budget 2GiB per job and cap at eight even on a
 # large host. ccache makes the safer concurrency cheap on repeat builds.
+# The source arrives as the tag's archive rather than a clone, for the reason whisper.Dockerfile spells out:
+# GitHub answers an unauthenticated `git-upload-pack` from datacenter egress with a 401 Basic challenge, which
+# git turns into a username prompt no image build can answer. Plain HTTPS has no git auth path in it.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.cache/ccache \
@@ -40,7 +43,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && echo "deb [signed-by=/etc/apt/keyrings/nvidia-cuda.asc] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/ /" \
         > /etc/apt/sources.list.d/nvidia-cuda.list \
     && apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
-    && git clone --depth 1 --branch b10581 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp \
+    && mkdir -p /tmp/llama.cpp \
+    && curl -fsSL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b10581.tar.gz \
+        | tar -xz -C /tmp/llama.cpp --strip-components=1 \
     && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
