@@ -91,6 +91,7 @@ const newChat = () => {
     return conversation;
 };
 
+const { closedDrafts } = await import("./closedDrafts");
 const { usageStatusByAccount } = await import("./usageStatus");
 const { Conversation } = await import("./conversation");
 const { endpointProviders, endpointsLoaded, trialStatus } = await import("./providerCatalog");
@@ -817,6 +818,47 @@ describe(`closing tabs`, () => {
         expect(chat.conversations.value[0]!.conversationId).not.toBeOneOf([...ids]);
         expect(chat.activeId.value).toBe(chat.conversations.value[0]!.conversationId);
         expect(chat.draft.value).toBe(``);
+    });
+
+    /* THE ONE THING A CLOSE MUST NOT DESTROY: the reported bug, from the surface it was pressed on.
+     *
+     * Everything else a closed chat held is somewhere else — the transcript is in History, the session is the
+     * daemon's — but the message standing in the composer exists in this browser and nowhere at all besides,
+     * and the × asks for no confirmation. So it is set aside (closedDrafts), the board keeps a card for it,
+     * and opening that card puts the words back where they were typed. */
+    it(`sets a closing chat's unsent message aside, and puts it back when the chat is opened again`, async () => {
+        const chat = useChat();
+        const ids = openFour();
+        const closing = chat.conversations.value.find((c) => c.conversationId === ids[1]!)!;
+        closing.draft.value = `the half-written message`;
+        await nextTick(); // the stamp that dates the message (the unsent-edge watch)
+
+        chat.closeTabs(new Set([ids[1]!]));
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[2], ids[3]]);
+        expect(closedDrafts.value.find((tab) => tab.conversationId === ids[1]!)?.draft).toBe(`the half-written message`);
+
+        // The board's card for it, pressed: the same conversation, with its composer as it was left.
+        const back = openAgentConversation({ id: ids[1]!, provider: `claude`, harness: `native`, registered: false });
+
+        expect(back.draft.value).toBe(`the half-written message`);
+        expect(back.draftAt.value).toBeGreaterThan(0); // dated from when it was written, not from the reopen
+        // ...and taken out, never copied: two accounts of one draft is how the stale one ends up on the board.
+        expect(closedDrafts.value.some((tab) => tab.conversationId === ids[1]!)).toBe(false);
+    });
+
+    // ...and a chat closed with NOTHING waiting in it is simply closed. This is not a history of tabs: reopening
+    // an agent is what History is for, and a card for every × ever pressed is litter, not a rescue.
+    it(`sets nothing aside for a chat closed with an empty composer`, async () => {
+        const chat = useChat();
+        const ids = openFour();
+        const closing = chat.conversations.value.find((c) => c.conversationId === ids[1]!)!;
+        closing.draft.value = ``;
+        await nextTick();
+
+        chat.closeTabs(new Set([ids[1]!]));
+
+        expect(closedDrafts.value.some((tab) => tab.conversationId === ids[1]!)).toBe(false);
     });
 
     it(`ignores ids that aren't open`, () => {

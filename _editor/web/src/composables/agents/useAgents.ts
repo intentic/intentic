@@ -4,7 +4,10 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
 import { invalidateAgentTranscript } from "../chat/agentTranscript";
+import { closedDrafts, forgetClosedDraft } from "../chat/closedDrafts";
 import { draftPreview, drawsChat, elsewhereDrafts } from "../chat/draftEcho";
+import type { StoredTab } from "../chat/tabSnapshot";
+import { rememberedProviderFor } from "../chat/turnDefaults";
 import { agentTabOf, type AgentTabSeed, useChat } from "../chat/useChat";
 import { summonChat } from "../chat/summon";
 import { commandShortcut } from "../commands/useCommands";
@@ -391,6 +394,39 @@ const clientStatus = (conversation: Conversation): ClientAgentStatus => {
     return conversation.messages.value.length > 0 || conversation.session.value !== undefined ? `resumed` : `draft`;
 };
 
+/* ONE CHAT THAT WAS CLOSED WITH ITS MESSAGE STILL IN IT (chat/closedDrafts), as a card.
+ *
+ * Everything here comes off the tab that was set aside, because there is nowhere else to ask: the conversation
+ * has no tab in any window and the daemon never registered it. That includes its BOX — a draft prepared against
+ * another sandbox is still this browser's draft and belongs on this board, and the card has to carry the
+ * address or opening it would ask the wrong daemon (the same rule the live draft cards state).
+ *
+ * `updatedAt` is when the message was first left standing, so the lanes sort it by the age its own mark
+ * reports, and a card the reader has not touched for a week does not sit above this morning's work. */
+const closedCard = (tab: StoredTab, unsent: UnsentTab | undefined): FleetAgent => ({
+    id: tab.conversationId,
+    status: tab.session === undefined ? `draft` : `resumed`,
+    // A tab persisted before it had picked anything (or by a build that stored neither) still opens somewhere:
+    // the same fallbacks a fresh conversation is born with, rather than a card that cannot say what it runs on.
+    provider: tab.provider ?? rememberedProviderFor(),
+    harness: tab.harness ?? `native`,
+    updatedAt: tab.draftAt ?? 0,
+    attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+    // No tab anywhere: that is the whole state this card describes, and what its × forgets rather than closes.
+    open: false,
+    unread: false,
+    unsent: true,
+    preview: unsent?.preview,
+    draftAt: tab.draftAt,
+    // What the message will be spent on, the pick the composer was standing on when it was closed. Named for
+    // the reason the live draft cards name it: a prepared message is queued work, and its model is a decision
+    // the user has already made about it.
+    ...(tab.model === undefined ? {} : { model: tab.model }),
+    ...(tab.title === undefined ? {} : { title: tab.title }),
+    ...(tab.session === undefined ? {} : { sessionId: tab.session.id }),
+    ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
+});
+
 /* ONE COMPOSER'S UNSENT CONTENTS, as the board reads them: the opening words of the message standing in it and
  * the instant it first held something. Both optional and for different reasons — there are no words when what is
  * unsent is an attachment or a message queued behind a running turn, and no instant on a tab restored from a
@@ -445,7 +481,7 @@ const fleet = computed<FleetAgent[]>(() => {
      * window cleared its mark out there and left this board wearing an unsent chip for words that no longer
      * existed anywhere. */
     const elsewhere = elsewhereDrafts.value;
-    const unsent: ReadonlyMap<string, UnsentTab> = drawsChat.value
+    const typing: ReadonlyMap<string, UnsentTab> = drawsChat.value
         ? new Map(
               conversations.value
                   .filter((conversation) => conversation.unsent.value)
@@ -459,6 +495,18 @@ const fleet = computed<FleetAgent[]>(() => {
               // same as an absent one: unsent, but an attachment or a queued message rather than typed words.
               [...elsewhere].map(([id, draft]): [string, UnsentTab] => [id, { preview: draft.preview || undefined, at: draft.at }]),
           );
+    /* ...AND THE ONES NOBODY IS TYPING IN ANY MORE, because their chat was CLOSED with the message still in it
+     * (chat/closedDrafts). Those words are set aside rather than destroyed, so they are as unsent as the ones
+     * in an open composer, and the card is the only way back to them: it wears the mark, it is named by the
+     * message, and opening it puts the words back where they were written.
+     *
+     * Merged UNDER the composers above, which is the direction that cannot go stale: an entry is taken out the
+     * moment its chat is reopened, so the only way to hold both is a window that reopened one without this one
+     * hearing yet, and in that race the live composer is the account being typed into. */
+    const unsent: ReadonlyMap<string, UnsentTab> = new Map([
+        ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { preview: draftPreview(tab.draft), at: tab.draftAt }]),
+        ...typing,
+    ]);
     // A draft is a conversation the fleet has never heard of. NOT one that is merely absent from the live
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
@@ -537,16 +585,28 @@ const fleet = computed<FleetAgent[]>(() => {
      * account of this agent is the same before and after. The card is a view of an open tab, no more, and it
      * says "archived" on its face (AgentCard reads archivedAt) so it can't be mistaken for live work. */
     const held: FleetAgent[] = [];
+    const archivedIds = new Set(archived.value.map((agent) => agent.id));
     for (const agent of archived.value) {
         const tab = unsent.get(agent.id);
         if (tab !== undefined && !carded.has(agent.id)) {
-            // A COPY, never the archive list's own entry: `open` and `unsent` are true of this window's tab and
-            // not of the filed-away agent, and writing them onto the stored row would leave the archive claiming
-            // both long after the tab is closed. The words and the age ride along for the same reason: they
-            // describe the composer, not the filed-away agent.
-            held.push({ ...agent, open: true, unsent: true, preview: tab.preview, draftAt: tab.at });
+            // A COPY, never the archive list's own entry: `unsent` is true of the words this browser is holding
+            // and not of the filed-away agent, and writing it onto the stored row would leave the archive
+            // claiming it long after they are sent. The words and the age ride along for the same reason: they
+            // describe the composer, not the filed-away agent. `open` is asked of the strip rather than assumed,
+            // since the message may be one a close set aside, which has no tab anywhere (closedDrafts).
+            held.push({ ...agent, open: openIds.has(agent.id), unsent: true, preview: tab.preview, draftAt: tab.at });
         }
     }
+    /* A CHAT THAT IS NOTHING BUT ITS UNSENT MESSAGE, closed with the words in it and never registered, so no
+     * roster row, no archive entry and no open tab draws it. Without this the fleet's own rule ("a draft is a
+     * conversation the fleet has never heard of") would quietly except the drafts most worth keeping: the ones
+     * whose tab is gone are exactly the ones nothing else can show.
+     *
+     * It stands where the tab stood, `draft` unless the chat had a session behind it, in which case reopening
+     * it resumes rather than begins (the same reading clientStatus takes of a live tab). */
+    const setAside = closedDrafts.value
+        .filter((tab) => !openIds.has(tab.conversationId) && !carded.has(tab.conversationId) && !archivedIds.has(tab.conversationId))
+        .map((tab): FleetAgent => closedCard(tab, unsent.get(tab.conversationId)));
     return [
         ...registry.value.map((agent): FleetAgent => {
             const tab = unsent.get(agent.id);
@@ -561,6 +621,7 @@ const fleet = computed<FleetAgent[]>(() => {
         }),
         ...held,
         ...drafts,
+        ...setAside,
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
 });
 
@@ -1071,6 +1132,13 @@ const purgeArchived = async (): Promise<void> => {
         // A tab reading a deleted agent has nothing left to read: its branch, its worktree and its conversation
         // are gone. Same rule as archiving, which closes them for the far gentler reason.
         useChat().closeTabs(gone);
+        /* ...and the ONE thing a close normally keeps goes too (chat/closedDrafts). Setting a message aside is a
+         * promise that the chat can be opened again on it, and after this press there is no chat: the entry
+         * would come back as a card for a conversation the daemon has deleted, offering to resume a session
+         * that no longer exists. This is the fleet's one irreversible press, and it is irreversible here too. */
+        for (const id of gone) {
+            forgetClosedDraft(id);
+        }
         notice.value =
             removed.length < aimedAt ? `Deleted ${removed.length} of ${aimedAt} archived agents, the rest are still in use and stayed.` : undefined;
         say(`${removed.length} archived agent${removed.length === 1 ? `` : `s`} deleted`);

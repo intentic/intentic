@@ -24,6 +24,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { agentTranscript, type AgentTranscript } from "./agentTranscript";
+import { keepClosedDraft, takeClosedDraft } from "./closedDrafts";
 import { draftPreview, drawsChat, elsewhereDrafts, publishDrafts, type UnsentDraft } from "./draftEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
@@ -218,19 +219,14 @@ const active = computed<Conversation>(() => {
 // line, as if they were the new sandbox's own.
 let scopedSandboxId: string | undefined;
 
-// One persisted tab, back as a live conversation. Restored attachments carry upload metadata only (no
-// previewUrl/controller, those are client-session objects); the composer re-mints thumbnails from the
-// workspace bytes on render (attachmentPreview).
-const restoreTab = (tab: StoredTab): Conversation => {
-    const conversation = new Conversation(tab.conversationId);
-    conversation.isolated.value = tab.isolated;
-    conversation.registered.value = tab.registered;
-    // Before anything else that could talk to a daemon: this is the tab's ADDRESS, and a hydrate that ran
-    // against the active box first would ask the wrong one about a conversation it has never heard of.
-    conversation.box.value = tab.box;
-    // The posture isn't part of the snapshot (it is a per-task choice, not a preference), a restored tab
-    // starts from the mode its tree calls for, same as a fresh one.
-    conversation.modePick.value = startingMode(conversation.isolated.value);
+/* EVERYTHING THAT WAS WAITING TO BE SENT, back in the composer: the message, the age it has been standing, the
+ * staged files and the turns queued behind a running one. Its own function because two arrivals put a composer
+ * back — a tab restored from this window's snapshot, and a chat REOPENED after a close set its words aside
+ * (closedDrafts) — and a second copy of this is how the two start to disagree about what "unsent" restores.
+ *
+ * Restored attachments carry upload metadata only (no previewUrl/controller, those are client-session objects);
+ * the composer re-mints thumbnails from the workspace bytes on render (attachmentPreview). */
+const restoreComposer = (conversation: Conversation, tab: StoredTab): void => {
     conversation.draft.value = tab.draft;
     // The age of what is in that composer, restored with it: the stamping watch below only ever fills an EMPTY
     // stamp, so a tab that comes back holding words keeps the instant it first held them instead of being
@@ -244,6 +240,20 @@ const restoreTab = (tab: StoredTab): Conversation => {
         progress: 1,
     }));
     conversation.queued.value = tab.queued.map((message) => ({ id: uuid(), text: message.text, attachments: message.attachments }));
+};
+
+// One persisted tab, back as a live conversation.
+const restoreTab = (tab: StoredTab): Conversation => {
+    const conversation = new Conversation(tab.conversationId);
+    conversation.isolated.value = tab.isolated;
+    conversation.registered.value = tab.registered;
+    // Before anything else that could talk to a daemon: this is the tab's ADDRESS, and a hydrate that ran
+    // against the active box first would ask the wrong one about a conversation it has never heard of.
+    conversation.box.value = tab.box;
+    // The posture isn't part of the snapshot (it is a per-task choice, not a preference), a restored tab
+    // starts from the mode its tree calls for, same as a fresh one.
+    conversation.modePick.value = startingMode(conversation.isolated.value);
+    restoreComposer(conversation, tab);
     conversation.title.value = tab.title ?? null;
     // Restore the harness before the model, the native/claude-code model lists diverge for codex/grok.
     if (tab.harness !== undefined) {
@@ -1439,6 +1449,41 @@ const loadSession = async (conversation: Conversation, sessionRef: string, title
     }
 };
 
+/* THE WORDS A CLOSE SET ASIDE, claimed by the chat they were typed into as it comes back (closedDrafts).
+ *
+ * Every reopen goes through here, and that is the point: the board's card, a history row, a summons from
+ * another window and a deep link are all "show me this conversation", and the message waiting in it is part of
+ * the conversation. Taken rather than copied, so the composer is the only place those words live again.
+ *
+ * WHICH ACCOUNT OF THE TAB WINS depends on what the caller is holding. A REGISTERED agent's seed is the
+ * daemon's own record (agentTabOf) and outranks a stored copy of it — but it carries `undefined` for
+ * everything the registry has nothing to say about, so only its stated fields overlay. A DRAFT's seed knows
+ * nothing this doesn't (it is a card the client itself invented), so the kept tab wins outright: its
+ * placement, its picks and its persona are the chat, and a fresh tab's defaults would quietly re-aim it. */
+const withClosedDraft = (entry: StoredTab): StoredTab => {
+    const kept = takeClosedDraft(entry.conversationId);
+    if (kept === undefined) {
+        return entry;
+    }
+    const stated = Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined)) as Partial<StoredTab>;
+    const merged = entry.registered ? { ...kept, ...stated } : { ...stated, ...kept };
+    // ...and the composer is the kept tab's whichever way that went: it is the whole reason there is an entry.
+    return { ...merged, draft: kept.draft, draftAt: kept.draftAt, attachments: kept.attachments, queued: kept.queued };
+};
+
+/* The same claim made on a tab this window ALREADY has open, which is how a close and a reopen in two different
+ * windows meet: the other window's × set the words aside, this one never closed its own copy. Only ever into an
+ * empty composer — words being typed here now are the live ones, and a stored copy must not overwrite them. */
+const claimClosedDraft = (conversation: Conversation): void => {
+    if (conversation.unsent.value) {
+        return;
+    }
+    const kept = takeClosedDraft(conversation.conversationId);
+    if (kept !== undefined) {
+        restoreComposer(conversation, kept);
+    }
+};
+
 /* One entry, resolved to the open Conversation it means in THIS window, matching an open tab by id and a
  * session by the session it shows, so a summons broadcast twice (or a chat this window already opened by hand)
  * focuses the tab it already has rather than minting a twin. What has to join the strip goes into `additions`,
@@ -1462,6 +1507,9 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
         // Titled from the row BEFORE the transcript round-trip: a nameless empty tab awaiting its fetch is
         // indistinguishable from an untouched draft, and the focus-leave sweep would close it mid-load.
         conversation.title.value = entry.title ?? null;
+        // A history row names a session, not a composer, so anything set aside for this chat is the only
+        // account of what was waiting to be sent in it.
+        claimClosedDraft(conversation);
         conversation.loading.value = true;
         void loadSession(conversation, entry.sessionRef, entry.title ?? null);
         additions.push(conversation);
@@ -1470,6 +1518,9 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
     const session = entry.session;
     const existing = byId ?? (session === undefined ? undefined : opened.find((conversation) => conversation.session.value?.id === session.id));
     if (existing !== undefined) {
+        // Closed in another window, still open here: the words that × set aside come back into this window's
+        // own composer (claimClosedDraft's note), never over one being typed in.
+        claimClosedDraft(existing);
         // The summoner says the fleet knows this agent, however the tab came to be open, the latch that keeps
         // an opened card from re-appearing on the board as a phantom draft (see the registered flag's note).
         if (entry.registered) {
@@ -1488,7 +1539,7 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
     // rather than left to the reachability watch, a turn running daemon-side attaches and renders live, a
     // settled one replays its record, and an unreachable daemon leaves the tab as it stands for that watch to
     // retry (hydrateOnce clears its mark on failure).
-    const conversation = restoreTab(entry);
+    const conversation = restoreTab(withClosedDraft(entry));
     additions.push(conversation);
     hydrateOnce(conversation);
     return conversation;
@@ -1739,15 +1790,25 @@ const setPanes = (ids: readonly string[]): void => {
     }
 };
 
-// Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
-// detach from each in-flight turn (Conversation.abort is soft, the daemon-side run keeps working and reopening
-// reattaches to it), drop each cached transcript, and keep at least one conversation, a fresh chat when
-// the set empties the strip. Closing the active tab moves focus to the last remaining one (VSCode behaviour, the
-// same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
+/* Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
+ * detach from each in-flight turn (Conversation.abort is soft, the daemon-side run keeps working and reopening
+ * reattaches to it), drop each cached transcript, and keep at least one conversation, a fresh chat when
+ * the set empties the strip. Closing the active tab moves focus to the last remaining one (VSCode behaviour, the
+ * same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
+ *
+ * ...and the ONE thing that would not survive is set aside instead (closedDrafts): a message standing in the
+ * composer lives in this browser and nowhere else, so an unconfirmed × must not be able to destroy it. The
+ * whole tab is kept, not merely its text, because what is unsent may be a staged attachment or a message
+ * queued behind a running turn, and because the chat has to come back as itself (its picks, its session, its
+ * persona) rather than as a fresh tab wearing somebody's words. The board goes on drawing a card for it, and
+ * opening that card is what takes the entry back (resolveEntry). */
 const closeTabs = (ids: ReadonlySet<string>): void => {
     traceFocus(`close`, { ids: [...ids], active: activeId.value });
     for (const conversation of conversations.value) {
         if (ids.has(conversation.conversationId)) {
+            if (conversation.unsent.value) {
+                keepClosedDraft(snapshotTab(conversation));
+            }
             conversation.abort();
             void dropTranscript(conversation.conversationId);
         }

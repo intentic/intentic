@@ -33,6 +33,7 @@ import { chatWide } from "../composables/chat/chatSurface";
 import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { summonChat } from "../composables/chat/summon";
+import { forgetClosedDraft } from "../composables/chat/closedDrafts";
 import { agentTabOf, useChat } from "../composables/chat/useChat";
 import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -931,9 +932,19 @@ const reviewAgent = (agent: FleetAgent): void => {
 /* The only exit a card with no registry entry has (AgentCard's `closable`): closing its TAB, which is the same
  * conversation this card is the other skin of, so the card leaves the board with it. Not `archive`: there is
  * nothing daemon-side to file, and deliberately the identical act the chat rail's × performs, down to asking
- * for no confirmation, so the two surfaces cannot come to mean different things by the same press. */
+ * for no confirmation, so the two surfaces cannot come to mean different things by the same press.
+ *
+ * TWO PRESSES WHEN THERE IS A MESSAGE IN IT, and that is the whole shape of it. The first closes the tab, which
+ * sets the unsent words aside rather than destroying them (chat/closedDrafts), so the card stays, now standing
+ * for the message alone. The second is the press that means the message too, and it is the only way this app
+ * throws away something the user wrote: asked for twice, on a card wearing an unsent mark that says what is
+ * about to go. */
 const closeAgent = (agent: FleetAgent): void => {
-    closeTabs(new Set([agent.id]));
+    if (agent.open) {
+        closeTabs(new Set([agent.id]));
+        return;
+    }
+    forgetClosedDraft(agent.id);
 };
 
 /* --- The card's right-click menu ------------------------------------------------------------------

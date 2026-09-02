@@ -19,6 +19,7 @@ vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxReques
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { nextTick } from "vue";
+import { forgetClosedDraft, keepClosedDraft } from "../chat/closedDrafts";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
 import { useNotifications } from "../notifications";
@@ -282,6 +283,68 @@ describe("draft cards", () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`fresh`)];
 
         expect(activeIds()).toEqual([`fresh`]);
+    });
+
+    /* A CHAT WITH NO TAB LEFT ANYWHERE, closed with its message still in it (chat/closedDrafts). The board is
+     * the only surface that can show it — the strip lists open tabs, and the fleet never registered this one —
+     * so without this card the words would be recoverable by nothing the user can see, which is the same as
+     * gone. It stands where the tab stood: named by the message, wearing its mark and its age. */
+    it("cards a draft whose chat was closed with the message still in it", () => {
+        keepClosedDraft({
+            conversationId: `set-aside`,
+            isolated: true,
+            registered: false,
+            provider: `claude`,
+            harness: `native`,
+            model: `claude-opus-5`,
+            draft: `fix the login redirect`,
+            draftAt: 1_700,
+            attachments: [],
+            queued: [],
+        });
+
+        expect(
+            useAgents().lanes.value.active.map((card) => ({
+                id: card.id,
+                status: card.status,
+                open: card.open,
+                unsent: card.unsent,
+                preview: card.preview,
+                draftAt: card.draftAt,
+                model: card.model,
+            })),
+        ).toEqual([
+            {
+                id: `set-aside`,
+                status: `draft`,
+                // No tab holds it, which is what the card is FOR, and what its × forgets rather than closes.
+                open: false,
+                unsent: true,
+                preview: `fix the login redirect`,
+                draftAt: 1_700,
+                model: `claude-opus-5`,
+            },
+        ]);
+
+        forgetClosedDraft(`set-aside`);
+    });
+
+    // ...and it gives way to the tab the moment there is one: opening the card takes the entry back (useChat),
+    // and a board drawing both would offer the same message twice, one of them a copy nothing can clear.
+    it("draws one card, not two, when the chat is open again", () => {
+        keepClosedDraft({
+            conversationId: `set-aside`,
+            isolated: true,
+            registered: false,
+            draft: `fix the login redirect`,
+            attachments: [],
+            queued: [],
+        });
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`set-aside`)];
+
+        expect(activeIds()).toEqual([`set-aside`]);
+
+        forgetClosedDraft(`set-aside`);
     });
 
     it("cards a workspace conversation by the same rule", () => {

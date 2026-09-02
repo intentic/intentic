@@ -308,18 +308,22 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
     };
 };
 
-// Parse one stored blob into a coherent snapshot: readable tabs only, each conversation once (a duplicate id
-// would render as two tabs sharing a key, which is how a strip ends up with the wrong name on the wrong tab
-// and a × that removes neither), and a focus that names one of them.
-const parse = (raw: string): TabSnapshot | undefined => {
-    let stored: { active?: unknown; panes?: unknown; tabs?: unknown };
+/* The `tabs` of a stored blob, read back: readable entries only, each conversation once (a duplicate id would
+ * render as two tabs sharing a key, which is how a strip ends up with the wrong name on the wrong tab and a ×
+ * that removes neither).
+ *
+ * Shared by the two things that persist tabs, this window's strip below and the drafts set aside when a chat
+ * holding unsent words is closed (closedDrafts.ts): both store the identical portable shape, so both read it
+ * back through the identical guard rather than one of them growing a second, laxer parser. */
+export const readStoredTabs = (raw: string): StoredTab[] => {
+    let stored: { tabs?: unknown };
     try {
-        stored = JSON.parse(raw) as { active?: unknown; panes?: unknown; tabs?: unknown };
+        stored = JSON.parse(raw) as { tabs?: unknown };
     } catch {
-        return undefined;
+        return [];
     }
     if (!Array.isArray(stored.tabs)) {
-        return undefined;
+        return [];
     }
     const seen = new Set<string>();
     const tabs: StoredTab[] = [];
@@ -330,6 +334,20 @@ const parse = (raw: string): TabSnapshot | undefined => {
             tabs.push(tab);
         }
     }
+    return tabs;
+};
+
+// Parse one stored blob into a coherent snapshot: its readable tabs, plus a focus and a pane set that name
+// them.
+const parse = (raw: string): TabSnapshot | undefined => {
+    let stored: { active?: unknown; panes?: unknown };
+    try {
+        stored = JSON.parse(raw) as { active?: unknown; panes?: unknown };
+    } catch {
+        return undefined;
+    }
+    const tabs = readStoredTabs(raw);
+    const seen = new Set(tabs.map((tab) => tab.conversationId));
     const first = tabs[0];
     if (first === undefined) {
         return undefined;
