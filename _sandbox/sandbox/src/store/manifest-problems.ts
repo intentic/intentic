@@ -71,16 +71,24 @@ const SCHEMA_REJECTED = "the file does not match what this build expects";
  * written by a NEWER build this sandbox has since rolled back from, and the repairs differ completely: fix
  * the file, versus update again and it reads fine. When the workspace's stamp (newest-run.ts) says a newer
  * intentic has run here, the report says so instead of implying the file is broken. Recognition only, by
- * design and by CLAUDE.md's own rule: nothing anywhere reads the file differently because of the version. */
+ * design and by CLAUDE.md's own rule: nothing anywhere reads the file differently because of the version.
+ *
+ * SAID IN TWO PIECES, cause in `detail` and remedy in `fix`, because it used to be one 40-word sentence that
+ * carried a diagnosis, a hypothesis and two instructions past a reader who wanted to know what to do. The
+ * split is the contract's (schemas/system.ts) and it is what lets the browser print the action on its own
+ * line. `detail` also stops restating the rejection: the notice already says the file is being ignored, so
+ * repeating "does not match what this build expects" ahead of the version numbers is a clause that says
+ * nothing the reader has not read. */
 export const withSkewHint = (problems: readonly ManifestProblem[], running: string, newest: string | undefined): ManifestProblem[] =>
     problems.map((problem) =>
         problem.kind === "unreadable" && problem.detail === SCHEMA_REJECTED && newest !== undefined && isNewer(newest, running)
             ? {
                   ...problem,
-                  detail:
-                      `${SCHEMA_REJECTED}: this workspace has run intentic ${newest}, newer than this sandbox (${running}), ` +
-                      `so the file may simply be newer than this build. Updating the sandbox will read it again; ` +
-                      `only edit the file if you know it is actually wrong.`,
+                  detail: `it was written by intentic ${newest}, newer than this sandbox (${running})`,
+                  // The one thing a reader could not deduce: the file is probably fine, and editing it to match
+                  // an older build is how a good config gets broken by hand. Said in one clause, because this
+                  // is one line on a notice, not a paragraph of advice.
+                  fix: `Update the sandbox — the file itself is probably fine.`,
               }
             : problem,
     );

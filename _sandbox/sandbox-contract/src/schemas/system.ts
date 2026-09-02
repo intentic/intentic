@@ -131,8 +131,19 @@ export const ManifestProblemSchema = z.object({
         .describe(
             "What to do about it. Unreadable means the whole file is being ignored and everything in it is at its default. An unknown key means only that key is ignored. An invalid entry means one item of a list was skipped and the rest is fine.",
         ),
-    detail: z.string().describe("What exactly was wrong."),
+    detail: z.string().describe("What exactly was wrong, as one sentence and nothing else. Never the remedy: that is `fix`."),
     suggestion: z.string().optional().describe("The name it was probably meant to be, when one is close enough to guess honestly."),
+    /* THE REMEDY, ONLY WHEN THE DAEMON KNOWS ONE THE READER CANNOT GUESS. For nearly every problem here the fix
+     * is "open the file and correct the line", which the browser can say without being told; carrying that
+     * sentence over the wire per problem would be the daemon dictating copy it has no more information about
+     * than the reader. The exception is the version skew (store/manifest-problems.ts): there the file is
+     * probably RIGHT and editing it is the wrong move, which nothing on the reading side could work out on its
+     * own. Kept apart from `detail` so a renderer can put cause and action on separate lines instead of
+     * concatenating them into a paragraph, which is what it used to be. */
+    fix: z
+        .string()
+        .optional()
+        .describe("What to do about it, when that is something other than 'correct the file'. Absent whenever the file itself is the thing to edit."),
 });
 export type ManifestProblem = z.infer<typeof ManifestProblemSchema>;
 // Workspace-relative path (`.intentic/config/settings.json`) and everything currently wrong with that file. A file
