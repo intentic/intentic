@@ -1233,6 +1233,9 @@ importers:
       '@iconify/vue':
         specifier: 'catalog:'
         version: 5.0.1(vue@3.5.40(typescript@5.9.3))
+      '@intentic/code-read':
+        specifier: workspace:*
+        version: link:../../_tools/code-read
       '@primeuix/themes':
         specifier: 'catalog:'
         version: 2.0.3
@@ -1306,6 +1309,9 @@ importers:
       '@intentic/base':
         specifier: workspace:*
         version: link:../../_tools/base
+      '@intentic/code-read':
+        specifier: workspace:*
+        version: link:../../_tools/code-read
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
@@ -2353,7 +2359,7 @@ importers:
         version: 7.9.1
       '@prisma/client':
         specifier: 'catalog:'
-        version: 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)
+        version: 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
       '@puristic/env':
         specifier: 'catalog:'
         version: 1.6.1(zod@4.5.4)
@@ -2538,7 +2544,7 @@ importers:
         version: 7.9.1
       '@prisma/client':
         specifier: 'catalog:'
-        version: 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)
+        version: 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -2866,6 +2872,9 @@ importers:
       '@intentic/base':
         specifier: workspace:*
         version: link:../../_tools/base
+      '@intentic/code-read':
+        specifier: workspace:*
+        version: link:../../_tools/code-read
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
@@ -3548,7 +3557,7 @@ importers:
         version: link:../../_sandbox/registry
       '@intentic/sandbox-openapi':
         specifier: workspace:*
-        version: file:_sandbox/sandbox-openapi(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+        version: link:../../_sandbox/sandbox-openapi
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -3588,7 +3597,7 @@ importers:
         version: link:../../_tools/constants
       '@intentic/sandbox-openapi':
         specifier: workspace:*
-        version: file:_sandbox/sandbox-openapi(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+        version: link:../../_sandbox/sandbox-openapi
     devDependencies:
       '@intentic/tsconfig':
         specifier: workspace:*
@@ -3599,6 +3608,34 @@ importers:
 
   _tools/base:
     dependencies:
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  _tools/code-read:
+    dependencies:
+      '@shikijs/langs':
+        specifier: 'catalog:'
+        version: 4.4.1
+      shiki:
+        specifier: 'catalog:'
+        version: 4.4.1
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -5606,11 +5643,11 @@ packages:
   '@intentic-dev/demo@file:_site/demo':
     resolution: {directory: _site/demo, type: directory}
 
-  '@intentic-dev/site-content@file:_site/site-content':
-    resolution: {directory: _site/site-content, type: directory}
-
   '@intentic/base@file:_tools/base':
     resolution: {directory: _tools/base, type: directory}
+
+  '@intentic/code-read@file:_tools/code-read':
+    resolution: {directory: _tools/code-read, type: directory}
 
   '@intentic/constants@file:_tools/constants':
     resolution: {directory: _tools/constants, type: directory}
@@ -5714,9 +5751,6 @@ packages:
 
   '@intentic/sandbox-contract@file:_sandbox/sandbox-contract':
     resolution: {directory: _sandbox/sandbox-contract, type: directory}
-
-  '@intentic/sandbox-openapi@file:_sandbox/sandbox-openapi':
-    resolution: {directory: _sandbox/sandbox-openapi, type: directory}
 
   '@intentic/sandbox-run@file:_sandbox/sandbox-run':
     resolution: {directory: _sandbox/sandbox-run, type: directory}
@@ -13879,7 +13913,7 @@ snapshots:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
-      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
       prisma: 7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
 
   '@better-auth/telemetry@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)':
@@ -14841,6 +14875,7 @@ snapshots:
       '@intentic-app/capability-catalog': file:_platform/capability-catalog(@opentelemetry/api@1.9.1)
       '@intentic-app/localhost-https': file:_tools/localhost-https
       '@intentic/base': file:_tools/base
+      '@intentic/code-read': file:_tools/code-read
       '@intentic/constants': file:_tools/constants
       '@intentic/ext-acceptance': file:_extensions/acceptance(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-activity': file:_extensions/activity(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
@@ -14931,16 +14966,17 @@ snapshots:
       '@intentic-app/capability-catalog': file:_platform/capability-catalog(@opentelemetry/api@1.9.1)
       '@intentic-app/localhost-https': file:_tools/localhost-https
       '@intentic/base': file:_tools/base
+      '@intentic/code-read': file:_tools/code-read
       '@intentic/constants': file:_tools/constants
       '@intentic/ext-acceptance': file:_extensions/acceptance(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-activity': file:_extensions/activity(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-automations': file:_extensions/automations(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-deployments': file:_extensions/deployments(@opentelemetry/api@1.9.1)(crossws@0.3.5)(vue@3.5.40(typescript@5.9.3))(ws@8.21.3)
+      '@intentic/ext-deployments': file:_extensions/deployments(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-documentation': file:_extensions/documentation(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-drafts': file:_extensions/drafts(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-git-history': file:_extensions/git-history(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-issues': file:_extensions/issues(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-knowledge': file:_extensions/knowledge(@opentelemetry/api@1.9.1)(crossws@0.3.5)(vue@3.5.40(typescript@5.9.3))(ws@8.21.3)
+      '@intentic/ext-knowledge': file:_extensions/knowledge(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-maintenance': file:_extensions/maintenance(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
@@ -15015,11 +15051,102 @@ snapshots:
       - webpack
       - ws
 
+  '@intentic-app/web@file:_editor/web(@opentelemetry/api@1.9.1)(esbuild@0.28.2)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))':
+    dependencies:
+      '@intentic-app/api-contract': file:_platform/api-contract(@opentelemetry/api@1.9.1)
+      '@intentic-app/capability-catalog': file:_platform/capability-catalog(@opentelemetry/api@1.9.1)
+      '@intentic-app/localhost-https': file:_tools/localhost-https
+      '@intentic/base': file:_tools/base
+      '@intentic/code-read': file:_tools/code-read
+      '@intentic/constants': file:_tools/constants
+      '@intentic/ext-acceptance': file:_extensions/acceptance(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-activity': file:_extensions/activity(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-automations': file:_extensions/automations(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-deployments': file:_extensions/deployments(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-documentation': file:_extensions/documentation(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-drafts': file:_extensions/drafts(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-git-history': file:_extensions/git-history(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-issues': file:_extensions/issues(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-knowledge': file:_extensions/knowledge(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-maintenance': file:_extensions/maintenance(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-repo-apps': file:_extensions/repo-apps(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-viewers': file:_extensions/viewers(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-workflows': file:_extensions/workflows(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
+      '@intentic/extension-ui': file:_editor/extension-ui(vue@3.5.40(typescript@5.9.3))
+      '@intentic/registry': file:_sandbox/registry
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
+      '@intentic/sandbox-run': file:_sandbox/sandbox-run
+      '@intentic/ui': file:_editor/ui(typescript@5.9.3)
+      '@intentic/workspace-ignore': file:_sandbox/workspace-ignore
+      '@intentic/workspace-setup': file:_sandbox/workspace-setup
+      '@orpc/client': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/openapi-client': 1.14.13(@opentelemetry/api@1.9.1)
+      '@shikijs/monaco': 4.4.1
+      '@tanstack/query-persist-client-core': 5.101.4
+      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
+      '@xterm/addon-serialize': 0.14.0
+      '@xterm/addon-web-links': 0.12.0
+      '@xterm/addon-webgl': 0.19.0
+      '@xterm/xterm': 6.0.0
+      better-auth: 1.6.25(@opentelemetry/api@1.9.1)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+      idb-keyval: 6.3.0
+      monaco-editor-core: 0.55.1
+      posthog-js: 1.409.5
+      primevue: 4.5.5(vue@3.5.40(typescript@5.9.3))
+      tslib: 2.8.1
+      vue: 3.5.40(typescript@5.9.3)
+      vue-router: 5.2.0(@vue/compiler-sfc@3.5.41)(esbuild@0.28.2)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
+      zod: 4.5.4
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@farmfe/core'
+      - '@lynx-js/react'
+      - '@opentelemetry/api'
+      - '@pinia/colada'
+      - '@prisma/client'
+      - '@rspack/core'
+      - '@sveltejs/kit'
+      - '@tanstack/react-start'
+      - '@tanstack/solid-start'
+      - '@vue/compiler-sfc'
+      - '@vue/composition-api'
+      - better-sqlite3
+      - bun-types-no-globals
+      - crossws
+      - drizzle-kit
+      - drizzle-orm
+      - esbuild
+      - fastify
+      - mongodb
+      - mysql2
+      - next
+      - pg
+      - pinia
+      - preact-render-to-string
+      - prisma
+      - react
+      - react-dom
+      - rolldown
+      - rollup
+      - solid-js
+      - svelte
+      - typescript
+      - unloader
+      - vite
+      - vitest
+      - webpack
+      - ws
+
   '@intentic-dev/demo@file:_site/demo(@opentelemetry/api@1.9.1)(esbuild@0.28.2)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
     dependencies:
       '@intentic-app/api-contract': file:_platform/api-contract(@opentelemetry/api@1.9.1)
-      '@intentic-app/web': file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.41)(crossws@0.3.5)(esbuild@0.28.2)(mysql2@3.15.3)(pg@8.22.0)(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))(ws@8.21.3)
-      '@intentic/ext-knowledge': file:_extensions/knowledge(@opentelemetry/api@1.9.1)(crossws@0.3.5)(vue@3.5.40(typescript@5.9.3))(ws@8.21.3)
+      '@intentic-app/web': file:_editor/web(@opentelemetry/api@1.9.1)(esbuild@0.28.2)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@intentic/ext-knowledge': file:_extensions/knowledge(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
@@ -15062,18 +15189,14 @@ snapshots:
       - webpack
       - ws
 
-  '@intentic-dev/site-content@file:_site/site-content(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)':
-    dependencies:
-      '@intentic/constants': file:_tools/constants
-      '@intentic/sandbox-openapi': file:_sandbox/sandbox-openapi(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - crossws
-      - fastify
-      - ws
-
   '@intentic/base@file:_tools/base':
     dependencies:
+      tslib: 2.8.1
+
+  '@intentic/code-read@file:_tools/code-read':
+    dependencies:
+      '@shikijs/langs': 4.4.1
+      shiki: 4.4.1
       tslib: 2.8.1
 
   '@intentic/constants@file:_tools/constants': {}
@@ -15125,6 +15248,26 @@ snapshots:
       '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
       '@orpc/openapi': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+      '@orpc/server': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
+      vue: 3.5.40(typescript@5.9.3)
+      zod: 4.5.4
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@vue/composition-api'
+      - crossws
+      - fastify
+      - ws
+
+  '@intentic/ext-deployments@file:_extensions/deployments(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
+    dependencies:
+      '@intentic/base': file:_tools/base
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
+      '@intentic/extension-ui': file:_editor/extension-ui(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
+      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/openapi': 1.14.13(@opentelemetry/api@1.9.1)
       '@orpc/server': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
@@ -15193,6 +15336,26 @@ snapshots:
       '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
       '@orpc/openapi': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+      '@orpc/server': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
+      vue: 3.5.40(typescript@5.9.3)
+      zod: 4.5.4
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@vue/composition-api'
+      - crossws
+      - fastify
+      - ws
+
+  '@intentic/ext-knowledge@file:_extensions/knowledge(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
+    dependencies:
+      '@intentic/base': file:_tools/base
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
+      '@intentic/extension-ui': file:_editor/extension-ui(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
+      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/openapi': 1.14.13(@opentelemetry/api@1.9.1)
       '@orpc/server': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
@@ -15322,20 +15485,6 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
-  '@intentic/sandbox-openapi@file:_sandbox/sandbox-openapi(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)':
-    dependencies:
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
-      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
-      '@orpc/openapi': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
-      json-schema-typed: 8.0.2
-      tslib: 2.8.1
-      zod: 4.5.4
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - crossws
-      - fastify
-      - ws
-
   '@intentic/sandbox-run@file:_sandbox/sandbox-run':
     dependencies:
       '@intentic/constants': file:_tools/constants
@@ -15347,6 +15496,7 @@ snapshots:
       '@dicebear/core': 10.5.0
       '@dicebear/styles': 10.4.0
       '@iconify/vue': 5.0.1(vue@3.5.40(typescript@5.9.3))
+      '@intentic/code-read': file:_tools/code-read
       '@primeuix/themes': 2.0.3
       '@shikijs/langs': 4.4.1
       '@shikijs/themes': 4.4.1
@@ -15703,6 +15853,23 @@ snapshots:
       '@orpc/standard-server': 1.14.13(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - '@opentelemetry/api'
+
+  '@orpc/openapi@1.14.13(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@orpc/client': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/interop': 1.14.13
+      '@orpc/openapi-client': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/server': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+      '@orpc/shared': 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/standard-server': 1.14.13(@opentelemetry/api@1.9.1)
+      json-schema-typed: 8.0.2
+      rou3: 0.7.12
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - crossws
+      - fastify
+      - ws
 
   '@orpc/openapi@1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.1)':
     dependencies:
@@ -16211,7 +16378,7 @@ snapshots:
 
   '@prisma/client-runtime-utils@7.9.1': {}
 
-  '@prisma/client@7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)':
+  '@prisma/client@7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@prisma/client-runtime-utils': 7.9.1
     optionalDependencies:
@@ -18122,7 +18289,7 @@ snapshots:
       nanostores: 1.4.2
       zod: 4.5.4
     optionalDependencies:
-      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
       mysql2: 3.15.3
       pg: 8.22.0
       prisma: 7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
@@ -18154,7 +18321,7 @@ snapshots:
       nanostores: 1.4.2
       zod: 4.5.4
     optionalDependencies:
-      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
       mysql2: 3.15.3
       pg: 8.22.0
       prisma: 7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
@@ -18186,7 +18353,7 @@ snapshots:
       nanostores: 1.4.2
       zod: 4.5.4
     optionalDependencies:
-      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
       mysql2: 3.15.3
       pg: 8.22.0
       prisma: 7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
@@ -18218,13 +18385,39 @@ snapshots:
       nanostores: 1.4.2
       zod: 4.5.4
     optionalDependencies:
-      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@prisma/client': 7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
       mysql2: 3.15.3
       pg: 8.22.0
       prisma: 7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
       vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      vue: 3.5.40(typescript@5.9.3)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@opentelemetry/api'
+
+  better-auth@1.6.25(@opentelemetry/api@1.9.1)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3)):
+    dependencies:
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2)
+      '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
+      '@better-auth/kysely-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.5)
+      '@better-auth/memory-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
+      '@better-auth/mongo-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
+      '@better-auth/prisma-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@prisma/client@7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))
+      '@better-auth/telemetry': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)
+      '@better-auth/utils': 0.4.2
+      '@better-fetch/fetch': 1.3.1
+      '@noble/ciphers': 2.3.0
+      '@noble/hashes': 2.3.0
+      better-call: 1.3.7(zod@4.5.4)
+      defu: 6.1.7
+      jose: 6.2.8
+      kysely: 0.29.5
+      nanostores: 1.4.2
+      zod: 4.5.4
+    optionalDependencies:
+      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
