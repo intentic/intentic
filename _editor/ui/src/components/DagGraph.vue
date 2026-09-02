@@ -24,6 +24,7 @@ const {
     rankSep,
     nodeSep,
     fitAlign = `center`,
+    fitPadding,
 } = defineProps<{
     nodes: readonly DagNode<T>[];
     edges: readonly DagEdge[];
@@ -75,6 +76,9 @@ const {
     /* Where a readable-zoom clamp lands vertically. `start` keeps shallow inline bands from floating with empty
      * space above and below; `center` is the default for a graph given a whole pane. */
     fitAlign?: `center` | `start`;
+    // Inset around the fitted picture, as a fraction of the frame. `{ x, y }` when horizontal and vertical need
+    // different air — shallow inline bands want a tight top/bottom.
+    fitPadding?: number | { readonly x: number; readonly y: number };
 }>();
 
 // Which node is selected; re-clicking the selected node clears it.
@@ -173,6 +177,10 @@ const extent = computed(() => {
 // DagEditor's padding, kept the same here so two components fitting the same kind of picture do not disagree
 // about how much room it gets.
 const PADDING = 0.08;
+const padOf = (): { x: number; y: number } => {
+    const value = fitPadding ?? PADDING;
+    return typeof value === `number` ? { x: value, y: value } : value;
+};
 /* The zoom below which a whole-graph fit stops being worth having. Above it, fitting everything wins over
  * showing part of it larger (see applyFit).
  *
@@ -181,7 +189,10 @@ const PADDING = 0.08;
  * stops being worth seeing at all, and the honest answer is much lower. A run needing 0.46 to fit its own
  * dialog was refused at 0.55 and clipped instead — a diagram overflowing a frame it plainly had room for. */
 const LEGIBLE_FIT = 0.45;
-const FIT = computed(() => (magnify ? undefined : { padding: PADDING, maxZoom: 1 }));
+const FIT = computed(() => {
+    const pad = padOf();
+    return magnify ? undefined : { padding: pad, maxZoom: 1 };
+});
 
 /* SHALLOW, and that is not an optimization: `ref()` deep-reactivates what it holds, and `reactive()` UNWRAPS
  * the refs it finds, so a store parked in a plain ref hands back `dimensions` as a bare `{width, height}` while
@@ -203,6 +214,7 @@ const hold = (): void => {
 // The fit `readableZoom` describes: whichever of the two the graph's size calls for. The estimate mirrors
 // Vue Flow's own arithmetic closely enough to pick a branch: the branch it picks then does the real work.
 const applyFit = (store: VueFlowStore): void => {
+    const pad = padOf();
     if (readableZoom === undefined) {
         void store.fitView(FIT.value);
         return;
@@ -222,7 +234,24 @@ const applyFit = (store: VueFlowStore): void => {
         void store.fitView(FIT.value);
         return;
     }
-    const fitted = Math.min((frame.width * (1 - 2 * PADDING)) / box.width, (frame.height * (1 - 2 * PADDING)) / box.height, magnify ? 2 : 1);
+    const fitted = Math.min(
+        (frame.width * (1 - 2 * pad.x)) / box.width,
+        (frame.height * (1 - 2 * pad.y)) / box.height,
+        magnify ? 2 : 1,
+    );
+    const place = (zoom: number): void => {
+        void store.setViewport({
+            x: frame.width * pad.x - box.x * zoom,
+            y: (fitAlign === `start` ? frame.height * pad.y : (frame.height - box.height * zoom) / 2) - box.y * zoom,
+            zoom,
+        });
+    };
+    /* TOP-ALIGNED INLINE BANDS never call `fitView`: it always centres vertically, which leaves a shallow run
+     * floating in a band sized for it. Manual placement keeps the leading edge at the top inset instead. */
+    if (fitAlign === `start`) {
+        place(fitted >= Math.min(readableZoom, LEGIBLE_FIT) ? Math.min(fitted, 1) : readableZoom);
+        return;
+    }
     /* SHOWING EVERYTHING BEATS SHOWING IT SLIGHTLY LARGER, and this used to trade the wrong way round.
      *
      * The floor exists for the fit that lands near 0.3, where the labels stop being letters. It was applied as
@@ -237,16 +266,12 @@ const applyFit = (store: VueFlowStore): void => {
         void store.fitView(FIT.value);
         return;
     }
-    void store.setViewport({
-        x: frame.width * PADDING - box.x * readableZoom,
-        y: (fitAlign === `start` ? frame.height * PADDING : (frame.height - box.height * readableZoom) / 2) - box.y * readableZoom,
-        zoom: readableZoom,
-    });
+    place(readableZoom);
 };
 
 // The whole shape at a glance, floor and all: what a "fit" control is for, and why it ignores `readableZoom`:
 // asking to see everything is asking to trade legibility for it, deliberately and for as long as you look.
-const fitAll = (): void => void flow.value?.fitView({ padding: PADDING });
+const fitAll = (): void => void flow.value?.fitView({ padding: padOf(), maxZoom: 1 });
 
 // The one door back to a fitted picture: everything that can invalidate a fit calls this, and it is the only
 // place the reader's own pan is protected from being fitted over.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PipelineJob } from "@intentic/sandbox-contract";
-import { Button, DagGraph, Icon, type DagNode } from "@intentic/extension-ui";
+import { DagGraph, Icon, ui, type DagNode } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
 import { formatDuration, STATUS_TONE, type StatusTone } from "./statusVisual";
@@ -69,7 +69,7 @@ const dag = computed(() => pipelineDag(stages, focus.value));
 const NODE_WIDTH = 184;
 const JOB_ROW_HEIGHT = 28;
 // Split over the card's two ends, so a single-job card is not a bare strip with text jammed against its border.
-const CARD_PADDING_Y = 12;
+const CARD_PADDING_Y = 8;
 /* The layout's air: between two columns, and between two cards in one. dagre is told both (see dagLayout.ts) and
  * the band height below counts with them.
  *
@@ -92,8 +92,10 @@ const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
  * the diagram sitting in the top third of a box of white space.
  *
  * So: the tallest COLUMN. Cards that share a stage are stacked by dagre with `nodesep` between them, and a
- * card's own height is its rows. The floor keeps short runs readable without turning a one-row graph into a
- * tall empty box; past the ceiling it pans instead of shrinking. */
+ * card's own height is its rows. Sized to the graph at the fitted zoom so vertical padding does not stack
+ * on a band that is taller than the picture. */
+const FIT_PAD_Y = 0.015;
+
 const bandHeight = computed(() => {
     const columns = new Map<number, number>();
     for (const node of dag.value.nodes) {
@@ -101,8 +103,7 @@ const bandHeight = computed(() => {
         columns.set(stageOfNode(node.id), stacked === undefined ? cardHeight(node.data) : stacked + NODE_SEP + cardHeight(node.data));
     }
     const contentHeight = Math.max(...columns.values(), 0);
-    // Overlay controls (Fit/Expand) and fit padding; tight enough that a shallow run does not float in whitespace.
-    return Math.min(520, Math.max(72, contentHeight + 28));
+    return Math.min(520, Math.ceil(contentHeight / (1 - 2 * FIT_PAD_Y)));
 });
 
 const toneOf = (job: PipelineJob): StatusTone => STATUS_TONE[job.status];
@@ -143,11 +144,11 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
             :magnify="false"
             :readable-zoom="0.8"
             :min-zoom="0.15"
-            fit-align="start"
+            :fit-padding="{ x: 0.04, y: FIT_PAD_Y }"
         >
             <template #node="{ node }">
                 <!-- The rows fill the card, so this is where the graph learns which job the pointer is on. -->
-                <div class="relative flex h-full w-full flex-col justify-center py-1.5">
+                <div class="relative flex h-full w-full flex-col py-1">
                     <!-- The trace's own card, ringed whole: see focusedCard. -->
                     <span v-if="node.id === focusedCard" class="pointer-events-none absolute inset-0 rounded-md ring-1 ring-inset ring-link"></span>
                     <div
@@ -197,15 +198,30 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
             </template>
 
             <template #overlay="{ fitAll }">
-                <!-- Two controls of one shape. A word beside a bare glyph gave the corner a wide button and a
-                     small square one, which reads as two unrelated things rather than as a pair. -->
-                <div class="absolute bottom-2.5 right-2.5 flex items-center gap-1">
-                    <Button size="small" severity="secondary" v-tooltip.top="`Zoom out until the whole run is in frame`" @click="fitAll()">
-                        Fit
-                    </Button>
-                    <Button v-if="!fill" size="small" severity="secondary" v-tooltip.top="`Open the job graph full screen`" @click="$emit(`expand`)">
-                        Expand
-                    </Button>
+                <div class="pointer-events-none absolute inset-0">
+                    <div
+                        class="pointer-events-auto absolute bottom-2 right-2 flex items-center gap-px rounded-md border border-line/50 bg-canvas/90 p-px shadow-sm backdrop-blur-sm"
+                    >
+                        <button
+                            type="button"
+                            :class="ui.iconButton(`h-7 w-7`)"
+                            aria-label="Fit"
+                            v-tooltip.top="`Zoom out until the whole run is in frame`"
+                            @click="fitAll()"
+                        >
+                            <Icon name="collapse-all" class="text-sm" />
+                        </button>
+                        <button
+                            v-if="!fill"
+                            type="button"
+                            :class="ui.iconButton(`h-7 w-7`)"
+                            aria-label="Expand"
+                            v-tooltip.top="`Open the job graph full screen`"
+                            @click="$emit(`expand`)"
+                        >
+                            <Icon name="expand" class="text-sm" />
+                        </button>
+                    </div>
                 </div>
             </template>
         </DagGraph>
