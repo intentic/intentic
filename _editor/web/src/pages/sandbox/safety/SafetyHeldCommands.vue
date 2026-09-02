@@ -5,20 +5,23 @@ import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSetti
 
 /* WHAT A PERMISSION CARD SHOWS YOU BEFORE YOU ANSWER FOR IT.
  *
- * The rulebook that decides WHICH commands stop (settings.commandRules) is a different question and is set
- * elsewhere; this group is only about the moment after one has stopped, when a person is looking at it and
- * deciding. That moment is the one the product had least to say about: the card carried the command as a wall
- * of unhighlighted shell, and the answer to "which part of this is the part that stopped it" was somewhere in
- * the middle of it.
+ * It lives here now, directly under the rulebook that produces the cards. It used to sit on the Agent tab under
+ * "How it runs", with a comment saying the rulebook "is set elsewhere" — and there was no elsewhere; nothing in
+ * the app wrote `commandRules` at all. With the rulebook on this page, splitting the two would leave one page
+ * deciding which commands stop and a different page deciding what you see when one does, which is one errand
+ * with a nav rail in the middle of it.
  *
- * Most of the fix needed no setting — the card colours the command now, and marks the fragment the classifier
- * fired on, on every card, for free. What is switchable is the part that costs something: a model call. */
+ * The moment this group is about is the one the product had least to say about: the card carried the command as
+ * a wall of unhighlighted shell, and the answer to "which part of this is the part that stopped it" was
+ * somewhere in the middle of it. Most of that fix needed no setting — the card colours the command and marks
+ * the fragment the classifier fired on, on every card, for free. What is switchable is the part that costs
+ * something: a model call. */
 
 const { settings, patch } = useSandboxSettings();
 </script>
 
 <template>
-    <RowGroup label="Held commands">
+    <RowGroup label="When a command is held">
         <!-- OFF BY DEFAULT, and the description says the price rather than burying it: this spends one
              quick-model call per card raised, on the owner's own connected account, at the moment they are
              waiting to answer. That is a real cost and it is theirs to accept.

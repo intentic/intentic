@@ -22,6 +22,7 @@ import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
 import { toListing, updateCount } from "./sandbox/discoverListing";
 import SandboxPersonas from "./sandbox/SandboxPersonas.vue";
 import SandboxOverview from "./sandbox/SandboxOverview.vue";
+import SandboxSafety from "./sandbox/SandboxSafety.vue";
 import SandboxSecrets from "./sandbox/SandboxSecrets.vue";
 import SandboxStatus from "./sandbox/SandboxStatus.vue";
 import SandboxUsage from "./sandbox/SandboxUsage.vue";
@@ -58,6 +59,16 @@ const configurationRows = (updates: number): readonly HubTab[] => [
     { slug: `environment`, label: `Environment`, icon: `box` },
     { slug: `secrets`, label: `Secrets`, icon: `key` },
     { slug: `agent`, label: `Agent`, icon: `sparkles` },
+    /* WHAT THE BOX WON'T DO WITHOUT ASKING (sandbox/SandboxSafety.vue argues the placement at length). Directly
+     * under Agent, because that is where a reader arrives from: the one related switch this app had used to
+     * live on that tab, under a comment pointing at a rulebook nothing could set. And ABOVE the
+     * Extensions/Discover pair rather than after it, so that pair stays adjacent — finding an extension,
+     * installing it and managing it is one subject, and splitting it is the failure Discover exists to undo.
+     *
+     * Not badged, and that is a decision rather than an omission. Every other count in this index is an errand
+     * (updates to consider, a port to reclaim); a rulebook has no outstanding number, and "2 rules set" drawn
+     * in the pill every other row uses for work-to-do would send people in here to clear something. */
+    { slug: `safety`, label: `Safety`, icon: `shield` },
     { slug: `extensions`, label: `Extensions`, icon: `sliders-h` },
     { slug: `discover`, label: `Discover`, icon: `search`, badge: updates > 0 ? { count: updates, tone: `info` as const } : undefined },
 ];
@@ -139,7 +150,11 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
     {
         key: `configuration`,
         label: `Configuration`,
-        items: configurationRows(updatable.value).filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || canShip.value),
+        /* Safety joins the maintainer floor for the reason Agent is already behind it: it writes the SAME
+         * settings object through the same daemon route, so a collaborator's picker would be a control the
+         * daemon refuses. And of everything on that object this is the one a lower role must not touch —
+         * loosening the gate that holds `rm -rf /` is operating authority by any reading. */
+        items: configurationRows(updatable.value).filter((tab) => ![`secrets`, `agent`, `safety`].includes(tab.slug) || canShip.value),
     },
     { key: `reach`, label: `Reach`, items: reachRows(contendedPorts.value.length).filter((tab) => tab.slug !== `computers` || canShip.value) },
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
@@ -159,6 +174,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxStatus v-else-if="slug === `status`" />
             <SandboxUsage v-else-if="slug === `usage`" />
             <SandboxSecrets v-else-if="slug === `secrets`" />
+            <SandboxSafety v-else-if="slug === `safety`" />
             <SandboxEnvironment v-else-if="slug === `environment`" />
             <SandboxAccess v-else-if="slug === `access`" />
             <SandboxPersonas v-else-if="slug === `personas`" />

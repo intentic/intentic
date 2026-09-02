@@ -9,7 +9,6 @@ import AgentChangelog from "./agent/AgentChangelog.vue";
 import AgentChecks from "./agent/AgentChecks.vue";
 import AgentCodeSearch from "./agent/AgentCodeSearch.vue";
 import AgentCommandOutput from "./agent/AgentCommandOutput.vue";
-import AgentHeldCommands from "./agent/AgentHeldCommands.vue";
 import AgentDependencies from "./agent/AgentDependencies.vue";
 import AgentFinishedWork from "./agent/AgentFinishedWork.vue";
 import AgentInstructions from "./agent/AgentInstructions.vue";
@@ -134,14 +133,18 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentMemory />
         </template>
 
-        <!-- The mechanics of a turn: how it finds things, how much of what it runs comes back, what a command
-             stopped for your approval shows you, how much of the job it may hand to other agents, and who picks
-             the turn up when it breaks. -->
+        <!-- The mechanics of a turn: how it finds things, how much of what it runs comes back, how much of the
+             job it may hand to other agents, and who picks the turn up when it breaks.
+
+             WHAT A HELD COMMAND SHOWS YOU used to sit between the last two, and it moved to Sandbox ▸ Safety
+             with the rulebook that produces those cards. Its own comment had always said the rulebook "is set
+             elsewhere", and there was no elsewhere; now there is, and the two halves of one errand — which
+             commands stop, and what you see when one does — are on one page instead of either side of a nav
+             rail. -->
         <template v-else-if="section === `running`">
             <AgentCodeSearch />
             <AgentDependencies />
             <AgentCommandOutput />
-            <AgentHeldCommands />
             <AgentSubagents />
             <AgentRecovery />
         </template>
