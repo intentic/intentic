@@ -115,9 +115,9 @@ test("the baseline commits the config slice and still refuses every credential a
 
     // Exactly the tracked slice out of that directory: both directory carve-outs included, nothing else.
     expect((await sh(work, "ls-files")).split("\n")).toEqual([
+        ".intentic/config/approvals/reddit-launch.json",
         ".intentic/config/automations.json",
         ".intentic/config/capabilities.json",
-        ".intentic/config/approvals/reddit-launch.json",
         ".intentic/config/environment.custom.Dockerfile",
         ".intentic/config/environment.d/rust.Dockerfile",
         ".intentic/config/personas.json",
