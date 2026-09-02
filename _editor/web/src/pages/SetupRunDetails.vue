@@ -43,7 +43,17 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
         <ul class="flex flex-col gap-2 text-xs leading-relaxed text-muted">
             <li class="flex items-start gap-2">
                 <Icon name="box" class="mt-0.5 shrink-0 text-link" />
-                <span class="min-w-0">Starts your sandbox in <span class="text-content">Docker</span></span>
+                <span class="min-w-0 flex flex-col gap-1">
+                    <span>Starts your sandbox in <span class="text-content">Docker</span></span>
+                    <a
+                        href="https://docs.docker.com/get-docker/"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="inline-flex items-center gap-1 text-link hover:underline"
+                    >
+                        Install Docker yourself <Icon name="external-link" />
+                    </a>
+                </span>
             </li>
             <li class="flex items-start gap-2">
                 <Icon name="cloud" class="mt-0.5 shrink-0 text-link" />
@@ -67,18 +77,6 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
                     <template #icon><Icon name="download" /></template>
                 </Button>
             </div>
-        </div>
-
-        <div class="border-t border-line pt-3 text-xs leading-relaxed text-subtle">
-            <p>Installs Docker if you haven't got it, asking first.</p>
-            <a
-                href="https://docs.docker.com/get-docker/"
-                target="_blank"
-                rel="noreferrer"
-                class="mt-1 inline-flex items-center gap-1 text-link hover:underline"
-            >
-                Install Docker yourself <Icon name="external-link" />
-            </a>
         </div>
 
         <!-- The undo. It used to sit on the card, on the argument that knowing the undo exists is worth a row of
