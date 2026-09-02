@@ -96,10 +96,6 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
             </template>
         </Row>
 
-        <p class="text-sm text-muted">
-            The programs your turns actually run. Each moves on its own schedule now: taking a newer one is a download here, not a new sandbox image.
-        </p>
-
         <ul class="flex flex-col divide-y divide-line">
             <li v-for="engine in engines" :key="engine.id" class="py-3 first:pt-0 last:pb-0">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
