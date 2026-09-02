@@ -27,7 +27,7 @@ const parseApps = (raw: string): AppInstanceInput[] =>
         });
 
 // Add one or more named app instances into an EXISTING monorepo at <dir>. Shells to @intentic/scaffold, which
-// clones the source, copies each app's instance packages in (renaming _apps/ dirs for custom names, overlapping
+// fetches the source, copies each app's instance packages in (renaming _apps/ dirs for custom names, overlapping
 // shared libs land once), and runs `pnpm install`.
 export const addAppCommand = buildCommand<AddAppFlags>({
     docs: { brief: "Add one or more app instances into an existing monorepo at <dir>" },

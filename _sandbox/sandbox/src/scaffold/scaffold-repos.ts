@@ -11,7 +11,7 @@ import { readTemplatesConfig } from "./templates-config.js";
 // runs through the caller's visible job session so the user watches the actual commands.
 
 // Scaffold an empty pnpm+turbo monorepo as its OWN repo at /work/<name> by running the `intentic scaffold monorepo`
-// CLI (the same @intentic/scaffold path, add-apps style, one visible command doing the template clone +
+// CLI (the same @intentic/scaffold path, add-apps style, one visible command doing the template fetch +
 // shell layout + git init). Its UI is the web app's apps extension, no operator panel is scaffolded.
 // The caller (the monorepo capability) gates on existence for idempotency.
 export const scaffoldAppMonorepo = async (services: Services, name: string, session: string): Promise<void> => {

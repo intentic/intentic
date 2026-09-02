@@ -302,6 +302,10 @@ RUN chmod +x /opt/intentic-cli/dist/cli.js \
 # than whichever host prepared the trees. The `.git` the scaffold leaves behind is dropped: the daemon inits the
 # repo itself when it seeds it, with the git dir on /history like every other workspace repo. Pinned by ref so a
 # template push cannot silently change what an image built yesterday ships.
+#
+# The CLI takes the template's source ARCHIVE, not a clone, for the reason the oh-my-zsh layer above spells out:
+# an unauthenticated `git-upload-pack` from this egress is answered with a Basic-auth challenge git turns into a
+# username prompt no build can answer, and this layer is where that took the `images` job down.
 ARG STARTER_TEMPLATE_REF=main
 RUN intentic scaffold monorepo --dir /opt --name starter --ref "$STARTER_TEMPLATE_REF" \
     && intentic scaffold add-app --dir /opt/starter --apps landing --ref "$STARTER_TEMPLATE_REF" \

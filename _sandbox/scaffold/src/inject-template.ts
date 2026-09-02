@@ -123,12 +123,65 @@ export const injectApps = async (opts: {
     }
 };
 
-// Shallow-clone the template source into a temp dir, hand it to `fn`, and always clean it up. `source` may be a
-// git URL or a local checkout. ponytail: fresh shallow clone per call, no cache; add one if latency ever matters.
-const withTemplateClone = async <T>(source: string, ref: string, fn: (sourceDir: string) => Promise<T> | T): Promise<T> => {
+// The source ARCHIVE url for an http(s) template source, GitHub's `<repo>/archive/<ref>.tar.gz` (which also
+// answers for tags and commit shas, not just branches). Undefined for a local checkout or an ssh/git:// remote,
+// those have no archive endpoint and stay on git.
+export const templateArchiveUrl = (source: string, ref: string): string | undefined => {
+    if (!/^https?:\/\//.test(source)) {
+        return undefined;
+    }
+    return `${source.replace(/\/+$/, "").replace(/\.git$/, "")}/archive/${ref}.tar.gz`;
+};
+
+// Unpack a source archive into `dir`, or answer false when the host won't serve one (a private repo, a
+// non-GitHub remote), which sends the caller back to git. Handed to `tar` on stdin rather than staged on disk:
+// the template is a few MB of tree nobody keeps.
+const extractTemplateArchive = async (url: string, dir: string): Promise<boolean> => {
+    const response = await fetch(url, { redirect: "follow" });
+    if (!response.ok) {
+        return false;
+    }
+    const archive = Buffer.from(await response.arrayBuffer());
+    const tar = spawn("tar", ["-xz", "-C", dir, "--strip-components=1"], { stdio: ["pipe", "ignore", "pipe"] });
+    const stderr: string[] = [];
+    tar.stderr.on("data", (chunk: Buffer) => stderr.push(chunk.toString()));
+    const exit = new Promise<number>((resolve, reject) => {
+        tar.on("error", reject);
+        tar.on("close", (code) => resolve(code ?? 1));
+    });
+    tar.stdin.end(archive);
+    const code = await exit;
+    if (code !== 0) {
+        throw new Error(`unpacking ${url} failed (tar exited with ${code})${stderr.length > 0 ? `\n${stderr.join("").trim()}` : ""}`);
+    }
+    return true;
+};
+
+// Materialize the template source tree into `dir`: its source ARCHIVE where the host serves one, a shallow
+// `git clone` otherwise (a local checkout, an ssh remote, a private repo whose archive 404s).
+//
+// The archive is first because of what it costs to be second: GitHub answers an unauthenticated
+// `git-upload-pack` from datacenter egress (CI, and the hosts sandboxes run on) with 401 and
+// `WWW-Authenticate: Basic realm="GitHub"`, and git turns that challenge into a username prompt that a build
+// with no tty cannot answer — `could not read Username for 'https://github.com'`, which is what took the
+// `images` job down when it baked the starter site. Its ref advertisement 200s first, so the clone looks alive
+// right up to the failure. Nothing here wants the history anyway: --depth 1 said so, and every consumer below
+// only reads files out of the tree. `GIT_TERMINAL_PROMPT=0` on the fallback so that same challenge surfaces as
+// an error rather than a process waiting on a terminal that isn't there.
+const materializeTemplateSource = async (source: string, ref: string, dir: string): Promise<void> => {
+    const archive = templateArchiveUrl(source, ref);
+    if (archive !== undefined && (await extractTemplateArchive(archive, dir))) {
+        return;
+    }
+    await exec("git", ["clone", "-q", "--depth", "1", "--branch", ref, source, dir], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+};
+
+// Fetch the template source into a temp dir, hand it to `fn`, and always clean it up. `source` may be a git URL
+// or a local checkout. ponytail: fresh fetch per call, no cache; add one if latency ever matters.
+const withTemplateSource = async <T>(source: string, ref: string, fn: (sourceDir: string) => Promise<T> | T): Promise<T> => {
     const sourceDir = await mkdtemp(join(tmpdir(), "intentic-template-"));
     try {
-        await exec("git", ["clone", "-q", "--depth", "1", "--branch", ref, source, sourceDir]);
+        await materializeTemplateSource(source, ref, sourceDir);
         return await fn(sourceDir);
     } finally {
         await rm(sourceDir, { recursive: true, force: true });
@@ -137,13 +190,13 @@ const withTemplateClone = async <T>(source: string, ref: string, fn: (sourceDir:
 
 // Read the source repo's template manifest without materializing anything, the daemon lists addable app types from this.
 export const fetchTemplateManifest = (source: string, ref: string): Promise<TemplateManifest> =>
-    withTemplateClone(source, ref, (sourceDir) => readTemplateManifest(sourceDir));
+    withTemplateSource(source, ref, (sourceDir) => readTemplateManifest(sourceDir));
 
-// The end-to-end empty-monorepo scaffold: clone the source, lay down the shell + shared packages, `git init`. No
+// The end-to-end empty-monorepo scaffold: fetch the source, lay down the shell + shared packages, `git init`. No
 // install, an empty shell has nothing to run until the first app is added (which installs). Shared by the CLI
 // and the sandbox daemon's monorepo capability so there is one path. Errors (bad ref) propagate.
 export const scaffoldMonorepo = (opts: { repoDir: string; source: string; ref: string }): Promise<void> =>
-    withTemplateClone(opts.source, opts.ref, (sourceDir) =>
+    withTemplateSource(opts.source, opts.ref, (sourceDir) =>
         injectMonorepoShell({ repoDir: opts.repoDir, sourceDir, manifest: readTemplateManifest(sourceDir) }),
     );
 
@@ -173,10 +226,10 @@ async function* runStreaming(command: string, args: string[], cwd: string): Asyn
     }
 }
 
-// The end-to-end add: clone the source, inject the requested app instances into an existing monorepo, and (unless
+// The end-to-end add: fetch the source, inject the requested app instances into an existing monorepo, and (unless
 // disabled) `pnpm install`. Shared by the CLI's `add-app` and the daemon's /workspace/apps route, both stream the
 // yielded progress lines (steps + live pnpm output) to the user. Errors (bad ref, unknown app) propagate. The
-// clone/cleanup is inlined rather than via withTemplateClone: its finally would remove the tempdir as soon as the
+// fetch/cleanup is inlined rather than via withTemplateSource: its finally would remove the tempdir as soon as the
 // generator is RETURNED, before iteration ever runs.
 export async function* addAppsToMonorepo(opts: {
     repoDir: string;
@@ -188,7 +241,7 @@ export async function* addAppsToMonorepo(opts: {
     yield "Fetching the template source…";
     const sourceDir = await mkdtemp(join(tmpdir(), "intentic-template-"));
     try {
-        await exec("git", ["clone", "-q", "--depth", "1", "--branch", opts.ref, opts.source, sourceDir]);
+        await materializeTemplateSource(opts.source, opts.ref, sourceDir);
         const manifest = readTemplateManifest(sourceDir);
         for (const app of opts.apps) {
             yield app.name === app.template ? `Adding ${app.name}…` : `Adding ${app.name} (${app.template})…`;

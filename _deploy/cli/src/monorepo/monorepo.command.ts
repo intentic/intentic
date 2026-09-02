@@ -12,7 +12,7 @@ interface MonorepoFlags {
 }
 
 // Scaffold an EMPTY pnpm+turbo monorepo (shell + shared packages, git-inited, no apps) at <dir>/<name>. Apps are
-// added into it afterwards with `add-app`. Shells to @intentic/scaffold, which clones the source and lays the
+// added into it afterwards with `add-app`. Shells to @intentic/scaffold, which fetches the source and lays the
 // shell down verbatim.
 export const monorepoCommand = buildCommand<MonorepoFlags>({
     docs: { brief: "Scaffold an empty pnpm+turbo monorepo at <dir>/<name>" },
