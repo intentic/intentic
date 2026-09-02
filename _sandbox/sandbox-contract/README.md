@@ -57,9 +57,14 @@ mismatch is a type error rather than a runtime surprise.
 - [src/definition.ts](src/definition.ts): the SANDBOX DEFINITION, the declarable shape of a sandbox
   (`sandbox.toml`): repositories by remote, connections by shape, secret names, the overlay as source, the
   non-default agent settings — plus the bundle manifest that embeds it, since a bundle is definition + state.
-  Shared because the daemon derives and applies definitions and the browser renders their plans, diffs and
-  reports; the definition never carries a credential value or an approval hash, so it is the export that is
-  safe to publish.
+  Shared because the daemon derives definitions and the browser renders them and their diffs; the definition
+  never carries a credential value or an approval hash, so it is the export that is safe to publish. Only the
+  OUTBOUND half lives here; applying one is an arrival.
+- [src/arrival.ts](src/arrival.ts): the ARRIVAL PIPELINE, one plan → apply → report for every artifact that can
+  come into a sandbox — a definition, an environment bundle, a Hermes or OpenClaw home directory. There were
+  three of these once, one per artifact, and the differences between them were drift rather than design (only
+  two of the three previewed; the credential consent was asked on opposite sides). The artifact is a parser
+  now and everything after it is shared, which is what lets one card render all four.
 - [src/index.ts](src/index.ts): the public surface.
 - [src/contract-lock.ts](src/contract-lock.ts) and [contract.lock.json](contract.lock.json): every exported
   schema serialized to one committed, comparable document. Regenerate with `pnpm --filter

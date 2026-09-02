@@ -22,7 +22,7 @@ import {
 
 /* THE HERMES ADAPTER, `~/.hermes` read into a migration plan, pure over the archive's file map so the same
  * function answers the preview and the apply (the apply re-derives; the wire plan is a rendering, never the
- * trusted input, restore.ts's rule).
+ * trusted input, bundle-arrival.ts's rule).
  *
  * The layout it reads (verified against Hermes' own configuration reference and against OpenClaw's `migrate`
  * command, whose Hermes provider is a peer-reviewed inventory of the same directory):
@@ -76,7 +76,7 @@ export const planHermes = (files: Files): SourcePlan => {
         planned.push({
             item: {
                 id: "memory:soul",
-                target: "memory",
+                group: "memory",
                 label: "Personality, SOUL.md",
                 detail: "Merged into the agent's memory files as standing context. Make it a persona later if the agent should act as this character.",
                 recommended: true,
@@ -92,7 +92,7 @@ export const planHermes = (files: Files): SourcePlan => {
     const agentsNotes = text(files, "AGENTS.md");
     if (agentsNotes !== undefined && agentsNotes.trim() !== "") {
         planned.push({
-            item: { id: "memory:agents", target: "memory", label: "Operating notes, AGENTS.md", recommended: true, secrets: [] },
+            item: { id: "memory:agents", group: "memory", label: "Operating notes, AGENTS.md", recommended: true, secrets: [] },
             apply: {
                 target: "memory",
                 fence: "intentic:imported-hermes:agents",
@@ -111,7 +111,7 @@ export const planHermes = (files: Files): SourcePlan => {
         planned.push({
             item: {
                 id: "memory:memories",
-                target: "memory",
+                group: "memory",
                 label: `Long-term memory, ${sections.length} file${sections.length === 1 ? "" : "s"}`,
                 recommended: true,
                 secrets: [],
@@ -184,7 +184,7 @@ export const planHermes = (files: Files): SourcePlan => {
         planned.push({
             item: {
                 id: `capability:endpoint:${id}`,
-                target: "capability",
+                group: "capability",
                 label: `Model endpoint, ${name}`,
                 detail: local ? `${baseUrl}, that address points at your old machine, not here.` : baseUrl,
                 recommended: !local,
@@ -236,7 +236,7 @@ export const planHermes = (files: Files): SourcePlan => {
         planned.push({
             item: {
                 id: `file:${path}`,
-                target: "file",
+                group: "files",
                 label: `Note, ${path}`,
                 detail: `Lands in imports/hermes/${path}.`,
                 recommended: true,

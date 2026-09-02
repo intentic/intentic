@@ -1,4 +1,4 @@
-import type { MigrationSource } from "@intentic-app/api-contract";
+import type { AssistantSource } from "@intentic-app/api-contract";
 
 /* WHAT TO TELL SOMEONE WHOSE SETUP IS ON ANOTHER COMPUTER, the instructions the migration card renders, as
  * data, so the copy is testable and the card stays about layout.
@@ -29,7 +29,7 @@ export interface SourceGuide {
     readonly fallbackNote?: string;
 }
 
-export const SOURCE_GUIDES: Record<MigrationSource, SourceGuide> = {
+export const SOURCE_GUIDES: Record<AssistantSource, SourceGuide> = {
     hermes: {
         label: `Hermes`,
         folder: `.hermes`,

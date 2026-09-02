@@ -3,8 +3,10 @@
 How a person who already runs OpenClaw or Hermes Agent on their own hardware brings that life into an
 Intentic sandbox without re-typing it: two source adapters feeding one normalized migration plan, applied
 through the native provisioning paths that already exist, previewed before anything is written, and honest
-about what cannot move. This records the reasoning; §10 records what changed when the Hermes slice was built
-(`_sandbox/sandbox/src/migrations/`, the `/migrations/*` routes, and the card on Sandbox → Environment).
+about what cannot move. This records the reasoning; §10 records what changed when the Hermes slice was built,
+and §11 what changed again when this stopped being a surface of its own
+(`_sandbox/sandbox/src/migrations/` is the adapters; the pipeline they feed is `portability/arrival.ts`,
+the `/arrivals/*` routes, and one card on Sandbox → Environment).
 
 ## 1. The gap
 
@@ -19,7 +21,7 @@ Three surfaces already do import-shaped work, and none of them closes this:
 
 | Surface | What it does | Why it doesn't cover this |
 | --- | --- | --- |
-| `_sandbox/sandbox/src/portability/` (`POST /bundles/restore`) | Full sandbox export/import | Intentic→Intentic only; the tar layout and manifest are our own |
+| `_sandbox/sandbox/src/portability/` (bundle restore, then at `POST /bundles/restore`) | Full sandbox export/import | Intentic→Intentic only; the tar layout and manifest are our own |
 | `_editor/web/src/composables/extensions/memoryImport.ts` | "Run this prompt in your old assistant, paste the answer" → fenced merge into `CLAUDE.md`/`AGENTS.md` | Memory only; loses skills, crons, channels, models, secrets |
 | `_editor/web/src/components/ForticlientImport.vue` | Parse one foreign config file to prefill one capability card | The right *gesture* at 1/40th the scope |
 
@@ -35,11 +37,11 @@ the design below is mostly the discipline of reusing them.
 
 Worth restating before proposing anything, because together they kill most of the obvious designs.
 
-> Every decision is re-derived on the way in. `restore.ts` never trusts what the bundle says about itself.
->: `_sandbox/sandbox/src/portability/restore.ts`
+> Every decision is re-derived on the way in. The bundle reader never trusts what the bundle says about itself.
+>: `_sandbox/sandbox/src/portability/bundle-arrival.ts`
 
-> `needsAction` is the deliverable. The restore does not pretend to have made the target identical.
->: `restore.ts:actionsFor`
+> `needsAction` is the deliverable. Taking a bundle in does not pretend to have made the target identical.
+>: `bundle-arrival.ts:bundleActions`
 
 > A stored credential never enters the model's context.
 >: `_sandbox/sandbox/src/browser/accounts-tools.ts`
@@ -282,3 +284,40 @@ recognizes which tool packed the archive. Calls this doc made that the build cor
   90 minutes" is refused with the reason rather than approximated onto a rhythm the owner never chose.
   One-time `at` jobs are refused too: by import day they are jobs in the past. HEARTBEAT.md becomes one
   scheduled automation on the configured heartbeat interval, exactly as §5 planned.
+
+## 11. What changed again: this stopped being a surface (built)
+
+The design above was right about the crossing and wrong about where it lives. Built as specified, it produced
+a THIRD import feature beside two that already existed — apply a definition, restore a bundle — each with its
+own routes, its own schemas, its own held state and its own card on the same tab. Read side by side, the three
+were the same four moves (read the artifact, show what would land, take the ticked rows, say what is left) on
+different bytes, and the ways they differed were drift rather than judgement:
+
+- Two of the three previewed. The BUNDLE wrote on file pick, though it is the only one of the three that lands
+  *over* a workspace instead of beside it — the arrival most needing a checklist was the one without one.
+- The assistants asked about credentials at apply, on the way in. The bundle asked at EXPORT, on the way out,
+  of a different person at a different moment.
+- All three ended in a "what landed / what didn't / what still needs you" report, rendered three times from
+  three schemas whose only real difference was which words they used for the same three lists — including two
+  spellings of the same heading ("Finish the move", "Finish the arrival").
+
+So the ARTIFACT became a parser and everything else moved to one pipeline (`portability/arrival.ts`,
+`ArrivalPlan`/`ArrivalApply`/`ArrivalReport`). What this file describes is intact — the adapters, the pure
+planners, the native write paths, the refusals, the bounded in-memory read — and what changed is the frame
+around them:
+
+- **`migrations.ts` became `assistants.ts`**, a parser rather than a surface: recognize, read (from an upload
+  or straight off a connected computer), translate, write. The token, the held artifact and the report belong
+  to the pipeline, which does them once for all four sources.
+- **`MigrationItem` became `ArrivalItem`**, one row shape across the sources. `target` became `group` and grew
+  the definition's and bundle's own kinds; `applicable` came from the definition side (an assistant adapter
+  refuses during its walk instead, so it fills the field constantly — `AdapterRow` says so once).
+- **`POST /migrations/plan` became `POST /arrivals/plan`**, and it no longer needs to know the format: two
+  bytes say gzip or not, and a gzip's first tar entry says bundle or foreign home. Whoever is uploading
+  already knew what they had; asking them to pick a route for it was work with nothing on the other side.
+- **The card merged** into one "Bring a sandbox in", beside one "Take this sandbox elsewhere". The tab is
+  split by DIRECTION now instead of by artifact, which is the axis the owner actually has in mind.
+
+Nothing in §5–§9 was reversed by this. The bounded reader, the in-memory hold (a foreign home is a credential
+store and still never touches disk — only a bundle spools, because a bundle can be tens of gigabytes), the
+per-item failure unit, the fenced memory merge, the refusals: all kept, and now shared.

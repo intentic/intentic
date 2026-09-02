@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import {
-    DefinitionApplySchema,
+    ArrivalApplySchema,
+    ArrivalScanSchema,
     EngineChannelInputSchema,
     EngineRevertInputSchema,
     EngineUpdateInputSchema,
@@ -9,8 +10,6 @@ import {
     type GrantedRole,
     GrantedRoleSchema,
     MachineReportSchema,
-    MigrationApplySchema,
-    MigrationScanSchema,
     REQUEST_ID_HEADER,
     roleAtLeast,
     runnerTranslatorPath,
@@ -59,15 +58,14 @@ import { createChildrenRoutes } from "./children/children.routes.js";
 import { readEnvironmentContents } from "./environment/contents.js";
 import { opt } from "./agent/opt.js";
 import { enginesView, revertEngine, setChannel, updateEngine } from "./engines/engines.js";
-import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
 import { createDefinitions } from "./portability/apply-definition.js";
 import { DefinitionFormatError, emitDefinitionToml, settingsDefinition } from "./portability/definition.js";
 import { publishWorkspace, workspaceRemote, WorkspaceRemoteError } from "./portability/workspace-repo.js";
-import { BundleFormatError, restoreBundle } from "./portability/restore.js";
-import { MigrationFormatError } from "./migrations/archive.js";
-import { createMigrations } from "./migrations/migrations.js";
+import { createArrivals } from "./portability/arrival.js";
+import { ArrivalFormatError, ArrivalStaleError } from "./portability/arrival-error.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";
@@ -1196,44 +1194,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         });
     });
 
-    app.post("/bundles/restore", async (c) => {
-        const denied = await ownerDenied(c);
-        if (denied !== undefined) {
-            return denied;
-        }
-        const body = c.req.raw.body;
-        if (body === null) {
-            return c.json({ error: "empty body" }, 400);
-        }
-        try {
-            const report = await restoreBundle(
-                body,
-                { workspaceRoot: services.workspace.root, historyRoot: services.config.historyRoot },
-                MAX_UPLOAD_BYTES,
-            );
-            // The restore wrote manifests the daemon's own state is derived from (capabilities, the custom
-            // overlay section), so recompose before answering, the Environment card then renders the target's
-            // own composition, against ITS base image, instead of whatever the source last had.
-            await composeEnvironment(services);
-            services.history.notifyUserWrite();
-            return c.json(report);
-        } catch (error) {
-            if (error instanceof BundleFormatError) {
-                return c.json({ error: error.message }, 400);
-            }
-            if (error instanceof UploadTooLargeError) {
-                return c.json({ error: "bundle too large" }, 413);
-            }
-            throw error;
-        }
-    });
-
-    /* THE DEFINITION: the declarable shape of this sandbox as `sandbox.toml`, the reference half of what a
-     * bundle carries whole (portability/definition.ts). Owner-only like the bundles beside it: the derivation
-     * reads every connection's shape and every repo's remote, and the apply writes capabilities, settings and
-     * clones. Preview-first like the migrations below: `plan` parses a document into a checklist held in
-     * memory under a token, `apply` names the ticked ids, and `diff` answers where this sandbox stands
-     * relative to a file without writing anything at all. */
+    /* THE DEFINITION, OUTBOUND: the declarable shape of this sandbox as `sandbox.toml`, the reference half of
+     * what a bundle carries whole (portability/definition.ts). Owner-only like the bundle export beside it: the
+     * derivation reads every connection's shape and every repo's remote.
+     *
+     * TWO ROUTES, BOTH READS. Deriving the document and comparing against one write nothing; APPLYING one is an
+     * arrival, and lives with the other three arrivals below rather than in a plan/apply/report trio of its
+     * own that did the same job as the bundle's, differently. */
     const definitions = createDefinitions(services);
     app.get("/definition", async (c) => {
         const denied = await ownerDenied(c);
@@ -1241,39 +1208,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return denied;
         }
         return c.json(await definitions.derive());
-    });
-    app.post("/definition/plan", async (c) => {
-        const denied = await ownerDenied(c);
-        if (denied !== undefined) {
-            return denied;
-        }
-        try {
-            return c.json(await definitions.plan(await c.req.text()));
-        } catch (error) {
-            if (error instanceof DefinitionFormatError) {
-                return c.json({ error: error.message }, 400);
-            }
-            throw error;
-        }
-    });
-    app.post("/definition/apply", async (c) => {
-        const denied = await ownerDenied(c);
-        if (denied !== undefined) {
-            return denied;
-        }
-        const parsed = DefinitionApplySchema.safeParse(await c.req.json().catch(() => undefined));
-        if (!parsed.success) {
-            return c.json({ error: "expected { token, items }" }, 400);
-        }
-        try {
-            return c.json(await definitions.apply(parsed.data));
-        } catch (error) {
-            // A stale/consumed token is the caller's staleness, not breakage: 409 so the UI re-uploads.
-            if (error instanceof DefinitionFormatError) {
-                return c.json({ error: error.message }, 409);
-            }
-            throw error;
-        }
     });
     app.post("/definition/diff", async (c) => {
         const denied = await ownerDenied(c);
@@ -1288,13 +1222,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }
             throw error;
         }
-    });
-    app.delete("/definition/plan", async (c) => {
-        const denied = await ownerDenied(c);
-        if (denied !== undefined) {
-            return denied;
-        }
-        return c.json({ ok: definitions.abandon() });
     });
 
     /* THE WORKSPACE REPO, the half of the definition a document cannot supply for itself: `[workspace]` names a
@@ -1330,13 +1257,34 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
     });
 
-    /* MIGRATIONS: importing a FOREIGN assistant's setup (a packed `~/.hermes`), preview-first. Raw Hono beside
-     * the bundle routes for the same reason they are, the plan's input is an upload stream, and owner-only
-     * throughout: the archive is somebody's credential store and the apply writes settings, skills, automations
-     * and capabilities. Two calls: `plan` parses the upload into a checklist and holds it in memory under a
-     * token; `apply` names the ticked ids. See migrations/migrations.ts for why nothing is held on disk. */
-    const migrations = createMigrations(services);
-    app.post("/migrations/plan", async (c) => {
+    /* ARRIVALS: everything coming INTO this sandbox, through one preview-first pipeline
+     * (portability/arrival.ts). A `sandbox.toml`, an environment bundle, a packed Hermes or OpenClaw home
+     * directory — three surfaces once, with three sets of routes and three sets of schemas doing the same four
+     * things to different bytes.
+     *
+     * Raw Hono rather than oRPC because a plan's input is an upload STREAM of arbitrary size, and owner-only
+     * throughout: the artifact may be somebody's credential store, and the apply writes repositories, settings,
+     * skills, automations, capabilities and, for a bundle, the workspace itself.
+     *
+     * FOUR CALLS, AND THE FORMAT IS NOT ONE OF THEM. `plan` sniffs the upload and answers with a checklist,
+     * `scan` reads a connected computer instead of a file, `apply` names the ticked ids, DELETE throws the
+     * held artifact away. Whoever is uploading knows what they have; the daemon can tell from two bytes and
+     * the first tar header, so asking them to pick a route for it was work with nothing on the other side. */
+    const arrivals = createArrivals(services);
+    // The two ways a caller can be wrong, told apart, because the answers differ: a file that is not what it
+    // claims is a 400 with the reader's own sentence, while a token that no longer matches means the FILE was
+    // fine and the preview went stale, which is a 409 and a re-read.
+    const arrivalFailed = (error: unknown): { readonly error: string; readonly status: 400 | 409 | 413 } | undefined => {
+        if (error instanceof ArrivalStaleError) {
+            return { error: error.message, status: 409 };
+        }
+        if (error instanceof ArrivalFormatError) {
+            return { error: error.message, status: 400 };
+        }
+        return error instanceof UploadTooLargeError ? { error: "that arrival is too large", status: 413 } : undefined;
+    };
+
+    app.post("/arrivals/plan", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
@@ -1346,67 +1294,69 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "empty body" }, 400);
         }
         try {
-            return c.json(await migrations.plan(body, MAX_UPLOAD_BYTES));
+            return c.json(await arrivals.plan(body, MAX_UPLOAD_BYTES));
         } catch (error) {
-            if (error instanceof MigrationFormatError) {
-                return c.json({ error: error.message }, 400);
+            const failed = arrivalFailed(error);
+            if (failed === undefined) {
+                throw error;
             }
-            throw error;
+            return c.json({ error: failed.error }, failed.status);
         }
     });
-    /* The owner's own computers as import sources, probed live, because the whole value is that the offer
+    /* The owner's own computers as arrival sources, probed live, because the whole value is that the offer
      * appears BEFORE they read a packing instruction. Never fails the card: a machine that is asleep or holds
      * nothing is a row saying so, which is why every probe is caught into its own `detail`. */
-    app.get("/migrations/hosts", async (c) => {
+    app.get("/arrivals/hosts", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        return c.json({ hosts: await migrations.hosts() });
+        return c.json({ hosts: await arrivals.hosts() });
     });
-    app.post("/migrations/scan", async (c) => {
+    app.post("/arrivals/scan", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        const parsed = MigrationScanSchema.safeParse(await c.req.json().catch(() => undefined));
+        const parsed = ArrivalScanSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!parsed.success) {
             return c.json({ error: "expected { host }" }, 400);
         }
         try {
-            return c.json(await migrations.scan(parsed.data.host));
+            return c.json(await arrivals.scan(parsed.data.host));
         } catch (error) {
-            if (error instanceof MigrationFormatError) {
-                return c.json({ error: error.message }, 400);
+            const failed = arrivalFailed(error);
+            if (failed === undefined) {
+                throw error;
             }
-            throw error;
+            return c.json({ error: failed.error }, failed.status);
         }
     });
-    app.post("/migrations/apply", async (c) => {
+    app.post("/arrivals/apply", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        const parsed = MigrationApplySchema.safeParse(await c.req.json().catch(() => undefined));
+        const parsed = ArrivalApplySchema.safeParse(await c.req.json().catch(() => undefined));
         if (!parsed.success) {
             return c.json({ error: "expected { token, items, includeSecrets }" }, 400);
         }
         try {
-            return c.json(await migrations.apply(parsed.data));
+            return c.json(await arrivals.apply(parsed.data));
         } catch (error) {
-            // A stale/consumed token is the caller's staleness, not breakage: 409 so the UI re-uploads.
-            if (error instanceof MigrationFormatError) {
-                return c.json({ error: error.message }, 409);
+            const failed = arrivalFailed(error);
+            if (failed === undefined) {
+                throw error;
             }
-            throw error;
+            return c.json({ error: failed.error }, failed.status);
         }
     });
-    app.delete("/migrations", async (c) => {
+    app.delete("/arrivals", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        return c.json({ ok: migrations.abandon() });
+        return c.json({ ok: await arrivals.abandon() });
     });
 
     // An extension's prebuilt ESM bundle, raw JS bytes, so a plain Hono route like /environment (oRPC is for

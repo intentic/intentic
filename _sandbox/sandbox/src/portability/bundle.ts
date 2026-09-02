@@ -7,6 +7,7 @@ import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from 
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { pack, type Pack } from "tar-stream";
 import type { Services } from "../composition.js";
+import { discoverRepos } from "../workspace/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition } from "./definition.js";
 
@@ -166,14 +167,20 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
              * this daemon cannot rewrite must not be the thing that fails an export. */
             await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
             /* The manifest EMBEDS the sandbox definition, the same document GET /definition emits: a bundle is
-             * definition + state, so the restore report reasons over facts either export door delivers. What
+             * definition + state, so the arrival report reasons over facts either export door delivers. What
              * the definition could not express (a remoteless repo) is no loss HERE, the bundle's own tar
-             * carries those repos' git dirs whole. */
+             * carries those repos' git dirs whole.
+             *
+             * `repos` is the same walk the pack below is filtered by, so the manifest and the tar can never
+             * disagree about which repositories are inside. That agreement is what makes a bundle previewable:
+             * the arrival offers one tick per repository, and it can only name them because this list arrives
+             * before the entries do (definition.ts argues the field on the schema). */
             const manifest: BundleManifest = {
-                version: 2,
+                version: 3,
                 ...(services.config.sandbox.name === "" ? {} : { sandbox: { name: services.config.sandbox.name } }),
                 createdAt: options.now,
                 secrets: options.secrets,
+                repos: (await discoverRepos(services.workspace.root)).toSorted(),
                 definition: (await deriveDefinition(services)).definition,
                 excluded: excludedEntries(options.secrets),
             };

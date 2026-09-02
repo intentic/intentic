@@ -3,7 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import {
     type Capability,
     CapabilitySchema,
-    type DefinitionAction,
+    type NeedsAction,
     type DefinitionRepository,
     type DefinitionWorkspace,
     type SandboxDefinition,
@@ -12,6 +12,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
 import { parse } from "smol-toml";
+import { ArrivalFormatError } from "./arrival-error.js";
 import type { Services } from "../composition.js";
 import { baseImageOf, customPath } from "../environment/environment.js";
 import { remoteState } from "../git/remote.js";
@@ -35,7 +36,7 @@ import { discoverRepos } from "../workspace/repo-discovery.js";
 // What the emitted file is called wherever one lands (downloads, a repo, the boot seed's description).
 export const DEFINITION_FILE = "sandbox.toml";
 
-export class DefinitionFormatError extends Error {}
+export class DefinitionFormatError extends ArrivalFormatError {}
 
 /* ---- the coverage lists: every versioned config manifest is placed, or the guard fails ----
  *
@@ -141,7 +142,7 @@ const referenceOf = async (dir: string): Promise<{ remote: string; ref?: string 
 const unreferenceable = (found: { remote: string; ref?: string } | Unreferenceable): found is Unreferenceable => "problem" in found;
 
 // One repo as a reference, or the reason it cannot be one.
-const repositoryOf = async (root: string, id: string): Promise<{ repo?: DefinitionRepository; omitted?: DefinitionAction }> => {
+const repositoryOf = async (root: string, id: string): Promise<{ repo?: DefinitionRepository; omitted?: NeedsAction }> => {
     const found = await referenceOf(join(root, id));
     if (!unreferenceable(found)) {
         return { repo: { id, ...found } };
@@ -160,7 +161,7 @@ const repositoryOf = async (root: string, id: string): Promise<{ repo?: Definiti
 /* The workspace repo itself. Its refusal is the discoverability of the whole `[workspace]` feature: an owner
  * who has never published /work reads, on the card, exactly what publishing would buy them and what the
  * document is missing without it. */
-const workspaceOf = async (root: string): Promise<{ workspace?: DefinitionWorkspace; omitted?: DefinitionAction }> => {
+const workspaceOf = async (root: string): Promise<{ workspace?: DefinitionWorkspace; omitted?: NeedsAction }> => {
     const found = await referenceOf(root);
     if (!unreferenceable(found)) {
         return { workspace: found };
@@ -189,9 +190,9 @@ const settledSettings = (current: Record<string, unknown>): Record<string, unkno
 /* Derive the definition from the live stores, plus the list of what could not be expressed. The `omitted`
  * list is the definition's version of the bundle manifest's `excluded`: what turns "the export skipped
  * things" from a silence into lines the owner can act on. */
-export const deriveDefinition = async (services: Services): Promise<{ definition: SandboxDefinition; omitted: DefinitionAction[] }> => {
+export const deriveDefinition = async (services: Services): Promise<{ definition: SandboxDefinition; omitted: NeedsAction[] }> => {
     await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
-    const omitted: DefinitionAction[] = [];
+    const omitted: NeedsAction[] = [];
     // The workspace first, in the document and in the omissions: it is the section that decides whether the
     // sandbox's own way of working travels at all, so an owner reading the export's refusals reads it first.
     const { workspace, omitted: workspaceSkip } = await workspaceOf(services.workspace.root);
@@ -265,11 +266,11 @@ export const settingsDefinition = async (services: Services): Promise<SandboxDef
  * definitionDiff for its wording alone: that surface speaks of "the definition" a person uploaded, while these
  * lines sit on a runner's card where the two sides are the parent and the runner. Same defaults rule — a key
  * absent on either side means that side runs the default, so omission never reads as drift against a default. */
-export const settingsDrift = (parent: SandboxDefinition, runner: SandboxDefinition): DefinitionAction[] => {
+export const settingsDrift = (parent: SandboxDefinition, runner: SandboxDefinition): NeedsAction[] => {
     const defaults = SandboxSettingsSchema.parse({}) as Record<string, unknown>;
     const parentSettings = parent.settings as Record<string, unknown>;
     const runnerSettings = runner.settings as Record<string, unknown>;
-    const differences: DefinitionAction[] = [];
+    const differences: NeedsAction[] = [];
     for (const key of [...new Set([...Object.keys(parentSettings), ...Object.keys(runnerSettings)])].toSorted()) {
         const here = parentSettings[key] ?? defaults[key];
         const there = runnerSettings[key] ?? defaults[key];
@@ -334,7 +335,7 @@ const tomlBlock = (value: string): string => {
 /* Every emitted document is the READER'S file: they commit it, hand-edit it, apply it somewhere else. Nothing
  * here is ever written back into this sandbox, so no copy carries a "managed, your edits will be overwritten"
  * header — there is no copy that would be true of. */
-export const emitDefinitionToml = (definition: SandboxDefinition, omitted: readonly DefinitionAction[] = []): string => {
+export const emitDefinitionToml = (definition: SandboxDefinition, omitted: readonly NeedsAction[] = []): string => {
     const lines: string[] = [
         "# Intentic sandbox definition: the declarable shape of a sandbox, safe to publish.",
         "# Apply it to an empty sandbox from the Environment tab. Secret NAMES travel, values never do;",
@@ -476,8 +477,8 @@ const trimmed = (value: string | undefined): string => (value ?? "").trim();
 const reference = (found: { readonly remote: string; readonly ref?: string | undefined }): string =>
     `${found.remote}${found.ref === undefined ? "" : ` @ ${found.ref}`}`;
 
-export const definitionDiff = (current: SandboxDefinition, target: SandboxDefinition): DefinitionAction[] => {
-    const differences: DefinitionAction[] = [];
+export const definitionDiff = (current: SandboxDefinition, target: SandboxDefinition): NeedsAction[] => {
+    const differences: NeedsAction[] = [];
     if (trimmed(target.environment.dockerfile) !== trimmed(current.environment.dockerfile)) {
         differences.push({
             subject: "Environment overlay",

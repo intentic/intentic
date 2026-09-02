@@ -168,19 +168,29 @@ const contents = [
     </p>
     <p>Everything else — designs, drafts, personas, skills, notes — waits for a person to open it, so it lands as it is.</p>
 
-    <h2>Download, apply or compare</h2>
-    <p>Open <strong>Sandbox → Environment → Sandbox definition</strong>. The three actions have deliberately different effects:</p>
+    <h2>Download, bring in, or compare</h2>
+    <p>
+        Open <strong>Sandbox → Environment</strong>. The tab is split by direction, so a definition is not a card of its own: it is one of
+        the things you can take out, and one of the things you can bring in.
+    </p>
     <ul>
-        <li><strong>Download sandbox.toml</strong> derives the current file and names anything omitted from it.</li>
         <li>
-            <strong>Apply a definition</strong> parses the file into a checklist. Applicable items start selected; existing repo paths and
-            connection ids are marked “already here” and are never overwritten.
+            <strong>Take this sandbox elsewhere → Download sandbox.toml</strong> derives the current file and names anything omitted from
+            it. The button beside it exports a bundle instead, which is the same document plus the bytes nothing can reference.
         </li>
-        <li><strong>Compare against one</strong> writes nothing. It returns one line per difference, or says the sandbox is in agreement.</li>
+        <li>
+            <strong>Take this sandbox elsewhere → Compare against one</strong> writes nothing. It returns one line per difference, or says
+            the sandbox is in agreement.
+        </li>
+        <li>
+            <strong>Bring a sandbox in → Choose a file</strong> takes the definition and parses it into a checklist. Applicable items start
+            selected; existing repo paths and connection ids are marked “already here” and are never overwritten. The same picker takes an
+            environment bundle or a packed Hermes/OpenClaw folder — you do not tell it which you have, it reads the file and says.
+        </li>
     </ul>
     <p>
-        Apply is preview-first. The daemon holds the exact parsed file behind a short-lived plan token, then re-derives the selected items
-        from those held bytes when you confirm. The browser cannot alter the reviewed plan on the way back.
+        Bringing one in is preview-first, whatever it was. The daemon holds the exact artifact behind a short-lived plan token, then
+        re-derives the selected items from those held bytes when you confirm. The browser cannot alter the reviewed plan on the way back.
     </p>
 
     <h2>Consent does not travel</h2>

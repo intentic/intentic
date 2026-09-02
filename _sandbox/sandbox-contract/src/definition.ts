@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DefinitionActionSchema } from "./definition-action.js";
+import { NeedsActionSchema } from "./needs-action.js";
 import { CapabilitySchema } from "./schemas/capabilities.js";
 import { SandboxSettingsSchema } from "./schemas/settings.js";
 
@@ -105,66 +105,28 @@ export const SandboxDefinitionSchema = z.strictObject({
 });
 export type SandboxDefinition = z.infer<typeof SandboxDefinitionSchema>;
 
-// One "do this by hand" line, the same honesty unit ImportReportSchema carries: a subject the UI bolds and a
-// detail written as an instruction to the owner. Defined in its own leaf module (definition-action.ts says
-// why) and re-exported here, where every consumer of the definition surface finds it.
-export { DefinitionActionSchema, type DefinitionAction } from "./definition-action.js";
+// One "do this by hand" line, the honesty unit the arrival surface carries too: a subject the UI bolds and a
+// detail written as an instruction to the owner. Defined in its own leaf module (needs-action.ts says why)
+// and re-exported here, where every consumer of the definition surface finds it.
+export { NeedsActionSchema, type NeedsAction } from "./needs-action.js";
 
 // What GET /definition answers: the emitted TOML, plus what the derivation could not express (a repo with no
 // remote), listed rather than silent, the export's own `excluded` discipline.
 export const DefinitionExportSchema = z.object({
     toml: z.string(),
-    omitted: z.array(DefinitionActionSchema),
+    omitted: z.array(NeedsActionSchema),
 });
 export type DefinitionExport = z.infer<typeof DefinitionExportSchema>;
 
-// One appliable piece of a held definition, the checklist row the owner ticks. Mirrors MigrationItemSchema's
-// role; the ids are deterministic ("repo:intentic", "capability:github") so the re-derived apply names the
-// same items the owner reviewed.
-export const DefinitionItemSchema = z.object({
-    id: z.string(),
-    kind: z.enum(["workspace", "repo", "capability", "environment", "settings"]),
-    label: z.string(),
-    detail: z.string().optional(),
-    /* False when the target already holds this piece (the repo's directory exists, a capability with that id
-     * exists): a definition lands BESIDE what is there, never over it, so an inapplicable item renders greyed
-     * with its reason rather than disappearing. */
-    applicable: z.boolean(),
-    reason: z.string().optional(),
-});
-export type DefinitionItem = z.infer<typeof DefinitionItemSchema>;
-
-export const DefinitionPlanSchema = z.object({
-    // Names the held definition for the apply call. Minted per plan; a new plan replaces the held one.
-    token: z.string(),
-    name: z.string().optional(),
-    items: z.array(DefinitionItemSchema),
-    // What is already known not to move mechanically (credentials to enter, an overlay to approve), surfaced
-    // at PREVIEW time so the owner ticks with open eyes, the migration surface's rule.
-    needsAction: z.array(DefinitionActionSchema),
-});
-export type DefinitionPlan = z.infer<typeof DefinitionPlanSchema>;
-
-export const DefinitionApplySchema = z.object({
-    token: z.string(),
-    // The ticked item ids. Ids the re-derived plan does not contain are ignored rather than erroring.
-    items: z.array(z.string()),
-});
-export type DefinitionApply = z.infer<typeof DefinitionApplySchema>;
-
-export const DefinitionReportSchema = z.object({
-    applied: z.array(z.object({ id: z.string(), label: z.string() })),
-    // Ticked and did not land, each with the reason (a clone that failed, a full disk). Distinct from
-    // inapplicable items, which were never attempted.
-    failed: z.array(z.object({ id: z.string(), label: z.string(), error: z.string() })),
-    needsAction: z.array(DefinitionActionSchema),
-});
-export type DefinitionReport = z.infer<typeof DefinitionReportSchema>;
+/* APPLYING one is not here. A definition is one of four things that can ARRIVE in a sandbox, and it lands
+ * through the shared pipeline in arrival.ts (ArrivalPlan → ArrivalApply → ArrivalReport) rather than through
+ * a plan/apply/report trio of its own. What stays on this file is the outbound half and the read: deriving
+ * the document, and where this sandbox stands relative to one. */
 
 // Where this sandbox stands relative to a definition: one line per difference, empty when they agree. The
 // drift answer, computable because the emitter is deterministic.
 export const DefinitionDiffSchema = z.object({
-    differences: z.array(DefinitionActionSchema),
+    differences: z.array(NeedsActionSchema),
 });
 export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
 
@@ -213,18 +175,28 @@ export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;
  * A bundle is DEFINITION + STATE: its manifest embeds the same definition `GET /definition` emits, and the
  * tar entries behind it carry what no definition can reference (git dirs, transcripts, ledgers). One schema,
  * two doors, which is what keeps the two formats from drifting into different answers about what an
- * environment IS. Version 2 replaced the ad-hoc `environment` facts block with the definition; a v1 bundle is
- * refused by version rather than guessed at, like any other manifest this daemon cannot read.
+ * environment IS. A manifest whose version this daemon does not know is refused rather than guessed at.
+ *
+ * Version 3 added `repos`, and it is the field that made a bundle previewable. Taking one in is now a plan
+ * the owner ticks (arrival.ts), and a plan has to say what is in the tar BEFORE the tar is read: which
+ * repositories a bundle carries could previously only be learned by walking every entry, because
+ * `definition.repositories` lists only the ones that HAVE a remote to be named by. A bundle that cannot
+ * describe its own contents can only be offered whole, which is exactly the all-or-nothing this replaced.
  */
 export const BundleManifestSchema = z.object({
     // Bumped when the layout changes in a way an older daemon would misread. Refused rather than guessed at.
-    version: z.literal(2),
+    version: z.literal(3),
     // Where it came from, for the report's first line. Never used to authorize anything.
     sandbox: z.object({ name: z.string() }).optional(),
     createdAt: z.number(),
     // The owner's export-time choice; the restorer re-derives every decision from the manifests rather than
     // trusting this, and uses it only to explain what is missing.
     secrets: z.boolean(),
+    /* Every repository whose real git dir rides in this bundle, by workspace id — INCLUDING the ones no
+     * definition can name, which is the point: a repo with no remote is invisible to `definition.repositories`
+     * and is precisely the one an owner most wants carried by bytes. "root" is not listed; the workspace repo
+     * itself is not a nested repository and travels with the workspace files. */
+    repos: z.array(z.string()),
     // The declarable shape, exactly what a definition export emits, so the restore report reasons over the
     // same facts either door delivers.
     definition: SandboxDefinitionSchema,

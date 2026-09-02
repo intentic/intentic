@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Automation, type Capability, type MigrationReport, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
+import { type ArrivalReport, type Automation, type Capability, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
 import type { PlannedItem, SourcePlan } from "./adapter-shared.js";
 import { mergeFenced } from "./merge.js";
 
@@ -55,10 +55,10 @@ export const applyMigration = async (
     deps: MigrationDeps,
     plan: SourcePlan,
     selection: { readonly items: readonly string[]; readonly includeSecrets: boolean },
-): Promise<MigrationReport> => {
+): Promise<ArrivalReport> => {
     const wanted = new Set(selection.items);
-    const applied: MigrationReport["applied"] = [];
-    const failed: MigrationReport["failed"] = [];
+    const applied: ArrivalReport["applied"] = [];
+    const failed: ArrivalReport["failed"] = [];
     const needsAction = [...plan.needsAction];
     const withheld: string[] = [];
 
@@ -117,7 +117,7 @@ export const applyMigration = async (
         }
         try {
             await applyOne(planned);
-            applied.push({ id: planned.item.id, target: planned.item.target, label: planned.item.label });
+            applied.push({ id: planned.item.id, group: planned.item.group, label: planned.item.label });
         } catch (error) {
             failed.push({ id: planned.item.id, label: planned.item.label, error: errorMessage(error) });
         }

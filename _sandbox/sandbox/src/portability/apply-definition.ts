@@ -1,16 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import {
-    type DefinitionAction,
-    type DefinitionApply,
-    type DefinitionExport,
+    type ArrivalItem,
+    type ArrivalReport,
     type DefinitionDiff,
-    type DefinitionItem,
-    type DefinitionPlan,
-    type DefinitionReport,
+    type DefinitionExport,
+    type NeedsAction,
     type SandboxDefinition,
     SandboxSettingsSchema,
 } from "@intentic/sandbox-contract";
@@ -19,17 +16,18 @@ import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment, draftsDir } from "../environment/environment.js";
 import { repoGitDir } from "../history/history.js";
 import { isValidRepoId } from "../workspace/repo-discovery.js";
-import { definitionDiff, DefinitionFormatError, deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
+import { definitionDiff, deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
 import { adoptWorkspaceRemote, workspaceIsPristine, workspaceRemoteUrl } from "./workspace-repo.js";
 
-/* APPLYING A DEFINITION, preview-first, through the same native write paths the product's own surfaces use.
+/* A DEFINITION ARRIVING, as one of the four sources the arrival pipeline reads (portability/arrival.ts holds
+ * the pipeline; this file is the parser and the apply loop for `sandbox.toml`).
  *
- * The migration surface's rules, kept on purpose (migrations/migrations.ts argues each): ONE held definition
- * at a time, in memory, under a token; the APPLY RE-DERIVES the checklist from the held document and honors
- * the ticked ids against that, never against the wire plan the browser rendered; and nothing lands verbatim,
- * a repo arrives through the daemon's own clone (separate git dir and all), a capability through the manifest
- * store, settings through the settings store, so everything an applied definition creates is editable and
- * deletable in the ordinary UI the day after.
+ * The rules the pipeline enforces on every source, argued here first: ONE held artifact at a time, under a
+ * token; the APPLY RE-DERIVES the checklist from the held document and honors the ticked ids against that,
+ * never against the wire plan the browser rendered; and nothing lands verbatim, a repo arrives through the
+ * daemon's own clone (separate git dir and all), a capability through the manifest store, settings through
+ * the settings store, so everything an applied definition creates is editable and deletable in the ordinary
+ * UI the day after.
  *
  * TWO THINGS ARE DELIBERATELY WEAKER THAN THEY COULD BE. A definition lands BESIDE what a sandbox already
  * has, never over it: an existing repo directory or capability id renders its item inapplicable with the
@@ -43,18 +41,27 @@ const strippedSettings = (definition: SandboxDefinition): Record<string, unknown
 
 const dockerfileOf = (definition: SandboxDefinition): string => (definition.environment.dockerfile ?? "").trim();
 
-// The checklist, derived fresh on every call so plan and apply cannot disagree about what is applicable.
-const itemsOf = async (services: Services, definition: SandboxDefinition): Promise<DefinitionItem[]> => {
-    const items: DefinitionItem[] = [];
+/* The checklist, derived fresh on every call so plan and apply cannot disagree about what is applicable.
+ *
+ * Every row is `recommended` and carries no `secrets`, and both are true by construction rather than by
+ * choice: a definition states a shape its owner already decided on, so there is nothing here to advise
+ * against, and it carries secret NAMES only, so the apply's credential consent has nothing to gate. The two
+ * fields exist for the sources where they do vary (an assistant's home directory), and stating them flatly
+ * here is what lets one checklist render all four. */
+export const definitionItems = async (services: Services, definition: SandboxDefinition): Promise<ArrivalItem[]> => {
+    const items: ArrivalItem[] = [];
+    const row = (
+        entry: Omit<ArrivalItem, "recommended" | "secrets"> & { readonly recommended?: boolean },
+    ): ArrivalItem => ({ recommended: true, secrets: [], ...entry });
     /* The workspace FIRST, in the checklist and therefore in the apply loop: it materializes a whole tree, and
      * a repo cloned before it would be a directory that tree could not be checked out over. */
     const workspace = definition.workspace;
     if (workspace !== undefined) {
         const published = await workspaceRemoteUrl(services.workspace.root);
         const pristine = await workspaceIsPristine(services.workspace.root);
-        items.push({
+        items.push(row({
             id: "workspace",
-            kind: "workspace",
+            group: "workspace",
             label: "The workspace itself",
             detail: `${workspace.remote}${workspace.ref === undefined ? "" : ` @ ${workspace.ref}`}; its notes, skills, personas, designs and approvals land in /work`,
             applicable: published === undefined && pristine,
@@ -63,14 +70,14 @@ const itemsOf = async (services: Services, definition: SandboxDefinition): Promi
                 : pristine
                   ? {}
                   : { reason: "this workspace already has a history of its own; a definition lands beside what is there, never over it" }),
-        });
+        }));
     }
     for (const repo of definition.repositories) {
         const invalid = !isValidRepoId(repo.id);
         const exists = !invalid && existsSync(join(services.workspace.root, repo.id));
-        items.push({
+        items.push(row({
             id: `repo:${repo.id}`,
-            kind: "repo",
+            group: "repo",
             label: `Repository ${repo.id}`,
             detail: `${repo.remote}${repo.ref === undefined ? "" : ` @ ${repo.ref}`}`,
             applicable: !invalid && !exists,
@@ -79,45 +86,45 @@ const itemsOf = async (services: Services, definition: SandboxDefinition): Promi
                 : exists
                   ? { reason: "already in the workspace; a definition lands beside what is there, never over it" }
                   : {}),
-        });
+        }));
     }
     if (dockerfileOf(definition) !== "") {
-        items.push({
+        items.push(row({
             id: "environment",
-            kind: "environment",
+            group: "environment",
             label: "Environment overlay",
             detail: "Lands as a proposal on the Environment card; nothing builds until you approve it and rebuild.",
             applicable: true,
-        });
+        }));
     }
     for (const capability of definition.capabilities) {
         const exists = (await services.capabilities.get(capability.id)) !== undefined;
-        items.push({
+        items.push(row({
             id: `capability:${capability.id}`,
-            kind: "capability",
+            group: "capability",
             label: `Connection ${capability.id}`,
             detail: `${capability.kind}; lands unauthenticated, waiting for its credential`,
             applicable: !exists,
             ...(exists ? { reason: "a connection with this id already exists" } : {}),
-        });
+        }));
     }
     const settingsKeys = Object.keys(strippedSettings(definition)).toSorted();
     if (settingsKeys.length > 0) {
-        items.push({
+        items.push(row({
             id: "settings",
-            kind: "settings",
+            group: "settings",
             label: "Agent settings",
             detail: settingsKeys.join(", "),
             applicable: true,
-        });
+        }));
     }
     return items;
 };
 
-// What no apply can do for the owner, stated at PREVIEW time and again on the report, the import report's
+// What no apply can do for the owner, stated at PREVIEW time and again on the report, the arrival pipeline's
 // honesty rule: a list that looks complete is worse than one that is visibly missing.
-const actionsFor = (definition: SandboxDefinition): DefinitionAction[] => {
-    const actions: DefinitionAction[] = [];
+export const definitionActions = (definition: SandboxDefinition): NeedsAction[] => {
+    const actions: NeedsAction[] = [];
     /* Said at PREVIEW time, before the tree is fetched and therefore before anyone can know WHICH things it
      * carries: a workspace repo is authored content, and the parts of it that act unattended land off. The
      * report replaces this with the specific list of what was actually switched off. */
@@ -148,31 +155,31 @@ const actionsFor = (definition: SandboxDefinition): DefinitionAction[] => {
     return actions;
 };
 
-/* One pass over the applicable, picked items. Exported apart from the surface because the boot seed
+/* One pass over the applicable, picked items. Exported apart from the arrival surface because the boot seed
  * (main.ts's definitionSeed step) applies everything applicable with no browser in the loop; the report it
  * returns is the same shape either caller logs or renders. */
 export const applyDefinitionItems = async (
     services: Services,
     definition: SandboxDefinition,
-    pick: (item: DefinitionItem) => boolean,
-): Promise<DefinitionReport> => {
-    const items = await itemsOf(services, definition);
-    const applied: DefinitionReport["applied"] = [];
-    const failed: DefinitionReport["failed"] = [];
+    pick: (item: ArrivalItem) => boolean,
+): Promise<ArrivalReport> => {
+    const items = await definitionItems(services, definition);
+    const applied: ArrivalReport["applied"] = [];
+    const failed: ArrivalReport["failed"] = [];
     // What the workspace arrival switched off, learned only by doing it, so it rides back on the report
     // beside the actions the document could predict.
-    const gated: DefinitionAction[] = [];
+    const gated: NeedsAction[] = [];
     /* Whether the `[environment]` item is going to park this definition's overlay as a proposal anyway. When it
      * is, a workspace checkout carrying the identical custom section must not park a SECOND copy: the two are
      * derived from the same file on the source, and the composed proposal would install everything twice. */
-    const overlayHandledBySection = items.some((item) => item.kind === "environment" && item.applicable && pick(item));
+    const overlayHandledBySection = items.some((item) => item.group === "environment" && item.applicable && pick(item));
     let touchedCapabilities = false;
     for (const item of items) {
         if (!item.applicable || !pick(item)) {
             continue;
         }
         try {
-            if (item.kind === "workspace") {
+            if (item.group === "workspace") {
                 const workspace = definition.workspace;
                 if (workspace === undefined) {
                     throw new Error("the held definition no longer names a workspace");
@@ -182,7 +189,7 @@ export const applyDefinitionItems = async (
                 // The tree may have delivered a capability manifest, which reaches the composed overlay and
                 // the endpoint translator exactly as an upserted capability does; converge once after the loop.
                 touchedCapabilities = true;
-            } else if (item.kind === "repo") {
+            } else if (item.group === "repo") {
                 const repo = definition.repositories.find((entry) => `repo:${entry.id}` === item.id);
                 if (repo === undefined) {
                     throw new Error("the held definition no longer names this repository");
@@ -194,11 +201,11 @@ export const applyDefinitionItems = async (
                     ...(repo.ref === undefined ? {} : { branch: repo.ref }),
                     separateGitDir: repoGitDir(services.config.historyRoot, repo.id),
                 });
-            } else if (item.kind === "environment") {
+            } else if (item.group === "environment") {
                 // The draft path, not the approved custom section: composeEnvironment folds drafts into the
                 // proposal the owner reviews, which is the approval gate this surface promises.
                 await services.files.write(join(draftsDir(services), "definition.Dockerfile"), `${dockerfileOf(definition)}\n`);
-            } else if (item.kind === "capability") {
+            } else if (item.group === "capability") {
                 const capability = definition.capabilities.find((entry) => `capability:${entry.id}` === item.id);
                 if (capability === undefined) {
                     throw new Error("the held definition no longer names this connection");
@@ -212,7 +219,7 @@ export const applyDefinitionItems = async (
                 const merged = SandboxSettingsSchema.parse({ ...(await services.sandboxSettings.get()), ...strippedSettings(definition) });
                 await services.sandboxSettings.set(merged);
             }
-            applied.push({ id: item.id, label: item.label });
+            applied.push({ id: item.id, group: item.group, label: item.label });
         } catch (error) {
             failed.push({ id: item.id, label: item.label, error: errorMessage(error) });
         }
@@ -224,7 +231,9 @@ export const applyDefinitionItems = async (
         await syncEndpointCompat(services);
     }
     services.history.notifyUserWrite();
-    return { applied, failed, needsAction: [...actionsFor(definition), ...gated] };
+    // `refused` is empty and stays empty: a definition is a document this daemon parsed in full or rejected
+    // outright, so there is no class of "saw it, will not offer it" the way a tar or a foreign home has.
+    return { applied, failed, refused: [], needsAction: [...definitionActions(definition), ...gated] };
 };
 
 /* The RUNNER'S way of taking a definition's settings: REPLACE, not the merge-beside applyDefinitionItems does.
@@ -238,53 +247,26 @@ export const adoptDefinitionSettings = async (services: Services, definition: Sa
     return Object.keys(stripped).toSorted();
 };
 
+/* THE TWO VERBS THAT ARE NOT AN ARRIVAL, and the reason this interface is now two functions rather than six.
+ * Deriving the document and comparing against one both READ: one emits what this sandbox is, the other says
+ * where it stands relative to a file, and neither writes a byte. Applying one is the arrival pipeline's, and
+ * moving it there is what stopped `sandbox.toml` having a plan/apply/report trio that did the same job as the
+ * bundle's, differently. */
 export interface Definitions {
     // The live sandbox as sandbox.toml, derived on every call, never stored.
     readonly derive: () => Promise<DefinitionExport>;
-    readonly plan: (toml: string) => Promise<DefinitionPlan>;
-    readonly apply: (input: DefinitionApply) => Promise<DefinitionReport>;
     // Where this sandbox stands relative to a definition file, one line per difference.
     readonly diff: (toml: string) => Promise<DefinitionDiff>;
-    readonly abandon: () => boolean;
 }
 
-export const createDefinitions = (services: Services): Definitions => {
-    let pending: { readonly token: string; readonly definition: SandboxDefinition } | undefined;
-    return {
-        derive: async () => {
-            const { definition, omitted } = await deriveDefinition(services);
-            return { toml: emitDefinitionToml(definition, omitted), omitted };
-        },
-        plan: async (toml) => {
-            const definition = parseDefinitionToml(toml);
-            pending = { token: randomUUID(), definition };
-            return {
-                token: pending.token,
-                ...(definition.name === undefined ? {} : { name: definition.name }),
-                items: await itemsOf(services, definition),
-                needsAction: actionsFor(definition),
-            };
-        },
-        apply: async (input) => {
-            if (pending === undefined || pending.token !== input.token) {
-                throw new DefinitionFormatError("no held definition matches that plan: upload it again and re-review");
-            }
-            const held = pending;
-            // Consumed whatever happens item by item, the migration surface's rule: the failures a re-run can
-            // fix are about the target, not the held bytes.
-            pending = undefined;
-            const chosen = new Set(input.items);
-            return applyDefinitionItems(services, held.definition, (item) => chosen.has(item.id));
-        },
-        diff: async (toml) => {
-            const target = parseDefinitionToml(toml);
-            const { definition: current } = await deriveDefinition(services);
-            return { differences: definitionDiff(current, target) };
-        },
-        abandon: () => {
-            const had = pending !== undefined;
-            pending = undefined;
-            return had;
-        },
-    };
-};
+export const createDefinitions = (services: Services): Definitions => ({
+    derive: async () => {
+        const { definition, omitted } = await deriveDefinition(services);
+        return { toml: emitDefinitionToml(definition, omitted), omitted };
+    },
+    diff: async (toml) => {
+        const target = parseDefinitionToml(toml);
+        const { definition: current } = await deriveDefinition(services);
+        return { differences: definitionDiff(current, target) };
+    },
+});

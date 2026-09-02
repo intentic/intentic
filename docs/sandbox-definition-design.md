@@ -3,9 +3,10 @@
 How a sandbox's environment splits into a declarable SHAPE (`sandbox.toml`) and irreplaceable STATE (the
 bundle), why the shape earned its own format, and what the split buys: fleets stamped from one file,
 environments that get code review, drift as a computation, and an export that is safe to publish. This records
-the reasoning; the implementation lives in `_sandbox/sandbox/src/portability/` (definition.ts,
-apply-definition.ts, the `/definition/*` routes) with the schemas in `_sandbox/sandbox-contract/src/definition.ts`
-and the card on Sandbox → Environment.
+the reasoning; the implementation lives in `_sandbox/sandbox/src/portability/` (definition.ts and the
+`/definition` routes for the outbound half; apply-definition.ts as one parser of the arrival pipeline in
+arrival.ts) with the schemas in `_sandbox/sandbox-contract/src/definition.ts` and `arrival.ts`, and the two
+cards on Sandbox → Environment. §7 records what changed when the three inbound surfaces became one.
 
 ## 1. The observation
 
@@ -29,15 +30,15 @@ as source, and the agent settings that differ from their defaults. It deliberate
 
 - **Consent.** The approval hash never travels. An applied definition writes its Dockerfile as an
   agent-style draft (`environment.d/definition.Dockerfile`), so it composes into a proposal at the owner's
-  approval gate. A bundle restore writes the approved custom section directly, and the asymmetry is the trust
+  approval gate. A bundle writes the approved custom section directly, and the asymmetry is the trust
   model: a bundle is the owner's own sandbox coming back, a definition is a file anyone may have handed them.
 - **Credentials or identity.** Capabilities land listed and unauthenticated; secrets land as names to fill.
   This is what makes a definition publishable where a bundle never is.
 - **Bytes with no source.** Transcripts, checkpoint timelines, unpushed branches, ledgers, the built image,
   browser and provider sessions. These are the bundle's, and they are what is left once `[workspace]` exists.
 
-One schema serves both doors: the bundle manifest (v2) embeds the definition, so a bundle is definition +
-state and the restore report reasons over the same facts either export emits.
+One schema serves both doors: the bundle manifest embeds the definition, so a bundle is definition + state and
+the arrival report reasons over the same facts either export emits.
 
 ## 2b. `[workspace]`: the sandbox's own way of working
 
@@ -100,10 +101,11 @@ Nothing here invented a posture; each rule is lifted from a neighbour that alrea
   itself on restarts that changed nothing about the sandbox's shape, and every rewrite arrived as a pending
   change in the owner's Changes review. The document is worth committing; who commits it, and when, is the
   owner's call. Download it from the Environment tab.
-- **Preview-first, re-derived at apply** (the migration surface's rule): `plan` holds the parsed document in
-  memory under a token and renders a checklist; `apply` re-derives the items from the held bytes and honors
-  ticked ids against that, never against the wire plan the browser rendered.
-- **Native write paths only** (the migration surface again): a repo arrives through the daemon's own clone
+- **Preview-first, re-derived at apply** (the assistant adapters' rule, and now the pipeline's for all four
+  sources): `plan` holds the parsed document under a token and renders a checklist; `apply` re-derives the
+  items from the held bytes and honors ticked ids against that, never against the wire plan the browser
+  rendered.
+- **Native write paths only** (the assistant adapters again): a repo arrives through the daemon's own clone
   (separate git dir on `/history`), a capability through the manifest store, settings through the settings
   store — so everything an applied definition creates is editable and deletable in the ordinary UI the day
   after.
@@ -127,3 +129,47 @@ fleet use case, with the owner's arrival checklist in the boot log's report.
 the repo `[workspace]` names) with a note saying how it lands. A config surface added next quarter is a red
 test until someone answers "does this deserve a section, or is riding the workspace repo enough?" — the same
 discipline the portability classes enforce one level down, applied one level up.
+
+## 7. What this design's split turned out to imply
+
+The reasoning above is about the two EXPORTS: what a definition is, what a bundle is, and where the line
+between shape and state falls. It said nothing about the doors, and the doors were where the design leaked.
+
+Splitting the artifact produced a second import surface beside the bundle's, and a third arrived with the
+assistant importer (docs/assistant-import-design.md §11). Three surfaces, one job. Held against each other
+they did not disagree about anything that mattered — they disagreed about *how to ask*:
+
+| | definition | bundle | assistant |
+| --- | --- | --- | --- |
+| preview before writing | yes | **no — wrote on file pick** | yes |
+| credential consent asked | n/a (carries names only) | at EXPORT, by the packer | at APPLY, by the receiver |
+| report schema | `DefinitionReport` | `ImportReport` | `MigrationReport` |
+| "what still needs you" heading | "Finish the arrival" | "Finish the move" | "Finish the move" |
+
+Two of those rows are bugs rather than variation. The bundle is the only artifact that lands OVER a workspace
+instead of beside it, so the one arrival most deserving of a checklist was the only one without one; and
+asking the exporter for credential consent asks the wrong person, at the wrong moment, about a sandbox that is
+not theirs.
+
+So the four sources became one pipeline (`portability/arrival.ts`) with the artifact as a parser, which cost
+one real thing and bought four:
+
+- **Cost: a bundle spools.** A definition is a document and a foreign home is bounded and held in memory
+  precisely because it is a credential store; a bundle can be tens of gigabytes, so previewing it means
+  putting it down. It lands on /history (`arrivals/`, mode 0600), is read twice — once to say what is in it,
+  once to write what was ticked — and is deleted on apply, on abandon, and by the boot sweep.
+- **Bought: a bundle is tickable.** `BundleManifest` v3 gained `repos` for exactly this: the list is what
+  lets a plan name one row per repository BEFORE the tar is read. `definition.repositories` cannot, because
+  it lists only repos that HAVE a remote — and a repo with no remote is precisely the one an owner most wants
+  carried by bytes. "Bring the sandbox, leave the six-gigabyte monorepo" is now a sentence someone can say.
+- **Bought: one consent, on the receiving side.** `ArrivalApply.includeSecrets` gates credential-classed
+  paths at write time, for every source. The exporter's `secrets` flag still decides what is IN the file;
+  both have to hold for a credential to land.
+- **Bought: one honesty list.** One `ArrivalReport`, one rendering, one heading.
+- **Bought: no format question.** `POST /arrivals/plan` sniffs two bytes, and when they say gzip, the tar's
+  first entry name — which is the manifest for our own bundles because bundle.ts writes it first so a reader
+  knows the shape before the bytes. That guarantee, made for a different reason, is what makes one picker
+  possible.
+
+The outbound half is unchanged and stays split: deriving a `sandbox.toml` and packing a bundle are different
+enough to be two buttons, and §2's line between shape and state is what those two buttons mean.

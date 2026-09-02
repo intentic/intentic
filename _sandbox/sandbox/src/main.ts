@@ -2,6 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
+import type { ArrivalItem } from "@intentic/sandbox-contract";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { defaultGit, observeGitCommands } from "@intentic/scaffold";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -46,6 +47,7 @@ import { composeEnvironment } from "./environment/environment.js";
 import { applyDefinitionItems } from "./portability/apply-definition.js";
 import { parseDefinitionToml } from "./portability/definition.js";
 import { sweepStaleExports } from "./portability/exports.js";
+import { sweepArrivals } from "./portability/bundle-arrival.js";
 import { queueVerify, type VerifyDeps } from "./workspace/verify-deps.js";
 import { type Config, loadConfig } from "./env.config.js";
 import { createLogger } from "./logger.js";
@@ -112,7 +114,7 @@ const BOOT_STEPS = [
     { key: "rootRepo", label: "Preparing the workspace repo" },
     { key: "starterSite", label: "Putting your starter site in place" },
     { key: "referenceShelf", label: "Ensuring the reference shelf" },
-    { key: "staleExports", label: "Sweeping interrupted exports" },
+    { key: "staleExports", label: "Sweeping interrupted exports and arrivals" },
     { key: "repoGitDirs", label: "Healing repository git dirs" },
     { key: "definitionSeed", label: "Seeding the sandbox definition" },
     { key: "agentsRegistry", label: "Loading conversations" },
@@ -635,15 +637,27 @@ const main = async (): Promise<void> => {
               ),
     );
 
-    // An environment export half-written when the daemon stopped. Only a LIVE process can be writing a `.part`,
-    // so one that survived a restart is an export that will never finish, marked failed here so the card shows
-    // a reason instead of a progress bar that never moves again (portability/exports.ts).
+    /* Both ends of the portability volume, swept together because a restart is what invalidates both.
+     *
+     * An environment export half-written when the daemon stopped: only a LIVE process can be writing a
+     * `.part`, so one that survived a restart will never finish, and it is marked failed here so the card
+     * shows a reason instead of a progress bar that never moves again (portability/exports.ts).
+     *
+     * A bundle spooled for an arrival nobody finished reviewing: the token that named it lived in the process
+     * that died, so every file in `arrivals/` is by definition abandoned and the owner re-reads their file
+     * (portability/bundle-arrival.ts). Deleted rather than marked, because unlike an export it is not an
+     * artifact anybody came here for. */
     await boot.step("staleExports", async () =>
         !role.roots
             ? undefined
-            : sweepStaleExports(config.historyRoot).catch((error: unknown) =>
-                  logger.warn({ err: error }, "stale exports not swept, an interrupted export may still read as packing"),
-              ),
+            : Promise.all([
+                  sweepStaleExports(config.historyRoot).catch((error: unknown) =>
+                      logger.warn({ err: error }, "stale exports not swept, an interrupted export may still read as packing"),
+                  ),
+                  sweepArrivals(config.historyRoot).catch((error: unknown) =>
+                      logger.warn({ err: error }, "abandoned arrival spools not swept, they hold disk until the next boot"),
+                  ),
+              ]).then(() => undefined),
     );
 
     // No repo keeps its git dir under /work: a worktree's gitdir pointer has to resolve identically inside an
@@ -673,7 +687,7 @@ const main = async (): Promise<void> => {
              * (hosts/machine-reports.ts); this filter is the belt to that braces, holding even for a seed
              * stamped by hand. Repos stay out too — a runner's repos arrive through the parent's git door
              * (runner-sync.ts), which carries the parent's exact branches where a remote clone cannot. */
-            const pick = runnerEnv !== undefined ? (item: { kind: string }): boolean => item.kind === "settings" : (): boolean => true;
+            const pick = runnerEnv !== undefined ? (item: ArrivalItem): boolean => item.group === "settings" : (): boolean => true;
             const report = await applyDefinitionItems(services, definition, pick);
             logger.info({ report }, "sandbox definition seeded; its needsAction list is the owner's arrival checklist");
         } catch (error) {

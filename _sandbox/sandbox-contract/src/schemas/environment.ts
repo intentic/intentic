@@ -142,116 +142,23 @@ export const EnvironmentItemSchema = z.object({
 export type EnvironmentItem = z.infer<typeof EnvironmentItemSchema>;
 export const EnvironmentContentsSchema = z.object({ items: z.array(EnvironmentItemSchema) });
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
-/* ---- portability: exporting a sandbox's environment and restoring it into a fresh one ----
+/* ---- portability: exporting a sandbox's environment ----
  *
  * A sandbox is four stores, not one: `/work` (the workspace and the daemon's manifests), `/history` (every
  * repo's real git dir, the fleet registry, the ledgers), the CONTAINER (the built overlay image plus the env
  * the run contract replays) and the AI-provider credential root. A bundle carries the first two, declared entry
  * by entry in WORKSPACE_STATE_FILES / HISTORY_STATE_FILES. It cannot carry the other two, and the honest
- * consequence is that an import ends in a REPORT rather than a claim of equivalence, the container has no
+ * consequence is that taking one in ends in a REPORT rather than a claim of equivalence, the container has no
  * docker socket, so only the host can rebuild the image the overlay describes.
  *
  * The bundle's manifest (BundleManifestSchema) lives in definition.ts beside the sandbox DEFINITION it embeds:
  * a bundle is definition + state, and keeping the two schemas together is what keeps the two export doors from
- * drifting into different answers about what an environment is. */
+ * drifting into different answers about what an environment is.
+ *
+ * ONLY THE OUTBOUND HALF IS HERE. Taking a bundle IN is not a surface of its own any more: it is one of the
+ * four sources the arrival pipeline reads (arrival.ts), beside a definition and the two foreign assistants,
+ * because all four answer the same question and used to answer it three different ways. */
 
-// What a restore actually did. `needsAction` is the part that matters: the environment rebuild command, the
-// credentials to re-enter, the logins to redo, each one a thing the target cannot do for itself.
-export const ImportReportSchema = z.object({
-    restored: z.object({ workspaceFiles: z.number(), historyFiles: z.number(), repos: z.array(z.string()), bytes: z.number() }),
-    // Entries the bundle carried that this daemon refused to write (an identity file, an escaping path), empty
-    // for any bundle a matching exporter produced, and a tamper signal when it is not.
-    refused: z.array(z.string()),
-    needsAction: z.array(z.object({ subject: z.string(), detail: z.string() })),
-});
-export type ImportReport = z.infer<typeof ImportReportSchema>;
-/* ---- migrations: importing a FOREIGN assistant's setup (Hermes, OpenClaw) ----
- *
- * A different crossing than a bundle restore, and deliberately a different surface: a bundle is our own format,
- * re-derived entry by entry against the state manifests, while a migration reads a directory some OTHER
- * program laid out (`~/.hermes`) and TRANSLATES it into native things, skills, automations, capabilities,
- * merged memory. Nothing foreign is executed or copied verbatim into daemon state; every item lands through the
- * same write paths the settings/skills/automations/capabilities surfaces use, which is what keeps an imported
- * setup editable and deletable in the ordinary UI the day after (docs/assistant-import-design.md).
- *
- * The flow is PREVIEW-FIRST, mirroring what these tools' own `migrate` commands taught their users to expect:
- * `plan` parses the uploaded archive into an itemized checklist and holds the upload in memory under a token;
- * `apply` names the ticked item ids and the token. The plan is RE-DERIVED from the held archive at apply, the
- * wire plan is a rendering for the owner, never the input the write trusts (restore.ts's rule, kept). */
-export const MigrationSourceSchema = z.enum(["hermes", "openclaw"]);
-export type MigrationSource = z.infer<typeof MigrationSourceSchema>;
-// What an item becomes here, not what it was there, the apply loop dispatches on this, and the checklist
-// groups by it so the owner reads "3 skills, 2 automations" rather than a foreign directory listing.
-export const MigrationTargetSchema = z.enum(["memory", "skill", "automation", "capability", "secret", "file"]);
-export type MigrationTarget = z.infer<typeof MigrationTargetSchema>;
-export const MigrationItemSchema = z.object({
-    // Deterministic (derived from the source artifact, e.g. `skill:weather`), so the ids the owner ticked name
-    // the same items when the plan is re-derived at apply.
-    id: z.string(),
-    target: MigrationTargetSchema,
-    // The checklist line, plain words: "Skill, weather", "Nightly digest (9:00 every day)".
-    label: z.string(),
-    detail: z.string().optional(),
-    /* The default tick. False marks the items the owner should read before taking, a server URL that points at
-     * localhost on the OLD machine, an .env key that looks like tuning rather than a credential. They still
-     * import fine when ticked; the flag is the adapter's judgment, not a gate. */
-    recommended: z.boolean(),
-    // Names of the secrets this item would store (never values, values stay in the held archive until apply,
-    // and only move when the apply says includeSecrets). Empty for items that carry none.
-    secrets: z.array(z.string()),
-});
-export type MigrationItem = z.infer<typeof MigrationItemSchema>;
-export const MigrationNeedsActionSchema = z.object({ subject: z.string(), detail: z.string() });
-export const MigrationPlanSchema = z.object({
-    source: MigrationSourceSchema,
-    // Names the held upload for the apply call. Minted per plan; a new upload replaces the held one.
-    token: z.string(),
-    items: z.array(MigrationItemSchema),
-    // What the adapter saw and will not move, sessions, logs, pairing state, listed rather than silent.
-    refused: z.array(z.string()),
-    // What is already known not to move mechanically (channels to reconnect, a model to pick), the same
-    // honesty ImportReportSchema carries, surfaced at PREVIEW time so the owner ticks with open eyes.
-    needsAction: z.array(MigrationNeedsActionSchema),
-});
-export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
-/* One of the owner's own computers, as an import SOURCE, the answer to "where is my setup" that needs no
- * packing at all. Read on the card's first render for every enrolled machine, so the offer appears before the
- * owner has read a single instruction.
- *
- * `found` absent means "connected, and nothing to import here", which is a real answer worth rendering
- * quietly, not an error: the machine may simply be a different one from the machine the assistant runs on. */
-export const MigrationHostSchema = z.object({
-    id: z.string(),
-    online: z.boolean(),
-    found: MigrationSourceSchema.optional(),
-    // Why this machine cannot be read right now, when it cannot, offline, or its own refusal, in its words.
-    detail: z.string().optional(),
-});
-export const MigrationHostsSchema = z.object({ hosts: z.array(MigrationHostSchema) });
-export type MigrationHost = z.infer<typeof MigrationHostSchema>;
-// Read the setup off a connected computer instead of an upload. Answers with a plan, exactly as the upload
-// route does, everything after this point is identical whichever door the setup came through.
-export const MigrationScanSchema = z.object({ host: z.string().min(1) });
-export const MigrationApplySchema = z.object({
-    token: z.string(),
-    // The ticked item ids. Ids the re-derived plan does not contain are ignored rather than erroring, the
-    // archive is the truth, and a stale checklist must not block the items that still exist.
-    items: z.array(z.string()),
-    // The owner's explicit consent to move credential VALUES (mirrors the bundle export's `?secrets=`, and the
-    // `--include-secrets` these tools' own migrate commands require). Off: secret items are skipped and
-    // capability configs land without their keys.
-    includeSecrets: z.boolean(),
-});
-export type MigrationApply = z.infer<typeof MigrationApplySchema>;
-export const MigrationReportSchema = z.object({
-    applied: z.array(z.object({ id: z.string(), target: MigrationTargetSchema, label: z.string() })),
-    // Items that were ticked and did not land, each with the reason, a full disk, an env store that needs
-    // DevOps active. Distinct from `refused`, which is the class of things never attempted.
-    failed: z.array(z.object({ id: z.string(), label: z.string(), error: z.string() })),
-    refused: z.array(z.string()),
-    needsAction: z.array(MigrationNeedsActionSchema),
-});
-export type MigrationReport = z.infer<typeof MigrationReportSchema>;
 /* One export sitting in the daemon's export directory, the ARTIFACT a bundle is, rather than the request that
  * produced it. Packing takes minutes over a real workspace, so tying it to a response made it a property of one
  * browser tab: a refresh abandoned the work and left nothing to come back to. It is a file now, and every field

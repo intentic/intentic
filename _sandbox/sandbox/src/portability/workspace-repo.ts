@@ -5,7 +5,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import {
     AutomationSchema,
-    type DefinitionAction,
+    type NeedsAction,
     type DefinitionWorkspace,
     type WorkspacePublish,
     type WorkspacePublishResult,
@@ -205,7 +205,7 @@ const parsedJsonFile = async <T>(path: string, schema: z.ZodType<T>, label: stri
     }
 };
 
-const stillAutomations = async (root: string): Promise<DefinitionAction | undefined> => {
+const stillAutomations = async (root: string): Promise<NeedsAction | undefined> => {
     const path = join(root, AUTOMATIONS);
     const automations = await parsedJsonFile(path, z.array(AutomationSchema), AUTOMATIONS);
     if (automations === undefined) {
@@ -234,7 +234,7 @@ const stillExtensions = async (
     root: string,
     targetEnablement: Readonly<Record<string, boolean>>,
     targetHadEnablement: boolean,
-): Promise<DefinitionAction | undefined> => {
+): Promise<NeedsAction | undefined> => {
     const extensionsRoot = workspaceExtensionsRoot(root);
     const entries = await readdir(extensionsRoot, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") {
@@ -266,7 +266,7 @@ const stillExtensions = async (
     };
 };
 
-const gateOverlay = async (root: string, incoming: Buffer | undefined, handledBySection: boolean): Promise<DefinitionAction | undefined> => {
+const gateOverlay = async (root: string, incoming: Buffer | undefined, handledBySection: boolean): Promise<NeedsAction | undefined> => {
     const custom = incoming?.toString("utf8").trim() ?? "";
     if (custom === "" || handledBySection) {
         return undefined;
@@ -290,7 +290,7 @@ const safeWorkspaceCommit = async (
     commit: string,
     options: { readonly overlayHandledBySection: boolean },
     git: GitRunner,
-): Promise<{ readonly commit: string; readonly actions: DefinitionAction[] }> => {
+): Promise<{ readonly commit: string; readonly actions: NeedsAction[] }> => {
     const root = services.workspace.root;
     const targetSources = new Map<string, Buffer | undefined>();
     for (const path of DEFINITION_SOURCES) {
@@ -316,7 +316,7 @@ const safeWorkspaceCommit = async (
             await gateOverlay(stage, incomingOverlay, options.overlayHandledBySection),
             await stillAutomations(stage),
             await stillExtensions(stage, targetEnablement, targetEnablementBytes !== undefined),
-        ].filter((action): action is DefinitionAction => action !== undefined);
+        ].filter((action): action is NeedsAction => action !== undefined);
         await git(stage, ["add", "-A"]);
         await git(stage, [
             "-c",
@@ -349,7 +349,7 @@ export const adoptWorkspaceRemote = async (
     workspace: DefinitionWorkspace,
     options: { readonly overlayHandledBySection: boolean },
     git: GitRunner = defaultGit,
-): Promise<{ readonly branch: string; readonly actions: DefinitionAction[] }> => {
+): Promise<{ readonly branch: string; readonly actions: NeedsAction[] }> => {
     const root = services.workspace.root;
     let checkedOut = false;
     await git(root, ["remote", "add", "origin", workspace.remote]).catch((error: unknown) => {

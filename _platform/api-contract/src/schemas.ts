@@ -19,11 +19,13 @@ import type {
     ApprovalStatusSchema,
     ApprovalsListSchema,
     ApprovalSummarySchema,
+    ArrivalHostSchema,
+    ArrivalItemSchema,
+    ArrivalPlanSchema,
+    ArrivalReportSchema,
+    ArrivalSourceSchema,
     DefinitionDiffSchema,
     DefinitionExportSchema,
-    DefinitionItemSchema,
-    DefinitionPlanSchema,
-    DefinitionReportSchema,
     WorkspacePublishResultSchema,
     WorkspaceRemoteSchema,
     EngineRowSchema,
@@ -31,12 +33,6 @@ import type {
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
-    ImportReportSchema,
-    MigrationHostSchema,
-    MigrationItemSchema,
-    MigrationPlanSchema,
-    MigrationReportSchema,
-    MigrationSourceSchema,
     InventoryEntrySchema,
     InventoryProviderSchema,
     LogFileEntrySchema,
@@ -134,12 +130,17 @@ export {
     ApprovalStatusSchema,
     ApprovalsListSchema,
     ApprovalSummarySchema,
-    DefinitionActionSchema,
+    NeedsActionSchema,
+    ArrivalGroupSchema,
+    ArrivalHostSchema,
+    ArrivalHostsSchema,
+    ArrivalItemSchema,
+    ArrivalPlanSchema,
+    ArrivalReportSchema,
+    ArrivalSourceSchema,
+    AssistantSourceSchema,
     DefinitionDiffSchema,
     DefinitionExportSchema,
-    DefinitionItemSchema,
-    DefinitionPlanSchema,
-    DefinitionReportSchema,
     WorkspacePublishResultSchema,
     WorkspaceRemoteSchema,
     EngineRowSchema,
@@ -148,13 +149,6 @@ export {
     EnvironmentSchema,
     BundleExportSchema,
     BundleExportsSchema,
-    ImportReportSchema,
-    MigrationHostSchema,
-    MigrationHostsSchema,
-    MigrationItemSchema,
-    MigrationPlanSchema,
-    MigrationReportSchema,
-    MigrationSourceSchema,
     InventoryEntrySchema,
     InventoryProviderSchema,
     InventoryValuesSchema,
@@ -204,19 +198,18 @@ export type EnginesView = z.infer<typeof EnginesViewSchema>;
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
 export type EnvironmentItem = EnvironmentContents["items"][number];
-export type ImportReport = z.infer<typeof ImportReportSchema>;
 export type DefinitionExport = z.infer<typeof DefinitionExportSchema>;
-export type DefinitionItem = z.infer<typeof DefinitionItemSchema>;
-export type DefinitionPlan = z.infer<typeof DefinitionPlanSchema>;
-export type DefinitionReport = z.infer<typeof DefinitionReportSchema>;
 export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
 export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;
 export type WorkspacePublishResult = z.infer<typeof WorkspacePublishResultSchema>;
-export type MigrationHost = z.infer<typeof MigrationHostSchema>;
-export type MigrationItem = z.infer<typeof MigrationItemSchema>;
-export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
-export type MigrationSource = z.infer<typeof MigrationSourceSchema>;
-export type MigrationReport = z.infer<typeof MigrationReportSchema>;
+// The arrival pipeline: one plan/apply/report the four inbound sources share (sandbox-contract's arrival.ts).
+export type ArrivalHost = z.infer<typeof ArrivalHostSchema>;
+export type ArrivalItem = z.infer<typeof ArrivalItemSchema>;
+export type ArrivalPlan = z.infer<typeof ArrivalPlanSchema>;
+export type ArrivalSource = z.infer<typeof ArrivalSourceSchema>;
+// The two a connected computer can be scanned for; a bundle is a file, never a setup sitting in a home folder.
+export type AssistantSource = Extract<ArrivalSource, "hermes" | "openclaw">;
+export type ArrivalReport = z.infer<typeof ArrivalReportSchema>;
 export type BundleExport = z.infer<typeof BundleExportSchema>;
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
 export type Automation = z.infer<typeof AutomationSchema>;

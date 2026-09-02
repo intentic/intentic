@@ -1,5 +1,5 @@
 import { upgradeWebSocket } from "@hono/node-server";
-import { type DefinitionAction, RunnerHelloSchema, type RunnerSummary } from "@intentic/sandbox-contract";
+import { type NeedsAction, RunnerHelloSchema, type RunnerSummary } from "@intentic/sandbox-contract";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { Services } from "../composition.js";
@@ -87,12 +87,12 @@ export const createRunnerConnectRoute = (services: Services) =>
  *              definition machinery, fixable in place through the sync door below.
  *
  * Total over a claim that does not parse: a runner from a stranger build costs its drift lines, never the list. */
-const runnerDriftLines = (services: Services, id: string, parent: Awaited<ReturnType<typeof settingsDefinition>>, state: Pick<RunnerSummary, "image" | "overlayHash">): DefinitionAction[] | undefined => {
+const runnerDriftLines = (services: Services, id: string, parent: Awaited<ReturnType<typeof settingsDefinition>>, state: Pick<RunnerSummary, "image" | "overlayHash">): NeedsAction[] | undefined => {
     if (state.image === undefined) {
         // Never connected: there is nothing to compare, and an empty list would falsely read as "agrees".
         return undefined;
     }
-    const lines: DefinitionAction[] = [];
+    const lines: NeedsAction[] = [];
     const parentHash = services.config.sandbox.environmentHash;
     const runnerHash = state.overlayHash ?? "";
     if (parentHash !== runnerHash) {

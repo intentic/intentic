@@ -183,6 +183,7 @@ export * from "./schemas/workspace-repos.js";
 export * from "./schemas/workspace-search.js";
 export * from "./schemas/workspace-setup.js";
 export * from "./schemas/workspace-tree.js";
+export * from "./arrival.js";
 export * from "./definition.js";
 export * from "./search-globs.js";
 export * from "./starter.js";

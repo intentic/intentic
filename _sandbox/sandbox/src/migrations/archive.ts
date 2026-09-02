@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import { extract, type Headers } from "tar-stream";
+import { ArrivalFormatError } from "../portability/arrival-error.js";
 import { skipReason } from "./scan-policy.js";
 
 /* READING A FOREIGN HOME DIRECTORY OFF AN UPLOAD, a gzipped tar of `~/.hermes` (or wherever the source tool
@@ -14,11 +15,11 @@ import { skipReason } from "./scan-policy.js";
  * the difference between "the user's config and notes" and "their session logs and SQLite", which the plan
  * refuses anyway and which would otherwise dominate the bytes.
  *
- * Decoder failures are the caller's fault and say so (a 400 at the route), exactly restore.ts's split: gunzip
+ * Decoder failures are the caller's fault and say so (a 400 at the route), exactly bundle-arrival.ts's split: gunzip
  * answers Z_DATA_ERROR for anything that is not gzip, tar-stream throws on a malformed member, and neither may
  * escape as a 500 the owner reads as "the sandbox broke". */
 
-export class MigrationFormatError extends Error {}
+export class MigrationFormatError extends ArrivalFormatError {}
 
 export interface ForeignArchive {
     // Archive-relative, forward-slash, `./` stripped. Values are the raw bytes; adapters decode.

@@ -57,11 +57,11 @@ it("bounds a daemon call that never answers, with no signal from the caller at a
 });
 
 it("exempts a call that streams a body up: its headers cannot arrive until the upload has", async () => {
-    /* A bundle restore is gigabytes and answers nothing until the last byte is sent, so any deadline useful
+    /* A bundle arriving is gigabytes and answers nothing until the last byte is sent, so any deadline useful
      * for a READ would abort it partway. The exemption is by body type rather than by route, because it is a
      * property of how the request is sent. */
     const timeout = hungDaemon();
-    const settled = sandboxJson(`/bundles/restore`, { method: `POST`, body: new Blob([`archive`]) }).then(
+    const settled = sandboxJson(`/arrivals/plan`, { method: `POST`, body: new Blob([`archive`]) }).then(
         () => `settled`,
         (error: unknown) => `rejected: ${error instanceof Error ? error.message : String(error)}`,
     );

@@ -105,6 +105,12 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
      * export would pack THAT, each one a multiple of the last. Living on this volume is the other half of the
      * same guard; under `/work` the file would also be watched, indexed by iq, and snapshotted into history. */
     { path: "exports/", portability: "derived" },
+    /* The other end of the same volume: a bundle being taken IN, spooled here while its owner reads the plan
+     * it produced. `derived` for the export directory's reason and one more — this is somebody else's bundle,
+     * mid-review, and packing a half-reviewed arrival into an export would carry a sandbox that was never
+     * this one. The pipeline deletes each spool on apply or abandon, and boot sweeps whatever a crash left
+     * (portability/bundle-arrival.ts). */
+    { path: "arrivals/", portability: "derived" },
 
     /* ---- credentials ---- */
 

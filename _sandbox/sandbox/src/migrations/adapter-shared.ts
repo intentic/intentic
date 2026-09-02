@@ -1,4 +1,4 @@
-import type { Automation, Capability, MigrationItem, SkillDraft } from "@intentic/sandbox-contract";
+import type { ArrivalItem, Automation, Capability, SkillDraft } from "@intentic/sandbox-contract";
 import { AutomationSchema, CapabilitySchema, SkillDraftSchema } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { isBakedSkill } from "../settings/skills.js";
@@ -22,8 +22,16 @@ export type ItemApply =
     // bytes stay complete.
     | { readonly target: "file"; readonly files: readonly { readonly relPath: string; readonly content: Buffer }[] };
 
+/* The checklist row an adapter writes, which is an arrival row MINUS `applicable`. An assistant's home
+ * directory has no notion of an inapplicable row: an adapter that cannot take something refuses it during the
+ * walk, with a line in `refused` naming the file and the reason. So the field would read `true` on every one
+ * of the thirty literals below and in the two adapters, saying nothing thirty times; it is filled once, where
+ * the plan is assembled (assistants.ts). The other two flags are NOT constant here and stay on the literals:
+ * `recommended` is the adapter's judgment, `secrets` is what the row would store. */
+export type AdapterRow = Omit<ArrivalItem, "applicable">;
+
 export interface PlannedItem {
-    readonly item: MigrationItem;
+    readonly item: AdapterRow;
     readonly apply: ItemApply;
 }
 
@@ -132,7 +140,7 @@ export const planSkillFiles = (files: Files, prefix: string, sourceLabel: string
         planned.push({
             item: {
                 id: `skill:${name}`,
-                target: "skill",
+                group: "skill",
                 label: `Skill, ${name}`,
                 ...(siblings.length > 0
                     ? { detail: `Only the skill text moves; ${siblings.length} other file${siblings.length === 1 ? "" : "s"} in its folder did not.` }
@@ -174,7 +182,7 @@ export const secretPlanner = (
             planned.push({
                 item: {
                     id: `secret:${key}`,
-                    target: "secret",
+                    group: "secret",
                     label: `Secret, ${key}`,
                     ...(credential(key, noise)
                         ? {}
@@ -228,7 +236,7 @@ export const automationPlanner = (
         planned.push({
             item: {
                 id: `automation:${id}`,
-                target: "automation",
+                group: "automation",
                 label: `Automation, ${id} (${cron})`,
                 detail: "Fires are held for your approval until you relax that on its card.",
                 recommended: true,
@@ -271,7 +279,7 @@ export const planMcpEntry = (
     out.planned.push({
         item: {
             id: `capability:mcp:${id}`,
-            target: "capability",
+            group: "capability",
             label: `MCP server, ${name}`,
             detail: local ? `${url}, that address points at your old machine, not here.` : url,
             recommended: !local,

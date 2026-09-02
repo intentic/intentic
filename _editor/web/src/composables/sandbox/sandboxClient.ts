@@ -25,7 +25,7 @@ const requestTo = async (target: SandboxTarget | undefined, path: string, init?:
             throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
         }
         /* The headers deadline, minus the calls that send a body up: their headers cannot arrive until the
-         * upload finishes, and a bundle restore is gigabytes (BundleCard). Decided here because this is the
+         * upload finishes, and a bundle arriving is gigabytes (ArrivalCard). Decided here because this is the
          * last place the body is still the thing the caller passed rather than a stream. */
         return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, {
             deadline: !uploadsBody(init?.body),

@@ -550,6 +550,85 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/members`, () => json({ members: [] })],
     [`GET`, `/environment`, () => json(demoEnvironment())],
     [`GET`, `/environment/contents`, () => json(demoEnvironmentContents())],
+    /* MOVING THE SANDBOX, the Environment tab's other half: one card for what leaves and one for what arrives.
+     * Both read on first render, so without these three the tab opened on a pair of error notices — the
+     * published-workspace row and the connected-computers row are the two things those cards say BEFORE the
+     * visitor clicks anything, and a demo that cannot say them is showing the empty version of the feature.
+     *
+     * A published workspace, because that is the state the card is about: the repo every definition names as
+     * `[workspace]`. No exports and no computers, which are the honest answers for a tab nobody has used yet
+     * and the states the two cards are designed to open in. */
+    [`GET`, `/definition/workspace`, () => json({ remote: `https://github.com/acme/intentic-sandbox-ada.git`, branch: `main`, hosts: [`github.com`] })],
+    [`GET`, `/bundles`, () => json({ exports: [] })],
+    [`GET`, `/arrivals/hosts`, () => json({ hosts: [] })],
+    /* Reading a file, answered as the checklist it produces, because the checklist IS the feature: one picker
+     * takes a sandbox.toml, an environment bundle or a packed Hermes/OpenClaw folder, and everything after
+     * that point is the same four rows the owner unticks. A demo that answered the upload with an error would
+     * show the button and hide the thing the button is for.
+     *
+     * A bundle, since it is the arrival that reads least like a document: one row for the workspace files, one
+     * per repository (the tick that lets an owner decline six gigabytes), one for the history nothing else can
+     * reproduce, and the two lines no arrival can do for the owner. */
+    [
+        `POST`,
+        `/arrivals/plan`,
+        () =>
+            json({
+                source: `bundle`,
+                token: `demo-arrival`,
+                name: `acme-shop`,
+                carriesSecrets: true,
+                items: [
+                    {
+                        id: `bundle:files`,
+                        group: `files`,
+                        label: `Workspace files`,
+                        detail: `Everything in /work that is not one of the repositories below, and the workspace repo's own history — 4,213 files, 41.8 MB`,
+                        applicable: true,
+                        recommended: true,
+                        secrets: [`STRIPE_SECRET_KEY`],
+                    },
+                    {
+                        id: `repo:acme-shop`,
+                        group: `repo`,
+                        label: `Repository acme-shop`,
+                        detail: `Its working tree and its full git history — 1,904 files, 12.2 MB`,
+                        applicable: true,
+                        recommended: true,
+                        secrets: [],
+                    },
+                    {
+                        id: `repo:design-system`,
+                        group: `repo`,
+                        label: `Repository design-system`,
+                        detail: `Its working tree and its full git history — 22,610 files, 6.1 GB`,
+                        applicable: true,
+                        recommended: true,
+                        secrets: [],
+                    },
+                    {
+                        id: `bundle:history`,
+                        group: `history`,
+                        label: `Sandbox history`,
+                        detail: `Transcripts, checkpoint timelines and ledgers, the part nothing else can reproduce — 8,802 files, 310.4 MB`,
+                        applicable: true,
+                        recommended: true,
+                        secrets: [],
+                    },
+                ],
+                refused: [`history/session-secret (this sandbox does not accept identity files)`],
+                needsAction: [
+                    {
+                        subject: `Rebuild the environment image`,
+                        detail: `The overlay Dockerfile travels, but the IMAGE it describes is built outside the container. Open the Environment card and run the rebuild command it shows.`,
+                    },
+                    {
+                        subject: `Reconnect capabilities`,
+                        detail: `Each connection arrives listed but unauthenticated. Open these on the Capabilities view and re-enter the credential each one asks for: github (git), linear (mcp).`,
+                    },
+                ],
+            }),
+    ],
 ];
 
 const DEMO_COMMANDS = [

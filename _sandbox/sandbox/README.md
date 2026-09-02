@@ -295,9 +295,9 @@ reports the profile.
   never automatic is a version OUTSIDE the channel: a turn refused for running too old an engine
   (`engine-version-floor`) holds the message and offers the install, because a version that satisfies a floor
   the blessed list has not reached yet is by definition one nobody here has tested.
-- Move a sandbox, two ways that share one truth (src/portability). A **bundle** is the whole environment as a
-  gzipped tar of the two volumes, driven entirely by the state manifests' portability classes (carry / secret /
-  identity / derived), restored onto a fresh sandbox with an honest report of what could not travel. A
+- Move a sandbox: two things go OUT, and everything comes back in through one door (src/portability). A
+  **bundle** is the whole environment as a gzipped tar of the two volumes, driven entirely by the state
+  manifests' portability classes (carry / secret / identity / derived). A
   **definition** is the declarable half of the same thing as a `sandbox.toml`: the workspace itself by remote,
   repositories by remote, connections by shape, secret NAMES, agent settings, the overlay as source — derived
   from the live manifests on every export (never stored, and the daemon keeps no copy in the workspace),
@@ -310,7 +310,14 @@ reports the profile.
   two doors), and applying a definition keeps the consent model: the overlay lands as a proposal at the approval
   gate, capabilities arrive unauthenticated, credentials never ride along, and the three things a checked-out
   workspace could do by itself (an approved overlay, enabled automations, workspace extensions) arrive switched
-  off with the report naming each one. A runner can stamp `SANDBOX_DEFINITION_SEED` (sandbox-run's `definition`
+  off with the report naming each one. **Coming IN, all four sources are one pipeline** (src/portability/arrival.ts):
+  a definition, a bundle, and a Hermes or OpenClaw home directory each get a parser, and everything after the
+  parser is shared — `POST /arrivals/plan` sniffs the upload from two bytes and the first tar header, answers
+  with a checklist the owner unticks, and `apply` writes only the ticked rows against a plan re-derived from
+  the held artifact. That is what gave a bundle a preview (it is the one arrival that lands OVER a workspace
+  rather than beside it, and it was the one that used to write on file pick), what makes "bring the sandbox,
+  leave the six-gigabyte monorepo" a sentence an owner can say, and what moved the credential consent to the
+  side that receives them. A runner can stamp `SANDBOX_DEFINITION_SEED` (sandbox-run's `definition`
   option) and an empty workspace boots pre-shaped — the fleet door. This sandbox's own runners are the first
   fleet through it: `runner-up` ships a settings-only definition plus the approved overlay with its pinning
   hash (approval by provenance — this owner already reviewed those bytes, and a runner has no owner of its

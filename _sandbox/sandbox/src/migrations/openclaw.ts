@@ -97,7 +97,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
     // -- memory: the bootstrap files, each its own fence; daily logs tail-merged and fully kept as files --
     const fenced = (id: string, label: string, heading: string, body: string, detail?: string): void => {
         planned.push({
-            item: { id: `memory:${id}`, target: "memory", label, ...(detail === undefined ? {} : { detail }), recommended: true, secrets: [] },
+            item: { id: `memory:${id}`, group: "memory", label, ...(detail === undefined ? {} : { detail }), recommended: true, secrets: [] },
             apply: { target: "memory", fence: `intentic:imported-openclaw:${id}`, body: `## ${heading}\n\n${clipped(body.trim())}` },
         });
     };
@@ -134,7 +134,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         planned.push({
             item: {
                 id: "memory:memories",
-                target: "memory",
+                group: "memory",
                 label: `Long-term memory, ${curated.length} file${curated.length === 1 ? "" : "s"}`,
                 ...(dailies.length > RECENT_DAILIES ? { detail: `The newest ${RECENT_DAILIES} daily notes; the full diary rides along below.` } : {}),
                 recommended: true,
@@ -147,7 +147,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         planned.push({
             item: {
                 id: "file:memory-diary",
-                target: "file",
+                group: "files",
                 label: `Daily memory notes, ${dailies.length} file${dailies.length === 1 ? "" : "s"}`,
                 detail: "Lands in imports/openclaw/memory/ for the agent to search, without loading every turn.",
                 recommended: true,
@@ -314,7 +314,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         planned.push({
             item: {
                 id: `file:${name}`,
-                target: "file",
+                group: "files",
                 label: `Note, ${name}`,
                 detail: `Lands in imports/openclaw/${name}.`,
                 recommended: true,

@@ -3,15 +3,27 @@ import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
-import BundleCard from "./BundleCard.vue";
-import DefinitionCard from "./DefinitionCard.vue";
+import ArrivalCard from "./ArrivalCard.vue";
 import EnginesCard from "./EnginesCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
-import MigrationCard from "./MigrationCard.vue";
+import MoveOutCard from "./MoveOutCard.vue";
 
-/* The Sandbox hub's "Environment" tab: the composed overlay Dockerfile (agent-proposed, owner-approved, applied
- * by a rebuild), and below it the bundle card that moves the whole environment to another sandbox. The two
- * belong together: a restored bundle's last step IS the rebuild the card above hands you, because the overlay
+/* The Sandbox hub's "Environment" tab, and it answers two questions in that order: WHAT THIS SANDBOX IS
+ * (the composed overlay Dockerfile, agent-proposed and owner-approved; the engines that run its turns), and
+ * then MOVING IT — out, or in.
+ *
+ * THE SECOND HALF USED TO BE THREE CARDS SPLIT BY ARTIFACT: "Move this sandbox" (the bundle), "Sandbox
+ * definition" (the sandbox.toml) and "Arrive from another assistant". Two of those headings were not even on
+ * the same axis — one named a job, the other named a file — so a reader who wanted to move a sandbox read the
+ * first, exported gigabytes of private bytes, and never learned the publishable document existed. And each of
+ * the three held BOTH directions at once, so every card asked its reader to keep in and out straight while
+ * reading it.
+ *
+ * They are split by DIRECTION now, which is the axis the owner actually has in mind: everything that leaves is
+ * MoveOutCard, everything that arrives is ArrivalCard, and the artifact is a choice inside each rather than a
+ * card of its own. The two are neighbours because they are the two halves of one job.
+ *
+ * The overlay card sits above both because a bundle's last step IS the rebuild it hands you: the overlay
  * travels as a recipe and the image it describes does not. EnvironmentCard self-hides until there's an overlay
  * or a proposal, so this tab adds the empty-state for a sandbox that has neither yet. */
 
@@ -52,14 +64,9 @@ const outline = useSandboxOutline(reading);
              Code am I on" is worth an answer before anything has gone wrong. -->
         <EnginesCard />
 
-        <BundleCard />
-
-        <!-- The bundle's other half: the same environment as a declarable sandbox.toml, references instead of
-             bytes, safe to publish where a bundle never is. -->
-        <DefinitionCard />
-
-        <!-- Beside the bundle card because they are the two crossings: a bundle moves an INTENTIC environment,
-             this one translates a foreign assistant's home directory into native pieces. -->
-        <MigrationCard />
+        <!-- OUT, then IN. Out first because it is the one an owner reaches for while still holding this
+             sandbox; in is what they do on the far side, usually in a different browser on a different day. -->
+        <MoveOutCard />
+        <ArrivalCard />
     </div>
 </template>

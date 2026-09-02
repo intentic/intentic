@@ -10,7 +10,8 @@ import type { Services } from "../composition.js";
 import { fakeFiles, memoryCapabilitiesStore, services } from "../route-testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
-import { applyDefinitionItems, createDefinitions } from "./apply-definition.js";
+import { applyDefinitionItems } from "./apply-definition.js";
+import { createArrivals } from "./arrival.js";
 import { deriveDefinition, parseDefinitionToml } from "./definition.js";
 import { rootExcludes } from "../history/history.js";
 import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/root-repo.js";
@@ -21,6 +22,10 @@ import { workspaceRemoteUrl } from "./workspace-repo.js";
  * two refusals the surface promises (a remoteless repo never becomes a reference; an occupied id is never
  * overwritten). The pure format halves live in definition.test.ts; this suite is the seams: git remotes,
  * the daemon-shaped clone (separate git dir), the stores the apply writes through. */
+
+// A definition arrives as an upload like every other source now, so the tests hand it one.
+const LIMIT = 64 * 1024 * 1024;
+const streamOf = (toml: string): ReadableStream<Uint8Array> => new Blob([toml]).stream();
 
 const roots: string[] = [];
 const makeRoots = async (): Promise<{ work: string; history: string }> => {
@@ -169,7 +174,7 @@ test("plan → apply lands every piece through the native paths, and a re-plan m
             },
         },
     });
-    const definitions = createDefinitions(targetServices);
+    const arrivals = createArrivals(targetServices);
 
     const toml = [
         "schemaVersion = 1",
@@ -195,7 +200,7 @@ test("plan → apply lands every piece through the native paths, and a re-plan m
         "",
     ].join("\n");
 
-    const plan = await definitions.plan(toml);
+    const plan = await arrivals.plan(streamOf(toml), LIMIT);
     expect(plan.items.map((item) => [item.id, item.applicable])).toEqual([
         ["repo:app", true],
         ["environment", true],
@@ -209,7 +214,7 @@ test("plan → apply lands every piece through the native paths, and a re-plan m
         "Enter secret values",
     ]);
 
-    const report = await definitions.apply({ token: plan.token, items: plan.items.map((item) => item.id) });
+    const report = await arrivals.apply({ token: plan.token, items: plan.items.map((item) => item.id), includeSecrets: false });
     expect(report.failed).toEqual([]);
     expect(report.applied.map((entry) => entry.id)).toEqual(["repo:app", "environment", "capability:linear", "settings"]);
 
@@ -225,7 +230,7 @@ test("plan → apply lands every piece through the native paths, and a re-plan m
     expect(settings.workspaceMap).toBe(true);
 
     // Landing beside, never over: the same document again plans everything already-there as inapplicable.
-    const replan = await definitions.plan(toml);
+    const replan = await arrivals.plan(streamOf(toml), LIMIT);
     expect(replan.items.find((item) => item.id === "repo:app")?.applicable).toBe(false);
     expect(replan.items.find((item) => item.id === "capability:linear")?.applicable).toBe(false);
     await cleanup();
@@ -237,13 +242,13 @@ test("a stale or consumed token is refused, and the boot-seed path applies every
 
     const target = await makeRoots();
     const targetServices = servicesFor(target, { git: { clone: gitClone } });
-    const definitions = createDefinitions(targetServices);
+    const arrivals = createArrivals(targetServices);
     const toml = ["schemaVersion = 1", "[[repositories]]", 'id = "app"', `remote = ${JSON.stringify(upstreamDir)}`, ""].join("\n");
 
-    const plan = await definitions.plan(toml);
-    await definitions.apply({ token: plan.token, items: [] });
+    const plan = await arrivals.plan(streamOf(toml), LIMIT);
+    await arrivals.apply({ token: plan.token, items: [], includeSecrets: false });
     // Consumed on apply, the migration surface's rule: the second apply must re-plan.
-    await expect(definitions.apply({ token: plan.token, items: [] })).rejects.toThrow(/no held definition/);
+    await expect(arrivals.apply({ token: plan.token, items: [], includeSecrets: false })).rejects.toThrow(/no held arrival/);
 
     // The seed door: no browser, no token, everything applicable lands (main.ts's definitionSeed step).
     const seeded = await makeRoots();
@@ -279,14 +284,14 @@ test("the workspace travels by reference: its content arrives, and everything in
         sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
         secretRegistry: async () => [],
     });
-    const definitions = createDefinitions(targetServices);
+    const arrivals = createArrivals(targetServices);
 
-    const plan = await definitions.plan(workspaceToml(remote, "main"));
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
     expect(plan.items.map((item) => [item.id, item.applicable])).toEqual([["workspace", true]]);
     // Said before anything is fetched, because at preview time nobody can know WHICH things the tree carries.
     expect(plan.needsAction.map((action) => action.subject)).toEqual(["What the workspace brings arrives switched off"]);
 
-    const report = await definitions.apply({ token: plan.token, items: ["workspace"] });
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
     expect(report.failed).toEqual([]);
 
     // The sandbox's own content, the half no definition could carry before this section existed.
@@ -336,7 +341,7 @@ test("a workspace with a history of its own, or one already published, is never 
     // Two commits: somebody has worked here, so this is no longer a fresh sandbox.
     const worked = await makeRoots();
     await makeWorkspaceRepo(worked.work, 2);
-    const workedPlan = await createDefinitions(servicesFor(worked)).plan(workspaceToml(remote));
+    const workedPlan = await createArrivals(servicesFor(worked)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(workedPlan.items[0]?.applicable).toBe(false);
     expect(workedPlan.items[0]?.reason?.length).toBeGreaterThan(0);
 
@@ -344,7 +349,7 @@ test("a workspace with a history of its own, or one already published, is never 
     const published = await makeRoots();
     await makeWorkspaceRepo(published.work);
     await defaultGit(published.work, ["remote", "add", "origin", remote]);
-    const publishedPlan = await createDefinitions(servicesFor(published)).plan(workspaceToml(remote));
+    const publishedPlan = await createArrivals(servicesFor(published)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(publishedPlan.items[0]?.applicable).toBe(false);
     expect(publishedPlan.items[0]?.reason).not.toBe(workedPlan.items[0]?.reason);
     await cleanup();
@@ -356,26 +361,26 @@ test("one commit is not provenance: only the daemon-marked baseline is pristine"
     const unmarked = await makeRoots();
     await makeWorkspaceRepo(unmarked.work);
     await defaultGit(unmarked.work, ["config", "--unset-all", ROOT_BASELINE_CONFIG]);
-    const unmarkedPlan = await createDefinitions(servicesFor(unmarked)).plan(workspaceToml(remote));
+    const unmarkedPlan = await createArrivals(servicesFor(unmarked)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(unmarkedPlan.items[0]?.applicable).toBe(false);
 
     const dirty = await makeRoots();
     await makeWorkspaceRepo(dirty.work);
     await writeFile(join(dirty.work, "notes.md"), "mine\n");
-    const dirtyPlan = await createDefinitions(servicesFor(dirty)).plan(workspaceToml(remote));
+    const dirtyPlan = await createArrivals(servicesFor(dirty)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(dirtyPlan.items[0]?.applicable).toBe(false);
 
     const baseline = await makeRoots();
     await makeWorkspaceRepo(baseline.work);
-    const baselinePlan = await createDefinitions(servicesFor(baseline)).plan(workspaceToml(remote));
+    const baselinePlan = await createArrivals(servicesFor(baseline)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(baselinePlan.items[0]?.applicable).toBe(true);
 
     const unborn = await makeRoots();
     await defaultGit(unborn.work, ["init", "-b", "main"]);
-    const unmarkedUnborn = await createDefinitions(servicesFor(unborn)).plan(workspaceToml(remote));
+    const unmarkedUnborn = await createArrivals(servicesFor(unborn)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(unmarkedUnborn.items[0]?.applicable).toBe(false);
     await defaultGit(unborn.work, ["config", ROOT_FRESH_CONFIG, "true"]);
-    const markedUnborn = await createDefinitions(servicesFor(unborn)).plan(workspaceToml(remote));
+    const markedUnborn = await createArrivals(servicesFor(unborn)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(markedUnborn.items[0]?.applicable).toBe(true);
     await cleanup();
 });
@@ -392,14 +397,14 @@ test("workspace selection preserves the target files owned by unticked definitio
     await writeFile(join(target.work, ".intentic/config/environment.custom.Dockerfile"), overlay);
     await makeWorkspaceRepo(target.work);
 
-    const definitions = createDefinitions(
+    const arrivals = createArrivals(
         servicesFor(target, {
             sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
             secretRegistry: async () => [],
         }),
     );
-    const plan = await definitions.plan(workspaceToml(remote, "main"));
-    const report = await definitions.apply({ token: plan.token, items: ["workspace"] });
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
 
     expect(report.failed).toEqual([]);
     expect(await readFile(join(target.work, ".intentic/config/settings.json"), "utf8")).toBe(settings);
@@ -421,10 +426,10 @@ test("private ignored state in a remote is refused before checkout and the targe
     await mkdir(join(target.work, ".intentic/secrets/auth"), { recursive: true });
     await writeFile(join(target.work, ".intentic/secrets/auth/token.json"), '{"token":"mine"}\n');
 
-    const definitions = createDefinitions(servicesFor(target));
-    const plan = await definitions.plan(workspaceToml(remote, "main"));
+    const arrivals = createArrivals(servicesFor(target));
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
     expect(plan.items[0]?.applicable).toBe(true); // the private file is ignored, so the marked baseline stays clean
-    const report = await definitions.apply({ token: plan.token, items: ["workspace"] });
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
 
     expect(report.applied).toEqual([]);
     expect(report.failed[0]?.error).toContain(".intentic/secrets/auth/token.json");
@@ -439,9 +444,9 @@ test("symlinks and unreadable active manifests fail closed before the workspace 
     });
     const linkedTarget = await makeRoots();
     await makeWorkspaceRepo(linkedTarget.work);
-    const linkedDefinitions = createDefinitions(servicesFor(linkedTarget));
-    const linkedPlan = await linkedDefinitions.plan(workspaceToml(linkedRemote, "main"));
-    const linkedReport = await linkedDefinitions.apply({ token: linkedPlan.token, items: ["workspace"] });
+    const linkedArrivals = createArrivals(servicesFor(linkedTarget));
+    const linkedPlan = await linkedArrivals.plan(streamOf(workspaceToml(linkedRemote, "main")), LIMIT);
+    const linkedReport = await linkedArrivals.apply({ token: linkedPlan.token, items: ["workspace"], includeSecrets: false });
     expect(linkedReport.failed[0]?.error).toContain("120000");
     expect(existsSync(join(linkedTarget.work, "notes.md"))).toBe(false);
 
@@ -450,9 +455,9 @@ test("symlinks and unreadable active manifests fail closed before the workspace 
     });
     const brokenTarget = await makeRoots();
     await makeWorkspaceRepo(brokenTarget.work);
-    const brokenDefinitions = createDefinitions(servicesFor(brokenTarget));
-    const brokenPlan = await brokenDefinitions.plan(workspaceToml(brokenRemote, "main"));
-    const brokenReport = await brokenDefinitions.apply({ token: brokenPlan.token, items: ["workspace"] });
+    const brokenArrivals = createArrivals(servicesFor(brokenTarget));
+    const brokenPlan = await brokenArrivals.plan(streamOf(workspaceToml(brokenRemote, "main")), LIMIT);
+    const brokenReport = await brokenArrivals.apply({ token: brokenPlan.token, items: ["workspace"], includeSecrets: false });
     expect(brokenReport.failed[0]?.error).toContain("automations.json");
     expect(existsSync(join(brokenTarget.work, "notes.md"))).toBe(false);
     expect(await workspaceRemoteUrl(brokenTarget.work)).toBeUndefined();

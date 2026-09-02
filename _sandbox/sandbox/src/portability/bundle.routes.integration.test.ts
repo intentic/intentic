@@ -67,7 +67,7 @@ afterEach(async () => {
     }
 });
 
-test("a collaborator may not list, start, delete or restore: every direction is operating-tier gated", async () => {
+test("a collaborator may not list, start, delete or bring one in: every direction is operating-tier gated", async () => {
     const app = createApp(
         services({
             auth: { authorize: async () => ({ email: "member@example.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden },
@@ -77,7 +77,7 @@ test("a collaborator may not list, start, delete or restore: every direction is 
     expect((await app.request("/bundles", { method: "POST" })).status).toBe(403);
     expect((await app.request("/bundles?name=x.tar.gz", { method: "DELETE" })).status).toBe(403);
     expect((await app.request("/bundles/ticket?name=x.tar.gz", { method: "POST" })).status).toBe(403);
-    expect((await app.request("/bundles/restore", { method: "POST", body: "x" })).status).toBe(403);
+    expect((await app.request("/arrivals/plan", { method: "POST", body: "x" })).status).toBe(403);
 });
 
 test("an unauthenticated caller gets 401, indistinguishable from an unreachable daemon", async () => {
@@ -152,12 +152,28 @@ test("deleting an unknown export is a 404 rather than a silent success", async (
     expect((await app.request("/bundles?name=nope.tar.gz", { method: "DELETE" })).status).toBe(404);
 });
 
-test("a restore body that is not a bundle is a 400, not a half-written workspace", async () => {
+/* THE INBOUND HALF IS /arrivals NOW, one route for all four sources, so these two guards moved with it. They
+ * still belong in this file: taking a bundle in is the other direction of the export beside it, and what they
+ * assert is that a body which is not readable is refused at the READ, before anything is written. */
+test("a body that is not any arrival this daemon reads is a 400, not a half-written workspace", async () => {
     const { app } = await appOn();
-    expect((await app.request("/bundles/restore", { method: "POST", body: new Uint8Array([1, 2, 3, 4]) })).status).toBe(400);
+    // Four bytes of nothing: not gzip, so it is read as a definition, and it is not one.
+    expect((await app.request("/arrivals/plan", { method: "POST", body: new Uint8Array([1, 2, 3, 4]) })).status).toBe(400);
 });
 
-test("an empty restore body is refused before anything is touched", async () => {
+test("an empty arrival body is refused before anything is touched", async () => {
     const { app } = await appOn();
-    expect((await app.request("/bundles/restore", { method: "POST" })).status).toBe(400);
+    expect((await app.request("/arrivals/plan", { method: "POST" })).status).toBe(400);
+});
+
+// A plan the daemon never minted, or minted and consumed: the FILE was fine and the preview went stale, which
+// is a different answer from "that is not a bundle" and the card reacts to it differently.
+test("applying against a token nothing holds is a 409, not a 400", async () => {
+    const { app } = await appOn();
+    const response = await app.request("/arrivals/apply", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: "nope", items: [], includeSecrets: false }),
+    });
+    expect(response.status).toBe(409);
 });

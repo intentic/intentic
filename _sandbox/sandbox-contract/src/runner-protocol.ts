@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DefinitionActionSchema } from "./definition-action.js";
+import { NeedsActionSchema } from "./needs-action.js";
 
 /* THE RUNNER LINK'S EDGES: the handshake on /system/runners/connect, the env a runner boots with, and the
  * placement value a turn request carries. The procedures spoken over the link once it exists live in
@@ -171,7 +171,7 @@ export const RunnerSummarySchema = z.object({
      * surface's drift unit, computed parent-side from the hello's definitionToml plus the overlay hashes).
      * Absent when the runner never said, empty when they agree. Lines whose subject is a Setting are fixable
      * over the live link (the sync door); an overlay line takes a rebuild. */
-    drift: z.array(DefinitionActionSchema).optional(),
+    drift: z.array(NeedsActionSchema).optional(),
 });
 export type RunnerSummary = z.infer<typeof RunnerSummarySchema>;
 
