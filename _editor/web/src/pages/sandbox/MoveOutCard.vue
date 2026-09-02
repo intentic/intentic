@@ -138,7 +138,7 @@ const sizeLabel = (bytes: number): string => {
 </script>
 
 <template>
-    <RowGroup label="Take this sandbox elsewhere" caption="Its shape as a file anyone may read, or its shape and its state as a private archive.">
+    <RowGroup label="Take this sandbox elsewhere">
         <div class="flex flex-col gap-4 p-5">
             <template v-if="canOperate">
                 <!-- THE WORKSPACE REPO, as the one record it is: which repository, on which branch, and the two
@@ -235,12 +235,6 @@ const sizeLabel = (bytes: number): string => {
                     <Button label="Compare against one" size="small" severity="secondary" text :loading="comparing" @click="chooseCompare?.click()" />
                     <input ref="chooseCompare" type="file" accept=".toml,text/plain,application/toml" class="hidden" @change="compare" />
                 </div>
-                <p class="text-2xs text-subtle">
-                    <span class="font-mono">sandbox.toml</span> is references only — repos, connections, secret NAMES, the overlay as source — so it
-                    is safe to commit or hand around. A bundle is that same document plus the bytes nothing can reference: transcripts, checkpoints,
-                    unpushed branches. Never publish one.
-                </p>
-
                 <!-- THE ONE DECISION THE EXPORT ASKS FOR, on the card's own surface. The lock is the state at a
                      glance: it opens and goes warning-coloured the moment the bundle stops being safe to hand
                      over, so the danger is legible before the sentence is read.

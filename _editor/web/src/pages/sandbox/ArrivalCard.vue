@@ -153,7 +153,7 @@ const cancel = (): Promise<void> =>
 </script>
 
 <template>
-    <RowGroup label="Bring a sandbox in" caption="A sandbox.toml, an environment bundle, or another assistant's setup — read, previewed, then applied.">
+    <RowGroup label="Bring a sandbox in">
         <div class="flex flex-col gap-4 p-5">
             <template v-if="canOperate">
                 <template v-if="plan === undefined">
