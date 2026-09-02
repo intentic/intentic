@@ -337,7 +337,7 @@ COPY --from=trees sandbox /opt/sandbox
 # node-pty's npm install script wants tsc (its lib/ is already compiled in the tarball — only the .node needs
 # building). The registry-prebuilt natives (sharp, ast-grep, onnxruntime, davey) are manylinux — safe as copied.
 RUN cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
-    && node-gyp rebuild
+    && node-gyp rebuild --nodedir=/usr/local
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
 # daemon writes/removes its skill at /work/.claude/skills/lsp). It runs the native TypeScript compiler (its
 # bundled @typescript/native-preview binary) over whatever tsconfig project the agent points it at in /work.
