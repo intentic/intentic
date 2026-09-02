@@ -157,7 +157,8 @@ watch(sessions, (list) => {
 });
 
 // Kick off the add-apps tmux job (from the dialog's picks) and hand the user its terminal tab: the terminal IS
-// the live install log and survives refresh/navigation. Completion is observed by watchAdd polling `running`.
+// the live install log and survives refresh/navigation. Completion is observed by watchAdd on the shared
+// terminals list, which the daemon refreshes when the one-shot job's shell returns to its prompt.
 const add = (entries: { template: string; name: string }[]): Promise<void> =>
     act(async () => {
         adding.value = true;

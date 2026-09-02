@@ -292,8 +292,10 @@ export const createWorkspaceRoutes = (services: Services) => {
         // Runs as a one-shot tmux job (session panel-<repo>--add_apps), mirroring /intentic/apply: `intentic
         // add-app` runs the SAME @intentic/scaffold path in an attachable, detached terminal, so the minutes-long
         // pnpm install survives refresh/navigation and its output stays in scrollback above a live prompt.
-        // Completion is observed by the apps extension polling the session's `running` on the global terminals
-        // list. The `--add_apps` key uses an underscore so it can never collide with an app panel key
+        // Completion is observed by the apps extension watching the session's `running` on the global terminals
+        // list, which the daemon refreshes on the `terminals` frame when the managed-process sweep sees a
+        // one-shot job's shell back at its prompt (prompt-signal.ts for the instant path, the poll for the
+        // rest). The `--add_apps` key uses an underscore so it can never collide with an app panel key
         // (<repo>--<app>, where an app name is a lowercase slug); `start` no-ops while the job runs, so a second
         // Add to the same repo can't spawn a concurrent install.
         addApps: i.addApps.handler(async ({ input }) => {

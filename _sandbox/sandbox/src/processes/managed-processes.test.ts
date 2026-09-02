@@ -120,7 +120,27 @@ test("a oneShot job stays running while its command is in the foreground, even p
     panels.stopAll();
 });
 
-test("a oneShot job completes after two consecutive prompt sightings: the session lingers unkilled", async () => {
+test("a oneShot job completes on the first prompt signal once the job was seen, without waiting for a poll tick", async () => {
+    let onPrompt: (() => void) | undefined;
+    const { runner, cmd, killed } = fakeRunner();
+    const panels = createManagedProcesses(runner, {
+        onPromptWatch: (signal) => {
+            onPrompt = signal;
+            return () => {
+                onPrompt = undefined;
+            };
+        },
+    });
+    await panels.start("job", { ...SPEC, oneShot: true });
+    onPrompt?.();
+    expect(panels.running("job")).toBe(true);
+    cmd.set("panel-job", "zsh");
+    onPrompt?.();
+    await vi.waitFor(() => expect(panels.running("job")).toBe(false));
+    expect(killed).toEqual([]);
+});
+
+test("a oneShot job completes after two consecutive prompt sightings on the poll tick: the session lingers unkilled", async () => {
     vi.useFakeTimers();
     const { runner, cmd, killed } = fakeRunner();
     const panels = createManagedProcesses(runner);

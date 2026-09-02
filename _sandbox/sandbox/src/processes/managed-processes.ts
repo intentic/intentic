@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { SHELL } from "../terminal/pane-state.js";
+import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { freePort } from "./free-port.js";
 
 const execFileAsync = promisify(execFile);
@@ -43,7 +44,14 @@ export interface ProcessRunner {
 
 // How often the manager sweeps pane liveness while anything is tracked. The `-d` tmux client exits the moment
 // the session is created, so there is no child "exit" event, session state is only observable by asking tmux.
+// Prompt signals (terminal/prompt-signal.ts) run the same sweep on every preexec and precmd, so a one-shot
+// install that finishes in milliseconds is not held until the next tick.
 const POLL_MS = 2000;
+
+export interface ManagedProcessesOptions {
+    // Injectable in tests; production uses the image zsh's /run/intentic/shell watcher.
+    readonly onPromptWatch?: (onSignal: () => void) => () => void;
+}
 
 const defaultRunner: ProcessRunner = {
     launch: async (session, spec) => {
@@ -168,9 +176,11 @@ export interface ManagedProcesses {
 // means "session alive", not "dev process alive": a Ctrl+C'd dev server sits at a usable prompt and stays
 // running. A oneShot job additionally completes when its shell is back at the prompt; the session lingers
 // attachable, output in scrollback above a live prompt.
-export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): ManagedProcesses => {
+export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, options: ManagedProcessesOptions = {}): ManagedProcesses => {
+    const watchPrompts = options.onPromptWatch ?? watchPromptSignals;
     const current = new Map<string, { port: number; oneShot: true | undefined; startedAt: number; sawJob: boolean; promptStreak: number }>();
     let timer: NodeJS.Timeout | undefined;
+    let unwatchPrompts: (() => void) | undefined;
 
     // Before this many ms, a oneShot sitting at the prompt is treated as "shell still booting, buffered
     // send-keys not consumed yet" rather than "job finished", unless the job was already observed running
@@ -187,7 +197,21 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
         publishRuntimeChange("panels", "terminals");
     };
 
-    const sweep = async (): Promise<void> => {
+    const stopWatching = (): void => {
+        if (timer !== undefined) {
+            clearInterval(timer);
+            timer = undefined;
+        }
+        unwatchPrompts?.();
+        unwatchPrompts = undefined;
+    };
+
+    const ensureWatching = (): void => {
+        timer ??= setInterval(() => void sweep(false), POLL_MS);
+        unwatchPrompts ??= watchPrompts(() => void sweep(true));
+    };
+
+    const sweep = async (fromPrompt = false): Promise<void> => {
         const states = await runner.states();
         for (const [key, entry] of current) {
             const command = states.get(panelSession(key));
@@ -203,16 +227,22 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
                 entry.promptStreak = 0;
                 continue;
             }
-            // Two consecutive prompt sightings debounce the ms-window where the shell sits between the
-            // commands of a `&&` chain (job pgroups hand the tty back to the shell between forks).
+            /* One prompt after a job the sweep saw is enough: precmd IS the shell saying the command finished,
+             * which is what prompt-signal.ts exists to surface without waiting for this tick. Two consecutive
+             * prompt sightings stay for the cases precmd cannot distinguish: a shell still booting before its
+             * send-keys land (never sawJob), and the ms-window between two commands in a `&&` chain that a poll
+             * can read as zsh between forks. */
             entry.promptStreak += 1;
-            if (entry.promptStreak >= 2 && (entry.sawJob || Date.now() - entry.startedAt > ONE_SHOT_GRACE_MS)) {
+            const graceOk = Date.now() - entry.startedAt > ONE_SHOT_GRACE_MS;
+            if (
+                (fromPrompt && entry.sawJob && entry.promptStreak >= 1) ||
+                (entry.promptStreak >= 2 && (entry.sawJob || graceOk))
+            ) {
                 untrack(key);
             }
         }
-        if (current.size === 0 && timer !== undefined) {
-            clearInterval(timer);
-            timer = undefined;
+        if (current.size === 0) {
+            stopWatching();
         }
     };
 
@@ -231,7 +261,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
             // The session exists now; it is not SERVING yet. This frame draws the row as starting, and the port
             // sampler's frame, seconds later, when the dev server actually binds, is what turns it healthy.
             publishRuntimeChange("panels", "terminals");
-            timer ??= setInterval(() => void sweep(), POLL_MS);
+            ensureWatching();
         },
         adopt: async (key, spec) => {
             const command = (await runner.states()).get(panelSession(key));
@@ -243,13 +273,16 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
                 // shell-at-prompt sighting after it finishes completes the one-shot without the boot grace.
                 current.set(key, { port: 0, oneShot: spec.oneShot, startedAt: Date.now(), sawJob: command !== SHELL, promptStreak: 0 });
                 publishRuntimeChange("panels", "terminals");
-                timer ??= setInterval(() => void sweep(), POLL_MS);
+                ensureWatching();
             }
             return true;
         },
         stop: async (key) => {
             const stopped = runner.kill(panelSession(key));
             untrack(key);
+            if (current.size === 0) {
+                stopWatching();
+            }
             await stopped;
         },
         running: (key) => current.has(key),
@@ -263,10 +296,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
             if (stopped) {
                 publishRuntimeChange("panels", "terminals");
             }
-            if (timer !== undefined) {
-                clearInterval(timer);
-                timer = undefined;
-            }
+            stopWatching();
         },
     };
 };
