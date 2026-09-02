@@ -54,16 +54,15 @@ export const machineFacts = (computer: Computer): string[] => {
     return parts;
 };
 
-/* HOW THIS SANDBOX REACHES IT, two independent doors, and a box may be behind both.
+/* HOW THIS SANDBOX REACHES IT through desktop sync, when that door is open.
  *
  * Split out of the fact line rather than sitting at the head of it, because it answers a different question. A
  * row used to run "desktop sync · connected computer · x64 · /usr/bin/zsh · sync agent 0.1.0 · computer agent
  * 0.1.0", six facts of three kinds, one grey, one size, one separator, and the reader had to know which was
- * which to get anything out of it. These are the ones with a shape: each door is one chip, and each carries its
- * own agent's version, so a machine running an old build is visible rather than mysteriously lacking a field.
- *
- * A version is labelled by ITS DOOR rather than by its binary: "desktop sync" and "connected computer" are the
- * names this tab already uses for the two ways in, so nothing needs explaining. */
+ * which to get anything out of it. Only desktop sync earns a chip now: the computer connection is implicit in
+ * every row that can act, and a second chip for it was noise. The chip rides beside the name, after the OS, and
+ * carries the sync agent's version so a machine running an old build is visible rather than mysteriously lacking
+ * a field. */
 /* And whether a newer release has passed the agent behind that door, the version and its staleness as one chip,
  * because they are one thought. "desktop sync 0.1.0" was already on the row and was already the answer to a
  * question nobody knew to ask: a machine ran a five-day-old agent through a bug that agent had a fix for, and
@@ -86,16 +85,8 @@ const door = (name: string, version: string | undefined, latest: string | undefi
     ...(isBehind(version, latest) && latest !== undefined ? { available: latest } : {}),
 });
 
-export const computerDoors = (computer: Computer, latest?: string): ComputerDoor[] => {
-    const doors: ComputerDoor[] = [];
-    if (computer.syncEnrolled) {
-        doors.push(door(`desktop sync`, computer.report?.agents.sync, latest));
-    }
-    if (computer.hostId !== undefined) {
-        doors.push(door(`connected computer`, computer.hostAgent ?? computer.report?.agents.host, latest));
-    }
-    return doors;
-};
+export const computerDoors = (computer: Computer, latest?: string): ComputerDoor[] =>
+    computer.syncEnrolled ? [door(`desktop sync`, computer.report?.agents.sync, latest)] : [];
 
 /* Whether this computer's SYNC agent is one the user should replace, the one door that earns a remedy on the
  * row, because it is the one with a command behind it (`intentic-machine upgrade`). The computer agent's version is

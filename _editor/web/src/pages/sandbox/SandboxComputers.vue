@@ -118,7 +118,7 @@ onMounted(() => {
  * only one the reader closes in a single click, so it says which switch: the same way the host agent's own
  * refusals name the control rather than reporting a broken sandbox. */
 const GAP_TEXT: Record<NonNullable<Computer[`gap`]>, string> = {
-    offline: `Asleep or offline. Nothing to read from it right now.`,
+    offline: `Asleep or offline.`,
     "scope-off": `Turn on "Run commands" in this computer's capability card to see what it is running.`,
     "no-agent": `Reachable, but it has no sync agent, so nothing here knows its folders or ports.`,
     unreported: `Enrolled, but it hasn't reported yet. An agent from before machine reports never will. Re-run its install to update it.`,
@@ -687,7 +687,7 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
                 </template>
 
                 <template #title>
-                    <span class="flex min-w-0 items-center gap-2.5">
+                    <span class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
                         <!-- Semibold against the tier's own medium: this row is the top of three nested tiers
                              and has to outrank the sandbox names inside it, which are a size down already. -->
                         <span class="min-w-0 truncate font-semibold">{{ row.computer.label }}</span>
@@ -697,6 +697,12 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
                              added them: and two of them can genuinely carry the same name. -->
                         <span v-if="osLabel(row.computer)" class="shrink-0 truncate text-xs font-normal text-muted" :title="osTitle(row.computer)">
                             {{ osLabel(row.computer) }}
+                        </span>
+                        <span v-for="door in computerDoors(row.computer, latest)" :key="door.name" :class="DOOR">
+                            <Icon name="sync" class="text-2xs text-subtle" />
+                            {{ door.name }}
+                            <span v-if="door.version" class="font-mono text-subtle">{{ door.version }}</span>
+                            <span v-if="door.available" class="font-mono text-warning">{{ door.available }} available</span>
                         </span>
                     </span>
                 </template>
@@ -722,26 +728,9 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
                      above, so it cannot go stale the next time a mark or a chevron changes size. -->
                 <template #below>
                     <div class="flex flex-col gap-3">
-                        <!-- WHAT IT IS AND HOW THIS SANDBOX REACHES IT, on one line. Two facts of two kinds, so the
-                         doors keep a shape of their own: they are the difference between a machine that syncs
-                         your files and one the agent can run commands on, and a reader scanning three computers
-                         is usually looking for exactly that.
-                         A newer release rides INSIDE the tag it is about, right after the version it supersedes,
-                         rather than at the end of a line the reader would have to match back up to a door. -->
-                        <div
-                            v-if="machineFacts(row.computer).length > 0 || computerDoors(row.computer, latest).length > 0"
-                            class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5"
-                        >
-                            <p v-if="machineFacts(row.computer).length > 0" class="min-w-0 truncate text-xs text-muted">
-                                {{ machineFacts(row.computer).join(` · `) }}
-                            </p>
-                            <span v-for="door in computerDoors(row.computer, latest)" :key="door.name" :class="DOOR">
-                                <Icon :name="door.name === `desktop sync` ? `sync` : `terminal`" class="text-2xs text-subtle" />
-                                {{ door.name }}
-                                <span v-if="door.version" class="font-mono text-subtle">{{ door.version }}</span>
-                                <span v-if="door.available" class="font-mono text-warning">{{ door.available }} available</span>
-                            </span>
-                        </div>
+                        <p v-if="machineFacts(row.computer).length > 0" class="min-w-0 truncate text-xs text-muted">
+                            {{ machineFacts(row.computer).join(` · `) }}
+                        </p>
 
                         <!-- WHAT THE ROW WANTS FROM YOU, if anything: each on its own line, in the tone it earns. -->
                         <div

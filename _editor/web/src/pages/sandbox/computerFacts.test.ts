@@ -67,10 +67,7 @@ test(`separates what the machine is from how it is reached`, () => {
         },
     });
     expect(machineFacts(row)).toEqual([`x64`, `PowerShell 7`, `ADA-LAPTOP`]);
-    expect(computerDoors(row)).toEqual([
-        { name: `desktop sync`, version: `0.1.0` },
-        { name: `connected computer`, version: `0.5.1` },
-    ]);
+    expect(computerDoors(row)).toEqual([{ name: `desktop sync`, version: `0.1.0` }]);
 });
 
 // The hostname is worth width only when the row is showing a different name. Machines are routinely enrolled under

@@ -150,11 +150,6 @@ const add = async (): Promise<void> => {
             </Button>
         </div>
 
-        <p v-if="mine.length === 0 && !adding" class="mt-1 text-2xs text-subtle">
-            None here yet. A runner is a container this sandbox keeps on this computer so agents can run on its cores instead of the ones the
-            workspace lives on; the work still lands here.
-        </p>
-
         <!-- The name is asked for rather than generated: it is what you pick from in the composer every day. -->
         <div v-if="adding" class="mt-2 flex flex-wrap items-center gap-2">
             <input

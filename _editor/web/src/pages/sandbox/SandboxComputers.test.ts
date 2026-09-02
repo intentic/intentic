@@ -160,9 +160,6 @@ it(`says what a computer is when it has no report to show`, () => {
     expect(text).toContain(`Windows 11 Pro`);
     expect(text).toContain(`x64`);
     expect(text).toContain(`PowerShell 7`);
-    // The door it is reachable through, and the version of the agent answering on it: one chip, two spans.
-    expect(text).toContain(`connected computer`);
-    expect(text).toContain(`0.5.1`);
     // The gap it had before is still said, because the OS does not answer it: this machine still has no agent.
     expect(text).toContain(`no sync agent`);
 });
