@@ -468,7 +468,7 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
  * reading when there is something to say (AgentSummarySchema.landedPresence). */
 export const landedAway = (agent: {
     readonly landedPresence?: { readonly landed: number; readonly present: number };
-}): { text: string; hint?: string; title: string } | undefined => {
+}): { text: string; hint?: string; title: string; icon: IconName } | undefined => {
     const presence = agent.landedPresence;
     if (presence === undefined) {
         return undefined;
@@ -485,13 +485,15 @@ export const landedAway = (agent: {
             text: `Removed`,
             hint: `on branch`,
             title: `Removed from your workspace (still on its branch)`,
+            icon: `link-broken`,
         };
     }
-    // A PART of it: the undo glyph and a present/landed fraction. What the user is deciding is whether enough
+    // A PART of it: a present/landed fraction and a split glyph. What the user is deciding is whether enough
     // survived to leave it be, and "9/12" answers that at a glance; the full sentence lives in `title` for hover.
     return {
         text: `${presence.present}/${presence.landed}`,
         title: `${presence.present} of ${presence.landed} files still in your workspace (the rest is on its branch)`,
+        icon: `arrows-h`,
     };
 };
 

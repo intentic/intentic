@@ -698,14 +698,14 @@ const grab = (event: PointerEvent): void => {
                  made. Muted rather than the theme's near-white label for the same reason in miniature: the
                  amber fact is what the row is FOR, and it has to be read before the offer beside it is. Never
                  automatic either: nothing re-lands this without the press. -->
-            <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                <p v-tooltip.top="away.title" class="flex min-w-0 flex-1 items-start gap-1.5 text-2xs leading-snug text-warning">
-                    <Icon name="undo" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
+            <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                <span v-tooltip.top="away.title" class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug text-warning">
+                    <Icon :name="away.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
                         >{{ away.text }}<template v-if="away.hint !== undefined">
                             <span class="text-subtle"> ({{ away.hint }})</span></template
                         ></span
                     >
-                </p>
+                </span>
                 <!-- No resting glyph: the line it sits on already leads with this exact one, and the pair read
                      as a stutter across six words. The spinner is the exception: that one is not decoration
                      but the press reporting itself, and it only exists while the round trip is out. -->

@@ -305,7 +305,9 @@ it(`says the work is not lost, in the same breath`, () => {
 });
 
 it(`shows a compact fraction when only part of a land was discarded`, () => {
-    expect(mount(discarded(1, 2)).textContent ?? ``).toContain(`1/2`);
+    const card = mount(discarded(1, 2));
+    expect(card.textContent ?? ``).toContain(`1/2`);
+    expect(card.querySelector(`[data-icon="arrows-h"]`)).not.toBeNull();
 });
 
 it(`offers the way back, and reports its own press`, () => {
