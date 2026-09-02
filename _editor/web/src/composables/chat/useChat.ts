@@ -24,7 +24,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { agentTranscript, type AgentTranscript } from "./agentTranscript";
-import { keepClosedDraft, takeClosedDraft } from "./closedDrafts";
+import { claimClosedDrafts, keepClosedDraft } from "./closedDrafts";
 import { draftPreview, drawsChat, elsewhereDrafts, publishDrafts, type UnsentDraft } from "./draftEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
@@ -1435,6 +1435,12 @@ export interface Reveal {
     readonly focus: string;
     // Put the caret in the composer: what the press is FOR when it starts something to type into.
     readonly caret: boolean;
+    /* THE WORDS THESE CHATS WERE CLOSED HOLDING (closedDrafts), for the reveal to put back. Filled by the
+     * window whose gesture reopens them, which claims them ONCE from the shared store and sends them with the
+     * summons so every window restores the identical composer; absent on a reveal made in this window alone,
+     * which claims for itself. Never something a calling surface fills in: a board card, a history row and a
+     * deep link all describe the chat they want, and what is waiting in it is this file's business. */
+    readonly unsent?: readonly StoredTab[];
 }
 
 // The transcript round-trip behind a session entry, off the reveal's synchronous path.
@@ -1449,19 +1455,18 @@ const loadSession = async (conversation: Conversation, sessionRef: string, title
     }
 };
 
-/* THE WORDS A CLOSE SET ASIDE, claimed by the chat they were typed into as it comes back (closedDrafts).
+/* THE WORDS A CLOSE SET ASIDE, folded into the tab they were typed into as it comes back (closedDrafts).
  *
  * Every reopen goes through here, and that is the point: the board's card, a history row, a summons from
  * another window and a deep link are all "show me this conversation", and the message waiting in it is part of
- * the conversation. Taken rather than copied, so the composer is the only place those words live again.
+ * the conversation.
  *
  * WHICH ACCOUNT OF THE TAB WINS depends on what the caller is holding. A REGISTERED agent's seed is the
  * daemon's own record (agentTabOf) and outranks a stored copy of it — but it carries `undefined` for
  * everything the registry has nothing to say about, so only its stated fields overlay. A DRAFT's seed knows
  * nothing this doesn't (it is a card the client itself invented), so the kept tab wins outright: its
  * placement, its picks and its persona are the chat, and a fresh tab's defaults would quietly re-aim it. */
-const withClosedDraft = (entry: StoredTab): StoredTab => {
-    const kept = takeClosedDraft(entry.conversationId);
+const withClosedDraft = (entry: StoredTab, kept: StoredTab | undefined): StoredTab => {
     if (kept === undefined) {
         return entry;
     }
@@ -1471,15 +1476,11 @@ const withClosedDraft = (entry: StoredTab): StoredTab => {
     return { ...merged, draft: kept.draft, draftAt: kept.draftAt, attachments: kept.attachments, queued: kept.queued };
 };
 
-/* The same claim made on a tab this window ALREADY has open, which is how a close and a reopen in two different
- * windows meet: the other window's × set the words aside, this one never closed its own copy. Only ever into an
- * empty composer — words being typed here now are the live ones, and a stored copy must not overwrite them. */
-const claimClosedDraft = (conversation: Conversation): void => {
-    if (conversation.unsent.value) {
-        return;
-    }
-    const kept = takeClosedDraft(conversation.conversationId);
-    if (kept !== undefined) {
+/* The same words put back into a tab this window ALREADY has open, which is how a close and a reopen in two
+ * different windows meet: the other window's × set them aside, this one never closed its own copy. Only ever
+ * into an EMPTY composer — words being typed here now are the live ones, and a restore must not overwrite them. */
+const restoreKept = (conversation: Conversation, kept: StoredTab | undefined): void => {
+    if (kept !== undefined && !conversation.unsent.value) {
         restoreComposer(conversation, kept);
     }
 };
@@ -1487,8 +1488,9 @@ const claimClosedDraft = (conversation: Conversation): void => {
 /* One entry, resolved to the open Conversation it means in THIS window, matching an open tab by id and a
  * session by the session it shows, so a summons broadcast twice (or a chat this window already opened by hand)
  * focuses the tab it already has rather than minting a twin. What has to join the strip goes into `additions`,
- * so the reveal lands as ONE list write however many chats it carries. */
-const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversation => {
+ * so the reveal lands as ONE list write however many chats it carries. `kept` is what the reveal is bringing
+ * back to these composers (reveal's note), by conversation. */
+const resolveEntry = (entry: RevealEntry, additions: Conversation[], kept: ReadonlyMap<string, StoredTab>): Conversation => {
     const opened = [...conversations.value, ...additions];
     const byId = opened.find((conversation) => conversation.conversationId === entry.conversationId);
     if (entry instanceof Conversation) {
@@ -1509,7 +1511,7 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
         conversation.title.value = entry.title ?? null;
         // A history row names a session, not a composer, so anything set aside for this chat is the only
         // account of what was waiting to be sent in it.
-        claimClosedDraft(conversation);
+        restoreKept(conversation, kept.get(entry.conversationId));
         conversation.loading.value = true;
         void loadSession(conversation, entry.sessionRef, entry.title ?? null);
         additions.push(conversation);
@@ -1519,8 +1521,8 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
     const existing = byId ?? (session === undefined ? undefined : opened.find((conversation) => conversation.session.value?.id === session.id));
     if (existing !== undefined) {
         // Closed in another window, still open here: the words that × set aside come back into this window's
-        // own composer (claimClosedDraft's note), never over one being typed in.
-        claimClosedDraft(existing);
+        // own composer (restoreKept's note), never over one being typed in.
+        restoreKept(existing, kept.get(entry.conversationId));
         // The summoner says the fleet knows this agent, however the tab came to be open, the latch that keeps
         // an opened card from re-appearing on the board as a phantom draft (see the registered flag's note).
         if (entry.registered) {
@@ -1539,21 +1541,32 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
     // rather than left to the reachability watch, a turn running daemon-side attaches and renders live, a
     // settled one replays its record, and an unreachable daemon leaves the tab as it stands for that watch to
     // retry (hydrateOnce clears its mark on failure).
-    const conversation = restoreTab(withClosedDraft(entry));
+    const conversation = restoreTab(withClosedDraft(entry, kept.get(entry.conversationId)));
     additions.push(conversation);
     hydrateOnce(conversation);
     return conversation;
 };
 
+/* WHAT A REVEAL IS BRINGING BACK to the composers it opens, by conversation: the words carried on a summons
+ * (claimed once, in the window that was pressed), or, for a reveal this window makes alone (a run taken into the
+ * panel, a link followed inside it), whatever this window can claim for itself right now.
+ *
+ * Claimed for the whole reveal rather than entry by entry, so a Shift-run of cards into panes makes one claim,
+ * and so the two cases meet in one place: the difference between "the window that was pressed already claimed
+ * these for me" and "nobody has" is the whole subtlety, and it is a single `??`. */
+const keptFor = (entries: readonly RevealEntry[], unsent: readonly StoredTab[] | undefined): ReadonlyMap<string, StoredTab> =>
+    new Map((unsent ?? claimClosedDrafts(entries.map((entry) => entry.conversationId))).map((tab) => [tab.conversationId, tab] as const));
+
 // Reveal returns the conversation the focus resolved to, the summoning surface may still need the live
 // instance (a fork link, a test fixture). `unpane` shows nothing, so it returns nothing.
-export const reveal = ({ verb, entries, focus, caret }: Reveal): Conversation | undefined => {
+export const reveal = ({ verb, entries, focus, caret, unsent }: Reveal): Conversation | undefined => {
     if (verb === `unpane`) {
         closePane(focus);
         return undefined;
     }
     const additions: Conversation[] = [];
-    const resolved = entries.map((entry) => resolveEntry(entry, additions));
+    const kept = keptFor(entries, unsent);
+    const resolved = entries.map((entry) => resolveEntry(entry, additions, kept));
     // The focus as THIS window knows it (see resolveEntry's aliasing).
     const at = entries.findIndex((entry) => entry.conversationId === focus);
     const focusId = (at === -1 ? undefined : resolved[at]?.conversationId) ?? focus;
@@ -1801,12 +1814,18 @@ const setPanes = (ids: readonly string[]): void => {
  * whole tab is kept, not merely its text, because what is unsent may be a staged attachment or a message
  * queued behind a running turn, and because the chat has to come back as itself (its picks, its session, its
  * persona) rather than as a fresh tab wearing somebody's words. The board goes on drawing a card for it, and
- * opening that card is what takes the entry back (resolveEntry). */
-const closeTabs = (ids: ReadonlySet<string>): void => {
+ * opening that card is what takes the entry back (resolveEntry).
+ *
+ * ONLY THE WINDOW DRAWING THE CHAT PUTS WORDS THERE, the rule draftEcho states and this is the second reader
+ * of: a window that is not drawing it keeps the tab objects it built, frozen at whatever was in their composers
+ * when the panel left, and a close that stored one of those would set aside a message the user has since sent
+ * out in the floating window — offered back, by a later card click, into the composer they sent it from. Such a
+ * window still closes its copy; it just has nothing to say about what was in it. */
+export const closeTabs = (ids: ReadonlySet<string>): void => {
     traceFocus(`close`, { ids: [...ids], active: activeId.value });
     for (const conversation of conversations.value) {
         if (ids.has(conversation.conversationId)) {
-            if (conversation.unsent.value) {
+            if (conversation.unsent.value && drawsChat.value) {
                 keepClosedDraft(snapshotTab(conversation));
             }
             conversation.abort();

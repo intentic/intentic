@@ -3,7 +3,9 @@
 // (a window that never saw the click applies the identical reveal) plus the two rules the wire form carries:
 // queued messages never ride it (another window would send them again), and a summons for another sandbox's
 // chats is ignored whole.
+import { nextTick } from "vue";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { StoredTab } from "./tabSnapshot";
 
 vi.mock("../sandbox/sandboxClient", () => {
     const sandboxRequest = vi.fn();
@@ -47,18 +49,46 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 const { resetChat, useChat } = await import("./useChat");
 const { Conversation } = await import("./conversation");
 const { chatRun } = await import("./chatRun");
-const { receiveSummons, relaySummons, summonChat, wireSummons } = await import("./summon");
+const { claimedSummons, receiveSummons, relaySummons, summonChat, wireSummons } = await import("./summon");
+const { closedDrafts, forgetClosedDraft, keepClosedDraft } = await import("./closedDrafts");
+const { receiveFloatingNote } = await import("../floating");
+
+/* THE CHAT IN A WINDOW OF ITS OWN, as the rest of the app hears it: one beat from that window (floating.ts's
+ * own seam), which is what makes this window stop drawing the panel — and its own copies of these chats shadows
+ * of the ones on screen out there. */
+const popOut = (): void => receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+const dock = (): void => receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+
+// A chat that was closed with a message still in it, as the store holds it and as a board card would name it
+// (agentTabOf builds the same shape from the registry).
+const setAside = (conversationId: string, draft: string): StoredTab => ({
+    conversationId,
+    isolated: true,
+    registered: false,
+    provider: `claude`,
+    harness: `native`,
+    draft,
+    draftAt: 1_700,
+    attachments: [],
+    queued: [],
+});
 
 beforeEach(() => {
     local.clear();
     session.clear();
     resetChat();
+    for (const entry of closedDrafts.value) {
+        forgetClosedDraft(entry.conversationId);
+    }
     // A daemon with nothing to say unless a test says otherwise: reveal hydrates the tabs it opens.
     sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
 });
 
 afterEach(() => {
     chatRun.value = undefined;
+    // Whatever a case did with the panel, this window draws the chat again: ownership is app-wide state, and a
+    // suite that left it popped out would run every later case as a window watching someone else's panel.
+    dock();
     vi.clearAllMocks();
 });
 
@@ -170,4 +200,94 @@ it(`relays a panel gesture without re-applying it in the window that made it`, (
 
     expect(chat.activeId.value).toBe(held);
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(other.conversationId);
+});
+
+/* THE WORDS A CLOSE SET ASIDE RIDE THE SUMMONS (closedDrafts), claimed once by the window that was pressed.
+ *
+ * The store answers the first window to ask, and every window applies the same reveal, so a claim made while
+ * applying is a race, one the surface the user is looking at has no reason to win: with the chat POPPED OUT the
+ * click is on the BOARD, whose own copy of the conversation is on no screen at all. */
+it(`claims a closed chat's words once, and sends them with the summons`, () => {
+    keepClosedDraft(setAside(`cnv-parked`, `the half-written message`));
+
+    const carrying = claimedSummons({
+        kind: `reveal`,
+        verb: `show`,
+        entries: [setAside(`cnv-parked`, ``)],
+        focus: `cnv-parked`,
+        caret: false,
+    });
+
+    expect(carrying.kind === `reveal` && carrying.unsent).toMatchObject([{ conversationId: `cnv-parked`, draft: `the half-written message` }]);
+    // ...and taken, so the second window applying this reveal does not go looking for them in a store that
+    // now has nothing, which is exactly the bug: it opened the chat with an empty composer.
+    expect(closedDrafts.value).toEqual([]);
+});
+
+// The receiving half, and the case the user reported: the × was pressed in the popped-out window, the card was
+// clicked on the board, and THIS window's store holds nothing. The message comes back all the same.
+it(`restores a summoned chat's message from what the summons carries, with an empty store`, () => {
+    const chat = useChat();
+    const wire = wireSummons({
+        kind: `reveal`,
+        verb: `show`,
+        entries: [setAside(`cnv-parked`, ``)],
+        focus: `cnv-parked`,
+        caret: false,
+        unsent: [setAside(`cnv-parked`, `the half-written message`)],
+    });
+
+    receiveSummons(wire);
+
+    expect(chat.activeId.value).toBe(`cnv-parked`);
+    expect(chat.active.value.draft.value).toBe(`the half-written message`);
+    // Dated from when it was written: the mark on the board says how long the message has been standing, and a
+    // restore that re-stamped it would call a four-day-old sentence fresh work.
+    expect(chat.active.value.draftAt.value).toBe(1_700);
+});
+
+/* CLOSING FROM THE BOARD IS A SUMMONS TOO, for the reason opening from it is: the card is the conversation seen
+ * from the board, and the panel drawing that conversation may be another window's. */
+it(`closes a chat in a window that never saw the click`, () => {
+    const chat = useChat();
+    const clicked = new Conversation();
+    receiveSummons(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
+    expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toContain(clicked.conversationId);
+
+    receiveSummons(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
+
+    expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
+});
+
+/* ...and a window that is NOT drawing the chat has nothing to say about what was in its composer (draftEcho's
+ * rule, which this is the second reader of). Its tab is frozen at whatever it last heard, so a close that set
+ * THAT aside would keep a message the user has since sent out in the floating window, and hand it back into the
+ * composer they sent it from at the next click on the card. */
+it(`sets no words aside for a chat this window is only shadowing`, async () => {
+    const chat = useChat();
+    const clicked = new Conversation();
+    receiveSummons(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
+    chat.active.value.draft.value = `what the composer out there held a moment ago`;
+    await nextTick();
+    popOut();
+
+    receiveSummons(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
+
+    expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
+    expect(closedDrafts.value).toEqual([]);
+});
+
+// The queue rule applies to the carried words too, and for the same reason it applies to the entries: a queued
+// turn restored in two windows is one press and two identical sends.
+it(`strips queued turns from the words a summons carries`, () => {
+    const wire = wireSummons({
+        kind: `reveal`,
+        verb: `show`,
+        entries: [setAside(`cnv-parked`, ``)],
+        focus: `cnv-parked`,
+        caret: false,
+        unsent: [{ ...setAside(`cnv-parked`, `still typing`), queued: [{ text: `about to be sent`, attachments: [] }] }],
+    });
+
+    expect(wire.kind === `reveal` && wire.unsent).toMatchObject([{ draft: `still typing`, queued: [] }]);
 });

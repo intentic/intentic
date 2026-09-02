@@ -21,7 +21,7 @@ Object.defineProperty(globalThis, `localStorage`, {
     },
 });
 
-const { closedDrafts, forgetClosedDraft, keepClosedDraft, receiveClosedDraftNote, takeClosedDraft } = await import("./closedDrafts");
+const { claimClosedDrafts, closedDrafts, forgetClosedDraft, keepClosedDraft, receiveClosedDraftNote } = await import("./closedDrafts");
 
 const tab = (conversationId: string, draft: string): StoredTab => ({
     conversationId,
@@ -60,12 +60,23 @@ describe(`closedDrafts`, () => {
         expect(closedDrafts.value.map((entry) => entry.draft)).toEqual([`what I actually meant`]);
     });
 
-    it(`hands an entry back exactly once: taking it is what puts the words in a composer`, () => {
+    it(`hands an entry back exactly once: claiming it is what puts the words in a composer`, () => {
         keepClosedDraft(tab(`c1`, `half a thought`));
 
-        expect(takeClosedDraft(`c1`)?.draft).toBe(`half a thought`);
-        expect(takeClosedDraft(`c1`)).toBeUndefined();
+        expect(claimClosedDrafts([`c1`]).map((entry) => entry.draft)).toEqual([`half a thought`]);
+        expect(claimClosedDrafts([`c1`])).toEqual([]);
         expect(closedDrafts.value).toEqual([]);
+    });
+
+    // One claim for the whole reveal (a Shift-run of cards into panes), and only the chats it names: the rest of
+    // the board's set-aside cards are nobody's business on that press.
+    it(`claims several at once and leaves the chats the reveal didn't name`, () => {
+        keepClosedDraft(tab(`c1`, `first`));
+        keepClosedDraft(tab(`c2`, `second`));
+        keepClosedDraft(tab(`c3`, `third`));
+
+        expect(claimClosedDrafts([`c1`, `c3`]).map((entry) => entry.conversationId)).toEqual([`c3`, `c1`]);
+        expect(closedDrafts.value.map((entry) => entry.conversationId)).toEqual([`c2`]);
     });
 
     it(`survives the window that wrote it`, async () => {

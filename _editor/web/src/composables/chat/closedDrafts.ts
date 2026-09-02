@@ -24,7 +24,7 @@ import { useSandbox } from "../sandbox/useSandbox";
  * SCOPED BY SANDBOX, like the tab snapshot it is made of: these name conversations of one daemon, and a window
  * pointed at another box has no business drawing them.
  *
- * AN ENTRY LEAVES ONLY BY BEING TAKEN, when the chat is opened again (useChat.resolveEntry) or the card is
+ * AN ENTRY LEAVES ONLY BY BEING CLAIMED, when the chat is opened again (useChat.reveal) or the card is
  * dismissed for good (the board's ×). There is no sweep and no expiry: a half-written message is not litter,
  * and the one thing worse than a card that lingers is a message that vanished on a schedule. The cap below is
  * the only bound, and it exists for the storage quota rather than for tidiness. */
@@ -97,12 +97,23 @@ export const keepClosedDraft = (tab: StoredTab): void => {
     publish([tab, ...kept.value.filter((entry) => entry.conversationId !== tab.conversationId)].slice(0, KEEP));
 };
 
-/** Take one back, for the chat that is being reopened: the entry is returned AND dropped, because the words are
- *  about to live in a composer again and two copies of a draft is how one of them goes stale. */
-export const takeClosedDraft = (conversationId: string): StoredTab | undefined => {
-    const found = kept.value.find((entry) => entry.conversationId === conversationId);
-    if (found !== undefined) {
-        publish(kept.value.filter((entry) => entry !== found));
+/* TAKE THEM BACK, for the chats a reveal is reopening: the entries are returned AND dropped, because the words
+ * are about to live in a composer again and two copies of a draft is how one of them goes stale.
+ *
+ * CLAIMED ONCE PER REVEAL, BY THE WINDOW THAT WAS PRESSED, which then carries what it took to the app's other
+ * windows on the summons itself (summon.ts). Letting each window reach in here as it applied the reveal is what
+ * the first cut did, and it lost the message it was written to save: reopening a chat is a broadcast, the first
+ * window to resolve the entry emptied this store, and with the chat POPPED OUT that window is the board's, whose
+ * copy of the conversation is on no screen at all. The floating window, the one actually drawing the chat, then
+ * rebuilt the tab from an entry that no longer existed and opened the composer empty.
+ *
+ * Taken as ONE claim (rather than a call per chat) so a reveal carrying several — a Shift-run of cards into
+ * panes — writes and broadcasts the remainder once. */
+export const claimClosedDrafts = (conversationIds: readonly string[]): readonly StoredTab[] => {
+    const wanted = new Set(conversationIds);
+    const found = kept.value.filter((entry) => wanted.has(entry.conversationId));
+    if (found.length > 0) {
+        publish(kept.value.filter((entry) => !wanted.has(entry.conversationId)));
     }
     return found;
 };

@@ -116,7 +116,7 @@ const {
 // The whole store rather than a destructure: the first screen's connect offer acts on the FOCUSED chat, and
 // the card takes that conversation's view (provider, harness, the press that re-points it) as one object.
 const chat = useChat();
-const { active, panes, closeTabs, connected, accountsLoaded } = chat;
+const { active, panes, connected, accountsLoaded } = chat;
 // A refusal lands on the board's notice strip: the preparation refuses whole (a running source, a transcript
 // that couldn't be captured), and a press that does nothing visible reads as a button that broke.
 const synthesize = async (): Promise<void> => {
@@ -934,6 +934,11 @@ const reviewAgent = (agent: FleetAgent): void => {
  * nothing daemon-side to file, and deliberately the identical act the chat rail's × performs, down to asking
  * for no confirmation, so the two surfaces cannot come to mean different things by the same press.
  *
+ * A SUMMONS, like every other gesture on this board: the chat it closes may be another window's floating one,
+ * and a card is the conversation seen from here rather than a tab of this window. Pressed locally it shut the
+ * board window's own invisible copy while the floating window went on showing the chat — and the words that
+ * close set aside were that copy's, frozen at whatever it last heard, not the message actually being typed.
+ *
  * TWO PRESSES WHEN THERE IS A MESSAGE IN IT, and that is the whole shape of it. The first closes the tab, which
  * sets the unsent words aside rather than destroying them (chat/closedDrafts), so the card stays, now standing
  * for the message alone. The second is the press that means the message too, and it is the only way this app
@@ -941,7 +946,7 @@ const reviewAgent = (agent: FleetAgent): void => {
  * about to go. */
 const closeAgent = (agent: FleetAgent): void => {
     if (agent.open) {
-        closeTabs(new Set([agent.id]));
+        summonChat({ kind: `close`, conversationIds: [agent.id] });
         return;
     }
     forgetClosedDraft(agent.id);

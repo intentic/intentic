@@ -1,8 +1,9 @@
+import { claimClosedDrafts } from "./closedDrafts";
 import { Conversation } from "./conversation";
 import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
-import { snapshotTab } from "./tabSnapshot";
-import { type Reveal, reveal, type RevealEntry } from "./useChat";
+import { snapshotTab, type StoredTab } from "./tabSnapshot";
+import { closeTabs, type Reveal, reveal, type RevealEntry } from "./useChat";
 import { useSandbox } from "../sandbox/useSandbox";
 
 /* SUMMONING THE CHAT, FOR EVERY WINDOW AT ONCE, the one way a surface outside the panel puts something on it.
@@ -38,16 +39,31 @@ export type Summons =
     | ({ readonly kind: `reveal` } & Reveal)
     // A workflow run taken into the panel: every window's panel follows the run from its own ledger reads
     // (ChatPanel's follower), so the summons carries the run's id and nothing else.
-    | { readonly kind: `run`; readonly runId: string };
+    | { readonly kind: `run`; readonly runId: string }
+    /* THE OTHER HALF OF A BOARD CARD: closing the chat it stands for, everywhere, the same way opening it shows
+     * it everywhere. A card is not a tab of the window it is drawn in — it is the conversation, seen from the
+     * board — so its × closing only the pressed window's copy came out wrong exactly where the reveal did: with
+     * the chat POPPED OUT, the press on the board shut an invisible shadow of it while the floating window went
+     * on showing the chat, and the words that close set aside were the shadow's stale copy of a message still
+     * being typed one window away.
+     *
+     * The panel's OWN × is untouched and still local (ChatTabList): a gesture on the strip acts on the strip it
+     * was made in, which is the rule this is the other side of, not an exception to. */
+    | { readonly kind: `close`; readonly conversationIds: readonly string[] };
 
 // The wire form: live conversations fold into their portable snapshots, queued messages stripped (see above).
 export type WireSummons = { readonly sandbox: string | undefined } & Summons;
 
 const portable = (entry: RevealEntry): RevealEntry => (entry instanceof Conversation ? { ...snapshotTab(entry), queued: [] } : entry);
 
+// The same rule for the words a reopened chat brings back with it (closedDrafts): the message, its age and its
+// staged files ride, the QUEUED turns do not. Those are sends waiting to happen, and they happen once, in the
+// window that was pressed.
+const carried = (tab: StoredTab): StoredTab => ({ ...tab, queued: [] });
+
 export const wireSummons = (summons: Summons): WireSummons => ({
     sandbox: useSandbox().activeSandboxId.value,
-    ...(summons.kind === `reveal` ? { ...summons, entries: summons.entries.map(portable) } : summons),
+    ...(summons.kind === `reveal` ? { ...summons, entries: summons.entries.map(portable), unsent: summons.unsent?.map(carried) } : summons),
 });
 
 const apply = (summons: Summons): void => {
@@ -55,7 +71,20 @@ const apply = (summons: Summons): void => {
         showRun(summons.runId, `live`);
         return;
     }
+    if (summons.kind === `close`) {
+        closeTabs(new Set(summons.conversationIds));
+        return;
+    }
     reveal(summons);
+};
+
+// What a summons says about itself in the focus trace: a tab list that changed because ANOTHER window was
+// clicked is the one movement no local gesture explains, so it says where it came from.
+const traced = (summons: Summons): Record<string, unknown> => {
+    if (summons.kind === `reveal`) {
+        return { kind: summons.kind, verb: summons.verb, focus: summons.focus };
+    }
+    return summons.kind === `run` ? { kind: summons.kind, run: summons.runId } : { kind: summons.kind, ids: summons.conversationIds.join(`,`) };
 };
 
 // Another window's summons, arriving here, the channel's receiving half, named so a test can hand it a wire
@@ -64,12 +93,7 @@ export const receiveSummons = (summons: WireSummons): void => {
     if (summons.sandbox !== useSandbox().activeSandboxId.value) {
         return;
     }
-    // The other end of the focus trace: a focus that moves because ANOTHER window was clicked is the one
-    // movement no local gesture explains, so it says where it came from.
-    traceFocus(
-        `summons`,
-        summons.kind === `reveal` ? { kind: summons.kind, verb: summons.verb, focus: summons.focus } : { kind: summons.kind, run: summons.runId },
-    );
+    traceFocus(`summons`, traced(summons));
     apply(summons);
 };
 
@@ -97,9 +121,25 @@ export const relaySummons = (summons: Summons): void => {
     channel?.postMessage(wireSummons(summons));
 };
 
+/* THE SUMMONS AS IT GOES OUT, HOLDING THE WORDS ITS CHATS WERE CLOSED WITH (closedDrafts). Claimed here, once,
+ * by the window whose gesture reopens them, and then carried, because that store answers the FIRST window to ask
+ * and every window applies the same reveal.
+ *
+ * Letting each of them ask for itself is what the first cut did, and it lost the message it was written to save.
+ * The press is on the BOARD; summonChat applies locally before it broadcasts; so the board's window claimed the
+ * words into a conversation of its own — and when the chat is POPPED OUT that window draws no chat at all, while
+ * the floating one, the only place the user could see the message, rebuilt the tab from a store already empty.
+ *
+ * Its own function because the guarantee is that the local apply and the broadcast are handed the SAME claim,
+ * never two, and that is the thing worth being able to read on its own (wireSummons is exported for its half of
+ * the same reason). */
+export const claimedSummons = (summons: Summons): Summons =>
+    summons.kind === `reveal` ? { ...summons, unsent: claimClosedDrafts(summons.entries.map((entry) => entry.conversationId)) } : summons;
+
 // Apply here, tell everyone else, a BroadcastChannel does not deliver to its own poster, so the local apply
 // and the broadcast together are what make every window (this one included) run the identical reveal.
 export const summonChat = (summons: Summons): void => {
-    apply(summons);
-    relaySummons(summons);
+    const carrying = claimedSummons(summons);
+    apply(carrying);
+    relaySummons(carrying);
 };
