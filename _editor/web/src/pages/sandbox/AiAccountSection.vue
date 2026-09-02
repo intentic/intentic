@@ -8,7 +8,7 @@ import {
     type TranslatorAccount,
     providerLabel,
 } from "@intentic/sandbox-contract";
-import { Button, formatTokens, InfoHint, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
+import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";
@@ -86,24 +86,11 @@ const routedProvider = computed<KeyedProvider | undefined>(() =>
         ? managedProvider.value
         : undefined,
 );
-// The full mechanic is parked behind the row's (i) rather than printed on screen.
-const ROUTED_ROW: Record<KeyedProvider, { title: string; about: string }> = {
-    codex: {
-        title: `ChatGPT subscription`,
-        about: `Runs Codex on your ChatGPT subscription, everywhere: on its own and under the Claude Code harness.`,
-    },
-    grok: {
-        title: `Under Claude Code`,
-        about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription, a separate sign-in from the Grok account above.`,
-    },
-    kimi: {
-        title: `Kimi Code subscription`,
-        about: `Runs Kimi models under the Claude Code harness on your Kimi Code subscription, no API key or metered API balance required.`,
-    },
-    gemini: {
-        title: `Google account`,
-        about: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account, free, and the one connection this provider needs.`,
-    },
+const ROUTED_ROW: Record<KeyedProvider, { title: string }> = {
+    codex: { title: `ChatGPT subscription` },
+    grok: { title: `Under Claude Code` },
+    kimi: { title: `Kimi Code subscription` },
+    gemini: { title: `Google account` },
 };
 
 // Codex, Kimi and Gemini own no native account: the subscription row IS their connection.
@@ -336,14 +323,6 @@ onUnmounted(() => clearTimeout(ringTimer));
          does: the ring needs room to sit outside the surface, and growing the section for 2.5s would shove the
          page. -->
     <RowGroup id="ai-account" label="AI account" :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''">
-        <template #info>
-            <InfoHint label="About AI accounts">
-                <span class="block text-xs text-content">
-                    The accounts your agent signs in as. Every credential is stored inside your sandbox, never on the platform: connecting here signs
-                    the sandbox in, not this browser.
-                </span>
-            </InfoHint>
-        </template>
         <!-- The provider switcher rides the group label (where "Command output" carries its own trailing
              controls), and the dot per chip is the point: this group shows ONE provider at a time, so without it
              the question it exists to answer, which AI can my agent use?: costs a click each. The dot has
@@ -511,7 +490,6 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :title="ROUTED_ROW[routedProvider].title"
                     state="connected"
                     :note="account.label"
-                    :about="ROUTED_ROW[routedProvider].about"
                     :headroom="headroom"
                     :exhausted="exhausted"
                 >
@@ -538,7 +516,6 @@ onUnmounted(() => clearTimeout(ringTimer));
                     state="missing"
                     :note="routedFlowLive ? `signing in…` : `not connected`"
                     :note-busy="routedFlowLive"
-                    :about="ROUTED_ROW[routedProvider].about"
                 >
                     <template #control>
                         <Button

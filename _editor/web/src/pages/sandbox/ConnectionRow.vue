@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { InfoHint, Row } from "@intentic/ui";
+import { Row } from "@intentic/ui";
 import { nextTick, ref, useTemplateRef } from "vue";
 import UsageRing from "../../components/UsageRing.vue";
 import type { PlanHeadroom } from "../../composables/chat/usageStatus";
@@ -18,7 +18,6 @@ import type { PlanHeadroom } from "../../composables/chat/usageStatus";
  *     derive a name from: without it, a second one is a second row saying nothing but the provider's name.
  *   · its STATE, in the same small type, in the same place, for every provider ("not connected", the signed-in
  *     identity, "signing in…")
- *   · an optional (i) for the paragraph of mechanics that would otherwise be printed on screen
  *   · the ACTION, in #control: one of them, except on a credential that has gone bad, where repairing it and
  *     dropping it are genuinely two different answers
  *   · the live sign-in, in #below, inside this row's hairline rather than in a panel detached from it
@@ -47,8 +46,6 @@ const {
     // second line materialising under a row already on screen pushes every row below it down.
     descriptionPending?: boolean;
     tone?: `default` | `warning`;
-    // The paragraph of mechanics, parked behind an (i): printing one per row is what made this card a wall.
-    about?: string;
     interactive?: boolean;
     // Whether this connection's name is the user's to change: true only where the sandbox owns the credential.
     renamable?: boolean;
@@ -158,9 +155,6 @@ const DOT_TONE: Record<string, string> = {
                 <span v-if="note && !editing" class="flex items-center gap-1 text-2xs font-normal text-subtle">
                     <Icon v-if="noteBusy" name="spinner" spin />{{ note }}
                 </span>
-                <InfoHint v-if="about" :label="`About ${title}`">
-                    <span class="block text-xs text-content">{{ about }}</span>
-                </InfoHint>
             </span>
         </template>
         <!-- Indented to the title's x, not the glyph's: the description belongs to the name above it. A bar of
