@@ -51,7 +51,7 @@ services:
             DATABASE_URL: postgresql://intentic:${POSTGRES_PASSWORD:?}@postgres:5432/intentic
             # Per-process pg pool cap. Raise only alongside Postgres max_connections (default 100): the ceiling
             # is replicas × this, plus headroom for the boot migration and psql.
-            DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+            DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
             # The api's own public origin (Better-Auth baseURL + the origin the SPA calls). Same-site with WEB_ORIGIN.
             API_URL: ${API_URL:?e.g. https://api.intentic.dev}
             # The SPA's origin — the CORS allow-origin and Better-Auth trusted origin. MUST be exactly this.
@@ -60,30 +60,34 @@ services:
             SECRETS_KEY: ${SECRETS_KEY:?generate a long random string — encrypts stored OAuth/sandbox tokens at rest}
             GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?}
             GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?}
+            # EVERY OPTIONAL KNOB BELOW IS PASSED THROUGH EMPTY, NEVER WITH A COPY OF ITS DEFAULT. The api's
+            # env source treats an empty value as unset (@puristic/env sources/env.js), so an unset knob falls
+            # back to the default in _platform/api/src/config.ts and that file stays the only place a default
+            # is written. Copying defaults here is what silently drifted before: this file still said 4 CPUs /
+            # 8192 MB / 20 GB for a hosted machine long after config.ts had halved the shape, so deploying it
+            # would have doubled every machine nobody asked to resize.
+            #
+            # The list itself, though, must be COMPLETE — compose only forwards what is named here, so a knob
+            # missing from it is one an operator can set in .env and watch do nothing, with no error anywhere.
+            # That is how POOL_* and TRIAL_* came to be set on a deployment that was not reading them. Add the
+            # variable here in the same commit that adds the field to config.ts.
+            #
             # Comma-separated emails whose signed-in session may call the /admin surface (the operator's
             # platform-admin panel). Empty (the default) disables it outright — no route, no exposure.
             ADMIN_EMAILS: ${ADMIN_EMAILS:-}
             # The admin surface's writes (suspend/retry/stop/erase). Leave off until the panel is a pinned
             # install — see the platform-admin extension's README.
-            ADMIN_MUTATIONS: ${ADMIN_MUTATIONS:-false}
+            ADMIN_MUTATIONS: ${ADMIN_MUTATIONS:-}
             # Cloudflare is DNS-ONLY now (the reachability fabric is the ingress below): the loopback-certificate
             # records for same-machine sandboxes, and the sweep that clears their residue.
             INTENTIC_CLOUDFLARE_API_TOKEN: ${INTENTIC_CLOUDFLARE_API_TOKEN:-}
-            INTENTIC_CLOUDFLARE_ZONE: ${INTENTIC_CLOUDFLARE_ZONE:-intentic.dev}
-            INTENTIC_CLOUDFLARE_POOL_SIZE: ${INTENTIC_CLOUDFLARE_POOL_SIZE:-1}
-            # Daily reaper: DELETES intentic-owned sandbox tunnels that are not connected and have been idle
-            # this long. Run a new deployment's first sweep with REAP_DRY_RUN=true, read the `tunnel reap
-            # candidate` log lines, and only then turn it off — the deletes are not recoverable.
-            # Every sandbox holds ~10 DNS records against Cloudflare's per-zone cap, so the same sweep prunes
-            # sandboxes offline this many days (their address is re-created, identical, on the next setup
-            # visit) and deletes orphaned records the tunnel walk can't see. 0 = never prune offline sandboxes.
-            INTENTIC_CLOUDFLARE_REAP_DRY_RUN: ${INTENTIC_CLOUDFLARE_REAP_DRY_RUN:-false}
-            # Hosted sandboxes: the platform creates each new user's machine on its OWN Fly account, so signing
-            # in IS the setup — and it keeps the way back in (wake/stop/destroy). Blank (the default) → the lane
-            # is off and every user sets up their own machine as before. The token must be ORG-scoped
-            # (`fly tokens create org`), and the ingress pair below must be set too: a hosted machine is
-            # reachable only through the grant this platform signs. A daily reconcile destroys any app under the
-            # prefix whose sandbox is gone — keep the prefix unique to this deployment.
+            INTENTIC_CLOUDFLARE_ZONE: ${INTENTIC_CLOUDFLARE_ZONE:-}
+            # May this deployment DELETE records in that zone? Off by default, and the default is the point: the
+            # sweep judges orphans against THIS database, and a developer holding production credentials once
+            # swept the production zone against an empty local one. REAP_DRY_RUN reports candidates without
+            # deleting even where reaping is on — a new deployment's first sweep runs that way.
+            INTENTIC_CLOUDFLARE_REAP: ${INTENTIC_CLOUDFLARE_REAP:-}
+            INTENTIC_CLOUDFLARE_REAP_DRY_RUN: ${INTENTIC_CLOUDFLARE_REAP_DRY_RUN:-}
             # The edge every sandbox is reached through (@intentic/ingress). Sandboxes dial INGRESS_URL
             # outbound and authenticate with a grant this platform SIGNS, so there is no fabric credential
             # here — just the private half of an Ed25519 pair whose public half rides the ingress's own env
@@ -91,28 +95,114 @@ services:
             # INGRESS_SIGNING_KEY nothing can be made reachable and setup offers only the attach lane.
             # INGRESS_ZONE is the wildcard zone sandbox hostnames are labels under; INGRESS_URL should be a
             # label under that same zone, so it costs no extra DNS and rides the same wildcard certificate.
-            INGRESS_ZONE: ${INGRESS_ZONE:-sbx.intentic.dev}
-            INGRESS_URL: ${INGRESS_URL:-https://ingress.sbx.intentic.dev}
+            #
+            # A PEM is multi-line and an env file is not. Write it on one line with `\n` escapes inside DOUBLE
+            # quotes — compose's dotenv parser expands those back to real newlines, which is what
+            # createPrivateKey needs (it does no unescaping of its own):
+            #   INGRESS_SIGNING_KEY="-----BEGIN PRIVATE KEY-----\nMC4…\n-----END PRIVATE KEY-----\n"
+            INGRESS_ZONE: ${INGRESS_ZONE:-}
+            INGRESS_URL: ${INGRESS_URL:-}
             INGRESS_SIGNING_KEY: ${INGRESS_SIGNING_KEY:-}
+            # Hosted sandboxes: the platform creates each new user's machine on its OWN Fly account, so signing
+            # in IS the setup — and it keeps the way back in (wake/stop/destroy). Blank (the default) → the lane
+            # is off and every user sets up their own machine as before. The token must be ORG-scoped
+            # (`fly tokens create org`), and the ingress pair above must be set too: a hosted machine is
+            # reachable only through the grant this platform signs. A daily reconcile destroys any app under the
+            # prefix whose sandbox is gone — keep the prefix unique to this deployment.
             HOSTED_FLY_API_TOKEN: ${HOSTED_FLY_API_TOKEN:-}
             HOSTED_FLY_ORG: ${HOSTED_FLY_ORG:-}
-            HOSTED_REGION: ${HOSTED_REGION:-iad}
-            HOSTED_REGION_EU: ${HOSTED_REGION_EU:-arn}
-            HOSTED_APP_PREFIX: ${HOSTED_APP_PREFIX:-intentic-sbx}
-            HOSTED_IMAGE: ${HOSTED_IMAGE:-ghcr.io/intentic/sandbox:stable}
-            HOSTED_CPUS: ${HOSTED_CPUS:-4}
-            HOSTED_MEMORY_MB: ${HOSTED_MEMORY_MB:-8192}
-            HOSTED_VOLUME_GB: ${HOSTED_VOLUME_GB:-20}
-            HOSTED_PER_USER: ${HOSTED_PER_USER:-1}
+            # Where a machine lands: REGION for callers outside the EEA, REGION_EU for callers inside it. The
+            # EU pick is a published data-protection promise, not a latency tweak.
+            HOSTED_REGION: ${HOSTED_REGION:-}
+            HOSTED_REGION_EU: ${HOSTED_REGION_EU:-}
+            HOSTED_APP_PREFIX: ${HOSTED_APP_PREFIX:-}
+            HOSTED_IMAGE: ${HOSTED_IMAGE:-}
+            # The starter machine's shape, and how many each user gets.
+            HOSTED_CPUS: ${HOSTED_CPUS:-}
+            HOSTED_MEMORY_MB: ${HOSTED_MEMORY_MB:-}
+            HOSTED_VOLUME_GB: ${HOSTED_VOLUME_GB:-}
+            HOSTED_PER_USER: ${HOSTED_PER_USER:-}
             # 0 = never sleep, which bills around the clock; the default stops an unused machine after 20 quiet
             # minutes and the platform wakes it on the next visit.
-            HOSTED_IDLE_STOP_MINUTES: ${HOSTED_IDLE_STOP_MINUTES:-20}
-            # Billing (optional — the upgrade flow 404s until set).
+            HOSTED_IDLE_STOP_MINUTES: ${HOSTED_IDLE_STOP_MINUTES:-}
+            # The free lane's ceiling (awake hours per calendar month for a non-member) and its expiry (days
+            # since last wake before the disk is collected, with one warning email first). Either at 0 disables.
+            HOSTED_MONTHLY_HOURS: ${HOSTED_MONTHLY_HOURS:-}
+            HOSTED_IDLE_DAYS: ${HOSTED_IDLE_DAYS:-}
+            HOSTED_IDLE_WARN_DAYS: ${HOSTED_IDLE_WARN_DAYS:-}
+            # The warm pool, PER REGION: machines built and stopped before anyone asks, so claiming the free
+            # sandbox costs a machine start instead of an image pull. 0 drains it.
+            HOSTED_POOL_SIZE: ${HOSTED_POOL_SIZE:-}
+            # The fleet watch (rows vs. what Fly actually has) and the provisioning canary (a throwaway sandbox
+            # end to end). Both report through ADMIN_EMAILS; the canary needs an email nobody signs in as.
+            HOSTED_HEALTH_MINUTES: ${HOSTED_HEALTH_MINUTES:-}
+            HOSTED_CANARY_MINUTES: ${HOSTED_CANARY_MINUTES:-}
+            HOSTED_CANARY_EMAIL: ${HOSTED_CANARY_EMAIL:-}
+            # Who this deployment is to Fly: every machine it makes is stamped with it, and its orphan sweep
+            # destroys nothing carrying anyone else's. Empty derives it from API_URL + the database.
+            HOSTED_INSTANCE_ID: ${HOSTED_INSTANCE_ID:-}
+            # The free trial's model keys (comma-separated, tried in order — several are a pool). Empty
+            # disables the trial outright: the routes 404 and Google sign-in is the chat's whole front door.
+            TRIAL_KEYS: ${TRIAL_KEYS:-}
+            TRIAL_BASE_URL: ${TRIAL_BASE_URL:-}
+            TRIAL_MODELS: ${TRIAL_MODELS:-}
+            TRIAL_DAILY_MESSAGES: ${TRIAL_DAILY_MESSAGES:-}
+            # THE CREATOR POOL (the paid membership). stripeSecretKey + stripePriceId are the switch: both
+            # empty and the pool does not exist — /pool routes 404 and no membership is offered anywhere.
+            POOL_STRIPE_SECRET_KEY: ${POOL_STRIPE_SECRET_KEY:-}
+            POOL_STRIPE_WEBHOOK_SECRET: ${POOL_STRIPE_WEBHOOK_SECRET:-}
+            POOL_STRIPE_PRICE_ID: ${POOL_STRIPE_PRICE_ID:-}
+            # The published economics: price, the per-member infra cost taken off the top, the creator/service
+            # shares of a spent credit's value, the daily allowance, and what an install donates.
+            POOL_PRICE_USD: ${POOL_PRICE_USD:-}
+            POOL_INFRA_USD: ${POOL_INFRA_USD:-}
+            POOL_CREATOR_SHARE: ${POOL_CREATOR_SHARE:-}
+            POOL_SERVICE_SHARE: ${POOL_SERVICE_SHARE:-}
+            POOL_DAILY_CREDITS: ${POOL_DAILY_CREDITS:-}
+            POOL_DONATION_CREDITS: ${POOL_DONATION_CREDITS:-}
+            # Comma-separated emails that count as premium WITHOUT a subscription (comped memberships).
+            POOL_COMP_EMAILS: ${POOL_COMP_EMAILS:-}
+            # Seed the self-contained demo service so the catalog is demonstrable without a provider.
+            POOL_DEMO_SERVICE: ${POOL_DEMO_SERVICE:-}
+            # The registry a publisher claim is proved against.
+            POOL_REGISTRY_URL: ${POOL_REGISTRY_URL:-}
+            # Payouts: the day a closed month becomes payable, how long an unclaimed name stays claimable, the
+            # smallest transfer worth making, and the currency.
+            POOL_PAYOUT_DAY_OF_MONTH: ${POOL_PAYOUT_DAY_OF_MONTH:-}
+            POOL_CLAIM_WINDOW_MONTHS: ${POOL_CLAIM_WINDOW_MONTHS:-}
+            POOL_MIN_PAYOUT_CENTS: ${POOL_MIN_PAYOUT_CENTS:-}
+            POOL_PAYOUT_CURRENCY: ${POOL_PAYOUT_CURRENCY:-}
+            # OPEN ADMISSION — the published thresholds a service provider is measured against. They live in
+            # config rather than code because rules-based admission means the rules are readable in advance.
+            POOL_OPEN_ADMISSION: ${POOL_OPEN_ADMISSION:-}
+            POOL_SERVICE_MIN_CREDITS: ${POOL_SERVICE_MIN_CREDITS:-}
+            POOL_SERVICE_MAX_CREDITS: ${POOL_SERVICE_MAX_CREDITS:-}
+            POOL_PROBATION_MAX_CREDITS: ${POOL_PROBATION_MAX_CREDITS:-}
+            POOL_PROBE_FRESH_MINUTES: ${POOL_PROBE_FRESH_MINUTES:-}
+            POOL_GRADUATION_RUNS: ${POOL_GRADUATION_RUNS:-}
+            POOL_MAX_REFUND_RATE: ${POOL_MAX_REFUND_RATE:-}
+            POOL_WATCH_WINDOW_RUNS: ${POOL_WATCH_WINDOW_RUNS:-}
+            POOL_CANARY_FAILURES: ${POOL_CANARY_FAILURES:-}
+            POOL_PRICE_CHANGE_HOURS: ${POOL_PRICE_CHANGE_HOURS:-}
+            POOL_MAX_SERVICES_PER_OWNER: ${POOL_MAX_SERVICES_PER_OWNER:-}
+            # The agent wallet's signer: the credential authenticating this platform to the custody provider
+            # that holds a member's wallet. Both empty → /wallet routes 404 and the capability stays pending.
+            WALLET_CUSTODY_URL: ${WALLET_CUSTODY_URL:-}
+            WALLET_CUSTODY_KEY: ${WALLET_CUSTODY_KEY:-}
+            # The iOS push relay. keyP8 is the switch: empty → /push routes 404 and the web app inside the
+            # shell reports notifications unsupported rather than half-working.
+            APNS_KEY_P8: ${APNS_KEY_P8:-}
+            APNS_KEY_ID: ${APNS_KEY_ID:-}
+            APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+            APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
+            APNS_URL: ${APNS_URL:-}
+            # Where the connect bootstrap scripts are served from — the URL the setup wizard's copy-paste
+            # command and the desktop handoff both fetch. A self-hosted platform points this at its own site.
+            SCRIPT_ORIGIN: ${SCRIPT_ORIGIN:-}
             # Sandbox-invite email via Resend (optional — invites are logged server-side until set).
             EMAIL_API_KEY: ${EMAIL_API_KEY:-}
             EMAIL_FROM: ${EMAIL_FROM:-}
-            # Comma-separated emails always entitled to `pro` without Stripe (comp/test accounts).
-            LOG_LEVEL: ${LOG_LEVEL:-info}
+            LOG_LEVEL: ${LOG_LEVEL:-}
             # OTLP traces (tracing.ts). Unset → no provider is registered and the overhead is zero.
             OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
         healthcheck:
