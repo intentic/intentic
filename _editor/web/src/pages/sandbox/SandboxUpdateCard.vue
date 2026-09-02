@@ -90,13 +90,14 @@ const updateHeading = computed(() => {
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="downloaded" dot />
                 <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
+                <StatusBadge v-else-if="channel === `stable`" variant="success" label="up to date" dot />
                 <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
             </div>
         </template>
 
         <RowNote variant="block">
             <div class="flex flex-col gap-4">
-                <p class="text-xs text-muted">
+                <p v-if="breaking || updateAvailable" class="text-xs text-muted">
                     <template v-if="breaking">
                         This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are kept
                         either way, and you can roll back afterwards:
@@ -107,17 +108,14 @@ const updateHeading = computed(() => {
                     <!-- The sentence this whole card was rebuilt around. A bounded half-minute is a completely
                          different decision from an unbounded "a few minutes", and until the host started reporting
                          what it had already downloaded there was no way to tell the two apart. -->
-                    <template v-else-if="updateAvailable && updateStaged">
+                    <template v-else-if="updateStaged">
                         It is already downloaded and built on the computer that runs this sandbox. Applying it restarts your sandbox for about half a
                         minute: your files (in /work) are kept.
                     </template>
-                    <template v-else-if="updateAvailable">
+                    <template v-else>
                         A newer sandbox image has been released. Downloading it interrupts nothing: your sandbox keeps working until you apply it, and
                         your files (in /work) are kept.
                     </template>
-                    <!-- The all-clear state says only that it is all clear. The way back lives one click below;
-                         advertising it here would put a recovery offer in the status line. -->
-                    <template v-else>You are on the newest image for this channel.</template>
                 </p>
 
         <!-- WHAT STOPS WORKING, before anything else on the card and never truncated: a warning that fell off
