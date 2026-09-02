@@ -54,7 +54,6 @@ const NARROW_TAKERS = new Set([
     "agent/turn-interactions.ts",
     "chores/chore-signals.ts",
     "codex/codex-readiness.ts",
-    "drafts/drafts-store.ts",
     "git/diff-raw.ts",
     "git/git.routes.ts",
     "hosts/host.routes.ts",

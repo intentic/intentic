@@ -120,5 +120,5 @@ every platform that posts through a logged-in browser needs (see below).
 
 // Approvals are native to every sandbox (like automations), so no capability owns this skill, the daemon
 // converges it at boot (the composeEnvironment pattern), keeping the prose current across daemon updates.
-export const ensureApprovalsSkill = (services: Services): Promise<void> =>
+export const ensureApprovalsSkill = (services: Pick<Services, "files" | "workspace">): Promise<void> =>
     writeLoadedSkill(services.files, services.workspace.root, "approvals", APPROVALS_SKILL);
