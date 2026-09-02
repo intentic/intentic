@@ -94,6 +94,15 @@ export const ROW_BLOCK_PAD = {
     dense: `px-2.5 py-3`,
 } as const satisfies Record<RowDensity, string>;
 
+/* PADDING FOR A DRAWER UNDER AN OPEN ROW. Horizontally matched to ROW_BLOCK_PAD; vertically asymmetric because
+ * the row's own bottom padding already separates the header from what opens — stacking full py on both sides
+ * doubled the gap (especially on diagram rows where the opened block is a canvas, not a form that wants air). */
+export const ROW_DRAWER_PAD = {
+    comfortable: `px-4.5 pt-2 pb-4`,
+    compact: `px-4 pt-1.5 pb-3.5`,
+    dense: `px-2.5 pt-1 pb-3`,
+} as const satisfies Record<RowDensity, string>;
+
 /* ── THE TIER BELONGS TO THE LIST ────────────────────────────────────────────────────────────────────────────
  *
  * A tier per CALL SITE was the whole of the drift. Every one of <Row>, <DisclosureRow> and <SkeletonRows>

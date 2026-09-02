@@ -92,15 +92,17 @@ const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
  * the diagram sitting in the top third of a box of white space.
  *
  * So: the tallest COLUMN. Cards that share a stage are stacked by dagre with `nodesep` between them, and a
- * card's own height is its rows. The floor is a canvas rather than the strip this used to be, a diagram given
- * 150px reads as a decoration of the row above it; past the ceiling it pans instead of shrinking. */
+ * card's own height is its rows. The floor keeps short runs readable without turning a one-row graph into a
+ * tall empty box; past the ceiling it pans instead of shrinking. */
 const bandHeight = computed(() => {
     const columns = new Map<number, number>();
     for (const node of dag.value.nodes) {
         const stacked = columns.get(stageOfNode(node.id));
         columns.set(stageOfNode(node.id), stacked === undefined ? cardHeight(node.data) : stacked + NODE_SEP + cardHeight(node.data));
     }
-    return Math.min(520, Math.max(224, Math.max(...columns.values(), 0) + 40));
+    const contentHeight = Math.max(...columns.values(), 0);
+    // Overlay controls (Fit/Expand) and fit padding; tight enough that a shallow run does not float in whitespace.
+    return Math.min(520, Math.max(72, contentHeight + 28));
 });
 
 const toneOf = (job: PipelineJob): StatusTone => STATUS_TONE[job.status];
@@ -141,6 +143,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
             :magnify="false"
             :readable-zoom="0.8"
             :min-zoom="0.15"
+            fit-align="start"
         >
             <template #node="{ node }">
                 <!-- The rows fill the card, so this is where the graph learns which job the pointer is on. -->

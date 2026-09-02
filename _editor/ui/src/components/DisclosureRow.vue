@@ -52,7 +52,7 @@ import { computed, useId } from "vue";
 import Icon from "./Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../icons/iconSets.js";
-import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
+import { ROW_DRAWER_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
 
 const {
     open = false,
@@ -198,9 +198,9 @@ const tint = computed(() => {
     return ``;
 });
 
-// Padding for a drawer: ROW_BLOCK_PAD, which is the same table <RowNote variant="block"> pads from. A drawer
-// under an open row and a form at the tail of the same list are the same shape on the same surface, and they
-// were two hand-written answers to it before.
+// Padding for a drawer: ROW_DRAWER_PAD — same horizontal measure as ROW_BLOCK_PAD, less top air because the
+// header row's own padding already paid for separation and a drawer that opens into a diagram was reading as a
+// gap rather than as a boundary.
 </script>
 
 <template>
@@ -213,7 +213,10 @@ const tint = computed(() => {
         <div :class="$slots[`before`] ? `flex w-full items-center` : `contents`">
             <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
             <Row
-                :class="$slots[`before`] ? `min-w-0 flex-1` : ``"
+                :class="[
+                    $slots[`before`] ? `min-w-0 flex-1` : ``,
+                    open && body === `drawer` ? `!pb-0` : ``,
+                ]"
                 :density="tier"
                 :tone="tone"
                 :icon="icon"
@@ -304,7 +307,7 @@ const tint = computed(() => {
         <!-- THE DRAWER. A sibling of the row rather than <Row>'s `#below`, because it is full-bleed: pulling it
              back out of the row's padding with negative margins would be four numbers to keep in step with the
              tier table, and every one of them a place to be wrong. -->
-        <div v-if="open && body === `drawer`" :id="bodyId" class="border-t border-line-subtle" :class="ROW_BLOCK_PAD[tier]">
+        <div v-if="open && body === `drawer`" :id="bodyId" class="border-t border-line-subtle" :class="ROW_DRAWER_PAD[tier]">
             <slot name="below" />
         </div>
     </div>

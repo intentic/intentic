@@ -23,6 +23,7 @@ const {
     edgeShape = `curve`,
     rankSep,
     nodeSep,
+    fitAlign = `center`,
 } = defineProps<{
     nodes: readonly DagNode<T>[];
     edges: readonly DagEdge[];
@@ -71,6 +72,9 @@ const {
     // the roomy default, which suits a graph of few large cards; a card that is a LIST of rows wants both tighter.
     rankSep?: number;
     nodeSep?: number;
+    /* Where a readable-zoom clamp lands vertically. `start` keeps shallow inline bands from floating with empty
+     * space above and below; `center` is the default for a graph given a whole pane. */
+    fitAlign?: `center` | `start`;
 }>();
 
 // Which node is selected; re-clicking the selected node clears it.
@@ -235,7 +239,7 @@ const applyFit = (store: VueFlowStore): void => {
     }
     void store.setViewport({
         x: frame.width * PADDING - box.x * readableZoom,
-        y: (frame.height - box.height * readableZoom) / 2 - box.y * readableZoom,
+        y: (fitAlign === `start` ? frame.height * PADDING : (frame.height - box.height * readableZoom) / 2) - box.y * readableZoom,
         zoom: readableZoom,
     });
 };
