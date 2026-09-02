@@ -107,11 +107,11 @@ describe(`landing on a switched-to sandbox`, () => {
     });
 
     it(`seeds a window that has never held the screen from the last window's`, async () => {
-        local.set(`intentic.sandboxScreen.sb2`, `/drafts`);
+        local.set(`intentic.sandboxScreen.sb2`, `/approvals`);
 
         await switchTo(`sb2`);
 
-        expect(replace).toHaveBeenLastCalledWith(`/drafts`);
+        expect(replace).toHaveBeenLastCalledWith(`/approvals`);
     });
 });
 

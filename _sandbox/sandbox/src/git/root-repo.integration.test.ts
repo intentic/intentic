@@ -76,7 +76,7 @@ test("the baseline commits the config slice and still refuses every credential a
     await mkdir(join(work, `${STATE_DIR}`, "secrets", "auth", "claude"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "config", "environment.d"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "records", "sessions", "claude"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "config", "drafts"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "config", "approvals"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "records", "approvals"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "identity"), { recursive: true });
@@ -90,7 +90,7 @@ test("the baseline commits the config slice and still refuses every credential a
      * not "the owner decided this" but "the sandbox did this outward, and it must be readable, revertible and
      * attributable". The extension is the nested-directory case, and its manifest is what decides how far its
      * code may reach, so the two files together are the whole review. */
-    await writeFile(join(work, `${STATE_DIR}`, "config", "drafts", "reddit-launch.json"), `{"platform":"reddit","status":"proposed"}\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "config", "approvals", "reddit-launch.json"), `{"kind":"post","platform":"reddit","status":"proposed"}\n`);
     await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "extension.js"), "export const activate = () => {};\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "intentic-extension.json"), `{"name":"rail-demo"}\n`);
     // A CONSUMED QUEUE beside them, and the counterexample that keeps the line honest: a held wake is removed the
@@ -117,7 +117,7 @@ test("the baseline commits the config slice and still refuses every credential a
     expect((await sh(work, "ls-files")).split("\n")).toEqual([
         ".intentic/config/automations.json",
         ".intentic/config/capabilities.json",
-        ".intentic/config/drafts/reddit-launch.json",
+        ".intentic/config/approvals/reddit-launch.json",
         ".intentic/config/environment.custom.Dockerfile",
         ".intentic/config/environment.d/rust.Dockerfile",
         ".intentic/config/personas.json",
@@ -133,12 +133,12 @@ test("daemon-owned skill files converged before the baseline read clean", async 
     const { work, historyRoot } = await tempBase();
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
-    // The boot sequence converges .agents skills (e.g. the drafts skill) BEFORE committing the baseline.
-    await mkdir(join(work, ".agents", "skills", "drafts"), { recursive: true });
-    await writeFile(join(work, ".agents", "skills", "drafts", "SKILL.md"), "converged\n");
+    // The boot sequence converges .agents skills (e.g. the approvals skill) BEFORE committing the baseline.
+    await mkdir(join(work, ".agents", "skills", "approvals"), { recursive: true });
+    await writeFile(join(work, ".agents", "skills", "approvals", "SKILL.md"), "converged\n");
     await commitRootBaseline(workspacePaths(work));
 
-    expect(await sh(work, "ls-files")).toBe(".agents/skills/drafts/SKILL.md");
+    expect(await sh(work, "ls-files")).toBe(".agents/skills/approvals/SKILL.md");
     expect(await bothSides(work)).toEqual([]);
 });
 

@@ -15,10 +15,10 @@ import type {
     CapabilityStateSchema,
     CapabilityStatusSchema,
     CapabilitySummarySchema,
-    DraftSchema,
-    DraftStatusSchema,
-    DraftsListSchema,
-    DraftSummarySchema,
+    ApprovalSchema,
+    ApprovalStatusSchema,
+    ApprovalsListSchema,
+    ApprovalSummarySchema,
     DefinitionDiffSchema,
     DefinitionExportSchema,
     DefinitionItemSchema,
@@ -130,10 +130,10 @@ export {
     CapabilityStateSchema,
     CapabilityStatusSchema,
     CapabilitySummarySchema,
-    DraftSchema,
-    DraftStatusSchema,
-    DraftsListSchema,
-    DraftSummarySchema,
+    ApprovalSchema,
+    ApprovalStatusSchema,
+    ApprovalsListSchema,
+    ApprovalSummarySchema,
     DefinitionActionSchema,
     DefinitionDiffSchema,
     DefinitionExportSchema,
@@ -223,10 +223,10 @@ export type Automation = z.infer<typeof AutomationSchema>;
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
 export type AutomationRun = z.infer<typeof AutomationRunSchema>;
 export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
-export type DraftStatus = z.infer<typeof DraftStatusSchema>;
-export type Draft = z.infer<typeof DraftSchema>;
-export type DraftSummary = z.infer<typeof DraftSummarySchema>;
-export type DraftsList = z.infer<typeof DraftsListSchema>;
+export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
+export type Approval = z.infer<typeof ApprovalSchema>;
+export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
+export type ApprovalsList = z.infer<typeof ApprovalsListSchema>;
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 export type Rule = z.infer<typeof RuleSchema>;
 export type SkillOrigin = z.infer<typeof SkillOriginSchema>;

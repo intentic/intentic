@@ -37,9 +37,9 @@ describe("outbound gate", () => {
         expect((out.hookSpecificOutput as { permissionDecisionReason?: string }).permissionDecisionReason).toContain("discord message.send");
     });
 
-    test("a held call is refused toward the drafts outbox: the held form of a send", async () => {
+    test("a held call is refused toward the approvals queue: the held form of a send", async () => {
         const out = await run({ "discord.*": "hold" }, DISCORD_SEND);
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-        expect((out.hookSpecificOutput as { permissionDecisionReason?: string }).permissionDecisionReason).toContain(".intentic/config/drafts/");
+        expect((out.hookSpecificOutput as { permissionDecisionReason?: string }).permissionDecisionReason).toContain(".intentic/config/approvals/");
     });
 });

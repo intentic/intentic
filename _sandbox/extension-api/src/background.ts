@@ -13,7 +13,7 @@ import { sandboxRef, sandboxScopeGuard } from "./scope.js";
  * THAT SOMETHING IS THE WRITE ITSELF WHEREVER THE ANSWER LIVES IN A FILE, and the timer is the backstop. The
  * push was already arriving and already naming this extension's paths, it was simply spent entirely on the cache
  * (`api.workspace.onDidChangeFiles`), so every badge in the workspace was as fresh as its own interval and no
- * fresher: a drafts queue the owner had just emptied went on claiming six items for a minute, and the slowest
+ * fresher: an approvals queue the owner had just emptied went on claiming six items for a minute, and the slowest
  * tile here is ten minutes behind the file it describes. A count that is wrong for minutes at a time is worse
  * than no count, because the owner learns to distrust the one they cannot check without clicking.
  *

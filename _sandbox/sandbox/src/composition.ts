@@ -49,7 +49,7 @@ import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
 import { cliProxyAuthDir, type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
-import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
+import { type HeldWakesStore, fileHeldWakesStore } from "./automations/held-wakes-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { fileLoopDesignsStore, fileLoopsStore, type LoopDesignsStore, type LoopsStore } from "./loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type WorkflowsStore } from "./workflows/workflows-store.js";
@@ -85,7 +85,7 @@ import { createSessions, type MintedSession } from "./auth/session.js";
 
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
-import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
+import { type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
 import { fileIssuesStore, type IssuesStore } from "./issues/issues-store.js";
 import { fileInstallsStore, type InstallsStore } from "./store/installs.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
@@ -448,14 +448,14 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly ciHooks: CiHookReconciler;
     // Wakes from `requireApproval` automations, held for the owner (.intentic/records/approvals/, one file per wake),
     // the /automations pending routes approve (run the held wake) or reject them.
-    readonly approvals: ApprovalsStore;
+    readonly heldWakes: HeldWakesStore;
     // Which sandbox conversation each inbound THREAD owns (.intentic/records/thread-sessions.json), a Front Desk
     // visitor's chat, a Discord or Slack channel. What makes a stream of messages one agent that remembers
     // instead of one fresh worktree per message; a thread past its TTL starts over.
     readonly threadSessions: ThreadSessionsStore;
-    // Agent-proposed post drafts (.intentic/config/drafts/, one file per draft), the agent writes them; /drafts is
-    // the owner's approve/edit/reject side.
-    readonly drafts: DraftsStore;
+    // Things the agent prepared and may not do unasked (.intentic/config/approvals/, one file per item: posts to
+    // publish, actions to carry out), the agent writes them; /approvals is the owner's approve/edit/reject side.
+    readonly approvals: ApprovalsStore;
     /* Bug reports from the owner's own sites and apps (.intentic/records/issues/, one file per fingerprint),
      * written by the public /intake ingest and triaged from /issues.
      *
@@ -1301,9 +1301,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workflowRuns: fileWorkflowRunsStore(statePath(workspace.root, ".intentic/records/workflow-runs.json")),
         chores,
         probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
-        approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/records/approvals/")),
+        heldWakes: fileHeldWakesStore(statePath(workspace.root, ".intentic/records/approvals/")),
         threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
-        drafts: fileDraftsStore(statePath(workspace.root, ".intentic/config/drafts/")),
+        approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/config/approvals/")),
         issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
         issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),
         turnJournal,

@@ -18,34 +18,34 @@ afterEach(() => {
 });
 
 it(`wakes a subscriber only for writes under its own declared paths`, () => {
-    const drafts = vi.fn();
+    const approvals = vi.fn();
     const chores = vi.fn();
-    listen([`${STATE_DIR}/config/drafts/`], drafts);
+    listen([`${STATE_DIR}/config/approvals/`], approvals);
     listen([`${STATE_DIR}/records/chores/`], chores);
 
-    emitFilesChanged([`${STATE_DIR}/config/drafts/proposal.json`]);
+    emitFilesChanged([`${STATE_DIR}/config/approvals/proposal.json`]);
 
-    expect(drafts).toHaveBeenCalledWith([`${STATE_DIR}/config/drafts/proposal.json`]);
+    expect(approvals).toHaveBeenCalledWith([`${STATE_DIR}/config/approvals/proposal.json`]);
     expect(chores).not.toHaveBeenCalled();
 });
 
 // The trailing slash is what makes a directory entry a directory entry, on this side as much as on the daemon's.
 it(`does not let a directory entry match a sibling file`, () => {
     const listener = vi.fn();
-    listen([`${STATE_DIR}/config/drafts/`], listener);
+    listen([`${STATE_DIR}/config/approvals/`], listener);
 
-    emitFilesChanged([`${STATE_DIR}/config/drafts-backup.json`]);
+    emitFilesChanged([`${STATE_DIR}/config/approvals-backup.json`]);
 
     expect(listener).not.toHaveBeenCalled();
 });
 
 it(`hands over only the matching paths, not the whole batch`, () => {
     const listener = vi.fn();
-    listen([`${STATE_DIR}/config/drafts/`], listener);
+    listen([`${STATE_DIR}/config/approvals/`], listener);
 
-    emitFilesChanged([`README.md`, `${STATE_DIR}/config/drafts/one.json`, `${STATE_DIR}/records/chores/report.json`]);
+    emitFilesChanged([`README.md`, `${STATE_DIR}/config/approvals/one.json`, `${STATE_DIR}/records/chores/report.json`]);
 
-    expect(listener).toHaveBeenCalledWith([`${STATE_DIR}/config/drafts/one.json`]);
+    expect(listener).toHaveBeenCalledWith([`${STATE_DIR}/config/approvals/one.json`]);
 });
 
 /* THE FRAME THAT MEANS THE MOST MUST NOT BE THE FRAME THAT DOES NOTHING. The daemon sends no path list at all
@@ -53,14 +53,14 @@ it(`hands over only the matching paths, not the whole batch`, () => {
  * batch to say "frames may have been lost". Matched against a prefix table, "no paths" matches nothing, so
  * exactly the largest changes would have gone unannounced. */
 it(`wakes every subscriber for its own paths when the batch says only "something, and we cannot say what"`, () => {
-    const drafts = vi.fn();
+    const approvals = vi.fn();
     const chores = vi.fn();
-    listen([`${STATE_DIR}/config/drafts/`], drafts);
+    listen([`${STATE_DIR}/config/approvals/`], approvals);
     listen([`${STATE_DIR}/records/chores/`], chores);
 
     emitFilesChanged([]);
 
-    expect(drafts).toHaveBeenCalledWith([`${STATE_DIR}/config/drafts/`]);
+    expect(approvals).toHaveBeenCalledWith([`${STATE_DIR}/config/approvals/`]);
     expect(chores).toHaveBeenCalledWith([`${STATE_DIR}/records/chores/`]);
 });
 
@@ -69,7 +69,7 @@ it(`never wakes a subscriber that declared no files`, () => {
     const listener = vi.fn();
     listen([], listener);
 
-    emitFilesChanged([`${STATE_DIR}/config/drafts/one.json`]);
+    emitFilesChanged([`${STATE_DIR}/config/approvals/one.json`]);
     emitFilesChanged([]);
 
     expect(listener).not.toHaveBeenCalled();
@@ -77,10 +77,10 @@ it(`never wakes a subscriber that declared no files`, () => {
 
 it(`stops delivering once disposed`, () => {
     const listener = vi.fn();
-    const subscription = onFilesChanged([`${STATE_DIR}/config/drafts/`], listener);
+    const subscription = onFilesChanged([`${STATE_DIR}/config/approvals/`], listener);
 
     subscription.dispose();
-    emitFilesChanged([`${STATE_DIR}/config/drafts/one.json`]);
+    emitFilesChanged([`${STATE_DIR}/config/approvals/one.json`]);
 
     expect(listener).not.toHaveBeenCalled();
 });
@@ -89,12 +89,12 @@ it(`stops delivering once disposed`, () => {
 it(`keeps going when a listener throws`, () => {
     const after = vi.fn();
     const thrower = vi.spyOn(console, `error`).mockImplementation(() => {});
-    listen([`${STATE_DIR}/config/drafts/`], () => {
+    listen([`${STATE_DIR}/config/approvals/`], () => {
         throw new Error(`badge derivation failed`);
     });
-    listen([`${STATE_DIR}/config/drafts/`], after);
+    listen([`${STATE_DIR}/config/approvals/`], after);
 
-    emitFilesChanged([`${STATE_DIR}/config/drafts/one.json`]);
+    emitFilesChanged([`${STATE_DIR}/config/approvals/one.json`]);
 
     expect(after).toHaveBeenCalledTimes(1);
     thrower.mockRestore();

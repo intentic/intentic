@@ -11,8 +11,8 @@ import { guard } from "./guard.js";
  * used to be the only boundary.
  *
  * A verdict of "hold" cannot park the turn (nobody may be there to answer; a card would hang until timeout and
- * read as the agent freezing), so it refuses the live call and points the agent at the drafts outbox, a draft
- * awaiting owner approval IS the held form of a send, and the publish automation is the approved replay.
+ * read as the agent freezing), so it refuses the live call and points the agent at the approvals queue, an approval
+ * awaiting owner approval IS the held form of a send, and the approvals executor is the approved replay.
  *
  * Same honesty note as the audit tee: this parses the command shapes the provider skills teach. A creatively
  * quoted command can slip past, so the gate is policy for well-behaved flows and an audit trail for the rest,
@@ -21,8 +21,8 @@ import { guard } from "./guard.js";
  * nothing here. */
 
 const DRAFT_REDIRECT =
-    "Instead of sending directly, write the message as a draft into .intentic/config/drafts/ (the drafts skill has the " +
-    "format): the owner approves drafts before they post, and that approval is what this rule asks for.";
+    "Instead of sending directly, write the message as an approval into .intentic/config/approvals/ (the approvals skill " +
+    "has the format): the owner approves before anything posts, and that approval is what this rule asks for.";
 
 export const outboundGateHooks = (rules: Readonly<Record<string, AdmissionRule>>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [

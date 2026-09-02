@@ -69,7 +69,7 @@ test("an essential extension cannot be switched off, reads enabled over a stale 
     // Enabling an already-enabled essential is a no-op, not an error: idempotent callers stay simple.
     await client.extensions.setEnabled({ id: "intentic.automations", enabled: true });
 
-    // The set is exactly the fail-active surfaces; a fail-safe one (drafts feeds only on prior approvals)
+    // The set is exactly the fail-active surfaces; a fail-safe one (approvals acts only on prior yeses)
     // keeps its ordinary switch.
     const essentials = rows.filter((extension) => extension.essential === true).map((extension) => extension.id);
     expect(essentials.toSorted()).toEqual(["intentic.automations", "intentic.maintenance", "intentic.workflows"]);
@@ -154,6 +154,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.acceptance",
         "intentic.acp-agents",
         "intentic.activity",
+        "intentic.approvals",
         "intentic.automations",
         "intentic.browsers",
         "intentic.computers",
@@ -161,7 +162,6 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.deployments",
         "intentic.discord",
         "intentic.documentation",
-        "intentic.drafts",
         "intentic.git-history",
         "intentic.google-workspace",
         "intentic.imap",

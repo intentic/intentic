@@ -34,7 +34,7 @@ export type DefinitionRepository = z.infer<typeof DefinitionRepositorySchema>;
 /* THE WORKSPACE ITSELF, by reference. `/work` is a git repo of its own (the daemon's `root` scope, git dir on
  * /history), tracking every workspace file that is not a nested repo, the reference shelf, or daemon-internal
  * state — which by the versioned-state allowlist means the owner's AUTHORED content: notes, skills, personas,
- * automations, workflow and loop designs, drafts, workspace extensions. None of that has a source anywhere else,
+ * automations, workflow and loop designs, approvals, workspace extensions. None of that has a source anywhere else,
  * so before this section a definition could only shrug at it and a bundle was the sole way to move it.
  *
  * With a remote it becomes referenceable like any other repo, which is the whole point: `[workspace]` plus

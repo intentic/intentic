@@ -468,8 +468,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
          * builds the card AND the browser capability behind it. */
         personas: memoryPersonasStore(),
         automations: memoryAutomationsStore(),
-        // Empty approvals queue: agents.list projects it as `held`, and no suite here holds a wake.
-        approvals: {
+        // No held wakes: agents.list projects them as `held`, and no suite here holds one.
+        heldWakes: {
             list: async () => [],
             get: async () => undefined,
             add: async (approval) => ({ ...approval, id: "held-1" }),

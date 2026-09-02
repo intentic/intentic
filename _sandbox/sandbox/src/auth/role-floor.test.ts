@@ -27,11 +27,11 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/system/sync/pair")).toBe("collaborator");
     });
 
-    test("what leaves the sandbox floors at maintainer: land, discard, drafts, workspace writes", () => {
+    test("what leaves the sandbox floors at maintainer: land, discard, approvals, workspace writes", () => {
         expect(routeFloor("POST", "/agents/abc/land")).toBe("maintainer");
         expect(routeFloor("POST", "/agents/abc/discard")).toBe("maintainer");
-        expect(routeFloor("POST", "/drafts")).toBe("maintainer");
-        expect(routeFloor("DELETE", "/drafts/d1")).toBe("maintainer");
+        expect(routeFloor("POST", "/approvals")).toBe("maintainer");
+        expect(routeFloor("DELETE", "/approvals/d1")).toBe("maintainer");
         expect(routeFloor("POST", "/workspace/move")).toBe("maintainer");
     });
 

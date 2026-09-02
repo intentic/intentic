@@ -1,0 +1,28 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "approvals",
+    "version": "1.0.0",
+    "category": "work",
+    "icon": "check-square",
+    "engines": { "intentic": "^2.3.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /approvals",
+            "POST /approvals",
+            "DELETE /approvals/*",
+            "GET /automations/pending",
+            "POST /automations/pending/*/approve",
+            "POST /automations/pending/*/reject",
+            "GET /extensions",
+            "GET /workspace/raw"
+        ]
+    },
+    "contributes": {
+        "views": [{ "id": "approvals", "label": "Approvals", "surface": "rail", "badge": true }],
+        "files": [
+            { "path": ".intentic/config/approvals/", "invalidates": ["approvals"] },
+            { "path": ".intentic/records/approvals/", "invalidates": ["automation-approvals"] }
+        ]
+    }
+}

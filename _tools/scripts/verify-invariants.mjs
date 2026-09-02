@@ -37,6 +37,7 @@ const src = join(root, "_sandbox/sandbox/src");
 const UNAUDITED = new Set([
     "acp",
     "activity",
+    "approvals",
     "auth",
     "automations",
     "browser",
@@ -44,7 +45,6 @@ const UNAUDITED = new Set([
     "ci",
     "claude",
     "codex",
-    "drafts",
     "endpoints",
     "environment",
     "execution",

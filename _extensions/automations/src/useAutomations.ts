@@ -1,15 +1,14 @@
-import { type Automation, type AutomationApproval, type AutomationSummary, AutomationsListSchema } from "@intentic/sandbox-contract";
+import { type Automation, type AutomationSummary, AutomationsListSchema } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
-import { approvalsQuery } from "./approvalsQuery";
 import { host } from "./host";
 
 /* The sandbox's automations manifest (.intentic/config/automations.json), read/written via the daemon's /automations
  * routes. `save` upserts by id; `setEnabled` has its own narrow route so switching a row cannot discard fields;
  * the daemon's
- * scheduler picks changes up on its next poll, nothing to provision, so no streamed apply. `pending` is the
- * owner's approval queue: a `requireApproval` automation holds each fire there instead of waking; `approve`
- * runs the held wake, `reject` drops it. All daemon access goes through the host api. */
+ * scheduler picks changes up on its next poll, nothing to provision, so no streamed apply. The wakes a
+ * `requireApproval` automation holds are NOT read here: they are the Approvals page's, which approves and rejects
+ * them and invalidates this list when a release records a run. All daemon access goes through the host api. */
 
 // How long after a by-hand fire to re-read the list for its outcome. A guard-skip and a short wake both land
 // well inside this; a long turn's outcome arrives with the next ordinary refetch.
@@ -75,10 +74,6 @@ export function useAutomations() {
     const api = host();
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.key(`automations`);
-    // The queue's read model, shared with the rail badge's background poll rather than written out again here:
-    // whichever of the two asks first fills the entry the other paints from (approvalsQuery.ts).
-    const pending = approvalsQuery();
-    const pendingKey = pending.queryKey;
     const enabled = computed(() => api.sandbox.reachable());
 
     const query = useQuery({
@@ -86,13 +81,7 @@ export function useAutomations() {
         queryFn: async (): Promise<AutomationSummary[]> => AutomationsListSchema.parse(await api.sandbox.json(`/automations`)).automations,
         enabled,
     });
-    const pendingQuery = useQuery({ ...pending, enabled });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
-    // Approving a held wake records a run, so refresh both the queue and the automation list.
-    const invalidatePending = (): Promise<void> => {
-        void queryClient.invalidateQueries({ queryKey });
-        return queryClient.invalidateQueries({ queryKey: pendingKey });
-    };
 
     const save = useMutation({
         mutationFn: (automation: Automation) =>
@@ -127,25 +116,13 @@ export function useAutomations() {
             setTimeout(() => void invalidate(), RUN_SETTLE_POLL_MS);
         },
     });
-    const approve = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/automations/pending/${encodeURIComponent(id)}/approve`, { method: `POST` }),
-        onSuccess: invalidatePending,
-    });
-    const reject = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/automations/pending/${encodeURIComponent(id)}/reject`, { method: `POST` }),
-        onSuccess: invalidatePending,
-    });
-
     return {
         automations: computed<AutomationSummary[]>(() => query.data.value ?? []),
-        pending: computed<AutomationApproval[]>(() => pendingQuery.data.value ?? []),
         error: computed(() => query.error.value?.message),
         isLoading: query.isLoading,
         save,
         setEnabled,
         remove,
         run,
-        approve,
-        reject,
     };
 }

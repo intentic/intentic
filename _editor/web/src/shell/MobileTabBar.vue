@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { agentsBadge, agentsScopeNote } from "../composables/agents/agentsTile";
-import { useDraftsTile } from "./mobileTabs";
+import { useApprovalsTile } from "./mobileTabs";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { pushBadge } from "../composables/workspace/pushBadge";
 import { useChanges } from "../composables/workspace/useChanges";
@@ -19,7 +19,7 @@ import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
  * desktop rail holds beyond these lives on the Menu page. Navigation stays live while the sandbox catches up:
  * cached files, reviews and transcripts remain useful, while actions inside them still require reachability.
  *
- * REVIEW IS THE DRAFTS EXTENSION'S TILE, PROMOTED. The queue moved out of the app, so the tab reads its route
+ * REVIEW IS THE APPROVALS EXTENSION'S TILE, PROMOTED. The queue moved out of the app, so the tab reads its route
  * and its owed-count off the same registry entry the desktop rail and the mobile menu render: naming the id
  * for PLACEMENT, exactly as RAIL_GROUPS ranks extension ids, never reaching into the extension's data. With
  * the pack off the tab keeps its place and falls back to the changes half alone: the workspace's own
@@ -33,7 +33,7 @@ interface Tab {
     // serves all four instead of a hand-rolled span per tab.
     readonly badge?: ViewBadge;
     /* WHICH WORKSPACE PANEL THIS TAB OWNS, for the two tabs that can share the workspace path. Files is the
-     * bare address and Review (with the drafts pack off) is the Changes panel of the same view, so path
+     * bare address and Review (with the approvals pack off) is the Changes panel of the same view, so path
      * matching alone lit both of them at once and neither tab answered "where am I". Absent on a tab whose
      * path is its own. */
     readonly panel?: "files" | "changes";
@@ -46,20 +46,20 @@ const changes = useChanges();
 const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
 
-/* The drafts extension's activation, when the pack is on: its path is the tab's target and its badge count is
+/* The approvals extension's activation, when the pack is on: its path is the tab's target and its badge count is
  * the queue's own `owed`: the identical number the desktop rail shows, because it is the same badge() call.
  *
  * MATCHED ON THE VIEW ID, which is what `detectActivations` returns. It used to look for the PACKAGE id
- * (`intentic.drafts`, the publisher-and-name pair the sandbox's extension routes speak) against a list that
+ * (`intentic.approvals`, the publisher-and-name pair the sandbox's extension routes speak) against a list that
  * only ever carries view ids, so nothing ever matched, the tab never once reached the queue it is named for,
  * and its count was the changes half alone. TAB_BAR_IDS is the shared statement of that promotion, so the
  * mobile menu drops the same row rather than listing it a second time under its own name.
  *
  * Resolved in mobileTabs.ts rather than here, because ShellMobile needs the same answer to decide which routes
  * are already one thumb press from home and therefore must NOT grow a back arrow. */
-const draftsTile = useDraftsTile();
+const approvalsTile = useApprovalsTile();
 
-// Things to act on: the drafts that owe a decision plus uncommitted changes. Once that total is zero but the
+// Things to act on: the approvals that owe a decision plus uncommitted changes. Once that total is zero but the
 // workspace still owes its remotes a push, the same glyph the desktop rail and the Changes tab wear takes over:
 // so the fact looks the same on a phone as on a desk, and the tab never reads as empty over work that is still
 // waiting.
@@ -70,7 +70,7 @@ const reviewBadge = computed<ViewBadge | undefined>(() => {
     if (push !== undefined) {
         return push;
     }
-    const count = (draftsTile.value?.badge?.count ?? 0) + changes.count.value;
+    const count = (approvalsTile.value?.badge?.count ?? 0) + changes.count.value;
     if (count > 0) {
         return { count, tooltip: `${count} to review` };
     }
@@ -93,11 +93,11 @@ const tabs = computed<readonly Tab[]>(() => [
         /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off.
          * `?panel=changes` rather than the bare path the Files tab already owns: two tabs at one address are
          * one tab's worth of navigation and two highlights (WorkspaceMobile reads the query). */
-        to: draftsTile.value?.to ?? `/workspace?panel=changes`,
+        to: approvalsTile.value?.to ?? `/workspace?panel=changes`,
         label: `Review`,
         icon: `send`,
         ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
-        ...(draftsTile.value === undefined ? { panel: `changes` as const } : {}),
+        ...(approvalsTile.value === undefined ? { panel: `changes` as const } : {}),
     },
     { to: `/menu`, label: `Menu`, icon: `bars`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);

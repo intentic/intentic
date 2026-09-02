@@ -56,7 +56,7 @@ const itemsOf = async (services: Services, definition: SandboxDefinition): Promi
             id: "workspace",
             kind: "workspace",
             label: "The workspace itself",
-            detail: `${workspace.remote}${workspace.ref === undefined ? "" : ` @ ${workspace.ref}`}; its notes, skills, personas, designs and drafts land in /work`,
+            detail: `${workspace.remote}${workspace.ref === undefined ? "" : ` @ ${workspace.ref}`}; its notes, skills, personas, designs and approvals land in /work`,
             applicable: published === undefined && pristine,
             ...(published !== undefined
                 ? { reason: `this workspace is already published at ${published}; a definition lands beside what is there, never over it` }

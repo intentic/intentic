@@ -32,7 +32,7 @@ import { applySystemEvent } from "./systemEvents";
  * path list at all) stops being the frame that means nothing. */
 
 const SANDBOX = `sbx-1`;
-const DRAFTS = `${STATE_DIR}/config/drafts/`;
+const APPROVALS = `${STATE_DIR}/config/approvals/`;
 
 let invalidated: unknown[][];
 let disposables: { dispose: () => void }[];
@@ -44,7 +44,7 @@ beforeEach(() => {
         const resolved = typeof filters === `function` ? filters() : filters;
         invalidated.push([...(resolved?.queryKey ?? [])]);
     });
-    disposables.push(registerFileBindings(`intentic.drafts`, [{ path: DRAFTS, invalidates: [`drafts`] }]));
+    disposables.push(registerFileBindings(`intentic.approvals`, [{ path: APPROVALS, invalidates: [`approvals`] }]));
 });
 
 afterEach(() => {
@@ -60,40 +60,40 @@ const woken = (paths: readonly string[]): ReturnType<typeof vi.fn> => {
 };
 
 it(`announces a write to the extension that declared the path, as well as evicting its query`, () => {
-    const listener = woken([DRAFTS]);
+    const listener = woken([APPROVALS]);
 
-    applySystemEvent({ kind: `workspaceChanged`, paths: [`${DRAFTS}proposal.json`] }, SANDBOX);
+    applySystemEvent({ kind: `workspaceChanged`, paths: [`${APPROVALS}proposal.json`] }, SANDBOX);
 
-    expect(invalidated).toContainEqual([`drafts`]);
-    expect(listener).toHaveBeenCalledWith([`${DRAFTS}proposal.json`]);
+    expect(invalidated).toContainEqual([`approvals`]);
+    expect(listener).toHaveBeenCalledWith([`${APPROVALS}proposal.json`]);
 });
 
 /* The daemon sends no path list past its per-frame cap, so a branch switch, a codegen run or a mass delete
  * arrives as an empty batch. Matched against a prefix table that is nothing, which made the largest change in the
  * app the only one that refreshed neither a view nor a badge. */
 it(`treats a batch too large to list as "assume everything file-backed moved"`, () => {
-    const listener = woken([DRAFTS]);
+    const listener = woken([APPROVALS]);
 
     applySystemEvent({ kind: `workspaceChanged`, paths: [] }, SANDBOX);
 
-    expect(invalidated).toContainEqual([`drafts`]);
-    expect(listener).toHaveBeenCalledWith([DRAFTS]);
+    expect(invalidated).toContainEqual([`approvals`]);
+    expect(listener).toHaveBeenCalledWith([APPROVALS]);
 });
 
 it(`wakes the file-backed background state on a new connection, not just the mounted views`, () => {
     // A write that landed while the stream was down was pushed once, to nobody, and no later frame repeats it.
-    const listener = woken([DRAFTS]);
+    const listener = woken([APPROVALS]);
 
     applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
 
-    expect(invalidated).toContainEqual([`drafts`]);
-    expect(listener).toHaveBeenCalledWith([DRAFTS]);
+    expect(invalidated).toContainEqual([`approvals`]);
+    expect(listener).toHaveBeenCalledWith([APPROVALS]);
 });
 
 it(`leaves an extension that claimed a different path alone`, () => {
     const listener = woken([`${STATE_DIR}/records/chores/`]);
 
-    applySystemEvent({ kind: `workspaceChanged`, paths: [`${DRAFTS}proposal.json`] }, SANDBOX);
+    applySystemEvent({ kind: `workspaceChanged`, paths: [`${APPROVALS}proposal.json`] }, SANDBOX);
 
     expect(listener).not.toHaveBeenCalled();
 });

@@ -150,7 +150,7 @@ export type Issue = z.infer<typeof IssueSchema>;
 export const IssueSummarySchema = IssueSchema.extend({ id: entryId.describe("The issue's id, which is its fingerprint.") });
 export type IssueSummary = z.infer<typeof IssueSummarySchema>;
 
-// `invalid` is the same trust-boundary confession the drafts list makes, for the opposite reason: nothing but
+// `invalid` is the same trust-boundary confession the approvals list makes, for the opposite reason: nothing but
 // the daemon writes these, so a file in here that will not parse is a BUG in this daemon or a half-written
 // volume, and either is worth seeing rather than silently skipping.
 export const IssuesListSchema = z.object({

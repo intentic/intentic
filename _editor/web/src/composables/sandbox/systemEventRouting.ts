@@ -6,8 +6,8 @@
  * they are now readable and testable on their own. The dispatcher that ACTS on them is systemEvents.ts. */
 
 /* Which .intentic/ manifest backs which queries used to be declared HERE, in a copy maintained separately from
- * the paths the daemon actually writes, and the two drifted: `.intentic/config/drafts/` is written by the agent's own
- * file tools and rendered by the Drafts view, and was simply never added. It now lives once in
+ * the paths the daemon actually writes, and the two drifted: `.intentic/config/approvals/` is written by the agent's own
+ * file tools and rendered by the Approvals view, and was simply never added. It now lives once in
  * @intentic/sandbox-contract (workspace-state.ts), where both sides derive from it; callers import
  * `staleQueryKeys` from there directly. */
 

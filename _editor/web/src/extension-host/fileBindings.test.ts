@@ -40,9 +40,9 @@ describe(`registerFileBindings`, () => {
     it(`ignores a superseded activation's late dispose`, () => {
         // The disposable a retired activation holds must not evict the replacement that took its place.
         const stale = registerFileBindings(`a.one`, AUTOMATIONS_FILES);
-        registerFileBindings(`a.one`, [{ path: `${STATE_DIR}/config/drafts/`, invalidates: [`drafts`] }]);
+        registerFileBindings(`a.one`, [{ path: `${STATE_DIR}/config/approvals/`, invalidates: [`approvals`] }]);
         stale.dispose();
-        expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/config/drafts/`]);
+        expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/config/approvals/`]);
     });
 
     it(`drops an extension's bindings when its own registration is disposed`, () => {

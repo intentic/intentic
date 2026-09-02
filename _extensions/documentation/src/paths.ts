@@ -20,7 +20,7 @@ import { STATE_DIR } from "@intentic/sandbox-contract";
  *      file-change push (contributes.files), an in-repo path cannot, because a manifest is static and repo
  *      names are not known when it is written.
  *   3. The owner reads it before it touches the repo. "Agent proposes, owner approves, it publishes" is already
- *      this workspace's shape for agent output (`.intentic/config/drafts/`), not a new idea.
+ *      this workspace's shape for agent output (`.intentic/config/approvals/`), not a new idea.
  *
  * The two trees share their TAIL (`repo.json`, `<pkg>/README.md`, …) so publishing is a copy per tail and never a
  * translation, and so a reviewer reading either tree is reading the same layout. */

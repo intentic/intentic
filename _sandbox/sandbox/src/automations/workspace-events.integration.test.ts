@@ -7,7 +7,7 @@ import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES } from "@intentic/testing/vitest";
-import { fileApprovalsStore } from "./approvals-store.js";
+import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import type { WakeFn } from "./scheduler.js";
 
@@ -20,12 +20,12 @@ const freshDispatch = async (): Promise<typeof import("./workspace-events.js")> 
     return import("./workspace-events.js");
 };
 
-// Same shape as scheduler.test's fake: the dispatcher reaches only automations/approvals/activity/workspace/logger.
+// Same shape as scheduler.test's fake: the dispatcher reaches only automations/heldWakes/activity/workspace/logger.
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        approvals: fileApprovalsStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },

@@ -285,7 +285,7 @@ survive reconnects. Its subsystems:
   `authorized_keys`, the git credentials: runs only for the daemon holding the container claim
   ([`claimContainer`](_sandbox/sandbox/src/platform/container-owner.ts)), and so does everything else there is
   only one of per container: the process sweep, the tmux session sweep, the translator, the platform announce,
-  the scheduler, the drafts publisher and the CI hooks. A container can hold more than one daemon: this
+  the scheduler, the approvals executor and the CI hooks. A container can hold more than one daemon: this
   repository IS the daemon, so a run of it from source is an ordinary thing for an agent to do: and the second
   one otherwise repoints HOME at its own empty roots (taking the live sandbox's git access, transcripts and
   desktop enrollment down without an error anywhere). A guest daemon serves its own routes and owns nothing that

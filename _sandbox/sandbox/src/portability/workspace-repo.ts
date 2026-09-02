@@ -31,7 +31,7 @@ import { DEFINITION_SOURCES } from "./definition.js";
  * pointer file (git/root-repo.ts). Its exclude list is DERIVED from the contract's `versioned` flag, so it
  * tracks every workspace file that is not a nested repo, the reference shelf, or daemon-internal state, which
  * by that allowlist means the owner's authored content: notes, skills, personas, automations, workflow and
- * loop designs, drafts, workspace extensions. Until it had a remote, none of that could travel by reference
+ * loop designs, approvals, workspace extensions. Until it had a remote, none of that could travel by reference
  * and a bundle was the only door. This module is the two halves of giving it one.
  *
  * THE ARRIVAL IS THE HARD HALF, and the reason is the format's own promise: a definition is safe to publish,

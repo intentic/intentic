@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
-import { fileApprovalsStore } from "../automations/approvals-store.js";
+import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -16,13 +16,13 @@ import { unstubbed } from "@intentic/testing";
 import { listenerStatus } from "./listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
 
-// The listener routes touch automations/approvals/capabilities/activity/workspace/logger; `unstubbed` keeps the
-// fake that small. The dispatch route drives fireAutomation, so approvals + a payload-guard-free automation are enough.
+// The listener routes touch automations/heldWakes/capabilities/activity/workspace/logger; `unstubbed` keeps the
+// fake that small. The dispatch route drives fireAutomation, so heldWakes + a payload-guard-free automation are enough.
 const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        approvals: fileApprovalsStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "approvals")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),

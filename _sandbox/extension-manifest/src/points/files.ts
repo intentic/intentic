@@ -17,7 +17,7 @@ import type { ContributionPoint } from "../contribution-point.js";
  * subscribe, no unsubscribe, no listener that quietly stops firing. */
 export const FileContributionSchema = z.object({
     /* Workspace-root-relative, forward-slash, the space the watcher's changed paths arrive in. Matched by
-     * PREFIX, so one entry covers an exact file (`.intentic/config/automations.json`), a directory (`.intentic/config/drafts/`
+     * PREFIX, so one entry covers an exact file (`.intentic/config/automations.json`), a directory (`.intentic/config/approvals/`
      *, keep the trailing slash so it cannot match a sibling file) or a name family (`.intentic/environment.`).
      * Deliberately not a glob: prefix is the whole matching rule on both sides of this union. */
     path: z
@@ -27,7 +27,7 @@ export const FileContributionSchema = z.object({
             message: "path must be workspace-root-relative and stay inside the workspace",
         })
         .describe(
-            "Workspace-root-relative, forward-slash, matched by prefix, so one entry covers an exact file (`.intentic/config/automations.json`), a directory (`.intentic/config/drafts/`, with the trailing slash so it cannot match a sibling file) or a name family (`.intentic/environment.`). Not a glob.",
+            "Workspace-root-relative, forward-slash, matched by prefix, so one entry covers an exact file (`.intentic/config/automations.json`), a directory (`.intentic/config/approvals/`, with the trailing slash so it cannot match a sibling file) or a name family (`.intentic/environment.`). Not a glob.",
         ),
     /* The browser query keys those contents feed, the first element of the extension's own
      * `api.sandbox.key(...)` keys, which is what makes them match (the sandbox id is a SUFFIX). Empty is not

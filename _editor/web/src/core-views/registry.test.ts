@@ -253,7 +253,7 @@ describe(`rail order`, () => {
      * rather than on a detected run because two of the four ids are core shell tiles, which contribute no
      * activation: the table ranks them all the same way, which is the whole reason it names them. */
     it(`keeps the busy permanent pair adjacent, with nothing seated between them`, () => {
-        // Start a turn, then read what it did: the loop the rail exists to serve. Drafts and Workflows used to
+        // Start a turn, then read what it did: the loop the rail exists to serve. Approvals and Workflows used to
         // sit in between, and both are touched by the week rather than by the minute.
         expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
     });
@@ -262,14 +262,14 @@ describe(`rail order`, () => {
         // Workflows is a permanent tile that never badges: it held the third seat purely by having been filed
         // beside Agents, and it belongs with the other thing you author once and leave alone.
         expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
-        for (const summons of [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
+        for (const summons of [`approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
             expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
         }
     });
 
-    it(`heads the decisions band with Drafts, the only one where nothing moves until the owner acts`, () => {
+    it(`heads the decisions band with Approvals, the only one where nothing moves until the owner acts`, () => {
         const judge = RAIL_GROUPS.find((group) => group.id === `judge`);
-        expect(judge?.items[0]?.id).toBe(`drafts`);
+        expect(judge?.items[0]?.id).toBe(`approvals`);
     });
 
     it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
@@ -323,10 +323,10 @@ describe(`rail seats`, () => {
     });
 
     it(`keeps a quiet queue off the rail, and seats it the moment it owes the owner something`, () => {
-        // The whole complaint this table answers: Drafts was permanent, so the rail carried a tile for an empty
+        // The whole complaint this table answers: Approvals was permanent, so the rail carried a tile for an empty
         // queue on every workspace, all day.
-        expect(railSeated({ id: `drafts` }, resting)).toBe(false);
-        expect(railSeated({ id: `drafts`, badge: { count: 3, tooltip: `3 waiting on you` } }, resting)).toBe(true);
+        expect(railSeated({ id: `approvals` }, resting)).toBe(false);
+        expect(railSeated({ id: `approvals`, badge: { count: 3, tooltip: `3 waiting on you` } }, resting)).toBe(true);
     });
 
     it(`keeps the surfaces you author once and leave alone off it until a run needs you`, () => {

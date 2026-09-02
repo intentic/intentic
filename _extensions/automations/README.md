@@ -18,9 +18,6 @@ cron expression, or a listener a connector provides) with the prompt to run when
 - [src/catalog.ts](src/catalog.ts): the daemon's catalogue, and what this browser adds to it (what is connected).
 - [src/cronSchedule.ts](src/cronSchedule.ts): schedule parsing and the plain-language sentence it renders as.
 - [src/useAutomationForm.ts](src/useAutomationForm.ts): the composer's state and its validation.
-- [src/approvalsQuery.ts](src/approvalsQuery.ts): the held-wake queue, named once for the view and the badge, and
-  which of those wakes actually want a person.
-- [src/attention.ts](src/attention.ts): the badge, filled while nothing here is on screen.
 
 ## How it fits
 
@@ -29,10 +26,11 @@ the area exists everywhere, which is what makes `/ext/automations`, the More lis
 palette's "Go to Automations" work.
 
 **A tile on the rail is a separate question, and the app answers it.** The rail seats a tile while it has
-something to say and keeps the rest behind its More menu (`core-views/registry.ts`), which is why this extension
-badges at all: a wake held for approval is the one thing here that stops dead until the owner acts, so it is the
-one thing worth a seat. A held wake carrying an `autoRunAt` is only a delay and is deliberately not counted, the
-scheduler releases that one itself.
+something to say and keeps the rest behind its More menu (`core-views/registry.ts`). This extension has nothing to
+say on its own: the one thing here that ever needed the owner, a wake held for approval, is a decision of exactly
+the Approvals page's shape (a prepared thing waiting for a yes, then carried out precisely), so that page lists the
+held wakes, offers approve / reject / start now / cancel, and its tile carries the count. Automations therefore
+lives in More unless pinned, which is right for a shelf you author once and leave alone.
 
 **This package is the surface, not the vocabulary.** What can wake an agent, and what is worth starting from,
 are served together by the daemon (`GET /automations/catalog`): its own sources, the website widget and CI,
@@ -60,8 +58,8 @@ disagreement waiting for whichever was edited second.
   an owner who deliberately points it at a card with more powers keeps that choice.
 - Two ways to keep a hand on the wheel, and they compose: `requireApproval` holds every fire for the owner's
   click, while `holdForSeconds` holds it under a visible countdown and the daemon starts it itself once the
-  timer passes on a quiet fleet: cancel and start-now stay one click away the whole time. When both are set,
-  approval wins.
+  timer passes on a quiet fleet: cancel and start-now stay one click away the whole time, on the Approvals page.
+  When both are set, approval wins.
 - Enablement is a narrow mutation, while an edit starts from the complete stored record. Switching or editing a
   row therefore preserves webhook identity, disabled state, provider-owned settings and security restrictions.
 - "Run now" answers "I wrote a 3 a.m. cron and cannot try it", so it exists for the triggers you would otherwise
@@ -71,8 +69,8 @@ disagreement waiting for whichever was edited second.
   a listener means sending the bot a message, which exercises the entire path. The daemon refuses it too, so
   the row's missing button is a rule rather than a decoration.
 - The dependency fix chore ("Fix what a dependency change broke") exists only as a template. No row is added
-  until the owner picks it; its fires then carry a 60-second hold. Approved drafts are published directly by
-  the daemon at their due time rather than through an automation.
+  until the owner picks it; its fires then carry a 60-second hold. Approved posts are carried out by the
+  daemon's approvals executor at their due time rather than through an automation.
 - A source outlives the pack that supplied it and a template does not, which reads like an inconsistency until
   you ask what each one is for. A source has to keep naming the trigger of an automation already standing on it,
   so a switched-off pack keeps its row and the picker simply declines to offer it. A template is something you

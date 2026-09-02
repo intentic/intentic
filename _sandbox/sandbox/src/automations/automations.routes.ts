@@ -146,17 +146,17 @@ export const createAutomationsRoutes = (services: Services) => {
             );
             return { ok: true } as const;
         }),
-        pendingList: i.pendingList.handler(async () => ({ approvals: await services.approvals.list() })),
+        pendingList: i.pendingList.handler(async () => ({ approvals: await services.heldWakes.list() })),
         // Approve a held wake: run it now with its snapshotted payload (`cleared: "both"`, its guard ran when the
         // wake was held and the owner has now approved it), then drop the queue entry. Detached like the /fire
         // webhook, the turn outlives this request.
         approve: i.approve.handler(async ({ input }) => {
-            const pending = await services.approvals.get(input.id);
+            const pending = await services.heldWakes.get(input.id);
             if (pending === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no pending approval with that id" });
             }
             const automation = await services.automations.get(pending.automationId);
-            await services.approvals.remove(input.id);
+            await services.heldWakes.remove(input.id);
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }
@@ -168,7 +168,7 @@ export const createAutomationsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         reject: i.reject.handler(async ({ input }) => {
-            if (!(await services.approvals.remove(input.id))) {
+            if (!(await services.heldWakes.remove(input.id))) {
                 throw new ORPCError("NOT_FOUND", { message: "no pending approval with that id" });
             }
             return { ok: true } as const;

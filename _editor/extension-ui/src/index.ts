@@ -43,7 +43,7 @@ export {
     vAction,
     BarChart,
     BottomSheet,
-    /* <BrandMark> ships because the drafts queue is the second surface to draw a platform as its brand (the
+    /* <BrandMark> ships because the approvals queue is the second surface to draw a platform as its brand (the
      * capability cards were the first), and because its fallback is the part a hand-roll skips: a platform
      * with no installed connector still has to render as SOMETHING, and the monogram is that something. */
     BrandMark,

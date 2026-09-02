@@ -13,7 +13,7 @@ export const extensionDir = (root: string, id: string): string => join(extension
 
 // Where WORKSPACE extensions live: one directory per extension, consumed in place, no clone, no capability
 // entry, no install moment. Deliberately a sibling of the checkout root above: that one is daemon-owned and
-// keyed by capability ids, this one is authored with the agent's file tools (the drafts precedent) and keyed
+// keyed by capability ids, this one is authored with the agent's file tools (the approvals precedent) and keyed
 // by nothing but its manifest.
 export const workspaceExtensionsRoot = (root: string): string => statePath(root, ".intentic/config/workspace-extensions/");
 

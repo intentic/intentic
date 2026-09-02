@@ -73,7 +73,7 @@ onMounted(() => {
     }
 });
 
-/* The rail's extension tiles, same detection AND same bands as ShellDesktop: Workspace/Drafts/Chat live on the
+/* The rail's extension tiles, same detection AND same bands as ShellDesktop: Workspace/Approvals/Chat live on the
  * tab bar, so the menu lists only the remaining areas. The desktop rail separates its bands with a hairline
  * because 44px leaves no room for a word; this page has the width, so it spells the band names out. Same
  * partition either way, which is the point of railBands living in the registry.

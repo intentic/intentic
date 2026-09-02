@@ -17,7 +17,7 @@ import {
     useLoadingReveal,
     vAction,
 } from "@intentic/extension-ui";
-import { computed, onUnmounted, reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
 import FrontDeskInstallDialog from "./FrontDeskInstallDialog.vue";
@@ -49,7 +49,7 @@ import { useAutomations } from "./useAutomations";
  * asked while writing one are "do I already have this?" and "what did the last one say?", and a modal covers
  * the only thing that answers them. */
 
-const { automations, isLoading, pending, error: listError, save, setEnabled, remove, run, approve, reject } = useAutomations();
+const { automations, isLoading, error: listError, save, setEnabled, remove, run } = useAutomations();
 // Only draw the wait once it has lasted long enough to be worth seeing: see useLoadingReveal.
 const outline = useLoadingReveal(
     isLoading,
@@ -69,7 +69,7 @@ const FILTER_FROM = 6;
 type View = `all` | `on` | `off` | `failing`;
 
 const createOpen = ref(false);
-// List-action errors (toggle/delete/approve/reject): the dialog carries its own submit error.
+// List-action errors (toggle/delete/run): the dialog carries its own submit error.
 const actionError = ref<string | undefined>(undefined);
 // Rows with their detail unfolded.
 const expanded = reactive(new Set<string>());
@@ -85,20 +85,6 @@ const search = ref(``);
 const view = ref<View>(`all`);
 
 const topError = computed(() => actionError.value ?? listError.value ?? catalogError.value);
-
-/* The countdown holds' clock. One ticking ref for the whole section rather than a timer per row: it exists
- * only while a hold with a deadline is on screen, and a second's granularity is the reading a person does.
- * The daemon releases on its own coarser tick, so "starting…" (past-due, fleet busy or scan pending) is a
- * real state and gets said rather than showing a negative number. */
-const now = ref(Date.now());
-const countdownTimer = setInterval(() => {
-    now.value = Date.now();
-}, 1_000);
-onUnmounted(() => clearInterval(countdownTimer));
-const startsIn = (autoRunAt: number): string => {
-    const seconds = Math.ceil((autoRunAt - now.value) / 1_000);
-    return seconds <= 0 ? `starting…` : `starts in ${seconds}s unless you cancel`;
-};
 
 const failing = (automation: AutomationSummary): boolean => automation.enabled && automation.runs[0]?.outcome === `error`;
 const matchesSearch = (automation: AutomationSummary): boolean => {
@@ -225,24 +211,6 @@ const removeAutomation = async (): Promise<void> => {
     }
 };
 
-// Approve a held wake (the agent runs now) or reject it (dropped, never runs).
-const approvePending = async (id: string): Promise<void> => {
-    actionError.value = undefined;
-    try {
-        await approve.mutateAsync(id);
-    } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not approve the automation.`;
-    }
-};
-const rejectPending = async (id: string): Promise<void> => {
-    actionError.value = undefined;
-    try {
-        await reject.mutateAsync(id);
-    } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not reject the automation.`;
-    }
-};
-
 const toggleDetail = (id: string): void => {
     if (!expanded.delete(id)) {
         expanded.add(id);
@@ -261,48 +229,6 @@ const toggleDetail = (id: string): void => {
         <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
 
         <div class="flex flex-col gap-6">
-            <!-- Held wakes: the only thing on this page that is waiting on the READER, so it stays at the top and
-                 wears the warning border whatever the filter says. -->
-            <section v-if="pending.length > 0">
-                <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
-                    <Icon name="lock" class="text-2xs text-warning" />
-                    <span :class="ui.sectionLabel('text-warning')">Waiting for you</span>
-                    <span class="text-2xs font-medium text-subtle">{{ pending.length }}</span>
-                    <span class="text-2xs text-subtle">These fired and are held: the agent hasn't run yet.</span>
-                </div>
-                <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-warning/40 bg-card">
-                    <div v-for="item in pending" :key="item.id" class="flex items-center gap-2 px-2.5 py-1.5">
-                        <span class="shrink-0 truncate text-xs font-medium text-content">{{ item.automationId }}</span>
-                        <!-- A countdown hold runs ITSELF when the timer passes: the row's job is to say so
-                             and keep the cancel in reach. An approval hold waits for the reader, as ever. -->
-                        <span v-if="item.autoRunAt !== undefined" class="shrink-0 text-2xs font-medium text-warning">{{
-                            startsIn(item.autoRunAt)
-                        }}</span>
-                        <span v-else class="shrink-0 text-2xs text-subtle">fired {{ since(item.createdAt) }}</span>
-                        <code v-if="item.payload" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle" v-tooltip.top="item.payload">
-                            {{ item.payload }}
-                        </code>
-                        <span v-else class="flex-1"></span>
-                        <Button
-                            :label="item.autoRunAt !== undefined ? `Start now` : `Approve`"
-                            size="small"
-                            :disabled="approve.isPending.value"
-                            @click="approvePending(item.id)"
-                        >
-                            <template #icon><Icon name="check" /></template>
-                        </Button>
-                        <Button
-                            :label="item.autoRunAt !== undefined ? `Cancel` : `Reject`"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            :disabled="reject.isPending.value"
-                            @click="rejectPending(item.id)"
-                        />
-                    </div>
-                </div>
-            </section>
-
             <!-- Creating, in the list. Keyed on the prefill so picking a different suggestion while the panel is
                  already open remounts it on that template rather than leaving the previous one's fields up. -->
             <AutomationComposer

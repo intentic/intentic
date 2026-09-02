@@ -22,7 +22,7 @@ test("the authored and versioned slice stays searchable: excluding all of .inten
     expect(isIqDenied(".intentic/config/settings.json")).toBe(false);
     expect(isIqDenied(".intentic/config/environment.Dockerfile")).toBe(false);
     expect(isIqDenied(".intentic/config/environment.custom.Dockerfile")).toBe(false);
-    expect(isIqDenied(".intentic/config/drafts/reddit-post.json")).toBe(false);
+    expect(isIqDenied(".intentic/config/approvals/reddit-post.json")).toBe(false);
     expect(isIqDenied(".intentic/config/skills/my-skill/SKILL.md")).toBe(false);
     expect(isIqDenied(".intentic/config/docs/intentic/repo.md")).toBe(false);
     expect(isIqDenied(".intentic/config/workspace-extensions/my-ext/index.ts")).toBe(false);

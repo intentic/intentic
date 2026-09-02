@@ -7,7 +7,7 @@ import { processIdentity, type ProcessIdentity } from "./proc-stat.js";
  * container-owner.ts asks the question once, at boot, because that is the only moment it can act on the answer:
  * take the container or run as a guest. Everything downstream then trusts that answer forever. Four boot jobs
  * converged HOME on it, the leftover sweep reclaims processes on it, and the singletons with one address, the
- * translator, the platform announce, the scheduler, the drafts publisher, the CI reconciler, each run because
+ * translator, the platform announce, the scheduler, the approvals executor, the CI reconciler, each run because
  * of it.
  *
  * The claim is a FILE in a HOME two daemons share, and the second daemon's own boot is what overwrites it. So

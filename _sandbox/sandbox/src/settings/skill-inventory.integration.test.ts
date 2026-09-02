@@ -158,13 +158,13 @@ test("a connection's skill, a core feature's and a loose file are told apart", a
     const vpn: Capability = { id: "office", kind: "vpn", config: { provider: "wireguard", config: "[Interface]", autoConnect: "off" } };
     await writeSkill(loaded, "github", "Use for GitHub repos.");
     await writeSkill(loaded, "vpn", "Use to reach the office network.");
-    await writeSkill(loaded, "drafts", "Use to prepare posts.");
+    await writeSkill(loaded, "approvals", "Use to prepare posts and actions for approval.");
     await writeSkill(loaded, "scratch", "Something the agent wrote itself.");
 
     const rows = await skillInventory(stubServices(root, [github, vpn], settingsWith([])));
     expect(rowFor(rows, "github")).toMatchObject({ origin: "capability", owner: "github", removable: false });
     expect(rowFor(rows, "vpn")).toMatchObject({ origin: "capability", owner: "office", removable: false });
-    expect(rowFor(rows, "drafts")).toMatchObject({ origin: "builtin", owner: "Drafts", removable: false });
+    expect(rowFor(rows, "approvals")).toMatchObject({ origin: "builtin", owner: "Approvals", removable: false });
     // The only origin that is removable without being editable: its home is the folder, not the owner's store.
     expect(rowFor(rows, "scratch")).toMatchObject({ origin: "dropped", removable: true, editable: false, switchable: false });
     // And the only one with nobody to send the reader to, which is what its row has to say instead of an owner.

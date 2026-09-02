@@ -287,7 +287,7 @@ const runFire = async (
             // finally, so the lock is NOT held while it waits for the owner, the approve route runs it later,
             // or (a countdown hold) the scheduler's own tick does once the countdown passes unanswered.
             if (verdict.effect === "hold" && cleared === undefined) {
-                await services.approvals.add({
+                await services.heldWakes.add({
                     automationId: automation.id,
                     // Only a pure-countdown hold carries autoRunAfterS (guard/actions.ts): "ask me", whether
                     // the automation's own requireApproval or the admission floor, never auto-runs.
@@ -540,12 +540,12 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
          * work under someone. A busy fleet just leaves the hold for a later tick; the row keeps showing it.
          * The entry is removed BEFORE the run so a wake that fails cannot re-fire on every tick, and an
          * automation deleted or disabled while its countdown ran is read as the cancel it is. */
-        for (const held of await services.approvals.list()) {
+        for (const held of await services.heldWakes.list()) {
             if (held.autoRunAt === undefined || held.autoRunAt > now || services.agents.liveSessionIds().length > 0) {
                 continue;
             }
             const automation = await services.automations.get(held.automationId);
-            await services.approvals.remove(held.id);
+            await services.heldWakes.remove(held.id);
             if (automation === undefined || !automation.enabled) {
                 continue;
             }

@@ -550,7 +550,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
      * route" line. Answered as the defaults (empty), because a demo visitor configures nothing. */
     [`GET`, `/extensions/{id}/settings`, () => json({ settings: {}, secretsSet: [] })],
     [`POST`, `/extensions/{id}/settings`, () => json({ ok: true })],
-    [`GET`, `/drafts`, () => json({ drafts: [] })],
+    [`GET`, `/approvals`, () => json({ approvals: [], invalid: [] })],
     [`GET`, `/members`, () => json({ members: [] })],
     [`GET`, `/environment`, () => json(demoEnvironment())],
     [`GET`, `/environment/contents`, () => json(demoEnvironmentContents())],

@@ -11,7 +11,7 @@ import { createCiRoutes } from "./ci/ci.routes.js";
 import { createClaudeRoutes } from "./claude/claude.routes.js";
 import { createCursorRoutes } from "./cursor/cursor.routes.js";
 import type { Services } from "./composition.js";
-import { createDraftsRoutes } from "./drafts/drafts.routes.js";
+import { createApprovalsRoutes } from "./approvals/approvals.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
 import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
@@ -51,7 +51,7 @@ export const createRouter = (services: Services) => ({
     ci: createCiRoutes(services),
     claude: createClaudeRoutes(services),
     cursor: createCursorRoutes(services),
-    drafts: createDraftsRoutes(services),
+    approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
     personas: createPersonasRoutes(services),
     sessions: createSessionsRoutes(services),

@@ -85,12 +85,12 @@ const RUNTIME_DOMAINS = [
     { domain: "webext", invalidates: [["capabilities"]] },
     { domain: "runners", invalidates: [["runners"]] },
 
-    /* The post queue, when the DAEMON moves it rather than the owner. Approving is the owner's own mutation and
-     * refetches itself, but everything after that happens while nobody is touching the page: a held post coming
-     * due, a Discord send landing, a publish turn writing back what went out. Those are the moments the row on
-     * screen stops being true, and this queue is watched precisely because its rows go out in public, so it is
-     * the last place to leave someone reading a stale one. */
-    { domain: "drafts", invalidates: [["drafts"]] },
+    /* The approvals queue, when the DAEMON moves it rather than the owner. Approving is the owner's own mutation
+     * and refetches itself, but everything after that happens while nobody is touching the page: a held item
+     * coming due, a Discord send landing, an executing turn writing back what happened. Those are the moments
+     * the row on screen stops being true, and this queue is watched precisely because its rows act in public,
+     * so it is the last place to leave someone reading a stale one. */
+    { domain: "approvals", invalidates: [["approvals"]] },
 
     /* WHAT A LANDED AGENT'S WORK IS CALLED, the commit message drafted from the diff the moment that work
      * reaches the main tree (agents/landed-subject.ts), which the review's "From" chip files into the commit box.

@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { writeJsonFile } from "./json-file.js";
 
 /* The substrate under the daemon's per-entry-file stores, a DIRECTORY holding one JSON file per entry
- * (.intentic/config/drafts/, .intentic/records/approvals/) rather than one manifest holding them all. `jsonFile` is the other
+ * (.intentic/config/approvals/, .intentic/records/approvals/) rather than one manifest holding them all. `jsonFile` is the other
  * shape; this is the one to reach for when the daemon is not the only writer.
  *
- * PER FILE, NEVER A MANIFEST, because both of these have a second writer: the agent creates drafts with its own
- * file tools, and separate automations fire approvals concurrently. Two writers on one manifest race a
+ * PER FILE, NEVER A MANIFEST, because both of these have a second writer: the agent creates approvals with its own
+ * file tools, and separate automations fire held wakes concurrently. Two writers on one manifest race a
  * read-modify-write and the loser's entry is simply gone, `jsonFile`'s update queue orders this daemon's own
  * handlers and nothing else. One file per entry has nothing to race: a write touches only its own id.
  *
@@ -15,9 +15,9 @@ import { writeJsonFile } from "./json-file.js";
  * what makes a body that disagrees with its own filename impossible to write, and what lets `mv` rename an
  * entry.
  *
- * A NAME THAT IS NOT A VALID ID IS REPORTED, NEVER READ. These directories are a trust boundary, the drafts
+ * A NAME THAT IS NOT A VALID ID IS REPORTED, NEVER READ. These directories are a trust boundary, the approvals
  * one is written by the agent, so `list` answers with the entries it parsed AND the filenames it refused,
- * and a typo surfaces in the UI instead of becoming a draft that silently never posts. */
+ * and a typo surfaces in the UI instead of becoming an item that silently never runs. */
 
 // The contract's `entryId` charset (sandbox-contract's schemas/internal.ts, which the package index does not
 // re-export). Held once here rather than re-typed per store: both copies of it carried a comment claiming to

@@ -44,7 +44,7 @@ const fakeApi = (over: { reachable?: boolean; file?: unknown; watching?: boolean
         },
     } as unknown as IntenticApi;
     // What the host does when the daemon reports a write under one of this extension's declared paths.
-    const writeLanded = (paths: readonly string[] = [`${STATE_DIR}/config/drafts/one.json`]): void => {
+    const writeLanded = (paths: readonly string[] = [`${STATE_DIR}/config/approvals/one.json`]): void => {
         for (const listener of listeners) {
             listener(paths);
         }

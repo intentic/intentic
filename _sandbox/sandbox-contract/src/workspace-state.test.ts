@@ -47,14 +47,14 @@ describe(`staleQueryKeys`, () => {
     it(`matches a name family and a one-file-per-entry directory through one prefix each`, () => {
         // environment.Dockerfile, environment.custom.Dockerfile, environment.approved.Dockerfile: one entry.
         expect(staleQueryKeys([`.intentic/config/environment.custom.Dockerfile`], [])).toEqual([`environment`]);
-        expect(staleQueryKeys([`.intentic/config/drafts/post-1.json`], [])).toEqual([`drafts`]);
+        expect(staleQueryKeys([`.intentic/config/approvals/post-1.json`], [])).toEqual([`approvals`]);
     });
 
-    it(`refreshes the Drafts view when the AGENT writes a draft`, () => {
-        // The regression this table was reorganized around: the drafts skill writes these files directly, so
+    it(`refreshes the Approvals view when the AGENT writes a proposal`, () => {
+        // The regression this table was reorganized around: the approvals skill writes these files directly, so
         // there is no browser mutation to hang an invalidate on: the watcher push is the only signal, and it
         // used to be dropped on the floor.
-        expect(staleQueryKeys([`.intentic/config/drafts/post-1.json`], [])).toEqual([`drafts`]);
+        expect(staleQueryKeys([`.intentic/config/approvals/post-1.json`], [])).toEqual([`approvals`]);
     });
 
     it(`ignores unrelated churn under .intentic/`, () => {
@@ -158,7 +158,7 @@ describe(`WORKSPACE_STATE_FILES`, () => {
     it(`states a reason for every entry that invalidates nothing`, () => {
         // An empty `invalidates` is a real answer (daemon machine state, a deliberately-polled surface, a path
         // whose query keys belong to an extension), but a SILENT one is indistinguishable from the omission this
-        // table exists to prevent, which is exactly how drafts went missing. Requiring the reason is what makes
+        // table exists to prevent, which is exactly how approvals went missing. Requiring the reason is what makes
         // the difference visible at review time.
         for (const file of WORKSPACE_STATE_FILES) {
             if (file.invalidates.length === 0) {
@@ -172,7 +172,7 @@ describe(`WORKSPACE_STATE_FILES`, () => {
     });
 
     it(`keeps directory entries slash-terminated so they cannot swallow a sibling`, () => {
-        // `.intentic/config/drafts` without the slash would also prefix-match a future `.intentic/drafts-archive.json`.
+        // `.intentic/config/approvals` without the slash would also prefix-match a future `.intentic/approvals-archive.json`.
         for (const file of WORKSPACE_STATE_FILES.filter((entry) => entry.invalidates.length > 0)) {
             const isFamilyPrefix = file.path.endsWith(`.`);
             const isFile = file.path.endsWith(`.json`) || file.path.endsWith(`.Dockerfile`);
@@ -224,7 +224,7 @@ describe(`isLockedWorkspacePath`, () => {
         // The dir itself is browsable, and most of what is in it is a file a person may legitimately read.
         expect(isLockedWorkspacePath(`.intentic`)).toBe(false);
         expect(isLockedWorkspacePath(`.intentic/config/settings.json`)).toBe(false);
-        expect(isLockedWorkspacePath(`.intentic/config/drafts/post-1.json`)).toBe(false);
+        expect(isLockedWorkspacePath(`.intentic/config/approvals/post-1.json`)).toBe(false);
     });
 
     it(`locks the ROOT's own .git and nobody else's`, () => {
@@ -320,6 +320,7 @@ describe(`VERSIONED_STATE_PATHS`, () => {
      * consequence of editing the table above: the review the flag itself exists to force. */
     it(`tracks exactly the configuration slice plus the agent's own authored output`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
+            `.intentic/config/approvals/`,
             `.intentic/config/automations.json`,
             /* The connections themselves, and the entry that took the longest to earn its place: it was classed
              * `secret` on the strength of holding each capability's credential, which stopped being true when the
@@ -333,7 +334,6 @@ describe(`VERSIONED_STATE_PATHS`, () => {
              * a workspace extension is code that runs in the app and can serve HTTP with the workspace under
              * node:fs, and both used to reach that far with no diff anywhere. Kept rather than consumed, one
              * small file at a time, so tracking them yields a record instead of churn. */
-            `.intentic/config/drafts/`,
             /* Where each agent engine takes its version from. Tracked for the same reason heavy-commands is:
              * it is a standing decision about what runs for everyone on this workspace — tracking upstream's
              * newest Claude Code, or pinning one while a regression is open — and `git log` is the only thing
@@ -439,7 +439,7 @@ describe(`state groups`, () => {
 
     it(`sorts the entries a browsing owner would recognise`, () => {
         expect(stateGroupPaths(`config`)).toContain(`.intentic/config/personas/`);
-        expect(stateGroupPaths(`config`)).toContain(`.intentic/config/drafts/`);
+        expect(stateGroupPaths(`config`)).toContain(`.intentic/config/approvals/`);
         expect(stateGroupPaths(`records`)).toContain(`.intentic/records/sessions/claude/`);
         expect(stateGroupPaths(`records`)).toContain(`.intentic/records/artifacts/`);
         expect(stateGroupPaths(`local`)).toContain(`.intentic/local/cache/`);

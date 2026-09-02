@@ -16,19 +16,15 @@
             "POST /automations/*/enabled",
             "DELETE /automations/*",
             "POST /automations/*/run",
-            "GET /webchat/*/installs",
-            "GET /automations/pending",
-            "POST /automations/pending/*/approve",
-            "POST /automations/pending/*/reject"
+            "GET /webchat/*/installs"
         ]
     },
     "contributes": {
-        "views": [{ "id": "automations", "label": "Automations", "surface": "rail", "badge": true }],
+        "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }],
         "files": [
             { "path": ".intentic/config/automations.json", "invalidates": ["automations"] },
             { "path": ".intentic/records/automation-runs.json", "invalidates": ["automations"] },
-            { "path": ".intentic/config/personas.json", "invalidates": ["personas"] },
-            { "path": ".intentic/records/approvals/", "invalidates": ["automation-approvals"] }
+            { "path": ".intentic/config/personas.json", "invalidates": ["personas"] }
         ]
     }
 }

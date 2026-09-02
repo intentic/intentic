@@ -139,7 +139,7 @@ describe(`cache key registry`, () => {
      * EXTENSION_OWNED is for names whose queries live in an extension package: those register through
      * `api.key(...)` (see the apiImpl exemption above) and this app cannot enumerate them. */
     it(`gives every name the daemon can push a family to land on`, () => {
-        const EXTENSION_OWNED = new Set([`drafts`]);
+        const EXTENSION_OWNED = new Set([`approvals`]);
         // Read from the registry's SOURCE rather than by importing it: the registry reaches useSandbox, and
         // that module's chain wants a browser at import time. Everything else here is a source scan anyway.
         const declared = new Set([...readFileSync(registry, `utf8`).matchAll(/=\s*family\(\s*`([^`]+)`/g)].map((match) => match[1]));

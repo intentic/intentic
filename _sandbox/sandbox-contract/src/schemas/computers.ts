@@ -195,7 +195,7 @@ export const MachinePairingSchema = z.object({
     /* The SECOND session's word, the one-way mirror carrying the sandbox's state dir down (sync's backupSpec).
      * Reported separately rather than folded into the status above, because the two fail independently and mean
      * different things: the first going quiet stops the owner's edits moving, the second going quiet stops their
-     * personas, skills, automations, drafts and transcripts from surviving the sandbox. A backup that is not
+     * personas, skills, automations, approvals and transcripts from surviving the sandbox. A backup that is not
      * running is only dangerous while nobody knows, so it gets its own word on the line. */
     backupStatus: z.string().optional(),
 });

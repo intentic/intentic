@@ -3,13 +3,13 @@ import { contractRoutes, requestPathFor, routeForProcedure, routeNameForRequest,
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
 import { agentsContract } from "./contracts/agents.contract.js";
+import { approvalsContract } from "./contracts/approvals.contract.js";
 import { automationsContract } from "./contracts/automations.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
 import { claudeContract } from "./contracts/claude.contract.js";
 import { cursorContract } from "./contracts/cursor.contract.js";
-import { draftsContract } from "./contracts/drafts.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
 import { exitContract } from "./contracts/exit.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
@@ -43,13 +43,13 @@ import { workspaceContract } from "./contracts/workspace.contract.js";
 export { activityContract } from "./contracts/activity.contract.js";
 export { agentContract } from "./contracts/agent.contract.js";
 export { agentsContract } from "./contracts/agents.contract.js";
+export { approvalsContract } from "./contracts/approvals.contract.js";
 export { automationsContract } from "./contracts/automations.contract.js";
 export { capabilitiesContract } from "./contracts/capabilities.contract.js";
 export { choresContract } from "./contracts/chores.contract.js";
 export { ciContract } from "./contracts/ci.contract.js";
 export { claudeContract } from "./contracts/claude.contract.js";
 export { cursorContract } from "./contracts/cursor.contract.js";
-export { draftsContract } from "./contracts/drafts.contract.js";
 export { endpointsContract, type TrialHealth, TrialStatusSchema, type TrialStatusResponse } from "./contracts/endpoints.contract.js";
 export { exitContract } from "./contracts/exit.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
@@ -126,7 +126,7 @@ export * from "./path-refs.js";
 export * from "./prompt-complexity.js";
 export * from "./quick-model.js";
 export * from "./output-fields.js";
-export * from "./publish-drafts.js";
+export * from "./approvals-execution.js";
 /* The wire shapes, one module per subject area, mirroring `contracts/` above: every request and response the
  * daemon speaks is declared in exactly one of them. Inputs that carry a `{param}` in their route path (repo /
  * id / name) merge the path param into the same flat object, oRPC fills the path placeholder from the matching
@@ -137,13 +137,13 @@ export * from "./publish-drafts.js";
 export * from "./schemas/activity.js";
 export * from "./schemas/agent.js";
 export * from "./schemas/agents.js";
+export * from "./schemas/approvals.js";
 export * from "./schemas/automations.js";
 export * from "./schemas/capabilities.js";
 export * from "./schemas/ci.js";
 export * from "./schemas/claude-gate.js";
 export * from "./schemas/codebase-health.js";
 export * from "./schemas/computers.js";
-export * from "./schemas/drafts.js";
 export * from "./schemas/engines.js";
 export * from "./schemas/environment.js";
 export * from "./schemas/exit.js";
@@ -198,13 +198,13 @@ export const sandboxContract = {
     activity: activityContract,
     agent: agentContract,
     agents: agentsContract,
+    approvals: approvalsContract,
     automations: automationsContract,
     capabilities: capabilitiesContract,
     chores: choresContract,
     ci: ciContract,
     claude: claudeContract,
     cursor: cursorContract,
-    drafts: draftsContract,
     endpoints: endpointsContract,
     extensions: extensionsContract,
     personas: personasContract,

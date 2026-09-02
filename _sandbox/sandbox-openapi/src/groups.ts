@@ -356,12 +356,12 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "What is currently shared, publishing a conversation, re-rendering one from how it stands now, and taking it down. As with the outbox, the page itself is the read.",
     },
     {
-        name: "drafts",
+        name: "approvals",
         shelf: "ship",
-        label: "Post drafts",
-        summary: "Posts the agent has proposed, waiting for you to approve them",
+        label: "Approvals",
+        summary: "Things the agent has prepared, waiting for you to say yes",
         description:
-            "The owner's side of the queue. The agent writes drafts directly; this is the inbox, the one call that covers approving, editing and retrying, and the deletion that is a rejection.",
+            "The owner's side of the queue: posts to publish, actions to carry out. The agent writes the files directly; this is the inbox, the one call that covers approving, editing and retrying, and the deletion that is a rejection.",
     },
     {
         name: "issues",

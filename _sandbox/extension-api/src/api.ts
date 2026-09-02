@@ -333,7 +333,7 @@ export interface IntenticApi {
          * whether the call would succeed. A view that shows a viewer buttons the daemon will refuse teaches them
          * that buttons lie; this is how a view says less instead.
          *
-         * The first consumer is the drafts queue (approve/reject are maintainer-and-up), and it existed as a
+         * The first consumer is the approvals queue (approve/reject are maintainer-and-up), and it existed as a
          * private composable before it was public API, which is the pattern this package's history warns about:
          * a surface only its own app needs is a surface nobody else can build the same feature on. */
         role(): "owner" | "maintainer" | "collaborator" | "viewer";

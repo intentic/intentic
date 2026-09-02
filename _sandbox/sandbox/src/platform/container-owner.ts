@@ -28,7 +28,7 @@ import { processIdentity, type ProcessIdentity, sameProcess } from "./proc-stat.
  *     it again at 15:22 from a run whose roots were safely under /tmp, because the sweep never asked about roots.
  *   - the tmux server, whose panel/agent/job sessions a boot sweep clears as a previous life's leftovers.
  *   - the singletons with one address: the translator on its fixed port, the platform registration that says
- *     where this sandbox answers, the scheduled-work timer, the drafts publisher, the CI webhook reconciler.
+ *     where this sandbox answers, the scheduled-work timer, the approvals executor, the CI webhook reconciler.
  *     Two of any of them is two of everything they do, a post published twice, an automation fired twice.
  *
  * SO THE CONTAINER IS CLAIMED, in HOME's own file: it names the owning pid plus its kernel start-time tick and

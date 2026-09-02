@@ -260,12 +260,12 @@ test("walkWorkspaceTree lists the daemon's own state entries but never lists wha
     const root = await mkdtemp(join(tmpdir(), "ws-tree-locked-"));
     await mkdir(join(root, `${STATE_DIR}`, "local", "browser", "Default"), { recursive: true });
     await mkdir(join(root, `${STATE_DIR}`, "secrets", "auth", "codex"), { recursive: true });
-    await mkdir(join(root, `${STATE_DIR}`, "config", "drafts"), { recursive: true });
+    await mkdir(join(root, `${STATE_DIR}`, "config", "approvals"), { recursive: true });
     await writeFile(join(root, `${STATE_DIR}`, "config", "capabilities.json"), '{"entries":[]}');
     await writeFile(join(root, `${STATE_DIR}`, "config", "settings.json"), "{}");
     await writeFile(join(root, `${STATE_DIR}`, "local", "browser", "Default", "Cookies"), "sqlite");
     await writeFile(join(root, `${STATE_DIR}`, "secrets", "auth", "codex", "auth.json"), '{"token":"secret"}');
-    await writeFile(join(root, `${STATE_DIR}`, "config", "drafts", "post-1.json"), "{}");
+    await writeFile(join(root, `${STATE_DIR}`, "config", "approvals", "post-1.json"), "{}");
 
     const result = await walkWorkspaceTree(root);
     const all = paths(result.tree);
@@ -281,7 +281,7 @@ test("walkWorkspaceTree lists the daemon's own state entries but never lists wha
     expect(await listWorkspaceChildren(root, `${STATE_DIR}/secrets/auth`)).toEqual({ entries: [], hidden: 0 });
     // The state dir's ORDINARY contents are untouched by any of this.
     expect(all).toContain(".intentic/config/settings.json");
-    expect(all).toContain(".intentic/config/drafts/post-1.json");
+    expect(all).toContain(".intentic/config/approvals/post-1.json");
 });
 
 /* SYMLINKS. They were filtered out of every listing, which is how `.claude/skills`: a folder holding thirty

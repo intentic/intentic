@@ -12,7 +12,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { PersistedAgent } from "../agents/agents-store.js";
-import { fileApprovalsStore } from "../automations/approvals-store.js";
+import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
@@ -607,7 +607,7 @@ const journalServices = async (root: string, autoResumeOnRestart = true): Promis
         ...fakeServices(root),
         turnJournal: fileTurnJournal(join(root, "turns")),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
-        approvals: fileApprovalsStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "approvals")),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
     });
@@ -830,7 +830,7 @@ test("a re-fire skips the approval gate: the wake was already past it when the d
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await vi.waitFor(() => expect(prompts).toEqual(["sweep"]), SETTLES);
     // Re-holding it would ask a question the owner has already answered.
-    expect(await services.approvals.list()).toEqual([]);
+    expect(await services.heldWakes.list()).toEqual([]);
 });
 
 test("an entry for an automation since deleted or disabled is consumed, not left to invent a run on every boot", async () => {

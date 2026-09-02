@@ -260,7 +260,7 @@ export const ensureLocalRootRepo = async (
 };
 
 // The baseline "Initialize workspace" commit, run once, on a fresh sandbox, AFTER the daemon has converged its
-// /work-owned files (the drafts skill, baked-tool skills). Whatever exists becomes committed state so the
+// /work-owned files (the approvals skill, baked-tool skills). Whatever exists becomes committed state so the
 // Changes review starts clean and daemon-owned files don't surface as a phantom add. --allow-empty keeps HEAD
 // born even on an empty workspace, no unborn-HEAD special case for root.
 export const commitRootBaseline = async (workspace: WorkspacePaths, git: GitRunner = defaultGit): Promise<void> => {

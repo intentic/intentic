@@ -5,7 +5,7 @@ import { issuesQuery, owedOf } from "./useIssues";
 
 /* ext-issues activation: bind the host handle, then register the "Issues" rail view.
  *
- * UNCONDITIONAL DETECT, SEATED BY THE BADGE, the shape ext-drafts settles: the AREA exists on every sandbox (so
+ * UNCONDITIONAL DETECT, SEATED BY THE BADGE, the shape ext-approvals settles: the AREA exists on every sandbox (so
  * `/ext/issues` resolves, and Issues is in the More list, the mobile menu and the palette), while the rail SEAT
  * is decided by the badge below. A workspace whose users have never hit a bug should not carry a tile all day
  * for an empty inbox, and one whose checkout is throwing should not have to go looking for it.

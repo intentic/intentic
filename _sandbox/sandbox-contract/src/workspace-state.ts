@@ -10,11 +10,11 @@ import type { StateFile } from "./state-portability.js";
  * maintained separately from the paths the daemon actually writes (composition.ts), two lists of the same
  * fact, in two packages, with nothing tying them together.
  *
- * They drifted, exactly as that shape always does. `.intentic/drafts/` is written by the AGENT (the drafts
- * skill puts a file there) and rendered by the Drafts view, but it was never added to the browser's table, so
- * a draft appearing on disk while the owner watched the page changed nothing until they refocused the tab.
- * Extension settings and the members list were missing for the same reason; writing them out is what showed
- * that neither is a drafts-shaped hole, see their entries.
+ * They drifted, exactly as that shape always does. The approvals queue is written by the AGENT (the approvals
+ * skill puts a file there) and rendered by the Approvals view, but it was never added to the browser's table,
+ * so a proposal appearing on disk while the owner watched the page changed nothing until they refocused the
+ * tab. Extension settings and the members list were missing for the same reason; writing them out is what
+ * showed that neither is an approvals-shaped hole, see their entries.
  *
  * So the binding is declared HERE, once, in the package both the daemon and the browser already import, and
  * each side derives what it needs: the daemon builds its store paths from `path`, the browser builds its
@@ -38,7 +38,7 @@ import type { StateFile } from "./state-portability.js";
  * `path` is workspace-root-relative, forward-slash, the space `workspaceChanged` paths arrive in. Matching is
  * by PREFIX, which lets one entry cover three shapes without a second matching rule:
  *   - an exact file      `.intentic/config/settings.json`
- *   - a directory        `.intentic/config/drafts/`     (one file per draft)
+ *   - a directory        `.intentic/config/approvals/`  (one file per approval)
  *   - a name family      `.intentic/config/environment.custom.` (…Dockerfile and anything later named beside it)
  * A directory entry keeps its trailing slash so it can never prefix-match a sibling file. Entries may NEST,
  * see stateFileFor, which resolves the longest match rather than the first. */
@@ -261,22 +261,24 @@ const STATE_FILES = [
      * that page but reads its own route, and a channel change must not cost every open Environment tab a
      * re-read of the overlay it did not touch. */
     { path: ".intentic/config/engines.json", invalidates: ["engines"], portability: "carry", versioned: true },
-    /* Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox, the one entry
+    /* Written by the AGENT's file tools (the approvals skill), read by the owner's approval inbox, the one entry
      * here whose whole point is that a change arrives from outside the browser that renders it. `authored`:
-     * a draft is text somebody wrote, and "find the reddit draft about X" is an ordinary search.
+     * an approval is text somebody wrote, a post or a description of an action, and "find the reddit post
+     * about X" is an ordinary search.
      *
-     * `versioned` because a draft is the furthest-reaching thing the agent writes: these words go out under the
-     * owner's name, to an audience, and cannot be recalled. The approval inbox already gates that, but a gate is
-     * not a record. Declining one used to erase it, so the question "what has this agent tried to post" had no
-     * answer at all, and an approved post's own history (what was proposed, what the owner changed, when it
-     * actually went) lived only in a file nobody could diff.
+     * `versioned` because an approval is the furthest-reaching thing the agent writes: a post goes out under the
+     * owner's name, to an audience, and cannot be recalled; an action spends or sends or deletes. The inbox
+     * already gates that, but a gate is not a record. Declining one used to erase it, so the question "what has
+     * this agent tried to do" had no answer at all, and an approved item's own history (what was proposed, what
+     * the owner changed, when it actually happened) lived only in a file nobody could diff.
      *
-     * It costs almost nothing to track, which is why the ledger objection does not reach it: a draft is one small
-     * file per post, it is written a handful of times across its whole life (proposed → approved → posted, with
-     * `postedAt`/`postedUrl` stamped at the end), and it is KEPT afterwards rather than consumed, so tracking
-     * yields a durable record instead of the add/delete churn a queue would produce. Nothing in a draft is a
-     * credential: it is a platform, a target URL and the body itself, all of it bound for publication anyway. */
-    { path: ".intentic/config/drafts/", invalidates: ["drafts"], portability: "carry", versioned: true, authored: true },
+     * It costs almost nothing to track, which is why the ledger objection does not reach it: an approval is one
+     * small file, written a handful of times across its whole life (proposed → approved → done, with
+     * `finishedAt`/`result` stamped at the end), and it is KEPT afterwards rather than consumed, so tracking
+     * yields a durable record instead of the add/delete churn a queue would produce. Nothing in one is a
+     * credential: a platform, a target, the words, a description of what will be done, all of it meant to be
+     * read by the owner anyway. */
+    { path: ".intentic/config/approvals/", invalidates: ["approvals"], portability: "carry", versioned: true, authored: true },
     // ---- declared by the extension that renders them (contributes.files), not here ----
     // The path is the DAEMON's (automations-store writes both), the query keys are the intentic.automations
     // extension's. It declares them in its own manifest and the browser unions the two lists, so uninstalling
@@ -310,7 +312,7 @@ const STATE_FILES = [
     {
         path: ".intentic/records/approvals/",
         invalidates: [],
-        why: "Declared by the intentic.automations extension's contributes.files, `automation-approvals` is its query key, not core's.",
+        why: "Declared by the intentic.approvals extension's contributes.files (the page that lists held wakes), `automation-approvals` is its query key, not core's.",
         portability: "carry",
     },
     /* The bug-report inbox, one file per fingerprint, written by the daemon's issues-store as reports arrive
@@ -321,8 +323,8 @@ const STATE_FILES = [
      * exported and restored elsewhere that arrived claiming nothing had ever crashed would have thrown away
      * the one record that says which bug is worth fixing first, and the counts are the whole of that record.
      *
-     * NOT `versioned`, and the drafts entry is the contrast worth reading: a draft is authored, reviewable and
-     * goes out under the owner's name, so it earns a diff. An issue is machine-recorded telemetry whose count
+     * NOT `versioned`, and the approvals entry is the contrast worth reading: an approval is authored, reviewable
+     * and acts under the owner's name, so it earns a diff. An issue is machine-recorded telemetry whose count
      * moves on every crash: tracking it would put a commit's worth of churn in `git log` per bad afternoon,
      * and nothing in it is a decision anybody made. */
     {
@@ -344,7 +346,7 @@ const STATE_FILES = [
     },
     /* The documentation STAGING tree (documentation extension's paths.ts): generation writes here, the owner
      * reads and approves here, publishing copies into the repo. `authored` is the whole nature of the entry,
-     * these are draft READMEs, drafts-shaped in every way that matters, and "find the staged page about X" is
+     * these are draft READMEs, approvals-shaped in every way that matters, and "find the staged page about X" is
      * as ordinary a search as finding a post draft. */
     {
         path: ".intentic/config/docs/",
@@ -440,10 +442,10 @@ const STATE_FILES = [
         versioned: true,
     },
     /* Workspace extensions: one directory per extension, consumed straight from the workspace, no clone, no
-     * install moment. Written like drafts, by the agent's own file tools (which is the point: an agent authors
+     * install moment. Written like approvals, by the agent's own file tools (which is the point: an agent authors
      * an extension and it is live for the daemon and every session at once, since .intentic is shared), so this
      * push is what makes one appearing or changing show up on the Extensions tab while the owner watches.
-     * `authored` for the same reason as drafts: this is source the agent wrote and will be asked to find,
+     * `authored` for the same reason as approvals: this is source the agent wrote and will be asked to find,
      * unlike `.intentic/extensions/` below, which is CLONES of source that lives elsewhere.
      *
      * `versioned` FOR THAT SAME REASON, which is the whole argument. Every other load path an extension can take
@@ -682,7 +684,7 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
 export const VERSIONED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
 
 /* The `.intentic` slice a workspace SEARCH may surface: configuration a person reviews (`versioned`) plus the
- * authored-content dirs (`authored`), drafts, staged docs, workspace extensions. Everything else under
+ * authored-content dirs (`authored`), approvals, staged docs, workspace extensions. Everything else under
  * `.intentic` is machine state, and the search engine (iq's floor) denies it BY DEFAULT off this list, the
  * same default-deny the portability classes are built on and for the same reason: a deny list is a list a new
  * ledger is forgotten from, and the forgetting is silent, it ranked loop iteration history and cloned
@@ -714,8 +716,8 @@ export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.f
  * the same three questions it always did; the group, the folder it belongs in, and every rule that reads them
  * follow with no further edit. */
 export type StateGroup =
-    /* Reviewed and reviewable: settings, personas, skills, drafts, staged docs, the environment overlay. Tracked
-     * by the root repo, searchable, backed up, and carried into a new sandbox. Two of its members (drafts, staged
+    /* Reviewed and reviewable: settings, personas, skills, approvals, staged docs, the environment overlay. Tracked
+     * by the root repo, searchable, backed up, and carried into a new sandbox. Two of its members (approvals, staged
      * docs) are authored content rather than configuration, and the folder is still called `config`, the word
      * that makes seventeen of the nineteen instantly clear beats one that makes all nineteen vague. */
     | "config"
@@ -927,7 +929,7 @@ export const isReviewableLockedPath = (relPath: string): boolean => {
  * files beside it spelled the same layout a SECOND way, `join(root, ".intentic", "settings.json")`, with
  * nothing tying the two spellings together. Rename a store's file and this table keeps declaring the old name:
  * no error, no failing test, just a view that quietly stops refreshing, which is the exact failure the table was
- * written to end and the exact way drafts went missing.
+ * written to end and the exact way approvals went missing.
  *
  * So the daemon joins through `statePath` (workspace/state-paths.ts), which takes one of THESE and nothing else.
  * A rename is now a compile error at every site that names the file, in both packages, or it is not a rename. */

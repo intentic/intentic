@@ -14,7 +14,7 @@ import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { expect, test } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
-import { fileApprovalsStore } from "../automations/approvals-store.js";
+import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
@@ -30,7 +30,7 @@ const ORIGIN = "https://shop.example";
 const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
-        approvals: fileApprovalsStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
@@ -284,7 +284,9 @@ test("the day's ceiling stops an intake spending forever", async () => {
 /* The trigger narrows the WAKING, not the recording, which is this source's one departure from the others: an
  * owner can hear about production crashes while still reading staging's, from one intake. */
 test("a trigger narrowed to crashes still records what people write in", async () => {
-    const { services, issues } = await setup(intake("bugs", { trigger: { kind: "listener", provider: "issues", allowedOrigins: [ORIGIN], eventType: "crash" } }));
+    const { services, issues } = await setup(
+        intake("bugs", { trigger: { kind: "listener", provider: "issues", allowedOrigins: [ORIGIN], eventType: "crash" } }),
+    );
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns), issues);
 
@@ -300,7 +302,7 @@ test("a trigger narrowed to crashes still records what people write in", async (
 });
 
 /* The shipped default for this source is `hold`, and it has to behave like every other hold: the wake parks in
- * the approvals queue carrying its own conversation, so approving it later lands in the issue's thread. */
+ * the held-wakes queue carrying its own conversation, so approving it later lands in the issue's thread. */
 test("the admission floor holds the wake, with the issue's own brief on the card", async () => {
     const { issues } = await setup(intake("bugs"));
     const root = mkdtempSync(join(tmpdir(), "intake-held-"));
@@ -317,10 +319,10 @@ test("the admission floor holds the wake, with the issue's own brief on the card
     expect((await post(app, "bugs", {})).status).toBe(200);
     // Waiting on the CARD rather than on a drain is also what makes the line under it mean anything: the wake
     // has demonstrably reached its decision, and the decision was to park rather than to run.
-    await settled(async () => (await held.approvals.list()).length === 1);
+    await settled(async () => (await held.heldWakes.list()).length === 1);
     expect(turns).toEqual([]);
 
-    const pending = await held.approvals.list();
+    const pending = await held.heldWakes.list();
     expect(pending).toHaveLength(1);
     expect(pending[0]?.title).toContain("Crash: TypeError: x is not a function");
     /* The conversation is snapshotted on the approval, which is what makes an approved run land in the issue's

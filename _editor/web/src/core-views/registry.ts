@@ -69,21 +69,21 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  *
  *   Work    Agents, Workspace, the two ends of one loop: start a turn, then read what it did and land it. Both
  *           are permanent and both are the busiest tiles in the product, so they take the two seats a hand finds
- *           without looking, and NOTHING is allowed between them. The first table put Drafts and Workflows there,
+ *           without looking, and NOTHING is allowed between them. The first table put Approvals and Workflows there,
  *           which split the pair with two surfaces touched weekly. The whole band is `always`: with the chat at
  *           its head and the running app at its foot, these four ARE the loop, and they are the only tiles the
  *           column carries unconditionally.
- *   Judge   Drafts, Acceptance, Pipelines, Deployments, Maintenance, "does this go out, is it good, did it ship,
- *           what is owed". The tiles you click BECAUSE one lit up, so they are together and high. Drafts heads the
- *           band: it is the only one where nothing happens at all until the owner acts, and a post carrying a send
- *           time is the most perishable thing on the rail.
+ *   Judge   Approvals, Acceptance, Pipelines, Deployments, Maintenance, "does this go out, is it good, did it ship,
+ *           what is owed". The tiles you click BECAUSE one lit up, so they are together and high. Approvals heads
+ *           the band: it is the only one where nothing happens at all until the owner acts, and a post carrying a
+ *           send time is the most perishable thing on the rail.
  *   Set up  Workflows, Automations, the two ways a run happens without anyone sitting there. The mechanisms have
  *           little in common (a workflow forks a prompt across sessions and merges what comes back; an automation
  *           is a trigger), but their relationship to the day is identical: authored once, then left alone. That
  *           is what makes them a shelf rather than work. Workflows previously sat third, a permanent tile that
- *           could not badge at all, holding a seat the hand reaches for by reflex. Each has since been given the
- *           one thing it can honestly say (a run in flight; a wake held for a yes), which is now also the only
- *           thing that seats it.
+ *           could not badge at all, holding a seat the hand reaches for by reflex; it now says the one thing it
+ *           honestly can (a run wants a gate opened), which is also the only thing that seats it. Automations
+ *           says nothing: its held wakes are counted by Approvals, where that decision belongs.
  *   Know    Documentation, Infrastructure, Live status, what you go and consult on your own initiative.
  *           Documentation badges, and its badge is well formed: generated docs waiting to be reviewed, which
  *           clears by looking. It fires rarely, which is the standard, rarely and meaningfully, not often.
@@ -114,7 +114,7 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  * looking, it holds one of nine seats while doing it.
  *
  * "A SURFACE THAT EXISTS INTERMITTENTLY CANNOT BE CHECKED, ONLY STUMBLED INTO." That objection is right, it is
- * why Drafts was a permanent tile before this, and it is ANSWERED here rather than dismissed: the More tile at
+ * why Approvals was a permanent tile before this, and it is ANSWERED here rather than dismissed: the More tile at
  * the foot of the run is permanent and lists every area whether or not it is seated, each one also has a
  * `view.*` command in the palette (composables/commands/useAreaCommands.ts), and any tile can be pinned back
  * onto the rail for good from its own right-click menu (shell/railPins.ts). Nothing became unreachable; what
@@ -128,9 +128,9 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  * else, which is good evidence the band is real, but deriving from it would reshuffle the whole rail the day
  * Automations grows a badge, and a column whose order moves is a column that has to be re-read.
  *
- * IT NAMES CORE SHELL TILES TOO (`agents`, `drafts`, `workspace`), not just extensions. Order used to live half
+ * IT NAMES CORE SHELL TILES TOO (`agents`, `approvals`, `workspace`), not just extensions. Order used to live half
  * here and half in ShellDesktop's fixedTiles, which is how an extension could not be placed among the core views
- * at all, only "after every core view". One column, one table. Drafts is what that buys: a core shell surface
+ * at all, only "after every core view". One column, one table. Approvals is what that buys: a core shell surface
  * banded with the four extensions it shares a job with, which no split table could have said.
  *
  * An id absent from these groups keeps its registration position within the last group, so a third-party
@@ -169,10 +169,11 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
     {
         id: `judge`,
         label: `Judge`,
-        items: [signal(`drafts`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
+        items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
     },
-    // Authored once, then left alone. Both were permanent tiles that could not badge at all until they were
-    // given one (ext-workflows: a run wants a gate opened; ext-automations: a fire is held for approval).
+    // Authored once, then left alone. Workflows badges when a run wants a gate opened; Automations never does:
+    // the one thing that used to badge it, a fire held for approval, is a Judge decision and is counted by
+    // Approvals, so this tile lives in More unless pinned.
     { id: `setup`, label: `Set up`, items: [signal(`workflows`), signal(`automations`)] },
     // Documentation badges rarely and meaningfully (a generated set nobody has read). Infrastructure and Live
     // status do not badge at all and are consulted deliberately, so at rest they live in More, which is exactly
@@ -204,15 +205,15 @@ export const railSeated = (
 /* WHAT THE MOBILE TAB BAR HAS ALREADY PROMOTED, and therefore what the mobile menu must not list again.
  *
  * A phone has four thumb tabs and the rail's whole column behind the fourth of them, so a surface can be
- * reachable twice, and two of these were: Drafts was the Review tab AND a "Drafts" row in the Judge band,
+ * reachable twice, and two of these were: Approvals was the Review tab AND an "Approvals" row in the Judge band,
  * same badge, same count, two names. Workspace is the Files tab; Chat is the agent route.
  *
  * VIEW IDS, the same key RAIL_GROUPS ranks and `detectActivations` returns, not the publisher-and-name
- * package ids the sandbox's extension routes speak. The tab bar previously matched drafts on the package id
+ * package ids the sandbox's extension routes speak. The tab bar previously matched the queue on the package id
  * and so never matched at all. Declared once here because two surfaces read it: the bar, to find the tile it
  * promotes, and the menu, to drop it. A list in each of them is how they came to disagree. */
-export const DRAFTS_VIEW_ID = `drafts`;
-export const TAB_BAR_IDS: readonly string[] = [DRAFTS_VIEW_ID, `workspace`, `chat`, `agents`];
+export const APPROVALS_VIEW_ID = `approvals`;
+export const TAB_BAR_IDS: readonly string[] = [APPROVALS_VIEW_ID, `workspace`, `chat`, `agents`];
 
 export const railRank = (id: string): number => {
     const at = RAIL_ORDER.indexOf(id);

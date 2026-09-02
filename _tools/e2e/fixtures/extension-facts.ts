@@ -104,10 +104,10 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
      * that a tile is drawn: on this fixture, with no daemon data behind any badge, most of these are reached
      * through the rail's More menu, which is why the inventory spec opens it. */
     { id: `acceptance`, key: `acceptance`, surface: `rail`, why: `platform has user stories` },
+    { id: `approvals`, key: `approvals`, surface: `rail`, why: `always on` },
     { id: `automations`, key: `automations`, surface: `rail`, why: `always on` },
     { id: `deployments`, key: `production`, surface: `rail`, why: `the komodo capability named production` },
     { id: `documentation`, key: `documentation`, surface: `rail`, why: `any repo at all` },
-    { id: `drafts`, key: `drafts`, surface: `rail`, why: `always on` },
     { id: `maintenance`, key: `maintenance`, surface: `rail`, why: `any repo at all` },
     { id: `pipelines`, key: `pipelines`, surface: `rail`, why: `a github CLI capability is connected` },
     { id: `workflows`, key: `workflows`, surface: `rail`, why: `always on` },

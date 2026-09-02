@@ -49,8 +49,9 @@ mismatch is a type error rather than a runtime surprise.
   pair cannot do (`limitationsOf`) and names which models the system-prompt setting reaches.
 - [src/chores](src/chores), the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
-- [src/publish-drafts.ts](src/publish-drafts.ts): the drafts publisher automation, shared for the chore book's
-  reason by its three consumers: the daemon's seeder, the recipe gallery, and the drafts routes' instant fire.
+- [src/approvals-execution.ts](src/approvals-execution.ts): how an approved item gets done, the hold every
+  approval starts with, which platforms the daemon posts to by code, and the prompts the executing turns are
+  handed, shared because the daemon acts on them and the Approvals page counts the same seconds down.
 - [src/workflow-faults.ts](src/workflow-faults.ts) and [src/output-fields.ts](src/output-fields.ts): graph and
   structured-output invariants shared by the designer and daemon, including duplicate field-name rejection.
 - [src/definition.ts](src/definition.ts): the SANDBOX DEFINITION, the declarable shape of a sandbox

@@ -85,7 +85,7 @@ export interface OutboundSendInput {
 /* May this in-turn provider call run? Consulted by the PreToolUse outbound gate BEFORE the command executes,
  * the enforcing twin of the activity sniffer's after-the-fact audit. A "hold" cannot park a running turn
  * (automation turns run unattended; nobody may be there to answer), so the gate translates it into a refusal
- * that points at the drafts outbox, a draft awaiting owner approval IS the held form of a send. */
+ * that points at the approvals queue, a post awaiting owner approval IS the held form of a send. */
 export const outboundSend = defineGuardedAction<OutboundSendInput>({
     action: "outbound.send",
     decide: ({ provider, type, rules }) => {

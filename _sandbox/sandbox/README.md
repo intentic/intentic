@@ -144,8 +144,8 @@ reports the profile.
   repository and can check that commit out and read the real frames. Held for the owner by default (the
   `issues` admission floor), because a bug-fix turn has the run of the repo on a brief a stranger's browser
   wrote. The owner's side is the Issues page over `/issues`.
-- Hold outbound posts as an approval queue: the agent proposes drafts as files (`.intentic/config/drafts/`, src/drafts),
-  the owner approves them on the Drafts page, and the daemon itself sends each one the moment it comes due:
+- Hold outbound work as an approvals queue: the agent proposes posts and actions as files (`.intentic/config/approvals/`,
+  src/approvals), the owner approves them on the Approvals page, and the daemon carries each one out the moment it comes due:
   sleeping on one timer until then rather than sweeping, since it is the process that wrote the deadline. A
   platform with a real API goes out as an authenticated request; one that is only a logged-in browser goes out
   as an agent turn, pinned to the persona the draft NAMES (`actsAs`). That pin is the difference between a post

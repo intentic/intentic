@@ -42,7 +42,7 @@ import type { TurnTaint } from "./turn-taint.js";
  * raise is judged here.
  *
  * A HOLD PARKS THE TURN. That is the whole difference from the outbound gate next door, which translates a hold
- * into a refusal pointing at the drafts outbox. A send has a held form, the draft IS the message, waiting,
+ * into a refusal pointing at the approvals queue. A send has a held form, the approval IS the message, waiting,
  * and `git push --force` has none: there is the command or there is not the command. So a hold raises the same
  * permission card the SDK's own prompts use (agent-requests.ts mints it, the client renders it, /agent/reply
  * answers it) and the caller simply waits, which every transport here is allowed to do.

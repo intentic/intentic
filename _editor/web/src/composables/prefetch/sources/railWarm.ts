@@ -15,7 +15,7 @@ import { warmQuery } from "../warmQuery";
  * rightly none of it.
  *
  * SEVERAL OF THESE ARE USUALLY WARM ALREADY, because the shell's own badges observe them from every page in the
- * app, the drafts queue, the panels the extension tiles are detected from, the running browsers and subagents.
+ * app, the approvals queue, the panels the extension tiles are detected from, the running browsers and subagents.
  * Declaring them anyway costs a cache lookup per beat and covers the cases where the shell is not the one
  * asking: the phone's navigation, a window whose first paint beat the badge to it, and the moment after a
  * reconnect when everything is invalidated at once. The tree and the module layout are the two that are

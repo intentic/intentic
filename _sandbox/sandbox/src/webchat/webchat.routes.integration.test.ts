@@ -11,7 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
-import { fileApprovalsStore } from "../automations/approvals-store.js";
+import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
@@ -25,7 +25,7 @@ const ORIGIN = "https://site.example";
 const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
-        approvals: fileApprovalsStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
@@ -119,7 +119,7 @@ test("a requireApproval automation holds the wake and streams a pending notice i
     expect(body).toContain("event: pending");
     // Held, not run: no prompt reached the agent and one approval is queued.
     expect(turns).toEqual([]);
-    expect(await services.approvals.list()).toHaveLength(1);
+    expect(await services.heldWakes.list()).toHaveLength(1);
     expect((await services.automations.get("wc-gated"))?.runs).toEqual([]);
 });
 
@@ -131,7 +131,7 @@ test("a held Front Desk wake snapshots the conversation the visitor's thread alr
     const app = appFor(services, fakeWake([]));
     // Draining the SSE body is what waits for the fire: the response resolves as soon as the stream opens.
     await (await post(app, "wc-thread", { conversationId: "visitor-7", content: "hello" })).text();
-    const [held] = await services.approvals.list();
+    const [held] = await services.heldWakes.list();
     expect(held?.conversationId).toBe("wc-wc-thread-visitor-7");
     // The same conversation the thread store opened for this visitor, not a second one.
     const thread = await services.threadSessions.get("webchat:wc-thread:visitor-7", 60_000, Date.now());

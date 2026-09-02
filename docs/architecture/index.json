@@ -418,7 +418,7 @@
     {
       "dev": false,
       "from": "_editor/web",
-      "to": "_extensions/drafts"
+      "to": "_extensions/approvals"
     },
     {
       "dev": false,
@@ -702,32 +702,32 @@
     },
     {
       "dev": false,
-      "from": "_extensions/drafts",
+      "from": "_extensions/approvals",
       "to": "_editor/extension-ui"
     },
     {
       "dev": false,
-      "from": "_extensions/drafts",
+      "from": "_extensions/approvals",
       "to": "_sandbox/extension-api"
     },
     {
       "dev": false,
-      "from": "_extensions/drafts",
+      "from": "_extensions/approvals",
       "to": "_sandbox/extension-manifest"
     },
     {
       "dev": false,
-      "from": "_extensions/drafts",
+      "from": "_extensions/approvals",
       "to": "_sandbox/sandbox-contract"
     },
     {
       "dev": true,
-      "from": "_extensions/drafts",
+      "from": "_extensions/approvals",
       "to": "_tools/testing"
     },
     {
       "dev": true,
-      "from": "_extensions/drafts",
+      "from": "_extensions/approvals",
       "to": "_tools/tsconfig"
     },
     {
@@ -2798,14 +2798,6 @@
         {
           "path": "_extensions/automations/src/useAutomationForm.ts",
           "what": ": the composer's state and its validation."
-        },
-        {
-          "path": "_extensions/automations/src/approvalsQuery.ts",
-          "what": ": the held-wake queue, named once for the view and the badge, and"
-        },
-        {
-          "path": "_extensions/automations/src/attention.ts",
-          "what": ": the badge, filled while nothing here is on screen."
         }
       ],
       "behind": 5,
@@ -3042,28 +3034,28 @@
     {
       "anchors": [
         {
-          "path": "_extensions/drafts/src/DraftsView.vue",
+          "path": "_extensions/approvals/src/ApprovalsView.vue",
           "what": ": the queue, one section per decision."
         },
         {
-          "path": "_extensions/drafts/src/useDrafts.ts",
+          "path": "_extensions/approvals/src/useDrafts.ts",
           "what": ": the list and the writes, plus owedOf, the one definition of what the"
         },
         {
-          "path": "_extensions/drafts/src/postText.ts",
+          "path": "_extensions/approvals/src/postText.ts",
           "what": ": platform caps, countdown words, and what makes a post a title."
         },
         {
-          "path": "_extensions/drafts/src/extension.ts",
+          "path": "_extensions/approvals/src/extension.ts",
           "what": ": activation, and the badge, which the queue's own files refresh (the"
         }
       ],
       "behind": 3,
-      "dir": "_extensions/drafts",
+      "dir": "_extensions/approvals",
       "files": 18,
       "hasTests": true,
       "loc": 1966,
-      "name": "@intentic/ext-drafts",
+      "name": "@intentic/ext-approvals",
       "oneLiner": "The approval inbox for posts the agent proposed during its scheduled work.",
       "readmeRev": "775111ae1d4b957f575e2bf345e2642a0f5c2269",
       "reason": "3 commits have touched this package since its README was written",
@@ -4367,7 +4359,7 @@
           "what": ", the chore book: definitions, applicability gates and verdicts, shared because the"
         },
         {
-          "path": "_sandbox/sandbox-contract/src/publish-drafts.ts",
+          "path": "_sandbox/sandbox-contract/src/approvals-execution.ts",
           "what": ": the drafts publisher automation, shared for the chore book's"
         },
         {

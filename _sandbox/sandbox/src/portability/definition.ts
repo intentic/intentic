@@ -70,7 +70,7 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         note: "Personas arrive naming accounts the target has not connected; each reads as broken until its capability is.",
     },
     { path: ".intentic/config/personas/", note: "Persona prompt files, beside the cards that name them." },
-    { path: ".intentic/config/drafts/", note: "Post drafts arrive awaiting approval, which is the only state they act in." },
+    { path: ".intentic/config/approvals/", note: "Approvals arrive awaiting a yes, which is the only state they act in." },
     {
         path: ".intentic/config/automations.json",
         note: "Arrive DISABLED: the scheduler fires enabled automations, and nobody consented to a stranger's schedule.",
@@ -170,7 +170,7 @@ const workspaceOf = async (root: string): Promise<{ workspace?: DefinitionWorksp
             subject: "The workspace itself",
             detail:
                 found.problem === "none"
-                    ? "/work has no remote, so this definition carries none of the workspace's own content: notes, skills, personas, automations, workflow and loop designs, drafts, workspace extensions. Publish the workspace to add a [workspace] section, or move it with a bundle."
+                    ? "/work has no remote, so this definition carries none of the workspace's own content: notes, skills, personas, automations, workflow and loop designs, approvals, workspace extensions. Publish the workspace to add a [workspace] section, or move it with a bundle."
                     : `The workspace's "${found.remoteName}" remote has no URL this daemon can read; fix it, or move the workspace with a bundle.`,
         },
     };
@@ -371,7 +371,7 @@ export const emitDefinitionToml = (definition: SandboxDefinition, omitted: reado
         lines.push(
             "",
             "# The workspace repo itself: this sandbox's own content — notes, skills, personas, automations,",
-            "# designs, drafts, workspace extensions. Applied before the repositories below, and never over",
+            "# designs, approvals, workspace extensions. Applied before the repositories below, and never over",
             "# a workspace that already has a history of its own.",
             "[workspace]",
             `remote = ${tomlValue(workspace.remote)}`,

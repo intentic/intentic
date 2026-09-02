@@ -31,8 +31,8 @@ import { restoreExits } from "./exit/exit-links.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
 import { startProviderBoot } from "./agent/provider-registry.js";
 import { createServices } from "./composition.js";
-import { draftsPublisherFor } from "./drafts/drafts-publisher.js";
-import { ensureDraftsSkill } from "./drafts/drafts-store.js";
+import { approvalsExecutorFor } from "./approvals/approvals-executor.js";
+import { ensureApprovalsSkill } from "./approvals/approvals-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
 import { startEngineWatch } from "./engines/engines.js";
 import { startExtensionUpdateWatch } from "./extensions/extension-updates.js";
@@ -691,7 +691,7 @@ const main = async (): Promise<void> => {
     // Converge the daemon-owned /work skill files BEFORE the baseline commit so a fresh sandbox reads clean
     // instead of surfacing them as a phantom add. Awaited for exactly that ordering; still log-and-continue, and
     // on a non-fresh boot (no baseline) their writes become ordinary pending changes for the Changes review.
-    // - the drafts skill: how the agent writes post drafts for approval, so its prose tracks the daemon.
+    // - the approvals skill: how the agent writes posts and actions for approval, so its prose tracks the daemon.
     // - the baked-tool skills, per the settings `skills` list, each present only when named (the CLIs are
     //   always on PATH; the skill file is what surfaces one to the agent).
     await boot.step("skills", async () => {
@@ -700,7 +700,7 @@ const main = async (): Promise<void> => {
         if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
         }
-        await ensureDraftsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "drafts skill not converged"));
+        await ensureApprovalsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "approvals skill not converged"));
         await services.sandboxSettings
             .get()
             .then((settings) => reconcileSkills(services, settings.skills))
@@ -1082,19 +1082,19 @@ const main = async (): Promise<void> => {
      * fires where the owner has stood the `verify-edits` rule. */
     shutdown.push(startVerifyNudges(services, streamAgent));
 
-    /* The post publisher, armed rather than polled: it reads the drafts queue, works out the soonest approved
-     * post's due time, and sleeps until exactly that. Arming here is what carries a hold across a restart, a
+    /* The approvals executor, armed rather than polled: it reads the queue, works out the soonest approved
+     * item's due time, and sleeps until exactly that. Arming here is what carries a hold across a restart, a
      * post approved a minute before the daemon went down is due the moment it is back, and this is the read
      * that notices. Nothing approved means no timer at all. */
-    const draftsPublisher = draftsPublisherFor(services);
-    // Nothing is lost by dropping the armed timer: the deadline it was holding is the draft's own
+    const approvalsExecutor = approvalsExecutorFor(services);
+    // Nothing is lost by dropping the armed timer: the deadline it was holding is the item's own
     // scheduledAt on disk, and the next boot arms from that.
-    shutdown.push(() => draftsPublisher.stop());
+    shutdown.push(() => approvalsExecutor.stop());
     // A pre-push check is a suite running on the main tree, a daemon that exits without killing it
     // leaves it burning CPU with nothing left to report the result to.
     shutdown.push(() => prepushCheck(services).cancel());
     if (role.container) {
-        void draftsPublisher.arm().catch((error: unknown) => logger.warn({ err: error }, "drafts publisher not armed"));
+        void approvalsExecutor.arm().catch((error: unknown) => logger.warn({ err: error }, "approvals executor not armed"));
     }
 
     // CI webhooks: keep every mapped workspace repo's github/gitlab hook pointing at this sandbox (boot pass +

@@ -66,7 +66,7 @@ const scanSkillsDir = async (services: Services, dir: string): Promise<FoundSkil
  * it buys is that neither of these reads as a loose file the owner is invited to delete, since the feature behind
  * it would simply write it again. */
 const FEATURE_SKILLS: Record<string, string> = {
-    drafts: "Drafts",
+    approvals: "Approvals",
     iq: "Code search",
 };
 

@@ -95,7 +95,7 @@ const GLYPHS: Readonly<Record<string, string>> = {
     lsp: `code`,
     iq: `search`,
     search: `search`,
-    drafts: `file-edit`,
+    approvals: `check-square`,
     notes: `file-edit`,
     review: `list-check`,
     security: `shield`,

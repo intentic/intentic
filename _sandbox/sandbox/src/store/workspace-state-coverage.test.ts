@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 
 /* THE GUARD THAT THE PREVIOUS TABLE DIDN'T HAVE: now only half a guard, because the compiler took the other half.
  *
- * `.intentic/config/drafts/` went missing from the browser's invalidation table for one reason: the test that covered
+ * `.intentic/config/approvals/` went missing from the browser's invalidation table for one reason: the test that covered
  * that table asserted the entries it already had. A list checked against itself can only ever confirm what
  * someone remembered to write down, which is the failure AGENTS.md names: "a hardcoded file list repeats the
  * miss it exists to prevent", so this recognizes violations by their SHAPE instead.

@@ -18,7 +18,7 @@
 // source whose events carry one. Both fold into the daemon's trigger catalogue, so a pack that knows something
 // worth waking on says so itself instead of being written into the automations surface. Additive.
 // 2.3.0 adds `api.sandbox.role()`, the signed-in user's trust tier, for affordance gating (the daemon floors
-// every route regardless). Surfaced when the drafts queue moved out of the app: approve/reject are
+// every route regardless). Surfaced when the approvals queue moved out of the app: approve/reject are
 // maintainer-and-up, and no extension could say so. Additive. The surface guard grew a `sandboxApi` member
 // list with this release, so additions below the top-level grain are recorded from here on.
 // 2.4.0 gives the manifest an authoring schema: `$schema` is a declared field, and every contribution point now
@@ -63,7 +63,7 @@
 // EVENT rather than only as a cache eviction, and `sandboxPoll` wakes on it. The declaration already reached the
 // host and the host already invalidated the query keys it named, but an eviction only reaches a query something
 // is observing, and a rail badge is read with nothing mounted by definition. So every tile in the workspace was
-// exactly as fresh as its own interval: a drafts queue the owner had just emptied kept claiming six items, and
+// exactly as fresh as its own interval: an approvals queue the owner had just emptied kept claiming six items, and
 // the slowest tile sat ten minutes behind the file it described. Additive, and the recorded surface grew a
 // `workspaceApi` member list with this release, the same grain `sandboxApi` got at 2.3.0 and for the same
 // reason: this is where the addition happened, and nothing could see it.

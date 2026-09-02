@@ -9,11 +9,11 @@ import { SETTLES } from "@intentic/testing/vitest";
 import type { z } from "zod";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
-import { fileApprovalsStore } from "./approvals-store.js";
+import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { automationIdle, createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
 
-// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger/sandboxSettings:
+// The scheduler only touches automations/heldWakes/activity/turnJournal/workspace/logger/sandboxSettings:
 // plus, for the countdown scan, the registry's liveSessionIds (`live` mutates in place, as a test's fleet
 // does); `unstubbed` keeps the fake that small. The journal is a real one on a temp dir: the in-flight entry
 // is what several tests assert on.
@@ -26,7 +26,7 @@ const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSche
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse(settings),
         }),
-        approvals: fileApprovalsStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
@@ -175,7 +175,7 @@ test("a held external wake snapshots its provenance, so approving it opens the s
     const record = (await services.automations.get("gated-chat")) as AutomationRecord;
     const origin = { automationId: "gated-chat", provider: "webchat", channelId: "v-7", author: "visitor" };
     await fireAutomation(services, record, fakeWake([]), { payload: "help", origin, title: "visitor: help" });
-    const held = (await services.approvals.list())[0];
+    const held = (await services.heldWakes.list())[0];
     expect(held).toMatchObject({ payload: "help", origin, title: "visitor: help" });
 });
 
@@ -186,10 +186,10 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
     // The due cron enqueued one held wake and never woke the agent nor recorded a run.
-    await vi.waitFor(async () => expect(await services.approvals.list()).toHaveLength(1), SETTLES);
+    await vi.waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     expect(prompts).toEqual([]);
     expect((await services.automations.get("gated"))?.runs).toEqual([]);
-    expect((await services.approvals.list())[0]?.automationId).toBe("gated");
+    expect((await services.heldWakes.list())[0]?.automationId).toBe("gated");
 
     // Approving replays it with cleared: "both": both gates are bypassed, the agent wakes, a run is recorded.
     await automationIdle("gated");
@@ -207,7 +207,7 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
     const record = (await services.automations.get("fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
     // Held, visibly, with the deadline the row's countdown renders, and no wake yet.
-    const held = (await services.approvals.list())[0];
+    const held = (await services.heldWakes.list())[0];
     expect(held?.automationId).toBe("fixer");
     expect(held?.payload).toBe("checks broke");
     expect(held?.autoRunAt).toBeGreaterThan(Date.now());
@@ -216,16 +216,16 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     // Before the deadline: still the owner's window, whatever the fleet is doing.
     await scheduler.tick(Date.now());
-    expect(await services.approvals.list()).toHaveLength(1);
+    expect(await services.heldWakes.list()).toHaveLength(1);
     // Past the deadline but the fleet is busy: the hold stays, a countdown never starts work under someone.
     await scheduler.tick(Date.now() + 2_000);
-    expect(await services.approvals.list()).toHaveLength(1);
+    expect(await services.heldWakes.list()).toHaveLength(1);
     expect(prompts).toEqual([]);
     // Past the deadline and quiet: silence was consent, the wake runs with the held payload, once.
     live.length = 0;
     await scheduler.tick(Date.now() + 2_000);
     await vi.waitFor(async () => expect((await services.automations.get("fixer"))?.runs).toHaveLength(1), SETTLES);
-    expect(await services.approvals.list()).toEqual([]);
+    expect(await services.heldWakes.list()).toEqual([]);
     expect(prompts).toEqual(["wake:fixer\n\n--- Event payload ---\nchecks broke"]);
 });
 
@@ -239,7 +239,7 @@ test("cancelling is just removing the hold, and disabling the automation mid-cou
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(Date.now() + 2_000);
     // The stale hold is dropped rather than left to fire the day the automation is re-enabled.
-    await vi.waitFor(async () => expect(await services.approvals.list()).toEqual([]), SETTLES);
+    await vi.waitFor(async () => expect(await services.heldWakes.list()).toEqual([]), SETTLES);
     expect(prompts).toEqual([]);
 });
 
@@ -251,11 +251,11 @@ test(`requireApproval wins over holdForSeconds: "ask me" never becomes "unless I
     const prompts: string[] = [];
     const record = (await services.automations.get("gated-fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts));
-    expect((await services.approvals.list())[0]?.autoRunAt).toBeUndefined();
+    expect((await services.heldWakes.list())[0]?.autoRunAt).toBeUndefined();
     // No deadline, so the scan never touches it: only the owner's click can run it.
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(Date.now() + 60_000);
-    expect(await services.approvals.list()).toHaveLength(1);
+    expect(await services.heldWakes.list()).toHaveLength(1);
     expect(prompts).toEqual([]);
 });
 
@@ -392,7 +392,7 @@ test(`cleared: "approval" skips the approval gate but still runs the guard: the 
     // Pressing the button IS the approval, so the wake runs instead of landing in the owner's own queue.
     await fireAutomation(services, record, fakeWake(prompts), { cleared: "approval" });
     expect(prompts).toEqual(["wake:gated-hand"]);
-    expect(await services.approvals.list()).toEqual([]);
+    expect(await services.heldWakes.list()).toEqual([]);
 
     // The guard is NOT skipped: "skipped by guard" is the most useful thing a by-hand fire can report.
     await services.automations.upsert(automation("gated-guard", { requireApproval: true, guard: "echo not today; exit 1" }));
@@ -470,9 +470,9 @@ test("an admission-floor hold parks a wake whose automation asked for nothing, a
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect(await services.approvals.list()).toHaveLength(1), SETTLES);
+    await vi.waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     // "Ask me" from the floor is the same "ask me" as requireApproval: no deadline for the scan to release.
-    expect((await services.approvals.list())[0]?.autoRunAt).toBeUndefined();
+    expect((await services.heldWakes.list())[0]?.autoRunAt).toBeUndefined();
     expect(prompts).toEqual([]);
 
     // The owner's approval replays it: the grant satisfies the hold.
@@ -489,7 +489,7 @@ test("an admission-floor deny refuses the wake and says so on the run record", a
     const record = (await services.automations.get("refused")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts));
     expect(prompts).toEqual([]);
-    expect(await services.approvals.list()).toEqual([]);
+    expect(await services.heldWakes.list()).toEqual([]);
     const run = (await services.automations.get("refused"))?.runs[0];
     expect(run?.outcome).toBe("skipped");
     expect(run?.detail).toContain("admission policy");
@@ -528,7 +528,7 @@ test("the webchat floor keys off its own source: a listener rule does not reach 
     const heldRecord = (await heldServices.automations.get("door")) as AutomationRecord;
     await fireAutomation(heldServices, heldRecord, fakeWake(heldPrompts), { payload: "hi" });
     expect(heldPrompts).toEqual([]);
-    expect((await heldServices.approvals.list())[0]?.automationId).toBe("door");
+    expect((await heldServices.heldWakes.list())[0]?.automationId).toBe("door");
 });
 
 /* A wake that blocks until the test lets it go, so a second fire can be made to arrive mid-run. The gate

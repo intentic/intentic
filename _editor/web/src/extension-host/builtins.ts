@@ -3,11 +3,11 @@ import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import * as acceptance from "@intentic/ext-acceptance";
 import * as activity from "@intentic/ext-activity";
+import * as approvals from "@intentic/ext-approvals";
 import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
 import * as deployments from "@intentic/ext-deployments";
 import * as documentation from "@intentic/ext-documentation";
-import * as drafts from "@intentic/ext-drafts";
 import * as gitHistory from "@intentic/ext-git-history";
 import * as issues from "@intentic/ext-issues";
 import * as knowledge from "@intentic/ext-knowledge";
@@ -34,7 +34,7 @@ export type BuiltinModule = ExtensionModule & { readonly manifest: ExtensionMani
 
 const modules: readonly BuiltinModule[] = [
     automations,
-    drafts,
+    approvals,
     knowledge,
     activity,
     pipelines,

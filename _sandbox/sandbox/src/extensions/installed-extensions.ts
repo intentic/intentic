@@ -125,8 +125,8 @@ const workspaceExtensions = async (
  * never a manifest field: essentialness is a claim about the relationship between a daemon engine and its one
  * surface, and a field an extension could set on itself would be a pack making itself un-removable.
  *
- * Contrast drafts, which is NOT here though the daemon fires its publisher on its own: that engine acts only on
- * drafts the owner already approved, so a hidden surface starves it rather than blinding anyone, fail-safe,
+ * Contrast approvals, which is NOT here though the daemon runs its executor on its own: that engine acts only on
+ * items the owner already approved, so a hidden surface starves it rather than blinding anyone, fail-safe,
  * where these three fail-active. */
 export const ESSENTIAL_EXTENSIONS: ReadonlySet<string> = new Set(["intentic.automations", "intentic.workflows", "intentic.maintenance"]);
 

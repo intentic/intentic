@@ -46,7 +46,7 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
      * browser's word (logs/logs.routes.ts `report`), which is a smaller grant than the reads above it. */
     "logs.report": "viewer",
     // Driving agents, the collaborator grant. Work stays on isolated branches; what leaves the sandbox
-    // (land, discard, purge, drafts, the terminal) stays at the maintainer default.
+    // (land, discard, purge, approvals, the terminal) stays at the maintainer default.
     "agent.run": "collaborator",
     "agent.reply": "collaborator",
     "agent.steer": "collaborator",
