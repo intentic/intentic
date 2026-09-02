@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -168,6 +169,53 @@ export const wakeHosted = async (config: Config, hosted: { appName: string; mach
     }
 };
 
+/* STARTING A MACHINE WHOSE CONFIG WAS JUST REPLACED, which is not the same job as waking one and cannot be
+ * done by the same call. Two Fly behaviours meet in this window and every naive ordering loses to one of them:
+ *
+ *   • WHILE THE REPLACEMENT LANDS the machine reads `replacing` and refuses starts with
+ *     `412 failed_precondition: machine getting replaced` — the race that made an eager caller burn both of a
+ *     region's warm machines per sign-up (see updateMachine in fly.ts).
+ *   • AN UPDATE ONLY CARRIES THE NEW VERSION UP IF THE MACHINE WAS ALREADY RUNNING. A stopped one is left
+ *     stopped, and Fly says so in the machine's own log: "machine was in a non-started state prior to the
+ *     update so leaving the new version stopped". EVERY warm pool machine is stopped by construction, so the
+ *     claim path met this every single time.
+ *
+ * Between them, "the launch rides with the config" holds for a running machine and never for a pool one, and a
+ * start fired immediately after the update is accepted and then dropped: the API answers success, no `start`
+ * event is ever recorded, and the machine sits stopped wearing its new identity. The owner met "the machine we
+ * started for you isn't running"; the canary called it a warm machine "provisioned but never checked in".
+ *
+ * `replacing` is therefore NOT progress to wait on hopefully — it is the state that resolves to `stopped`, so
+ * treating it as live (which LIVE_STATES does, correctly, for a wake) reports success moments before the
+ * machine settles down again. Wait for the replacement to SETTLE, then start, then confirm it actually ran. */
+const SETTLE_ATTEMPTS = 60;
+const SETTLE_MS = 500;
+const RUNNING_STATES = new Set([`created`, `starting`, `started`]);
+export const startAfterUpdate = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- settling is sequential by definition
+        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
+        if (machine !== undefined && RUNNING_STATES.has(machine.state)) {
+            return;
+        }
+        // Still `replacing` (or momentarily unreadable): asking now earns the 412 above and nothing else.
+        if (machine !== undefined && machine.state !== `replacing`) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            await startMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) => {
+                lastError = error;
+            });
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+        await delay(SETTLE_MS);
+    }
+    /* The replacement settled and the machine still will not run. That is a machine that is broken rather than
+     * busy, and the claim must fail here: handing this row to its owner is handing them a box that never answers. */
+    throw new Error(
+        `fly machine ${hosted.machineId} did not start after its config was replaced${lastError === undefined ? `` : `: ${String(lastError)}`}`,
+    );
+};
+
 /* Claim a warm machine for this sandbox, or answer undefined and let the cold path build one. The pool row
  * is won by a guarded update (`ready` → `claimed`), so two simultaneous claims can never brand the same
  * machine; the winner writes the sandbox's real config into it (identity in, no-op boot override out, one
@@ -213,7 +261,7 @@ const claimPoolMachine = async (
             // oxlint-disable-next-line eslint/no-await-in-loop
             await updateMachine(config.hosted.flyApiToken, row.appName, row.machineId, hostedMachineConfig(config, args, row.appName, row.volumeId));
             // oxlint-disable-next-line eslint/no-await-in-loop
-            await wakeHosted(config, row);
+            await startAfterUpdate(config, row);
             // oxlint-disable-next-line eslint/no-await-in-loop
             await prisma.$transaction([
                 prisma.hostedMachine.create({
@@ -316,7 +364,7 @@ export const refreshHosted = async (
         hosted.machineId,
         hostedMachineConfig(config, args, hosted.appName, hosted.volumeId),
     );
-    await wakeHosted(config, hosted);
+    await startAfterUpdate(config, hosted);
 };
 
 // Tear the whole app down (machines + volume ride with it). 404-tolerant by fly.ts's contract.

@@ -5,8 +5,8 @@ import {
     type IngressTunnelHandle,
     type IngressTunnelOptions,
 } from "@intentic/sandbox-contract/ingress-contract";
-import { serveIngressSession, type IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
-import { createWebSocketStream, WebSocket } from "ws";
+import { serveIngressSession, webSocketDuplex, type IngressSessionServer, type TunnelWebSocket } from "@intentic/sandbox-contract/ingress-protocol";
+import { WebSocket } from "ws";
 
 /* HOW THIS SANDBOX BECOMES REACHABLE, and it is one outbound dial.
  *
@@ -82,7 +82,7 @@ export interface IngressTunnelDeps {
 const realConnect = (url: string, headers: Record<string, string>): TunnelSocket => new WebSocket(url, { headers }) as unknown as TunnelSocket;
 
 const realServe = async (socket: TunnelSocket, targetPort: number): Promise<IngressSessionServer> =>
-    serveIngressSession(createWebSocketStream(socket as unknown as WebSocket), { targetPort });
+    serveIngressSession(webSocketDuplex(socket as unknown as TunnelWebSocket), { targetPort });
 
 /* START IT ONLY IF THIS SANDBOX HAS WHAT IT TAKES, and say which piece is missing when it does not.
  *

@@ -1,9 +1,9 @@
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH, hostOwnerId, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
-import { openIngressSession, type IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
+import { openIngressSession, webSocketDuplex, type IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
-import { WebSocketServer, createWebSocketStream, type WebSocket } from "ws";
+import { WebSocketServer, type WebSocket } from "ws";
 import { PING_INTERVAL_MS, startHeartbeat } from "./heartbeat.js";
 import { createTunnelRegistry, type TunnelRegistry } from "./registry.js";
 import type { Revocation } from "./revocation.js";
@@ -188,7 +188,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
      * displacement by a newer dial, an h2 session erroring — arrives as the socket closing. One exit means the
      * registry cannot be left holding a session whose transport is gone. */
     const hold = async (sandboxId: string, ws: WebSocket): Promise<void> => {
-        const duplex = createWebSocketStream(ws);
+        const duplex = webSocketDuplex(ws);
         // A stream error is the transport failing, which is the socket's business and never this process's:
         // without a handler node raises it as an uncaught exception and takes every other sandbox with it.
         duplex.on(`error`, () => ws.terminate());

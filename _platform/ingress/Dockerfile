@@ -18,7 +18,20 @@
 #   INGRESS_PORT/HOST   defaults 8080 / 0.0.0.0.
 # The private half NEVER appears here: this image can verify grants and can never mint one, which is the whole
 # of why a compromised edge cannot make anything reachable.
-FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04
+# BUN CANARY, PINNED BY DIGEST, AND THE ONE REASON IT IS NOT A RELEASED TAG: the edge asks the platform
+# whether a sandbox still exists BEFORE it upgrades the WebSocket (that round trip is the whole of
+# revocation), so `handleUpgrade` always runs a tick or more after the `upgrade` event. Every RELEASED bun
+# — 1.4.0 is the newest, 2026-08-20 — aborts that handshake and then dies inside its own abort path
+# (`abortHandshake` reads STATUS_CODES off an http shim that does not have it), so the first sandbox to
+# register a tunnel killed this process and it restarted into the same crash on the retry. Measured: an
+# upgrade 0ms after the event succeeds, 5ms crashes, and node does it at any delay.
+#
+# Bun's main fixed it (the runtime smoke in scripts/ passes on 1.4.1 and fails on 1.4.0), so this rides
+# canary rather than moving the edge off bun. The digest pin is what keeps that reproducible — `canary` is a
+# moving tag and an unpinned one would silently change the runtime under a process that holds every
+# sandbox's tunnel. MOVE THIS TO `1.4.1-slim` (and the bun devDependency in package.json with it) as soon as
+# 1.4.1 is released; both exist only to wait that release out.
+FROM oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b4334faa009a500594b71
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 WORKDIR /app
 COPY . /app

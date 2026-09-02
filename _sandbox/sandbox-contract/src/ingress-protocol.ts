@@ -8,7 +8,7 @@ import {
     type ServerHttp2Stream,
 } from "node:http2";
 import { type AddressInfo, createServer as createNetServer, connect as netConnect, type Socket } from "node:net";
-import type { Duplex } from "node:stream";
+import { Duplex } from "node:stream";
 
 /* THE DATA PLANE OF THE INGRESS TUNNEL: both halves of it, over any node Duplex, in node core alone.
  *
@@ -571,4 +571,55 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
             bridge.tunnel.end();
         },
     };
+};
+
+/* ── THE WEBSOCKET, AS A DUPLEX ──────────────────────────────────────────────────────────────────────────
+ *
+ * `ws` ships this as `createWebSocketStream`, and BUN DOES NOT IMPLEMENT IT: the call throws
+ * `Error("Not supported yet in Bun")` out of ws's `Receiver` constructor (verified on 1.3.14 and on 1.4.0,
+ * the current latest). The edge runs on Bun, and the throw landed inside its `upgrade` handler with no
+ * `try` of ours on the stack — so the FIRST sandbox to register a tunnel killed the process, taking every
+ * other sandbox's tunnel with it, and the container restarted straight into the same crash when that
+ * sandbox retried. It is the reason a hosted sandbox could be provisioned and then never come up.
+ *
+ * Reimplementing it is a dozen lines and buys more than the fix: both halves of the tunnel now get the same
+ * bytes on Bun and on node, so the runtime stops being a variable on the hot path. It belongs in this file
+ * because this file already owns both halves and the property below is one of its stated invariants.
+ *
+ * THE PROPERTY TO PRESERVE is the BYTE SAFETY note at the top: the write callback fires only once the socket
+ * has taken the frame (`send(chunk, …, callback)`), so the stream owns each chunk until it is out and no
+ * pooled Buffer is ever handed to an asynchronous writer. `read()` is a no-op because the socket pushes —
+ * there is nothing to pull — and a closed socket ends the readable side with `push(null)` so an h2 session
+ * over it sees a clean EOF rather than a hang. */
+export interface TunnelWebSocket {
+    readonly send: (data: Buffer, options: { binary: boolean }, callback: (error?: Error) => void) => void;
+    readonly close: () => void;
+    readonly on: {
+        (event: `message`, listener: (data: unknown) => void): unknown;
+        (event: `close`, listener: () => void): unknown;
+        (event: `error`, listener: (error: Error) => void): unknown;
+    };
+}
+
+export const webSocketDuplex = (socket: TunnelWebSocket): Duplex => {
+    const duplex = new Duplex({
+        read: () => {},
+        write: (chunk: Buffer, _encoding, callback) => {
+            socket.send(chunk, { binary: true }, (error) => callback(error ?? null));
+        },
+        // Half-closing a WebSocket is not a thing: ending the writable side ends the socket, which is what
+        // every caller here means by it (a session that has written its GOAWAY is done with the transport).
+        final: (callback) => {
+            socket.close();
+            callback();
+        },
+    });
+    // `message` carries a Buffer for binary frames under both ws and Bun; a text frame (nothing on this
+    // protocol sends one) would arrive as a string, and coercing it is cheaper than dropping bytes silently.
+    socket.on(`message`, (data: unknown) => {
+        duplex.push(Buffer.isBuffer(data) ? data : Buffer.from(data as string));
+    });
+    socket.on(`close`, () => duplex.push(null));
+    socket.on(`error`, (error: Error) => duplex.destroy(error));
+    return duplex;
 };

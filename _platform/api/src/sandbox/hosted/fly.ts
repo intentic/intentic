@@ -253,8 +253,15 @@ export const startMachine = async (token: string, app: string, machineId: string
  * posted `skip_launch: true` and then started the machine itself therefore lost that race EVERY time — the
  * measured effect was 100% of pool claims refused, both warm machines of a region burned and stranded per
  * sign-up, and the reader handed the exact cold build the pool exists to spare. So the launch rides WITH the
- * config: one call, no window to lose, and the caller's own start becomes a cheap idempotent confirmation
- * (hosted.ts's wakeHosted) rather than the operation that has to succeed. */
+ * config: one call, and no window in which a start can be refused.
+ *
+ * THAT LAUNCH ONLY LIFTS A MACHINE THAT WAS ALREADY RUNNING, which is the half this comment used to get
+ * wrong. Fly leaves a STOPPED machine stopped across an update and says so in the machine's log — "machine
+ * was in a non-started state prior to the update so leaving the new version stopped" — and every warm pool
+ * machine is stopped by construction. So the caller's start is NOT a cheap confirmation on that path, it is
+ * the operation that has to succeed, and it has to wait for the replacement to settle first or it is accepted
+ * and silently dropped. hosted.ts's `startAfterUpdate` is that sequence; `wakeHosted` (a start with no update
+ * in front of it) is still the cheap idempotent one. */
 export const updateMachine = async (token: string, app: string, machineId: string, config: FlyMachineConfig): Promise<void> => {
     await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`, { config });
 };

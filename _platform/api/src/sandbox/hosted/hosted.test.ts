@@ -79,6 +79,37 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
 
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
 
+/* A FLY MACHINE THAT BEHAVES LIKE A REAL ONE ACROSS A CONFIG REPLACEMENT, which is the only way these tests
+ * can hold `startAfterUpdate` honest. Two real behaviours matter and a flat stub has neither:
+ *   • while the replacement lands, reads say `replacing` and a start is refused with 412
+ *   • a STOPPED machine is left stopped by the update, so it runs only once a start has actually landed
+ * A fake that answered `started` from the first read would pass a caller that never starts anything, and one
+ * that answered `stopped` forever describes a start that returned 200 over a machine that never ran — which
+ * is precisely the failure this path shipped. `replacingFor` is how many reads report `replacing` first. */
+const settlingMachine = (id: string, options: { replacingFor?: number } = {}) => {
+    let replacing = options.replacingFor ?? 0;
+    let started = false;
+    return {
+        read: () => {
+            if (replacing > 0) {
+                replacing -= 1;
+                return json({ id, state: `replacing` });
+            }
+            return json({ id, state: started ? `started` : `stopped` });
+        },
+        start: () => {
+            if (replacing > 0) {
+                return json({ error: `failed_precondition: machine getting replaced, refusing to start` }, 412);
+            }
+            started = true;
+            return json({ ok: true });
+        },
+        get started() {
+            return started;
+        },
+    };
+};
+
 // This deployment's stamp, derived from its own API URL, so the fixtures below say what a machine of OURS
 // looks like without hard-coding a hash anybody would have to update by hand.
 const INSTANCE = hostedInstanceId(config());
@@ -216,9 +247,11 @@ describe(`provisionHosted`, () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
         const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const machine = settlingMachine(`m7`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => json({ ok: true }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
         ]);
         const prisma = fakePrisma({
             hostedMachine: { create: created },
@@ -245,6 +278,9 @@ describe(`provisionHosted`, () => {
         // `replacing` state and refused every claim this pool ever made.
         expect(update.skip_launch).toBeUndefined();
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m7/start`))).toBe(true);
+        // And the start LANDED. An update leaves a stopped machine stopped, so "we asked" is not the claim's
+        // job here — a row committed over a machine that never ran is the sandbox that never comes up.
+        expect(machine.started).toBe(true);
         // The user's clock starts here: the pool's own no-op boot was the platform's cost, not theirs.
         expect(created).toHaveBeenCalledWith({
             data: {
@@ -259,21 +295,29 @@ describe(`provisionHosted`, () => {
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
     });
 
-    /* THE OUTAGE THIS PINS SHUT, read off production logs: the branding update puts a machine through Fly's
-     * `replacing` state for a few seconds, and the confirming start lands inside that window and is refused
-     * with `412 machine getting replaced`. Every claim died there, both warm machines of the caller's region
-     * were burned and stranded per sign-up, and every reader was handed the cold build the pool exists to
-     * spare. A machine Fly reports as replacing is a machine coming up: the claim must finish, not fall back. */
-    it(`finishes the claim when the confirming start lands mid-replacement: replacing is coming up, not gone`, async () => {
+    /* TWO OUTAGES MEET IN THIS ONE TEST, and each one's fix is the other's bug unless `replacing` is treated
+     * as neither failure nor success.
+     *
+     * THE FIRST: the branding update puts a machine through Fly's `replacing` state for a few seconds, and a
+     * start fired inside that window is refused with `412 machine getting replaced`. Reading that as "this
+     * warm machine is bad" killed every claim, burned both warm machines of the caller's region per sign-up,
+     * and handed every reader the cold build the pool exists to spare. So `replacing` must NOT fall back.
+     *
+     * THE SECOND, which the fix for the first one caused: `replacing` was then counted as "coming up" and the
+     * claim committed on the strength of it. But a replacement resolves to STOPPED for a machine that was
+     * stopped when it started — every pool machine — so the row was handed over, the meter opened, and the
+     * machine never ran. The owner got "the machine we started for you isn't running" and the canary reported
+     * a warm machine "provisioned but never checked in". So `replacing` must NOT count as started either.
+     *
+     * It is a state to WAIT OUT: let it settle, then start, then confirm the machine really is running. */
+    it(`waits out the replacement, then starts the machine: replacing is neither a dead row nor a running one`, async () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
+        const machine = settlingMachine(`m7`, { replacingFor: 2 });
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `replacing` }) },
-            {
-                match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`),
-                respond: () => json({ error: `failed_precondition: machine getting replaced, refusing to start` }, 412),
-            },
-            { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => json({ id: `m7`, state: `replacing` }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
         ]);
         const prisma = fakePrisma({
             hostedMachine: { create: created },
@@ -289,6 +333,8 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
         expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m7` }) }));
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
+        // The half the earlier fix lost: the machine is actually RUNNING, not merely handed over.
+        expect(machine.started).toBe(true);
     });
 
     it(`ignores warm machines in the wrong region: the residency promise beats the fast path`, async () => {
@@ -343,10 +389,12 @@ describe(`provisionHosted`, () => {
     it(`tries the next warm machine when the first one is gone: one dead row must not cost a cold build`, async () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
+        const secondMachine = settlingMachine(`m8`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `machine not found` }, 404) },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8`), respond: () => json({ id: `m8`, state: `stopped` }) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8/start`), respond: () => json({ ok: true }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8/start`), respond: () => secondMachine.start() },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m8`), respond: () => secondMachine.read() },
         ]);
         const second = { ...poolRow, id: `p2`, appName: `intentic-sbx-pool-def456`, machineId: `m8`, volumeId: `vol_8` };
         const prisma = fakePrisma({
@@ -381,9 +429,11 @@ describe(`provisionHosted`, () => {
         });
         const created = vi.fn().mockRejectedValue(duplicate);
         const poolDelete = vi.fn().mockResolvedValue({});
+        const machine = settlingMachine(`m7`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => json({ ok: true }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
         ]);
         const second = { ...poolRow, id: `p2`, appName: `intentic-sbx-pool-def456`, machineId: `m8`, volumeId: `vol_8` };
         const claim = vi.fn().mockResolvedValue({ count: 1 });
@@ -759,6 +809,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     });
 
     it(`hostedRestart refreshes the current image onto the existing volume before starting`, async () => {
+        // A restart replaces the config too, so it meets the same "update leaves a stopped machine stopped"
+        // rule the pool claim does — the machine has to be observed running, not merely asked to run.
+        const machine = settlingMachine(`m1`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ ok: true }) },
             {
@@ -766,7 +819,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
             },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/start`), respond: () => json({ ok: true }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/start`), respond: () => machine.start() },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m1`), respond: () => machine.read() },
         ]);
         const hosted = {
             id: `h1`,

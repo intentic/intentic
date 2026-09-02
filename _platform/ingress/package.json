@@ -9,7 +9,7 @@
         "start": "bun ./src/main.ts",
         "typecheck": "tsgo --noEmit",
         "docker:release": "bash ../../_tools/scripts/docker-release.sh ingress --prune",
-        "test": "vitest run"
+        "test": "vitest run && bun scripts/runtime-smoke.ts"
     },
     "dependencies": {
         "@intentic/constants": "workspace:*",
@@ -27,7 +27,7 @@
         "@types/bun": "catalog:",
         "@types/ws": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "bun": "catalog:",
+        "bun": "1.4.0-canary.20260901.1",
         "vitest": "catalog:"
     }
 }
