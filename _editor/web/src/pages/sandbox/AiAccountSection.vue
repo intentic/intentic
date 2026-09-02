@@ -13,10 +13,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
-import { providerRefusals } from "../../composables/chat/providerAccounts";
 import { providerTabs } from "../../composables/chat/providerCatalog";
 import { refreshConnections, useChat } from "../../composables/chat/useChat";
-import { isSpent, liveUsage, type PlanHeadroom, planHeadroom, refusalFor } from "../../composables/chat/usageStatus";
+import { isSpent, liveUsage, type PlanHeadroom, planHeadroom } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -192,9 +191,7 @@ const usageLine = (id: string): string => {
  * and the row's own dimming disagree about which accounts were spent. One projection, passed down whole. */
 
 // A row ready to render: the account, its headroom (the ring and the card behind it), and whether it is
-// effectively spent. The headroom also carries when the reading was taken, which the provider's refusal line
-// needs to tell whether a reading has overtaken it (refusalIsCurrent): a question about the whole list rather
-// than about any one row.
+// effectively spent.
 interface AccountRow<T> {
     account: T;
     headroom: PlanHeadroom | undefined;
@@ -239,25 +236,6 @@ const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
               (account) => account.usage,
           ),
 );
-
-/* --- The provider's last refusal --------------------------------------------------------------------------
- * ONE line for the whole section rather than one per row, because that is the resolution of the fact: a routed
- * turn is served by whichever auth file CLIProxyAPI picks, so a refusal belongs to the provider the switcher is
- * on. Repeating it down 31 Google rows would restate one event 31 times.
- *
- * It earns a place beside the rings because it answers what a ring cannot. A ring is polled: at turn end for
- * Claude, on a five-minute sweep for the routed subscriptions, and the pools are account-wide, so every other
- * client on the plan drains them without this sandbox hearing about it. The refusal is the moment the plan
- * actually said no. Together they are readable: a green ring under a fresh refusal says the ring is stale.
- *
- * This is the state that sent someone here to reconnect a Kimi account in perfect health: the chat said
- * "Failed to authenticate", because that is what the harness prints over a 403, and the Agent tab showed a
- * healthy green dot beside it with nothing to reconcile the two. */
-// Loud only while nothing that happened since has answered it: see refusalNote, which also decides what a
-// refusal SAYS in each of those two states. Judged over both lists, because the provider's accounts are one list
-// to the reader whichever mechanism holds them, and asked of refusalFor rather than assembled here, so this line
-// and the pool the rings beside it draw as spent can only ever come from the same verdict.
-const refusal = computed(() => refusalFor(managedProvider.value));
 
 /* --- Collapsing long lists -----------------------------------------------------------------------------------
  * Five accounts fit comfortably; beyond that the card becomes a scroll trap that pushes the rest of the Agent
@@ -404,13 +382,6 @@ onUnmounted(() => clearTimeout(ringTimer));
         </template>
 
         <Notice v-if="chatNotice" :of="chatNotice" class="m-3" />
-
-        <!-- The provider's own words, the last time it refused a turn (see `refusal` above). An alert while it
-             is the newest thing known about this provider; once something taken since has answered it, a quiet
-             footnote saying so with those words on the hover: a stale alarm over a live meter is worse than no
-             alarm at all. -->
-        <Notice v-if="refusal !== undefined && refusal.current" tone="warning" class="m-3">{{ refusal.line }}</Notice>
-        <p v-else-if="refusal !== undefined" class="mx-3 mt-3 text-2xs text-subtle" v-tooltip.top="refusal.detail">{{ refusal.line }}</p>
 
         <!-- Nothing has been read yet. An offline sandbox says so and stops (there is nothing to wait for);
              otherwise the rows that are coming stand in as skeletons, in their own shape, so the section keeps
