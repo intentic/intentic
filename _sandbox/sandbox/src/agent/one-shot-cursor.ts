@@ -6,6 +6,8 @@ import { cursorReadiness } from "../cursor/cursor-readiness.js";
 import { CURSOR_SDK_MISSING, cursorSdk } from "../cursor/cursor-sdk.js";
 import type { Services } from "../composition.js";
 
+export type CursorOneShotDeps = Pick<Services, "cursorStore" | "cursorModels">;
+
 /* ONE PROMPT IN, ONE STRING OUT. ON CURSOR'S OWN RUNTIME. The same shape one-shot.ts and one-shot-gemini.ts
  * serve, and it exists for one reason: CURSOR HAS NO CLAUDE CODE ROAD AT ALL.
  *
@@ -62,7 +64,7 @@ const helperError = (error: unknown, sdk: Awaited<ReturnType<typeof cursorSdk>>)
 };
 
 export const runCursorOneShot = async (params: {
-    readonly services: Services;
+    readonly services: CursorOneShotDeps;
     readonly prompt: string;
     readonly cwd: string;
     readonly model: string;
