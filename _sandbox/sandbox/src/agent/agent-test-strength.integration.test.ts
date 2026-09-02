@@ -138,10 +138,13 @@ describe(`a test re-run against the code as it was`, () => {
         const { root, testFile } = repoWithChange();
         writeFileSync(testFile, [`import { expect, test } from "vitest";`, `test("t", () => { expect(1).toBe(1); });`, ``].join(`\n`));
         await ask(root, testFile);
-        // The generated config is the one thing this writes into the tree. A leftover would be picked up by the
-        // package's own next run, which loads every config it finds.
+        // The generated config is the one thing this writes into the tree, and a leftover would be picked up by
+        // the package's own next run, which loads every config it finds. Asserted as the WHOLE listing rather
+        // than as the absence of that one name: the run also copies HEAD's source somewhere and vitest caches
+        // what it compiled, and either landing in the package would be the same defect under another name. What
+        // is left is the turn's own two files — the source it changed, and the test it wrote.
         const listed = execFileSync(`git`, [`status`, `--porcelain`, `--untracked-files=all`], { cwd: root, encoding: `utf8` });
-        expect(listed).not.toContain(`.intentic-head.vitest.config.mts`);
+        expect(listed).toBe(` M pkg/src/bucket.ts\n?? pkg/src/bucket.test.ts\n`);
         // And the working copy of the changed source is still the CHANGED one, never the reverted text.
         expect(execFileSync(`cat`, [join(root, `pkg/src/bucket.ts`)], { encoding: `utf8` })).toBe(CHANGED_SOURCE);
     });
