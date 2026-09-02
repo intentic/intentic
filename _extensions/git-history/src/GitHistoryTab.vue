@@ -591,7 +591,7 @@ const runPending = async (): Promise<void> => {
 <template>
     <div ref="rootEl" class="flex h-full min-h-0 flex-col bg-canvas text-content">
         <!-- Header: checked-out branch · how many commits are drawn. Which repo this is lives on the tab. -->
-        <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line-subtle bg-card px-3">
+        <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line-subtle bg-card pl-1.5 pr-3">
             <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
                  no branch to show as a pill, but the switcher is still the way BACK onto one. -->
             <BranchSwitcher :repo="repoRef" />
@@ -600,7 +600,15 @@ const runPending = async (): Promise<void> => {
             <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
                 searching ? `${matched.length} of ${commits.length}` : commits.length
             }}</span>
-            <SearchBar v-model="search" placeholder="Search message, author, sha…" class="min-w-0 max-w-56 flex-1" />
+            <div class="ui-search-row flex h-8 min-w-0 max-w-56 flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
+                <SearchBar
+                    v-model="search"
+                    placeholder="Filter commits…"
+                    clearable
+                    aria-label="Filter commits by message, author, or sha"
+                    class="min-w-0 flex-1 border-b-0"
+                />
+            </div>
             <span class="flex-1"></span>
             <!-- Names the action it will undo, in git's own words on hover. Absent when there is nothing to walk
                  back: a fresh branch, a detached HEAD, or a halted operation (which ends by aborting instead). -->

@@ -87,11 +87,10 @@ const confirmDelete = async (name: string): Promise<void> => {
 
 <template>
     <div class="flex min-w-0 items-center">
-        <Button
-            size="small"
-            severity="secondary"
-            :text="true"
-            class="min-w-0"
+        <button
+            type="button"
+            :disabled="busy"
+            class="touch-target ui-off inline-flex min-w-0 cursor-pointer select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-content transition-colors hover:bg-overlay focus:outline-none focus-visible:bg-overlay disabled:cursor-default"
             v-tooltip.bottom="'Switch, create or delete a branch'"
             aria-label="Branch"
             @click="toggle"
@@ -101,7 +100,7 @@ const confirmDelete = async (name: string): Promise<void> => {
             <span v-if="current && current.behind > 0" class="shrink-0 text-muted">↓{{ current.behind }}</span>
             <span v-if="current && current.ahead > 0" class="shrink-0 text-muted">↑{{ current.ahead }}</span>
             <Icon name="chevron-down" class="shrink-0 text-4xs" />
-        </Button>
+        </button>
 
         <Popover ref="popover">
             <div class="flex w-72 flex-col gap-1.5">
