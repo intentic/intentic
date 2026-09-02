@@ -699,9 +699,11 @@ const grab = (event: PointerEvent): void => {
                  amber fact is what the row is FOR, and it has to be read before the offer beside it is. Never
                  automatic either: nothing re-lands this without the press. -->
             <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                <p class="flex min-w-0 flex-1 items-start gap-1.5 text-2xs leading-snug text-warning">
+                <p v-tooltip.top="away.title" class="flex min-w-0 flex-1 items-start gap-1.5 text-2xs leading-snug text-warning">
                     <Icon name="undo" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
-                        >{{ away.text }} <span class="text-subtle">({{ away.hint }})</span></span
+                        >{{ away.text }}<template v-if="away.hint !== undefined">
+                            <span class="text-subtle"> ({{ away.hint }})</span></template
+                        ></span
                     >
                 </p>
                 <!-- No resting glyph: the line it sits on already leads with this exact one, and the pair read

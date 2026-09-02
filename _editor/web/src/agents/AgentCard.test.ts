@@ -290,33 +290,22 @@ const relandButton = (el: HTMLElement): HTMLButtonElement | undefined =>
 it(`says so when the whole of a land has left the workspace`, () => {
     const card = mount(discarded(0, 4));
     expect(card.textContent).toContain(`Removed`);
-    expect(card.textContent).toContain(`branch`);
+    expect(card.textContent).toContain(`on branch`);
 });
 
-// The fraction, not the remainder: what the user is deciding is whether enough survived to leave it be, and
-// "9 of 12" answers that without them doing the subtraction.
+// The fraction, not the remainder: what the user is deciding is whether enough survived to leave it be.
 it(`counts what survived when only part of a land was discarded`, () => {
-    expect(mount(discarded(9, 12)).textContent).toContain(`9`);
-    expect(mount(discarded(9, 12)).textContent).toContain(`12`);
+    expect(mount(discarded(9, 12)).textContent).toContain(`9/12`);
 });
 
-/* The half that stops "removed from your workspace" reading as work destroyed. It is not decoration: the
- * branch genuinely still holds all of it, and that fact is what makes the discard safe to have made.
- * A CLAUSE ON THE SAME LINE, not a paragraph under a button: hence the assertion on the joined sentence. The
- * old wording spent two lines saying it, half of them narrating the button directly above them. */
+/* The half that stops "removed" reading as work destroyed. The branch genuinely still holds all of it, and
+ * that fact is what makes the discard safe to have made. */
 it(`says the work is not lost, in the same breath`, () => {
-    const whole = mount(discarded(0, 4)).textContent ?? ``;
-    expect(whole).toContain(`branch`);
-    expect(whole).toContain(`workspace`);
+    expect(mount(discarded(0, 4)).textContent ?? ``).toContain(`on branch`);
 });
 
-// The partial reading names the OTHER half: the fraction already said what is here, so the clause is only
-// worth its words about what is not.
-it(`points a partial discard at where the missing files still are`, () => {
-    const partial = mount(discarded(9, 12)).textContent ?? ``;
-    expect(partial).toContain(`9`);
-    expect(partial).toContain(`12`);
-    expect(partial).toContain(`branch`);
+it(`shows a compact fraction when only part of a land was discarded`, () => {
+    expect(mount(discarded(1, 2)).textContent ?? ``).toContain(`1/2`);
 });
 
 it(`offers the way back, and reports its own press`, () => {

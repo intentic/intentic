@@ -468,7 +468,7 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
  * reading when there is something to say (AgentSummarySchema.landedPresence). */
 export const landedAway = (agent: {
     readonly landedPresence?: { readonly landed: number; readonly present: number };
-}): { text: string; hint: string } | undefined => {
+}): { text: string; hint?: string; title: string } | undefined => {
     const presence = agent.landedPresence;
     if (presence === undefined) {
         return undefined;
@@ -481,13 +481,18 @@ export const landedAway = (agent: {
      * denying it. The recovery is the button's own word, `again`, and needs no sentence of its own. */
     // The whole of it, which is the common shape: one discard of one agent's work, and no arithmetic to read.
     if (presence.present === 0) {
-        return { text: `Removed from your workspace`, hint: `still on its branch` };
+        return {
+            text: `Removed`,
+            hint: `on branch`,
+            title: `Removed from your workspace (still on its branch)`,
+        };
     }
-    // A PART of it, a discarded selection, or a few rows reverted by hand. The fraction rather than the
-    // remainder ("3 files gone") because what the user is deciding is whether enough survived to leave it be,
-    // and that reads off "9 of 12" without them having to do the subtraction. Its hint names the OTHER half for
-    // the same reason: the fraction already says what is here, so the clause is only useful about what is not.
-    return { text: `${presence.present} of ${presence.landed} files still in your workspace`, hint: `the rest is on its branch` };
+    // A PART of it: the undo glyph and a present/landed fraction. What the user is deciding is whether enough
+    // survived to leave it be, and "9/12" answers that at a glance; the full sentence lives in `title` for hover.
+    return {
+        text: `${presence.present}/${presence.landed}`,
+        title: `${presence.present} of ${presence.landed} files still in your workspace (the rest is on its branch)`,
+    };
 };
 
 /* ONE BIT, "this session isn't done with your tree yet", for surfaces that name an agent while showing its
