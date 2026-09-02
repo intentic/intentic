@@ -2,7 +2,7 @@ import type { McpServerConfig as CursorMcpServer, SDKCustomTool, SDKJsonValue, T
 import type { AgentEvent, AskQuestion } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
 import type { AgentRequest } from "../agent/agent.js";
-import { formatAnswers } from "../agent/agent.js";
+import { formatAnswers } from "../agent/question-answers.js";
 import { waitForSubagent, type SubagentWaitUntil } from "../agent/subagents.js";
 
 /* WHAT THE TURN'S TOOLS BECOME ON CURSOR'S RUNTIME. Three seams, and between them they are the whole reason

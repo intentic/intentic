@@ -1,4 +1,4 @@
-import type { RestoredMessage, RestoredToolCall, ToolCallContent } from "@intentic/sandbox-contract";
+import type { RestoredMessage, RestoredQuestion, RestoredToolCall, ToolCallContent } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { track } from "../analytics";
 import type { Conversation } from "../chat/conversation";
@@ -68,6 +68,18 @@ const renderContent = (content: ToolCallContent): string => {
     }
 };
 
+const renderQuestion = (question: RestoredQuestion): string => {
+    const reply = question.reply?.kind === `question` ? question.reply : undefined;
+    const answers = reply?.answers;
+    const lines = question.questions.map((asked) => {
+        const picks = answers?.[asked.question] ?? [];
+        const answer =
+            reply === undefined ? `(unanswered)` : reply.cancelled === true ? `(dismissed)` : picks.length > 0 ? picks.join(`, `) : `(no answer)`;
+        return `- ${asked.header || asked.question}: ${answer}`;
+    });
+    return lines.join(`\n`);
+};
+
 /* A whole conversation as one labelled evidence document. Every message becomes a `## A.n. Role` section,
  * the stable citation labels the synthesis prompt asks for, carrying its text verbatim plus everything the
  * record retained around it: reasoning, tool calls, the daemon's notes, attachment paths, notices. The header
@@ -90,6 +102,11 @@ export const renderTranscript = (label: string, title: string, messages: readonl
         }
         if (message.tools !== undefined && message.tools.length > 0) {
             parts.push(`### Tools\n${message.tools.map((tool) => renderTool(tool, 0)).join(`\n`)}`);
+        }
+        // The decision the user made at this row's question, keyed the way the card labelled it. The picks
+        // are the one thing on a card a synthesis cannot infer from the work that followed them.
+        if (message.question !== undefined) {
+            parts.push(`### Asked\n${renderQuestion(message.question)}`);
         }
         return parts.join(`\n\n`);
     });

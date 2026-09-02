@@ -42,7 +42,7 @@ import { readTranscript, saveTranscript } from "./transcriptCache";
 import { TranscriptClock } from "./transcriptClock";
 import { rememberedModelFor, rememberedProviderFor, startingMode, turnDefaults } from "./turnDefaults";
 import { TurnFailures } from "./turnFailures";
-import type { TurnEffect } from "./turnReducer";
+import { restoredCards, type TurnEffect } from "./turnReducer";
 import { type SessionRef, type TurnSettings, boundSession, resumes, turnRequestBody } from "./turnRequest";
 import { type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
 import { formatReset, formatUtilization, modelAllowance, planHeadroom, SPENT_PERCENT, usageStatusByAccount, usageStatusFor } from "./usageStatus";
@@ -1224,6 +1224,10 @@ export class Conversation {
                 // shown live: a reader who can see the agent's instructions only while the tab stays open can't
                 // see them at all.
                 ...(message.notes !== undefined ? { notes: message.notes } : {}),
+                // The card this bubble parked on, frozen with the decision that settled it, the question and the
+                // picks that answered it above all: the part of a conversation the user actually did something
+                // in, and until the record kept it, the part a reopen lost.
+                ...restoredCards(message),
             })),
         );
         this.error.value = null;

@@ -1,8 +1,9 @@
-import type { AgentCommand, AgentEvent, AgentReply, ContextUsage, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
+import type { AgentCommand, AgentEvent, AgentReply, ContextUsage, PermissionMode, RestoredMessage, UsageWindow } from "@intentic/sandbox-contract";
 import { basename } from "@intentic/ui/path";
 import {
     type BrowserHelpStatus,
     type CapabilityOfferStatus,
+    type CardKind,
     type ChatMessage,
     type ChatTool,
     type ChatUsage,
@@ -371,6 +372,76 @@ const capabilityOfferStatusOf = (reply: AgentReply | undefined): CapabilityOffer
 // A yes settles the decision; whether the money actually moved is the payment_receipt frame's to say.
 const paymentOfferStatusOf = (reply: AgentReply | undefined): PaymentOfferStatus =>
     reply?.kind !== `payment_offer` ? `cancelled` : reply.approve ? `approved` : `skipped`;
+
+/* A RECORDED ROW'S CARD, restored as the live card it was. The daemon's record keeps each card as it was raised
+ * and the reply that released it VERBATIM (RestoredMessageSchema's card fields), so a restored card goes through
+ * the same status derivation the `resolved` frame goes through above, and a question reopened tomorrow reads
+ * exactly as it did on screen: answered, with its picks; a plan approved; a tool denied; and, with no reply on
+ * record, stopped, which is what a card nobody answered was. Everything else the record kept on the card, a
+ * permission's late sentence, an offer's stream and receipt, rides along unchanged.
+ *
+ * Built field by field rather than spread, because the record's optional fields admit `undefined` (they are
+ * wire shapes) and the live card's do not. */
+export const restoredCards = (message: RestoredMessage): Pick<ChatMessage, CardKind> => {
+    const cards: { -readonly [K in CardKind]?: ChatMessage[K] } = {};
+    const { plan, question, permission, browserHelp, terminalHelp, serviceOffer, capabilityOffer, paymentOffer } = message;
+    if (plan !== undefined) {
+        cards.plan = {
+            requestId: plan.requestId,
+            text: plan.text,
+            status: planStatusOf(plan.reply),
+            ...(plan.document === undefined ? {} : { document: plan.document }),
+        };
+    }
+    if (question !== undefined) {
+        const answers = question.reply?.kind === `question` ? question.reply.answers : undefined;
+        cards.question = {
+            requestId: question.requestId,
+            questions: question.questions,
+            status: questionStatusOf(question.reply),
+            ...(answers === undefined ? {} : { answers }),
+            ...(question.document === undefined ? {} : { document: question.document }),
+        };
+    }
+    if (permission !== undefined) {
+        const { reply, ...ask } = permission;
+        cards.permission = { ...ask, status: permissionStatusOf(reply) };
+    }
+    if (browserHelp !== undefined) {
+        const { reply, ...ask } = browserHelp;
+        cards.browserHelp = { ...ask, status: browserHelpStatusOf(reply) };
+    }
+    if (terminalHelp !== undefined) {
+        const { reply, ...ask } = terminalHelp;
+        cards.terminalHelp = { ...ask, status: terminalHelpStatusOf(reply) };
+    }
+    if (serviceOffer !== undefined) {
+        cards.serviceOffer = {
+            requestId: serviceOffer.requestId,
+            offer: serviceOffer.offer,
+            status: serviceOfferStatusOf(serviceOffer.reply),
+            ...(serviceOffer.events === undefined ? {} : { events: serviceOffer.events }),
+            ...(serviceOffer.receipt === undefined ? {} : { receipt: serviceOffer.receipt }),
+        };
+    }
+    if (capabilityOffer !== undefined) {
+        cards.capabilityOffer = {
+            requestId: capabilityOffer.requestId,
+            offer: capabilityOffer.offer,
+            status: capabilityOfferStatusOf(capabilityOffer.reply),
+            ...(capabilityOffer.outcome === undefined ? {} : { outcome: capabilityOffer.outcome }),
+        };
+    }
+    if (paymentOffer !== undefined) {
+        cards.paymentOffer = {
+            requestId: paymentOffer.requestId,
+            offer: paymentOffer.offer,
+            status: paymentOfferStatusOf(paymentOffer.reply),
+            ...(paymentOffer.receipt === undefined ? {} : { receipt: paymentOffer.receipt }),
+        };
+    }
+    return cards;
+};
 
 /* The quick model's plain sentence for a command card already on screen, patched onto the card the requestId
  * names. Not a new card and not a settlement: the card stays pending and answerable, and gains a line above

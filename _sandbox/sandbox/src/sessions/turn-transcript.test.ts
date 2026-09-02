@@ -318,4 +318,116 @@ describe("restoredTurn", () => {
             expect(restoredTurn({ prompt: "go" }, events, "/work", SENT_AT).map((message) => message.role)).toEqual(["user", "assistant"]);
         }
     });
+    /* THE CARD THE TURN PARKED ON, and the answer that released it. All of this used to be dropped: a question
+     * the user answered was on screen for as long as the run's frame log lived and in the browser's mirror until
+     * the next web build, and then the record repainted the chat with the prose before the ask and the prose
+     * after the answer, and nothing of the question, its options, or the picks in between. The card takes the
+     * open bubble and closes it, as the live reducer draws it, so the ask tool's own call (which trails its card)
+     * lands in the row beneath, with what the agent said once answered. */
+    it("records the question a turn asked, with the picks that answered it, and closes the bubble on the card", () => {
+        const questions = [
+            {
+                question: "Which?",
+                header: "Pick",
+                multiSelect: true,
+                options: [
+                    { label: "A", description: "a" },
+                    { label: "B", description: "b" },
+                ],
+            },
+        ];
+        const reply = { kind: "question" as const, requestId: "q1", answers: { "Which?": ["A", "B"] } };
+        const events: AgentEvent[] = [
+            { kind: "delta", text: "Two ways to go." },
+            { kind: "text_end" },
+            { kind: "question", requestId: "q1", questions },
+            { kind: "tool_call", id: "t1", name: "mcp__ui__ask", category: "other", status: "in_progress" },
+            { kind: "resolved", requestId: "q1", reply },
+            { kind: "tool_call_update", id: "t1", status: "completed" },
+            { kind: "delta", text: "Both it is." },
+        ];
+        expect(restoredTurn({ prompt: "go" }, events, "/work", SENT_AT).slice(1)).toEqual([
+            { role: "assistant", text: "Two ways to go." },
+            { role: "assistant", text: "", question: { requestId: "q1", questions, reply } },
+            { role: "assistant", text: "Both it is.", tools: [{ id: "t1", name: "mcp__ui__ask", category: "other", status: "completed" }] },
+        ]);
+    });
+
+    // A card raised under prose that is still open joins that prose, the one row, exactly where the live
+    // client attached it (withBubble takes the current bubble); the answer's continuation opens the next.
+    it("keeps the prose that led up to a card in the card's own row, with the document it asks about", () => {
+        const document = { path: "docs/plan.md", title: "Plan", markdown: "# Plan\n\n1. do it" };
+        const reply = { kind: "plan" as const, requestId: "p1", approve: true };
+        const events: AgentEvent[] = [
+            { kind: "delta", text: "Here is the plan." },
+            { kind: "plan", requestId: "p1", text: "1. do it", document },
+            { kind: "resolved", requestId: "p1", reply },
+            { kind: "delta", text: "Doing it." },
+        ];
+        expect(restoredTurn({ prompt: "plan it" }, events, "/work", SENT_AT).slice(1)).toEqual([
+            { role: "assistant", text: "Here is the plan.", plan: { requestId: "p1", text: "1. do it", document, reply } },
+            { role: "assistant", text: "Doing it." },
+        ]);
+    });
+
+    /* A card nobody answered carries no reply: a Stop, or a turn that died under the card, is not a decision,
+     * and a restored card must not wear one. What DID land on the card before that stays: the quick model's
+     * late sentence is part of what the user was looking at. */
+    it("records a card nobody answered as unanswered, keeping what landed on it meanwhile", () => {
+        const events: AgentEvent[] = [
+            { kind: "permission", requestId: "perm1", toolName: "Bash", title: "Claude wants to run pnpm test" },
+            { kind: "permission_note", requestId: "perm1", explain: "Runs the test suite." },
+            { kind: "resolved", requestId: "perm1" },
+        ];
+        expect(restoredTurn({ prompt: "test" }, events, "/work", SENT_AT).slice(1)).toEqual([
+            {
+                role: "assistant",
+                text: "",
+                permission: { requestId: "perm1", toolName: "Bash", title: "Claude wants to run pnpm test", explain: "Runs the test suite." },
+            },
+        ]);
+    });
+
+    // An offer's whole life is on its card: the click, the run showing itself living, and how the spend ended.
+    // Each follow-up frame names the card by requestId, and each is kept where the live card rendered it.
+    it("keeps an offer's decision, its stream and its receipt on the card that offered it", () => {
+        const offer = { slug: "research", name: "Research", publisher: "acme", description: "d", creditsPerRun: 3, request: "{}" };
+        const reply = { kind: "service_offer" as const, requestId: "s1", approve: true };
+        const events: AgentEvent[] = [
+            { kind: "service_offer", requestId: "s1", offer },
+            { kind: "resolved", requestId: "s1", reply },
+            { kind: "service_event", requestId: "s1", event: { event: "status", text: "searching" } },
+            { kind: "service_receipt", requestId: "s1", outcome: "ok", credits: 3, remaining: 7 },
+            { kind: "delta", text: "Found it." },
+        ];
+        expect(restoredTurn({ prompt: "research" }, events, "/work", SENT_AT).slice(1)).toEqual([
+            {
+                role: "assistant",
+                text: "",
+                serviceOffer: {
+                    requestId: "s1",
+                    offer,
+                    reply,
+                    events: [{ event: "status", text: "searching" }],
+                    receipt: { outcome: "ok", credits: 3, remaining: 7 },
+                },
+            },
+            { role: "assistant", text: "Found it." },
+        ]);
+    });
+
+    // A card is the parent turn's business: read at a subagent's own level it is not that stream's, and it
+    // has nowhere on a tool card to hang, so the child's transcript leaves it out.
+    it("keeps the parent's cards out of a subagent's own transcript", () => {
+        const questions = [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "a" }] }];
+        const events: AgentEvent[] = [
+            { kind: "tool_call", id: "task-1", name: "Agent", category: "other", status: "in_progress" },
+            { kind: "delta", text: "looking", parentToolUseId: "task-1" },
+            { kind: "question", requestId: "q1", questions },
+        ];
+        expect(subagentTurn(events, "task-1", "Find it")).toEqual([
+            { role: "user", text: "Find it" },
+            { role: "assistant", text: "looking" },
+        ]);
+    });
 });

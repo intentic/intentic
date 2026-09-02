@@ -1,7 +1,9 @@
 import { basename } from "node:path";
 import { sdk } from "../claude/claude-sdk.js";
-import type { MatchSnippet, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import { AskQuestionSchema, type MatchSnippet, type RestoredMessage, type RestoredQuestion, type RestoredToolCall } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
+import { ASK_TOOL_NAMES, parseAnswers } from "../agent/question-answers.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
@@ -150,6 +152,9 @@ export const searchWorkspaceSessions = async (
 // (listSessions scans the whole project and is capped). undefined ⇒ nothing to resume.
 export const workspaceSessionExists = async (dir: string, id: string): Promise<boolean> => (await sdk().getSessionInfo(id, { dir })) !== undefined;
 
+// The ask tool's input as the store keeps it: the same questions the live `question` frame carried.
+const AskInputSchema = z.object({ questions: z.array(AskQuestionSchema).min(1) });
+
 const blocksOf = (message: { message?: unknown }): StoredBlock[] => {
     const content = (message.message as AnthropicMessageLike | undefined)?.content;
     // A plain-string content is a bare user prompt, the one block shape the store writes unwrapped.
@@ -242,13 +247,16 @@ export const restoredSessionMessages = (
     // The bubble being written into, opened by the first thing that lands in it and closed by a prose block (or
     // by the next thing the user says). Kept OPEN across the tool_result messages between two calls: those are
     // the SDK's plumbing, and closing on one is what split a turn's run into a card apiece.
-    let bubble: { text: string; thinking: string; tools: RestoredToolCall[] } | undefined;
-    const open = (): { text: string; thinking: string; tools: RestoredToolCall[] } => (bubble ??= { text: "", thinking: "", tools: [] });
+    let bubble: { text: string; thinking: string; tools: RestoredToolCall[]; question?: RestoredQuestion } | undefined;
+    const open = (): NonNullable<typeof bubble> => (bubble ??= { text: "", thinking: "", tools: [] });
     // Mirrors the daemon's own `flush`: a bubble that produced nothing at all is not a row.
     const flush = (): void => {
         const current = bubble;
         bubble = undefined;
-        if (current === undefined || (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0)) {
+        if (
+            current === undefined ||
+            (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0 && current.question === undefined)
+        ) {
             return;
         }
         out.push({
@@ -256,12 +264,21 @@ export const restoredSessionMessages = (
             text: current.text,
             ...(current.thinking.length > 0 ? { thinking: current.thinking } : {}),
             ...(current.tools.length > 0 ? { tools: current.tools } : {}),
+            ...(current.question === undefined ? {} : { question: current.question }),
         });
     };
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
     // card is in the open bubble or already in `out`; either way it is mutated in place, so a result that lands
     // after its bubble closed needs no second pass.
     const awaiting = new Map<string, RestoredToolCall>();
+    /* tool_use id → THE QUESTION THAT CALL ASKED, to be answered by the same result. The store never saw the
+     * `question` frame or the reply that released it, it has the ask tool's call (the questions, as its input)
+     * and its result (the picks, as the text the model read), and those are enough to redraw the card the user
+     * answered, which is the one part of a turn killed mid-flight a person actually did something in. Only the
+     * question is rebuilt here: a plan's text lives in prose the store does not mark, and a permission gate is
+     * no tool call at all, so neither has a stored shape to read back. The record (turn-transcript.ts) keeps all
+     * of them typed; this is the recovery for the turns that never reached it. */
+    const asked = new Map<string, RestoredQuestion>();
     // Which cards carry a call-time diff: a successful Edit/Write result is the redundant "file updated"
     // snippet, so the diff stays the card's content. Errors DO replace it (the text is the reason), the same
     // rule the live tool_call_update applies.
@@ -292,6 +309,13 @@ export const restoredSessionMessages = (
                 tool.status = failed ? "failed" : "completed";
                 if (failed || !diffed.has(tool.id)) {
                     tool.content = [{ type: "text", text: resultText(block.content) }];
+                }
+                // The ask's result is the user's answer, read back as the reply the record would have kept. Text
+                // the formatter did not write leaves the card unanswered rather than wearing a decision.
+                const question = asked.get(block.tool_use_id);
+                const reply = question === undefined ? undefined : parseAnswers(question.questions, block.tool_use_id, resultText(block.content));
+                if (question !== undefined && reply !== undefined) {
+                    question.reply = reply;
                 }
             }
             // A user message carrying only tool_results is the SDK's plumbing, not something the user said.
@@ -349,6 +373,17 @@ export const restoredSessionMessages = (
             } else if (block.type === "thinking" && typeof block.thinking === "string") {
                 open().thinking += block.thinking;
             } else if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
+                /* The ask tool's call is where the live stream raised its `question` card, one frame ahead of the
+                 * call itself, so the card goes down first and takes the open bubble with it, exactly as the fold
+                 * of a recorded turn places it: the prose that led up to the ask stays above the card, and the
+                 * call lands in the row beneath. A call whose input is not the ask's shape is an ordinary card. */
+                const ask = ASK_TOOL_NAMES.has(block.name) ? AskInputSchema.safeParse(block.input) : undefined;
+                if (ask?.success === true) {
+                    const question: RestoredQuestion = { requestId: block.id, questions: ask.data.questions };
+                    open().question = question;
+                    flush();
+                    asked.set(block.id, question);
+                }
                 const target = toolTarget(block.input);
                 const locations = toolLocations(block.input, dir);
                 const diff = editDiffContent(block.name, block.input, dir);

@@ -62,3 +62,23 @@ test("spends its budget on the end of a long conversation, not its opening", () 
     expect(envelope.length).toBeLessThan(33_000);
     expect(envelope.endsWith("carry on")).toBe(true);
 });
+
+/* WHAT THE USER DECIDED rides the handoff. The picks steered everything the agent did after the ask, and the
+ * tool result that carried them is tool output, which the preamble leaves out on purpose; without this line
+ * the next runtime inherits the work and not the reason for it. A card nobody answered says nothing. */
+test("carries the answer to a question the turn asked, and nothing for one nobody answered", () => {
+    const questions = [{ question: "Which store?", header: "Store", multiSelect: false, options: [{ label: "Postgres", description: "p" }] }];
+    const history: RestoredMessage[] = [
+        { role: "user", text: "choose" },
+        {
+            role: "assistant",
+            text: "Two ways.",
+            question: { requestId: "q1", questions, reply: { kind: "question", requestId: "q1", answers: { "Which store?": ["Postgres"] } } },
+        },
+        { role: "assistant", text: "Again?", question: { requestId: "q2", questions } },
+    ];
+    const prompt = withRuntimeHistory("go on", history);
+    expect(prompt).toContain("Assistant: Two ways.\n[asked: The user answered: - Store: Postgres]");
+    expect(prompt).toContain("Assistant: Again?\n\n---");
+    expect(parseRuntimeHistory(prompt)?.prompt).toBe("go on");
+});

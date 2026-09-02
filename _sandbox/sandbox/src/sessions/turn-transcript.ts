@@ -1,7 +1,11 @@
 import {
     type AgentEvent,
+    type AgentReply,
     type AgentTurn,
     capabilitiesOf,
+    holdsCard,
+    RESTORED_CARD_FIELDS,
+    type RestoredCards,
     type RestoredMessage,
     type RestoredToolCall,
     resumeDisclosure,
@@ -108,26 +112,66 @@ const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): RestoredTool
  * of this stream, and nest under the card that spawned them. Which is one rule for both callers, and it is what
  * makes depth fall out for free, a subagent that itself delegates nests one level further down, on the same
  * pass, whichever level you asked to read. */
+interface Bubble {
+    text: string;
+    thinking: string;
+    tools: RestoredToolCall[];
+    // The card this bubble parked on, at most one: a card closes the bubble it lands in (see `park`).
+    card: RestoredCards;
+}
+
+// The one card a recorded row holds, whichever kind it is: what a `resolved` frame settles.
+const cardOn = (row: RestoredMessage): { reply?: AgentReply | undefined } | undefined =>
+    RESTORED_CARD_FIELDS.map((field) => row[field]).find((card) => card !== undefined);
+
 const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): RestoredMessage[] => {
     const out: RestoredMessage[] = [];
     // tool_call id → the card a later tool_call_update settles. The card is already in `out` (or in the open
     // bubble) and is mutated in place, so a result that lands turns after its call needs no second pass. Nested
     // cards go in too: an update names only its id, so a child's result has to be reachable the same way.
     const cards = new Map<string, RestoredToolCall>();
-    let bubble: { text: string; thinking: string; tools: RestoredToolCall[] } | undefined;
-    const open = (): { text: string; thinking: string; tools: RestoredToolCall[] } => (bubble ??= { text: "", thinking: "", tools: [] });
-    const flush = (): void => {
+    /* requestId → the ROW holding the interactive card it names, for the frames that land on a card after it
+     * was raised: the reply that released it (`resolved`), a permission's late sentence, an offer's stream and
+     * receipt. The row is already in `out` and its card is mutated in place, the same move the tool cards make.
+     *
+     * These used to be dropped, all of them, and with them the one part of a conversation the user had actually
+     * DONE something in: a reopened chat showed the prose before a question and the prose after the answer, and
+     * nothing of the question, the options, or the picks. The card's whole life is in the frame log this fold
+     * reads, so recording it costs nothing but the fields. */
+    const parked = new Map<string, RestoredMessage>();
+    let bubble: Bubble | undefined;
+    const open = (): Bubble => (bubble ??= { text: "", thinking: "", tools: [], card: {} });
+    // Mirrors the client's own row guard (recordedRows): text, thinking, tools or a card makes a row, and nothing
+    // makes none. Returns the row it wrote, so a card can be found again by the frames that settle it.
+    const flush = (): RestoredMessage | undefined => {
         const current = bubble;
         bubble = undefined;
-        if (current === undefined || (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0)) {
-            return;
+        if (
+            current === undefined ||
+            (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0 && !holdsCard(current.card))
+        ) {
+            return undefined;
         }
-        out.push({
+        const row: RestoredMessage = {
             role: "assistant",
             text: current.text,
             ...(current.thinking.length > 0 ? { thinking: current.thinking } : {}),
             ...(current.tools.length > 0 ? { tools: current.tools } : {}),
-        });
+            ...current.card,
+        };
+        out.push(row);
+        return row;
+    };
+    /* A card takes the bubble that is open and closes it, the live client's own move (turnReducer: withBubble,
+     * then bubbleId null): the prose that led up to the ask stays above the card, and whatever the agent says
+     * once answered opens a fresh row beneath it. A bubble holding nothing but the card is still a row, as it is
+     * live, where the card IS the bubble. */
+    const park = (requestId: string, card: RestoredCards): void => {
+        open().card = card;
+        const row = flush();
+        if (row !== undefined) {
+            parked.set(requestId, row);
+        }
     };
     // text_end retires a bubble that WROTE something, and only that, the client's own guard (turnReducer's
     // `hasProse`). A block that produced no prose has no boundary to draw: retiring on it would split a card
@@ -234,6 +278,75 @@ const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): Res
             }
             if (event.locations !== undefined) {
                 card.locations = event.locations;
+            }
+        } else if (event.kind === "plan") {
+            park(event.requestId, {
+                plan: { requestId: event.requestId, text: event.text, ...(event.document === undefined ? {} : { document: event.document }) },
+            });
+        } else if (event.kind === "question") {
+            park(event.requestId, {
+                question: {
+                    requestId: event.requestId,
+                    questions: event.questions,
+                    ...(event.document === undefined ? {} : { document: event.document }),
+                },
+            });
+        } else if (event.kind === "permission") {
+            const { kind: _kind, ...ask } = event;
+            park(event.requestId, { permission: ask });
+        } else if (event.kind === "browser_help") {
+            const { kind: _kind, ...ask } = event;
+            park(event.requestId, { browserHelp: ask });
+        } else if (event.kind === "terminal_help") {
+            const { kind: _kind, ...ask } = event;
+            park(event.requestId, { terminalHelp: ask });
+        } else if (event.kind === "service_offer") {
+            park(event.requestId, { serviceOffer: { requestId: event.requestId, offer: event.offer } });
+        } else if (event.kind === "capability_offer") {
+            park(event.requestId, { capabilityOffer: { requestId: event.requestId, offer: event.offer } });
+        } else if (event.kind === "payment_offer") {
+            park(event.requestId, { paymentOffer: { requestId: event.requestId, offer: event.offer } });
+        } else if (event.kind === "resolved") {
+            /* The reply rides verbatim, the frame's own rule: absent, nobody answered (a Stop, a turn that died
+             * under the card), which is not a decision, and the card reads back unanswered rather than as one. */
+            const row = parked.get(event.requestId);
+            const card = row === undefined ? undefined : cardOn(row);
+            if (card !== undefined && event.reply !== undefined) {
+                card.reply = event.reply;
+            }
+        } else if (event.kind === "permission_note") {
+            const permission = parked.get(event.requestId)?.permission;
+            if (permission !== undefined) {
+                permission.explain = event.explain;
+            }
+        } else if (event.kind === "service_event") {
+            const offer = parked.get(event.requestId)?.serviceOffer;
+            if (offer !== undefined) {
+                offer.events = [...(offer.events ?? []), event.event];
+            }
+        } else if (event.kind === "service_receipt") {
+            const offer = parked.get(event.requestId)?.serviceOffer;
+            if (offer !== undefined) {
+                offer.receipt = {
+                    outcome: event.outcome,
+                    credits: event.credits,
+                    ...(event.remaining === undefined ? {} : { remaining: event.remaining }),
+                };
+            }
+        } else if (event.kind === "capability_outcome") {
+            const offer = parked.get(event.requestId)?.capabilityOffer;
+            if (offer !== undefined) {
+                offer.outcome = { outcome: event.outcome, ...(event.id === undefined ? {} : { id: event.id }) };
+            }
+        } else if (event.kind === "payment_receipt") {
+            const offer = parked.get(event.requestId)?.paymentOffer;
+            if (offer !== undefined) {
+                offer.receipt = {
+                    outcome: event.outcome,
+                    amountUsd: event.amountUsd,
+                    ...(event.transaction === undefined ? {} : { transaction: event.transaction }),
+                    ...(event.network === undefined ? {} : { network: event.network }),
+                };
             }
         }
     }

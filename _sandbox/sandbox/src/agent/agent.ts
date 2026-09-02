@@ -16,7 +16,6 @@ import {
     type AdmissionRule,
     type AgentCapabilities,
     type AgentEvent,
-    type AgentReply,
     type AskQuestion,
     type CardDocument,
     type CommandClass,
@@ -73,6 +72,7 @@ import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { noteChildWork } from "./child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "./subagents.js";
+import { ASK_TOOL_NAMES, formatAnswers } from "./question-answers.js";
 
 export interface AgentRequest {
     /* What the model reads AFTER the notes below: the user's own words (plus, on the Claude arm, the
@@ -350,25 +350,6 @@ export interface AgentRequest {
      * gate. Absent ⇒ the runtime offers no supervision tools. */
     readonly children?: ChildSupervisor;
 }
-
-// Render the user's question picks (or a dismissal) as the `ask` tool's text result. A dismissal is not a
-// quieter answer: the client stops the turn on it (and the stand-in an aborted turn settles with lands here
-// too), so this text is read on the NEXT turn, where "proceed on defaults" would be an instruction to resume
-// work the user just pulled the plug on.
-// Exported for the restart path: a restored question card's answer arrives with no tool call left to feed, so
-// it rides a resumed turn's prompt instead, worded by the same function, so the model reads one shape of
-// answer wherever the daemon was in between (turn-resume.ts).
-export const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { kind: "question" }>): string => {
-    if (reply.cancelled || reply.answers === undefined) {
-        return "The user dismissed the questions without answering and stopped the turn. STOP what you are doing and wait for them to say how to proceed.";
-    }
-    const answers = reply.answers;
-    const lines = questions.map((q) => {
-        const picks = answers[q.question] ?? [];
-        return `- ${q.header || q.question}: ${picks.length > 0 ? picks.join(", ") : "(no answer)"}`;
-    });
-    return `The user answered:\n${lines.join("\n")}`;
-};
 
 /* THE REBASE A SETTLED CARD EARNS, and the two conditions on taking it.
  *
@@ -890,7 +871,7 @@ const askServer = (
 
 // Tools that must never raise a permission card: asking the user a question, and entering plan mode, are both
 // the agent deferring TO the user. Prompting for permission to prompt would be a dead end.
-const UNGATED = new Set(["mcp__ui__ask", "AskUserQuestion", "EnterPlanMode"]);
+const UNGATED = new Set([...ASK_TOOL_NAMES, "EnterPlanMode"]);
 
 /* The posture EVERY approved plan executes in, whatever the turn started in and whichever client approved it.
  * Approval is the one moment the user has read what the agent intends to do and said yes to all of it, so

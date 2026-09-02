@@ -20,7 +20,11 @@ import { SECRET_PATTERNS } from "../public/public-files.js";
  *   · `checkpointId`, an address in the daemon's own rewind state. Meaningless off this machine.
  *   · `notes`, the context the daemon prepended to a turn (a rebase that moved the branch, dependencies that
  *     are behind, retrieved workspace context). The published page has no surface that draws them, so keeping
- *     them would publish text nobody can read, which is strictly worse than not keeping it. */
+ *     them would publish text nobody can read, which is strictly worse than not keeping it.
+ *   · The cards a turn parked on (`question`, `plan`, `permission`, …, RestoredMessageSchema's card fields),
+ *     for the same reason: the share view draws prose, thinking and tool cards and nothing interactive, so
+ *     a card would leave as unreadable JSON. The day it draws them, the question and its picks belong at
+ *     BOTH levels, they are the two speakers deciding something together. */
 
 // The marker a matched secret leaves behind. Visible on purpose: a silently shortened line reads as the agent
 // having said something odd, where this reads as what it is.

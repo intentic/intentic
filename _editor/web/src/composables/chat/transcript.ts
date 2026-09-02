@@ -1,19 +1,23 @@
-import type {
-    AskQuestion,
-    CapabilityOffer,
-    CardDocument,
-    PaymentOffer,
-    PermissionAsk,
-    ServiceOffer,
-    ServiceStreamEvent,
-    SubagentKind,
-    SubagentStatus,
-    TodoItem,
-    ToolCallContent,
-    ToolCallLocation,
-    ToolCallStatus,
-    ToolKind,
-    TurnNote,
+import {
+    type AskQuestion,
+    type CapabilityOffer,
+    type CapabilityOutcome,
+    type CardDocument,
+    type PaymentOffer,
+    type PaymentReceipt,
+    type PermissionAsk,
+    RESTORED_CARD_FIELDS,
+    type ServiceOffer,
+    type ServiceReceipt,
+    type ServiceStreamEvent,
+    type SubagentKind,
+    type SubagentStatus,
+    type TodoItem,
+    type ToolCallContent,
+    type ToolCallLocation,
+    type ToolCallStatus,
+    type ToolKind,
+    type TurnNote,
 } from "@intentic/sandbox-contract";
 import { formatDate } from "@intentic/ui/format";
 import { errandOf } from "./errands";
@@ -116,7 +120,7 @@ export interface ServiceOfferRequest {
     readonly events?: readonly ServiceStreamEvent[];
     // How an approved run ended (the service_receipt frame): served and charged, refunded in full because the
     // service failed to answer, or refused by the platform after the click (a raced-out allowance).
-    readonly receipt?: { readonly outcome: "ok" | "refunded" | "refused"; readonly credits: number; readonly remaining?: number };
+    readonly receipt?: ServiceReceipt;
 }
 
 /* A USDC payment awaiting the owner's click, the daemon's payment gate (wallet/payment-offer.ts).
@@ -132,7 +136,7 @@ export interface PaymentOfferRequest {
     // How an approved payment ended (the payment_receipt frame): settled (with its onchain transaction hash
     // when the endpoint stated one), or failed, in which case the signed authorization expired unused and
     // nothing left the wallet.
-    readonly receipt?: { readonly outcome: "paid" | "failed"; readonly amountUsd: string; readonly transaction?: string; readonly network?: string };
+    readonly receipt?: PaymentReceipt;
 }
 
 /* A missing capability asking for the owner's setup, the daemon's setup gate (capabilities/
@@ -148,7 +152,7 @@ export interface CapabilityOfferRequest {
     readonly status: CapabilityOfferStatus;
     // How an accepted ask ended (the capability_outcome frame): the connection came live while the agent
     // waited (`id` is the connected instance), or the setup didn't finish while anyone was waiting.
-    readonly outcome?: { readonly outcome: "connected" | "unfinished"; readonly id?: string };
+    readonly outcome?: CapabilityOutcome;
 }
 
 // One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
@@ -352,19 +356,17 @@ export interface ChatMessage {
 /* THE INTERACTIVE CARDS a turn can park on. They differ in what they ask, a plan to approve, questions to
  * answer, a tool to permit, and in nothing else: each carries a `requestId` the daemon un-parks on, each is
  * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
- * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
- * rather than a hunt through the three places that used to spell them out. */
-export const CARD_KINDS = [
-    "plan",
-    "question",
-    "permission",
-    "browserHelp",
-    "terminalHelp",
-    "serviceOffer",
-    "capabilityOffer",
-    "paymentOffer",
-] as const;
+ * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit
+ * rather than a hunt through the places that used to spell them out.
+ *
+ * The list is the CONTRACT's: the daemon's record keeps a card under exactly the field this message keeps it
+ * under (RestoredMessageSchema), and the row counts on the two sides, which have to agree to the row, ask the
+ * same list whether a bubble holds one. */
+export const CARD_KINDS = RESTORED_CARD_FIELDS;
 export type CardKind = (typeof CARD_KINDS)[number];
+
+// Whether a bubble holds a card at all, answered or not.
+export const holdsCard = (message: ChatMessage): boolean => CARD_KINDS.some((kind) => message[kind] !== undefined);
 
 // Whether a bubble is holding the turn open on a card the user hasn't answered.
 export const isAwaitingDecision = (message: ChatMessage): boolean => CARD_KINDS.some((kind) => message[kind]?.status === `pending`);
@@ -421,9 +423,11 @@ export interface ChatTurn {
  * wrong for every conversation that had ever seen a provider error: the fork asked for fewer rows than it meant
  * and lost the tail of the transcript it was copying.
  *
- * The assistant guard below MIRRORS the daemon's own (`flush` in sessions/turn-transcript.ts): text, thinking or
- * tools makes a row, and nothing makes none. The two have to agree, a fork that counts one row too many
- * inherits a turn the user cut, one too few drops a turn they kept, so change them together. */
+ * The assistant guard below MIRRORS the daemon's own (`flush` in sessions/turn-transcript.ts): text, thinking,
+ * tools or a card makes a row, and nothing makes none. The two have to agree, a fork that counts one row too
+ * many inherits a turn the user cut, one too few drops a turn they kept, so change them together. A bubble
+ * holding nothing but a card is the ordinary shape of a question asked after a paragraph ended (the card opens
+ * its own bubble, see turnReducer), and the record writes that bubble down as the row it is. */
 export const recordedRows = (messages: readonly ChatMessage[]): number =>
     messages.filter((message) => {
         if (message.role === `notice`) {
@@ -432,7 +436,7 @@ export const recordedRows = (messages: readonly ChatMessage[]): number =>
         if (message.role === `user`) {
             return true;
         }
-        return message.text.length > 0 || (message.thinking?.length ?? 0) > 0 || (message.tools?.length ?? 0) > 0;
+        return message.text.length > 0 || (message.thinking?.length ?? 0) > 0 || (message.tools?.length ?? 0) > 0 || holdsCard(message);
     }).length;
 
 /* WHAT PRESSING CONTINUE ACTUALLY SAYS, one sentence, picked from two by continuationFor below.

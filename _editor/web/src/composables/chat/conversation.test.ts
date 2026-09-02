@@ -15,6 +15,7 @@ import {
     foldsIntoTurn,
     forkCutsOf,
     isAcknowledgment,
+    recordedRows,
     turnsOf,
 } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
@@ -2833,6 +2834,51 @@ describe(`Conversation`, () => {
         // the attachment chips and checkpoint a replay has no way to rebuild.
         expect(conversation.messages.value[0]?.role).toBe(`user`);
         expect(conversation.messages.value[0]?.run).toBeUndefined();
+    });
+
+    /* THE CARDS A RECORD KEPT come back as the cards they were. A question the user answered used to survive a
+     * reload only while the run's frame log lived; the daemon's record now holds the card and the reply
+     * verbatim, and this is the seam that turns them back into the live shape, through the same status rule the
+     * resolved frame goes through, so "answered, with these picks" reads identically live and a week later. */
+    it(`restores the cards a record kept, frozen with the decisions that settled them`, () => {
+        const conversation = new Conversation(`c1`);
+        const questions = [
+            {
+                question: `Which?`,
+                header: `Pick`,
+                multiSelect: true,
+                options: [
+                    { label: `A`, description: `a` },
+                    { label: `B`, description: `b` },
+                ],
+            },
+        ];
+        conversation.restoreMessages([
+            { role: `user`, text: `choose` },
+            {
+                role: `assistant`,
+                text: ``,
+                question: { requestId: `q1`, questions, reply: { kind: `question`, requestId: `q1`, answers: { "Which?": [`A`, `B`] } } },
+            },
+            { role: `assistant`, text: `Here is the plan.`, plan: { requestId: `p1`, text: `1. do it` } },
+            {
+                role: `assistant`,
+                text: ``,
+                permission: {
+                    requestId: `perm1`,
+                    toolName: `Bash`,
+                    explain: `Runs the tests.`,
+                    reply: { kind: `permission`, requestId: `perm1`, decision: `always` },
+                },
+            },
+        ]);
+        const [, asked, planned, permitted] = conversation.messages.value;
+        expect(asked?.question).toEqual({ requestId: `q1`, questions, status: `answered`, answers: { "Which?": [`A`, `B`] } });
+        // No reply on record is nobody's decision: the card reads as stopped, never as approved or rejected.
+        expect(planned?.plan).toEqual({ requestId: `p1`, text: `1. do it`, status: `cancelled` });
+        expect(permitted?.permission).toEqual({ requestId: `perm1`, toolName: `Bash`, explain: `Runs the tests.`, status: `always` });
+        // A record row per bubble, cards included: the count a fork copies a prefix of agrees with the daemon's.
+        expect(recordedRows(conversation.messages.value)).toBe(4);
     });
 
     /* The transcript-loss bug: reattach appends the running turn's prompt bubble to whatever the transcript

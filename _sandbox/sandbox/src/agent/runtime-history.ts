@@ -7,6 +7,7 @@
 // drops, and it is keyed by conversationId, which is exactly the identity a retired session leaves behind.
 
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import { formatAnswers } from "./question-answers.js";
 
 export interface RuntimeHistoryMessage {
     readonly role: "user" | "assistant";
@@ -31,20 +32,35 @@ const TOOLS_PER_MESSAGE = 8;
 
 const toolLabel = (call: RestoredToolCall): string => (call.target !== undefined && call.target !== "" ? `${call.name} ${call.target}` : call.name);
 
-// The trailer that says what a turn touched: tool calls for an assistant message, attached files for a user's.
-// Empty when there is nothing to say, so a plain text exchange renders exactly as it always did.
+/* WHAT THE USER DECIDED at a question this row asked, the one thing on a card the next runtime cannot do
+ * without: the picks steered everything the agent did afterwards, and the ask tool's result that carried them
+ * is tool output, which this preamble excludes. Worded by the same function the model read them through live
+ * (formatAnswers), on one line. A card with no reply was stopped under, and says nothing here. */
+const decisionLabel = (message: RestoredMessage): string | undefined => {
+    const question = message.question;
+    if (question === undefined || question.reply?.kind !== "question") {
+        return undefined;
+    }
+    return formatAnswers(question.questions, question.reply).replaceAll("\n", " ");
+};
+
+// The trailer that says what a turn touched: tool calls and the answer to a question it asked for an assistant
+// message, attached files for a user's. Empty when there is nothing to say, so a plain text exchange renders
+// exactly as it always did.
 const trailerOf = (message: RestoredMessage): string => {
     if (message.role === "user") {
         const attachments = message.attachments ?? [];
         return attachments.length > 0 ? `\n[attached: ${attachments.join(", ")}]` : "";
     }
+    const decision = decisionLabel(message);
+    const asked = decision === undefined ? "" : `\n[asked: ${decision}]`;
     const tools = message.tools ?? [];
     if (tools.length === 0) {
-        return "";
+        return asked;
     }
     const shown = tools.slice(0, TOOLS_PER_MESSAGE).map(toolLabel);
     const rest = tools.length - shown.length;
-    return `\n[used: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}]`;
+    return `${asked}\n[used: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}]`;
 };
 
 const rendered = (message: RestoredMessage): string => {

@@ -232,6 +232,75 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
     expect(messages[2]?.tools?.[1]?.content).toEqual([{ type: "text", text: "boom" }]);
 });
 
+/* THE QUESTION A TURN ASKED, rebuilt from the ask tool's own call and result. The store never saw the `question`
+ * frame or the reply that released it; it has the call (the questions, as its input) and the result (the picks,
+ * as the text the model read), and those redraw the card the user answered, the one part of a turn killed
+ * mid-flight a person actually did something in. The card goes down where the live stream raised it, one frame
+ * ahead of the call, closing the bubble the prose opened; the call itself lands in the row beneath. */
+test("rebuilds the question a turn asked, and the picks that answered it, from the ask tool's call", async () => {
+    const questions = [
+        {
+            question: "Which?",
+            header: "Pick",
+            multiSelect: true,
+            options: [
+                { label: "A", description: "a" },
+                { label: "B", description: "b" },
+            ],
+        },
+    ];
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "choose" } },
+        {
+            type: "assistant",
+            message: {
+                content: [
+                    { type: "text", text: "Two ways." },
+                    { type: "tool_use", id: "ask-1", name: "mcp__ui__ask", input: { questions } },
+                ],
+            },
+        },
+        { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "ask-1", content: "The user answered:\n- Pick: A, B" }] } },
+        { type: "assistant", message: { content: [{ type: "text", text: "Both it is." }] } },
+    ]);
+
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
+
+    expect(messages.map((message) => [message.role, message.text])).toEqual([
+        ["user", "choose"],
+        ["assistant", "Two ways."],
+        ["assistant", ""],
+        ["assistant", "Both it is."],
+    ]);
+    expect(messages[2]?.question).toEqual({
+        requestId: "ask-1",
+        questions,
+        reply: { kind: "question", requestId: "ask-1", answers: { "Which?": ["A", "B"] } },
+    });
+    expect(messages[3]?.tools?.map((tool) => [tool.name, tool.status])).toEqual([["mcp__ui__ask", "completed"]]);
+});
+
+// A dismissal is an answer of its own kind and reads back as one; a call the turn died under (no result at
+// all) stays unanswered, which is what happened.
+test("reads a dismissed question back as cancelled, and one with no result as unanswered", async () => {
+    const questions = [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "a" }] }];
+    const dismissed =
+        "The user dismissed the questions without answering and stopped the turn. STOP what you are doing and wait for them to say how to proceed.";
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "choose" } },
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "ask-1", name: "AskUserQuestion", input: { questions } }] } },
+        { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "ask-1", content: dismissed }] } },
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "ask-2", name: "AskUserQuestion", input: { questions } }] } },
+    ]);
+
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
+
+    const asked = messages.flatMap((message) => (message.question === undefined ? [] : [message.question]));
+    expect(asked.map((question) => question.reply)).toEqual([{ kind: "question", requestId: "ask-1", cancelled: true }, undefined]);
+    // The second call never got its result: its own card stays in progress, the honest state.
+    expect(messages.at(-1)?.tools?.[0]?.status).toBe("in_progress");
+});
+
 /* THE SHAPE THE STORE ACTUALLY WRITES, and the regression this is here for: the SDK files a fresh assistant
  * message around every CONTENT block, so a turn that made three calls between two sentences is stored as three
  * lone tool_use messages with a tool_result message between each pair. Folded per stored message that reopened

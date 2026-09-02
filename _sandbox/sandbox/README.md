@@ -784,6 +784,21 @@ conversation's worktree instead of a path that still reaches the shared checkout
   the weights summing past the ceiling, so no setting of it can downgrade a short vague request. That is also
   why the ledger records the verdict and the ceiling beside the score, a bare 0.35 is standard on one stop and
   fast on the next, and a refit reading the score column alone could not tell those rows apart.
+- **The conversation record is what was on screen, cards included.** `restoredTurn` (src/sessions/turn-transcript.ts)
+  folds a settled turn's frames into the per-conversation record on `/history/transcripts`, and a reopened chat is
+  repainted from that record alone once the run's in-memory frame log is gone (a minute after settle) and the
+  browser's local mirror has been dropped (every web build). Prose, thinking and tool cards were always folded; the
+  interactive cards were not, so a question the user had answered survived exactly as long as the frame log and
+  then vanished from the only durable copy. Every card now records as it was raised, with the reply that released
+  it verbatim (`RestoredMessageSchema`'s card fields carry the `resolved` frame's own payload) and whatever landed
+  on it afterwards (a permission's late sentence, an offer's stream and receipt), and the client freezes a restored
+  card through the same status rule it applies to the live `resolved` frame (`restoredCards` in
+  turnReducer.ts), so the two cannot disagree about what "answered" looks like. A card takes the open bubble and
+  closes it on both sides, which keeps the row counts a fork copies a prefix of in agreement (`recordedRows`
+  mirrors `flush`; both ask the contract's `RESTORED_CARD_FIELDS`). The one provider-shaped recovery, a turn killed
+  mid-flight read back from the SDK's session store, rebuilds the question card from the ask tool's own call and
+  result (`parseAnswers` is `formatAnswers` read backwards, src/agent/question-answers.ts); a plan's text and a
+  permission gate have no stored shape there and stay the record's alone.
 - **`slow` spans live in their own file so that `daemon.log` can be read.** `src/platform/perf.ts` warns one line
   per slow span, which is right, and in a live 3.5 MB `daemon.log` those lines were 5,465 of the warnings against
   six errors in the whole file: a log whose signal could not be found. The per-span lines now go to

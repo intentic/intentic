@@ -286,6 +286,168 @@ export const ToolCallContentSchema = z.discriminatedUnion("type", [
 ]);
 export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 
+/* WHAT A PARKED CARD IS ABOUT: the document the turn wrote and is now asking a question against.
+ *
+ * A card asks for a decision; until this it carried no SUBJECT. The commonest shape of a real decision is "I
+ * analysed this and wrote it up, now choose", and the write-up went into a file whose card had already folded
+ * itself into `Write · +135 −0` twenty tool calls back. So the reader was asked to choose between options
+ * describing a document the chat had never shown them.
+ *
+ * Carried BY VALUE rather than as a path, for the same reason the diff on a tool call is: the bytes are already
+ * in hand when the card is raised, a path would make the card's meaning depend on a file that keeps changing
+ * under it, and a restored or published transcript has no workspace to go read. The path rides along anyway, so
+ * a document past the wire cap still has somewhere to send the reader.
+ *
+ * Nothing is asked of the MODEL for this. It calls `ask` exactly as before; the daemon knows what the turn
+ * wrote, because every write came past it as a frame (documents.ts decides which of them is a document). A
+ * harness that can see the answer must not spend prompt on asking the model to repeat it. */
+export const CardDocumentSchema = z.object({
+    path: z.string().describe("Where it lives, as a workspace path."),
+    title: z.string().describe("What it is called: its opening heading, or its file name."),
+    markdown: z.string().describe("The document itself."),
+    truncated: z.boolean().optional().describe("It was clipped at the wire cap; the file on disk has more."),
+    plan: z.boolean().optional().describe("It is one of the CLI's plan files, written to be approved rather than merely read."),
+});
+export type CardDocument = z.infer<typeof CardDocumentSchema>;
+
+/* ONE CARD'S OWN FIELDS, spelled once. Three readers carry the same card and must agree on what it is: the
+ * frame that raises it (AgentEventSchema below), the journal entry that keeps a parked one across a restart
+ * (ParkedCardSchema), and the record row that keeps it for good (RestoredMessageSchema's card fields). A shape
+ * declared inline in each was three shapes with one name. */
+const REQUEST_ID = z.string().describe("What to send back when you answer.");
+const planCard = {
+    requestId: REQUEST_ID,
+    text: z.string().describe("The plan itself."),
+    // Present when the adjacent plan prose POINTS at a document instead of being one: the model wrote the real
+    // plan to a file and summarised it there. Absent when the text already is the whole plan.
+    document: CardDocumentSchema.optional().describe("The write-up this plan refers to, when the plan itself is a pointer to one."),
+};
+const questionCard = {
+    requestId: REQUEST_ID,
+    questions: z.array(AskQuestionSchema).describe("What it wants to know."),
+    document: CardDocumentSchema.optional().describe("The document this turn wrote and is asking about, so the choice can be read beside it."),
+};
+const permissionCard = { requestId: REQUEST_ID };
+// The agent's browser needs a person: it parked mid-sign-in on something it cannot clear itself (a captcha,
+// a password it does not hold, a phone check). `session` names the browser session on /browsers, the card's
+// one action is going THERE, where the live stage and Take control already are; the Browsers banner and this
+// card resolve the same requestId. `account` is the capability the sign-in is for, so the card can say whose
+// login is stuck even after the browser has navigated somewhere unrecognizable.
+const browserHelpCard = {
+    requestId: z.string(),
+    session: z.string(),
+    account: z.string(),
+    message: z.string(),
+};
+// The agent's TERMINAL needs a person: a command it started is sitting at a prompt it cannot answer (a
+// one-time password, a security-key touch, a confirm). `session` names the tmux session on the terminal
+// panel, the card's one action is going THERE, where the live pane and its prompt already are, which is
+// the same division of labour the browser card has with /browsers.
+const terminalHelpCard = {
+    requestId: z.string(),
+    session: z.string(),
+    message: z.string(),
+};
+const serviceOfferCard = { requestId: z.string(), offer: ServiceOfferSchema };
+const capabilityOfferCard = { requestId: z.string(), offer: CapabilityOfferSchema };
+const paymentOfferCard = { requestId: z.string(), offer: PaymentOfferSchema };
+
+/* HOW AN OFFER'S ACCEPTED HALF ENDED, the follow-up that lands on the card after the click. Each is the body of
+ * the frame that reports it (`service_receipt`, `capability_outcome`, `payment_receipt`) and the field the
+ * record keeps it in, one shape for both, so a receipt reopened tomorrow says exactly what the live card said. */
+export const ServiceReceiptSchema = z.object({
+    outcome: z.enum(["ok", "refunded", "refused"]),
+    credits: z.number(),
+    remaining: z.number().optional(),
+});
+export type ServiceReceipt = z.infer<typeof ServiceReceiptSchema>;
+export const CapabilityOutcomeSchema = z.object({
+    outcome: z.enum(["connected", "unfinished"]),
+    id: z.string().optional(),
+});
+export type CapabilityOutcome = z.infer<typeof CapabilityOutcomeSchema>;
+export const PaymentReceiptSchema = z.object({
+    outcome: z.enum(["paid", "failed"]),
+    amountUsd: z.string(),
+    transaction: z.string().optional(),
+    network: z.string().optional(),
+});
+export type PaymentReceipt = z.infer<typeof PaymentReceiptSchema>;
+
+/* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
+ * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the
+ * very same frames instead of ending the turn `interrupted`, the card the user was about to answer survives
+ * the restart that killed the process holding it. The two handover cards are deliberately not among them:
+ * `browser_help`'s Chromium and `terminal_help`'s waiting command both die with the container, so those parks
+ * cannot be restored, only reported. */
+const PlanCardSchema = z.object({
+    kind: z.literal("plan").describe("The agent has written a plan and is waiting for a yes."),
+    ...planCard,
+});
+const QuestionCardSchema = z.object({
+    kind: z.literal("question").describe("The agent has asked you something and is waiting."),
+    ...questionCard,
+});
+const PermissionCardSchema = PermissionAskSchema.extend({
+    kind: z.literal("permission").describe("The agent wants to use a tool it needs permission for."),
+    ...permissionCard,
+});
+export const ParkedCardSchema = z.discriminatedUnion("kind", [PlanCardSchema, QuestionCardSchema, PermissionCardSchema]);
+export type ParkedCard = z.infer<typeof ParkedCardSchema>;
+
+// ---- restored cards ----
+/* THE CARDS A TURN PARKED ON, as the record keeps them: the card exactly as it was raised, and the reply that
+ * released it exactly as the client sent it (the `resolved` frame's own payload), plus whatever landed on the
+ * card afterwards (a permission's late explanation, an offer's stream and receipt).
+ *
+ * They exist because the record used to keep NONE of this. A question the user answered was on screen for as
+ * long as the turn's frame log lived (minutes) and in the browser's local mirror for as long as that survived
+ * (until the next web build), and then the record repainted the conversation without it: the card, the
+ * questions, and the user's own picks, gone from the only durable copy. The rule the record follows is that a
+ * reopened chat redraws what was on screen, and a decision the user made is the part of a conversation they
+ * come back to re-read.
+ *
+ * The REPLY rides verbatim rather than as a derived status, for the same reason the `resolved` frame carries
+ * it that way: the client already turns a reply into the card's frozen state for the live stream, and a
+ * restored card goes through that one function too, so the two can never disagree about what "answered"
+ * looks like. Absent, nobody answered (the turn was stopped, or died under the card), which is not a decision
+ * and must not replay as one. */
+const settled = {
+    reply: AgentReplySchema.optional().describe(
+        "How it was answered, exactly as the client sent it. Absent when nobody did: the turn was stopped or died under the card, which is not a decision and does not read back as one.",
+    ),
+};
+export const RestoredPlanSchema = z.object({ ...planCard, ...settled });
+export type RestoredPlan = z.infer<typeof RestoredPlanSchema>;
+export const RestoredQuestionSchema = z.object({ ...questionCard, ...settled });
+export type RestoredQuestion = z.infer<typeof RestoredQuestionSchema>;
+// `explain`, the quick model's late sentence (the `permission_note` frame), lands here through PermissionAskSchema.
+export const RestoredPermissionSchema = PermissionAskSchema.extend({ ...permissionCard, ...settled });
+export type RestoredPermission = z.infer<typeof RestoredPermissionSchema>;
+export const RestoredBrowserHelpSchema = z.object({ ...browserHelpCard, ...settled });
+export type RestoredBrowserHelp = z.infer<typeof RestoredBrowserHelpSchema>;
+export const RestoredTerminalHelpSchema = z.object({ ...terminalHelpCard, ...settled });
+export type RestoredTerminalHelp = z.infer<typeof RestoredTerminalHelpSchema>;
+export const RestoredServiceOfferSchema = z.object({
+    ...serviceOfferCard,
+    ...settled,
+    events: z.array(ServiceStreamEventSchema).optional().describe("The approved run's stream, in order (the service_event frames)."),
+    receipt: ServiceReceiptSchema.optional().describe("How the approved run ended (the service_receipt frame)."),
+});
+export type RestoredServiceOffer = z.infer<typeof RestoredServiceOfferSchema>;
+export const RestoredCapabilityOfferSchema = z.object({
+    ...capabilityOfferCard,
+    ...settled,
+    outcome: CapabilityOutcomeSchema.optional().describe("How an accepted ask's setup ended (the capability_outcome frame)."),
+});
+export type RestoredCapabilityOffer = z.infer<typeof RestoredCapabilityOfferSchema>;
+export const RestoredPaymentOfferSchema = z.object({
+    ...paymentOfferCard,
+    ...settled,
+    receipt: PaymentReceiptSchema.optional().describe("How the approved payment ended (the payment_receipt frame)."),
+});
+export type RestoredPaymentOffer = z.infer<typeof RestoredPaymentOfferSchema>;
+
 // ---- restored transcripts ----
 // What /sessions/{id} replays into a reopened tab, and what the daemon's own conversation record stores. It has
 // to REDRAW the transcript the user was looking at rather than merely paraphrase it, so it keeps the assistant's
@@ -427,8 +589,41 @@ export const RestoredMessageSchema = z.object({
         .enum(["tierHold"])
         .optional()
         .describe("A one-press follow-up this recorded notice offers, by name. The chat decides what it does and whether it still applies."),
+    /* THE CARD THIS BUBBLE PARKED ON (assistant rows only), at most one: a card closes the bubble it lands in,
+     * live (turnReducer nulls the turn's bubble) and in the fold alike (sessions/turn-transcript.ts), so the
+     * next thing the agent says opens a fresh row beneath it. One field per kind rather than one union field,
+     * because that is the shape the live ChatMessage has and a restored row is meant to be indistinguishable
+     * from the one it replaces. See the restored-cards section above for why these exist at all. */
+    plan: RestoredPlanSchema.optional().describe("The plan this row asked approval for, and the answer."),
+    question: RestoredQuestionSchema.optional().describe("The questions this row asked, and the picks that answered them."),
+    permission: RestoredPermissionSchema.optional().describe("The tool this row asked permission for, and the decision."),
+    browserHelp: RestoredBrowserHelpSchema.optional().describe("The browser hand-over this row asked for, and how it ended."),
+    terminalHelp: RestoredTerminalHelpSchema.optional().describe("The terminal hand-over this row asked for, and how it ended."),
+    serviceOffer: RestoredServiceOfferSchema.optional().describe("The priced service run this row offered, the decision, and the receipt."),
+    capabilityOffer: RestoredCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
+    paymentOffer: RestoredPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
 });
 export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
+
+/* THE CARD FIELDS A ROW CAN CARRY, as one list, for every reader that has to ask "does this row hold a card":
+ * the fold that counts a card-only bubble as a row (sessions/turn-transcript.ts), the client's own row count
+ * (recordedRows), which must agree with it to the row or a branch is cut in the wrong place, and the client's
+ * restore, which turns each into its live card. The live ChatMessage names its cards exactly this way, so the
+ * list is the same list on both sides rather than two that have to be kept in step. */
+export const RESTORED_CARD_FIELDS = [
+    "plan",
+    "question",
+    "permission",
+    "browserHelp",
+    "terminalHelp",
+    "serviceOffer",
+    "capabilityOffer",
+    "paymentOffer",
+] as const;
+export type RestoredCardField = (typeof RESTORED_CARD_FIELDS)[number];
+export type RestoredCards = Pick<RestoredMessage, RestoredCardField>;
+// Whether a row holds a card at all, the question the row counts on both sides ask.
+export const holdsCard = (message: RestoredCards): boolean => RESTORED_CARD_FIELDS.some((field) => message[field] !== undefined);
 
 export const SessionTranscriptSchema = z.object({
     messages: z
@@ -476,57 +671,6 @@ export const SharePayloadSchema = z.object({
     messages: z.array(RestoredMessageSchema),
 });
 export type SharePayload = z.infer<typeof SharePayloadSchema>;
-
-/* WHAT A PARKED CARD IS ABOUT: the document the turn wrote and is now asking a question against.
- *
- * A card asks for a decision; until this it carried no SUBJECT. The commonest shape of a real decision is "I
- * analysed this and wrote it up, now choose", and the write-up went into a file whose card had already folded
- * itself into `Write · +135 −0` twenty tool calls back. So the reader was asked to choose between options
- * describing a document the chat had never shown them.
- *
- * Carried BY VALUE rather than as a path, for the same reason the diff on a tool call is: the bytes are already
- * in hand when the card is raised, a path would make the card's meaning depend on a file that keeps changing
- * under it, and a restored or published transcript has no workspace to go read. The path rides along anyway, so
- * a document past the wire cap still has somewhere to send the reader.
- *
- * Nothing is asked of the MODEL for this. It calls `ask` exactly as before; the daemon knows what the turn
- * wrote, because every write came past it as a frame (documents.ts decides which of them is a document). A
- * harness that can see the answer must not spend prompt on asking the model to repeat it. */
-export const CardDocumentSchema = z.object({
-    path: z.string().describe("Where it lives, as a workspace path."),
-    title: z.string().describe("What it is called: its opening heading, or its file name."),
-    markdown: z.string().describe("The document itself."),
-    truncated: z.boolean().optional().describe("It was clipped at the wire cap; the file on disk has more."),
-    plan: z.boolean().optional().describe("It is one of the CLI's plan files, written to be approved rather than merely read."),
-});
-export type CardDocument = z.infer<typeof CardDocumentSchema>;
-
-/* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
- * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the
- * very same frames instead of ending the turn `interrupted`, the card the user was about to answer survives
- * the restart that killed the process holding it. The two handover cards are deliberately not among them:
- * `browser_help`'s Chromium and `terminal_help`'s waiting command both die with the container, so those parks
- * cannot be restored, only reported. */
-const PlanCardSchema = z.object({
-    kind: z.literal("plan").describe("The agent has written a plan and is waiting for a yes."),
-    requestId: z.string().describe("What to send back when you answer."),
-    text: z.string().describe("The plan itself."),
-    // Present when the adjacent plan prose POINTS at a document instead of being one: the model wrote the real
-    // plan to a file and summarised it there. Absent when the text already is the whole plan.
-    document: CardDocumentSchema.optional().describe("The write-up this plan refers to, when the plan itself is a pointer to one."),
-});
-const QuestionCardSchema = z.object({
-    kind: z.literal("question").describe("The agent has asked you something and is waiting."),
-    requestId: z.string().describe("What to send back when you answer."),
-    questions: z.array(AskQuestionSchema).describe("What it wants to know."),
-    document: CardDocumentSchema.optional().describe("The document this turn wrote and is asking about, so the choice can be read beside it."),
-});
-const PermissionCardSchema = PermissionAskSchema.extend({
-    kind: z.literal("permission").describe("The agent wants to use a tool it needs permission for."),
-    requestId: z.string().describe("What to send back when you answer."),
-});
-export const ParkedCardSchema = z.discriminatedUnion("kind", [PlanCardSchema, QuestionCardSchema, PermissionCardSchema]);
-export type ParkedCard = z.infer<typeof ParkedCardSchema>;
 
 // One frame from an agent turn, relayed to the UI. `kind`-discriminated. The daemon normalizes the SDK's
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
@@ -843,35 +987,18 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     PlanCardSchema,
     QuestionCardSchema,
     PermissionCardSchema,
-    // The agent's browser needs a person: it parked mid-sign-in on something it cannot clear itself (a captcha,
-    // a password it does not hold, a phone check). `session` names the browser session on /browsers, the card's
-    // one action is going THERE, where the live stage and Take control already are; the Browsers banner and this
-    // card resolve the same requestId. `account` is the capability the sign-in is for, so the card can say whose
-    // login is stuck even after the browser has navigated somewhere unrecognizable.
-    z.object({
-        kind: z.literal("browser_help"),
-        requestId: z.string(),
-        session: z.string(),
-        account: z.string(),
-        message: z.string(),
-    }),
-    // The agent's TERMINAL needs a person: a command it started is sitting at a prompt it cannot answer (a
-    // one-time password, a security-key touch, a confirm). `session` names the tmux session on the terminal
-    // panel, the card's one action is going THERE, where the live pane and its prompt already are, which is
-    // the same division of labour the browser card has with /browsers. Not journalled for restore, and for the
+    // The agent's browser needs a person (see browserHelpCard for what the card carries). Not journalled for
+    // restore: the Chromium holding the page dies with the container.
+    z.object({ kind: z.literal("browser_help"), ...browserHelpCard }),
+    // The agent's TERMINAL needs a person (see terminalHelpCard). Not journalled for restore, and for the
     // browser card's reason one door along: the pane holding the prompt belongs to a process the restart kills.
-    z.object({
-        kind: z.literal("terminal_help"),
-        requestId: z.string(),
-        session: z.string(),
-        message: z.string(),
-    }),
+    z.object({ kind: z.literal("terminal_help"), ...terminalHelpCard }),
     /* A premium service run awaiting the owner's click. Raised OUTSIDE the turn generator, the daemon's
      * services route parks the agent's own `services run` call and pushes this frame into the live run
      * (platform/service-offer.ts), so unlike the four cards above it is not journalled for restore: its
      * waiter is the CLI's held connection, which dies with the daemon, and a restored card would offer
      * buttons nothing is waiting behind. Settles through the same `POST /agent/reply` as every other card. */
-    z.object({ kind: z.literal("service_offer"), requestId: z.string(), offer: ServiceOfferSchema }),
+    z.object({ kind: z.literal("service_offer"), ...serviceOfferCard }),
     /* One event off an approved run's stream, pushed as the provider emits it so the settled card shows the
      * run living rather than a spinner of unknowable length. Today that is `status` lines; `result` stays off
      * the transcript on purpose (it is the agent's answer to act on, not the card's to duplicate), the frame
@@ -881,49 +1008,31 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * rather than a promise: `ok` served and charged, `refunded` failed to answer and charged nothing,
      * `refused` the platform said no after the click (a raced-out allowance). `remaining` is the meter after,
      * when the platform stated one. Skip needs no receipt, nothing happened, and `resolved` already says so. */
-    z.object({
-        kind: z.literal("service_receipt"),
-        requestId: z.string(),
-        outcome: z.enum(["ok", "refunded", "refused"]),
-        credits: z.number(),
-        remaining: z.number().optional(),
-    }),
+    ServiceReceiptSchema.extend({ kind: z.literal("service_receipt"), requestId: z.string() }),
     /* A missing capability asking for the owner's setup, the agent hit something this sandbox is not
      * connected to and raised the card instead of describing manual steps. Raised OUTSIDE the turn generator
      * exactly like the service offer above (the daemon's ask route parks the agent's `capabilities request`
      * call and pushes this frame into the live run; capabilities/capability-offer.ts), so it is not
      * journalled for restore either: its waiter is the CLI's held connection, which dies with the daemon.
      * Settles through the same `POST /agent/reply` as every other card. */
-    z.object({ kind: z.literal("capability_offer"), requestId: z.string(), offer: CapabilityOfferSchema }),
+    z.object({ kind: z.literal("capability_offer"), ...capabilityOfferCard }),
     /* How an accepted ask ended, pushed once the daemon stops watching for the connection: `connected`, the
      * capability came live while the agent waited (`id` is the connected instance, the agent's handle for it)
      *, or `unfinished`, the setup did not complete while anyone was waiting (the deadline passed, or the
      * asking command died). A skip needs no outcome frame, nothing was set up, and `resolved` already says
      * so. It is what settles the card's "waiting for you to finish setup" state on every surface. */
-    z.object({
-        kind: z.literal("capability_outcome"),
-        requestId: z.string(),
-        outcome: z.enum(["connected", "unfinished"]),
-        id: z.string().optional(),
-    }),
+    CapabilityOutcomeSchema.extend({ kind: z.literal("capability_outcome"), requestId: z.string() }),
     /* A USDC payment awaiting the owner's click. Raised OUTSIDE the turn generator exactly like the service
      * offer above (the daemon's wallet route parks the agent's `wallet fetch` call and pushes this frame into
      * the live run; wallet/payment-offer.ts), so it is not journalled for restore either: its waiter is the
      * CLI's held connection, which dies with the daemon. Settles through the same `POST /agent/reply`. */
-    z.object({ kind: z.literal("payment_offer"), requestId: z.string(), offer: PaymentOfferSchema }),
+    z.object({ kind: z.literal("payment_offer"), ...paymentOfferCard }),
     /* How an approved (or auto-approved) payment ended, pushed after the endpoint answered so the card can
      * settle as a receipt rather than a promise: `paid`, the endpoint confirmed settlement (`transaction` is
      * the onchain hash when it stated one); `failed`, the payment was refused or settlement failed, in which
      * case the signed authorization expires unused and NOTHING left the wallet. A skip needs no receipt,
      * nothing moved, and `resolved` already says so. */
-    z.object({
-        kind: z.literal("payment_receipt"),
-        requestId: z.string(),
-        outcome: z.enum(["paid", "failed"]),
-        amountUsd: z.string(),
-        transaction: z.string().optional(),
-        network: z.string().optional(),
-    }),
+    PaymentReceiptSchema.extend({ kind: z.literal("payment_receipt"), requestId: z.string() }),
     // The card above named by `requestId` is released, the user answered (or dismissed it, or the turn was
     // stopped out from under it), so the turn is executing again. Emitted by whoever parked, the moment its
     // waiter settles, because the park's END is otherwise invisible on this stream: nothing else here says
