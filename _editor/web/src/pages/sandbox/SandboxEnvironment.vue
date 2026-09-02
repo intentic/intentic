@@ -3,10 +3,9 @@ import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
-import ArrivalCard from "./ArrivalCard.vue";
 import EnginesCard from "./EnginesCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
-import MoveOutCard from "./MoveOutCard.vue";
+import MoveCard from "./MoveCard.vue";
 
 /* The Sandbox hub's "Environment" tab, and it answers two questions in that order: WHAT THIS SANDBOX IS
  * (the composed overlay Dockerfile, agent-proposed and owner-approved; the engines that run its turns), and
@@ -19,13 +18,13 @@ import MoveOutCard from "./MoveOutCard.vue";
  * the three held BOTH directions at once, so every card asked its reader to keep in and out straight while
  * reading it.
  *
- * They are split by DIRECTION now, which is the axis the owner actually has in mind: everything that leaves is
- * MoveOutCard, everything that arrives is ArrivalCard, and the artifact is a choice inside each rather than a
- * card of its own. The two are neighbours because they are the two halves of one job.
+ * Splitting them by DIRECTION fixed the axis, and then two direction cards turned out to be one card: out and
+ * in are halves of a single subject, not two subjects, so they share a surface and a heading in MoveCard. The
+ * artifact is a choice inside each half rather than a card of its own.
  *
- * The overlay card sits above both because a bundle's last step IS the rebuild it hands you: the overlay
- * travels as a recipe and the image it describes does not. EnvironmentCard self-hides until there's an overlay
- * or a proposal, so this tab adds the empty-state for a sandbox that has neither yet. */
+ * The overlay card sits above it because a bundle's last step IS the rebuild it hands you: the overlay travels
+ * as a recipe and the image it describes does not. EnvironmentCard self-hides until there's an overlay or a
+ * proposal, so this tab adds the empty-state for a sandbox that has neither yet. */
 
 const { proposal, pending, applied, query } = useEnvironment();
 const empty = computed(() => !proposal.value && !pending.value && !applied.value);
@@ -64,9 +63,9 @@ const outline = useSandboxOutline(reading);
              Code am I on" is worth an answer before anything has gone wrong. -->
         <EnginesCard />
 
-        <!-- OUT, then IN. Out first because it is the one an owner reaches for while still holding this
-             sandbox; in is what they do on the far side, usually in a different browser on a different day. -->
-        <MoveOutCard />
-        <ArrivalCard />
+        <!-- One card, both directions. Out is drawn first inside it because it is the one an owner reaches for
+             while still holding this sandbox; in is what they do on the far side, usually in a different
+             browser on a different day. -->
+        <MoveCard />
     </div>
 </template>

@@ -315,8 +315,14 @@ around them:
 - **`POST /migrations/plan` became `POST /arrivals/plan`**, and it no longer needs to know the format: two
   bytes say gzip or not, and a gzip's first tar entry says bundle or foreign home. Whoever is uploading
   already knew what they had; asking them to pick a route for it was work with nothing on the other side.
-- **The card merged** into one "Bring a sandbox in", beside one "Take this sandbox elsewhere". The tab is
-  split by DIRECTION now instead of by artifact, which is the axis the owner actually has in mind.
+- **The card merged** into one inbound half, beside one outbound half, split by DIRECTION instead of by
+  artifact — the axis the owner actually has in mind. Both halves then merged again onto a single "Move this
+  sandbox" card, because out and in are two halves of one job rather than two subjects, and the bundle one end
+  exports is the bundle the other end brings in.
+- **The export's secrets switch moved behind the Export button.** It used to stand on the card as a toggle,
+  which reads as a setting and is not one: it is one argument to one POST that nothing remembers between
+  clicks. It is now a dialog raised by the button, starting locked on every open, so both directions ask for
+  credentials the same way — at the moment of the commit, never beside it.
 
 Nothing in §5–§9 was reversed by this. The bounded reader, the in-memory hold (a foreign home is a credential
 store and still never touches disk — only a bundle spools, because a bundle can be tens of gigabytes), the
