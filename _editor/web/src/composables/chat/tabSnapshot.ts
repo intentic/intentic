@@ -1,6 +1,7 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { Conversation } from "./conversation";
 import type { PickUp, PickUpReason } from "./pickUp";
+import type { TurnPick } from "./turnDefaults";
 import type { SessionRef } from "./turnRequest";
 import { forgetWindowState, readWindowState, writeWindowState } from "../windowStore";
 
@@ -30,6 +31,12 @@ export interface StoredTab {
     readonly registered: boolean;
     // The tab's turn selection; the session's provider may differ while a switch is picked but not yet sent.
     readonly provider?: AgentProvider;
+    /* The pick the APP moved this tab off because it could not send (Conversation.movedFrom), absent for every
+     * tab that is where it was put. Persisted because the displacement outlives the window that made it: a chat
+     * pushed onto the free trial while a Google sign-in was redirecting comes back from that redirect still on
+     * the trial, and the fact that it is standing somewhere it did not choose is the only thing that can move it
+     * back once the account lands. */
+    readonly movedFrom?: TurnPick;
     // The tab's harness selection (native vs the Claude Code loop); absent ⇒ the current default on restore.
     readonly harness?: AgentHarness;
     // Which of the provider's accounts this tab's next turn runs on. Per TAB, not merely per provider: the
@@ -112,6 +119,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     box: conversation.box.value,
     registered: conversation.registered.value,
     provider: conversation.provider.value,
+    movedFrom: conversation.movedFrom.value,
     account: conversation.account.value,
     model: conversation.model.value,
     effort: conversation.effortPick.value,
@@ -171,6 +179,26 @@ const readText = <K extends string>(key: K, raw: unknown): { [P in K]?: string }
 const readStamp = <K extends string>(key: K, raw: unknown): { [P in K]?: number } =>
     typeof raw === `number` && Number.isFinite(raw) ? ({ [key]: raw } as { [P in K]?: number }) : {};
 
+// The same, for one PROVIDER id, on validProvider's terms.
+const readProvider = <K extends string>(key: K, raw: unknown): { [P in K]?: AgentProvider } =>
+    validProvider(raw) ? ({ [key]: raw } as { [P in K]?: AgentProvider }) : {};
+
+// The displaced pick, read back whole or not at all, like the session and the fork: half of a pair whose two
+// halves are meaningless apart would name a route nothing can take. An EMPTY model id is a real one (an ACP
+// agent brings its own model), so only its type is checked.
+const readMovedFrom = (raw: unknown): { movedFrom?: TurnPick } => {
+    const pick = (typeof raw === `object` && raw !== null ? raw : {}) as Record<string, unknown>;
+    const provider = pick[`provider`];
+    const value = pick[`value`];
+    return validProvider(provider) && typeof value === `string` ? { movedFrom: { provider, value } } : {};
+};
+
+// The same, for one stored FLAG. Absent rather than false when the blob says nothing: every one of these has a
+// restore default of its own, and reading "not stored" as "off" would turn a tab that predates a toggle into
+// one the user had switched off.
+const readFlag = <K extends string>(key: K, raw: unknown): { [P in K]?: boolean } =>
+    typeof raw === `boolean` ? ({ [key]: raw } as { [P in K]?: boolean }) : {};
+
 const PICK_UP_REASONS: readonly PickUpReason[] = [`stopped`, `limit`, `outage`];
 
 /* The stopped turn, read back. `readyAt` survives because it is the whole value of persisting this: an
@@ -214,33 +242,44 @@ const readSession = (raw: unknown): { session?: SessionRef } => {
     };
 };
 
+/* The fork linkage, read back WHOLE or not at all: a partial one would make the first send name a source the
+ * daemon then copies the wrong prefix of, which is worse than the fresh start losing it means. Its own function
+ * beside readPickUp and readSession, the two other read-it-whole fields, rather than eight conditions inlined in
+ * the middle of readTab, which is where it used to sit and what made that function unreadable. */
+// Where the cut fell: a whole, non-negative count of recorded rows, or nothing.
+const readCut = (raw: unknown): number | undefined => (typeof raw === `number` && Number.isInteger(raw) && raw >= 0 ? raw : undefined);
+// ...and which files the fork opens over.
+const readFiles = (raw: unknown): "then" | "now" | undefined => (raw === `then` || raw === `now` ? raw : undefined);
+
+const readFork = (raw: unknown): { forkOf?: StoredTab["forkOf"] } => {
+    const fork = (typeof raw === `object` && raw !== null ? raw : {}) as Record<string, unknown>;
+    const conversationId = fork[`conversationId`];
+    const keep = readCut(fork[`keep`]);
+    const files = readFiles(fork[`files`]);
+    if (typeof conversationId !== `string` || conversationId === `` || keep === undefined || files === undefined) {
+        return {};
+    }
+    return { forkOf: { conversationId, keep, files } };
+};
+
+// The two small closed vocabularies, each read back only as one of its own members: anything else is an older
+// build's word, or a hand-edited blob, and the restore's own default is the right answer for both.
+const readTier = (raw: unknown): { tier?: "fast" | "standard" } => (raw === `fast` || raw === `standard` ? { tier: raw } : {});
+const readHarness = (raw: unknown): { harness?: AgentHarness } => (raw === `claude-code` || raw === `native` ? { harness: raw } : {});
+
 // One entry, or undefined when it carries no usable identity or draft. Skipped rather than fatal: a single
 // unreadable tab must not cost the user every other chat they had open.
 const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
     if (typeof raw[`conversationId`] !== `string` || raw[`conversationId`] === `` || typeof raw[`draft`] !== `string`) {
         return undefined;
     }
-    // The fork linkage, read back whole or not at all: a partial one would make the first send name a source
-    // the daemon then copies the wrong prefix of, which is worse than the fresh start losing it means.
-    const fork = raw[`forkOf`] as Record<string, unknown> | null | undefined;
-    const validForkOf =
-        typeof fork === `object` &&
-        fork !== null &&
-        typeof fork[`conversationId`] === `string` &&
-        fork[`conversationId`] !== `` &&
-        typeof fork[`keep`] === `number` &&
-        Number.isInteger(fork[`keep`]) &&
-        (fork[`keep`] as number) >= 0 &&
-        (fork[`files`] === `then` || fork[`files`] === `now`)
-            ? { conversationId: fork[`conversationId`] as string, keep: fork[`keep`] as number, files: fork[`files`] as `then` | `now` }
-            : undefined;
     return {
         conversationId: raw[`conversationId`],
         // A tab that names no tree runs in its own worktree, the default a fresh one gets.
         isolated: raw[`isolated`] !== false,
-        // ...and one that names no sandbox lives in the box this browser is pointed at, which is what every
-        // tab stored before this feature existed means, and what almost every tab stored since means too.
-        ...(typeof raw[`box`] === `string` && raw[`box`] !== `` ? { box: raw[`box`] as string } : {}),
+        // ...and one that names no sandbox lives in the box this browser is pointed at, which is what almost
+        // every tab means.
+        ...readText(`box`, raw[`box`]),
         // ...and one that doesn't say the fleet knows it is a draft until a roster frame says otherwise.
         registered: raw[`registered`] === true,
         draft: raw[`draft`],
@@ -248,21 +287,23 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         queued: (Array.isArray(raw[`queued`]) ? (raw[`queued`] as Record<string, unknown>[]) : [])
             .filter((entry) => typeof entry[`text`] === `string`)
             .map((entry) => ({ text: entry[`text`] as string, attachments: readAttachments(entry[`attachments`]) })),
-        ...(validProvider(raw[`provider`]) ? { provider: raw[`provider`] } : {}),
+        ...readProvider(`provider`, raw[`provider`]),
+        ...readMovedFrom(raw[`movedFrom`]),
         ...readText(`account`, raw[`account`]),
         ...readText(`model`, raw[`model`]),
         ...readText(`effort`, raw[`effort`]),
         ...readText(`actsAs`, raw[`actsAs`]),
-        ...(typeof raw[`thinking`] === `boolean` ? { thinking: raw[`thinking`] } : {}),
-        ...(typeof raw[`fast`] === `boolean` ? { fast: raw[`fast`] } : {}),
-        ...(typeof raw[`autoContinue`] === `boolean` ? { autoContinue: raw[`autoContinue`] } : {}),
+        ...readFlag(`thinking`, raw[`thinking`]),
+        ...readFlag(`fast`, raw[`fast`]),
+        ...readFlag(`autoContinue`, raw[`autoContinue`]),
+        ...readFlag(`tierHold`, raw[`tierHold`]),
         ...readPickUp(raw[`pickUp`]),
-        ...(typeof raw[`tierHold`] === `boolean` ? { tierHold: raw[`tierHold`] } : {}),
-        ...(raw[`tier`] === `fast` || raw[`tier`] === `standard` ? { tier: raw[`tier`] as `fast` | `standard` } : {}),
-        ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),
+        ...readTier(raw[`tier`]),
+        ...readHarness(raw[`harness`]),
         ...readSession(raw[`session`]),
-        ...(validForkOf !== undefined ? { forkOf: validForkOf } : {}),
-        ...(typeof raw[`title`] === `string` ? { title: raw[`title`] } : {}),
+        ...readFork(raw[`forkOf`]),
+        // An empty title is not a title: it comes back absent, which is the `null` a tab nobody has named holds.
+        ...readText(`title`, raw[`title`]),
         ...readStamp(`draftAt`, raw[`draftAt`]),
     };
 };

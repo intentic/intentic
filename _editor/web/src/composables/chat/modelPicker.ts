@@ -10,6 +10,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor, providerGroup, providerGroupLabel } from "./providerCatalog";
+import type { TurnPick } from "./turnDefaults";
 
 /* The unified model-picker list: every provider's models flattened into one searchable entry set. Pure
  * derivation over the live catalogs (conversation.ts), the picker component owns only its transient UI state
@@ -25,11 +26,11 @@ import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor, pro
  * model-order.ts, one rule the daemon's catalogs and this picker share, and catalog order survives only as the
  * tiebreak between ids that rule cannot separate. */
 
-export interface PickerEntry {
+// A picker row IS a pick (TurnPick: provider + model id) with the words to draw it, which is why picking one is
+// `selectModel(entry)` and not a re-assembly of its fields into some other shape.
+export interface PickerEntry extends TurnPick {
     // `${provider}:${value}`, the model id is unique within a provider's (harness-independent) catalog.
     readonly key: string;
-    readonly provider: AgentProvider;
-    readonly value: string;
     readonly label: string;
     readonly description?: string;
     readonly badges?: readonly ModelBadge[];
@@ -54,12 +55,6 @@ export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...endpointProviders.value.flatMap((endpoint) => modelOptionsFor(endpoint.id).map((option) => entryFor(endpoint.id, option))),
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
-
-// What the app CALLS a (provider, model) pair, the catalog's own published label, falling back to the raw id
-// for a model no catalog offers (a custom id the user typed, a row that has aged out). Every surface that shows
-// a chosen model without showing the list reads it from here, so the chip and the row it came from agree.
-export const modelLabelFor = (provider: AgentProvider, model: string): string =>
-    pickerEntries.value.find((entry) => entry.provider === provider && entry.value === model)?.label ?? model;
 
 // Lowercase and strip separators on both sides, so "gpt5" matches "GPT-5" and "45" matches "4.5".
 const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);

@@ -1689,3 +1689,206 @@ describe(`forking at a cut`, () => {
         expect(chat.conversations.value).toHaveLength(2);
     });
 });
+
+/* THE UNSENT BOARD: several drafts standing on the /agents board, each prepared with its own message and its
+ * own model. Picking a model in one of them is a statement about that one chat, and about what the NEXT new
+ * chat should open on — never about the other drafts already standing. */
+describe(`unsent drafts keep their own picks`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    const bothConnected = (): void => {
+        mockConnections({
+            accounts: (path) =>
+                path.startsWith(`/claude`) || path.startsWith(`/cursor`) ? [{ id: `a-${path.slice(1, 7)}`, label: `Personal`, connectedAt: 0 }] : [],
+        });
+    };
+
+    it(`leaves the other drafts alone when one of them picks a different model`, async () => {
+        bothConnected();
+        const chat = useChat();
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+
+        const first = chat.active.value;
+        first.draft.value = `first task`;
+        first.selectModel({ provider: `cursor`, value: `composer-2.5` });
+
+        const second = newChat();
+        second.draft.value = `second task`;
+        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        await nextTick();
+
+        expect([first.provider.value, first.model.value]).toEqual([`cursor`, `composer-2.5`]);
+
+        // A routine connection refresh (they run on a timer) must not drag the first draft onto the last pick.
+        await refreshConnections(true);
+        await nextTick();
+        expect([first.provider.value, first.model.value]).toEqual([`cursor`, `composer-2.5`]);
+    });
+
+    it(`gives every draft its own pick back after a reload`, async () => {
+        bothConnected();
+        const chat = useChat();
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+
+        chat.active.value.draft.value = `first task`;
+        chat.active.value.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        const second = newChat();
+        second.draft.value = `second task`;
+        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        await nextTick();
+
+        resetChat(); // the same restore path as a page refresh
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+
+        expect(chat.conversations.value.map((tab) => [tab.provider.value, tab.model.value])).toEqual([
+            [`cursor`, `composer-2.5`],
+            [`claude`, `claude-opus-5`],
+        ]);
+    });
+
+    /* THE PICK THAT KEEPS THE PROVIDER IS STILL A PICK. It is the ordinary one, too: going back to a draft that
+     * already sits on Cursor and choosing a different Cursor model. The provider pointer used to be written only
+     * by a pick that MOVED the chat, so this recorded the model under Cursor and left the pointer on whatever
+     * provider some other tab was last switched to, and the next New agent opened on that provider showing a
+     * model the user had never chosen. */
+    it(`opens a new agent on the last model picked, even when that pick kept the provider`, async () => {
+        bothConnected();
+        const chat = useChat();
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+
+        const prepared = chat.active.value;
+        prepared.draft.value = `first task`;
+        prepared.selectModel({ provider: `cursor`, value: `composer-2.5` });
+
+        // A second draft, switched to Claude: this is what leaves the remembered provider pointing elsewhere.
+        const second = newChat();
+        second.draft.value = `second task`;
+        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+
+        // Back to the first draft, and a different CURSOR model chosen in it.
+        chat.setActive(prepared.conversationId);
+        prepared.selectModel({ provider: `cursor`, value: `composer-2.5-fast` });
+        await nextTick();
+
+        const fresh = new Conversation();
+        expect([fresh.provider.value, fresh.model.value]).toEqual([`cursor`, `composer-2.5-fast`]);
+    });
+
+    /* THE FALLBACK STILL COMES BACK, which is what the drag above was standing in for: a chat the APP moved off
+     * a provider it could not reach returns to that provider the moment it can — to its OWN, not to whatever was
+     * picked most recently somewhere else, and without disturbing the drafts beside it. */
+    it(`returns only the chat the app moved, and only to the provider it was moved off`, async () => {
+        const chat = useChat();
+        const stranded = chat.active.value;
+        stranded.draft.value = `written while Claude was down`;
+        stranded.selectModel({ provider: `claude`, value: `claude-opus-5` });
+
+        const beside = newChat();
+        beside.draft.value = `prepared on Cursor`;
+        beside.selectModel({ provider: `cursor`, value: `composer-2.5` });
+
+        // Only Cursor answers: the Claude draft cannot send, so the app parks it there.
+        mockConnections({ accounts: (path) => (path.startsWith(`/cursor`) ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+        expect(stranded.provider.value).toBe(`cursor`);
+        expect([beside.provider.value, beside.model.value]).toEqual([`cursor`, `composer-2.5`]);
+
+        // Claude comes back. The chat that was moved goes home, on the model it was moved off; the one that was
+        // deliberately prepared on Cursor stays exactly where the user put it.
+        bothConnected();
+        await refreshConnections(true);
+        await nextTick();
+        expect([stranded.provider.value, stranded.model.value]).toEqual([`claude`, `claude-opus-5`]);
+        expect([beside.provider.value, beside.model.value]).toEqual([`cursor`, `composer-2.5`]);
+    });
+
+    /* NEW AGENT OPENS ON THE LATEST PICK EVEN WHEN IT OPENS NOTHING. A second press must not mint a twin of an
+     * empty draft, so the one already open is handed back — carrying the picks that were remembered when it
+     * happened to be created, which after any pick made since is a model the user never chose sitting under a
+     * heading that says "New agent". Untouched, it is re-seeded, so what comes back is the chat a fresh one
+     * would have been. */
+    it(`re-seeds the empty draft New agent hands back, so it opens on the latest pick`, async () => {
+        bothConnected();
+        const chat = useChat();
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+
+        const prepared = chat.active.value;
+        prepared.draft.value = `first task`;
+        prepared.selectModel({ provider: `claude`, value: `claude-opus-5` });
+
+        // The empty draft the strip keeps, minted while Claude was the remembered pick.
+        const empty = newChat();
+        expect([empty.provider.value, empty.model.value]).toEqual([`claude`, `claude-opus-5`]);
+
+        // A pick made since, in the OTHER chat (the focus stays on the empty draft, which would otherwise be
+        // swept: the strip keeps at most one untouched draft, and only as the focused tab).
+        prepared.selectModel({ provider: `cursor`, value: `composer-2.5` });
+
+        const started = draftConversation();
+        expect(started.conversationId).toBe(empty.conversationId);
+        expect([started.provider.value, started.model.value]).toEqual([`cursor`, `composer-2.5`]);
+    });
+
+    /* ...AND EACH GOES BACK TO ITS OWN MODEL. Two drafts on two Claude models, both parked on Cursor by one
+     * outage: the return used to re-read the provider's remembered model, so both came back on whichever had
+     * been picked most recently. What was displaced is what is owed back. */
+    it(`gives each displaced draft back the model it was moved off, not the provider's latest`, async () => {
+        const chat = useChat();
+        const opus = chat.active.value;
+        opus.draft.value = `the opus task`;
+        opus.selectModel({ provider: `claude`, value: `claude-opus-5` });
+
+        const sonnet = newChat();
+        sonnet.draft.value = `the sonnet task`;
+        sonnet.selectModel({ provider: `claude`, value: `claude-sonnet-4-5-20250929` });
+
+        mockConnections({ accounts: (path) => (path.startsWith(`/cursor`) ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+        expect([opus.provider.value, sonnet.provider.value]).toEqual([`cursor`, `cursor`]);
+
+        bothConnected();
+        await refreshConnections(true);
+        await nextTick();
+        expect(opus.model.value).toBe(`claude-opus-5`);
+        expect(sonnet.model.value).toBe(`claude-sonnet-4-5-20250929`);
+    });
+
+    /* A chat can be BORN on a substitute: a new chat opened while the remembered provider is down is seeded with
+     * one that can send (rememberedProviderFor resolves the pick without writing over it). That is the same
+     * displacement the pass above makes, noticed a moment earlier, so it is owed the same return. */
+    it(`returns a chat that OPENED on a substitute once its own provider is back`, async () => {
+        const chat = useChat();
+        chat.active.value.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        mockConnections({ accounts: (path) => (path.startsWith(`/cursor`) ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
+        await loadAccountStatus();
+        endpointsLoaded.value = true;
+        await nextTick();
+
+        // Opened during the outage: Claude is the pick, Cursor is what can answer.
+        const born = newChat();
+        born.draft.value = `written during the outage`;
+        expect(born.provider.value).toBe(`cursor`);
+
+        bothConnected();
+        await refreshConnections(true);
+        await nextTick();
+        expect([born.provider.value, born.model.value]).toEqual([`claude`, `claude-opus-5`]);
+    });
+});

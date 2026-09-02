@@ -305,6 +305,47 @@ describe("draft cards", () => {
         ]);
     });
 
+    /* WHAT A PREPARED DRAFT WILL RUN ON, on the card, on the tick the pick is made. A message standing in a
+     * composer is queued work and the model is a decision already taken about it, so a board of drafts is a
+     * board of pending spends; the model used to reach the card only once a turn was in flight, so the one way
+     * to read a pick back was to reload and hope. The card follows the composer's own conversation, which is
+     * also why picking in ONE draft moves that card and no other. */
+    it("names the model a prepared draft will run on, and moves only that card when it is picked", () => {
+        const first = new Conversation(`prepared`);
+        first.draft.value = `fix the login redirect`;
+        first.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        const second = new Conversation(`beside`);
+        second.draft.value = `write the release notes`;
+        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        useChat().conversations.value = [...useChat().conversations.value, first, second];
+
+        const shown = (): { id: string; provider: string; model: string | undefined }[] =>
+            useAgents()
+                .lanes.value.active.map((card) => ({ id: card.id, provider: card.provider, model: card.model }))
+                .toSorted((a, b) => a.id.localeCompare(b.id));
+
+        expect(shown()).toEqual([
+            { id: `beside`, provider: `claude`, model: `claude-opus-5` },
+            { id: `prepared`, provider: `cursor`, model: `composer-2.5` },
+        ]);
+
+        // One draft is re-pointed at another provider's model: its card follows at once, the other holds still.
+        first.selectModel({ provider: `claude`, value: `claude-sonnet-4-5-20250929` });
+
+        expect(shown()).toEqual([
+            { id: `beside`, provider: `claude`, model: `claude-opus-5` },
+            { id: `prepared`, provider: `claude`, model: `claude-sonnet-4-5-20250929` },
+        ]);
+    });
+
+    // ...and a tab nobody has typed in names none: it is a placeholder for work not yet described, and a model
+    // on it would put a spend on the board for a turn nobody has decided to take.
+    it("leaves an untouched New agent card unpriced", () => {
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`fresh`)];
+
+        expect(useAgents().lanes.value.active.map((card) => card.model)).toEqual([undefined]);
+    });
+
     /* THE SAME DRAFT, BEING TYPED IN THE POPPED-OUT CHAT: the reported bug. The composer is a window away, so
      * over here the tab looks untouched, and clicking another card swept it: the board threw away the one card
      * whose contents nothing else could rebuild. The window drawing the chat says what it is holding

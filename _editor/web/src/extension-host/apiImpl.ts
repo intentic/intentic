@@ -6,12 +6,11 @@ import {
     type AgentHarness,
     type AgentProvider,
     type ExtensionSummary,
-    providerLabel,
     sandboxRequestFor,
     WorkspaceFileSchema,
 } from "@intentic/sandbox-contract";
 import { watch } from "vue";
-import { modelLabelFor } from "../composables/chat/modelPicker";
+import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { agentRunChoice, shellModelPicking } from "../composables/chat/shellModelPicking";
 import { summonChat } from "../composables/chat/summon";
 import { accountsOf, useChat } from "../composables/chat/useChat";
@@ -58,14 +57,13 @@ export interface HostBindings {
  * has been disconnected is exactly what a caller needs to be able to notice. */
 const named = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): PickedModel => {
     const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
-    // An UNPINNED model has no catalog row to name it, and an empty chip is the one thing a chip must never be.
-    // The provider is what will resolve one at run time, so the provider is what it says. Read from the catalog
-    // first all the same: an installed ACP agent IS a row with an empty model id, and that row has a name.
-    const label = modelLabelFor(provider, model);
     return {
         provider,
         model,
-        label: label === `` ? providerLabel(provider) : label,
+        // The app's ONE naming rule for a (provider, model) pair, shared with the composer's pill and the shell's
+        // own run buttons: an UNPINNED model has no catalog row to name it, and the rule's last rung is the
+        // provider's display name, which is right because the provider is what resolves a model at run time.
+        label: modelLabelFor(provider, model),
         ...(account !== undefined ? { account } : {}),
         ...(connected !== undefined ? { accountLabel: connected.email ?? connected.label } : {}),
         ...(harness !== undefined ? { harness } : {}),

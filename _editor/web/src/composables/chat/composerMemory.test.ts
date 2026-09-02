@@ -63,13 +63,15 @@ const TWO = [
     { id: `second`, label: `Claude two`, connectedAt: 2 },
 ];
 
-// The daemon this suite talks to: two Claude accounts, and a Claude catalog carrying the model the user picks.
+// The daemon this suite talks to: two Claude accounts, a Cursor one (so a pick on a SECOND provider is one the
+// sandbox could actually run — an unrunnable pick resolves to a connected provider at read, by design, which
+// would hide whether the pick was remembered at all), and a Claude catalog carrying the model the user picks.
 const mockDaemon = (claudeModels = [`claude-fable-5`, `claude-opus-4-6`]): void => {
     sandboxJsonMock.mockImplementation((path: string) =>
         Promise.resolve(
             path === `/translator/accounts`
                 ? { codex: [], grok: [], kimi: [], gemini: [] }
-                : { accounts: path.startsWith(`/claude`) ? TWO : [] },
+                : { accounts: path.startsWith(`/claude`) ? TWO : path.startsWith(`/cursor`) ? [{ id: `cur`, label: `Cursor`, connectedAt: 1 }] : [] },
         ),
     );
     sandboxRequestMock.mockImplementation((path: string) =>
@@ -125,6 +127,22 @@ describe(`the composer's remembered picks`, () => {
         expect(fresh.model.value).toBe(`claude-opus-4-6`);
         expect(fresh.effortPick.value).toBe(`high`);
         expect(fresh.account.value).toBe(`second`);
+    });
+
+    /* A PICK IS A PAIR — this provider, this model — and both halves travel. The provider used to be recorded
+     * only by a pick that MOVED the chat off another one, so choosing a second model from the provider a chat
+     * already sat on recorded the model and left the pointer where some other tab had put it: the next New agent
+     * opened on that provider, wearing a model nobody had chosen. */
+    it(`carries the provider of the pick, not only its model`, async () => {
+        const board = await openWindow();
+        const floating = await openWindow();
+
+        floating.chat.useChat().selectModel({ provider: `cursor`, value: `composer-2.5` });
+        // The second pick keeps the provider, which is the ordinary case and the one that used to be lost.
+        floating.chat.useChat().selectModel({ provider: `cursor`, value: `composer-2.5-fast` });
+
+        const fresh = new board.Conversation();
+        expect([fresh.provider.value, fresh.model.value]).toEqual([`cursor`, `composer-2.5-fast`]);
     });
 
     it(`keeps a pick a thin catalog read does not carry, and honours it when the catalog does`, async () => {

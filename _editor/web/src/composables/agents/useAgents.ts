@@ -400,6 +400,31 @@ interface UnsentTab {
     readonly at?: number;
 }
 
+/* WHAT THIS BROWSER KNOWS ABOUT A TURN THE DAEMON HAS NOT FILED YET, which is the whole of what a `starting`
+ * card can honestly say, and it is not nothing.
+ *
+ * Such a card used to be built from its four identity fields alone, so a sent turn appeared as a title under a
+ * spinner and nothing else: no model, no elapsed, no reason. That is a fair drawing of an untouched draft
+ * (there is nothing to say about a tab nobody has typed in) and a bad one of work in flight, because every
+ * fact it was missing was sitting on the conversation the card is made of. The settings are the ones the send
+ * actually went out under, the elapsed runs from the moment of the send rather than from whenever the entry
+ * appears, and the usage is this tab's own running total, each of them replaced by the registry's version the
+ * moment it lands.
+ *
+ * Zero tokens and zero cost are "nothing counted yet" rather than measurements, and a stat row of zeroes is the
+ * kind of readout people learn to distrust, so they are left off until the turn's first `usage` frame. */
+const startedTurnFacts = (conversation: Conversation): Partial<FleetAgent> => ({
+    model: conversation.model.value,
+    effort: conversation.effort.value,
+    thinking: conversation.thinking.value,
+    fast: conversation.fast.value,
+    ...(conversation.turnStartedAt.value === undefined ? {} : { startedAt: conversation.turnStartedAt.value }),
+    ...(conversation.inputTokens.value > 0
+        ? { inputTokens: conversation.inputTokens.value, outputTokens: conversation.outputTokens.value }
+        : {}),
+    ...(conversation.costUsd.value > 0 ? { costUsd: conversation.costUsd.value } : {}),
+});
+
 // Attention first, then live turns + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
@@ -480,36 +505,23 @@ const fleet = computed<FleetAgent[]>(() => {
             if (conversation.session.value !== undefined) {
                 draft.sessionId = conversation.session.value.id;
             }
-            /* WHAT THIS BROWSER KNOWS ABOUT A TURN THE DAEMON HAS NOT FILED YET, which is the whole of what a
-             * `starting` card can honestly say, and it is not nothing.
-             *
-             * The card used to be built from the four fields above alone, so a sent turn appeared as a title
-             * under a spinner and nothing else: no model, no elapsed, no reason. That is a fair drawing of a
-             * DRAFT (there is nothing to say about a tab nobody has typed in) and a bad one of work in flight,
-             * because every fact it was missing was sitting on the conversation the card is made of. The
-             * settings are the ones the send actually went out under, the elapsed runs from the moment of the
-             * send rather than from whenever the entry appears, and the usage is this tab's own running total,
-             * each of them replaced by the registry's version the moment it lands.
-             *
-             * Only for `starting`: on a draft they would describe a turn that has not happened, and on a
-             * `resumed` card the composer's current picks are not an account of the conversation's past. */
+            /* Everything this browser knows about a turn already in flight (startedTurnFacts). Only for
+             * `starting`: on an untouched draft those fields would describe a turn that has not happened, and
+             * on a `resumed` card the composer's current picks are not an account of the conversation's past. */
             if (draft.status === `starting`) {
+                Object.assign(draft, startedTurnFacts(conversation));
+            }
+            /* WHAT A PREPARED DRAFT WILL RUN ON, which is the one of those facts that is already true before the
+             * send. A message standing in a composer is queued work, and the model it will be spent on is a
+             * decision the user has already made about it, so the card names it — read from the same
+             * conversation the words themselves come from, and so on the same tick the pick is made rather than
+             * after a reload.
+             *
+             * Gated on there being something unsent, which is the line between the two kinds of draft: a card
+             * for a tab nobody has typed in is a placeholder for work not yet described, and naming a model on
+             * it would put a spend on the board for a turn nobody has decided to take. */
+            if (draft.status === `draft` && tab !== undefined) {
                 draft.model = conversation.model.value;
-                draft.effort = conversation.effort.value;
-                draft.thinking = conversation.thinking.value;
-                draft.fast = conversation.fast.value;
-                if (conversation.turnStartedAt.value !== undefined) {
-                    draft.startedAt = conversation.turnStartedAt.value;
-                }
-                // Zero is "nothing counted yet", not a measurement, and a stat row of zeroes is the kind of
-                // readout people learn to distrust. The first `usage` frame of the turn fills them in.
-                if (conversation.inputTokens.value > 0) {
-                    draft.inputTokens = conversation.inputTokens.value;
-                    draft.outputTokens = conversation.outputTokens.value;
-                }
-                if (conversation.costUsd.value > 0) {
-                    draft.costUsd = conversation.costUsd.value;
-                }
             }
             return draft;
         });

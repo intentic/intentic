@@ -5,9 +5,18 @@ import { definePreference } from "@intentic/ui/preference";
 import { accessKnown, providerReady } from "./access";
 import { defaultModelFor, perProvider, providerModels, providerModelsState } from "./providerCatalog";
 
-/* WHAT A NEW CONVERSATION STARTS WITH, the turn prefs the last one left behind. A fresh-conversation provider
- * pick writes back here (Conversation.selectProvider), and useChat's facade setters write model/effort/thinking
- * through, so the next new chat, and the next session, inherit the last-used settings.
+/* WHAT A NEW CONVERSATION STARTS WITH: the LAST DELIBERATE PICK a composer made, so the next new chat, and the
+ * next session, open on the model, provider and effort the user last chose. Every pick lands here through
+ * Conversation's own setters (selectModel / selectProvider / setEffort / setThinking / selectHarness), and the
+ * account half rides the same way through accountPreference.ts.
+ *
+ * A PICK, NEVER A COINCIDENCE, and the distinction is what most of this file is about. Three kinds of write used
+ * to reach these keys and only one of them was a choice: the user picking, the app falling back off a provider
+ * it could not reach, and a catalog or account list answering thinly on a slow load. The last two spent the
+ * user's choice permanently for a moment's bad luck — that is the whole "my model keeps switching back" family
+ * of reports. Now only a pick writes; a fallback is recorded on the CONVERSATION it moved (Conversation
+ * .movedFrom), and a thin read is resolved against at READ (rememberedProviderFor / rememberedModelFor /
+ * rememberedAccountFor) rather than written back over the pick.
  *
  * EACH ONE IS A `definePreference`, which is the load-bearing part rather than a tidier way to call
  * localStorage. These are preferences in that primitive's exact sense, one answer per account, not per window,
@@ -69,6 +78,34 @@ export const turnDefaults = {
         read: (raw) => raw !== `false`,
         write: String,
     }),
+};
+
+/* A TURN'S MODEL CHOICE AS ONE VALUE: which provider, which model id. Every pick travels in this shape — the
+ * picker's rows are built on it (modelPicker.PickerEntry extends it), Conversation.selectModel takes it, and a
+ * displaced conversation holds the one it was moved off (Conversation.movedFrom) — because the provider and the
+ * model id are meaningless apart: the same id can name different models on two providers, and a model with no
+ * provider names no route. `value` rather than `model` so a picker row IS a pick, with nothing to rename. */
+export interface TurnPick {
+    readonly provider: AgentProvider;
+    readonly value: string;
+}
+
+/* THE ONE WRITE. A deliberate pick in a composer is a pick of a PAIR — this provider, this model — and the two
+ * halves are recorded together or the memory lies. They used to be written by two different methods on two
+ * different conditions: `selectProvider` wrote the provider, but only when the pick MOVED the conversation off
+ * another one, and `selectModel` wrote the model under whichever provider it named. So the ordinary act of
+ * opening a chat that already sits on Cursor and choosing a different Cursor model recorded the model and left
+ * the pointer on whatever provider was last switched TO, in some other tab, possibly days ago. The next "New
+ * agent" then opened on that provider, showing a model the user had never chosen, and nothing on screen could
+ * explain where it came from.
+ *
+ * Going through one function makes the pair unable to disagree: the pointer always names a provider whose entry
+ * in the map is the model that was actually picked for it. Callers state a pick; they never poke the storage. */
+export const rememberPick = (pick: TurnPick): void => {
+    turnDefaults.provider.value = pick.provider;
+    // Per-provider, so switching provider away and back restores the model chosen for each. The catalog is
+    // harness-independent, so the entry rides across a harness switch too.
+    turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
 };
 
 /* THE PROVIDER A FRESH CONVERSATION STARTS ON: the user's remembered pick when it can actually run, else the

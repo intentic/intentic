@@ -40,7 +40,7 @@ import {
 } from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
 import { TranscriptClock } from "./transcriptClock";
-import { rememberedModelFor, rememberedProviderFor, startingMode, turnDefaults } from "./turnDefaults";
+import { rememberedModelFor, rememberedProviderFor, rememberPick, startingMode, turnDefaults, type TurnPick } from "./turnDefaults";
 import { TurnFailures } from "./turnFailures";
 import { restoredCards, type TurnEffect } from "./turnReducer";
 import { type SessionRef, type TurnSettings, boundSession, resumes, turnRequestBody } from "./turnRequest";
@@ -385,16 +385,46 @@ export class Conversation {
     // Start of the in-flight turn (ms), for the card's elapsed readout; undefined while idle.
     readonly turnStartedAt = ref<number | undefined>();
 
-    // This conversation's turn selection, seeded from the module defaults at construction. All of it, provider
-    // and account included, is switchable mid-chat (the composer binds them); send() decides whether the
-    // session above still matches (resume) or a fresh one starts seeded with the transcript so far.
-    readonly provider = ref<AgentProvider>(rememberedProviderFor());
-    readonly harness = ref<AgentHarness>(turnDefaults.harness.value);
-    // Seeded from THIS conversation's provider rather than from the remembered pick again: the two differ
-    // exactly when the pick can't run, and reading the pick here would hand the chat another provider's account.
-    readonly account = ref<string | undefined>(rememberedAccountFor(this.provider.value));
-    readonly model = ref<string>(rememberedModelFor(this.provider.value));
-    readonly thinking = ref<boolean>(turnDefaults.thinking.value);
+    /* This conversation's turn selection. All of it, provider and account included, is switchable mid-chat (the
+     * composer binds them); send() decides whether the session above still matches (resume) or a fresh one
+     * starts seeded with the transcript so far.
+     *
+     * The values below are placeholders: `seedPicks` (called by the constructor) is what actually fills them
+     * from the remembered picks, and it is the ONE description of what a chat nobody has touched starts on.
+     * Written as five field initializers, the seeding drifted from the re-seeding "New agent" needs when it
+     * hands back an already-open empty draft instead of minting a twin, and a rule spelled out in two places is
+     * a rule that is about to disagree with itself. */
+    readonly provider = ref<AgentProvider>(`claude`);
+    readonly harness = ref<AgentHarness>(`native`);
+    readonly account = ref<string | undefined>();
+    readonly model = ref<string>(``);
+    /* WHERE THE APP MOVED THIS CHAT FROM — the provider AND the model — and the whole of what tells an
+     * app-chosen fallback apart from a choice somebody made. Undefined for every conversation that is where it
+     * was put, which is almost all of them; set by `repointProvider` and cleared the moment either the fallback
+     * is given back (restoreProvider) or the user picks for themselves.
+     *
+     * The MODEL rides along because the restore is otherwise lossy in exactly the way this whole file is about:
+     * two drafts prepared on two different Claude models, both parked on Cursor by an outage, both came back on
+     * whichever Claude model had been picked most recently. What was displaced is what is owed back.
+     *
+     * IT REPLACES ASKING THE GLOBAL PREFERENCE. The connection watch used to answer "should this chat move back"
+     * by comparing the conversation's provider against the last pick made ANYWHERE (turnDefaults.provider), which
+     * cannot tell the two apart: a board of unsent drafts, each deliberately prepared on its own model, was
+     * dragged wholesale onto whichever one had been picked most recently, on every account refresh and on every
+     * reload. Per conversation, the question is exact — this chat is on the trial because we put it there, and
+     * here is what it was on — so the only chat that ever moves is the one that was moved in the first place,
+     * and it moves back to its own provider rather than to somebody else's latest pick.
+     *
+     * Persisted with the tab (tabSnapshot), because the fallback reliably outlives the window: a chat pushed onto
+     * the free trial while an OAuth redirect was in flight comes back from that redirect still on the trial, and
+     * a displacement only this window's memory knew about would leave it there for good.
+     *
+     * A conversation can also be BORN displaced, which is why `seedPicks` sets this too: `rememberedProviderFor`
+     * resolves a pick that cannot run today to one that can, deliberately without writing over the pick, so a
+     * chat opened while Claude is down opens on whatever can send. That is a substitution exactly like the
+     * watch's, and it is owed the same return — the two differ only in which of them noticed first. */
+    readonly movedFrom = ref<TurnPick | undefined>();
+    readonly thinking = ref<boolean>(true);
     /* Ask for fast speed on this conversation's turns. Deliberately NOT seeded from turnDefaults, unlike every
      * other control on this line: fast mode costs roughly twice per token, and the sticky-default machinery
      * would carry one chat's toggle into every chat opened afterwards. A control that spends more money starts
@@ -450,7 +480,7 @@ export class Conversation {
     // moment thinking is switched off. Everything that selects an effort writes this; everything that renders or
     // SENDS one reads `effort` below. Keeping the pick means a trip through a smaller model doesn't ratchet it
     // down, come back and the user's choice is still there.
-    readonly effortPick = ref<string>(turnDefaults.effort.value);
+    readonly effortPick = ref<string>(``);
 
     // The tier this conversation's next turn actually runs at: the pick, clamped to what the current
     // provider+model+thinking triple offers. Clamped at READ rather than written back, so it also covers the
@@ -659,7 +689,40 @@ export class Conversation {
     // survives provider/harness switches (which retire sessions) and reloads (persisted in the tab snapshot).
     // A readable word pair rather than a UUID, because this string is READ far more than it is dereferenced,
     // it is the branch, the worktree directory and the name on every board card; see newConversationId.
-    constructor(readonly conversationId: string = newConversationId()) {}
+    constructor(readonly conversationId: string = newConversationId()) {
+        this.seedPicks();
+    }
+
+    /* WHAT A CHAT NOBODY HAS TOUCHED STARTS ON: the last deliberate composer pick (turnDefaults /
+     * accountPreference), resolved against what this sandbox can actually run.
+     *
+     * TWO CALLERS, AND THE SECOND IS THE REASON THIS IS A METHOD. A fresh conversation is seeded here at
+     * construction; and "New agent" hands back the untouched draft that is already open rather than minting a
+     * twin (useChat.draftConversation, which is what keeps a second press from reading as a press that did
+     * nothing), so that draft has to be re-seeded or the press opens a chat wearing whatever was remembered
+     * when the tab happened to be created — which after a pick made anywhere since is a model the user did not
+     * choose, sitting under a heading that says "New agent".
+     *
+     * Safe there precisely because the draft is UNTOUCHED: no words, no title, no turn, nothing decided about
+     * it. And it costs a deliberate pick nothing, since a pick made in that very draft is by definition the one
+     * being re-seeded from.
+     *
+     * The account reads THIS conversation's resolved provider rather than the remembered pick again: the two
+     * differ exactly when the pick cannot run, and reading the pick here would hand the chat another provider's
+     * account. `fast`, `tierHold`, `actsAs`, `workflowId` and `loopId` are deliberately NOT here; each says on
+     * its own declaration why it is never sticky. */
+    seedPicks(): void {
+        const provider = rememberedProviderFor();
+        this.provider.value = provider;
+        this.harness.value = turnDefaults.harness.value;
+        this.account.value = rememberedAccountFor(provider);
+        this.model.value = rememberedModelFor(provider);
+        this.effortPick.value = turnDefaults.effort.value;
+        this.thinking.value = turnDefaults.thinking.value;
+        // Born displaced when the pick could not run and something else was substituted for it (see movedFrom).
+        const picked = turnDefaults.provider.value;
+        this.movedFrom.value = picked === provider ? undefined : { provider: picked, value: rememberedModelFor(picked) };
+    }
 
     // Switch the provider this conversation's next turn runs on and re-scope its provider-specific settings:
     // the model repoints to the new provider's remembered/live-default pick (the effort scale follows the model,
@@ -670,16 +733,45 @@ export class Conversation {
         if (!this.pointAt(next)) {
             return;
         }
-        turnDefaults.provider.value = next;
+        // A choice, so there is no longer a fallback owed back: wherever the app had moved this chat from, the
+        // user has now said where it runs.
+        this.movedFrom.value = undefined;
+        rememberPick({ provider: next, value: this.model.value });
     }
 
     /* THE SAME SWITCH, MADE BY THE APP RATHER THAN BY THE USER, the connection safety net moving a chat off a
      * provider it cannot send to (useChat). It re-scopes exactly as a pick does, and deliberately does NOT write
      * the module default: a fallback is the app coping, not the user choosing, and persisting it turned one
      * unlucky moment into every later chat's starting provider, the "my model keeps coming back as GPT" report.
-     * The user's remembered provider survives untouched, so the next reload opens on it again. */
+     * The user's remembered provider survives untouched, so the next reload opens on it again.
+     *
+     * What it DOES record is the pick it moved this chat off (`movedFrom`), so the move can be undone later for
+     * this chat alone. The FIRST displacement is the one kept: a chat pushed Claude → trial → Codex across two
+     * unlucky loads is owed Claude back, not the trial it was parked on in between. */
     repointProvider(next: AgentProvider): void {
-        this.pointAt(next);
+        const from: TurnPick = { provider: this.provider.value, value: this.model.value };
+        if (!this.pointAt(next)) {
+            return;
+        }
+        this.movedFrom.value ??= from;
+    }
+
+    /* GIVE THE FALLBACK BACK, now that the provider the app moved this chat off can serve it again. The mirror of
+     * repointProvider and the only thing that ever undoes one: a chat nobody moved has nothing to return to, and
+     * a chat whose user has picked since is where they put it.
+     *
+     * Not a pick either, so nothing is written to the module defaults: putting a conversation back where it was
+     * says as little about what the user wants next as moving it away did. */
+    restoreProvider(): void {
+        const from = this.movedFrom.value;
+        if (from === undefined || this.streaming.value) {
+            return;
+        }
+        this.pointAt(from.provider);
+        // The model it was displaced FROM, not the provider's remembered one: two drafts on two Claude models
+        // parked by the same outage are owed their own back, which is this whole change in one line.
+        this.model.value = from.value;
+        this.movedFrom.value = undefined;
     }
 
     // Point this conversation at a provider and re-scope everything that was scoped to the old one. False when
@@ -712,17 +804,18 @@ export class Conversation {
      * pick keeps the current harness. A cross-provider pick re-points the selection and the fresh session starts
      * lazily at the next send. Mid-stream, only a same-provider model swap is allowed, a provider switch is not,
      * because it retires the session the stream is running on. */
-    selectModel(pick: { provider: AgentProvider; value: string }): void {
+    selectModel(pick: TurnPick): void {
         if (this.streaming.value && pick.provider !== this.provider.value) {
             return;
         }
-        if (pick.provider !== this.provider.value) {
-            this.selectProvider(pick.provider);
-        }
+        // `pointAt` rather than `selectProvider`, and a no-op when the row's provider is already this chat's: the
+        // pair is remembered ONCE, below, with the model the user actually pressed. Routing through the provider
+        // setter wrote the memory twice, the first time pairing the new provider with the OLD one's model.
+        this.pointAt(pick.provider);
         this.model.value = pick.value;
-        // Per-provider memory, so switching provider away and back restores the pick (the catalog is
-        // harness-independent, so it rides across a harness switch too).
-        turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
+        // A choice, so nothing is owed back: see selectProvider.
+        this.movedFrom.value = undefined;
+        rememberPick(pick);
         /* A SAME-PROVIDER MODEL SWAP GETS A DIVIDER TOO, which it did not until this line, and the silence was
          * read as "this one is free". It keeps the session where a provider switch retires it, so the sentence
          * it earns is a different one (modelSwitchNotice), but it is not nothing: the next turn re-reads the

@@ -1,9 +1,9 @@
-import { type AgentHarness, type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { AgentRunChoice, ModelPicking } from "@intentic/ui";
 import { effectScope } from "vue";
 import { type AgentRunModel, useAgentRunModel } from "./agentRunModel";
 import { requestModelPick } from "./hostModelPicker";
-import { modelLabelFor } from "./modelPicker";
+import { modelLabelFor } from "./providerCatalog";
 import { useChat } from "./useChat";
 
 /* WHAT A SURFACE-STARTED RUN OPENS ON, AND HOW TO RE-POINT IT, the shell's own implementation of the kit's
@@ -14,20 +14,18 @@ import { useChat } from "./useChat";
  * drawn by the shell are the same button, and the day the two disagreed about which model a click would spend,
  * one of them would be lying to the user about money. */
 
-// A (provider, model) pair, named the way the app names it. An UNPINNED model has no catalog row to name it,
-// and an empty label is the one thing this must never return, the provider is what will resolve one at run
-// time, so the provider is what it says. Read from the catalog first all the same: an installed ACP agent IS a
-// row with an empty model id, and that row has a name.
-const namedChoice = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): AgentRunChoice => {
-    const label = modelLabelFor(provider, model);
-    return {
-        provider,
-        model,
-        label: label === `` ? providerLabel(provider) : label,
-        ...(account !== undefined ? { account } : {}),
-        ...(harness !== undefined ? { harness } : {}),
-    };
-};
+// A (provider, model) pair, named the way the app names it — the ONE naming rule (providerCatalog.modelLabelFor),
+// shared with the composer's pill and the board's cards so no two surfaces can call the same pair different
+// things. An UNPINNED model has no catalog row to name it, and an empty label is the one thing this must never
+// return; that floor is the rule's own last rung, the provider's display name, since the provider is what will
+// resolve a model at run time.
+const namedChoice = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): AgentRunChoice => ({
+    provider,
+    model,
+    label: modelLabelFor(provider, model),
+    ...(account !== undefined ? { account } : {}),
+    ...(harness !== undefined ? { harness } : {}),
+});
 
 /* THE AGENT-RUN LIST, ENTERED ONCE FOR THE WHOLE APP.
  *

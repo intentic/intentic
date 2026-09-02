@@ -41,7 +41,7 @@ import {
     providerModelsState,
     trialStatus,
 } from "./providerCatalog";
-import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
+import { rememberedModelFor, startingMode, turnDefaults, type TurnPick } from "./turnDefaults";
 import { accessKnown, providerReady, providerReadyOn } from "./access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
 import { scopeAccountPreference } from "./accountPreference";
@@ -256,6 +256,10 @@ const restoreTab = (tab: StoredTab): Conversation => {
         // pin of its own (one persisted before this was stored) falls back to the provider's remembered one.
         conversation.account.value = tab.account ?? rememberedAccountFor(tab.provider);
         conversation.model.value = tab.model ?? rememberedModelFor(tab.provider);
+        // ...and whether the app is the one that put it there. Without this a chat parked on a fallback while a
+        // sign-in redirected the whole page came back on that fallback with nothing left to say it was standing
+        // somewhere it never chose, so the reconciliation pass below had no reason to give it back.
+        conversation.movedFrom.value = tab.movedFrom;
     }
     // ...and the rest of the tab's turn settings by the same rule: the composer's pills describe THIS chat, so a
     // reload restores what it was showing rather than re-seeding it from picks made in some other tab since.
@@ -567,10 +571,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         get: () => conversation.value.model.value,
         set: (value) => conversation.value.selectModel({ provider: conversation.value.provider.value, value }),
     }),
-    // Conversation.selectModel is the whole rule (provider re-point, per-provider memory, the mid-stream
+    // Conversation.selectModel is the whole rule (provider re-point, remembering the pair, the mid-stream
     // guard); what this adds is the catalog refetch, which only a surface that did not open the picker needs,
     // the picker warms every catalog on mount and so drives the conversation directly.
-    selectModel: (pick: { provider: AgentProvider; value: string }): void => {
+    selectModel: (pick: TurnPick): void => {
         conversation.value.selectModel(pick);
         void loadProviderModels(pick.provider);
     },
@@ -1037,16 +1041,23 @@ watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, tri
         if (conversation.session.value !== undefined || conversation.messages.value.length > 0) {
             continue;
         }
-        /* RETURN FROM AN APP-CHOSEN FALLBACK once the user's remembered provider can run again. The current
+        /* RETURN FROM AN APP-CHOSEN FALLBACK once the provider it was moved off can run again. The current
          * provider being ready is not enough to stop here: the free trial is ready by design, and an OAuth
-         * redirect restores an untouched tab on that trial separately from the Google pick in turnDefaults.
-         * Treating "trial can answer" as final silently spends the metered trial after Google connected.
+         * redirect restores an untouched tab on that trial while the Google account it was signing into lands
+         * separately. Treating "the trial can answer" as final silently spends the metered trial after Google
+         * connected.
          *
-         * An explicit trial pick is left alone because selectProvider writes that pick to turnDefaults; only
-         * repointProvider (the fallback path below) creates the current != preferred shape handled here. */
-        const preferred = turnDefaults.provider.value;
-        if (preferred !== conversation.provider.value && providerReadyOn(preferred, conversation.harness.value)) {
-            conversation.repointProvider(preferred);
+         * ASKED OF THE CONVERSATION, NEVER OF THE GLOBAL PREFERENCE. This used to compare each conversation's
+         * provider against turnDefaults.provider (the last pick made in any tab) and move anything that
+         * differed, which cannot tell a fallback from a choice: a board of unsent drafts, each prepared on its
+         * own model, was dragged wholesale onto whichever model had been picked most recently — on every
+         * account refresh, and again on every reload. `movedFrom` is set only by repointProvider below, so the
+         * only chat that returns is one this pass itself moved, and it returns to its own provider. */
+        if (
+            conversation.movedFrom.value !== undefined &&
+            providerReadyOn(conversation.movedFrom.value.provider, conversation.harness.value)
+        ) {
+            conversation.restoreProvider();
             continue;
         }
         if (providerReadyOn(conversation.provider.value, conversation.harness.value)) {
@@ -1603,7 +1614,19 @@ export const openAgentConversation = (agent: AgentTabSeed): Conversation =>
  * twin is what keeps a second press from reading as a press that did nothing: an empty draft has nothing in it
  * to tell two apart, so the press is about the caret, and about the FOCUS landing on the draft, which is a
  * visible tab switch when it was pressed from another tab. */
-export const draftConversation = (): Conversation => conversations.value.find(untouchedDraft) ?? new Conversation();
+export const draftConversation = (): Conversation => {
+    const open = conversations.value.find(untouchedDraft);
+    if (open === undefined) {
+        return new Conversation();
+    }
+    /* ...RE-SEEDED, so the draft handed back is the chat a fresh one would have been. It was minted with the
+     * picks that were remembered at the time, which is not the same thing: pick a model in one chat, then press
+     * New agent, and the empty tab that answers was carrying whatever was remembered when it happened to be
+     * created — a model the user had not chosen, under a heading saying "New agent". Safe because the draft is
+     * untouched by definition, and free because a pick made in that very draft IS the remembered pick. */
+    open.seedPicks();
+    return open;
+};
 
 /* The conversation a SUGGESTION is written into, the empty board's starters, which fill a composer rather than
  * sending anything (agentActions.composeAgent).
