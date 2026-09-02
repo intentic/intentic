@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type AgentTurn, ciContract, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
+import { type AgentTurn, ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { startConversationTurn } from "../agent/turn-resume.js";
@@ -20,11 +20,6 @@ const RUNS_PER_PROJECT = 15;
 // the turn's context stays about fixing rather than scrolling.
 const FIX_LOG_BYTES = 24_000;
 const TITLE_MAX = 80;
-
-// The same uniqueness recipe as scheduler's mintConversationId, for a conversation a CLICK opens rather than
-// an automation: bounded, charset-safe, unique per process.
-let fixSeq = 0;
-const mintFixConversationId = (runId: number, now: number): string => `ci-fix-${runId}-${now.toString(36)}${(fixSeq++).toString(36)}`;
 
 // A vendor refusal (403 on rerun, an expired run) is an upstream answer, not a daemon bug: 502 carrying
 // the vendor's message, so the view can show WHY instead of a blank 500.
@@ -111,7 +106,11 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 `Reproduce the failure locally in the repo before changing anything, fix the cause, and verify the failing checks pass. You are in an isolated worktree: commit your fix and it goes through review.`,
                 ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),
             ].join("\n\n");
-            const conversationId = mintFixConversationId(input.runId, Date.now());
+            /* DERIVED FROM THE RUN, never minted: this is the name the Pipelines board re-computes to find out
+             * whether an agent is already on this failure (conversation-ids.ts has the whole argument). One
+             * failed run is therefore one conversation, one worktree and one branch, however many times the
+             * button is pressed. */
+            const conversationId = ciFixConversationId(input.repo, input.runId);
             const turn: AgentTurn & { conversationId: string } = {
                 prompt,
                 conversationId,
@@ -134,8 +133,11 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
              * `conversationId` is what streamAgent registers on, whatever placement the turn asked for. */
             const started = await startConversationTurn(services, wake, turn);
             if (started === undefined) {
-                // Minted ids are unique, so this is an invariant breach rather than a user-level busy state.
-                throw new ORPCError("CONFLICT", { message: "the CI fix conversation is already running" });
+                /* A REAL STATE NOW, not an invariant breach: the id is derived, so a second press on the same
+                 * failure addresses the conversation the first one opened. Live, that turn is the answer and
+                 * this says so in words the board can show; finished, the call above adds a turn to it instead,
+                 * which is what makes "try again" continue the fix rather than start a rival agent. */
+                throw new ORPCError("CONFLICT", { message: "An agent is already working on this run's failure." });
             }
             return { conversationId };
         }),

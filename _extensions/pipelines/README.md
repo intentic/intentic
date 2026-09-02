@@ -10,6 +10,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
 - Say whether a branch is red RIGHT NOW, on its last commit rather than on its last run, and keep saying it
   until a commit passes.
 - Lead with the repository that needs a person, and keep the quiet ones out of the way without losing them.
+- Put an agent on a failure, and then say what became of it: whether it is working, waiting on you, holding a
+  fix nobody has landed, or over.
 
 ## Key files
 
@@ -27,6 +29,10 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
   runs failed.
 - [src/failureHistory.ts](src/failureHistory.ts): what has failed before, so a repeat reads as one.
 - [src/statusVisual.ts](src/statusVisual.ts): one mapping from status to appearance.
+- [src/useCiFixes.ts](src/useCiFixes.ts): the fix agents, read off the fleet roster, quickly while one is moving
+  and at the board's own pace otherwise.
+- [src/ciFixes.ts](src/ciFixes.ts): which failure each of them belongs to, and which branch already has one.
+- [src/fixStance.ts](src/fixStance.ts): what an agent's state says on a red row, in the fleet's own words.
 
 ## How it fits
 
@@ -64,6 +70,24 @@ inside the view rather than gating the tile.
   of board (`TALLY_AT_REM`), measured off the body with a ResizeObserver rather than off the window: this view
   renders into a pane the reader can halve with the chat panel. In the header it takes a zero flex basis, so the
   width it needs comes out of the row's slack and never out of the `<h1>`.
+- A FIX CONVERSATION IS NAMED AFTER THE RUN IT FIXES (`ci-fix-<repo>-<runId>`, minted in the contract's
+  `conversation-ids.ts`), and that one decision is what makes the row able to report at all. Nothing records
+  which agent was started for which failure; the fleet roster is the record, and a roster is keyed by id, so an
+  id nobody can re-compute is a record nobody can read. It used to carry a timestamp and a counter, so the board
+  could only ever offer "Fix with agent", to every browser, forever, including while an agent was parked on a
+  question nobody would see. Deriving it also makes one failure one conversation: a second press continues that
+  agent on its branch instead of racing a second one beside it.
+- ONE SLOT ON THE ROW FOR THE AGENT, whichever half of its life it is in: the button becomes a state chip
+  (`fixStance.ts`), and only an ENDED fix turns back into a press, labelled "Try again". A collapsed row is
+  scanned, so it gets one word about the fix and no second control; the model, the spend, the diff and the way
+  into the conversation live in the drawer, which is read deliberately. The words are the fleet board's own, a
+  card one click away must not describe the same agent differently.
+- An ending outranks a diff. An agent that crashed after writing two files has one, and reading that as a fix
+  ready to land is the board promising something the turn never finished; the files earn a sentence in the
+  hint, not the verdict. Same order the fleet's own lane machine reads them in.
+- A fix belongs to a RUN, a breakage belongs to a BRANCH, so a row with no agent of its own is told when
+  another run of its branch has one: the button demotes and says which run to open. Without it the newest red
+  row cheerfully offers a second agent for work already in flight one row below it.
 - A repository with no runs is a picker row under "No runs yet", not a card in the body. A repository with a
   `hookWarning` is a card: the warning is usually the reason it looks silent, so hiding it would hide the answer
   along with the question.

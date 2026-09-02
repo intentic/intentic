@@ -25,9 +25,9 @@
  * is not a matter of taste; the test beside it holds the whole generated space to it.
  *
  * Conversations the SANDBOX starts keep their own minters and their own prefixes (an automation's fire is
- * `a-<automation>-<time>`, a CI fix is minted from the run), those names say WHERE the conversation came
- * from, which beats a random pair for a card the user did not ask for. This is the default for the ones a
- * person opens.
+ * `a-<automation>-<time>`, a CI fix is DERIVED from the run it fixes, see below), those names say WHERE the
+ * conversation came from, which beats a random pair for a card the user did not ask for. This is the default
+ * for the ones a person opens.
  */
 
 /* The two halves of the name. Kept short (nothing over seven letters) because the whole point is a string that
@@ -171,3 +171,37 @@ const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => randomBelow
 /* A fresh conversation id: `<adjective>-<noun>-<tail>`, e.g. `swift-otter-k9m2`. Sixteen characters or so
  * against a UUID's thirty-six, and the first eleven of them are the ones a person reads. */
 export const newConversationId = (): string => `${pick(ADJECTIVES)}-${pick(NOUNS)}-${tail()}`;
+
+/* WHAT A CI FIX CONVERSATION IS CALLED, and the one id in this file that is DERIVED rather than drawn.
+ *
+ * It is derived because the question "has anybody already put an agent on this failure?" has to be answerable
+ * from the failure alone. Nothing records that anywhere: the fleet roster IS the record (the conversation, its
+ * worktree, its branch, its live status), and a roster is keyed by id, so an id nothing can re-compute is a
+ * record nothing can read. This one used to carry a timestamp and a per-process counter, which made every fix
+ * unfindable the moment the click was over: the board could offer "Fix with agent" and nothing else, forever,
+ * however many agents were already working on the row.
+ *
+ * Deriving it settles a second question the same way. One failed run is now one conversation, so a second press
+ * (from another tab, or from a reader who did not scroll to the state) CONTINUES the fix rather than starting a
+ * rival agent on a rival branch: the daemon refuses while the turn is live, and adds a turn to the same session
+ * once it is not. The old recipe made a fresh worktree every time.
+ *
+ * THE REPOSITORY IS IN IT because a run id belongs to one forge project, not to the workspace: two repos can
+ * each have a run 42, and without the repo their failures would share a conversation. It is slugified rather
+ * than hashed because this string is read by people, in `git branch` (`agent/ci-fix-web-4213`), in a path and
+ * on a card, and `ci-fix-a3f91c-4213` answers the join just as well while saying nothing. Two repositories
+ * whose names agree for the first REPO_SLUG_MAX characters share a slug, and would then share a fix
+ * conversation for identically-numbered runs, a pairing rare enough to prefer the readable name over guarding
+ * against it.
+ */
+export const CI_FIX_PREFIX = "ci-fix-";
+// Leaves ~24 characters for the run id inside ConversationIdSchema's 64, which is twice the widest id either
+// forge mints.
+const REPO_SLUG_MAX = 32;
+const repoSlug = (repo: string): string =>
+    repo
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .slice(0, REPO_SLUG_MAX)
+        .replace(/^-+|-+$/g, "") || "repo";
+export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;

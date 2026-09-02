@@ -9,6 +9,7 @@
     "permissions": {
         "sandbox": [
             "GET /settings",
+            "GET /agents",
             "GET /ci/runs",
             "POST /ci/runs/rerun",
             "POST /ci/runs/cancel",

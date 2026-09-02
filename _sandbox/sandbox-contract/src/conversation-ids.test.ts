@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { newConversationId } from "./conversation-ids.js";
+import { CI_FIX_PREFIX, ciFixConversationId, newConversationId } from "./conversation-ids.js";
 import { ConversationIdSchema } from "./schemas/agent.js";
 
 const mockRandomValues = (values: readonly number[]) => {
@@ -58,4 +58,34 @@ test("maps complete random buckets to equal-width base36 characters", () => {
 test("ids are unique across a burst", () => {
     const ids = new Set(Array.from({ length: 5_000 }, newConversationId));
     expect(ids.size).toBe(5_000);
+});
+
+// The whole point of the derived id: the same failure names the same conversation, forever, from any browser.
+test("a CI fix id is the same string every time it is derived", () => {
+    expect(ciFixConversationId(`web`, 4213)).toBe(`ci-fix-web-4213`);
+    expect(ciFixConversationId(`web`, 4213)).toBe(ciFixConversationId(`web`, 4213));
+});
+
+// A run id belongs to one forge project, not to the workspace: without the repo, two repos' run 42 would share
+// an agent, and the second failure would be answered by the first one's conversation.
+test("two repos with the same run number get different conversations", () => {
+    expect(ciFixConversationId(`web`, 42)).not.toBe(ciFixConversationId(`api`, 42));
+});
+
+// The id becomes a branch and a path, so the guard is not a matter of taste. Held over the repo names a
+// workspace can actually produce: nested dirs, dots, spaces, punctuation, and something that slugs to nothing.
+test("every derived id passes the conversation-id guard", () => {
+    const repos = [`root`, `web`, `apps/web`, `my repo`, `.dotted`, `UPPER_Case`, `___`, `x`.repeat(80)];
+    for (const repo of repos) {
+        for (const runId of [1, 42, 18_446_744_073]) {
+            const id = ciFixConversationId(repo, runId);
+            expect(ConversationIdSchema.safeParse(id).success).toBe(true);
+            expect(id.startsWith(CI_FIX_PREFIX)).toBe(true);
+        }
+    }
+});
+
+// The join is a prefix scan over the fleet, so the prefix has to survive a repo name that starts with one.
+test("the prefix is carried by every fix id", () => {
+    expect(ciFixConversationId(`ci-fix`, 7)).toBe(`ci-fix-ci-fix-7`);
 });

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import type { PipelineRun } from "@intentic/sandbox-contract";
+import type { AgentSummary, PipelineRun } from "@intentic/sandbox-contract";
 import {
     AgentRunButton,
     type AgentRunChoice,
+    appLink,
     Avatar,
     Button,
+    DiffStat,
     DisclosureRow,
     formatTimestamp,
     Icon,
@@ -14,6 +16,8 @@ import {
     useAgentRunPick,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import type { CiFix } from "./ciFixes";
+import { fixStance } from "./fixStance";
 import { host } from "./host";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
@@ -38,6 +42,14 @@ const props = defineProps<{
     // Whether this row's graph should be on screen without a click: this run is still going, on the newest
     // commit its branch has (ciStreaks' `runningOnHead`). A third cross-run fact, and a DEFAULT, not a state.
     autoOpen: boolean;
+    /* THE AGENT THIS ROW ALREADY SENT, if it did (ciFixes.ts): the fleet card for the conversation whose id is
+     * derived from this very run. It is what turns the button into a report, and it is the reason the row can
+     * stop offering to start what is already running. */
+    fix: AgentSummary | undefined;
+    /* …and the one working on ANOTHER run of the same branch, for a row that has no agent of its own. A fix is
+     * attached to a run; a breakage belongs to a branch, so without this the newest red row would cheerfully
+     * offer a second agent for work already in flight one row down. Only ever set when `fix` is not. */
+    branchFix: CiFix | undefined;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
@@ -80,19 +92,64 @@ const trigger = computed(() => triggerLabel(props.run.trigger));
  * started, so the next fix on the same row opens on the standing list again. */
 const fixModel = useAgentRunPick(() => host().models);
 
+const api = host();
+const agentLink = (id: string): { href: string; onClick: (event: MouseEvent) => void } =>
+    // `/agents/<id>` is the one destination every state wants: it focuses the conversation in the docked chat
+    // AND carries the review of what the agent wrote, so a question and a finished diff are both one press
+    // away. A real anchor, so ⌘-click opens a tab like every other row on this board.
+    appLink(api.href(`/agents/${id}`), () => api.navigate(`/agents/${id}`));
+
+/* WHAT BECAME OF THIS ROW'S OWN AGENT, read once and used three times: the chip that replaces the button, the
+ * button's label when there is nothing left to report, and the strip inside the drawer. */
+const fixState = computed(() => {
+    const agent = props.fix;
+    return agent === undefined ? undefined : { ...fixStance(agent), agent, link: agentLink(agent.id) };
+});
+const branchState = computed(() => {
+    const other = props.branchFix;
+    return other === undefined ? undefined : { run: other.run, link: agentLink(other.agent.id) };
+});
+// A landed fix hands the row's weight to Re-run: the fix is in the workspace, and what is left is proving it.
+const proven = computed(() => fixState.value?.kind === `landed`);
+
 /* WHY THE BUTTON IS QUIET, for a demoted one: a Fix button at Re-run's weight reads as broken otherwise. The
- * two reasons differ enough to be worth different words: a superseded failure is over, while a failure behind
- * the head of an open breakage is very much alive, just not the run to start from.
+ * three reasons differ enough to be worth different words. A superseded failure is over; a failure behind the
+ * head of an open breakage is very much alive, just not the run to start from; and a branch that already has
+ * an agent on it wants that agent opened, not a second one started beside it.
  *
  * What it will SPEND is no longer part of this sentence: the caret beside it says that, and says it in one
  * place for every surface in the app that starts an agent. */
-const fixHint = computed<string | undefined>(() => {
+const demoted = computed<string | undefined>(() => {
+    if (props.branchFix !== undefined) {
+        return `An agent is already working on ${props.run.branch}, started from run #${props.branchFix.run.runId}: open that one before starting a second.`;
+    }
     if (props.open) {
         return undefined;
     }
     return props.superseded !== undefined
         ? `${props.run.branch} has passed since: this failure is history, but you can still start an agent on it`
         : `Behind a newer failure on ${props.run.branch}, that one is the run to fix`;
+});
+// One flowing line rather than a list: the tooltip renders as text into a clamped strip, so a newline is a
+// space and a third sentence falls off the bottom. What happened leads; why the button is quiet follows.
+const startHint = computed<string | undefined>(() =>
+    [fixState.value?.retry === true ? fixState.value.hint : undefined, demoted.value].filter((part) => part !== undefined).join(` `) || undefined,
+);
+// Loud only on the branch's open failure, and only while nobody is already on it.
+const loud = computed(() => props.open && props.branchFix === undefined);
+
+// What the agent has spent, at the precision the number deserves: a sub-cent turn still shows something.
+const spend = computed<string | undefined>(() => {
+    const usd = props.fix?.costUsd;
+    return usd === undefined || usd === 0 ? undefined : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`;
+});
+// A live turn is timed from its start; a settled one from when it last did anything.
+const fixSince = computed<string | undefined>(() => {
+    const agent = props.fix;
+    if (agent === undefined) {
+        return undefined;
+    }
+    return agent.startedAt === undefined ? timeAgo(agent.updatedAt) : `started ${timeAgo(agent.startedAt)}`;
 });
 
 const startFix = (): void => {
@@ -197,19 +254,43 @@ const startFix = (): void => {
                         {{ timeAgo(run.createdAt) }}
                     </span>
                     <div class="flex items-center gap-1">
-                        <!-- Primary only on the branch's open failure. Every other red row keeps the same action at
-                             Re-run's weight: a log entry, not a demand, while the vendor's own re-runs and skipped
-                             jobs mean a green above is evidence, not proof, so the action stays one click away. -->
+                        <!-- ONE SLOT FOR THE AGENT, whichever half of its life the row is looking at. The board
+                             could only ever say "Fix with agent", including to the reader whose agent was at that
+                             moment parked on a question nobody would ever see; so the same slot reports instead as
+                             soon as there is something to report (fixStance.ts owns the words).
+
+                             It stays a state even on a run that has since gone green: a rerun keeps the vendor's
+                             run id, and an agent still working on the failure it USED to have is worth saying. -->
+                        <a
+                            v-if="fixState !== undefined && !fixState.retry"
+                            v-bind="fixState.link"
+                            class="touch-target inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1 text-xs font-medium"
+                            :class="[fixState.ink, fixState.chip]"
+                            v-tooltip.top="fixState.hint"
+                            :aria-label="`Fix agent: ${fixState.label.toLowerCase()} — open the conversation`"
+                        >
+                            <Icon :name="fixState.icon" :spin="fixState.spin" class="text-2xs" />
+                            {{ fixState.label }}
+                        </a>
+                        <!-- Primary only on the branch's open failure, and only while no agent is already on that
+                             branch. Every other red row keeps the same action at Re-run's weight: a log entry, not
+                             a demand, while the vendor's own re-runs and skipped jobs mean a green above is
+                             evidence, not proof, so the action stays one click away.
+
+                             "Try again" is the same press on a fix that ENDED: the conversation id is derived from
+                             the run, so it carries on in that conversation, on its branch, rather than opening a
+                             rival agent beside it. The caret matters most here, an agent that just failed is the
+                             one case where reaching for a bigger model is the whole point. -->
                         <AgentRunButton
-                            v-if="run.status === `failed`"
-                            label="Fix with agent"
+                            v-else-if="run.status === `failed`"
+                            :label="fixState?.retry === true ? `Try again` : `Fix with agent`"
                             :model-label="fixModel.model.value.label"
                             :overridden="fixModel.overridden.value"
-                            :severity="open ? undefined : `secondary`"
-                            :text="!open"
+                            :severity="loud ? undefined : `secondary`"
+                            :text="!loud"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
-                            :hint="fixHint"
+                            :hint="startHint"
                             @run="startFix"
                             @pick="fixModel.choose"
                         />
@@ -223,14 +304,18 @@ const startFix = (): void => {
                             :disabled="busy !== undefined"
                             @click="emit(`cancel`, run)"
                         />
+                        <!-- THE LAST RUNG OF THE LADDER. Fix → review → land → prove it, and once the fix is in the
+                             workspace the useful press on a still-red row is this one, so it takes the weight the
+                             Fix button has just given up. Nothing else on the board knows enough to say that. -->
                         <Button
                             v-else
                             label="Re-run"
                             size="small"
-                            severity="secondary"
-                            text
+                            :severity="proven ? undefined : `secondary`"
+                            :text="!proven"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
+                            :title="proven ? `The fix is in your workspace: run the pipeline again to prove it` : undefined"
                             @click="emit(`rerun`, run)"
                         />
                     </div>
@@ -240,6 +325,34 @@ const startFix = (): void => {
 
         <!-- Expanded: the run's job graph -->
         <template #below>
+            <!-- THE AGENT, IN FULL, where a row has the width for it. The collapsed line gets one word about the
+                 fix because it is scanned; everything that answers "how is it going, what has it cost me, what
+                 did it write" is read deliberately, which is what opening a row IS. Same placement (and the same
+                 reasoning) as ext-maintenance's run line. -->
+            <div v-if="fixState" class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                <span class="inline-flex items-center gap-1 font-medium" :class="fixState.ink">
+                    <Icon :name="fixState.icon" :spin="fixState.spin" />
+                    {{ fixState.label }}
+                </span>
+                <span v-if="fixSince">{{ fixSince }}</span>
+                <span v-if="fixState.agent.model" class="font-mono">{{ fixState.agent.model }}</span>
+                <span v-if="spend">{{ spend }}</span>
+                <span v-if="fixState.agent.diff && fixState.agent.diff.files > 0" class="inline-flex items-center gap-1.5">
+                    {{ fixState.agent.diff.files }} file{{ fixState.agent.diff.files === 1 ? `` : `s` }}
+                    <DiffStat :additions="fixState.agent.diff.insertions" :deletions="fixState.agent.diff.deletions" />
+                </span>
+                <a v-bind="fixState.link" class="touch-target underline hover:text-content">open the conversation</a>
+            </div>
+
+            <!-- A row with no agent of its own, on a branch that has one. The collapsed line can only demote its
+                 button and say so in a tooltip; this is where the sentence gets a link, because "open that one
+                 instead" is not advice anybody can act on without one. -->
+            <p v-else-if="branchState" class="mb-3 text-2xs text-subtle">
+                An agent is already working on <span class="font-mono">{{ run.branch }}</span
+                >, started from run #{{ branchState.run.runId }} —
+                <a v-bind="branchState.link" class="touch-target underline hover:text-content">open it</a>
+            </p>
+
             <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
                 <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
                     <template v-for="i in 3" :key="i">

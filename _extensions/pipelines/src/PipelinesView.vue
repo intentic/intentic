@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiFix } from "./ciFixes";
 import {
     Icon,
     Notice,
@@ -16,7 +17,9 @@ import {
     type TallyItem,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
 import { openFailures, runningOnHead, supersededBy } from "./ciStreaks";
+import { useCiFixes } from "./useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
@@ -127,6 +130,24 @@ const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurrin
 const open = computed(() => openFailures(runs.value));
 const superseded = computed(() => supersededBy(runs.value));
 
+/* WHICH RED ROWS ALREADY HAVE AN AGENT ON THEM, and what became of it.
+ *
+ * A fourth cross-run fact, read off every run rather than the scoped ones for the same reason the three below
+ * are: an agent working on a branch is working on it whichever repository the reader happens to be looking at.
+ * The join is the derived conversation id (ciFixes.ts), so this costs one cheap daemon read and no bookkeeping.
+ *
+ * ASKED FOR ONLY WHEN THERE IS SOMETHING TO ASK ABOUT: no failed run, no fix to find, no request. */
+const anyFailed = computed(() => runs.value.some((run) => run.status === `failed`));
+const { fixes, invalidate: refreshFixes } = useCiFixes(anyFailed);
+const fixByRun = computed(() => fixesByRun(runs.value, fixes.value));
+// The branch's ongoing fix, for the rows that have none of their own: a fix is attached to a run, a breakage
+// belongs to a branch, and the newest red row is exactly the one that would otherwise offer a second agent for
+// work already in flight one row below it.
+const fixByBranch = computed(() => branchFixes(fixByRun.value));
+// A row with an agent of its own says so itself, and is also the row every OTHER row on the branch is being
+// pointed at, so it never carries the pointer.
+const branchFixFor = (run: PipelineRun): CiFix | undefined => (fixByRun.value.has(run) ? undefined : fixByBranch.value.get(branchKey(run)));
+
 /* WHICH ROWS ARRIVE OPEN: the ones still running on their branch's newest commit (ciStreaks). Reading a board
  * whose live run is a strip of five circles means clicking it to see the graph that is the reason this view
  * exists, and the runs that are moving are the ones nobody has to be asked about. Off every run rather than the
@@ -229,6 +250,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
     actionError.value = undefined;
     try {
         const { conversationId } = await fix.mutateAsync({ run, pick });
+        // So the row this reader comes back to says "Agent working" rather than offering to start what it just
+        // started. Not awaited: the navigation below is the point, and a roster read is not worth delaying it.
+        void refreshFixes();
         // The BOARD with the new card focused, not the agent's diff view: the turn started a second ago and has
         // nothing to review yet, so what the user wants is to watch it work beside their other agents. `?focus`
         // is the fleet's own deep link: it waits for the card to reach the roster, then selects and reveals it.
@@ -356,6 +380,8 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                                 :open="open.has(run)"
                                 :superseded="superseded.get(run)"
                                 :auto-open="live.has(run)"
+                                :fix="fixByRun.get(run)"
+                                :branch-fix="branchFixFor(run)"
                                 @rerun="act($event, rerun)"
                                 @cancel="act($event, cancel)"
                                 @fix="fixRun"
