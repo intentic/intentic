@@ -10,6 +10,7 @@
     "scripts": {
         "build": "turbo run build",
         "verify": "pnpm typecheck && pnpm test",
+        "verify:push": "pnpm check:bytes && pnpm lint && pnpm verify",
         "test": "pnpm prepass && VITEST_MAX_WORKERS=${VITEST_MAX_WORKERS:-4} turbo run test --only",
         "typecheck": "pnpm prepass && turbo run typecheck --continue=dependencies-successful",
         "prepass": "node _tools/scripts/prepass.mjs",

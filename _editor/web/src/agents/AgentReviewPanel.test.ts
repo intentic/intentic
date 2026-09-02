@@ -320,7 +320,7 @@ it(`orders on the code-only reading once every row has been counted, and holds i
     noCode(agentStatKey(AGENT, `root`, `assets/logo.png`, undefined));
 
     const el = await mount();
-    // Git's order would be session.ts (+12), session.test.ts (+8), config.ts (+2): this is the other one.
+    // Git's order would be the session row (+12), its test row (+8), then config (+2): this is the other one.
     const order = [`session.test.ts`, `config.ts`, `session.ts`, `logo.png`, `README.md`];
     expect(rowNames(el)).toEqual(order);
 
