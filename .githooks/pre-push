@@ -26,8 +26,17 @@
 # git, grep and every diff viewer — and then sat in `pnpm check` alone, where nothing automatic ever reached it,
 # while seven more files picked up the same byte. A gate no hook and no pipeline runs is a comment.
 #
+# The daemon's two structural gates ride along on the same terms. verify-invariants.mjs is the invariant
+# registry's exhaustiveness: every subsystem under _sandbox/sandbox/src registers a check or says why it has
+# none. verify-daemon-boundaries.mjs holds the module seams where they stand: no new module takes the whole of
+# Services without handing it on, no new pair of subsystems imports each other's values. Both read the checkout
+# and nothing else, in milliseconds; both lived in `pnpm check` alone, and the first was red on main for nine
+# subsystems with nothing running it.
+#
 # No dependency guard, unlike commit-msg: this needs only node, which is the thing running the repo. Use
 # `git push --no-verify` when you genuinely mean to push a tree that does not pass.
 set -e
 node _tools/scripts/prepass.mjs --checks-only
-exec node _tools/scripts/control-chars.mjs
+node _tools/scripts/control-chars.mjs
+node _tools/scripts/verify-invariants.mjs
+exec node _tools/scripts/verify-daemon-boundaries.mjs

@@ -255,6 +255,14 @@ jobs:
       # runs, and seven more files picked up the same byte behind it. 4,300 files read in ~120ms, same shape as
       # the step above: checkout only, no node_modules, no network.
       - run: node _tools/scripts/control-chars.mjs
+      # The daemon's structural gates, the same shape: checkout only, milliseconds. verify-invariants.mjs is the
+      # invariant registry's exhaustiveness (every subsystem under _sandbox/sandbox/src registers a check or says
+      # why it has none); verify-daemon-boundaries.mjs holds the module seams where they stand (no new module
+      # takes the whole of Services without handing it on, no new pair of subsystems imports each other's
+      # values). Both sat in `pnpm check` alone, and the first was red on main for nine subsystems with nothing
+      # running it. The pre-push hook runs the same two on the other side of the push.
+      - run: node _tools/scripts/verify-invariants.mjs
+      - run: node _tools/scripts/verify-daemon-boundaries.mjs
       # The publish set is the same shape of invariant — package.json files and nothing else — and it was
       # checked nowhere but release-prepare, which runs on main AFTER the release has already been decided.
       # That is where the extension-manifest → base dependency surfaced: the release failed on a list that a

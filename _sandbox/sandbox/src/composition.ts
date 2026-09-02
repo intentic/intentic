@@ -1517,6 +1517,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // The DECORATED store for the exit checks: they read `kind` and a country code, never a credential, so
         // the rehydrating read is the right one and the raw store would only hide vault markers from them.
         capabilities: services.capabilities,
+        runners: services.runners,
+        runnerHub: services.runnerHub,
+        webexts: services.webexts,
+        webextHub: services.webextHub,
+        issues: services.issues,
+        cursorHooks: services.cursorHooks,
     });
     return services;
 };

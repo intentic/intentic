@@ -57,6 +57,9 @@ export interface RunnerHub {
     // Cut a runner off now: the owner revoking it, or the capability being removed.
     readonly disconnect: (id: string, reason: string) => void;
     readonly online: (id: string) => boolean;
+    // Every runner holding a socket right now, for the companion (invariant.ts) that holds each against the
+    // enrollment store: a socket the store no longer vouches for is a revoked runner still receiving work.
+    readonly connected: () => readonly string[];
     readonly state: (id: string) => RunnerLiveState;
 }
 
@@ -148,6 +151,7 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
             said();
         },
         online: (id) => live.has(id),
+        connected: () => [...live.keys()],
         state: (id) => {
             const runner = live.get(id);
             const remembered = runner ?? seen.get(id);

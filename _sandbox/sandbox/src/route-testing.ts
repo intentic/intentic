@@ -561,7 +561,13 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         cursorModels: { models: async () => ({ models: [{ id: "auto", label: "Auto" }], default: "auto" }), item: async () => undefined },
         // Registered but never consulted: with no live turn the gate answers allow, which is what an unwired
         // hook service does anyway.
-        cursorHooks: { start: async () => {}, register: () => () => {}, ready: () => false, close: async () => {} },
+        cursorHooks: {
+            start: async () => {},
+            register: () => () => {},
+            ready: () => false,
+            paths: () => ({ socket: "", script: "", hooks: "" }),
+            close: async () => {},
+        },
         async *cursorAgent() {
             yield { kind: "done" };
         },

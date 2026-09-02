@@ -63,6 +63,9 @@ export interface CursorHookService {
     readonly register: (turn: CursorGateTurn) => () => void;
     // Whether the gate is actually wired, so a turn can say honestly whether its rules are in force.
     readonly ready: () => boolean;
+    // The socket, the script that names it, and the hooks file that names the script: the three links the
+    // companion (invariant.ts) re-reads, because each is a path another daemon can overwrite after `ready`.
+    readonly paths: () => { readonly socket: string; readonly script: string; readonly hooks: string };
     readonly close: () => Promise<void>;
 }
 
@@ -234,6 +237,12 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
             // gate comes back after a hard kill.
             await rm(socketPath, { force: true });
             const created = createServer((request, response) => {
+                // Who is listening: the companion's probe (invariant.ts), so a socket path this daemon believes
+                // is its own can be told from one a second daemon on the same auth root has since re-bound.
+                if (request.url === "/identity") {
+                    response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ pid: process.pid }));
+                    return;
+                }
                 if (request.method !== "POST" || (request.url !== "/gate" && request.url !== "/session-env")) {
                     response.writeHead(405).end();
                     return;
@@ -300,6 +309,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
             };
         },
         ready: () => server !== undefined,
+        paths: () => ({ socket: socketPath, script: scriptPath, hooks: enterpriseHooksPath() }),
         close: async () => {
             const running = server;
             server = undefined;

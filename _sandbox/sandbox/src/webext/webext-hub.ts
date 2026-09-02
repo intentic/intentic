@@ -63,6 +63,9 @@ export interface WebExtHub {
     readonly rememberTools: (id: string, result: unknown) => void;
     readonly knownTools: (id: string) => unknown | undefined;
     readonly online: (id: string) => boolean;
+    // Every browser holding a socket right now, for the companion (invariant.ts) that holds each against the
+    // enrollment store: a socket the store no longer vouches for is a browser the agent can still drive.
+    readonly connected: () => readonly string[];
     // The card's read: liveness from this hub, and the browser's own facts asked fresh when it is up. Falls
     // back to the last answer on timeout, so a card renders a stale grant list rather than nothing.
     readonly state: (id: string) => Promise<Omit<WebExtSummary, "id" | "platform">>;
@@ -172,6 +175,7 @@ export const createWebExtHub = (logger: { warn: (data: object, message: string) 
             said();
         },
         online: (id) => live.has(id),
+        connected: () => [...live.keys()],
         state: async (id) => {
             const extension = live.get(id);
             if (extension !== undefined) {

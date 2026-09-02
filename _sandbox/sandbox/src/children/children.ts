@@ -102,6 +102,9 @@ interface ChildRecord {
     readonly cwd: string;
     sessionId: string | undefined;
     running: boolean;
+    // When `running` was last set: the companion (invariant.ts) compares this ledger with the turn path's own
+    // record of what is live, and needs to know a record's age to tell "not begun yet" from "never begun".
+    startedAt: number;
     pending: PendingChildCard | undefined;
 }
 
@@ -141,6 +144,15 @@ export const supervisorFor = (conversationId: string): ChildSupervisor | undefin
  * unproven is already said where it can be acted on: it rides back with the report itself
  * (child-verification.ts) and it lands on the spend ledger. */
 export const isSpawnedChild = (conversationId: string): boolean => depths.has(conversationId);
+
+/* Every child this daemon has a record of, for the companion (invariant.ts) that compares this ledger with the
+ * turn path's record of what is live. Settled children stay on it, that is what a follow-up `send` resumes. */
+export const childLedger = (): readonly {
+    readonly conversationId: string;
+    readonly parent: string;
+    readonly running: boolean;
+    readonly startedAt: number;
+}[] => [...kids].map(([conversationId, kid]) => ({ conversationId, parent: kid.parent, running: kid.running, startedAt: kid.startedAt }));
 
 // Tests drive the service through its real entry points, so they need a way back to empty between cases.
 export const resetChildrenForTest = (): void => {
@@ -517,6 +529,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             cwd: parent.cwd,
             sessionId: undefined,
             running: true,
+            startedAt: Date.now(),
             pending: undefined,
         });
         /* The roster handle: the PARENT's conversation, which is what the record files under and what the wait
@@ -610,6 +623,7 @@ export const sendToChild = async (
             ...(spec.model !== undefined ? { model: spec.model } : {}),
         });
         kid.running = true;
+        kid.startedAt = Date.now();
         const started = runChildTurn(services, childId, parent.conversationId, turn, turnFn);
         if (!started.ok) {
             kid.running = false;
