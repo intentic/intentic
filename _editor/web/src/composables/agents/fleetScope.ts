@@ -7,7 +7,7 @@ import { landOnAfterSwitch } from "../sandbox/sandboxScreen";
 import { useSandbox } from "../sandbox/useSandbox";
 import { turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
-import { useChat } from "../chat/useChat";
+import { chatStrip, useChat } from "../chat/useChat";
 
 /* HOW MUCH OF THE ACCOUNT THE FLEET BOARD IS ABOUT: the sandbox you are standing in, or all of them.
  *
@@ -70,8 +70,10 @@ export const otherFleet = computed<readonly FleetAgent[]>(() => {
      *
      * Matched on (id, box), never on the id alone: two sandboxes can hold one conversation id, and a tab open
      * on THIS box's copy must not mark the other box's card as open. */
-    const local = useChat().conversations.value;
-    const tabOf = new Map(local.flatMap((tab) => (tab.box.value === undefined ? [] : [[cardKey(tab.box.value, tab.conversationId), tab] as const])));
+    // The strip as the app sees it (useChat.chatStrip), whichever window is drawing the chat: the same account
+    // of "is this open, does it hold words" the home board reads, so a card here and a card there cannot
+    // disagree about one conversation.
+    const tabOf = new Map(chatStrip.value.tabs.flatMap((tab) => (tab.box === undefined ? [] : [[cardKey(tab.box, tab.id), tab] as const])));
     return otherBoxes.value.flatMap((box) =>
         box.agents.map((agent): FleetAgent => {
             const tab = tabOf.get(cardKey(box.sandbox.id, agent.id));
@@ -81,7 +83,7 @@ export const otherFleet = computed<readonly FleetAgent[]>(() => {
                 open: tab !== undefined,
                 // Unsent words exist in exactly one place, the composer in front of the user, so this is read
                 // from the tab or it is false: a summary from another daemon has no way to know.
-                unsent: tab?.unsent.value ?? false,
+                unsent: tab?.unsent ?? false,
                 unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
             };
         }),

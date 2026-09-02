@@ -2,7 +2,7 @@ import type { AgentOrigin } from "@intentic/sandbox-contract";
 import { type FleetAgent, useAgents } from "../agents/useAgents";
 import { type FleetLane, laneOf } from "../agents/agentStatus";
 import type { Conversation } from "./conversation";
-import { draftPreview } from "./draftEcho";
+import { draftPreview } from "./draftPreview";
 import { useChat } from "./useChat";
 
 /* What the open-chat list KNOWS about a tab, as projections rather than as component state, because two

@@ -25,7 +25,7 @@ import {
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { agentTranscript, type AgentTranscript } from "./agentTranscript";
 import { claimClosedDrafts, keepClosedDraft } from "./closedDrafts";
-import { draftPreview, drawsChat, elsewhereDrafts, publishDrafts, type UnsentDraft } from "./draftEcho";
+import { drawsChat, elsewhereStrip, publishStrip } from "./chatEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
 import { accountsLoaded, providerAccounts, providerRefusals, rememberedAccountFor, selectedAccountId, translatorAccounts } from "./providerAccounts";
@@ -46,6 +46,7 @@ import { rememberedModelFor, startingMode, turnDefaults, type TurnPick } from ".
 import { accessKnown, providerReady, providerReadyOn } from "./access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
 import { scopeAccountPreference } from "./accountPreference";
+import { type Strip, tabFacts, untouched } from "./tabFacts";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
@@ -53,7 +54,6 @@ import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
 import { sandboxError, sandboxJson, sandboxRequest, sandboxRequestVia } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { showsPanel } from "../floating";
 import { useSandbox } from "../sandbox/useSandbox";
 import { uuid } from "../uuid";
 
@@ -77,7 +77,15 @@ export interface ChatSession {
  * has why), and only daemon-backed state converges between them on its own. What does cross windows is the
  * SUMMONS, a surface outside the panel showing a chat goes through summon.ts, which applies the same reveal
  * in every window, so a click made in any of them is followed by all of them, the chat's own floating window
- * included. */
+ * included.
+ *
+ * WHILE THE CHAT IS DRAWN BY ANOTHER WINDOW, this window's tab list is a SHADOW: the tabs it built before the
+ * panel left plus every summons since, with composers frozen at whatever they last heard. It is kept for the
+ * actions that need a Conversation to act on from here (a resolve prompt sent from the board, a stop, a rename),
+ * and it is replaced wholesale from the seed the moment the panel returns (restoreTabs). Nothing reads it for
+ * DISPLAY: what the chat is showing is asked of `chatStrip` below, which answers from this list only while this
+ * window draws the chat and from the drawing window's published strip otherwise (chatEcho.ts). Every defect the
+ * popped-out chat has had was a reader mixing the two. */
 
 const { activeSandboxId, reachable } = useSandbox();
 
@@ -97,21 +105,13 @@ const activeId = ref<string>(``);
  * anything unsent (Conversation.unsent, composer text, a staged attachment, a queued message), a transcript,
  * a session, a running turn, a rename, an unread error, or a fleet registration.
  *
- * ...and words in the composer are read from WHICHEVER WINDOW is drawing the chat, this one or the one that
- * popped it out (draftEcho), never from both. A popped-out chat is a window of its own, so a draft being typed
- * out there is empty here, and this sweep was taking the board's card for it away on the next click: the one
- * thing in this app that exists nowhere but in front of the user, dropped because it was in front of them on
- * another screen. Reading this window's frozen copy ALONGSIDE the echo is the opposite failure and just as
- * durable: words the panel took with it when it left keep a tab alive here forever, since no send out there can
- * clear a composer this window is no longer showing. */
-const untouchedDraft = (conversation: Conversation): boolean =>
-    !conversation.registered.value &&
-    !conversation.streaming.value &&
-    !(drawsChat.value ? conversation.unsent.value : elsewhereDrafts.value.has(conversation.conversationId)) &&
-    conversation.messages.value.length === 0 &&
-    conversation.session.value === undefined &&
-    conversation.title.value === null &&
-    conversation.error.value === null;
+ * Read off THIS window's conversation, whether or not this window draws the chat. In the window that does, the
+ * composer is the truth. In a window that does not, the list is a shadow (the note above) that nothing displays:
+ * a sweep there costs the board nothing, since the board reads the drawing window's strip, and sparing there
+ * costs nothing either. The sweep used to consult the echo for the words instead, which was the right answer to
+ * a question that no longer arises: the board's card for a draft being typed one window away is drawn from that
+ * window's strip, not from whether this window's copy survived the click. */
+const untouchedDraft = (conversation: Conversation): boolean => untouched(tabFacts(conversation));
 
 /* The one writer of the tab list AND of the focus (setActive routes through it too), holding both of the
  * strip's invariants in the same write:
@@ -128,16 +128,24 @@ const untouchedDraft = (conversation: Conversation): boolean =>
  * listed) was live long enough to render and to be persisted by the snapshot watch. It also only ever looked at
  * the tab that LOST the focus, so a draft that lost it to a list rewrite instead (a close reseating the focus on
  * the last tab) survived as a permanent, unsweepable "New agent" tab. One synchronous write, no ordering. */
+
+/* THE ORDER THE FOCUS VISITED THE TABS IN, most recent last, for the one question it answers: where the focus
+ * goes when the tab holding it closes. It used to go to the LAST tab in the strip, which in a rail sorted by
+ * lane is whichever chat happened to be opened last, most often a finished or archived one nobody was reading,
+ * so closing a draft from the board sent the popped-out chat to "some old session". The tab the reader was on
+ * BEFORE this one is what every editor's close means (VSCode focuses the most recent editor by default), and it
+ * is the only answer that makes a close from the board and a close from the rail land in the same place. */
+let recent: readonly string[] = [];
+
 const setConversations = (next: readonly Conversation[], focus: string, reason: string): void => {
+    const open = (id: string): boolean => next.some((conversation) => conversation.conversationId === id);
     /* Where the focus lands when the id asked for names no tab in the list being written, a close taking the
-     * tab that had it. A chat still ON SCREEN wins over the strip's last tab: with several panes open, closing
-     * the focused one should hand the keyboard to a column the user is already looking at and let that column
-     * go, rather than pull an unrelated chat into the vacated slot to hold a focus that had nowhere else to be
-     * (VSCode closes the group with its last editor; this is the same move). With one pane the only pane IS the
-     * closed tab, so this falls through to the last tab exactly as it always has. */
-    const focused = next.some((conversation) => conversation.conversationId === focus)
-        ? focus
-        : (panes.value.find((id) => next.some((conversation) => conversation.conversationId === id)) ?? next.at(-1)!.conversationId);
+     * tab that had it. A chat still ON SCREEN wins: with several panes open, closing the focused one should hand
+     * the keyboard to a column the user is already looking at and let that column go, rather than pull an
+     * unrelated chat into the vacated slot to hold a focus that had nowhere else to be (VSCode closes the group
+     * with its last editor; this is the same move). Then the tab the focus was on most recently before this one
+     * (`recent`), and only when nothing has ever held it, the strip's last tab. */
+    const focused = open(focus) ? focus : (panes.value.find(open) ?? recent.findLast(open) ?? next.at(-1)!.conversationId);
     // The focused tab is always kept, so the list can never come out empty. A dropped draft needs no teardown:
     // untouched means no turn to detach from and no transcript to evict.
     const kept = next.filter((conversation) => conversation.conversationId === focused || !untouchedDraft(conversation));
@@ -166,6 +174,8 @@ const setConversations = (next: readonly Conversation[], focus: string, reason: 
     // leaving from.
     reconcilePanes(kept, focused);
     activeId.value = focused;
+    // Closed tabs leave the order; the focused one moves to its head.
+    recent = [...recent.filter((id) => id !== focused && kept.some((conversation) => conversation.conversationId === id)), focused];
 };
 
 /* WHICH CHATS ARE ON SCREEN AT ONCE, the panes, in the order they were opened.
@@ -367,8 +377,8 @@ restoreTabs();
  *   · SHOWING it, write on every change, which also re-seeds the next window (windowStore's two stores).
  *   · NOT showing it, forget, and read the seed back the moment the panel returns. A brand-new floating window
  *     and a window taking the panel back therefore travel the same path, the one a fresh window always took.
- * Nothing is exchanged between the two windows and nothing has to be handed over: the seed is the handoff. */
-const showsChat = showsPanel(`chat`);
+ * Nothing is exchanged between the two windows and nothing has to be handed over: the seed is the handoff.
+ * `drawsChat` (chatEcho.ts) is that reading. */
 
 /* WHEN EACH COMPOSER FIRST HELD SOMETHING UNSENT (Conversation.draftAt), stamped here and nowhere else.
  * Something arrives in a composer by five routes — typing, an upload finishing, a message queued behind a
@@ -408,46 +418,44 @@ watch(
             tabs: conversations.value.map(snapshotTab),
         }),
     (json) => {
-        if (scopedSandboxId !== undefined && showsChat.value) {
+        if (scopedSandboxId !== undefined && drawsChat.value) {
             writeTabSnapshot(scopedSandboxId, json);
         }
     },
 );
 
-watch(showsChat, (shows) => {
-    if (shows) {
+watch(drawsChat, (draws) => {
+    if (draws) {
         restoreTabs();
         return;
     }
     forgetTabSnapshot(scopedSandboxId);
 });
 
-/* ...and the same strip, told to the windows that are NOT drawing it, cut down to the one fact only this
- * window can know: which chats hold words that have not gone out, the first few of them, and how long they have
- * been standing (draftEcho has the whole argument). It is what keeps the fleet board's card for a draft alive
- * while the chat is popped out, what lets that card wear the message's opening words instead of "New agent",
- * and what lets its unsent mark say how old the message is from another window.
- *
- * A stringified getter, like the snapshot above: the previews stop changing after the first line or so, the
- * stamp only moves on the edge into unsent (the watch above), and from then on typing publishes nothing. Gated
- * on drawing the panel, since a window that isn't is repeating hearsay, and the gate is IN the key so that
- * becoming the drawing window publishes at once rather than at the next keystroke. */
+/* THE STRIP AS EVERYTHING OUTSIDE THE PANEL READS IT (tabFacts.ts): every open tab as a card would draw it, the
+ * focus, the panes. This window's own while it draws the chat; the drawing window's published one while it does
+ * not (chatEcho.ts). It is the ONE account of the chat the fleet board, the ring and every other surface outside
+ * the panel consult, and the reason none of them has to know which window the chat is in: the choice between a
+ * local tab and an echo is made here, once, and nowhere else. */
+const localStrip = computed<Strip>(() => ({
+    active: activeId.value,
+    panes: panes.value,
+    tabs: conversations.value.map(tabFacts),
+}));
+
+export const chatStrip: ComputedRef<Strip> = computed(() => (drawsChat.value ? localStrip.value : elsewhereStrip.value));
+
+/* ...and told to the windows that are NOT drawing it. A stringified getter, like the snapshot above: a card's
+ * facts stop changing once its first line is typed (the preview is cut short, the stamp only moves on the edge
+ * into unsent), so keystrokes publish nothing after the first few. Gated on drawing the panel, since a window
+ * that isn't is repeating hearsay, and the gate is IN the key so that becoming the drawing window publishes at
+ * once rather than at the next change. Parsed back rather than handed the live object so what the local reader
+ * and the remote one hold is byte for byte the same strip. */
 watch(
-    () =>
-        showsChat.value
-            ? JSON.stringify(
-                  conversations.value
-                      .filter((conversation) => conversation.unsent.value)
-                      .map((conversation) => ({
-                          id: conversation.conversationId,
-                          preview: draftPreview(conversation.draft.value) ?? ``,
-                          at: conversation.draftAt.value,
-                      })),
-              )
-            : undefined,
+    () => (drawsChat.value ? JSON.stringify(localStrip.value) : undefined),
     (json) => {
         if (json !== undefined) {
-            publishDrafts(JSON.parse(json) as UnsentDraft[]);
+            publishStrip(JSON.parse(json) as Strip);
         }
     },
     { immediate: true },
@@ -1816,11 +1824,11 @@ const setPanes = (ids: readonly string[]): void => {
  * persona) rather than as a fresh tab wearing somebody's words. The board goes on drawing a card for it, and
  * opening that card is what takes the entry back (resolveEntry).
  *
- * ONLY THE WINDOW DRAWING THE CHAT PUTS WORDS THERE, the rule draftEcho states and this is the second reader
- * of: a window that is not drawing it keeps the tab objects it built, frozen at whatever was in their composers
- * when the panel left, and a close that stored one of those would set aside a message the user has since sent
- * out in the floating window — offered back, by a later card click, into the composer they sent it from. Such a
- * window still closes its copy; it just has nothing to say about what was in it. */
+ * ONLY THE WINDOW DRAWING THE CHAT PUTS WORDS THERE (drawsChat, chatEcho.ts): a window that is not drawing it
+ * holds a shadow of the strip, frozen at whatever was in its composers when the panel left, and a close that
+ * stored one of those would set aside a message the user has since sent out in the floating window — offered
+ * back, by a later card click, into the composer they sent it from. Such a window still closes its copy; it just
+ * has nothing to say about what was in it. The floating window, applying the same close, says it. */
 export const closeTabs = (ids: ReadonlySet<string>): void => {
     traceFocus(`close`, { ids: [...ids], active: activeId.value });
     for (const conversation of conversations.value) {

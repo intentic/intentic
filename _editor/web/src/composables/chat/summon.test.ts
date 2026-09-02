@@ -5,6 +5,7 @@
 // chats is ignored whole.
 import { nextTick } from "vue";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { Summons } from "./summon";
 import type { StoredTab } from "./tabSnapshot";
 
 vi.mock("../sandbox/sandboxClient", () => {
@@ -49,9 +50,14 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 const { resetChat, useChat } = await import("./useChat");
 const { Conversation } = await import("./conversation");
 const { chatRun } = await import("./chatRun");
-const { claimedSummons, receiveSummons, relaySummons, summonChat, wireSummons } = await import("./summon");
+const { claimedSummons, relaySummons, summonChat, wireSummons } = await import("./summon");
+const { receiveChatNote } = await import("./chatChannel");
 const { closedDrafts, forgetClosedDraft, keepClosedDraft } = await import("./closedDrafts");
 const { receiveFloatingNote } = await import("../floating");
+
+// A summons arriving from another window, by the path the channel delivers it: on the chat's one channel, in an
+// envelope naming the sandbox it is about (chatChannel.ts).
+const deliver = (summons: Summons, sandbox: string | undefined = `sb1`): void => receiveChatNote({ sandbox, note: { kind: `summons`, summons } });
 
 /* THE CHAT IN A WINDOW OF ITS OWN, as the rest of the app hears it: one beat from that window (floating.ts's
  * own seam), which is what makes this window stop drawing the panel — and its own copies of these chats shadows
@@ -102,7 +108,7 @@ it(`applies a broadcast reveal to a window that never saw the click`, () => {
     const clicked = new Conversation();
     clicked.title.value = `Board card`;
 
-    receiveSummons(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
 
     // The receiving window rebuilt the tab from the snapshot (a different instance, the same identity) and
     // focused it: with `show` collapsing to it, exactly as the clicking window did.
@@ -116,7 +122,7 @@ it(`carries the caret with a New agent summons, so every window's composer is re
     const chat = useChat();
     const requests = chat.composerFocus.value;
     const draft = new Conversation();
-    receiveSummons(wireSummons({ kind: `reveal`, verb: `show`, entries: [draft], focus: draft.conversationId, caret: true }));
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [draft], focus: draft.conversationId, caret: true }));
     expect(chat.composerFocus.value).toBe(requests + 1);
 });
 
@@ -135,10 +141,7 @@ it(`ignores a summons for another sandbox's chats`, () => {
     const chat = useChat();
     const before = chat.activeId.value;
     const foreign = new Conversation();
-    receiveSummons({
-        ...wireSummons({ kind: `reveal`, verb: `show`, entries: [foreign], focus: foreign.conversationId, caret: false }),
-        sandbox: `sb-other`,
-    });
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [foreign], focus: foreign.conversationId, caret: false }), `sb-other`);
     expect(chat.activeId.value).toBe(before);
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(foreign.conversationId);
 });
@@ -149,8 +152,8 @@ it(`is idempotent: a summons repeated focuses the tab it opened rather than mint
     const chat = useChat();
     const clicked = new Conversation();
     const wire = wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false });
-    receiveSummons(wire);
-    receiveSummons(wire);
+    deliver(wire);
+    deliver(wire);
     expect(chat.conversations.value.filter((conversation) => conversation.conversationId === clicked.conversationId)).toHaveLength(1);
 });
 
@@ -160,7 +163,7 @@ it(`resolves a session summons onto the tab already showing that session`, () =>
     const chat = useChat();
     const showing = chat.active.value;
     showing.session.value = { id: `sess-9`, provider: `claude`, account: `acc-1`, harness: `native` };
-    receiveSummons(
+    deliver(
         wireSummons({
             kind: `reveal`,
             verb: `show`,
@@ -175,7 +178,7 @@ it(`resolves a session summons onto the tab already showing that session`, () =>
 
 // The run summons carries the id alone: each window's panel follows the run from its own ledger reads.
 it(`points every window's panel at a summoned run`, () => {
-    receiveSummons(wireSummons({ kind: `run`, runId: `run-7` }));
+    deliver(wireSummons({ kind: `run`, runId: `run-7` }));
     expect(chatRun.value).toEqual({ runId: `run-7`, mode: `live` });
 });
 
@@ -237,7 +240,7 @@ it(`restores a summoned chat's message from what the summons carries, with an em
         unsent: [setAside(`cnv-parked`, `the half-written message`)],
     });
 
-    receiveSummons(wire);
+    deliver(wire);
 
     expect(chat.activeId.value).toBe(`cnv-parked`);
     expect(chat.active.value.draft.value).toBe(`the half-written message`);
@@ -251,10 +254,10 @@ it(`restores a summoned chat's message from what the summons carries, with an em
 it(`closes a chat in a window that never saw the click`, () => {
     const chat = useChat();
     const clicked = new Conversation();
-    receiveSummons(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toContain(clicked.conversationId);
 
-    receiveSummons(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
+    deliver(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
 
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
 });
@@ -266,12 +269,12 @@ it(`closes a chat in a window that never saw the click`, () => {
 it(`sets no words aside for a chat this window is only shadowing`, async () => {
     const chat = useChat();
     const clicked = new Conversation();
-    receiveSummons(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
     chat.active.value.draft.value = `what the composer out there held a moment ago`;
     await nextTick();
     popOut();
 
-    receiveSummons(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
+    deliver(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
 
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
     expect(closedDrafts.value).toEqual([]);

@@ -804,7 +804,22 @@ describe(`closing tabs`, () => {
         chat.closeTabs(new Set([ids[2]!, ids[3]!])); // to the right of the second tab
 
         expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
-        expect(chat.activeId.value).toBe(ids[1]); // the active tab went; focus falls to the last remaining one
+        expect(chat.activeId.value).toBe(ids[1]); // the active tab went; focus falls to the one it was on before
+    });
+
+    /* WHERE THE FOCUS GOES WHEN THE TAB HOLDING IT CLOSES: to the tab it was on before this one, not to whichever
+     * sits last in the strip. The rail sorts by lane, so "last" was most often a finished or archived chat nobody
+     * was reading, and a draft closed from the board sent the popped-out chat to some old session. The same rule
+     * for the rail's × and the board's, so the two closes land in the same place. */
+    it(`hands the focus back to the most recently focused survivor when the focused tab closes`, () => {
+        const chat = useChat();
+        const ids = openFour(); // ...and the focus has visited them in order, ending on the third
+        chat.setActive(ids[0]!);
+        chat.setActive(ids[3]!);
+
+        chat.closeTabs(new Set([ids[3]!]));
+
+        expect(chat.activeId.value).toBe(ids[0]); // not ids[2], the last tab in the strip
     });
 
     // "Close All" can't leave the panel with nothing to render: the composer needs a conversation to write into.
@@ -963,53 +978,44 @@ describe(`abandoned drafts`, () => {
         expect(chat.activeId.value).toBe(pressed.conversationId);
     });
 
-    /* THE WORDS MAY BE IN ANOTHER WINDOW, and the sweep has to count them all the same. With the chat popped
-     * out, the composer is out there and this window's copy of the tab is empty, so clicking another card on
-     * the board swept a draft the user was in the middle of writing: the one thing here that exists nowhere
-     * else. The window drawing the chat says what it is holding (draftEcho) and this reads it. */
-    it(`keeps a draft whose words are being typed in the popped-out chat`, async () => {
-        const { receiveDraftNote } = await import("./draftEcho");
+    /* WHAT EVERYTHING OUTSIDE THE PANEL READS (chatStrip): this window's own strip while it draws the chat, and
+     * the strip the popped-out window publishes while it does not, never a mix of the two. With the chat on
+     * another screen this window's tabs are a frozen copy, and every popped-out defect so far was a reader taking
+     * one fact from the copy and another from the echo: a draft card swept because the copy looked empty, an
+     * unsent chip kept because the copy still held sent words. So the copy is not consulted at all. */
+    it(`answers for the strip from whichever window draws the chat`, async () => {
+        const { chatStrip } = await import("./useChat");
+        const { receiveChatNote } = await import("./chatChannel");
         const { receiveFloatingNote } = await import("../floating");
         const chat = useChat();
-        const first = chat.active.value.conversationId;
+        const own = chat.active.value.conversationId;
         chat.draft.value = `real work`;
-        const elsewhere = newChat();
+        await nextTick();
+
+        expect(chatStrip.value.active).toBe(own);
+        expect(chatStrip.value.tabs.map((tab) => ({ id: tab.id, unsent: tab.unsent, preview: tab.preview }))).toEqual([
+            { id: own, unsent: true, preview: `real work` },
+        ]);
+
+        // Popped out: what this window holds stops counting, and what the holder says is the whole answer.
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
-        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [{ id: elsewhere.conversationId, preview: `half a thought` }] });
-        await nextTick();
+        receiveChatNote({
+            sandbox: `sb1`,
+            note: {
+                kind: `strip`,
+                strip: {
+                    active: `far`,
+                    panes: [`far`],
+                    tabs: [{ id: `far`, registered: false, standing: `draft`, provider: `claude`, harness: `native`, model: ``, unsent: true, preview: `half a thought` }],
+                },
+            },
+        });
+        expect(chatStrip.value.active).toBe(`far`);
+        expect(chatStrip.value.tabs.map((tab) => tab.id)).toEqual([`far`]);
 
-        chat.setActive(first);
-        await nextTick();
-
-        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first, elsewhere.conversationId]);
-
-        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [] });
+        // Docked again: this window draws the chat and answers for it, the echo is ignored whatever it last said.
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
-    });
-
-    /* ...and the words may be GONE from that other window, which is the same rule read the other way. This
-     * window's copy of a popped-out chat's tab is frozen at the moment the panel left, so once the message is
-     * sent out there nothing here can clear it: the holder's snapshot stops naming the chat, and a sweep that
-     * still read the frozen composer kept the tab (and its board card) alive for the rest of the session. */
-    it(`sweeps a draft the popped-out chat no longer names, whatever this window's frozen copy holds`, async () => {
-        const { receiveDraftNote } = await import("./draftEcho");
-        const { receiveFloatingNote } = await import("../floating");
-        const chat = useChat();
-        const first = chat.active.value.conversationId;
-        chat.draft.value = `real work`;
-        const elsewhere = newChat();
-        // This window's frozen copy of the popped-out tab, still holding what was in it when the panel left.
-        elsewhere.draft.value = `half a thought`;
-        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
-        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [] });
-        await nextTick();
-
-        chat.setActive(first);
-        await nextTick();
-
-        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first]);
-
-        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+        expect(chatStrip.value.active).toBe(own);
     });
 
     it(`leaves a draft the fleet has registered alone: that tab is a real agent now`, async () => {

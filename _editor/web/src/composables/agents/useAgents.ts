@@ -2,13 +2,13 @@ import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contrac
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, effectScope, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, limited, turnInFlight, unregistered } from "./agentStatus";
-import type { Conversation } from "../chat/conversation";
 import { invalidateAgentTranscript } from "../chat/agentTranscript";
 import { closedDrafts, forgetClosedDraft } from "../chat/closedDrafts";
-import { draftPreview, drawsChat, elsewhereDrafts } from "../chat/draftEcho";
+import { draftPreview } from "../chat/draftPreview";
+import type { TabFacts } from "../chat/tabFacts";
 import type { StoredTab } from "../chat/tabSnapshot";
 import { rememberedProviderFor } from "../chat/turnDefaults";
-import { agentTabOf, type AgentTabSeed, useChat } from "../chat/useChat";
+import { agentTabOf, type AgentTabSeed, chatStrip, useChat } from "../chat/useChat";
 import { summonChat } from "../chat/summon";
 import { commandShortcut } from "../commands/useCommands";
 import { useNotifications } from "../notifications";
@@ -371,28 +371,8 @@ export const windowFinished = <T>(
     return { shown: [...shown, pinned], hidden: beyond.length - 1 };
 };
 
-/* WHERE A CARD WITH NO REGISTRY ENTRY STANDS. Three answers, and the order of the tests is the whole of it:
- *   · streaming, a turn has gone but the daemon has not filed it yet, which is `starting`. NOT the wire's
- *     `running`, which this used to answer and which claims the registry's account of an agent the registry has
- *     never heard of: every guard that asks "does the daemon know this card" then said yes, so clicking one
- *     latched the tab as registered and the card left the board with nothing to replace it (see the standing's
- *     own note in agentStatus.ts);
- *   · an error, the refusal that kept it off the roster in the first place (the daemon turned the request
- *     away, so no entry was ever made): not a draft waiting to be typed into but a card for work that never
- *     started, which is what `failed` says;
- *   · a TRANSCRIPT or a session, this conversation has a past, so it was reopened from History rather than
- *     newly made. `resumed`, and the reason that standing exists: it used to answer `draft` here, which put a
- *     three-week-old chat at the head of the Active lane dressed as work about to begin.
- * Everything left is what "draft" was always meant to mean, an empty tab the user is about to type into. */
-const clientStatus = (conversation: Conversation): ClientAgentStatus => {
-    if (conversation.streaming.value) {
-        return `starting`;
-    }
-    if (conversation.error.value !== null) {
-        return `failed`;
-    }
-    return conversation.messages.value.length > 0 || conversation.session.value !== undefined ? `resumed` : `draft`;
-};
+// What a card that is not the daemon's says about itself: no attention, nothing owed.
+const NO_ATTENTION: FleetAgent["attention"] = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
 
 /* ONE CHAT THAT WAS CLOSED WITH ITS MESSAGE STILL IN IT (chat/closedDrafts), as a card.
  *
@@ -401,8 +381,9 @@ const clientStatus = (conversation: Conversation): ClientAgentStatus => {
  * another sandbox is still this browser's draft and belongs on this board, and the card has to carry the
  * address or opening it would ask the wrong daemon (the same rule the live draft cards state).
  *
- * `updatedAt` is when the message was first left standing, so the lanes sort it by the age its own mark
- * reports, and a card the reader has not touched for a week does not sit above this morning's work. */
+ * `updatedAt` is zero, as on every card the daemon has no row for: a set-aside message is not activity, and a
+ * card dating itself by the message's age read as "last active 2m ago" the moment its chat was closed, which
+ * is the one thing about it that had NOT just happened. The mark carries the age (draftAt); the footer does not. */
 const closedCard = (tab: StoredTab, unsent: UnsentTab | undefined): FleetAgent => ({
     id: tab.conversationId,
     status: tab.session === undefined ? `draft` : `resumed`,
@@ -410,8 +391,8 @@ const closedCard = (tab: StoredTab, unsent: UnsentTab | undefined): FleetAgent =
     // the same fallbacks a fresh conversation is born with, rather than a card that cannot say what it runs on.
     provider: tab.provider ?? rememberedProviderFor(),
     harness: tab.harness ?? `native`,
-    updatedAt: tab.draftAt ?? 0,
-    attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+    updatedAt: 0,
+    attention: NO_ATTENTION,
     // No tab anywhere: that is the whole state this card describes, and what its × forgets rather than closes.
     open: false,
     unread: false,
@@ -436,29 +417,53 @@ interface UnsentTab {
     readonly at?: number;
 }
 
-/* WHAT THIS BROWSER KNOWS ABOUT A TURN THE DAEMON HAS NOT FILED YET, which is the whole of what a `starting`
- * card can honestly say, and it is not nothing.
+/* ONE OPEN TAB THE FLEET HAS NEVER HEARD OF, as a card: the DRAFT half of the board, drawn from the strip
+ * (tabFacts.ts) rather than from a Conversation, so it draws the same card for a tab in this window and for one
+ * in the window that popped the chat out.
  *
- * Such a card used to be built from its four identity fields alone, so a sent turn appeared as a title under a
- * spinner and nothing else: no model, no elapsed, no reason. That is a fair drawing of an untouched draft
- * (there is nothing to say about a tab nobody has typed in) and a bad one of work in flight, because every
- * fact it was missing was sitting on the conversation the card is made of. The settings are the ones the send
- * actually went out under, the elapsed runs from the moment of the send rather than from whenever the entry
- * appears, and the usage is this tab's own running total, each of them replaced by the registry's version the
- * moment it lands.
+ * WHAT THE CARD IS CALLED BEFORE ANYTHING HAS NAMED IT: the opening words of the message waiting in its
+ * composer. A board of drafts otherwise says "New agent" as many times as there are cards, at the one moment
+ * the reader is trying to tell them apart. The same source as the mark, never a fallback from one to the other,
+ * which is also what turns "unsent, but an attachment rather than words" into no name at all: such a card wears
+ * the mark and keeps its "New agent".
  *
- * Zero tokens and zero cost are "nothing counted yet" rather than measurements, and a stat row of zeroes is the
- * kind of readout people learn to distrust, so they are left off until the turn's first `usage` frame. */
-const startedTurnFacts = (conversation: Conversation): Partial<FleetAgent> => ({
-    model: conversation.model.value,
-    effort: conversation.effort.value,
-    thinking: conversation.thinking.value,
-    fast: conversation.fast.value,
-    ...(conversation.turnStartedAt.value === undefined ? {} : { startedAt: conversation.turnStartedAt.value }),
-    ...(conversation.inputTokens.value > 0
-        ? { inputTokens: conversation.inputTokens.value, outputTokens: conversation.outputTokens.value }
-        : {}),
-    ...(conversation.costUsd.value > 0 ? { costUsd: conversation.costUsd.value } : {}),
+ * WHERE THIS DRAFT WILL RUN, when it is not here (`box`): a tab aimed at another sandbox is still a draft in
+ * THIS browser and belongs on this board, since a draft exists nowhere else, but the card has to carry the box
+ * or every action on it would address the wrong daemon. From its first turn on, the card comes from that box's
+ * own roster instead (fleetScope.otherFleet), which is what the ack-time registration latch hands over.
+ *
+ * The session a RESUMED card stands for is named here so nothing else reports it a second time: the board's
+ * search lists conversations no card carries ("In earlier chats"), and without this the chat the user just
+ * opened from that very list went on being offered underneath its own card.
+ *
+ * A turn already in flight (`turn`, only ever on a `starting` card) is what this browser knows about work the
+ * daemon has not filed yet, and it is not nothing: the settings the send went out under, the elapsed from the
+ * send itself, the tab's own running counts, each replaced by the registry's version the moment it lands. Zero
+ * tokens and zero cost are "nothing counted yet" rather than measurements, so the strip leaves them off until
+ * the turn's first usage frame.
+ *
+ * WHAT A PREPARED DRAFT WILL RUN ON is the one of those facts already true before the send: a message standing
+ * in a composer is queued work, and its model is a decision the user has already made about it, so the card
+ * names it. Gated on there being something unsent, which is the line between the two kinds of draft: a card for
+ * a tab nobody has typed in is a placeholder for work not yet described, and naming a model on it would put a
+ * spend on the board for a turn nobody has decided to take. */
+const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => ({
+    id: tab.id,
+    status: tab.standing,
+    provider: tab.provider,
+    harness: tab.harness,
+    updatedAt: 0,
+    attention: NO_ATTENTION,
+    open: true,
+    unread: false,
+    unsent: held !== undefined,
+    preview: held?.preview,
+    draftAt: held?.at,
+    ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
+    ...(tab.title === undefined ? {} : { title: tab.title }),
+    ...(tab.sessionId === undefined ? {} : { sessionId: tab.sessionId }),
+    ...(tab.turn === undefined ? {} : { model: tab.model, ...tab.turn }),
+    ...(tab.standing === `draft` && held !== undefined ? { model: tab.model } : {}),
 });
 
 // Attention first, then live turns + fresh drafts, then most recently active.
@@ -466,113 +471,37 @@ const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
 
 const fleet = computed<FleetAgent[]>(() => {
-    const { conversations } = useChat();
-    const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
+    /* THE CHAT'S STRIP, from whichever window is drawing it (useChat.chatStrip): the one account of which chats
+     * are open, what they are called and which hold words that have not gone out, the last being the one thing
+     * the daemon's roster cannot know. Read from here and from nowhere else. The board used to read this
+     * window's own tab list for the first two and an echo of the composers for the third, and every defect of
+     * the popped-out chat was those two disagreeing: with the chat on another screen this window's tabs are a
+     * frozen copy, so a draft card vanished because the copy looked empty, an unsent chip stayed because the
+     * copy still held sent words, and a card closed from here disappeared and came back because the copy was
+     * closed a beat before the drawing window said so. */
+    const strip = chatStrip.value;
+    const openIds = new Set(strip.tabs.map((tab) => tab.id));
     const carded = new Set(registry.value.map((agent) => agent.id));
-    /* The tabs holding words that have not gone out, the one thing the daemon's roster cannot know, and the
-     * reason the halves below are joined against it rather than against `openIds` alone.
+    /* The tabs holding words that have not gone out, and the reason the halves below are joined against this
+     * rather than against `openIds` alone...
      *
-     * ASKED OF WHICHEVER WINDOW DRAWS THE CHAT, and of that one only (draftEcho): this window's own composers
-     * while the chat is docked here, the echo from the window holding it while it is popped out. Without the
-     * echo the board went blind exactly when it was the only surface left showing the work, the chat popped out
-     * onto another screen and the card over here claiming there was nothing in it. Taking BOTH, which is what
-     * this used to do, fails the other way round and is the bug it replaces: a window that is not drawing the
-     * chat keeps its tab objects frozen at the moment the panel left, so a message sent out in the floating
-     * window cleared its mark out there and left this board wearing an unsent chip for words that no longer
-     * existed anywhere. */
-    const elsewhere = elsewhereDrafts.value;
-    const typing: ReadonlyMap<string, UnsentTab> = drawsChat.value
-        ? new Map(
-              conversations.value
-                  .filter((conversation) => conversation.unsent.value)
-                  .map((conversation): [string, UnsentTab] => [
-                      conversation.conversationId,
-                      { preview: draftPreview(conversation.draft.value), at: conversation.draftAt.value },
-                  ]),
-          )
-        : new Map(
-              // The publisher has already folded its previews (draftEcho), so the empty string here means the
-              // same as an absent one: unsent, but an attachment or a queued message rather than typed words.
-              [...elsewhere].map(([id, draft]): [string, UnsentTab] => [id, { preview: draft.preview || undefined, at: draft.at }]),
-          );
-    /* ...AND THE ONES NOBODY IS TYPING IN ANY MORE, because their chat was CLOSED with the message still in it
+     * ...AND THE ONES NOBODY IS TYPING IN ANY MORE, because their chat was CLOSED with the message still in it
      * (chat/closedDrafts). Those words are set aside rather than destroyed, so they are as unsent as the ones
      * in an open composer, and the card is the only way back to them: it wears the mark, it is named by the
      * message, and opening it puts the words back where they were written.
      *
-     * Merged UNDER the composers above, which is the direction that cannot go stale: an entry is taken out the
-     * moment its chat is reopened, so the only way to hold both is a window that reopened one without this one
-     * hearing yet, and in that race the live composer is the account being typed into. */
+     * Merged UNDER the composers, which is the direction that cannot go stale: an entry is taken out the moment
+     * its chat is reopened, so the only way to hold both is a window that reopened one without this one hearing
+     * yet, and in that race the live composer is the account being typed into. */
     const unsent: ReadonlyMap<string, UnsentTab> = new Map([
         ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { preview: draftPreview(tab.draft), at: tab.draftAt }]),
-        ...typing,
+        ...strip.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { preview: tab.preview, at: tab.draftAt }]),
     ]);
     // A draft is a conversation the fleet has never heard of. NOT one that is merely absent from the live
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
     // not be rendered a second time by this one, whatever the latch says.
-    const drafts = conversations.value
-        .filter((conversation) => !conversation.registered.value && !carded.has(conversation.conversationId))
-        .map((conversation): FleetAgent => {
-            /* WHAT THE CARD IS CALLED BEFORE ANYTHING HAS NAMED IT: the opening words of the message waiting in
-             * its composer, read from this window's own conversation, or from the window holding the chat panel
-             * when that is another one. A board of drafts otherwise says "New agent" as many times as there are
-             * cards, at the one moment the reader is trying to tell them apart.
-             *
-             * The same source as the mark, never a fallback from one to the other: a stale local draft is exactly
-             * as wrong as a name as it is as a mark, so both come out of the one join above. That is also what
-             * turns "unsent, but an attachment rather than words" into no name at all: such a card wears the mark
-             * and keeps its "New agent". */
-            const tab = unsent.get(conversation.conversationId);
-            const draft: FleetAgent = {
-                id: conversation.conversationId,
-                status: clientStatus(conversation),
-                provider: conversation.provider.value,
-                harness: conversation.harness.value,
-                updatedAt: 0,
-                attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
-                open: true,
-                unread: false,
-                unsent: tab !== undefined,
-                preview: tab?.preview,
-                draftAt: tab?.at,
-                /* WHERE THIS DRAFT WILL RUN, when it is not here. A tab aimed at another sandbox
-                 * (Conversation.box) is still a draft in THIS browser and belongs on this board, since a draft
-                 * exists nowhere else, but the card has to carry the box or every action on it would address
-                 * the wrong daemon and its chip would claim work about to happen somewhere else. From its first
-                 * turn on, the card comes from that box's own roster instead (fleetScope.otherFleet), which is
-                 * what the ack-time registration latch hands over (Conversation.latchRemoteRegistration). */
-                ...(conversation.box.value === undefined ? {} : { sandboxId: conversation.box.value }),
-            };
-            if (conversation.title.value !== null) {
-                draft.title = conversation.title.value;
-            }
-            // The session a RESUMED card stands for. Named here so nothing else reports it a second time: the
-            // board's search lists conversations no card carries ("In earlier chats"), and without this the
-            // chat the user just opened from that very list went on being offered underneath its own card.
-            if (conversation.session.value !== undefined) {
-                draft.sessionId = conversation.session.value.id;
-            }
-            /* Everything this browser knows about a turn already in flight (startedTurnFacts). Only for
-             * `starting`: on an untouched draft those fields would describe a turn that has not happened, and
-             * on a `resumed` card the composer's current picks are not an account of the conversation's past. */
-            if (draft.status === `starting`) {
-                Object.assign(draft, startedTurnFacts(conversation));
-            }
-            /* WHAT A PREPARED DRAFT WILL RUN ON, which is the one of those facts that is already true before the
-             * send. A message standing in a composer is queued work, and the model it will be spent on is a
-             * decision the user has already made about it, so the card names it — read from the same
-             * conversation the words themselves come from, and so on the same tick the pick is made rather than
-             * after a reload.
-             *
-             * Gated on there being something unsent, which is the line between the two kinds of draft: a card
-             * for a tab nobody has typed in is a placeholder for work not yet described, and naming a model on
-             * it would put a spend on the board for a turn nobody has decided to take. */
-            if (draft.status === `draft` && tab !== undefined) {
-                draft.model = conversation.model.value;
-            }
-            return draft;
-        });
+    const drafts = strip.tabs.filter((tab) => !tab.registered && !carded.has(tab.id)).map((tab): FleetAgent => draftCard(tab, unsent.get(tab.id)));
     /* ARCHIVED, AND BACK ON THE BOARD ANYWAY, the sessions the user has started writing in.
      *
      * Reading an agent out of the archive opens its chat by design, and typing there is the most ordinary thing

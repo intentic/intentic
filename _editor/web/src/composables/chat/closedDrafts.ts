@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, shallowRef, watch } from "vue";
+import { onChatNote, postChatNote } from "./chatChannel";
 import { readStoredTabs, type StoredTab } from "./tabSnapshot";
 import { useSandbox } from "../sandbox/useSandbox";
 
@@ -17,9 +18,11 @@ import { useSandbox } from "../sandbox/useSandbox";
  * the board that has to keep the card is in another. A per-window store would leave the board with nothing to
  * draw and the words recoverable only in the window that closed them, which is the surface the user has just
  * dismissed. localStorage for the same reason the seed uses it — the drafts outlive the window, the browser
- * restart, and the machine going to sleep — with a BroadcastChannel note so the other windows react NOW rather
- * than at their next load (a `storage` event would do half of this, but not for the window that wrote, and the
- * app already speaks in notes: summon.ts, draftEcho.ts).
+ * restart, and the machine going to sleep — with a note on the chat's channel (chatChannel.ts) so the other
+ * windows react NOW rather than at their next load (a `storage` event would do half of this, but not for the
+ * window that wrote). The same channel the strip itself travels on, deliberately: a close in the floating
+ * window says "these words are set aside" and then "that tab is gone", and one channel is what makes every
+ * board hear them in that order, so the card changes state once rather than vanishing between the two.
  *
  * SCOPED BY SANDBOX, like the tab snapshot it is made of: these name conversations of one daemon, and a window
  * pointed at another box has no business drawing them.
@@ -33,15 +36,6 @@ import { useSandbox } from "../sandbox/useSandbox";
 // are reopened), shallow enough that a pathological session cannot fill the origin's storage with transcript-
 // sized blobs. The OLDEST goes when it overflows: the words most recently put down are the ones still wanted.
 const KEEP = 30;
-
-interface ClosedDraftNote {
-    readonly sandbox: string | undefined;
-    // The whole set, never a patch: the last note wins, the same presence rule the roster and the draft echo
-    // already follow, so a window that missed one is corrected by the next rather than left diverging.
-    readonly tabs: readonly StoredTab[];
-}
-
-const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.closed-drafts`);
 
 const storageKey = (sandboxId: string): string => `intentic.closedDrafts.${sandboxId}`;
 
@@ -84,11 +78,12 @@ const { activeSandboxId } = useSandbox();
 // drafts onto another's board would offer to reopen conversations that daemon has never heard of.
 watch(activeSandboxId, (sandboxId) => (kept.value = read(sandboxId)), { immediate: true });
 
+// The whole set, never a patch: the last note wins, the same presence rule the roster and the strip echo already
+// follow, so a window that missed one is corrected by the next rather than left diverging.
 const publish = (tabs: readonly StoredTab[]): void => {
     kept.value = tabs;
     write(activeSandboxId.value, tabs);
-    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
-    channel?.postMessage({ sandbox: activeSandboxId.value, tabs } satisfies ClosedDraftNote);
+    postChatNote({ kind: `closed-drafts`, tabs });
 };
 
 /** Set a closing chat's words aside. Called by the one close path (useChat.closeTabs) for every tab that holds
@@ -126,13 +121,7 @@ export const forgetClosedDraft = (conversationId: string): void => {
     }
 };
 
-/** Another window's note, arriving here: the one way in, so a test hands one over by the path the channel uses
- *  (the seam summon.ts and draftEcho.ts keep for the same reason). */
-export const receiveClosedDraftNote = (note: ClosedDraftNote): void => {
-    // Another sandbox's chats are not this window's business, the same guard every note in this app keeps.
-    if (note.sandbox === activeSandboxId.value) {
-        kept.value = note.tabs;
-    }
-};
-
-channel?.addEventListener(`message`, (event: MessageEvent<ClosedDraftNote>) => receiveClosedDraftNote(event.data));
+// Another window's set, arriving here (the channel has already dropped another sandbox's).
+onChatNote(`closed-drafts`, (note) => {
+    kept.value = note.tabs;
+});

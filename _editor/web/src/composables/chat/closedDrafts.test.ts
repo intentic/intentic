@@ -21,7 +21,8 @@ Object.defineProperty(globalThis, `localStorage`, {
     },
 });
 
-const { claimClosedDrafts, closedDrafts, forgetClosedDraft, keepClosedDraft, receiveClosedDraftNote } = await import("./closedDrafts");
+const { claimClosedDrafts, closedDrafts, forgetClosedDraft, keepClosedDraft } = await import("./closedDrafts");
+const { receiveChatNote } = await import("./chatChannel");
 
 const tab = (conversationId: string, draft: string): StoredTab => ({
     conversationId,
@@ -95,15 +96,16 @@ describe(`closedDrafts`, () => {
     it(`takes the whole set from another window's note`, () => {
         keepClosedDraft(tab(`c1`, `mine`));
 
-        receiveClosedDraftNote({ sandbox: `sb1`, tabs: [tab(`c2`, `closed in the popped-out window`)] });
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `closed-drafts`, tabs: [tab(`c2`, `closed in the popped-out window`)] } });
 
         expect(closedDrafts.value.map((entry) => entry.conversationId)).toEqual([`c2`]);
     });
 
+    // The channel's own guard (chatChannel), read here from this store's side of it.
     it(`ignores a note about another sandbox's chats`, () => {
         keepClosedDraft(tab(`c1`, `mine`));
 
-        receiveClosedDraftNote({ sandbox: `sb2`, tabs: [] });
+        receiveChatNote({ sandbox: `sb2`, note: { kind: `closed-drafts`, tabs: [] } });
 
         expect(closedDrafts.value.map((entry) => entry.conversationId)).toEqual([`c1`]);
     });

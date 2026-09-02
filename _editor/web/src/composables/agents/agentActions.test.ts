@@ -34,6 +34,9 @@ vi.mock("../chat/useChat", () => ({
         conversations: chat.conversations,
         active: { value: { conversationId: undefined } },
     }),
+    // The strip the fleet reads (useAgents.fleet evaluates it the moment that module loads): nothing open, so
+    // no draft card competes with the registry rows these cases act on.
+    chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     // `actsAs` is on the stub because startAgent PINS the draft before summoning it: including to `undefined`,
     // which is how pressing Anyone un-pins a draft that was aimed at a persona a moment ago.
     draftConversation: () => ({ conversationId: `c1`, actsAs: { value: undefined }, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),

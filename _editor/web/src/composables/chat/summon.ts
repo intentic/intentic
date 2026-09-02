@@ -1,10 +1,10 @@
+import { onChatNote, postChatNote } from "./chatChannel";
 import { claimClosedDrafts } from "./closedDrafts";
 import { Conversation } from "./conversation";
 import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
 import { snapshotTab, type StoredTab } from "./tabSnapshot";
 import { closeTabs, type Reveal, reveal, type RevealEntry } from "./useChat";
-import { useSandbox } from "../sandbox/useSandbox";
 
 /* SUMMONING THE CHAT, FOR EVERY WINDOW AT ONCE, the one way a surface outside the panel puts something on it.
  *
@@ -16,9 +16,9 @@ import { useSandbox } from "../sandbox/useSandbox";
  * else.
  *
  * So a summons is not a store call, it is a BROADCAST: the same reveal (useChat.reveal) is applied in this
- * window and posted to every other window of this origin, each of which applies it to its own panel, docked,
- * floating, or parked. One channel, one apply, no ownership question: there is no "attached" window to find
- * and no fallback when it is missing, because every window is told and every window obeys.
+ * window and posted to every other window of this origin (chatChannel.ts), each of which applies it to its own
+ * panel, docked, floating, or parked. One channel, one apply, no ownership question: there is no "attached"
+ * window to find and no fallback when it is missing, because every window is told and every window obeys.
  *
  * WHAT RIDES THE CHANNEL is the portable description of a tab (StoredTab), never the live object: a window
  * that has never heard of the chat rebuilds it exactly as a reload would and hydrates it from the daemon. Two
@@ -32,8 +32,7 @@ import { useSandbox } from "../sandbox/useSandbox";
  *     the fleet board rings whatever the chat is showing, and it is a whole window away.
  *
  * Scoped by SANDBOX, because the summons names conversations of one sandbox's daemon: a window looking at
- * another sandbox has no such chats and quietly ignores it. Same-origin only (a BroadcastChannel's own scope),
- * which is also the boundary of "the same app". */
+ * another sandbox has no such chats and the channel drops it before it gets here. */
 
 export type Summons =
     | ({ readonly kind: `reveal` } & Reveal)
@@ -51,9 +50,6 @@ export type Summons =
      * was made in, which is the rule this is the other side of, not an exception to. */
     | { readonly kind: `close`; readonly conversationIds: readonly string[] };
 
-// The wire form: live conversations fold into their portable snapshots, queued messages stripped (see above).
-export type WireSummons = { readonly sandbox: string | undefined } & Summons;
-
 const portable = (entry: RevealEntry): RevealEntry => (entry instanceof Conversation ? { ...snapshotTab(entry), queued: [] } : entry);
 
 // The same rule for the words a reopened chat brings back with it (closedDrafts): the message, its age and its
@@ -61,10 +57,9 @@ const portable = (entry: RevealEntry): RevealEntry => (entry instanceof Conversa
 // window that was pressed.
 const carried = (tab: StoredTab): StoredTab => ({ ...tab, queued: [] });
 
-export const wireSummons = (summons: Summons): WireSummons => ({
-    sandbox: useSandbox().activeSandboxId.value,
-    ...(summons.kind === `reveal` ? { ...summons, entries: summons.entries.map(portable), unsent: summons.unsent?.map(carried) } : summons),
-});
+/** The wire form: live conversations fold into their portable snapshots, queued messages stripped (see above). */
+export const wireSummons = (summons: Summons): Summons =>
+    summons.kind === `reveal` ? { ...summons, entries: summons.entries.map(portable), unsent: summons.unsent?.map(carried) } : summons;
 
 const apply = (summons: Summons): void => {
     if (summons.kind === `run`) {
@@ -87,21 +82,14 @@ const traced = (summons: Summons): Record<string, unknown> => {
     return summons.kind === `run` ? { kind: summons.kind, run: summons.runId } : { kind: summons.kind, ids: summons.conversationIds.join(`,`) };
 };
 
-// Another window's summons, arriving here, the channel's receiving half, named so a test can hand it a wire
-// message without a second window to post one.
-export const receiveSummons = (summons: WireSummons): void => {
-    if (summons.sandbox !== useSandbox().activeSandboxId.value) {
-        return;
-    }
-    traceFocus(`summons`, traced(summons));
-    apply(summons);
-};
-
-// One channel per window, listening from the first import. Guarded like the auth channels: a runtime without
-// BroadcastChannel (tests, SSR) just has a single-window app, which is exactly what no channel means.
-const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.chat-summons`);
-
-channel?.addEventListener(`message`, (event: MessageEvent<WireSummons>) => receiveSummons(event.data));
+// Another window's summons, arriving here, applied to this window's own panel, whether that panel is on screen
+// or not: a window that is not drawing the chat keeps its copy of the strip current as the surface its own
+// actions run on (useChat's note on the shadow), and takes the real strip back from the seed when the panel
+// returns.
+onChatNote(`summons`, (note) => {
+    traceFocus(`summons`, traced(note.summons));
+    apply(note.summons);
+});
 
 /* TELL THE OTHER WINDOWS, WITHOUT PERFORMING IT HERE, for a gesture that has ALREADY acted on the panel it was
  * made in: the panel's own rail and tabs (ChatTabList).
@@ -117,8 +105,7 @@ channel?.addEventListener(`message`, (event: MessageEvent<WireSummons>) => recei
  * this surface offers panes at all, which row was the anchor of a range). Re-running the reveal over that would
  * be a second answer to a question the panel has already answered. */
 export const relaySummons = (summons: Summons): void => {
-    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
-    channel?.postMessage(wireSummons(summons));
+    postChatNote({ kind: `summons`, summons: wireSummons(summons) });
 };
 
 /* THE SUMMONS AS IT GOES OUT, HOLDING THE WORDS ITS CHATS WERE CLOSED WITH (closedDrafts). Claimed here, once,

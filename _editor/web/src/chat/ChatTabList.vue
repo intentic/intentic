@@ -28,7 +28,7 @@ import UnsentMark from "../components/UnsentMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
 import { relativeTime, statusIcon, statusLabel } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
-import { draftPreview } from "../composables/chat/draftEcho";
+import { draftPreview } from "../composables/chat/draftPreview";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import ChatShareDialog from "./ChatShareDialog.vue";

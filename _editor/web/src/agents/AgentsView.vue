@@ -35,7 +35,7 @@ import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { summonChat } from "../composables/chat/summon";
 import { forgetClosedDraft } from "../composables/chat/closedDrafts";
-import { agentTabOf, useChat } from "../composables/chat/useChat";
+import { agentTabOf, chatStrip, useChat } from "../composables/chat/useChat";
 import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import MatchLine from "../components/MatchLine.vue";
@@ -448,16 +448,23 @@ const runGraphUp = computed(
         showingRunGraph(
             workflowRuns.value.find((run) => run.runId === chatRun.value?.runId),
             chatRun.value,
-            panes.value,
+            chatStrip.value.panes,
         ),
 );
-const highlightId = computed(() => flashId.value ?? (mobile.value || runGraphUp.value ? undefined : active.value.conversationId));
+/* WHAT THE CHAT IS SHOWING, for the ring and the panes below, is asked of the strip as the app sees it
+ * (useChat.chatStrip), never of this window's own tab list: with the chat popped out that list is a shadow, and
+ * a × pressed on the floating window's own rail moves the focus out there without telling anyone, so a ring
+ * read from the shadow stayed on a chat that was no longer on any screen. */
+const highlightId = computed(() => flashId.value ?? (mobile.value || runGraphUp.value ? undefined : chatStrip.value.active));
 /* THE OTHER COLUMNS, ringed exactly as that one is. A split is not a ranking: the reader put two chats up to
  * read them together, so the board no longer draws the panes that don't hold the keyboard a step fainter than
  * the one that does (AgentCard.selected has the rest of it; the chat rail dropped the same second weight). The
  * two states that take the ring off the focused chat take it off these as well, which is why this is read off
  * `highlightId`'s own conditions rather than off the pane set alone. */
-const inPane = (id: string): boolean => !mobile.value && !runGraphUp.value && panes.value.length > 1 && panes.value.includes(id);
+const inPane = (id: string): boolean => {
+    const { panes: shown } = chatStrip.value;
+    return !mobile.value && !runGraphUp.value && shown.length > 1 && shown.includes(id);
+};
 const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id));
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
@@ -926,7 +933,7 @@ const summonCards = (verb: `show` | `beside` | `panes`, cards: readonly FleetAge
 const paneGesture = (agent: FleetAgent, event: MouseEvent): boolean => {
     if (event.shiftKey) {
         const order = paneOrder.value;
-        const from = order.findIndex((card) => card.id === (paneAnchor.value ?? active.value.conversationId));
+        const from = order.findIndex((card) => card.id === (paneAnchor.value ?? chatStrip.value.active));
         const to = order.findIndex((card) => card.id === agent.id);
         const run = from === -1 ? [agent] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
         summonCards(`panes`, run, agent.id);
@@ -937,7 +944,7 @@ const paneGesture = (agent: FleetAgent, event: MouseEvent): boolean => {
     }
     paneAnchor.value = agent.id;
     // Ctrl/Cmd toggles; Alt only ever adds, which is what makes it the safe one-shot.
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && panes.value.includes(agent.id) && panes.value.length > 1) {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && chatStrip.value.panes.includes(agent.id) && chatStrip.value.panes.length > 1) {
         summonChat({ kind: `reveal`, verb: `unpane`, entries: [], focus: agent.id, caret: false });
         return true;
     }
