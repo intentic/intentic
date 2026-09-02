@@ -534,6 +534,16 @@ const checkResult = (id: string, text: string) => ({
     status: "completed" as const,
     content: [{ type: "text" as const, text }],
 });
+// A call that only LOOKS at the tree. Its category is what keeps it out of the edit ledger (trackedCall), which
+// is the whole of the difference the silent-ending tests below turn on.
+const readFrame = (id: string, path: string) => ({
+    kind: "tool_call" as const,
+    id,
+    name: "Read",
+    category: "read" as const,
+    status: "completed" as const,
+    locations: [{ path }],
+});
 
 test("a turn that proved its edits is recorded as verified, naming the check that spoke", async () => {
     const ledger: Record<string, unknown>[] = [];
@@ -583,8 +593,13 @@ test("a turn that stopped talking is recorded as such: unproven edits, its own c
             }),
         ),
     );
-    await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-quiet" });
+    const events = await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-quiet" });
 
+    /* AND IT IS STILL A FINISHED TURN, which is the carve-out `silentEnding` makes for exactly this shape. The
+     * turn said nothing, but it left a diff, a diffstat on its card and a standing to land, so there is
+     * something to come back to and the pair of readings below is the honest account of it. Reporting it as a
+     * failure as well would overwrite a considered answer with a blunter one. */
+    expect(events.filter((event) => event.kind === "error")).toEqual([]);
     await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect(ledger[0]).toMatchObject({
         outcome: "ok",
@@ -600,6 +615,68 @@ test("a turn that stopped talking is recorded as such: unproven edits, its own c
     // Nothing spoke, so there is no check to name; an absent one is the difference between "you never checked"
     // and "you checked and it broke".
     expect("check" in (ledger[0] ?? {})).toBe(false);
+});
+
+/* AND THE ENDING WITH NOTHING TO SHOW FOR IT AT ALL, which is the one shape the daemon used to call a success.
+ *
+ * A Gemini turn on the OpenCode runtime read and grepped 59 times, changed no file, wrote not one word, and was
+ * ended by an ordinary `session.idle`. No error frame, so the row said `outcome: "ok"`, the registry wrote the
+ * resting `idle`, and the card settled into the board's Finished lane over an empty assistant bubble: the lane
+ * that means "nothing to do here", on the one card that most needed somebody. */
+test("a turn that ends with nothing to show for it is reported as a failure, not as a finished turn", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield readFrame("1", "/work/src/parser.ts");
+                    yield readFrame("2", "/work/src/lexer.ts");
+                    yield { kind: "usage", costUsd: 0.2 };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    const events = await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-silent" });
+
+    /* The frame lands AHEAD of `done`, which is what puts it on the one path every reader of a failed turn
+     * already watches: the transcript, the activity record, the ledger below, and the registry, whose `errored`
+     * is what moves this card out of Finished and into Attention. */
+    expect(events.map((event) => event.kind).slice(-2)).toEqual(["error", "done"]);
+    const failure = events.find((event) => event.kind === "error");
+    expect(failure).toMatchObject({ message: expect.stringContaining("2 tool calls") });
+    /* UNCODED, and that is the difference between a red dead end and a way on: an uncoded failure is the one
+     * shape the chat answers with a Continue press, which is the whole recovery here (turnFailures.ts). */
+    expect("code" in (failure ?? {})).toBe(false);
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect(ledger[0]).toMatchObject({ outcome: "error", errorMessage: expect.stringContaining("nothing to show for it"), filesEdited: 0 });
+});
+
+/* The same ending one step earlier: the model thought, and stopped. It is the same failure and it wants a
+ * different sentence, because "59 tool calls and then a stop" and "it never got past its own first thought"
+ * send a reader to two different places. */
+test("a turn that stops after thinking and nothing else is reported the same way, and lands on the board as an error", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "thinking", text: "working out where the button lives" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const events = await runAgentTurn(client, { prompt: "go", conversationId: "conv-thought" });
+
+    expect(events.find((event) => event.kind === "error")).toMatchObject({
+        message:
+            "The turn ended with nothing to show for it: the model started and then stopped, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.",
+    });
+    const { agents } = await client.agents.list();
+    // The whole point of the frame: `error` is what the board reads as the Attention lane (agentStatus.ts).
+    expect(agents.find((agent) => agent.id === "conv-thought")).toMatchObject({ status: "error" });
 });
 
 /* A REFUSED TURN GETS NO VERDICT, for the same reason it gets no prose count: "it changed no code" is

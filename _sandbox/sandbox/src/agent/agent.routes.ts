@@ -99,6 +99,115 @@ const editorContextNote = (context: EditorContext): string => {
  * them would mean every outage failure immediately un-did itself. */
 const ANSWERED_FRAMES = new Set<AgentEvent["kind"]>(["delta", "thinking", "tool_call"]);
 
+/* THE FRAMES THAT PUT SOMETHING IN FRONT OF THE USER, which is a different question from the one above and the
+ * one `silentEnding` turns on. `ANSWERED_FRAMES` asks whether the provider is alive; this asks whether the turn
+ * left the conversation anywhere to go.
+ *
+ * Every card a turn can park on is here, because a turn holding one has addressed the user as squarely as prose
+ * does: it asked them something. Prose itself is NOT in the list and is counted separately (`proseChars`, which
+ * the turn loop already keeps), so an adapter emitting an empty `delta` cannot pass for an answer.
+ *
+ * A TOOL CALL IS DELIBERATELY ABSENT, and that absence is the whole point. Fifty-nine reads and greps prove the
+ * model was working; not one of them says anything to the person who asked. */
+const ADDRESSED_FRAMES: readonly AgentEvent["kind"][] = [
+    "plan",
+    "question",
+    "permission",
+    "service_offer",
+    "capability_offer",
+    "payment_offer",
+    "browser_help",
+    "terminal_help",
+];
+
+// What the turn loop has to remember to answer the question below. Every field is something it already knew;
+// they are gathered into one argument so the reading stays out of `runTurn`, which is complex enough that the
+// agent lint ratchets on it.
+interface TurnSilence {
+    readonly conversationId: string | undefined;
+    readonly signal: AbortSignal | undefined;
+    readonly failed: boolean;
+    // Whether the provider spoke at all this turn, the loop's own `providerAnswered`. It is the difference
+    // between a turn that worked and told nobody and a turn that never got started, and only the first is this.
+    readonly answered: boolean;
+    // Every frame kind this turn emitted. A set rather than a flag per condition: the loop adds one entry per
+    // frame with no branch of its own, and what counts as addressing the user is then decided in one place.
+    readonly kinds: ReadonlySet<AgentEvent["kind"]>;
+    readonly proseChars: number;
+    readonly filesEdited: number;
+    readonly toolCalls: number;
+}
+
+// Did this turn put anything in front of the person who asked: prose, or a card it parked on. See
+// ADDRESSED_FRAMES for what is on the list and what is deliberately not.
+const addressedUser = (turn: TurnSilence): boolean => turn.proseChars > 0 || ADDRESSED_FRAMES.some((kind) => turn.kinds.has(kind));
+
+/* A TURN THAT ENDED WITH NOTHING TO SHOW FOR ITSELF, in the sentence to say about it, because from every surface
+ * downstream of this line such a turn is indistinguishable from one that finished.
+ *
+ * That is not a hypothetical. A Gemini turn on the OpenCode runtime made 59 tool calls, changed no file, wrote
+ * not one word, and was ended by an ordinary `session.idle`: no error frame, so the daemon recorded
+ * `outcome: "ok"`, the registry wrote the resting `idle`, and the card settled into the board's Finished lane
+ * with an empty assistant bubble behind it. Nothing anywhere said the turn had stopped rather than finished, and
+ * the one person who could tell the difference was looking at the lane that means "nothing to do here".
+ *
+ * A TURN THAT EDITED SOMETHING IS NOT THIS, however quiet it went, and the exclusion is the whole reason this
+ * reads `filesEdited` at all. That turn left a diff, a diffstat on its card and a standing to land, so there is
+ * something to come back to; and it is a shape this daemon already has an honest answer for, `outcome: "ok"`
+ * with `verification: "unproven"` and its own checklist left open (see the ledger's `ending` below). Calling it
+ * a failure as well would overwrite a considered answer with a blunter one.
+ *
+ * NOR IS A TURN THE PROVIDER NEVER ANSWERED, and that exclusion is the same one the ledger already makes one
+ * screen down: "it said nothing" is arithmetic when the model never read a word, not a fact about behaviour.
+ * Such a turn was refused, or gated, or served by something that produced no frames at all, and every one of
+ * those is reported by whatever refused it rather than by this.
+ *
+ * THREE OTHER ENDINGS ARE ALSO NOT THIS, each already reported somewhere better. A turn the user STOPPED is
+ * silent by their own decision, and its dismissed-question twin ends the same way (both abort, which is what the
+ * signal reads). A turn that already FAILED has its own sentence, and a second one after it would bury the
+ * first. And a turn with no conversation behind it is an internal one-shot: no card, no lane, nobody to address.
+ *
+ * The sentence says the session is intact because that is the whole recovery: the client draws an uncoded
+ * failure with a Continue press, and the press resumes the very session this turn stopped in. */
+const silentEnding = (turn: TurnSilence): string | undefined => {
+    if (turn.conversationId === undefined || turn.signal?.aborted === true || turn.failed || !turn.answered) {
+        return undefined;
+    }
+    if (turn.filesEdited > 0 || addressedUser(turn)) {
+        return undefined;
+    }
+    // The two halves of "it worked and told nobody", which send a reader to two different places: a turn with
+    // tool calls behind it got somewhere, and one with none never got past its own first thought.
+    const did =
+        turn.toolCalls === 0
+            ? "the model started and then stopped"
+            : `${turn.toolCalls} tool call${turn.toolCalls === 1 ? "" : "s"} and then a stop`;
+    return `The turn ended with nothing to show for it: ${did}, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.`;
+};
+
+/* …and where the frame for it goes: injected ahead of `done`, so it runs the same path a provider's own failure
+ * does, the activity record, the daemon log line, the ledger's outcome, the registry's `errored`, and with it
+ * the Attention lane. A second way of ending a turn badly is a second thing for each of those readers to learn,
+ * and none of them has to learn it.
+ *
+ * `silent` is a callback rather than a value because the state it reads is only final when the stream is. */
+async function* withSilentEnding(frames: AsyncIterable<AgentEvent>, silent: () => string | undefined): AsyncGenerator<AgentEvent> {
+    for await (const event of frames) {
+        if (event.kind === "done") {
+            const message = silent();
+            if (message !== undefined) {
+                /* UNCODED ON PURPOSE, which is the difference between a red dead end and a way on. An uncoded
+                 * failure is the one shape the chat answers with a Continue press (client turnFailures.ts:
+                 * "nothing is broken that the user could go and fix, the session is intact, and the only thing
+                 * between the work and its finish is somebody saying carry on"). That is exactly this condition,
+                 * so giving it a code of its own would take away the press it most deserves. */
+                yield { kind: "error", message };
+            }
+        }
+        yield event;
+    }
+}
+
 // Run one agent turn, streaming typed AgentEvents. `input.agent` picks the provider adapter (absent =
 // claude); each provider's token is the sandbox's own credential, never held by the platform, with the
 // container env as fallback. A turn with no stored account and no env fallback surfaces an actionable error
@@ -1290,6 +1399,14 @@ async function* runTurn(
      * the number and cannot be seen there. Counted here because `delta` is the only frame that carries prose,
      * and nothing downstream of this loop still knows which bytes were which. */
     let proseChars = 0;
+    /* WHETHER THIS TURN EVER ADDRESSED THE USER, and how much work it did without doing so. The pair
+     * `silentEnding` reads at the `done` frame; ADDRESSED_FRAMES says what counts as addressing and why.
+     *
+     * The tool count is carried for the SENTENCE rather than the verdict: "the model stopped mid-turn" and "the
+     * model stopped after 59 tool calls" send a reader to two different places, and this loop is the last thing
+     * that knows which one happened. */
+    const kinds = new Set<AgentEvent["kind"]>();
+    let toolCalls = 0;
     /* The turn's search work, the search teaching's metric, on exactly the same footing as `proseChars` above:
      * the mechanism changes how the turn searches, so searches are what it has to be scored on, and cost per
      * turn could never see it (UsageTurn.searchCalls says why).
@@ -1333,6 +1450,19 @@ async function* runTurn(
      * A frame reached here at all means it was not an abort, the branch above drops those before anything sees
      * them, so a user pressing Stop can never be recorded as a failure. */
     let failure: { readonly code: string | undefined; readonly message: string } | undefined;
+    // This turn's state as `silentEnding` reads it, gathered at the `done` frame where every field is final. The
+    // judgement itself lives outside this function; here it is one call (see TurnSilence).
+    const endedSilent = (): string | undefined =>
+        silentEnding({
+            conversationId: input.conversationId,
+            signal,
+            failed: failure !== undefined,
+            answered: providerAnswered,
+            kinds,
+            proseChars,
+            filesEdited: verification.edited().length,
+            toolCalls,
+        });
     const record = (event: Omit<ActivityEvent, "id" | "at" | "provider" | "direction">): void => {
         // Read per event, never captured once: nameAgentTitle runs concurrently with this turn, so turn.started
         // often writes before a fresh conversation has a name and turn.completed writes after. The feed takes the
@@ -1367,7 +1497,7 @@ async function* runTurn(
      * account's rotation for the rest of the daemon's life. */
     const releaseAccount = resolvedAccount !== undefined ? holdAccount(resolvedAccount) : undefined;
     try {
-        for await (const event of run(request)) {
+        for await (const event of withSilentEnding(run(request), endedSilent)) {
             /* AN ABORT IS NOT A FAILURE, and this is the one place that can say so for every provider.
              *
              * Each of the four adapters reports the unwind of a hard-cancel as an error frame, a thrown
@@ -1414,7 +1544,13 @@ async function* runTurn(
                 // and a turn that delegates its writing would otherwise read as a turn that wrote nothing.
                 proseChars += event.text.length;
             }
+            // …and what KINDS of frame this turn produced at all, which is how the ending below knows whether
+            // anything was ever put in front of the user (silentEnding, and TurnSilence on why it is a set).
+            kinds.add(event.kind);
             if (event.kind === "tool_call") {
+                // Counted for the silent ending's sentence alone (silentEnding). `tool_call` only, on the same
+                // rule the search counters below follow: an update is a later state of a call already counted.
+                toolCalls += 1;
                 // Subagents' calls included, on the same rule as the prose above: a turn that sends an Explore
                 // agent looking still went looking, and the retrieval it was handed is what it would have used.
                 // `tool_call` only, an update is a later state of a call already counted.

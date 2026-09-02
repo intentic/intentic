@@ -138,6 +138,26 @@ const GROK_MAX_TURN_MS = 30 * 60_000;
 // waiting here costs latency on every turn, and going ahead early costs at most the session id.
 const CONNECT_MS = 5_000;
 
+/* THE STREAM ENDED WITHOUT ENDING THE TURN, which is the server going away underneath it: one `opencode serve`
+ * drives every turn in this container, and a restart, a crash or a dropped socket closes the shared SSE for
+ * whoever happens to be mid-turn on it.
+ *
+ * The loop used to `return` here, which reads downstream as a clean finish. `session.idle` and `session.error`
+ * are the only two endings a turn on this runtime has, and neither of them happened: so the adapter emitted no
+ * error, the daemon recorded `outcome: "ok"`, and the agent's card settled into the board's Finished lane over
+ * a turn that had been cut off mid-tool-call. Thrown instead, exactly like the inactivity timeout beside it,
+ * which is this same fact arriving as silence rather than as a closed stream.
+ *
+ * A STOPPED TURN IS THE ONE EXCEPTION, and it returns quietly: the abort closes this stream by design
+ * (whenAborted, in the runner), so throwing there would report the user's own press as a provider failure. The
+ * daemon drops error frames on an aborted turn anyway, which makes this belt and braces, and it costs a read. */
+const refuseEarlyClose = (turn: GrokTurn): void => {
+    if (turn.signal.aborted) {
+        return;
+    }
+    throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} stopped sending events before the turn ended.`);
+};
+
 // The production runner: use the shared OpenCode client to create/resume the session, fire the prompt on the
 // xAI provider, and yield the session's events off the global SSE stream. `inactivityMs` is injectable for tests.
 export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number = GROK_INACTIVITY_MS): GrokRunner =>
@@ -265,6 +285,9 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                         throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode.`);
                     }
                     if (result.done) {
+                        // The stream closed without the turn ending. Throws, unless this turn's own abort is
+                        // what closed it: refuseEarlyClose has the whole story.
+                        refuseEarlyClose(turn);
                         return;
                     }
                     event = result.value;

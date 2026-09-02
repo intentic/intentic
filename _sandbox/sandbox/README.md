@@ -761,6 +761,23 @@ conversation's worktree instead of a path that still reaches the shared checkout
   harness's own non-success result is classified too, `turn-cap` for a loop out of iterations and
   `harness-incomplete` for the rest, where both used to land as an uncoded failure — the one shape nothing
   downstream knows how to handle.
+- **A turn that ends with nothing to show for it is a failure, not a finish** (`silentEnding` in
+  [src/agent/agent.routes.ts](src/agent/agent.routes.ts)). A Gemini turn on the OpenCode runtime read and
+  grepped 59 times, changed no file, wrote not one word, and was ended by an ordinary `session.idle`: no error
+  frame, so the row said `outcome: "ok"`, the registry wrote the resting `idle`, and the card settled into the
+  board's **Finished** lane over an empty assistant bubble — the lane that means "nothing to do here", on the
+  one card that most needed somebody. The daemon now injects an `error` frame ahead of `done` for exactly that
+  shape — the provider answered, and then no prose, no card the turn parked on and no file edited — which puts
+  it on the one path every reader of a failed turn already watches: the transcript, the activity record, the
+  ledger, and the registry's `errored`, which is what moves the card into **Attention**. Uncoded deliberately,
+  because an uncoded failure is the one shape the chat answers with a Continue press, and a press on an intact
+  session is the whole recovery. Two neighbouring endings are deliberately not this: a turn that EDITED
+  something left a diff, a diffstat and a standing to land, and `outcome: "ok"` with `verification: "unproven"`
+  above is already the honest account of it; and a turn the provider never answered has nothing to be silent
+  about, which is the same reason the verdict above is withheld from it. The runtime's own
+  version of the same silence is fixed where it starts ([src/grok/grok-agent.ts](src/grok/grok-agent.ts)): an
+  OpenCode event stream that ENDS without `session.idle` or `session.error` is the shared `opencode serve`
+  going away mid-turn, and it now throws rather than returning as though the turn had finished.
 - **And the follow-up that asks for proof now fires on every runtime** (`src/agent/verify-nudge.ts`). The
   owner's `verify-edits` rule — a turn that changed code and ran no check after its last edit gets one bounded
   follow-up naming the checks this workspace actually has — reached the model through the Claude Agent SDK's

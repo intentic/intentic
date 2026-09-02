@@ -388,9 +388,13 @@ test("an in-turn retry surfaces as provider_retry, naming a rate limit when that
 // A fake OpenCode whose SSE stream yields `events` then STAYS OPEN (like the real global subscription), so
 // these exercise how createGrokRunner terminates against an open stream (idle/error/timeout), which a fake
 // GrokRunner (a finite array) can't reproduce. `return()` releases the hang so the runner's cleanup never blocks.
+//
+// `closes` is the other thing a real stream can do: END, which is the shared `opencode serve` going away
+// mid-turn (a restart, a crash, a dropped socket) rather than the turn ending on it.
 const fakeOpenCode = (
     events: Event[],
     rejectModel?: { id: string; message: string },
+    closes = false,
 ): {
     openCode: OpenCodeService;
     aborted: () => boolean;
@@ -430,6 +434,9 @@ const fakeOpenCode = (
                     }
                     if (i < withHello.length) {
                         return Promise.resolve({ done: false, value: withHello[i++]! });
+                    }
+                    if (closes) {
+                        return Promise.resolve({ done: true, value: undefined as never });
                     }
                     return new Promise<IteratorResult<Event>>((resolve) => {
                         releaseHang = () => resolve({ done: true, value: undefined as never });
@@ -561,6 +568,55 @@ test("a session.status keeps the inactivity watchdog alive", async () => {
         seen.push(event.type);
     }
     expect(seen).toEqual(["session.created", "session.status", "session.idle"]);
+});
+
+/* THE OTHER WAY A TURN ON THIS RUNTIME CAN GO QUIET, and the one that used to read as a success.
+ *
+ * `session.idle` and `session.error` are the only two endings a turn here has. When the shared `opencode serve`
+ * goes away instead — a restart, a crash, a dropped socket — the stream simply ENDS, and the runner used to
+ * return on that: no error, so the daemon recorded the turn as `ok` and the agent's card settled into the
+ * board's Finished lane over work that had been cut off mid-tool-call. */
+test("a stream that ends without ending the turn is the server going away, not a finished turn", async () => {
+    const { openCode } = fakeOpenCode(
+        [
+            { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+            {
+                type: "message.part.updated",
+                properties: {
+                    part: {
+                        type: "tool",
+                        id: "tp1",
+                        sessionID: "s1",
+                        messageID: "m1",
+                        callID: "c1",
+                        tool: "bash",
+                        state: { status: "running", input: { command: "pnpm test" }, time: { start: 0 } },
+                    },
+                },
+            } as unknown as Event,
+        ],
+        undefined,
+        true,
+    );
+    const events = await collect(createGrokAgent(createGrokRunner(openCode), "intentic-gemini"), request);
+    // The turn's LAST word is the failure, and `done` still follows it: the adapter's contract is that every
+    // turn ends with one, failed or not. The tool call is left where it was, in_progress, which is the truth.
+    expect(events.map((event) => event.kind)).toEqual(["session", "tool_call", "error", "done"]);
+    // Named for the backend the user actually picked, like every other failure sentence on this shared runtime.
+    expect(events[2]).toMatchObject({ message: "Google stopped sending events before the turn ended." });
+});
+
+// …unless the user is the one who closed it. Stop aborts the session, which ends this very stream, so a throw
+// here would report their own press as a provider failure.
+test("a stream that ends because the turn was stopped is not reported as a failure", async () => {
+    const { openCode } = fakeOpenCode([{ type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event], undefined, true);
+    const controller = new AbortController();
+    controller.abort();
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, signal: controller.signal })) {
+        seen.push(event.type);
+    }
+    expect(seen).toEqual(["session.created"]);
 });
 
 test("createGrokRunner ends the turn on session.error even while the stream stays open", async () => {
