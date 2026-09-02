@@ -133,7 +133,11 @@ watch(
                 <!-- `flex` and not a bare block: the chip is inline-flex, and in a block box it sits on a text
                      line, which lends it the line box's leading — 1.5px of it above, which is what made a
                      corner inset of exactly 6px measure 7.5 above and 4.5 below. -->
-                <div v-if="copyable" class="absolute top-1.5 right-1.5 flex">
+                <!-- Scroll mode puts overflow-y on the block, so the vertical bar shares the top-right corner
+                     with this chip; nudge left by the bar's width (6px, matching `.scrollbar-thin`). The offset
+                     is a utility here, not code.css: `@layer components` loses to `right-1.5`. `right-5` clears
+                     the 6px webkit bar and Firefox's wider `scrollbar-width: thin`. -->
+                <div v-if="copyable" class="absolute top-1.5 flex" :class="scrolled ? `right-5` : `right-1.5`">
                     <CopyButton :text="code" label="Copy" class="bg-canvas" @copied="emit(`copied`)" />
                 </div>
                 <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering bug. -->

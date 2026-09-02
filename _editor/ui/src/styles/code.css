@@ -58,6 +58,12 @@
         overflow-y: auto;
     }
 
+    /* Match `.scrollbar-thin`'s 6px webkit bar so Code.vue's copy-chip offset (`right-4`) clears it. */
+    .ui-code.ui-code-scroll .shiki::-webkit-scrollbar,
+    .ui-code.ui-code-scroll pre::-webkit-scrollbar {
+        width: 6px;
+    }
+
     /* THE BOX <CodeField> STACKS ITS TWO HALVES IN. The coloured <pre> and the transparent <textarea> over it
      * occupy the same grid cell, so every property that can move a glyph has to be identical in both — which
      * is why this is one rule listing all of them rather than a class on each. Shiki's own <pre> is in the
