@@ -219,31 +219,27 @@ export const verifySyncToken = async (historyRoot: string, presented: string, ch
 // Whether ANY machine is enrolled, the UI's "desktop sync/mirror active" signal.
 export const isKeyEnrolled = async (historyRoot: string): Promise<boolean> => (await readEnrollments(historyRoot)).length > 0;
 
-// The machine holding file sync, as the card needs it: its label plus when it was last heard from. A projection
-// rather than the enrollment itself, the record next to these two fields is a key and a token digest, which have
-// no business reaching a browser.
-export interface SyncHolder {
-    readonly machine: string;
-    readonly seenAt?: number;
-}
+/* EVERY ENROLLED MACHINE, AS A ROW, the shape that replaced "one holder plus a list of everybody else".
+ *
+ * The store has always been a list of machines each holding a mode. What was PUBLISHED collapsed it: `syncingFrom`
+ * named the one file-syncing machine and `mirroredBy` listed the names of the rest, because the card reading it
+ * believed a sandbox has A desktop sync. It does not. It has as many enrolled computers as the user pointed at it,
+ * and each of them is a row somebody wants to read and act on: which half it holds, whether it has ever checked
+ * in, and the name to revoke it by. So the projection is the list itself now, one entry per enrollment, and the
+ * Computers view folds each into the machine's own row.
+ *
+ * A machine belongs on that list because it is ENROLLED, not because it has managed to report: one that never
+ * posts is exactly the case worth showing (an agent too old to report, or a setup that never finished).
+ *
+ * A PROJECTION STILL, not the enrollment: the two fields beside these are an authorized_keys line and a token
+ * digest, which have no business reaching a browser. */
+export type SyncEnrollmentRow = Pick<SyncEnrollment, "machine" | "mode"> & { readonly seenAt?: number };
 
-// The machine holding file sync (there is at most one), for the "Syncing from X" card. Mirror-only machines
-// aren't file-syncing, so they don't appear here.
-export const syncHolder = async (historyRoot: string): Promise<SyncHolder | undefined> => {
-    const holder = (await readEnrollments(historyRoot)).find((entry) => entry.mode === "sync");
-    if (holder === undefined) {
-        return undefined;
-    }
-    return { machine: holder.machine, ...(holder.seenAt === undefined ? {} : { seenAt: holder.seenAt }) };
-};
+const rowsOf = (enrollments: readonly SyncEnrollment[]): SyncEnrollmentRow[] =>
+    enrollments.map((entry) => ({ machine: entry.machine, mode: entry.mode, ...(entry.seenAt === undefined ? {} : { seenAt: entry.seenAt }) }));
 
-// The machines currently mirroring ports (any number), for the UI to show who has live previews.
-export const mirrorMachines = async (historyRoot: string): Promise<string[]> =>
-    (await readEnrollments(historyRoot)).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
-
-// Every enrolled machine's label, whichever mode it holds. A machine belongs on the Computers view's row list
-// because it is ENROLLED, not because it has managed to report: one that never posts is exactly the case worth
-// showing (an agent too old to report, or a setup that never finished).
+// The names those rows go by, for the reports filter below, which only has to answer "is this machine still
+// enrolled" and has no use for the rest of the row.
 const labelsOf = (enrollments: readonly SyncEnrollment[]): string[] => enrollments.map((entry) => entry.machine);
 
 /* WHAT THE MACHINE SAYS ABOUT ITSELF. Everything above is what the SANDBOX knows about an enrollment, that it
@@ -291,9 +287,11 @@ export const machineReports = async (historyRoot: string): Promise<{ machine: st
 /* BOTH ENROLLMENT LISTS OFF ONE READ OF THE FILE, for the Computers view, which needs the labels and the reports
  * together and used to ask for them separately, reading and parsing sync-enrollments.json twice per request.
  * Trivial next to a round trip to a laptop, and free to stop doing now that the round trip is off that path. */
-export const enrolledFleet = async (historyRoot: string): Promise<{ machines: string[]; reports: { machine: string; report: MachineReport }[] }> => {
+export const enrolledFleet = async (
+    historyRoot: string,
+): Promise<{ machines: SyncEnrollmentRow[]; reports: { machine: string; report: MachineReport }[] }> => {
     const enrollments = await readEnrollments(historyRoot);
-    return { machines: labelsOf(enrollments), reports: reportsFor(enrollments) };
+    return { machines: rowsOf(enrollments), reports: reportsFor(enrollments) };
 };
 
 // Self-revoke: drop the enrollment owning this sync token (the agent's uninstall). Returns false when no
@@ -309,10 +307,35 @@ export const revokeEnrollmentByToken = async (historyRoot: string, token: string
     return revoked;
 };
 
-// Owner "Disable desktop sync": drop EVERY enrollment (all keys + tokens), the admin kill switch. Always a
-// write, even over an empty store: "nobody is enrolled" is a state authorized_keys must be able to read.
-export const clearAllEnrollments = async (historyRoot: string): Promise<void> => {
-    await persist(historyRoot, () => []);
+/* THE OWNER'S REVOKE, AIMED AT ONE MACHINE, which is the door the browser has and used not to.
+ *
+ * The only revoke a browser could reach cleared EVERY enrollment at once, because it sat under a card that
+ * believed a sandbox has A desktop sync: "Disable sync" therefore meant "cut off every computer, including the
+ * three that were only mirroring ports for people who are not you". A reader who wanted their old laptop
+ * unpaired had to take everyone else's sync with it, or go to that laptop and uninstall from there. Every other
+ * connection in this product revokes one at a time (`DELETE /system/hosts/:id`); this is that, for the sync door.
+ *
+ * BY MACHINE NAME, which is the identity the rest of this file already uses: the key's comment is what reports
+ * are filed under, what the row was drawn from, and what the browser can name. Machines sharing a comment share
+ * one enrollment identity throughout the daemon, so this drops both — the same conflation `reports` already has,
+ * stated rather than papered over with a second id that would disagree with the first.
+ *
+ * Nothing on that machine is deleted: its agent notices the refusal within a poll and tears its own mirroring
+ * down, and the installation stays until somebody runs `intentic-machine sync uninstall` there. */
+export const revokeEnrollmentByMachine = async (historyRoot: string, machine: string): Promise<boolean> => {
+    let revoked = false;
+    await persist(historyRoot, (enrollments) => {
+        const kept = enrollments.filter((entry) => entry.machine !== machine);
+        revoked = kept.length !== enrollments.length;
+        return revoked ? kept : enrollments;
+    });
+    // The machine's own report outlives its enrollment in memory until something drops it. reportsFor() filters
+    // against the live list, so it stops being served the moment this returns; clearing it here as well keeps the
+    // map from holding a laptop's folder list for the lifetime of the daemon.
+    if (revoked) {
+        reports.delete(machine);
+    }
+    return revoked;
 };
 
 /* THE SSH HOSTNAME THAT USED TO LIVE HERE is gone, and the reason is worth keeping.

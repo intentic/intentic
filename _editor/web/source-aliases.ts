@@ -118,6 +118,12 @@ export const sourceAliases = (): Record<string, string> => ({
     // the barrel that question costs mermaid, shiki and vue-flow, paid by every unit test that asks it, which
     // is how a 20s budget meant to bound a HANG became a budget that a slow machine could lose to.
     "@intentic/ui/theme": fromRoot("_editor/ui/src/composables/useTheme.ts"),
+    // And again, for what a computer's report MEANS: folding a machine's flat folder and port lists into one
+    // block per sandbox, and the small judgements about what a folded row still has to say. <MachineDetail>
+    // draws it, and the Computers tab's own derivations (computerFacts.ts) reason over the same shapes without
+    // rendering anything, so through the barrel a pure module's unit test would boot the component graph, whose
+    // theme reader touches `document` at import time.
+    "@intentic/ui/machine": fromRoot("_editor/ui/src/components/machineDetail.ts"),
     "@intentic/ui": fromRoot("_editor/ui/src/index.ts"),
     /* THE EXTENSION KIT MUST RESOLVE TO SOURCE HERE, and unlike its neighbours above that is not a convenience
      *, it is the difference between an app and an infinite regress. `@intentic/extension-ui` is PUBLISHED, so

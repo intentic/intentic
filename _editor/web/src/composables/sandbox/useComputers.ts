@@ -133,6 +133,24 @@ export async function runMachineCommand(hostId: string, command: MachineCommand,
     return MachineCommandResultSchema.parse(await response.json());
 }
 
+/* CUTTING ONE COMPUTER OFF FROM THIS SANDBOX'S DESKTOP SYNC, from the row that describes it.
+ *
+ * The twin of the hosts revoke, and it arrived late for a reason worth remembering: the only revoke a browser
+ * could reach cleared EVERY enrollment, because it lived under a card that treated desktop sync as one property
+ * of the sandbox. "I don't use that laptop any more" therefore meant taking everybody else's sync down with it.
+ *
+ * THE SANDBOX'S OWN DOOR, not the machine's, which is what makes it the right button for the case it exists for:
+ * a laptop that is lost, wiped, asleep or simply somebody else's answers nothing, and this needs it to answer
+ * nothing. It drops the key from authorized_keys here; the agent over there discovers it on its next poll and
+ * tears its own mirroring down. Unpairing a machine you are holding is the other button (`sync-unpair`), which
+ * asks the machine to clean up properly and is better whenever the machine is there to ask. */
+export async function revokeSyncMachine(machine: string): Promise<void> {
+    const response = await sandboxRequest(`/system/authorized-key/${encodeURIComponent(machine)}`, { method: `DELETE` });
+    if (!response.ok) {
+        throw await sandboxError(response, { method: `DELETE`, path: `/system/authorized-key/{machine}` });
+    }
+}
+
 /* THE CONNECTED COMPUTER THAT RUNS A GIVEN SANDBOX, when there is one, the fact that turns "paste this command
  * on the machine that runs your sandbox" into a button.
  *

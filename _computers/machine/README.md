@@ -41,7 +41,12 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   thing here that writes to *this* computer's localhost, so the flag lives on this side, survives a restart, and
   is read every tick. File sync, the state backup and the git bridge are untouched by it — the point is to stop
   the ports without unpairing the sandbox. The sandbox's Computers tab has a button for it, and that button runs
-  this very command over the `host` capability, so the two can never disagree.
+  this very command over the `host` capability, so the two can never disagree. The same is true of the other
+  three per-pairing verbs — `sync pause`, `sync resume` and `sync uninstall --sandbox <id>` — each of which is a
+  button on the row that describes what it changes: pause and unpair under the folder, mirroring under the ports.
+  Every one of them is scoped by `--sandbox` from the row, because bare they act on every sandbox this machine
+  pairs, which is a reasonable thing to mean in a terminal and never what a button on one row should do to a
+  colleague's pairing on the same computer.
 - Register Mutagen's daemon for login autostart — on Windows through the launcher stub, because Mutagen's own
   registration flashes a console window at every boot.
 

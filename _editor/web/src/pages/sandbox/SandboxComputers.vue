@@ -35,6 +35,7 @@ import BridgeTokensCard from "./BridgeTokensCard.vue";
 import {
     type ComputerScopes,
     computerDoors,
+    computerSummary,
     lastSeenNote,
     machineFacts,
     type ManageBlock,
@@ -42,10 +43,13 @@ import {
     osLabel,
     osTitle,
     syncAgentBehind,
+    syncNote,
+    syncStopped,
 } from "./computerFacts";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
-import { manageMachineSandbox, reportStale, runMachineCommand, useComputers } from "../../composables/sandbox/useComputers";
+import { manageMachineSandbox, reportStale, revokeSyncMachine, runMachineCommand, useComputers } from "../../composables/sandbox/useComputers";
+import { useRole } from "../../composables/sandbox/useRole";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
@@ -67,8 +71,18 @@ import { desktopApp } from "../../environments/desktop";
  * two halves and this page hands it the containers and the verbs; what is left here is what a row says about the
  * MACHINE, which is the half that view cannot know.
  *
- * Enabling sync is still the DesktopSyncCard below, unchanged: adding a computer is a different job from reading
- * the ones you have, and that card already does it well.
+ * DESKTOP SYNC IS A PROPERTY OF A COMPUTER, NOT OF THE SANDBOX, and that is the last thing this page had wrong.
+ * A card under the list held the whole subject: one "Syncing from radarsu-rog", one folder path, one "Disable
+ * sync" that revoked EVERY paired computer at once. The store underneath was never shaped like that — it is a
+ * list of machines, each holding either full sync or ports-only, each with its own folder, its own mirrored
+ * ports and its own heartbeat — and the machine agent has been per-computer and per-sandbox all along
+ * (`intentic-machine sync pause --sandbox …`). So a reader saw one sandbox-level claim above a list of the
+ * several computers that actually disagreed with it, and the only revoke they could reach was the fleet's.
+ *
+ * Every one of those facts is now on the row of the machine it belongs to (`ComputerSync`, syncNote), and every
+ * switch beside the thing it changes: pause and unpair under the FOLDER, mirroring under the PORTS, revoke on
+ * the machine. What survives below is the pairing card, which does the one job that genuinely belongs to the
+ * sandbox: handing out the one-liner that adds a computer.
  *
  * Arriving from the Workspace "Open in local editor" shortcut (?enable=desktop-sync) still flashes that card. */
 
@@ -228,7 +242,12 @@ interface ComputerRow {
  * want and a terrible thing to do by accident, so the row says so and the confirmation names it. */
 const { daemonUrl } = useSandbox();
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
-const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean => computer.hostId !== undefined && group.sandbox?.slug === ownSlug.value;
+/* BOTH SIDES HAVE TO BE KNOWN. `group.sandbox?.slug === ownSlug.value` compared two optionals, so a pairing with
+ * no container on a page whose daemon URL is unknown (a loopback or dev sandbox) matched `undefined ===
+ * undefined` and every such row claimed to be the sandbox you are reading this in: badged "the one you're
+ * using", unfolded on arrival, and named in the severing warning of any confirmation aimed at it. */
+const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean =>
+    computer.hostId !== undefined && ownSlug.value !== undefined && group.sandbox?.slug === ownSlug.value;
 
 // What the reader typed. Lower-cased once here rather than per comparison, and blank until they type: an empty
 // filter must never narrow anything.
@@ -238,25 +257,7 @@ const needle = computed(() => query.value.trim().toLowerCase());
 const rows = computed<ComputerRow[]>(() =>
     sorted.value.map((computer) => {
         const groups = machineGroups(computer);
-        const running = groups.filter((group) => group.sandbox?.running === true).length;
-        const attention = groups.filter(groupNeedsAttention).length;
-        const facts: string[] = [];
-        const warnings: string[] = [];
-        if (groups.length > 0) {
-            facts.push(groups.length === 1 ? `1 sandbox` : `${groups.length} sandboxes`);
-        }
-        if (running > 0) {
-            facts.push(`${running} running`);
-        }
-        if (attention > 0) {
-            warnings.push(attention === 1 ? `1 needs attention` : `${attention} need attention`);
-        }
-        /* The watcher is a fact about the MACHINE rather than any row under it, so it belongs on the machine's
-         * own line, and it is the failure this whole area exists to surface: a dead watcher leaves every row
-         * beneath it reading exactly as it did the moment before. */
-        if (computer.report !== undefined && (computer.report.watcher.running === false || watcherHalted(computer))) {
-            warnings.push(`sync agent stopped`);
-        }
+        const { facts, warnings } = computerSummary(computer, groups, now.value);
         const watcher = computer.report?.watcher;
         return {
             computer,
@@ -416,15 +417,29 @@ const inDesktopApp = desktopApp() !== undefined;
 
 const rowKey = (computer: Computer, group: MachineSandboxGroup): string => `${computer.key}:${group.sandboxId}`;
 const busy = ref<string | undefined>();
-/* The mirroring switch's own in-flight row, kept OUT of `busy` rather than folded into it. `busy` is
+/* The pairing switches' own in-flight call, kept OUT of `busy` rather than folded into it. `busy` is
  * `${row}:${verb}`, and the row splits its own verb back out of it to decide which button spins
  * (`runningVerb`): a value in there that is not a container verb makes <SandboxVerbs> spin its ⋯ menu for
- * something that is not in the menu. Two refs, one meaning, read through `working`. */
-const mirrorBusy = ref<string | undefined>();
+ * something that is not in the menu. Two refs, one meaning, read through `working`.
+ *
+ * It carries the COMMAND as well as the row, because there are three of these buttons on a row now (pause under
+ * the folder, mirroring under the ports, and unpair beside the first). Keyed by row alone, pressing any one of
+ * them spun all three, which reads as a page that did not understand the click. */
+const syncBusy = ref<{ key: string; command: MachineCommand } | undefined>();
+// Whether THIS row's THIS button is the one waiting on a machine. Pause and resume are one button wearing two
+// labels, so they answer to each other: the label flips on the machine's next report, not on the click.
+const PAIRED_WITH: Partial<Record<MachineCommand, MachineCommand>> = {
+    "sync-pause": `sync-resume`,
+    "sync-resume": `sync-pause`,
+    "mirror-off": `mirror-on`,
+    "mirror-on": `mirror-off`,
+};
+const syncRunning = (computer: Computer, group: MachineSandboxGroup, command: MachineCommand): boolean =>
+    syncBusy.value?.key === rowKey(computer, group) && (syncBusy.value.command === command || syncBusy.value.command === PAIRED_WITH[command]);
 // Something is running on some machine. Every button on this tab drives one socket per computer, and the tab
 // has always taken the simple rule: one at a time, everything else waits. A mirroring switch and a container
 // verb racing on the same pairing would be two answers about the same ports.
-const working = computed(() => busy.value !== undefined || mirrorBusy.value !== undefined);
+const working = computed(() => busy.value !== undefined || syncBusy.value !== undefined);
 const actionError = ref<{ key: string; notice: NoticeModel } | undefined>();
 const actionDone = ref<{ key: string; message: string } | undefined>();
 // The running operation's output, keyed by row so leaving a log on screen while reading another row's is fine.
@@ -536,55 +551,138 @@ const runAct = async (computer: Computer, group: MachineSandboxGroup, op: Sandbo
     }
 };
 
-/* --- PORT MIRRORING, OFF AND ON AGAIN ---------------------------------------------------------------------
+/* --- WHAT THIS COMPUTER IS DOING FOR THIS SANDBOX, AND HOW TO CHANGE IT ------------------------------------
  *
- * The one control on this tab that changes the COMPUTER rather than a container on it. Mirroring is the half of
- * the sync agent that writes to somebody's own localhost: a sandbox's dev server takes localhost:5173 on their
- * desk, where their own was going to go, and until now the only ways to stop that were to unpair the sandbox
- * (which takes the file sync and the git bridge with it) or to revoke the enrollment (the same, for every
- * machine at once). "Not on my localhost today" had no expression anywhere in the product.
+ * The controls on this tab that change the COMPUTER rather than a container on it. There are three, and they
+ * are the two halves of one pairing plus its end: file syncing (pause/resume), port mirroring (off/on), and
+ * unpairing, which stops both.
  *
- * THE MACHINE OWNS THE SWITCH, and this button asks for it by running that machine's OWN CLI over the computer
- * connection (`intentic-machine sync mirror off`, built daemon-side from a name). So the button and the command
- * are one gesture rather than two mechanisms that can disagree, and a computer told to keep ports off keeps
- * them off while this sandbox is asleep, unreachable, or arguing.
+ * Mirroring is the half that writes to somebody's own localhost: a sandbox's dev server takes localhost:5173 on
+ * their desk, where their own was going to go. File syncing is the half that writes to their FILES, which is the
+ * more intrusive of the two and, until now, the one with no button: it had a CLI and a paragraph telling the
+ * reader to go and find a terminal, on the very view built to replace that terminal. "Not on my localhost today"
+ * and "stop touching my files for an hour" are the same size of ask and now cost the same click.
  *
- * WHERE IT CAN BE OFFERED: the computer door (`hostId`), the machine awake, and no `gap` in the way, which is
+ * THE MACHINE OWNS ALL THREE, and these buttons ask for them by running that machine's OWN CLI over the computer
+ * connection (`intentic-machine sync mirror off`, `… sync pause`, `… sync uninstall`, each built daemon-side
+ * from a name in a closed set). So a button and a command are one gesture rather than two mechanisms that can
+ * disagree, and a computer told to keep ports off keeps them off while this sandbox is asleep, unreachable, or
+ * arguing. It is also why unpairing goes through the machine rather than through this side's own revoke: the
+ * agent terminates its Mutagen sessions, drops its local pairing and self-revokes on the way out, where a
+ * sandbox-side revoke would leave the machine to discover its key had stopped working.
+ *
+ * WHERE THEY CAN BE OFFERED: the computer door (`hostId`), the machine awake, and no `gap` in the way, which is
  * where "Run commands is off" already lands and is stated in the row's own line above. A pairing is required
- * too: mirroring belongs to one, and a container this sandbox never paired with has no ports of ours to place. */
-const mirrorable = (computer: Computer, group: MachineSandboxGroup): boolean =>
+ * too: all three belong to one, and a container this sandbox never paired with has nothing of ours on it. */
+const commandable = (computer: Computer, group: MachineSandboxGroup): boolean =>
     computer.hostId !== undefined && computer.online === true && computer.gap === undefined && group.folder !== undefined;
 
-// No confirmation, deliberately: it takes ports off a localhost and puts them back, changes no file and destroys
-// nothing, and the button that undoes it is the one that appears in its place.
-const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Promise<void> => {
+/* Pause and resume are FILE SYNC's, so they are offered only where there is a file sync: a mirror enrollment has
+ * no Mutagen session to pause, and the machine's own CLI says exactly that if asked ("mirror-only enrollment, no
+ * file sync to pause"). Better not to draw the button than to draw one whose answer is that sentence. */
+const pausable = (computer: Computer, group: MachineSandboxGroup): boolean => commandable(computer, group) && group.folder?.mode === `sync`;
+
+// What each command is called on the row, and what to say if the machine would not do it. Kept beside each other
+// rather than inlined at three call sites so a verb and its failure sentence cannot drift apart.
+const COMMAND_REFUSAL: Record<MachineCommand, string> = {
+    "mirror-off": `That computer didn't change its port mirroring.`,
+    "mirror-on": `That computer didn't change its port mirroring.`,
+    "sync-pause": `That computer didn't pause its file syncing.`,
+    "sync-resume": `That computer didn't resume its file syncing.`,
+    "sync-unpair": `That computer didn't unpair this sandbox.`,
+};
+const COMMAND_UNREACHED: Record<MachineCommand, string> = {
+    "mirror-off": `Couldn't reach that computer to change its port mirroring.`,
+    "mirror-on": `Couldn't reach that computer to change its port mirroring.`,
+    "sync-pause": `Couldn't reach that computer to pause its file syncing.`,
+    "sync-resume": `Couldn't reach that computer to resume its file syncing.`,
+    "sync-unpair": `Couldn't reach that computer to unpair this sandbox.`,
+};
+
+/* No confirmation for the reversible four, deliberately: each takes something off a machine and puts it back,
+ * destroys nothing, and the button that undoes it is the one that appears in its place. `sync-unpair` ends a
+ * pairing that only a fresh one-liner re-makes, so the template routes that one through the dialog first. */
+const runSync = async (computer: Computer, group: MachineSandboxGroup, command: MachineCommand): Promise<void> => {
     if (computer.hostId === undefined || working.value) {
         return;
     }
     const key = rowKey(computer, group);
-    // Scoped to the row that was clicked. Bare, the machine's CLI acts on every sandbox it pairs, which is a
-    // reasonable thing to want from a terminal and never what a button on one row should do to a colleague's.
-    const command: MachineCommand = mirroringOff(group.folder) ? `mirror-on` : `mirror-off`;
-    mirrorBusy.value = key;
+    syncBusy.value = { key, command };
     actionError.value = undefined;
     actionDone.value = undefined;
     try {
+        // Scoped to the row that was clicked. Bare, the machine's CLI acts on every sandbox it pairs, which is a
+        // reasonable thing to want from a terminal and never what a button on one row should do to a colleague's.
         const result = await runMachineCommand(computer.hostId, command, group.sandboxId);
-        /* THE MACHINE'S OWN SENTENCE, either way. It names the ports it actually took off localhost, which is
-         * more than this side knows, and a refusal names the switch to flip. `ok: false` is a real answer rather
-         * than a throw (see runMachineCommand), so it is shown as the machine explaining itself: amber, because
-         * nothing here broke, the computer simply did not do it. */
+        /* THE MACHINE'S OWN SENTENCE, either way. It names the ports it actually took off localhost, or the
+         * sessions it paused, which is more than this side knows, and a refusal names the switch to flip.
+         * `ok: false` is a real answer rather than a throw (see runMachineCommand), so it is shown as the machine
+         * explaining itself: amber, because nothing here broke, the computer simply did not do it. */
         actionDone.value = result.ok ? { key, message: result.message } : undefined;
-        actionError.value = result.ok
-            ? undefined
-            : { key, notice: { tone: `warning`, title: `That computer didn't change its port mirroring.`, detail: result.message } };
+        actionError.value = result.ok ? undefined : { key, notice: { tone: `warning`, title: COMMAND_REFUSAL[command], detail: result.message } };
     } catch (failure) {
-        actionError.value = { key, notice: noticeFrom(failure, `Couldn't reach that computer to change its port mirroring.`) };
+        actionError.value = { key, notice: noticeFrom(failure, COMMAND_UNREACHED[command]) };
     } finally {
-        mirrorBusy.value = undefined;
+        syncBusy.value = undefined;
         /* The ports on this row are exactly what just changed, and the daemon dropped its cached reading of this
          * machine as the command ran, so this re-read blocks on a real answer rather than serving the list from
          * before the click. Always, including after a failure: a call that timed out from here still ran there. */
+        refetch();
+    }
+};
+
+/* UNPAIRING IS THE ONE THAT DOES NOT UNDO ITSELF: the machine terminates its sessions, drops its pairing and
+ * self-revokes, and turning it back on means a fresh one-liner over there. So it parks in the app's own dialog
+ * rather than the browser's confirm(), like the container verbs above it. */
+const confirmingUnpair = ref<{ computer: Computer; group: MachineSandboxGroup } | undefined>();
+const confirmUnpair = (): void => {
+    const pending = confirmingUnpair.value;
+    confirmingUnpair.value = undefined;
+    if (pending !== undefined) {
+        void runSync(pending.computer, pending.group, `sync-unpair`);
+    }
+};
+
+/* --- CUTTING A COMPUTER OFF FROM THIS SANDBOX -------------------------------------------------------------
+ *
+ * The other kind of ending, and the difference from Unpair above is which side is holding the machine. Unpair
+ * ASKS the computer to clean up after itself, which is better whenever it can be asked. This one drops the key
+ * from the sandbox and lets the machine find out, which is the only thing that works for a laptop that is lost,
+ * wiped, permanently asleep, or somebody else's.
+ *
+ * PER MACHINE, which is the whole change: the only revoke a browser could reach used to clear every enrollment
+ * at once, because it lived on a card that treated desktop sync as one property of the sandbox. There is no
+ * fleet-wide button behind this on purpose — three computers is three deliberate acts, each on the row that
+ * describes it.
+ *
+ * Owner-only, matching the daemon's own floor and the hosts revoke beside it: a member holds their own mirror
+ * enrollment and drops it from their own machine, but ending somebody else's is the owner's call. */
+const { isOwner } = useRole();
+const confirmingRevoke = ref<Computer | undefined>();
+const revoking = ref(false);
+const runRevoke = async (): Promise<void> => {
+    const computer = confirmingRevoke.value;
+    /* The row lost its enrollment between opening this dialog and confirming it: the list re-reads every ten
+     * seconds, and the machine may have uninstalled itself in between. There is nothing left to revoke, so the
+     * dialog closes rather than sitting open over a question that has answered itself. */
+    if (computer?.sync === undefined) {
+        confirmingRevoke.value = undefined;
+        return;
+    }
+    revoking.value = true;
+    actionError.value = undefined;
+    actionDone.value = undefined;
+    try {
+        await revokeSyncMachine(computer.sync.machine);
+        confirmingRevoke.value = undefined;
+        actionDone.value = { key: computer.key, message: `${computer.label} no longer has access to this sandbox.` };
+    } catch (failure) {
+        actionError.value = { key: computer.key, notice: noticeFrom(failure, `Couldn't revoke that computer's access.`) };
+        confirmingRevoke.value = undefined;
+    } finally {
+        revoking.value = false;
+        // The row it was aimed at is about to lose its enrollment, so the list has to be re-read either way: a
+        // revoke that failed here may still have landed, and the machine is the only honest source for which.
         refetch();
     }
 };
@@ -732,6 +830,20 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
                             {{ machineFacts(row.computer).join(` · `) }}
                         </p>
 
+                        <!-- WHAT THIS COMPUTER'S ENROLLMENT IS, restated inside the open row. The folded line
+                             carries it too, and hides it when the row opens (every other fact up there is
+                             stated in full below), so without this the one thing the whole area is about
+                             vanishes at exactly the moment somebody goes looking for it. Warning ink when the
+                             machine has stopped checking in: nothing is reaching its folder, and that is the
+                             failure this used to keep reading as healthy. -->
+                        <p
+                            v-if="syncNote(row.computer, now)"
+                            class="min-w-0 text-xs"
+                            :class="syncStopped(row.computer, now) ? `text-warning` : `text-muted`"
+                        >
+                            {{ syncNote(row.computer, now) }}
+                        </p>
+
                         <!-- WHAT THE ROW WANTS FROM YOU, if anything: each on its own line, in the tone it earns. -->
                         <div
                             v-if="
@@ -809,6 +921,45 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
                                         @act="(verb) => act(row.computer, group, verb)"
                                     />
                                 </template>
+                                <!-- WHAT TO DO ABOUT THIS PAIRING'S FILES, under the folder rather than up in the
+                                 verbs, which act on the CONTAINER. A "Pause" beside the Stop that stops the
+                                 sandbox would be read as the same act, and this one stops nothing in the
+                                 sandbox: the box keeps running, the ports keep arriving, the files stop moving.
+                                 Pause had no button at all until now — only a sentence naming a command to go
+                                 and type, on the view built to replace that terminal. -->
+                                <template #folder="{ group }">
+                                    <Button
+                                        v-if="pausable(row.computer, group)"
+                                        size="small"
+                                        severity="secondary"
+                                        :text="true"
+                                        :label="group.folder?.paused === true ? `Resume syncing` : `Pause syncing`"
+                                        :loading="syncRunning(row.computer, group, `sync-pause`)"
+                                        :disabled="working"
+                                        v-tooltip.top="
+                                            group.folder?.paused === true
+                                                ? `Start moving files between this computer and the sandbox again`
+                                                : `Stop moving files either way. The sandbox keeps running and its ports keep being mirrored.`
+                                        "
+                                        @click="void runSync(row.computer, group, group.folder?.paused === true ? `sync-resume` : `sync-pause`)"
+                                    />
+                                    <!-- THE END OF THE PAIRING, and the one control here that nothing undoes in
+                                     a click: turning it back on means a fresh one-liner on that computer. It
+                                     asks the MACHINE to unpair (which is why it needs the computer door), so
+                                     the agent tears its own sessions down and self-revokes rather than
+                                     discovering later that its key stopped working. -->
+                                    <Button
+                                        v-if="commandable(row.computer, group)"
+                                        size="small"
+                                        severity="danger"
+                                        :text="true"
+                                        label="Unpair"
+                                        :loading="syncRunning(row.computer, group, `sync-unpair`)"
+                                        :disabled="working"
+                                        v-tooltip.top="`Stop this computer syncing this sandbox. Its local folder is left exactly as it is.`"
+                                        @click="confirmingUnpair = { computer: row.computer, group }"
+                                    />
+                                </template>
                                 <!-- THE SWITCH THAT CLEARS THE USER'S OWN LOCALHOST, under the ports it is about
                                  rather than up in the verbs, which act on the container. Two "Stop"s a pixel
                                  apart would be read as one, and this one stops nothing in the sandbox: the dev
@@ -816,19 +967,19 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
                                  localhost. Its label points whichever way the machine currently says. -->
                                 <template #ports="{ group }">
                                     <Button
-                                        v-if="mirrorable(row.computer, group)"
+                                        v-if="commandable(row.computer, group)"
                                         size="small"
                                         severity="secondary"
                                         :text="true"
                                         :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
-                                        :loading="mirrorBusy === rowKey(row.computer, group)"
+                                        :loading="syncRunning(row.computer, group, `mirror-off`)"
                                         :disabled="working"
                                         v-tooltip.top="
                                             mirroringOff(group.folder)
                                                 ? `Put this sandbox's ports back on this computer's localhost`
                                                 : `Take this sandbox's ports off this computer's localhost. Files keep syncing.`
                                         "
-                                        @click="void toggleMirror(row.computer, group)"
+                                        @click="void runSync(row.computer, group, mirroringOff(group.folder) ? `mirror-on` : `mirror-off`)"
                                     />
                                 </template>
                                 <!-- The machine's own output: while a row works, and afterwards for as long as a log
@@ -855,6 +1006,30 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
                          gate above, deliberately, a machine that never reported still holds runners this
                          sandbox created, and the list of them is this side's own knowledge. -->
                         <MachineRunners :computer="row.computer" />
+
+                        <!-- CUTTING THIS COMPUTER OFF, at the bottom of its own row, because it ends everything
+                             above it at once. It is the machine-level twin of Unpair: that one asks the computer
+                             to stop syncing ONE sandbox and needs the computer to be reachable, this one drops
+                             the key here and works on a laptop that is lost, wiped or permanently asleep — which
+                             is the case it exists for, and the case Unpair cannot serve.
+                             Only on a row that HAS an enrollment, and only for the owner, matching the daemon's
+                             own floor. What it replaced was one button under the list that revoked every paired
+                             computer at once, including the ones mirroring ports for other people. -->
+                        <div v-if="row.computer.sync && isOwner" class="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line-subtle pt-3">
+                            <p class="min-w-0 flex-1 text-xs text-muted">
+                                Revoking stops this computer reaching the sandbox at all. Nothing on it is deleted, and its agent stays installed.
+                            </p>
+                            <Button
+                                size="small"
+                                severity="danger"
+                                :text="true"
+                                label="Revoke access"
+                                :disabled="working || revoking"
+                                @click="confirmingRevoke = row.computer"
+                            >
+                                <template #icon><Icon name="times" /></template>
+                            </Button>
+                        </div>
                     </div>
                 </template>
             </DisclosureRow>
@@ -879,6 +1054,48 @@ const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Pro
             <p v-if="actPrompt?.body !== undefined">{{ actPrompt.body }}</p>
             <p v-if="actPrompt?.severing === true" class="mt-3 text-xs text-warning">
                 This is the sandbox you are using right now — this page will lose it.
+            </p>
+        </ConfirmDialog>
+
+        <!-- ENDING ONE PAIRING. What survives is named as carefully as what goes: the folder is the thing people
+             are actually worried about, and it is untouched. -->
+        <ConfirmDialog
+            :open="confirmingUnpair !== undefined"
+            :header="`Unpair ${confirmingUnpair?.group.title ?? `this sandbox`}?`"
+            confirm-label="Unpair"
+            :destructive="true"
+            @cancel="confirmingUnpair = undefined"
+            @confirm="confirmUnpair"
+        >
+            <p>
+                <span class="font-mono text-content">{{ confirmingUnpair?.computer.label }}</span> stops syncing this sandbox's files and mirroring its
+                ports. Everything already in its local folder stays exactly as it is.
+            </p>
+            <p v-if="confirmingUnpair?.group.folder?.localDir" class="mt-2 break-all font-mono text-xs text-content">
+                {{ confirmingUnpair.group.folder.localDir }}
+            </p>
+            <p class="mt-2">Pairing it again means running a fresh command on that computer.</p>
+        </ConfirmDialog>
+
+        <!-- CUTTING ONE COMPUTER OFF. Named for the machine rather than the sandbox, because that is the scope,
+             and explicit that it is this one and not the fleet: the button it replaces revoked every paired
+             computer at once, which is the assumption a reader arrives with. -->
+        <ConfirmDialog
+            :open="confirmingRevoke !== undefined"
+            :header="`Revoke ${confirmingRevoke?.label ?? `this computer`}'s access?`"
+            confirm-label="Revoke access"
+            confirm-icon="times"
+            :destructive="true"
+            :loading="revoking"
+            @cancel="confirmingRevoke = undefined"
+            @confirm="runRevoke"
+        >
+            <p>
+                This computer alone loses access — every other paired computer keeps syncing. Its file sync stops and its mirrored ports drop off its
+                localhost within a minute.
+            </p>
+            <p class="mt-2">
+                Nothing on that computer is deleted and its agent stays installed, but letting it back in means running a fresh pairing command there.
             </p>
         </ConfirmDialog>
     </div>

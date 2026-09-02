@@ -6,6 +6,7 @@
 // derivation (computerFacts.test.ts has that) but that the row actually PUTS it on screen, next to the name, for a
 // computer that has nothing else to show.
 import type { Computer } from "@intentic/sandbox-contract";
+import PrimeVue from "primevue/config";
 import { DESTRUCTIVE_VERB, groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -13,6 +14,12 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 // What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
 // query (the UI barrel's useDevice). jsdom plus these two is the whole of it: see daemonRestart.test.ts, which
 // cuts the same edge.
+
+/* ONE DESKTOP-SYNC ENROLLMENT ON A ROW. It replaced a `syncEnrolled: true` boolean, and the extra two fields are
+ * the point: a row has to say WHICH half of sync this computer holds (files and ports, or ports alone) and be
+ * able to name the enrollment when the reader revokes it. `seenAt` is now, so these rows read as live: an
+ * enrollment nobody has used is a warning, which is its own test below. */
+const paired = (mode: `sync` | `mirror` = `sync`, machine = `laptop`): Computer[`sync`] => ({ machine, mode, seenAt: Date.now() });
 
 const computers = ref<Computer[]>([]);
 // The FIRST read, not the ten-second poll. Every test below is about a list that has already arrived, so this
@@ -26,6 +33,9 @@ const mirrorCalls: { hostId: string; command: string; sandboxId?: string | undef
 // What the machine answers. `ok: false` is a machine explaining itself (its "Run commands" switch is off, its
 // CLI exited non-zero) and reaches the row as words rather than as a throw, so a test can swap this and pin it.
 let mirrorAnswer: { ok: boolean; message: string } = { ok: true, message: `Port mirroring OFF for: work-abc` };
+// Which machine's enrollment was revoked. The sandbox-side door, so unlike the commands above it needs no
+// computer connection at all: that is the whole reason it exists beside Unpair.
+const revokeCalls: string[] = [];
 vi.mock(`../../composables/sandbox/useComputers`, async () => {
     // reportStale is a plain function of the row and the clock: real, so a row's staleness line is decided the
     // way it is in the app rather than by this file's idea of it.
@@ -37,8 +47,15 @@ vi.mock(`../../composables/sandbox/useComputers`, async () => {
             mirrorCalls.push({ hostId, command, sandboxId });
             return Promise.resolve(mirrorAnswer);
         },
+        revokeSyncMachine: (machine: string) => {
+            revokeCalls.push(machine);
+            return Promise.resolve();
+        },
     };
 });
+// The reader's tier. Revoking another computer's access is the owner's, matching the daemon's own floor.
+const owner = ref(true);
+vi.mock(`../../composables/sandbox/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
 // `sandboxKey` is reached at module eval by the real useComputers above, which is why it is here as well as the
 // one hook the component calls.
 vi.mock(`../../composables/sandbox/useSandbox`, () => ({
@@ -105,6 +122,9 @@ const mount = (rows: Computer[]): HTMLElement => {
     app = createApp({ render: () => h(SandboxComputers) });
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
     app.directive(`tooltip`, {});
+    // The confirmations (unpair, revoke, the container verbs) are PrimeVue Dialogs underneath, and they read the
+    // plugin's config while rendering.
+    app.use(PrimeVue);
     app.mount(el);
     return el;
 };
@@ -124,7 +144,9 @@ afterEach(() => {
     runnersList.value = [];
     computersLoading.value = false;
     capabilities.value = [];
+    owner.value = true;
     mirrorCalls.length = 0;
+    revokeCalls.length = 0;
     mirrorAnswer = { ok: true, message: `Port mirroring OFF for: work-abc` };
     app?.unmount();
     app = undefined;
@@ -141,8 +163,7 @@ it(`says what a computer is when it has no report to show`, () => {
         {
             key: `radarsu-rog`,
             label: `radarsu-rog`,
-            syncEnrolled: false,
-            hostId: `radarsu-rog`,
+                        hostId: `radarsu-rog`,
             online: true,
             platform: `windows`,
             facts: {
@@ -171,8 +192,7 @@ it(`falls back to the platform, and ages a computer that is not here`, () => {
         {
             key: `linux`,
             label: `linux`,
-            syncEnrolled: false,
-            hostId: `linux`,
+                        hostId: `linux`,
             online: false,
             platform: `linux`,
             lastSeen: Date.now() - 3 * 60 * 60_000,
@@ -199,10 +219,10 @@ it(`puts the machines worth reading first`, () => {
         capturedAt,
     });
     const el = mount([
-        { key: `a`, label: `a-offline`, syncEnrolled: false, hostId: `a`, online: false, platform: `linux`, gap: `offline` },
-        { key: `b`, label: `b-quiet`, syncEnrolled: true, platform: `linux`, report: report(Date.now() - 60 * 60_000) },
-        { key: `c`, label: `c-attention`, syncEnrolled: false, hostId: `c`, online: true, platform: `linux`, gap: `no-agent` },
-        { key: `d`, label: `d-live`, syncEnrolled: true, platform: `linux`, report: report(Date.now()) },
+        { key: `a`, label: `a-offline`, hostId: `a`, online: false, platform: `linux`, gap: `offline` },
+        { key: `b`, label: `b-quiet`, sync: paired(), platform: `linux`, report: report(Date.now() - 60 * 60_000) },
+        { key: `c`, label: `c-attention`, hostId: `c`, online: true, platform: `linux`, gap: `no-agent` },
+        { key: `d`, label: `d-live`, sync: paired(), platform: `linux`, report: report(Date.now()) },
     ]);
     const text = el.textContent ?? ``;
     const at = (label: string): number => text.indexOf(label);
@@ -219,7 +239,7 @@ it(`names the image each sandbox on the machine is running, once the row is open
         {
             key: `laptop`,
             label: `laptop`,
-            syncEnrolled: true,
+            sync: paired(),
             platform: `linux`,
             report: {
                 hostname: `laptop`,
@@ -249,7 +269,8 @@ it(`names the image each sandbox on the machine is running, once the row is open
 const managed = (running: boolean): Computer => ({
     key: `laptop`,
     label: `laptop`,
-    syncEnrolled: true,
+    // A CONNECTED COMPUTER AND NOTHING ELSE: no desktop-sync enrollment, which is what makes it the right
+    // fixture for the container verbs and for asserting that a machine with no enrollment offers no revoke.
     platform: `linux`,
     hostId: `host-1`,
     online: true,
@@ -332,7 +353,7 @@ it(`says nothing about connecting a computer that is already managing its sandbo
 const syncOnly = (): Computer => ({
     key: `laptop`,
     label: `laptop`,
-    syncEnrolled: true,
+    sync: paired(),
     platform: `windows`,
     report: {
         hostname: `laptop`,
@@ -391,7 +412,7 @@ it(`names the removal switch on a machine that may do everything else`, () => {
 const busyMachine = (): Computer => ({
     key: `rog`,
     label: `radarsu-rog`,
-    syncEnrolled: true,
+    sync: paired(),
     platform: `linux`,
     hostId: `host-1`,
     online: true,
@@ -524,7 +545,7 @@ it(`says when a filter matched nothing`, async () => {
 const behind = (): Computer => ({
     key: `laptop`,
     label: `laptop`,
-    syncEnrolled: true,
+    sync: paired(),
     platform: `linux`,
     report: {
         hostname: `laptop`,
@@ -683,7 +704,7 @@ it(`says nothing about the build of a runner that matches`, async () => {
 const mirrored = (state: `on` | `off`, door: { hostId: string; online: boolean } | null = { hostId: `host-1`, online: true }): Computer => ({
     key: `laptop`,
     label: `laptop`,
-    syncEnrolled: true,
+    sync: paired(),
     platform: `linux`,
     ...door,
     report: {
@@ -785,4 +806,143 @@ it(`still warns about a port that missed localhost while mirroring is on`, () =>
     );
     expect(groups.map((group) => groupSummary(group))).toEqual([{ facts: [], warnings: [`1 port not on localhost`] }]);
     expect(groups.filter(groupNeedsAttention)).toHaveLength(1);
+});
+
+/* ---- desktop sync, as a property of each COMPUTER --------------------------------------------------------
+ *
+ * The change these pin: a card under this list used to hold the whole subject in the singular — one "Syncing
+ * from radarsu-rog", one folder, one "Disable sync" that revoked EVERY paired computer. The store underneath was
+ * never that shape and the machine agent never was either (`intentic-machine sync pause --sandbox …`), so a
+ * reader saw one sandbox-level claim above a list of the several computers that disagreed with it.
+ *
+ * Now each row states its own enrollment and carries its own switches. */
+
+// A machine that only mirrors ports: no folder, no file sync, and it must not be described as syncing files.
+const mirrorOnly = (): Computer => ({
+    key: `colleague`,
+    label: `colleague-pc`,
+    sync: paired(`mirror`, `colleague`),
+    platform: `linux`,
+    report: {
+        hostname: `colleague`,
+        os: `linux`,
+        agents: { sync: `1.183.0` },
+        sandboxes: [],
+        pairings: [{ sandboxId: `work-abc`, mode: `mirror` }],
+        ports: [{ port: 5173, host: `127.0.0.1`, sandboxId: `work-abc`, state: `mirrored` }],
+        watcher: { running: true },
+        capturedAt: Date.now(),
+    },
+});
+
+it(`says which half of desktop sync each computer holds`, () => {
+    const text = mount([mirrored(`on`), mirrorOnly()]).textContent ?? ``;
+    expect(text).toContain(`syncing files and ports`);
+    expect(text).toContain(`mirroring ports`);
+    // The chip beside the name says it too, so a mirror machine is never labelled with the word that would send
+    // its owner looking for a folder that does not exist.
+    expect(text).toContain(`ports only`);
+});
+
+/* AN ENROLLMENT NOBODY HAS USED IS A WARNING, not a green row. This is the failure that used to be invisible
+ * everywhere at once: the record exists, so every surface read it as healthy, while nothing at all was reaching
+ * that machine's folder. */
+it(`warns about a computer whose enrollment has gone quiet`, () => {
+    const row = mirrored(`on`);
+    const text = mount([{ ...row, sync: { machine: `laptop`, mode: `sync` } }]).textContent ?? ``;
+    expect(text).toContain(`never checked in`);
+});
+
+it(`treats an enrollment last used hours ago as stopped`, () => {
+    const row = mirrored(`on`);
+    const text = mount([{ ...row, sync: { machine: `laptop`, mode: `sync`, seenAt: Date.now() - 3 * 60 * 60_000 } }]).textContent ?? ``;
+    expect(text).toContain(`stopped`);
+});
+
+/* PAUSE HAD NO BUTTON AT ALL: the ports half of a pairing got a switch and the files half got a paragraph
+ * naming a command to go and type, on the view built to replace that terminal. What leaves is the row's OWN
+ * sandbox id, for the same reason mirroring's does: bare, the machine's CLI acts on every pairing it holds. */
+it(`pauses this pairing's file syncing, and nobody else's`, async () => {
+    const el = mount([mirrored(`on`)]);
+    await openRow(el, `work`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Pause syncing`))?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-pause`, sandboxId: `work-abc` }]);
+});
+
+// The label points whichever way the machine currently says, exactly as the mirroring switch does.
+it(`offers Resume, and no Pause, on a pairing the machine reports as paused`, async () => {
+    const row = mirrored(`on`);
+    const paused = {
+        ...row,
+        report: { ...row.report!, pairings: [{ ...row.report!.pairings[0]!, paused: true }] },
+    };
+    const el = mount([paused]);
+    await openRow(el, `work`);
+    expect(labels(el)).toContain(`Resume syncing`);
+    expect(labels(el)).not.toContain(`Pause syncing`);
+});
+
+// A mirror enrollment has no Mutagen session to pause, and the machine's own CLI says exactly that if asked.
+// Better to draw no button than one whose only possible answer is that sentence.
+it(`does not offer to pause a computer that only mirrors ports`, async () => {
+    const el = mount([{ ...mirrorOnly(), hostId: `host-1`, online: true }]);
+    await openRow(el, `work-abc`);
+    expect(labels(el)).not.toContain(`Pause syncing`);
+    // Mirroring is still its to switch: that half is exactly what a mirror enrollment does.
+    expect(labels(el)).toContain(`Stop mirroring`);
+});
+
+/* UNPAIRING ENDS A PAIRING THAT ONLY A FRESH ONE-LINER RE-MAKES, so it asks first — and it goes to the MACHINE,
+ * which tears its own sessions down and self-revokes, rather than this side yanking the key underneath it. */
+it(`asks before unpairing, then tells the machine to do it`, async () => {
+    const el = mount([mirrored(`on`)]);
+    await openRow(el, `work`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Unpair`)?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([]);
+    expect(document.body.textContent ?? ``).toContain(`stops syncing this sandbox's files`);
+
+    // The LAST match is the dialog's own button: it teleports to the end of <body>, so the row's button is first.
+    [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).trim() === `Unpair`)?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-abc` }]);
+});
+
+/* CUTTING ONE COMPUTER OFF, from its own row. The button this replaced revoked every paired computer at once,
+ * so this asserts both halves: that it asks, and that what leaves names ONE machine. */
+it(`revokes one computer's access, naming that machine alone`, async () => {
+    const el = mount([mirrored(`on`)]);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Revoke access`))?.click();
+    await nextTick();
+    expect(revokeCalls).toEqual([]);
+    // The dialog is explicit that this is one computer rather than the fleet, which is the assumption a reader
+    // arrives with after years of the old button.
+    expect(document.body.textContent ?? ``).toContain(`every other paired computer keeps syncing`);
+
+    // The dialog's own confirm, which teleports past the row's button that opened it.
+    [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).includes(`Revoke access`))?.click();
+    await nextTick();
+    expect(revokeCalls).toEqual([`laptop`]);
+});
+
+// It is the SANDBOX's own door, so unlike Unpair it is offered on a machine this sandbox cannot reach at all:
+// a laptop that is lost, wiped or permanently asleep is exactly the case it exists for.
+it(`offers to revoke a computer that has no connection to run commands on`, () => {
+    const el = mount([mirrored(`off`, null)]);
+    expect(labels(el)).toContain(`Revoke access`);
+    expect(labels(el)).not.toContain(`Unpair`);
+});
+
+// Owner-only, matching the daemon's floor: a member holds their own mirror enrollment and drops it from their
+// own machine, but ending somebody else's is not a collaboration feature.
+it(`does not offer the revoke to a member`, () => {
+    owner.value = false;
+    expect(labels(mount([mirrored(`on`)]))).not.toContain(`Revoke access`);
+});
+
+// A connected computer that was never paired for sync has no enrollment to end, and a "Revoke access" on it
+// would be a button with nothing behind it.
+it(`says nothing about revoking a computer that is not enrolled for sync`, () => {
+    expect(labels(mount([managed(true)]))).not.toContain(`Revoke access`);
 });

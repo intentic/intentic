@@ -89,6 +89,15 @@ defineSlots<{
     badges?: (props: { group: MachineSandboxGroup }) => unknown;
     /** What can be DONE to it, right-aligned on the same line. The caller owns the verbs. */
     actions?: (props: { group: MachineSandboxGroup }) => unknown;
+    /* What can be done about this row's FILE SYNC, under the folder it is about: the twin of `ports` below, and
+     * for the same reason. Pausing a sync and stopping a container are different enough acts that they must not
+     * share a cluster of buttons; each belongs under the line that describes what it changes.
+     *
+     * It exists because the two halves of one pairing had grown two different affordances: the ports line got a
+     * button, and the folder line got a paragraph naming a command to go and type in a terminal, on the very
+     * view built to replace that terminal. The caller owns it, because this package knows what a file sync IS
+     * and nothing about the door to the machine that pauses one. */
+    folder?: (props: { group: MachineSandboxGroup }) => unknown;
     /* What can be done about this row's PORTS, at the end of the ports line rather than up in `actions`.
      *
      * Its own slot because the row's verbs are its CONTAINER's: a "Stop mirroring" sitting beside the Stop that
@@ -392,6 +401,20 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 :label="`${group.folder.conflicts} ${group.folder.conflicts === 1 ? `conflict` : `conflicts`}`"
                             />
                         </div>
+                        <!-- WHAT TO DO ABOUT THIS FOLDER, under it rather than up in the row's verbs, which act
+                             on the CONTAINER. A "Pause" beside the Stop that stops the sandbox is two very
+                             different pauses a pixel apart, and this one stops nothing in the sandbox at all:
+                             the box keeps running, the ports keep being mirrored, the files stop moving. The
+                             same argument the ports switch below already makes from its own side.
+                             Spans both columns so its controls start under the path rather than in the label
+                             gutter; `-ml-2.5` cancels a small text button's own padding, exactly as the ports
+                             cluster does, so the words land in the block's one value column. -->
+                        <span
+                            v-if="$slots[`folder`]"
+                            class="empty:hidden col-start-2 -ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1"
+                        >
+                            <slot name="folder" :group="group" />
+                        </span>
                     </template>
 
                     <!-- The ports line survives having NO PORTS, which is the one case it used to render as

@@ -462,11 +462,15 @@ reports the profile.
   (`machine-reports.ts`), and `host-seed.ts`: the card the setup flow creates for the machine that installed
   this sandbox, granted its sandboxes and nothing else. Acting on one of those sandboxes STREAMS, because the
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
-  here. `machine-commands.ts` is the other door: one of the machine's OWN CLI actions (turning its port mirroring
-  off) run from a button rather than through an agent, answering with the sentence the CLI printed instead of a
-  stream. The set of actions is a closed enum and the argv is built here from the name — never sent by the
-  caller — because the socket underneath also carries `run_command`, and a route that forwarded caller-supplied
-  text would hand every browser session a shell on somebody's laptop. Reading them does NOT stream: a reading is
+  here. `machine-commands.ts` is the other door: one of the machine's OWN CLI actions run from a button rather
+  than through an agent, answering with the sentence the CLI printed instead of a stream. Five of them, and they
+  are the two halves of one pairing plus its end — port mirroring off/on, file syncing paused/resumed, and
+  unpairing, which asks the agent to terminate its sessions and self-revoke rather than having the key pulled
+  from under it. The set is a closed enum and the argv is built here from the name — never sent by the caller —
+  because the socket underneath also carries `run_command`, and a route that forwarded caller-supplied text would
+  hand every browser session a shell on somebody's laptop. The one that destroys a pairing refuses to run
+  fleet-wide: bare, the agent's CLI acts on every sandbox that computer pairs, which is the honest "turn it off
+  entirely" for a switch and a trap for an unpair reachable by omitting a field. Reading them does NOT stream: a reading is
   served from memory and refreshed behind the answer, because the
   alternative is a page that waits on a round trip to every one of somebody's laptops before it can paint, and
   a reading carries its own `capturedAt` for the view to age it by. Only a machine this daemon has never once

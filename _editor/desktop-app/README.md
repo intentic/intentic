@@ -45,7 +45,7 @@ from any device. The app adds no third plane. It is three thin native things aro
    container as up and say nothing whatsoever about the sync the same setup had just configured. The only
    rendering of those facts was the agent's printed status, in a terminal.
 
-   Enabling sync after setup was the same gap from the other side: the SPA's Desktop sync card minted a
+   Enabling sync after setup was the same gap from the other side: the SPA's "Add a computer" card minted a
    pairing and then handed the app's own user a one-liner to paste in a terminal. Inside the app that card
    offers a button instead (`intentic://sync`, app-window only — the token enrolls a machine into two-way
    file sync, so an external copy of the link is refused whole): the app asks for the folder in the system's

@@ -1,6 +1,22 @@
 import type { Computer } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { computerDoors, hostCard, lastSeenNote, machineFacts, manageBlock, osLabel, osTitle } from "./computerFacts";
+import { sandboxGroups } from "@intentic/ui/machine";
+import {
+    computerDoors,
+    computerSummary,
+    hostCard,
+    lastSeenNote,
+    machineFacts,
+    manageBlock,
+    osLabel,
+    osTitle,
+    syncNote,
+    syncStopped,
+} from "./computerFacts";
+
+// One instant for every judgement below, so a threshold is crossed because a test asked for it rather than
+// because the suite happened to straddle a minute.
+const NOW = 1_700_000_000_000;
 
 /* The row shapes these have to survive are the interesting half. A computer arrives through either of two doors,
  * and the ones that arrive with NO report: a connected computer whose owner never installed the sync agent, a
@@ -9,8 +25,15 @@ import { computerDoors, hostCard, lastSeenNote, machineFacts, manageBlock, osLab
 const computer = (overrides: Partial<Computer> = {}): Computer => ({
     key: `my-pc`,
     label: `my-pc`,
-    syncEnrolled: false,
     ...overrides,
+});
+
+// One desktop-sync enrollment on a row: which half this computer holds, and when it last checked in. It replaced
+// a `syncEnrolled` boolean, which could say a machine was paired and nothing about what that pairing does.
+const enrolled = (mode: `sync` | `mirror` = `sync`, seenAt?: number): Computer[`sync`] => ({
+    machine: `my-pc`,
+    mode,
+    ...(seenAt === undefined ? {} : { seenAt }),
 });
 
 const WINDOWS = {
@@ -49,7 +72,7 @@ test(`falls back to the platform when the machine has never described itself`, (
 test(`separates what the machine is from how it is reached`, () => {
     const row = computer({
         label: `laptop`,
-        syncEnrolled: true,
+        sync: enrolled(),
         hostId: `my-pc`,
         online: true,
         platform: `windows`,
@@ -83,10 +106,13 @@ test(`repeats the hostname only when the row is called something else`, () => {
         watcher: { running: true },
         capturedAt: 1_700_000_000_000,
     };
-    expect(machineFacts(computer({ syncEnrolled: true, report }))).toEqual([]);
-    expect(machineFacts(computer({ label: `ada's box`, syncEnrolled: true, report }))).toEqual([`MY-PC`]);
+    expect(machineFacts(computer({ sync: enrolled(), report }))).toEqual([]);
+    expect(machineFacts(computer({ label: `ada's box`, sync: enrolled(), report }))).toEqual([`MY-PC`]);
     // A door with no report behind it is still a door: it just cannot say which version answered.
-    expect(computerDoors(computer({ syncEnrolled: true }))).toEqual([{ name: `desktop sync` }]);
+    expect(computerDoors(computer({ sync: enrolled() }))).toEqual([{ name: `desktop sync` }]);
+    // A ports-only machine gets the words that describe it: "desktop sync" over a mirror sends its owner
+    // looking for a folder that does not exist.
+    expect(computerDoors(computer({ sync: enrolled(`mirror`) }))).toEqual([{ name: `ports only` }]);
 });
 
 /* "Last seen" is the one thing an asleep machine can still say, and it is the difference between a lid closed an
@@ -113,7 +139,7 @@ test(`ages a machine that is not here, and stays quiet about one that is`, () =>
 // what the row is about to draw.
 const reported = (overrides: Partial<Computer> = {}): Computer =>
     computer({
-        syncEnrolled: true,
+        sync: enrolled(),
         report: {
             hostname: `laptop`,
             os: `win32`,
@@ -136,7 +162,7 @@ test(`says a sync-only computer must be connected before its sandboxes can be ma
  * "and desktop sync would not carry containers anyway" is the second sentence of a paragraph whose first one is
  * "we have not heard from this computer". */
 test(`stays quiet on a machine that has not reported anything yet`, () => {
-    expect(manageBlock(computer({ syncEnrolled: true, platform: `windows`, gap: `unreported` }), undefined)).toBeUndefined();
+    expect(manageBlock(computer({ sync: enrolled(), platform: `windows`, gap: `unreported` }), undefined)).toBeUndefined();
 });
 
 /* A Mac is the hole this leaves open: the desktop app pairs one happily and there is no card to connect it as a
@@ -185,4 +211,79 @@ test(`stays quiet about permissions on a computer that cannot be reached`, () =>
     expect(manageBlock(computer({ hostId: `my-pc`, online: false, gap: `offline` }), undefined)).toBeUndefined();
     expect(manageBlock(computer({ hostId: `my-pc`, online: true, gap: `scope-off` }), undefined)).toBeUndefined();
     expect(manageBlock(computer({ hostId: `my-pc`, online: true, gap: `no-agent` }), undefined)).toBeUndefined();
+});
+
+/* --- WHAT A COMPUTER'S ENROLLMENT SAYS ---------------------------------------------------------------------
+ *
+ * These moved here with the fact they judge. The staleness rule used to live in the Desktop sync card, where it
+ * could only ever be applied to ONE machine — the sandbox's single "syncingFrom" holder — while the store
+ * underneath held as many enrollments as the user had made. */
+
+test(`names which half of desktop sync a computer holds`, () => {
+    expect(syncNote(computer({ sync: enrolled(`sync`, NOW) }), NOW)).toBe(`syncing files and ports`);
+    expect(syncNote(computer({ sync: enrolled(`mirror`, NOW) }), NOW)).toBe(`mirroring ports`);
+    // A connected computer that was never paired is not missing anything, so it says nothing at all.
+    expect(syncNote(computer({ hostId: `my-pc` }), NOW)).toBeUndefined();
+});
+
+/* AN ENROLLMENT NOBODY HAS EVER USED is a setup that did not finish, and it is indistinguishable from a working
+ * one on every other signal a row has: the record exists, the machine is listed, the badge is green. It is the
+ * exact failure that let a lost pairing go unnoticed for days. */
+test(`treats an enrollment that has never been used as stopped`, () => {
+    const never = computer({ sync: enrolled() });
+    expect(syncStopped(never, NOW)).toBe(true);
+    expect(syncNote(never, NOW)).toBe(`enrolled for syncing files and ports, never checked in`);
+});
+
+// The heartbeat is the agent's own poll, at most a minute apart, so a live machine is always well inside the
+// window and anything hours old means nothing is reaching that folder.
+test(`ages an enrollment by its own heartbeat`, () => {
+    expect(syncStopped(computer({ sync: enrolled(`sync`, NOW - 60_000) }), NOW)).toBe(false);
+    const quiet = computer({ sync: enrolled(`sync`, NOW - 3 * 60 * 60_000) });
+    expect(syncStopped(quiet, NOW)).toBe(true);
+    expect(syncNote(quiet, NOW)).toBe(`syncing files and ports: stopped`);
+});
+
+/* --- THE FOLDED LINE ---------------------------------------------------------------------------------------
+ *
+ * Facts are counted and never coloured; warnings keep their ink and are the reason to open the row. The split
+ * matters because it decides what a reader can skim past. */
+const watching = (overrides: Partial<NonNullable<Computer[`report`]>> = {}): NonNullable<Computer[`report`]> => ({
+    hostname: `my-pc`,
+    os: `linux`,
+    agents: {},
+    sandboxes: [],
+    pairings: [],
+    ports: [],
+    watcher: { running: true },
+    capturedAt: NOW,
+    ...overrides,
+});
+
+test(`counts what is under a folded computer, and colours only what wants something`, () => {
+    const groups = sandboxGroups(
+        [{ sandboxId: `work`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching` }],
+        [],
+        [{ slug: `work`, running: true, image: `img` }],
+    );
+    expect(computerSummary(computer({ sync: enrolled(`sync`, NOW), report: watching() }), groups, NOW)).toEqual({
+        facts: [`1 sandbox`, `1 running`, `syncing files and ports`],
+        warnings: [],
+    });
+});
+
+/* A DEAD WATCHER IS THE FAILURE THIS WHOLE AREA EXISTS TO SURFACE: every row beneath it keeps reading exactly as
+ * it did the moment before, so the machine's own line is the only place it can be said. */
+test(`warns on the machine's line when its sync agent has stopped`, () => {
+    const summary = computerSummary(computer({ sync: enrolled(`sync`, NOW), report: watching({ watcher: { running: false } }) }), [], NOW);
+    expect(summary.warnings).toEqual([`sync agent stopped`]);
+    expect(summary.facts).toEqual([`syncing files and ports`]);
+});
+
+// A quiet enrollment is a warning rather than a fact, because nothing is reaching that machine's folder — the
+// one line on a folded row that must not read as "fine".
+test(`moves a quiet enrollment from the facts to the warnings`, () => {
+    const summary = computerSummary(computer({ sync: enrolled(`sync`, NOW - 3 * 60 * 60_000), report: watching() }), [], NOW);
+    expect(summary.facts).toEqual([]);
+    expect(summary.warnings).toEqual([`syncing files and ports: stopped`]);
 });

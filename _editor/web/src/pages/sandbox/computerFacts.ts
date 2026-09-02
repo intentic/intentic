@@ -1,4 +1,8 @@
-import { type Computer, isBehind } from "@intentic/sandbox-contract";
+import { type Computer, isBehind, watcherStalled } from "@intentic/sandbox-contract";
+// The deep path rather than the barrel: this module is a pure derivation, and the barrel drags in every
+// component in the kit (and with them the DOM). machineDetail.ts is itself structural by design — see its own
+// note about carrying no domain dependency — so the two make the same bargain from opposite sides.
+import { groupNeedsAttention, type MachineSandboxGroup } from "@intentic/ui/machine";
 import { timeAgo } from "@intentic/ui/format";
 
 /* WHAT A COMPUTERS ROW SAYS ABOUT THE MACHINE ITSELF, as opposed to what the machine is doing for this sandbox.
@@ -85,14 +89,119 @@ const door = (name: string, version: string | undefined, latest: string | undefi
     ...(isBehind(version, latest) && latest !== undefined ? { available: latest } : {}),
 });
 
+/* The chip names WHICH HALF, because "desktop sync" over a mirror enrollment is the one word that misleads. A
+ * machine mirroring ports is paired, reports, has a live watcher and a green row, and syncs no files at all; a
+ * reader who takes the chip at face value goes looking for their folder and does not find one. The two words
+ * cost the same width as the one they replace. */
 export const computerDoors = (computer: Computer, latest?: string): ComputerDoor[] =>
-    computer.syncEnrolled ? [door(`desktop sync`, computer.report?.agents.sync, latest)] : [];
+    computer.sync === undefined ? [] : [door(computer.sync.mode === `mirror` ? `ports only` : `desktop sync`, computer.report?.agents.sync, latest)];
+
+/* HOW LONG SINCE AN ENROLLED MACHINE USED ITS ENROLLMENT before its sync counts as STOPPED. The daemon refreshes
+ * seenAt at most once a minute while the agent polls (every 5s), so a live machine is always well inside this;
+ * anything older means the agent stopped polling, the machine is asleep or offline, or its pairing was taken
+ * over by another sandbox's setup on the same computer.
+ *
+ * Enrollment ALONE used to be the signal, which is how the old card claimed "Syncing from X" for as long as the
+ * record existed, whether or not anything was syncing: the exact failure that let a lost pairing go unnoticed
+ * for days. It moved here with the fact it judges. */
+const SYNC_STALE_MS = 5 * 60 * 1000;
+
+/* WHETHER THIS COMPUTER'S ENROLLMENT HAS GONE QUIET. An enrollment that has NEVER been used counts as stopped
+ * too: that is a setup somebody started and did not finish, and it is indistinguishable from a working one on
+ * every other signal the row has. */
+export const syncStopped = (computer: Computer, now: number): boolean =>
+    computer.sync !== undefined && (computer.sync.seenAt === undefined || now - computer.sync.seenAt > SYNC_STALE_MS);
+
+/* WHAT THE ENROLLMENT SAYS, as the one line a folded row can carry, and it is deliberately about the MACHINE
+ * rather than about any sandbox under it: which half of desktop sync this computer holds, and whether it is
+ * still doing it. The per-sandbox half (which folder, which ports, is Mutagen happy) is the report's, drawn by
+ * <MachineDetail> in the rows below.
+ *
+ * Silent on a machine with no enrollment: a connected computer that has never been paired for sync is not
+ * missing anything, and a "no desktop sync" on every one of them is a word that stops being read. */
+export const syncNote = (computer: Computer, now: number): string | undefined => {
+    if (computer.sync === undefined) {
+        return undefined;
+    }
+    const what = computer.sync.mode === `mirror` ? `mirroring ports` : `syncing files and ports`;
+    if (!syncStopped(computer, now)) {
+        return what;
+    }
+    return computer.sync.seenAt === undefined ? `enrolled for ${what}, never checked in` : `${what}: stopped`;
+};
 
 /* Whether this computer's SYNC agent is one the user should replace, the one door that earns a remedy on the
  * row, because it is the one with a command behind it (`intentic-machine upgrade`). The computer agent's version is
  * reported the same way and shown the same way, but nothing here should print an instruction for updating it that
  * has not been built: a wrong command is worse than a fact with no command attached. */
 export const syncAgentBehind = (computer: Computer, latest?: string): boolean => isBehind(computer.report?.agents.sync, latest);
+
+/* WHAT A FOLDED COMPUTER'S LINE SAYS, and the whole reason folding one is safe: a machine collapsed to a chevron
+ * only beats the wall it replaced if the closed line still answers "is anything wrong under here".
+ *
+ * Two kinds, kept apart because they are read differently and it is the same split <MachineDetail> makes one
+ * tier down (groupSummary): FACTS are counted at a glance and never coloured, WARNINGS keep their ink and are
+ * the reason to open the row.
+ *
+ * Here rather than in the component because it is now eight judgements rather than three, and because "does a
+ * quiet enrollment warn" is exactly the kind of rule that should be pinned in a test rather than re-read out of
+ * a template. */
+export interface ComputerSummary {
+    readonly facts: readonly string[];
+    readonly warnings: readonly string[];
+}
+
+// Whether this computer's watcher is up but no longer making rounds: the same rule the terminal uses, so a row
+// and `intentic-machine status` cannot disagree about one machine.
+const watcherHalted = (computer: Computer, now: number): boolean =>
+    computer.report !== undefined && watcherStalled(computer.report.watcher, now);
+
+// Split in two, like groupSummary's own halves one tier down, because the two are read differently and neither
+// reads the other: what is counted, and what is coloured.
+const summaryFacts = (computer: Computer, groups: readonly MachineSandboxGroup[], now: number): string[] => {
+    const facts: string[] = [];
+    const running = groups.filter((group) => group.sandbox?.running === true).length;
+    if (groups.length > 0) {
+        facts.push(groups.length === 1 ? `1 sandbox` : `${groups.length} sandboxes`);
+    }
+    if (running > 0) {
+        facts.push(`${running} running`);
+    }
+    /* WHAT THIS COMPUTER IS DOING FOR THE SANDBOX, which is the question the tab is opened with and which used
+     * to be answered by a card underneath the list, for one machine, in the singular. Only while it is actually
+     * doing it; a quiet enrollment is a warning below rather than a fact here. */
+    const note = syncNote(computer, now);
+    if (note !== undefined && !syncStopped(computer, now)) {
+        facts.push(note);
+    }
+    return facts;
+};
+
+const summaryWarnings = (computer: Computer, groups: readonly MachineSandboxGroup[], now: number): string[] => {
+    const warnings: string[] = [];
+    const attention = groups.filter(groupNeedsAttention).length;
+    if (attention > 0) {
+        warnings.push(attention === 1 ? `1 needs attention` : `${attention} need attention`);
+    }
+    /* AN ENROLLMENT NOBODY HAS USED, which is the failure every surface in this product used to keep reading as
+     * healthy: the record exists, so the row is green, and nothing is reaching that machine's folder. */
+    const note = syncNote(computer, now);
+    if (note !== undefined && syncStopped(computer, now)) {
+        warnings.push(note);
+    }
+    /* The watcher is a fact about the MACHINE rather than any row under it, so it belongs on the machine's own
+     * line, and it is the failure this whole area exists to surface: a dead watcher leaves every row beneath it
+     * reading exactly as it did the moment before. */
+    if (computer.report !== undefined && (!computer.report.watcher.running || watcherHalted(computer, now))) {
+        warnings.push(`sync agent stopped`);
+    }
+    return warnings;
+};
+
+export const computerSummary = (computer: Computer, groups: readonly MachineSandboxGroup[], now: number): ComputerSummary => ({
+    facts: summaryFacts(computer, groups, now),
+    warnings: summaryWarnings(computer, groups, now),
+});
 
 /* WHEN IT WAS LAST HERE, and only when it is not here now. On a live row it is noise the badge already carries;
  * on an offline one it is the single most useful thing left to say, because "asleep since this morning" and

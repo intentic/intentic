@@ -40,6 +40,12 @@ interface MachineCommandSpec {
     readonly done: string;
     /** The command line, built from the name and at most a validated sandbox id. */
     readonly line: (sandboxId: string | undefined) => string;
+    /* Whether this one REFUSES to run fleet-wide. Bare, the agent's CLI acts on every sandbox that computer
+     * pairs, which is a reasonable thing to mean in a terminal and a trap on a route: `sync-unpair` without an id
+     * is "unpair every sandbox on this machine and remove sync's whole residue", reachable by omitting a field.
+     * The reversible switches keep the bare form (it is the honest "turn it off entirely"); the one that destroys
+     * a pairing has to name the pairing. */
+    readonly scoped?: boolean;
 }
 
 // Bare, the agent's `sync mirror` acts on every sandbox that computer pairs, which is the "turn it off entirely"
@@ -55,6 +61,38 @@ export const MACHINE_COMMANDS: Readonly<Record<MachineCommand, MachineCommandSpe
     "mirror-on": {
         done: "Port mirroring is back on. Ports return to that computer's localhost within a few seconds.",
         line: (sandboxId) => forSandbox("intentic-machine sync mirror on", sandboxId),
+    },
+    /* THE FILE-SYNC HALF, which had a CLI and no button while its twin above had both.
+     *
+     * "Stop touching my files for an hour" is the same size of ask as "keep these ports off my localhost", and
+     * the two live one line apart on the same row: the folder and the ports of one pairing. One of them was a
+     * click and the other was a paragraph naming a command to go and type, for no reason except which had been
+     * built. Pause is also the honest answer to a conflict somebody is about to resolve by hand, which is the
+     * situation this product is otherwise worst at.
+     *
+     * Both halves of the pair move together on the machine (its `sync pause` pauses the state backup with the
+     * workspace session, deliberately: leaving the backup writing into a folder its owner just asked the agent
+     * to stop touching would be the wrong reading of "pause"). */
+    "sync-pause": {
+        done: "File syncing is paused on that computer. Its ports keep being mirrored.",
+        line: (sandboxId) => forSandbox("intentic-machine sync pause", sandboxId),
+    },
+    "sync-resume": {
+        done: "File syncing has resumed on that computer.",
+        line: (sandboxId) => forSandbox("intentic-machine sync resume", sandboxId),
+    },
+    /* THE ONE THAT DESTROYS SOMETHING, and the reason it is the machine's `uninstall` rather than a revoke from
+     * this side: the agent terminates both Mutagen sessions, drops its local pairing and self-revokes its own
+     * enrollment on the way out, so the machine cleans up after itself instead of leaving this side to guess
+     * how far it got. A machine that cannot be reached is a different act with a different door (the owner's
+     * per-machine enrollment revoke), and the row offers that one instead.
+     *
+     * Nothing in the sandbox is touched, and neither is anything in the local folder: what ends is the pairing
+     * between the two. */
+    "sync-unpair": {
+        done: "That computer has stopped syncing this sandbox. Its local folder is left exactly as it is.",
+        line: (sandboxId) => forSandbox("intentic-machine sync uninstall", sandboxId),
+        scoped: true,
     },
 };
 
@@ -109,7 +147,14 @@ export const outcomeOf = (command: MachineCommand, answer: { text: string; refus
  * non-zero — comes back as `ok: false` carrying its words, because that is a real answer to show the person who
  * pressed the button. */
 export const runMachineCommand = async (services: Services, input: MachineCommandInput): Promise<MachineCommandResult> => {
-    const line = MACHINE_COMMANDS[input.command].line(input.sandboxId);
+    const spec = MACHINE_COMMANDS[input.command];
+    // A caller that omitted the sandbox on a scoped command is asking for the fleet-wide form of something that
+    // has no safe fleet-wide form. Refused here rather than narrowed in the schema: the field is legitimately
+    // optional for the switches beside it, and one enum member wanting it is not a second input shape.
+    if (spec.scoped === true && input.sandboxId === undefined) {
+        throw new ORPCError("BAD_REQUEST", { message: `"${input.command}" has to name the sandbox it acts on.` });
+    }
+    const line = spec.line(input.sandboxId);
     try {
         const answer = await callTool(
             services,

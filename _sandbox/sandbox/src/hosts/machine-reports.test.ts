@@ -2,6 +2,7 @@ import type { HostSummary, MachineFlowLine, MachineReport, MachineSandboxFlow } 
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { afterEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
+import type { SyncEnrollmentRow } from "../platform/sync.js";
 import { computers, manageMachineSandbox, mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
 
 const report = (hostname: string, overrides: Partial<MachineReport> = {}): MachineReport => ({
@@ -24,6 +25,11 @@ const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => 
     online: true,
     ...overrides,
 });
+
+/* One desktop-sync enrollment, as the store now hands them over: a machine, the half of sync it holds, and when
+ * it last checked in. The merge used to take a bare list of NAMES, which is why a row could say "this machine is
+ * paired" and nothing about what that pairing does or how to end it. */
+const enrolled = (machine: string, mode: "sync" | "mirror" = "sync"): SyncEnrollmentRow => ({ machine, mode });
 
 /* `run_command` answers in PROSE: it is written for the agent, which is its only other caller, so a machine
  * reader has to find its JSON inside a human answer. These pin that extraction, because it is the one place this
@@ -81,8 +87,8 @@ test("an agent without the tool, or an answer that is not the fleet, contributes
 });
 
 test("keeps an enrolled machine that has never reported, and says why it is empty", () => {
-    const merged = mergeComputers(["laptop"], [], []);
-    expect(merged).toEqual([{ key: "laptop", label: "laptop", syncEnrolled: true, gap: "unreported" }]);
+    const merged = mergeComputers([enrolled("laptop")], [], []);
+    expect(merged).toEqual([{ key: "laptop", label: "laptop", sync: enrolled("laptop"), gap: "unreported" }]);
 });
 
 /* WHAT THE MACHINE IS has to survive having no report, because that is the row it matters on: a connected
@@ -99,7 +105,6 @@ test("says what a connected computer is even when it reported nothing", () => {
     expect(merged[0]).toEqual({
         key: "my-pc",
         label: "my-pc",
-        syncEnrolled: false,
         hostId: "my-pc",
         online: true,
         platform: "windows",
@@ -114,7 +119,7 @@ test("says what a connected computer is even when it reported nothing", () => {
 // spelling `os.platform()` uses, which is not one anybody should have to recognise on screen.
 test("reads a sync-only machine's platform off its report", () => {
     const merged = mergeComputers(
-        ["laptop", "mac"],
+        [enrolled("laptop"), enrolled("mac")],
         [
             { machine: "laptop", report: report("laptop-box", { os: "win32" }) },
             { machine: "mac", report: report("mac-box", { os: "darwin" }) },
@@ -131,10 +136,10 @@ test("folds a sync enrollment and a host capability into one row when the hostna
     const pulled: PullResult = {
         report: report("blackbox", { sandboxes: [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }] }),
     };
-    const merged = mergeComputers(["laptop"], [{ machine: "laptop", report: report("blackbox") }], [{ host: host("my-pc"), result: pulled }]);
+    const merged = mergeComputers([enrolled("laptop")], [{ machine: "laptop", report: report("blackbox") }], [{ host: host("my-pc"), result: pulled }]);
 
     expect(merged).toHaveLength(1);
-    expect(merged[0]).toMatchObject({ key: "blackbox", label: "laptop", syncEnrolled: true, hostId: "my-pc", online: true });
+    expect(merged[0]).toMatchObject({ key: "blackbox", label: "laptop", sync: enrolled("laptop"), hostId: "my-pc", online: true });
     // The pulled report wins, because it is the only one carrying containers.
     expect(merged[0]?.report?.sandboxes).toHaveLength(1);
 });
@@ -143,12 +148,12 @@ test("folds a sync enrollment and a host capability into one row when the hostna
 // become one row just because both are reachable.
 test("keeps two machines apart when nothing says they are the same box", () => {
     const merged = mergeComputers(
-        ["ada-laptop"],
+        [enrolled("ada-laptop")],
         [{ machine: "ada-laptop", report: report("ada-box") }],
         [{ host: host("grace-pc"), result: { report: report("grace-box") } }],
     );
     expect(merged.map((row) => row.key)).toEqual(["ada-box", "grace-box"]);
-    expect(merged.map((row) => row.syncEnrolled)).toEqual([true, false]);
+    expect(merged.map((row) => row.sync?.mode)).toEqual(["sync", undefined]);
 });
 
 /* Each gap is a different errand, so each survives to the UI as itself. "scope-off" in particular is the one the
@@ -164,7 +169,7 @@ test("carries the reason a reachable computer produced nothing", () => {
         ],
     );
     expect(merged.map((row) => row.gap)).toEqual(["offline", "scope-off", "no-agent"]);
-    expect(merged.every((row) => !row.syncEnrolled)).toBe(true);
+    expect(merged.every((row) => row.sync === undefined)).toBe(true);
 });
 
 /* --- HOW OFTEN THE MACHINE IS ACTUALLY ASKED ---------------------------------------------------------------

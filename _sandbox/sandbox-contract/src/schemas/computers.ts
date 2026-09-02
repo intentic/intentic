@@ -133,7 +133,19 @@ export type MachineFlowLine = z.infer<typeof MachineFlowLineSchema>;
  *
  * The machine still enforces its own switches. "Run commands" being off comes back as its own refusal, in its
  * own words, naming the control to flip — exactly as it does for the sandbox ops. */
-export const MachineCommandSchema = z.enum(["mirror-off", "mirror-on"]);
+/* THE SET, and why the file-sync half of it is here beside the mirroring half.
+ *
+ * Both are the same gesture to the person clicking: something this computer is doing for this sandbox, turned
+ * off or on from the row that describes it. They were split for a while by nothing but which one had been built
+ * — mirroring had a button and pausing a file sync had a paragraph telling you to go and find a terminal — and
+ * that is exactly the gap this door exists to close.
+ *
+ * `sync-unpair` is the one that DESTROYS something, and it is deliberately the machine's `sync uninstall
+ * --sandbox`, not this side's idea of unpairing: the agent terminates both Mutagen sessions, drops the local
+ * pairing and self-revokes its enrollment on the way out, so the machine cleans up after itself rather than
+ * leaving a sandbox to guess what it managed to do. Revoking from the SANDBOX side (an unreachable machine, a
+ * laptop that is never coming back) is a different act and a different route, see the enrollment revoke. */
+export const MachineCommandSchema = z.enum(["mirror-off", "mirror-on", "sync-pause", "sync-resume", "sync-unpair"]);
 export type MachineCommand = z.infer<typeof MachineCommandSchema>;
 /* Which paired sandbox the command acts on: the machine's own id for it, as it appears in that machine's report,
  * so nothing here has to re-derive the sanitizing the agent applied. Absent means every sandbox that machine
@@ -294,13 +306,39 @@ export type ComputerGap = z.infer<typeof ComputerGapSchema>;
  * enrolled ssh key's comment vs. the capability id the user typed, so the two are reconciled on the `hostname`
  * their reports agree on, and left as separate rows when there is nothing to reconcile them by. Guessing that two
  * differently-named machines are the same one would merge two people's laptops on a shared sandbox. */
+/* THE DESKTOP-SYNC ENROLLMENT BEHIND A ROW, which used to be a boolean and could not be.
+ *
+ * `syncEnrolled: true` answered "is this machine paired" and nothing a reader standing in front of the row
+ * actually asks next: WHICH half of desktop sync it holds (files and ports, or ports alone), whether it has
+ * ever used the enrollment, and how to name it when they want it gone. Those three lived on /system/sync
+ * instead, as one machine's worth of `syncingFrom` plus a list of `mirroredBy` names, which is the sandbox-level
+ * shape this view exists to stop being: one card claiming a sandbox has A desktop sync, over a list of the
+ * several computers that actually do.
+ *
+ * `machine` is the enrollment's own name for the box (the ssh key's comment). It is what the reports are filed
+ * under, and it is the id the revoke route takes — the same string, so a row can revoke exactly the enrollment
+ * it is drawn from. Two machines that present the same comment share one enrollment identity throughout the
+ * daemon (reports included); that is a pre-existing property of naming machines by their key comment, and this
+ * field inherits it rather than inventing a second identity that would disagree with the first. */
+export const ComputerSyncSchema = z.object({
+    machine: z.string(),
+    /* Which half. "sync" is files AND ports and is SINGLE-HOLDER for the sandbox; "mirror" is ports only and any
+     * number of machines may hold one. The row says which, because "your laptop is paired" is read as the first
+     * by somebody who has the second, and then their files are not where they expect them. */
+    mode: z.enum(["sync", "mirror"]),
+    // When this machine last USED its enrollment (its watcher's own polls stamp it). Absent on one that never
+    // has, which is exactly what a setup that did not finish leaves behind, and must not read as healthy.
+    seenAt: z.number().optional(),
+});
+export type ComputerSync = z.infer<typeof ComputerSyncSchema>;
 export const ComputerSchema = z.object({
     // Stable row key: the reported hostname when either door produced one, else the name that door knows it by.
     key: z.string(),
     // What to call it on screen, the user's own name for the machine wherever one exists.
     label: z.string(),
-    // Whether a desktop-sync enrollment exists for this machine (it syncs files and/or mirrors ports).
-    syncEnrolled: z.boolean(),
+    // The desktop-sync enrollment this machine holds with this sandbox, absent when it has none (a computer
+    // reached only through its `host` capability).
+    sync: ComputerSyncSchema.optional(),
     // The host capability's id, when this machine is also a connected computer. Absent otherwise.
     hostId: z.string().optional(),
     // Host-capability liveness. Absent when there is no host capability, which is NOT the same as offline.
@@ -327,9 +365,16 @@ export const ComputerSchema = z.object({
 });
 export type Computer = z.infer<typeof ComputerSchema>;
 export const ComputersListSchema = z.object({ computers: z.array(ComputerSchema) });
-// GET /system/sync, the enrollment state the Desktop sync card is built on, plus what each enrolled machine has
-// said about itself. `machines` is optional because a daemon predating machine reports omits it, and an SPA is
-// routinely newer than the daemon it is pointed at during a rolling update.
+/* GET /system/sync: what desktop sync is doing for this sandbox, WITHOUT naming any one machine as the answer.
+ *
+ * It used to carry `syncingFrom` + `syncSeenAt` + `mirroredBy`, which is the enrollment list flattened into one
+ * holder and a list of everybody else — the shape a card that believed a sandbox has A desktop sync needed, and
+ * the reason that card kept restating facts the Computers list beside it already had per machine. Every one of
+ * those now rides on the machine's own row (ComputerSync), where a reader can act on it.
+ *
+ * What is left is what is genuinely about the SANDBOX rather than about any computer: whether sync is possible
+ * here at all, whether anything at all is enrolled, and the raw reports, which is the cheap ambient read the
+ * rail's badge lives on (it must never fan out to somebody's laptop just to decide whether to draw a chip). */
 export const SyncStatusSchema = z.object({
     enrolled: z.boolean(),
     /* Whether this sandbox can do desktop sync at all. It used to be the SSH hostname the laptop would dial, and
@@ -338,10 +383,6 @@ export const SyncStatusSchema = z.object({
      * surface now, so a sandbox that can answer this read can also sync. Kept as a field rather than assumed,
      * because the card branches on it and a daemon too old to say is one that should not be offered sync. */
     available: z.boolean().optional(),
-    // The single machine holding file sync, and when its heartbeat last landed.
-    syncingFrom: z.string().optional(),
-    syncSeenAt: z.number().optional(),
-    mirroredBy: z.array(z.string()).optional(),
     machines: z.array(MachineReportSchema).optional(),
 });
 export type SyncStatus = z.infer<typeof SyncStatusSchema>;

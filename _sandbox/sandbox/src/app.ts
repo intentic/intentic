@@ -37,16 +37,14 @@ import { createSpeechRoute } from "./speech/speech.routes.js";
 import { enrollHost } from "./inventory/enroll-host.js";
 import { createRouter } from "./router.js";
 import {
-    clearAllEnrollments,
     enrollSyncKey,
     isKeyEnrolled,
     isValidAuthorizedKey,
     machineReports,
-    mirrorMachines,
     recordMachineReport,
+    revokeEnrollmentByMachine,
     revokeEnrollmentByToken,
     type SyncMode,
-    syncHolder,
     verifySyncToken,
 } from "./platform/sync.js";
 import { createSyncSshRoute } from "./platform/sync-ssh.js";
@@ -436,8 +434,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         app.use("*", async (c, next) => {
             // /system/terminal is a WebSocket upgrade: the browser can't set an Authorization header on it, so
             // the terminal route authorizes the token from the query string itself (see createTerminalRoute).
-            // /system/authorized-key is redeemed by the desktop-sync agent with a one-time pairing token instead
-            // of a bearer; the POST handler checks that token itself and the DELETE handler re-checks the owner.
+            /* /system/authorized-key is the desktop-sync AGENT's door, and it carries no bearer: the POST is
+             * redeemed with a one-time pairing token the handler checks itself, and the DELETE is the same
+             * agent self-revoking with its own sync token. Exact-path, so the owner's per-machine revoke
+             * (/system/authorized-key/:machine) is NOT exempt — it is an owner acting in a browser, and it goes
+             * through this middleware and then its own owner check like every other revoke. */
             if (
                 c.req.path === "/health" ||
                 c.req.path === "/system/terminal" ||
@@ -1788,22 +1789,23 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/system/sync", async (c) => {
         // Any collaborator (owner or member) may read enrollment state, the bearer middleware already blocked a
         // non-member, so a member's Desktop-sync card can render and mint its mirror-only pairing.
-        const holder = await syncHolder(services.config.historyRoot);
-        const mirrors = await mirrorMachines(services.config.historyRoot);
-        // Always 200, and `available` is now always true: sync rides this daemon's own HTTPS surface, so every
-        // sandbox that can serve this response can also carry the transport (platform/sync-ssh.ts). It stays in
-        // the body because the card branches on it, and because a sandbox that CANNOT do sync is a state worth
-        // being able to express again rather than one to delete the vocabulary for. syncingFrom names the single
-        // machine holding file sync (takeover target) and when it was last heard from, an enrollment nobody has
-        // used for hours is a sync that has stopped, which the card must not report as healthy. mirroredBy lists
-        // every machine mirroring ports (unlimited, each collaborator on their own localhost).
-        // `machines` is what each enrolled computer says about ITSELF (folders, ports, watcher), the half the
-        // enrollment record above has never been able to answer. Empty until a machine's watcher posts one, which
-        // is also what an old agent looks like, so the card must render without it.
+        /* Always 200, and `available` is now always true: sync rides this daemon's own HTTPS surface, so every
+         * sandbox that can serve this response can also carry the transport (platform/sync-ssh.ts). It stays in
+         * the body because the pairing card branches on it, and because a sandbox that CANNOT do sync is a state
+         * worth being able to express again rather than one to delete the vocabulary for.
+         *
+         * WHICH MACHINE HOLDS WHAT IS NOT HERE ANY MORE. This route used to flatten the enrollment list into a
+         * `syncingFrom` holder and a `mirroredBy` list of names, for a card that presented a sandbox as having
+         * one desktop sync. Every one of those facts is per COMPUTER, so it rides on the computer's own row
+         * (/system/computers → ComputerSync), where the reader can also act on it. What is left here is what is
+         * genuinely about this sandbox.
+         *
+         * `machines` is what each enrolled computer says about ITSELF (folders, ports, watcher). It stays because
+         * it is the cheap ambient read the rail's badge lives on: already in this daemon's memory, so a chip
+         * never costs a fan-out to somebody's laptop. Empty until a machine's watcher posts one, so every reader
+         * must render without it. */
         return c.json({
             enrolled: await isKeyEnrolled(services.config.historyRoot),
-            ...(holder !== undefined ? { syncingFrom: holder.machine, ...(holder.seenAt === undefined ? {} : { syncSeenAt: holder.seenAt }) } : {}),
-            ...(mirrors.length > 0 ? { mirroredBy: mirrors } : {}),
             available: true,
             machines: (await machineReports(services.config.historyRoot)).map((entry) => entry.report),
         });
@@ -1828,21 +1830,33 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             ? c.json({ ok: true })
             : c.json({ error: "unknown enrollment" }, 403);
     });
-    app.delete("/system/authorized-key", async (c) => {
-        // Two revoke paths: an agent uninstalling self-revokes with its own sync token (removes just its
-        // enrollment); the owner (Google) clears EVERY enrollment, the "Disable desktop sync" kill switch.
-        const sync = c.req.header("x-intentic-sync") ?? undefined;
-        if (sync !== undefined && sync !== "") {
-            return (await revokeEnrollmentByToken(services.config.historyRoot, sync))
-                ? c.json({ ok: true })
-                : c.json({ error: "unknown enrollment" }, 404);
-        }
+    /* THE AGENT'S OWN WAY OUT: `intentic-machine sync uninstall` presents its sync token and drops the one
+     * enrollment that token belongs to. Nobody else's, which is what lets a collaborator's laptop walk away from
+     * a shared sandbox without disturbing the owner's file sync. */
+    app.delete("/system/authorized-key", async (c) =>
+        (await revokeEnrollmentByToken(services.config.historyRoot, c.req.header("x-intentic-sync") ?? ""))
+            ? c.json({ ok: true })
+            : c.json({ error: "unknown enrollment" }, 404),
+    );
+    /* THE OWNER'S WAY OUT, ONE COMPUTER AT A TIME, and the shape is the point: it is `DELETE /system/hosts/:id`
+     * for the sync door, which is what every other connection in this product already looks like.
+     *
+     * What it replaces cleared the WHOLE store, because it sat under a card that treated desktop sync as one
+     * property of the sandbox. So "I don't use that laptop any more" was spelled "cut off every computer,
+     * including the ones mirroring ports for people who are not me", and the alternative was walking to the
+     * laptop. There is no fleet-wide kill switch behind this on purpose: revoking three computers is three
+     * deliberate acts, and each of them is a row the reader is already looking at.
+     *
+     * Owner-only, like the hosts revoke beside it: a member may hold a mirror enrollment of their own (and drops
+     * it from their own machine), but ending somebody else's is the owner's call. */
+    app.delete("/system/authorized-key/:machine", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        await clearAllEnrollments(services.config.historyRoot);
-        return c.json({ ok: true });
+        return (await revokeEnrollmentByMachine(services.config.historyRoot, c.req.param("machine") ?? ""))
+            ? c.json({ ok: true })
+            : c.json({ error: "no computer is enrolled under that name" }, 404);
     });
 
     // Everything else flows through the oRPC OpenAPI handler, mounted at the root (its contract paths ARE the

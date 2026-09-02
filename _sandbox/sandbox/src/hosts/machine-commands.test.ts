@@ -93,6 +93,21 @@ test("reports a failed command in the machine's words, stderr first", () => {
 // Typing check as much as a behaviour one: every name in the contract's enum has a row in the table, so adding
 // one to the schema without an implementation cannot compile.
 test("implements every action the contract names", () => {
-    const commands: MachineCommandInput["command"][] = ["mirror-off", "mirror-on"];
+    const commands: MachineCommandInput["command"][] = ["mirror-off", "mirror-on", "sync-pause", "sync-resume", "sync-unpair"];
     expect(Object.keys(MACHINE_COMMANDS).toSorted()).toEqual(commands.toSorted());
+});
+
+/* THE ONE THAT DESTROYS SOMETHING NAMES WHAT IT ACTS ON. Bare, the agent's CLI acts on every sandbox that
+ * computer pairs, which is the honest "turn it off entirely" for the reversible switches and a trap here:
+ * `sync-unpair` with no id would unpair every sandbox on the machine and take sync's whole residue with it,
+ * reachable by omitting one optional field. */
+test("builds each command line from the name and at most the row's own sandbox", () => {
+    expect(MACHINE_COMMANDS["sync-pause"].line("work-abc")).toBe("intentic-machine sync pause --sandbox work-abc");
+    expect(MACHINE_COMMANDS["sync-resume"].line("work-abc")).toBe("intentic-machine sync resume --sandbox work-abc");
+    expect(MACHINE_COMMANDS["sync-unpair"].line("work-abc")).toBe("intentic-machine sync uninstall --sandbox work-abc");
+    // The reversible switches keep their fleet-wide form; the destructive one is marked as needing a sandbox,
+    // and the route refuses it without one.
+    expect(MACHINE_COMMANDS["mirror-off"].line(undefined)).toBe("intentic-machine sync mirror off");
+    expect(MACHINE_COMMANDS["sync-unpair"].scoped).toBe(true);
+    expect(MACHINE_COMMANDS["mirror-off"].scoped).toBeUndefined();
 });

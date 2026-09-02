@@ -14,7 +14,7 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { approvedPath } from "../environment/environment.js";
-import { enrolledFleet } from "../platform/sync.js";
+import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { hostSummaries } from "./host.routes.js";
 
@@ -262,7 +262,11 @@ const platformOf = (declared: string | undefined, report: MachineReport | undefi
  * produced a report and those reports agree on the hostname. Anything weaker is a guess, and the guess that goes
  * wrong merges two collaborators' laptops into a single row on a shared sandbox. */
 export const mergeComputers = (
-    enrolled: readonly string[],
+    /* The ENROLLMENTS, not their names. A row has to be able to say which half of desktop sync this machine
+     * holds and address the enrollment when the reader revokes it, and a list of strings answered neither: both
+     * facts used to be published as a sandbox-level projection (`syncingFrom` / `mirroredBy`) that no row could
+     * act on. See SyncEnrollmentRow. */
+    enrolled: readonly SyncEnrollmentRow[],
     volunteered: readonly { machine: string; report: MachineReport }[],
     // The host's whole summary, not just its id and liveness: what the machine said about itself at connect is
     // the only description a row with no report has, and it is already sitting in the hub's memory.
@@ -271,13 +275,13 @@ export const mergeComputers = (
     // Driven by the ENROLLMENT list, not the report list: a machine that has never posted still gets a row, which
     // is the whole difference between "your laptop's agent is too old to report" and the sandbox quietly
     // pretending the laptop is not there.
-    const rows: Computer[] = enrolled.map((machine) => {
-        const report = volunteered.find((entry) => entry.machine === machine)?.report;
+    const rows: Computer[] = enrolled.map((enrollment) => {
+        const report = volunteered.find((entry) => entry.machine === enrollment.machine)?.report;
         const platform = platformOf(undefined, report);
         return {
-            key: report?.hostname ?? machine,
-            label: machine,
-            syncEnrolled: true,
+            key: report?.hostname ?? enrollment.machine,
+            label: enrollment.machine,
+            sync: enrollment,
             ...(platform === undefined ? {} : { platform }),
             ...(report === undefined ? {} : { report }),
         };
@@ -305,7 +309,6 @@ export const mergeComputers = (
         rows.push({
             key: report?.hostname ?? host.id,
             label: host.id,
-            syncEnrolled: false,
             ...identity,
             ...(report === undefined ? { gap: "gap" in result ? result.gap : "offline" } : { report }),
         });
