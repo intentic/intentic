@@ -105,6 +105,7 @@ interface RuntimeState {
     failureCode: string | undefined;
     limitResetsAt: number | undefined;
     limitHeld: boolean;
+    limitScheduled: boolean;
     /* THE USER ENDED THIS TURN and the abort has landed, it is on its way out but not out yet, in the two
      * flavours that end differently.
      *
@@ -161,6 +162,7 @@ const freshRuntime = (): RuntimeState => ({
     failureCode: undefined,
     limitResetsAt: undefined,
     limitHeld: false,
+    limitScheduled: false,
     stopping: undefined,
     resuming: false,
     activity: undefined,
@@ -201,13 +203,16 @@ const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): boolean =
  * and the hold at frame time, so taking them from it is the client and the card agreeing by construction.
  *
  * Pure and outside the closure, like statusOf below: a rule worth stating and testing without a registry. */
-const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Pick<RuntimeState, "failure" | "failureCode" | "limitResetsAt" | "limitHeld"> => {
+const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Pick<RuntimeState, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled"> => {
     const limit = event.code === "rate_limit";
     return {
         failure: sanitizeFailure(event.message),
         failureCode: event.code,
         limitResetsAt: limit ? event.resetsAt : undefined,
         limitHeld: limit && event.held !== undefined,
+        // The daemon's own verdict about this very failure (agent.routes' limitFrame), not a posture read back
+        // later: the pass that performs the fire reads the same answer, so the card and the schedule agree.
+        limitScheduled: limit && event.autoResume === "scheduled",
     };
 };
 
@@ -224,7 +229,7 @@ const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Pick<RuntimeS
 const reportedFailure = (
     entry: PersistedAgent,
     status: AgentStatus,
-): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld">> =>
+): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled">> =>
     status !== "error"
         ? {}
         : {
@@ -232,6 +237,7 @@ const reportedFailure = (
               ...(entry.failureCode !== undefined ? { failureCode: entry.failureCode } : {}),
               ...(entry.limitResetsAt !== undefined ? { limitResetsAt: entry.limitResetsAt } : {}),
               ...(entry.limitHeld === true ? { limitHeld: true } : {}),
+              ...(entry.limitScheduled === true ? { limitScheduled: true } : {}),
           };
 
 /* AND WHAT A FINISH WRITES THROUGH from it: the whole account of the failure, or nothing at all. The four
@@ -240,7 +246,7 @@ const reportedFailure = (
  *
  * A turn that did NOT error answers `{}`, and the caller's destructure has already dropped whatever the entry
  * was carrying, so the pair is what clears a previous turn's wall off a card that has since run clean. */
-const endedFailure = (state: RuntimeState | undefined): Partial<Pick<PersistedAgent, "failure" | "failureCode" | "limitResetsAt" | "limitHeld">> =>
+const endedFailure = (state: RuntimeState | undefined): Partial<Pick<PersistedAgent, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled">> =>
     state?.errored !== true
         ? {}
         : {
@@ -248,6 +254,7 @@ const endedFailure = (state: RuntimeState | undefined): Partial<Pick<PersistedAg
               ...(state.failureCode !== undefined ? { failureCode: state.failureCode } : {}),
               ...(state.limitResetsAt !== undefined ? { limitResetsAt: state.limitResetsAt } : {}),
               ...(state.limitHeld ? { limitHeld: true } : {}),
+              ...(state.limitScheduled ? { limitScheduled: true } : {}),
           };
 
 /* THE STATUS PROJECTION, in precedence order: the live turn, then the one that is coming BACK, then how the
@@ -812,7 +819,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
              * Not migration and not compatibility, the flag is simply false at boot as a matter of fact, and
              * this is where the process learns it. The reset instant beside it is untouched: an allowance
              * reopening at four is still reopening at four, and saying so is what the card is for. */
-            entries = (await store.load()).map(({ limitHeld: _held, ...carried }) => carried);
+            entries = (await store.load()).map(({ limitHeld: _held, limitScheduled: _booked, ...carried }) => carried);
             /* The roster goes out the moment it is loaded, an /events stream that connected during boot is
              * already holding an empty fleet and this frame is what fills it. Standings are probed BEHIND the
              * broadcast, not before it: a reboot's verdict cache is empty, so the probe is a git spawn per live
@@ -1388,7 +1395,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // shape recordLanded clears `conflicts` with, and for the same reason: this finish is the one
                 // that decides how the turn ended, so an explanation it did not write is one for a death that
                 // is no longer being reported.
-                const { failure: _ended, failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, ...carried } = entry;
+                const { failure: _ended, failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, limitScheduled: _booked, ...carried } = entry;
                 replace({
                     ...carried,
                     /* How the turn ENDED, which is all this field says now: an observed error frame, the user's
@@ -1425,6 +1432,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.failureCode = undefined;
                     state.limitResetsAt = undefined;
                     state.limitHeld = false;
+                    state.limitScheduled = false;
                 }
                 await persist();
             }
@@ -1456,7 +1464,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // The daemon's OWN sentence about a resume that never came, so the classification the original
             // frame carried is dropped with it: this ending is not that failure any more, and a countdown left
             // standing under it would be counting down to a window nobody is waiting for.
-            const { failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, ...carried } = entry;
+            const { failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, limitScheduled: _booked, ...carried } = entry;
             replace({ ...carried, status: "error", ...(failure !== undefined ? { failure } : {}), updatedAt: now });
             await persist();
             broadcast();

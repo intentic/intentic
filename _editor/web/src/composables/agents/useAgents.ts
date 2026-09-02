@@ -1,7 +1,7 @@
 import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
-import { errorMessage, useNow } from "@intentic/ui/async";
-import { computed, effectScope, ref, shallowRef, watch } from "vue";
-import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, limited, turnInFlight, unregistered } from "./agentStatus";
+import { errorMessage } from "@intentic/ui/async";
+import { computed, ref, shallowRef, watch } from "vue";
+import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import { invalidateAgentTranscript } from "../chat/agentTranscript";
 import { closedDrafts, forgetClosedDraft } from "../chat/closedDrafts";
 import { draftPreview } from "../chat/draftPreview";
@@ -554,29 +554,9 @@ const fleet = computed<FleetAgent[]>(() => {
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
 });
 
-/* THE BOARD'S SECOND HAND, and the only reason this store needs one at all.
- *
- * Every other lane rule is a pure function of a roster frame: a card moves because the daemon said something
- * about it. A spent allowance is the first that moves because TIME PASSED and nothing else, the window the
- * provider named reopens and the card owes a press it did not owe a second earlier. Without a tick, the lanes
- * and the badge would be right whenever a frame happened to arrive and stale in between, which on a quiet board
- * (nothing running, so nothing framing) is exactly the situation this is for.
- *
- * ARMED ON THE ROSTER, NOT ON THE CLOCK, which is what keeps it from chasing its own tail: the gate asks
- * whether any card is stranded on an allowance at all, a question a roster frame answers, and never whether one
- * has reopened, which is the question the tick exists to re-ask. On a board with none, and that is nearly every
- * board, `useNow` runs no interval and this costs nothing.
- *
- * A DETACHED SCOPE, like shellModelPicking's: this is app-lifetime state in a module singleton, and `useNow`
- * registers its disposal with whatever scope is current. Owned by the first component that happened to read the
- * store, the timer would be torn down when that component unmounted and the board would silently stop moving. */
-const boardScope = effectScope(true);
-// `run()` only answers undefined for a STOPPED scope, and this one is never stopped.
-const boardNow = boardScope.run(() => useNow(() => fleet.value.some(limited)))!;
-
 // The board's two headline counts, kept apart on purpose (the header renders both): agents BLOCKED on the
 // user, and agents merely unread.
-const blocking = computed(() => fleet.value.filter((agent) => blocked(agent, boardNow.value)).length);
+const blocking = computed(() => fleet.value.filter(blocked).length);
 const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
 /* The single aggregate the rail tile and mobile tab badge render, "there is something for you on the board",
  * counted per AGENT so one that is both blocked and unread badges once.
@@ -586,9 +566,7 @@ const unread = computed(() => fleet.value.filter((agent) => agent.unread).length
  * lane, but the rail stayed silent, so the one surface visible from every other area said nothing was owed. A
  * hold is not an agent, it has no conversation, no transcript and no turn until it is approved, which is
  * exactly why it needs the badge: nothing else about it is on screen. */
-const attention = computed(
-    () => fleet.value.filter((agent) => blocked(agent, boardNow.value) || agent.unread).length + heldWakes.value.length,
-);
+const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length + heldWakes.value.length);
 
 // A turn that finishes while you are WATCHING its conversation is not news, the reply is already on your
 // screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on THIS
@@ -707,28 +685,18 @@ const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id 
  * and the whole point of that board is that a card sorts by what it needs, never by which machine it is on. A
  * second copy of these comparators over there would be a board whose columns order differently depending on
  * which scope you were in, which is the one thing a scope control must not change. */
-export const laneGroups = (agents: readonly FleetAgent[], now: number = Date.now()): Record<FleetLane, FleetAgent[]> => {
+export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, FleetAgent[]> => {
     const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };
     for (const agent of agents) {
-        grouped[laneOf(agent, now)].push(agent);
+        grouped[laneOf(agent)].push(agent);
     }
-    /* Fresh drafts lead the active lane (they're what the user just created). Below them, order by startedAt,
-     * a turn's start is FIXED for its whole life, so a running agent holds its slot instead of jumping to the
-     * top on every activity frame (updatedAt ticks every second, which churns the lane when many run at once).
-     * Oldest-running leads; a draft has no startedAt, so it falls back to updatedAt but is already sorted ahead.
-     *
-     * AND WORK IN FLIGHT OUTRANKS WORK THAT IS WAITING, which the startedAt reading alone gets backwards. A
-     * card parked on a watch or a shut allowance window has no `startedAt` at all, so it falls back to an
-     * `updatedAt` that stopped moving when its turn ended — which is OLDER than any running turn's start, so
-     * every waiting card sorted above every working one. On a board that hit an account-wide wall, that is the
-     * whole lane: five cards doing nothing, above the three that are. Both halves keep their own order within
-     * the split, so nothing else about this changes. */
+    // Fresh drafts lead the active lane (they're what the user just created). Below them, order by startedAt,
+    // a turn's start is FIXED for its whole life, so a running agent holds its slot instead of jumping to the
+    // top on every activity frame (updatedAt ticks every second, which churns the lane when many run at once).
+    // Oldest-running leads; a draft has no startedAt, so it falls back to updatedAt but is already sorted ahead.
     grouped.active.sort(
         (a, b) =>
-            Number(b.status === `draft`) - Number(a.status === `draft`) ||
-            Number(turnInFlight(b)) - Number(turnInFlight(a)) ||
-            (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) ||
-            byId(a, b),
+            Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
     /* UNSENT FIRST, then ready-to-land, then recency. Both exceptions are the same argument, made about the
@@ -751,7 +719,7 @@ export const laneGroups = (agents: readonly FleetAgent[], now: number = Date.now
     return grouped;
 };
 
-const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => laneGroups(fleet.value, boardNow.value));
+const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => laneGroups(fleet.value));
 
 /* Explicit registry pull, the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
  *

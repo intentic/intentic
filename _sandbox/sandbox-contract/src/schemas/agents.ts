@@ -235,6 +235,21 @@ export const AgentSummarySchema = z.object({
      * of the word "Continue" that made it). On the summary because the board is where somebody with four
      * stranded agents is standing, and until now the press existed only inside each chat. */
     limitHeld: z.boolean().optional().describe("Whether the refused turn is held whole, so sending again re-runs it instead of appending to it."),
+    /* A FIRE IS ALREADY BOOKED FOR THIS ONE: the conversation is armed (`resumeAfterLimit`), the reset instant
+     * is known, and the daemon's pass will send the held turn again when the window opens without anybody
+     * pressing anything.
+     *
+     * IT IS THE ONE THING THAT MOVES A STRANDED CARD OUT OF THE ATTENTION LANE, and the only reason it needs to
+     * be on the wire at all. "Does this session need me?" is the question that lane answers, and for a spent
+     * allowance the honest answer is yes: the window reopening does not send the turn, a person does. Unless
+     * this is set, in which case a machine does, and demanding a press for work already booked is the same
+     * false alarm as demanding one for a turn that is running.
+     *
+     * A BOOLEAN THE DAEMON ALREADY DECIDED rather than a posture the client re-folds. The effective posture is
+     * two levels deep (this conversation's override, else the sandbox setting), and the lane machine is a leaf
+     * with no store to ask: threading a settings read through every caller of `laneOf` would put the answer in
+     * five places and let them disagree. The daemon resolves it once, where the failure happened. */
+    limitScheduled: z.boolean().optional().describe("Whether the held turn is already booked to go again at the reset, so nobody has to press anything."),
     provider: AgentProviderSchema.describe("Which model provider it runs on."),
     harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
     // Which machine its turns execute on: a paired runner's id, absent for this sandbox (runners/). Latched

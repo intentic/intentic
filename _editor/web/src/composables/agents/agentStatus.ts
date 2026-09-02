@@ -59,23 +59,28 @@ export interface AgentStanding {
      * the header gives about the other two: `laneOf` reads it, so anything answering "is this session done?"
      * from `status` alone would contradict the board on screen. Absent for nearly every conversation. */
     readonly watches?: readonly AgentWatch[];
-    /* WHICH KIND OF FAILURE ENDED THE LAST TURN, and when the allowance behind it comes back: the FOURTH half
-     * of the state, and the one that was missing for longest.
+    /* WHICH KIND OF FAILURE ENDED THE LAST TURN, and what the wait behind it looks like: the FOURTH half of the
+     * state, and the one that was missing for longest.
      *
      * `status: "error"` is a single word doing the work of two very different situations. A harness that died
-     * mid-run is broken and needs a person; an allowance that ran out is neither, and the difference between
-     * them is a fact the daemon has always known and the board could not see. So a spent allowance was drawn
-     * with the whole failure vocabulary, a red sentence, an "Error" chip, a "View error" link into a transcript
-     * that holds nothing to view, and it sat in the Attention lane for as long as it took somebody to notice,
-     * hours after the window it was waiting for had reopened.
+     * mid-run is BROKEN: somebody has to go and find out why. An allowance that ran out is not broken at all,
+     * it is early, and it says when it stops being early. Both reached every surface as the same grey "error",
+     * so the second was drawn in the full vocabulary of the first — a red sentence, an "Error" chip and a "View
+     * error" link into a transcript whose last line is a provider politely saying no.
      *
-     * `laneOf` reads both, which is why they belong here rather than on the card: the lane, the badge and the
-     * chip have to agree, and the only way they ever do in this file is by reading the same standing. */
+     * BOTH STILL NEED THE USER, which is what the classification is NOT for: a stranded turn goes nowhere until
+     * a person sends it again, so both belong in Attention. What this buys is the card being able to say WHICH,
+     * so a reader can tell the four cards they have to investigate from the one they just have to come back to.
+     *
+     * `laneOf` reads it, which is why it belongs here rather than on the card: the lane, the badge and the chip
+     * have to agree, and the only way they ever do in this file is by reading the same standing. */
     readonly failureCode?: string;
     /** When the spent allowance reopens, in epoch SECONDS (the wire's unit). Absent when nobody published one. */
     readonly limitResetsAt?: number;
     /** Whether the refused turn is held whole, so a press RE-RUNS it rather than sending a message after it. */
     readonly limitHeld?: boolean;
+    /** Whether a fire is already booked for it at the reset, so this card needs nobody. The one lane input. */
+    readonly limitScheduled?: boolean;
 }
 
 /* A SPENT ALLOWANCE, WHICH IS THE ONE "FAILURE" HERE THAT NOBODY HAS TO FIX. Nothing is broken, no credential
@@ -88,14 +93,31 @@ export interface AgentStanding {
  * the failure was understood (error-frames.ts) and carried here precisely so no surface has to guess. */
 export const limited = (agent: AgentStanding): boolean => agent.status === `error` && agent.failureCode === `rate_limit`;
 
-/* …and whether the window it named is still SHUT, which is the question every lane and badge decision below
- * actually turns on. A limit with the window shut owes the user nothing but patience; the same card an hour
- * later, with the window open, owes them one press.
+/* …and whether the window it named is still SHUT, which is what the card's clock counts down to and NOTHING
+ * else. It is deliberately not a lane input, and the version of this file that made it one had the product
+ * backwards: it read "the window is shut, so nothing is owed yet" and filed the card under Active.
  *
- * A limit with NO published instant reads as open, which is the conservative answer and the right one: with
- * nothing to wait for there is nothing to hold the card out of Attention for, and the press is live now. */
+ * A REOPENING WINDOW SENDS NOTHING. That is the whole correction. A watched agent's condition firing starts a
+ * turn by itself, which is why a watch belongs in Active; an allowance coming back starts nothing at all — it
+ * only makes a press possible, and the press is the user's. So a stranded card is waiting on a PERSON for the
+ * whole of the wait, shut window or open, and the lane that says so is Attention (see laneOf).
+ *
+ * A limit with no published instant is never "closed": there is no instant to count to, so the card shows no
+ * clock rather than a guessed one. */
 export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boolean =>
     limited(agent) && agent.limitResetsAt !== undefined && agent.limitResetsAt * 1_000 > now;
+
+/* THE ONE STRANDED CARD THAT DOES NOT NEED A PERSON: a fire is already booked for it (AgentSummary's
+ * `limitScheduled`), so the held turn goes again at the reset whether or not anybody looks at the board.
+ *
+ * This is the exception the rule above generates rather than one bolted onto it. "Does this session progress
+ * without me?" is the question the lanes answer, and for an armed conversation the answer is yes — the same
+ * answer `resuming` gives, and it earns the same treatment. Arming it is exactly how a user says "stop asking
+ * me about this one", so a board that went on asking would be ignoring the instruction it was given.
+ *
+ * OFF unless somebody asked for it (`resumeAfterLimit` defaults to off), so on an ordinary board this is false
+ * for every card and every spent allowance lands in Attention. */
+export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
 
 /* THIS CONVERSATION WILL RUN AGAIN BY ITSELF, with nobody pressing anything. The narrowest reading of a watch,
  * and the one the lane machine below is really asking for.
@@ -254,20 +276,23 @@ export const writingNow = (agent: AgentStanding): boolean => agent.status === `r
 // It is here rather than in Active because a card nobody can act on has no business sitting among the agents
 // that are working, wearing the lane that says they are.
 //
-// A SPENT ALLOWANCE WITH ITS WINDOW STILL SHUT IS THE ONE `error` THAT IS NOT HERE, and it is the same argument
-// the paragraph above makes about unread cards, made about a clock. Nothing is blocked on the user: the turn is
-// waiting for an allowance to come back, at an instant the provider named, and no press before then does
-// anything a press after it would not do better. Counting it taught the badge to cry wolf for eight hours at a
-// stretch, on the one condition in this product that reliably resolves itself.
+// A SPENT ALLOWANCE IS BLOCKED ON THE USER like every other `error`, and an earlier version of this file that
+// excepted it while its window was shut was wrong about the product rather than about the wording. That
+// reasoning ran "the window has not reopened, so a press buys nothing yet", which is true and beside the point:
+// a reopening window SENDS NOTHING. It only makes a press possible, and the press is a person's. So from the
+// moment the turn is refused to the moment somebody acts, this session does not progress — which is the exact
+// question this predicate exists to answer.
 //
-// It rejoins the moment the window opens (limitClosed goes false), which is exactly when there IS something
-// owed: one press, on a turn the daemon is still holding.
+// THE ONE EXCEPTION IS A CARD A MACHINE HAS TAKEN OVER (limitScheduled): armed, the held turn goes again at the
+// reset with nobody watching, so nothing is owed. Arming it is how a user says "stop asking me about this one",
+// and a board that kept asking would be overriding the instruction it was given.
+//
 // The five ENDINGS that block, as a set rather than a chain of comparisons: each has its paragraph above, and
 // listing them once here is what keeps this predicate readable now that it has an exception to state first.
 const BLOCKING_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set([`error`, `interrupted`, `stopping`, `stopped`, `failed`]);
 
-export const blocked = (agent: AgentStanding, now: number = Date.now()): boolean =>
-    limitClosed(agent, now)
+export const blocked = (agent: AgentStanding): boolean =>
+    limitScheduled(agent)
         ? false
         : agent.attention.plan ||
           agent.attention.question ||
@@ -292,22 +317,21 @@ export const awaitingUser = (agent: AgentStanding): boolean =>
 
 // The one-line "why this card is in the Attention lane" label, shared by the card chip, the Changes legend's
 // hover card, and any future toast.
-export const attentionReason = (agent: AgentStanding, now: number = Date.now()): string | undefined => {
-    /* THE WAIT, FIRST, because it outranks the word this card would otherwise wear. A spent allowance is a
-     * `status: "error"` and would fall through to "Error" below, which is the whole complaint: an amber chip
-     * reading Error over a red sentence, for a condition that is neither an error nor anything the reader can
-     * act on for the next several hours.
+export const attentionReason = (agent: AgentStanding): string | undefined => {
+    /* THE CHIP IS THE WHOLE OF THE FIX, and everything the card used to add underneath it was the price of not
+     * having said this here. "Error" over a spent allowance is what sent a predictable, self-dating wait out
+     * dressed as a broken workspace; naming the condition in the corner every reader's eye already goes to is
+     * enough on its own, and it leaves the card's body to say what the card IS rather than what happened to it.
      *
-     * Two words for the two halves of it, because they ask for opposite things. Shut, the chip reports a wait
-     * and the card's own line carries the hour (limitLine). Open, it names the press that is now live, which is
-     * also the only moment this card sits in the Attention lane at all. */
-    /* ONE WORD WHILE IT WAITS, and the brevity is load-bearing rather than stylistic. This chip is `shrink-0`
-     * beside a title that is not, so every character here is taken off the title at lane width: "Waiting on
-     * limit" rendered two cards as "In…" and "C…", which is a card that has stopped being able to say which
-     * agent it is. "Waiting" is the length of the words it sits beside ("Error", "Stopped"), and what it is
-     * waiting FOR is on the card's own line an inch below. */
+     * "USAGE LIMIT" IS THE VENDOR'S OWN PHRASE, which is the point: it is what the provider's message says and
+     * what their dashboard calls it, in two plain words rather than "allowance" — a word that reads as jargon
+     * to anyone who did not grow up with the language. The vendor is not named here because the card already
+     * names it a line below, on the model.
+     *
+     * SHORT, because this chip is `shrink-0` beside a title that is not, so every character it grows is taken
+     * off the agent's own name at lane width: an earlier "Waiting on limit" drew two cards as "In…" and "C…". */
     if (limited(agent)) {
-        return limitClosed(agent, now) ? `Waiting` : `Send again`;
+        return `Usage limit`;
     }
     if (agent.attention.plan) {
         return `Approval needed`;
@@ -358,25 +382,19 @@ export type FleetLane = "attention" | "active" | "finished";
 // the state machine, so "finished" needs no explicit action or timer: the auto-land flow flips a
 // cleanly-completed turn to landed/idle within ms of it ending, and any follow-up message moves the card
 // straight back to active. Unread stays a card badge, not a promotion.
-export const laneOf = (agent: AgentStanding, now: number = Date.now()): FleetLane => {
-    /* AN ALLOWANCE THAT HAS NOT COME BACK YET IS ACTIVE, ahead of everything, and it is the `watching` argument
-     * below made about a clock instead of about a condition. Nothing is running, so every reading further down
-     * files this card under a settled lane; what is true is that this conversation is waiting on the world, at
-     * an instant the world already named.
+export const laneOf = (agent: AgentStanding): FleetLane => {
+    /* A SPENT ALLOWANCE IS ATTENTION, through `blocked` and with no branch of its own, and the branch that used
+     * to be here is worth naming because it was wrong in an instructive way.
      *
-     * ACTIVE RATHER THAN ATTENTION for the reason `blocked` now gives: nothing is owed by the USER while the
-     * window is shut. A press before the reset buys nothing a press after it would not buy, so a lane that
-     * demands one is demanding it for the sake of the demand, and eight hours of that is how "needs you" stops
-     * meaning anything. The card still says exactly where it stands, muted, with the hour on it (limitLine).
+     * It filed a card under Active for as long as its window stayed shut, reasoning that nothing was owed until
+     * the reset. The reset owes nothing either: it opens a window and SENDS NOTHING THROUGH IT. So the card sat
+     * for hours in the lane that means "this is moving", among agents that were, when the truth was that this
+     * work had stopped and only a person could restart it. That is precisely what Attention is for, and dressing
+     * the card better (see attentionReason) is the answer to a lane full of them, not moving them out of it.
      *
-     * AND IT COMES BACK BY ITSELF, which is what makes the placement honest rather than a way of hiding a
-     * problem: the moment the reset passes this returns false, the card moves into Attention wearing a press,
-     * and if the conversation is armed the daemon has already fired it and the card is running. Every other
-     * card in this lane is one somebody is waiting on; so is this one. */
-    if (limitClosed(agent, now)) {
-        return `active`;
-    }
-    if (blocked(agent, now) || agent.status === `awaiting` || agent.status === `conflict`) {
+     * The `watching` branch further down is NOT the same case, which is where the mistake came from: a watch
+     * fires and starts a turn by itself, so nothing is owed for the whole of that wait. An allowance does not. */
+    if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
         return `attention`;
     }
     /* A DISMISSAL IS FINISHED FROM THE PRESS, ahead of the in-flight reading below, and it is the other half of
@@ -409,6 +427,16 @@ export const laneOf = (agent: AgentStanding, now: number = Date.now()): FleetLan
      * Below the in-flight readings on purpose: an agent that armed a watch and is now running again is running,
      * and both facts stay true on the card (the watch line draws either way). */
     if (watching(agent)) {
+        return `active`;
+    }
+    /* AND SO IS A STRANDED TURN SOMETHING IS ALREADY BOOKED TO SEND, for the same reason and by the same test:
+     * this conversation starts working again on its own, at an instant that is already fixed. It reaches here
+     * at all only because `blocked` let it past (limitScheduled is that predicate's one exception), so a card
+     * nobody armed never sees this line and lands in Attention above.
+     *
+     * It has to be SAID, though, rather than left to fall through: without it an armed card lands in Finished,
+     * which would announce as over a conversation that is going to run again tonight. */
+    if (limitScheduled(agent)) {
         return `active`;
     }
     // landed | idle, the work is in the workspace (or there was none), and `ready`, work HELD on the branch
@@ -498,13 +526,13 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
           { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };
 };
 
-// "Working" would be wrong for the two active cards that are not: one parked on a watch has finished its turn
-// and is waiting for the world, and one stranded on a spent allowance is waiting for a clock. Both are in this
-// lane because nothing is owed by the user (laneOf says why), and neither is doing anything, so the label says
-// which kind of unfinished it is rather than claiming work that is not happening.
+// "Working" would be wrong for the two active cards that are not: one parked on a watch is waiting for the
+// world, and one whose spent turn is booked to go again is waiting for a clock. Both are in this lane because
+// each starts working again on its own (laneOf says why), and neither is doing anything right now, so the label
+// says which kind of unfinished it is rather than claiming work that is not happening.
 const activeLabel = (agent: AgentStanding): string => {
-    if (limitClosed(agent)) {
-        return `Waiting on the allowance`;
+    if (limitScheduled(agent)) {
+        return `Sends itself again`;
     }
     return watching(agent) && !turnInFlight(agent) ? `Waiting on a condition` : `Still working`;
 };
@@ -728,84 +756,29 @@ export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly te
     return { ...ended[loop.state], spin: false };
 };
 
-/* Past this far out a wall-clock time reads better than a countdown: a weekly allowance comes back on Tuesday,
- * and "72h 14m" is a number nobody can act on. Under it the countdown wins, because "in 6m" is read at a glance
- * where a clock time makes the reader do arithmetic. The same threshold and the same reasoning as the chat
- * strip's (chat/pickUp.ts CLOCK_FROM_MS): one product, one rule about when a wait becomes an appointment. */
+/* WHEN A STRANDED TURN CAN GO AGAIN, four or five characters for the card's clock corner: the slot a running
+ * card puts its elapsed in and a watching one its countdown, answering the same question in the same place.
+ *
+ * THIS IS ALL THAT IS LEFT OF A WHOLE LINE OF PROSE, and the deletion is the point. The card used to carry a
+ * sentence of its own — "Claude allowance spent · back at Thu 00:12" — under a chip that said "Waiting", which
+ * is the vendor named twice (the model line already says it), the state said twice, and a whole row of card
+ * height spent on it. The chip names the condition; this names the hour; nothing else was carrying meaning.
+ *
+ * HOW LONG while that is a number a person can hold, the DAY AND HOUR once it is not: "4h 11m" is read at a
+ * glance, "74h 12m" is arithmetic, and a weekly pool routinely comes back on Thursday. Same threshold and same
+ * reasoning as the chat strip's own switch (chat/pickUp.ts).
+ *
+ * Undefined for a card with no published instant, which is Grok and Cursor and anything whose vendor names no
+ * reset: the corner keeps its ordinary date rather than showing a time nobody promised. */
 const CLOCK_FROM_MS = 90 * 60 * 1_000;
 
-/* HOW A SPENT ALLOWANCE READS ON A CARD: the state, the hour, and the whole of it behind them.
- *
- * THE SHAPE IS watchLine's, deliberately and to the field. Both are "this conversation is waiting on something
- * outside it, and here is when it stops waiting", the card already draws that shape, and the board is scanned:
- * one grammar for a wait is what makes a column of them readable. What differs is only that this wait has an
- * appointment rather than a deadline.
- *
- * THE TEXT SAYS WHOSE ALLOWANCE AND WHOSE MOVE, in that order, because on a mixed board the vendor is what
- * tells four stranded cards apart from four others, and the move is what the reader is deciding. Armed, there
- * is no move to state: the sentence says the card is coming back on its own, which is the whole point of having
- * armed it. The provider's own sentence is NOT here, it is the hint, since "Claude usage limit reached. Send
- * again once it resets." is a paragraph restating what the chip, the line and the countdown already say.
- *
- * THE COUNTDOWN IS ONLY EVER TO A SHUT WINDOW. Once it opens there is nothing to count to and the readout would
- * be counting up from an instant that no longer matters, so it goes, and the line changes to say the press is
- * live. A limit that published no instant has no countdown at any point, and says so by omission rather than by
- * guessing: `undefined` here is the card quietly not making a promise.
- *
- * Undefined for every card that is not stranded on an allowance, which is nearly all of them. */
-export const limitLine = (
-    agent: AgentStanding,
-    options: { readonly now: number; readonly vendor: string; readonly armed: boolean },
-): { readonly text: string; readonly countdown: string | undefined; readonly hint: string } | undefined => {
-    if (!limited(agent)) {
+export const limitCountdown = (agent: AgentStanding, now: number): string | undefined => {
+    const reopensAt = agent.limitResetsAt;
+    if (!limitClosed(agent, now) || reopensAt === undefined) {
         return undefined;
     }
-    const { now, vendor, armed } = options;
-    const reopensAt = agent.limitResetsAt;
-    const closed = limitClosed(agent, now);
-    // Defined whenever the window is shut (limitClosed requires an instant), and the fallback is what the
-    // sentences read when it is not: the honest non-answer, never a guessed hour.
-    const when = reopensAt === undefined ? `when the provider reopens it` : limitWhen(reopensAt * 1_000, now);
-    /* THE TIME IS SAID ONCE, in the countdown slot, and the text carries only the STATE. Both said it at first,
-     * "back at Thu 00:12" in the sentence and "4h 11m" beside it, which is the same fact twice at the width
-     * where the card can least afford it: on a 280px lane that redundancy is what pushed the title down to two
-     * characters. The slot is the right home for it because it is the slot every other card on this board keeps
-     * its clock in (a running turn's elapsed, a watch's countdown), and because it is where the eye already
-     * goes for "when". */
-    return {
-        text: closed ? (armed ? `${vendor} allowance spent · goes again` : `${vendor} allowance spent`) : `${vendor} allowance is back`,
-        countdown: closed && reopensAt !== undefined ? limitClock(reopensAt * 1_000, now) : undefined,
-        hint: limitHint(agent, { closed, armed, when }),
-    };
-};
-
-/* An instant as the READOUT says it, four or five characters in the card's clock slot: how long is left while
- * that is a number a person can hold ("4h 11m"), and the weekday and hour once it isn't ("Thu 00:12"), because
- * a weekly allowance measured in hours is arithmetic rather than information. Same threshold, and the same
- * reasoning, as the chat strip's own switch (chat/pickUp.ts). */
-const limitClock = (at: number, now: number): string => (at - now >= CLOCK_FROM_MS ? formatWeekdayTime(at) : formatElapsed(now, at));
-
-/* And the same instant as a SENTENCE says it, for the hint, where it is read as prose and needs its
- * preposition ("due back at Tue 14:40", "due back in 45m"). */
-const limitWhen = (at: number, now: number): string =>
-    at - now >= CLOCK_FROM_MS ? `at ${formatWeekdayTime(at)}` : `in ${formatElapsed(now, at)}`;
-
-/* The three things the line could not carry: that the turn is HELD (so sending again is the same request rather
- * than a new one), what the provider actually said, and, for a card nobody armed, that arming it is an option.
- * One flowing line rather than a list, for tooltip.css's reason: the box renders with `textContent` into a
- * clamped strip, so a newline is a space and a fourth sentence falls off the bottom. */
-const limitHint = (agent: AgentStanding, state: { closed: boolean; armed: boolean; when: string }): string => {
-    const held = agent.limitHeld === true ? `The refused turn is held whole, so sending again re-runs it rather than adding a message after it. ` : ``;
-    if (!state.closed) {
-        return `${held}The allowance is back: this turn is waiting for you to send it.`;
-    }
-    return state.armed
-        ? `${held}This conversation sends itself again once the allowance comes back ${state.when}. Nothing else is owed.`
-        : // Names the control rather than the wish: the card's menu is where this card's posture lives (the
-          // press beside this line spends now, and a second one arming a later spend would be two decisions in
-          // one row), and a hint promising an affordance the reader cannot find is worse than one that stops
-          // at the fact.
-          `${held}Nothing sends it for you. The allowance is due back ${state.when}; this card's menu can send it for you next time.`;
+    const at = reopensAt * 1_000;
+    return at - now >= CLOCK_FROM_MS ? formatWeekdayTime(at) : formatElapsed(now, at);
 };
 
 // A watch's pacing, in the fewest characters that stay true: seconds up to two minutes, whole minutes above.

@@ -180,12 +180,13 @@ export const PersistedAgentSchema = z.object({
     // beside the sentence and cleared with it, for the same reason: the reader who needs to know a wall from a
     // crash is the one arriving hours later at a card nobody watched fail.
     failureCode: z.string().optional(),
-    // A refused turn's two limit facts: when the window reopens (epoch seconds) and whether the turn is held
-    // whole for a press. Persisted because the card that has to say both outlives the browser that saw the
-    // frame; `limitHeld` deliberately does NOT survive a daemon restart in substance (pendingLimit is in
-    // memory), which is why the resume route answers NOT_FOUND for one and the card falls back to a plain send.
+    // A refused turn's three limit facts: when the window reopens (epoch seconds), whether the turn is held
+    // whole for a press, and whether a fire is already booked for it. Persisted because the card that has to
+    // say them outlives the browser that saw the frame; the last two deliberately do NOT survive a daemon
+    // restart in substance (pendingLimit is in memory), which is why both are dropped at init.
     limitResetsAt: z.number().optional(),
     limitHeld: z.boolean().optional(),
+    limitScheduled: z.boolean().optional(),
     // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit, see AgentSummarySchema.
     // Persisted because it must govern turns that finish with no browser attached (automations included).
     autoLand: z.boolean().optional(),
