@@ -76,6 +76,24 @@ export const createAgentsRoutes = (services: Services) => {
      * first turn, the one most likely to be opened, would otherwise have none. */
     const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): string | undefined =>
         capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? services.agents.sessionIdOf(agent.id) : undefined;
+    /* WHETHER THIS CONVERSATION'S LAST TURN STOPPED BEFORE IT FINISHED, the one fact a reopened tab needs to
+     * offer the press instead of asking for the word (AgentTranscriptSchema.stoppedShort).
+     *
+     * Off the PROJECTED status, never `entry.status`: the entry carries `interrupted` for the whole of a running
+     * turn, on purpose, so that a daemon dying under it leaves the right mark (agents-store.ts), and reading it
+     * raw would tell every client opening a working agent that its turn had stopped. `get` is the same
+     * projection the roster publishes, so the chat and the card cannot disagree about the same session.
+     *
+     * TWO ENDINGS, and they are the two the daemon knows leave finished work behind a live session: a Stop
+     * somebody pressed, and a turn its daemon was killed under. Deliberately not the failures that name
+     * something to REPAIR (a dead credential, a model the provider does not serve) — continuing those re-fails
+     * by construction, and an offer that re-fails teaches people to stop trusting the offer. A spent allowance
+     * is left out for a narrower reason: the press it wants is a re-run of the held turn, and what the strip
+     * says about it turns on whether that turn got anywhere, which no record here keeps. */
+    const stoppedShort = (id: string): boolean => {
+        const status = services.agents.get(id)?.status;
+        return status === "stopped" || status === "interrupted";
+    };
     // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
     // literal is structurally fine while missing a route, so a handler deleted in passing (which is how
     // `archived` was lost, the router kept compiling and the archive door quietly stopped rendering) fails no
@@ -186,6 +204,9 @@ export const createAgentsRoutes = (services: Services) => {
                           ...(agent.account !== undefined ? { account: agent.account } : {}),
                       }
                     : {}),
+                // ...and how the last turn ENDED, which is what lets a tab opened anywhere offer the press the
+                // window that watched it stop used to keep to itself (see stoppedShort).
+                ...(stoppedShort(input.id) ? { stoppedShort: true } : {}),
                 messages,
             };
         }),

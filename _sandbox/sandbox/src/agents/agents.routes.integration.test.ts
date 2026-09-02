@@ -237,7 +237,11 @@ test("agents.search matches titles and later lines, across the archive", async (
      * does not belong to, and a client filling them in itself announced a fresh session for the credential
      * actually holding this one. The account is the one the daemon RESOLVED for the turn (this fixture's
      * store answers "default"), not what the request asked for — these turns name no account at all, which is
-     * the shape every automation, channel mention and webchat turn arrives in. */
+     * the shape every automation, channel mention and webchat turn arrives in.
+     *
+     * `toEqual` and not `toMatchObject`, which is what makes the ABSENCE of `stoppedShort` an assertion: these
+     * turns finished on their own, so there is nothing to pick up, and a chat that opened one wearing the
+     * continue strip would be offering to carry on work that is done. */
     expect(await client.agents.transcript({ id: "conv1" })).toEqual({
         sessionId: "sess-1",
         provider: "claude",

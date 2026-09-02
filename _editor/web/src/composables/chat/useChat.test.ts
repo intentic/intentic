@@ -1629,6 +1629,96 @@ describe(`hydrating a conversation whose turn is still running`, () => {
     });
 });
 
+/* THE OFFER TO CARRY ON BELONGS TO THE CONVERSATION, NOT TO THE WINDOW THAT WATCHED IT STOP.
+ *
+ * `pickUp` was armed only by the stream that saw a turn die, so the continue press existed exactly where
+ * somebody had been looking. Every other way of arriving at the same stopped session had nothing: a Stop pressed
+ * on the board with the chat closed (agentActions.stopAgent posts the cancel straight to the daemon), a session
+ * stopped on another device, a tab closed and reopened from its card, a turn the daemon was killed under. All of
+ * them left a chat whose only way on was typing "Continue" by hand, which is the one thing the press exists to
+ * spare. The daemon says how the last turn ended now (AgentTranscriptSchema.stoppedShort), and hydration takes
+ * it: the offer is a property of the conversation from here on, whoever opens it and whenever. */
+describe(`opening a session whose last turn stopped short`, () => {
+    const STOPPED = {
+        sessionId: `sess-stopped`,
+        stoppedShort: true,
+        messages: [
+            { role: `user`, text: `rewrite the reconcile engine` },
+            { role: `assistant`, text: `Started on the reducer.` },
+        ],
+    } as const;
+
+    // The record answers the transcript read; nothing is running, so the attach probe finds no turn (the 404
+    // every other path falls back to, see the file's default mock).
+    const daemonReads = (body: unknown): void => {
+        sandboxRequestMock.mockImplementation((path: string) =>
+            path.endsWith(`/transcript`)
+                ? Promise.resolve({ ok: true, json: () => Promise.resolve(body) } as Response)
+                : Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response),
+        );
+    };
+
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    it(`offers the continuation on a tab that never watched the turn stop`, async () => {
+        daemonReads(STOPPED);
+
+        const conversation = openAgentConversation({ id: `stopped-elsewhere`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        // `stopped` and not one of the endings that know more: a record says the turn did not finish and nothing
+        // else, which is exactly what the strip's plainest sentence and a live press are drawn from.
+        await vi.waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `stopped` }));
+    });
+
+    // The commonest ending by far, and the one this must stay silent about: a chat that offered to continue
+    // finished work would teach people to ignore the strip everywhere it means something.
+    it(`says nothing about a conversation whose last turn ended on its own`, async () => {
+        daemonReads({ sessionId: `sess-done`, messages: STOPPED.messages });
+
+        const conversation = openAgentConversation({ id: `finished-cleanly`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        expect(conversation.pickUp.value).toBeUndefined();
+    });
+
+    /* A PICK-UP THE STREAM ALREADY ARMED OUTRANKS THE RECORD, because it knows strictly more than a record can
+     * carry: the turn is HELD whole (so the press re-runs it rather than appending a message after it) and the
+     * allowance names the hour it comes back. Flattened to a bare `stopped`, the strip would lose its countdown
+     * and the press would post the word "Continue" into a conversation the daemon is holding a turn for. */
+    it(`keeps what the stream armed instead of flattening it to a bare stop`, async () => {
+        daemonReads(STOPPED);
+
+        const conversation = openAgentConversation({ id: `stopped-on-a-limit`, provider: `claude`, harness: `native` });
+        const spent = { reason: `limit`, readyAt: 4_000, held: { ran: true } } as const;
+        conversation.pickUp.value = spent;
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        expect(conversation.pickUp.value).toEqual(spent);
+    });
+
+    // A record the daemon could not produce leaves nothing to carry on FROM, and the press would open the
+    // conversation with the word "Continue" — the shape of the bug `turnAccepted` exists to prevent, arriving
+    // by another road.
+    it(`refuses to offer a continuation over a transcript that never painted`, async () => {
+        daemonReads({ ...STOPPED, messages: [] });
+
+        const conversation = openAgentConversation({ id: `stopped-but-empty`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() => expect(sandboxRequestMock.mock.calls.some(([path]) => String(path).endsWith(`/transcript`))).toBe(true));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(conversation.messages.value).toHaveLength(0);
+        expect(conversation.pickUp.value).toBeUndefined();
+    });
+});
+
 /* FORKING FROM A CUT. The gesture is the transcript's, but everything it decides lives here: which tab the user
  * lands in, what that tab is holding, and: the part the old edit-and-branch got wrong, whether anything ran. */
 describe(`forking at a cut`, () => {

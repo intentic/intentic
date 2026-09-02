@@ -34,8 +34,11 @@ import type { SessionRef } from "./turnRequest";
  * (SessionRef). The wire sends the four flat, and reading them apart is what let a caller adopt an id while
  * filling its runtime and credential in from its own tab — the pair that decides whether the next message
  * resumes or opens a fresh session, answered by the side that cannot know. Present only when the daemon named
- * all of it. */
-export type AgentTranscript = { readonly session?: SessionRef; readonly messages: RestoredMessage[] } | "gone";
+ * all of it.
+ *
+ * `stoppedShort` is the daemon's account of how the last turn ENDED, and the reason a tab that never watched it
+ * stop can still offer to pick it up (Conversation.adoptEnding). */
+export type AgentTranscript = { readonly session?: SessionRef; readonly stoppedShort?: boolean; readonly messages: RestoredMessage[] } | "gone";
 
 /* `at` is the box holding the conversation, undefined for the active one, and it belongs in the KEY as much as
  * in the request: two sandboxes can hold one conversation id (a workspace cloned onto a second machine, a
@@ -67,6 +70,7 @@ const read = async (conversationId: string, at: string | undefined): Promise<Age
         provider?: AgentProvider;
         harness?: AgentHarness;
         account?: string;
+        stoppedShort?: boolean;
         messages?: RestoredMessage[];
     };
     /* The id WITH the runtime that minted it, or nothing: a session that cannot say where it resumes cannot
@@ -80,7 +84,14 @@ const read = async (conversationId: string, at: string | undefined): Promise<Age
         body.sessionId !== undefined && body.provider !== undefined && body.harness !== undefined
             ? { id: body.sessionId, provider: body.provider, harness: body.harness, account: body.account }
             : undefined;
-    return { ...(bound !== undefined ? { session: bound } : {}), messages: body.messages ?? [] };
+    /* A daemon older than this browser sends nothing here, which reads as "not stopped" and is the right way for
+     * this to be missing: the offer is an ADDITION to a chat that works without it, so a box that cannot say
+     * leaves the tab exactly where it was before the field existed. */
+    return {
+        ...(bound !== undefined ? { session: bound } : {}),
+        ...(body.stoppedShort === true ? { stoppedShort: true } : {}),
+        messages: body.messages ?? [],
+    };
 };
 
 // Long enough that a board left open keeps every card it warmed; short enough that a session spent elsewhere

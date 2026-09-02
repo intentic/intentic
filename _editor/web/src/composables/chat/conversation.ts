@@ -1327,6 +1327,39 @@ export class Conversation {
         this.persist(true);
     }
 
+    /* HOW THE LAST TURN ENDED, AS THE DAEMON HAS IT (AgentTranscriptSchema.stoppedShort), taken by a tab that
+     * never watched it happen. `stoppedShort` is the whole of the record's verdict: the turn stopped before its
+     * work did, so the offer to carry on is armed from that instead of from a stream nobody was watching.
+     *
+     * `pickUp` used to be arm-able ONLY by the stream that watched a turn die, which quietly made the press a
+     * property of the WINDOW rather than of the conversation. Every other way of arriving at the same stopped
+     * session therefore had nothing: a Stop pressed on the board with the chat closed (which posts the cancel
+     * straight to the daemon, agentActions.stopAgent), a session stopped on another device, a tab closed and
+     * reopened from its card, a turn the daemon was killed under. All of them left a chat whose only way on was
+     * typing the word by hand, which is the exact typing this state exists to do once.
+     *
+     * FOUR REFUSALS, and each is a case where the record is not the last word:
+     *   · the record says the turn ENDED ON ITS OWN, which is most of them and the reason this is asked here
+     *     rather than at the call site: what a record can settle about the chat in front of the user is this
+     *     conversation's judgement to make;
+     *   · a LIVE turn, where the record describes the turn BEFORE it and beginTurn has already cleared the
+     *     pick-up for the one that is running;
+     *   · a pick-up ALREADY HELD, which came from the stream and knows strictly more than a record can (a held
+     *     turn, an allowance's reset instant, an automation already bringing it back), so flattening it to a
+     *     bare `stopped` would take the countdown off the strip and the re-run out of the press;
+     *   · an EMPTY transcript, an offer to continue nothing, whose press would open the conversation with the
+     *     word "Continue".
+     *
+     * It arms the OFFER and never the automation, even on a chat with auto-continue switched on: that switch
+     * takes the stop in front of it when it is PRESSED (see setAutoContinue), and opening a tab is not a press.
+     * A turn started because somebody looked at a chat is the one thing an unattended continuation must not do. */
+    adoptEnding(stoppedShort: boolean): void {
+        if (!stoppedShort || this.streaming.value || this.pickUp.value !== undefined || this.messages.value.length === 0) {
+            return;
+        }
+        this.pickUp.value = { reason: `stopped` };
+    }
+
     // Restore a past conversation pulled from the history menu: build bubbles from the stored transcript and
     // arm its session so the next turn resumes it in the sandbox. Unlike restoreMessages this also seeds the
     // conversation's identity, because the tab it lands in is a fresh one that has none.

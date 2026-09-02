@@ -2011,6 +2011,9 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     // by conversation/worktree identity, then adopt the SDK session that actually supplied the transcript so the
     // next turn resumes what the user is looking at. History-menu tabs still mean one exact runtime session.
     let restored: RestoredMessage[] | undefined;
+    // How the last turn ENDED, as the daemon has it, applied once the transcript below is in place: an offer to
+    // carry on belongs under the work it is offering to carry on (see Conversation.adoptStoppedTurn).
+    let stoppedShort = false;
     if (conversation.registered.value) {
         const transcript = await fetchAgentTranscript(conversation);
         if (transcript === undefined) {
@@ -2035,6 +2038,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
             setConversations(conversations.value, activeId.value, `unlatch-registered`);
         } else {
             restored = transcript.messages;
+            stoppedShort = transcript.stoppedShort === true;
             /* THE SESSION AS THE DAEMON HAS IT, binding included, which is the only place the binding exists.
              *
              * This used to build the ref out of the TAB's own picks, and a tab's picks are what its NEXT turn
@@ -2082,6 +2086,11 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     if (restored.length > 0 && !conversation.streaming.value) {
         conversation.restoreMessages(restored);
     }
+    /* AND THE OFFER TO PICK IT BACK UP, last, so it lands over a painted transcript rather than over the blank
+     * pane a tab holds for the length of this read. Handed the verdict rather than gated on it: what a record
+     * can and cannot settle about a chat in front of the user is the conversation's own judgement, and it
+     * refuses this for a live turn, an empty transcript, or a pick-up its stream already armed (adoptEnding). */
+    conversation.adoptEnding(stoppedShort);
     return true;
 };
 

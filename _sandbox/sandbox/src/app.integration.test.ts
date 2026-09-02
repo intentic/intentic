@@ -1120,6 +1120,12 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
     const frames = await collect(await client.agent.attach({ conversationId: "conv1" }));
     const events = frames.flatMap((frame) => (frame.kind === "frame" ? [frame.event] : []));
     expect(events.filter((event) => event.kind === "error")).toEqual([]);
+    /* ...but the RECORD says the turn stopped short, which is the one thing about a stop that has to outlive the
+     * window that pressed it. The continue press used to be armed by the stream watching the turn die, so it
+     * existed only where somebody had been looking: this same session opened tomorrow, or on another device, or
+     * after the Stop was pressed on the board with the chat closed, came back offering nothing but the composer
+     * and the word typed by hand. The daemon is the only party that still knows, so the daemon is asked. */
+    expect(await client.agents.transcript({ id: "conv1" })).toMatchObject({ stoppedShort: true });
 
     // A stop with nothing running is still NOT_FOUND: the client retires its own control on that answer.
     expect(await errorCode(client.agent.stop({ conversationId: "conv1" }))).toBe("NOT_FOUND");

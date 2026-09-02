@@ -645,7 +645,7 @@ export const SessionTranscriptSchema = z.object({
  * is what made switching BACK to the account that minted it announce a fresh session and then retire a
  * perfectly resumable one, spending the whole transcript again on a cold prompt cache.
  *
- * All optional, and absent together on a conversation that has no session to resume. */
+ * The session fields are all optional, and absent together on a conversation that has no session to resume. */
 export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
     sessionId: z.string().optional().describe("The provider session behind the last turn, when there is one."),
     provider: AgentProviderSchema.optional().describe("Which provider minted that session."),
@@ -654,6 +654,22 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
         .string()
         .optional()
         .describe("Which stored account it belongs to, as the daemon resolved it. Absent when no stored account paid for the turn."),
+    /* AND HOW THE LAST TURN ENDED, for the one ending that leaves the client something to OFFER rather than
+     * something to draw: work half done behind a session that is perfectly alive, where the only thing missing
+     * is somebody saying carry on.
+     *
+     * It rides the transcript because the offer used to ride the WINDOW. A chat armed the continue press from
+     * the stream it was watching when the turn stopped, so the press existed only where somebody had been
+     * looking: stop an agent from the board with its chat closed, or reopen the tab on another device, or after
+     * a reload that dropped the tab, and the same stopped session came back with no way on but typing the word
+     * by hand, which is precisely what the press exists to spare. The daemon is the one party that knows this
+     * about a conversation whoever asks and however long after, so it is the one that says it. */
+    stoppedShort: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether the last turn stopped before it finished, by a Stop or by the daemon dying under it, so the work is half done and continuing it is one press. Absent for a conversation whose last turn ended on its own.",
+        ),
 });
 
 /* WHAT A PUBLISHED CONVERSATION'S PAGE IS HANDED, the whole of it, baked into the page as one JSON block.
