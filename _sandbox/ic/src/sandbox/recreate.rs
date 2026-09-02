@@ -1064,7 +1064,10 @@ mod tests {
             Some("intentic-sandbox-env-abc:0123456789ab")
         ));
         // Any channel counts — following beta is still following the registry.
-        assert!(follows_registry(Some("ghcr.io/intentic/sandbox:beta"), None));
+        assert!(follows_registry(
+            Some("ghcr.io/intentic/sandbox:beta"),
+            None
+        ));
     }
 
     #[test]
@@ -1081,7 +1084,10 @@ mod tests {
             None
         ));
         // A custom registry, and a bare tag with no registry at all.
-        assert!(!follows_registry(Some("registry.example.com/sandbox:v1"), None));
+        assert!(!follows_registry(
+            Some("registry.example.com/sandbox:v1"),
+            None
+        ));
         assert!(!follows_registry(None, Some("my-own-build:latest")));
         // Neither stamp: a container older than the run contract — unclassifiable, so untouched.
         assert!(!follows_registry(None, None));

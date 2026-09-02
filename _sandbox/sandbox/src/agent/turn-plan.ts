@@ -18,6 +18,8 @@ import { admitTurn, readMemoryHeadroom } from "../platform/memory-admission.js";
 import { createFreshnessResolver } from "../dependencies/registry-freshness.js";
 import { createWorkspacePins } from "../dependencies/workspace-pins.js";
 import { statePath } from "../workspace/state-paths.js";
+import { dirtyPathsAcross } from "../git/changes.js";
+import { discoverRepos } from "../workspace/repo-discovery.js";
 import { accountsServer } from "../browser/accounts-tools.js";
 import { secretsServer } from "../browser/secrets-tools.js";
 import type { SecretAccess } from "./agent-secrets.js";
@@ -1029,6 +1031,14 @@ export const planHarnessTurn = async (
                           (await services.dependencies.status())
                               .filter((project) => project.state === "installing")
                               .map((project) => (project.dir === "" ? "the workspace root" : project.dir)),
+                      /* What the TREE says the turn changed, for the conditions the Stop reads: the edit ledger
+                       * hears the edit tools, and an edit made with `sed -i`, a heredoc or a script is heard by
+                       * nobody but git. Only for an isolated turn, whose worktree is clean when the turn starts
+                       * (land commits the remainder), so its dirty paths are this turn's own; in the main checkout
+                       * they would be everyone's landed, uncommitted work. */
+                      ...(context.localCwd !== services.workspace.root
+                          ? { changedPaths: async () => dirtyPathsAcross(context.localCwd, await discoverRepos(context.localCwd)) }
+                          : {}),
                   }
                 : {}),
             // The sniffer's rulebook, forwarded only when the owner wrote a rule, same no-hook economy.

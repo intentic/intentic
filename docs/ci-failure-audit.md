@@ -10,11 +10,14 @@
 
 ## Status
 
-Five of the seven recommendations are applied. Two are not, and both for reasons the work turned up.
+Six of the seven recommendations are applied. One is withdrawn for a reason the work turned up, and one is a
+decision rather than a change.
 
 **Applied:** 1, the release no longer reports a skipped release as a failure. 2, the workflow-lint exceptions
 moved onto their steps. 3, all 41 packages now name a test budget, held by prepass invariant 13. 4, the rule is
-stated and the template gate reaches the push. 6, the store shells run nightly.
+stated and the template gate reaches the push. 6, the store shells run nightly. 7(b), the push gate now runs what
+CI runs (`_tools/scripts/verify-push.mjs`, from both the app's push check and the git hook); the note at 7(b)
+records what a second hundred pipelines showed and why the gate is unfiltered rather than scoped.
 
 **Withdrawn:** 5. The sweep it proposed is the wrong change, and Class B says why with the failing output.
 
@@ -421,10 +424,21 @@ have been actively harmful, because `pnpm build` dies EXDEV under agent worktree
 `verify` was written without it, and is documented in three places. The gap that was real is the pre-push
 hook's, and recommendation 4 closed it.
 
-**(b) Extend the pre-push hook to the affected closure.** Still open, and now smaller than it looked. The hook
-gained the template gate under 4, which covers Class A. A second, opt-out tier
-(`turbo run typecheck build test --filter=...[origin/main]`) would cover B and E too, and is nearly free with a
-warm turbo cache — but it is a change to how every push feels, and worth deciding rather than slipping in.
+**(b) ~~Extend the pre-push hook to the affected closure.~~ Applied, unfiltered, after a second hundred
+pipelines said what the first did not.** Of the 100 `main` runs to 2026-09-01: 55 failed, 24 succeeded, 21
+cancelled. The reds of the last three days were type errors in `@intentic/ui` and `@intentic/ingress`, a test
+file that did not compile, an adapter test whose fake had drifted, and `_sandbox/ic` failing `cargo fmt
+--check` three pipelines running. Every one had passed the push check of the day, because that check was
+`pnpm test`: tests only, on a tree CI then type-checked first, and a test file with a type error runs fine under
+vitest. The git hook behind it ran only the ~70ms invariants, so a push from a terminal was measured by nothing.
+
+`_tools/scripts/verify-push.mjs` is now what both run. It executes verify.yml's three steps (`prepass`,
+`turbo run typecheck`, `turbo run build test`) on the whole graph, with turbo's cache as the filter rather than
+a `--filter=...[origin/main]` this file would have to keep in step with `affected.mjs`; runs `cargo fmt
+--check` on any crate the push touches (rustfmt is on the image, clippy is not runnable there); and records the
+verdict against a hash of the working tree so the app's check and the hook do not measure one tree twice. What it
+cannot do is measure the commit rather than the tree: it says how many uncommitted paths it saw, and the rest is
+the pusher's.
 
 **(c) Branch protection with the three verify groups as required checks.** The real fix, and the one this
 workflow layout was built for: `ci-audit.md` explains that the three groups exist as separately nameable

@@ -57,6 +57,24 @@ pipelines failed with the `test` job.
 The fleet lands in parallel, so this is also the only moment the check means anything: main moves under you
 while you work, and a red main is a red main for whoever lands next, whatever they changed.
 
+The rule's path condition is read from the tree as well as from the edit tools, so an edit made with `sed`, a
+heredoc or a script counts like one made with Edit. There is no way to change code under `intentic/**` that
+the check does not see.
+
+## Before it leaves the machine
+
+The push is the one gate nothing routes around, and it runs `_tools/scripts/verify-push.mjs`: from the app's
+"Check before you push" rule (`pnpm verify:push`), in a terminal the owner can watch, and again from
+`.githooks/pre-push` for any push git makes from the checkout. The script runs the checkout-only gates first (the prepass
+invariants, the byte scan, the invariant registry, the daemon boundaries, the linter), then `cargo fmt --check`
+on any Rust crate the push touches, then the three steps CI's verify groups run (`prepass`, `turbo run
+typecheck`, `turbo run build test`), unfiltered, with turbo's cache standing in for a filter. A tree the app's check has already
+measured is not measured twice: the verdict is keyed to a hash of the working tree.
+
+It measures the working tree; CI measures the commit. Landed work not yet committed, or a lockfile an install
+left beside a committed manifest, is in the first and not the second, and the script says how many such paths
+it saw. Commit what belongs together before pushing.
+
 ## Tests
 
 Tests are type-checked source, held to the rules above. `pnpm typecheck` compiles every one of them

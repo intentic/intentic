@@ -19,6 +19,7 @@ import {
     conflictedFileDiff,
     createBranchAt,
     createTagAt,
+    dirtyPathsAcross,
     discardPaths,
     dropCommit,
     refFileDiff,
@@ -936,4 +937,23 @@ test("an oversized untracked file that is not text says so instead of shipping d
     expect(diff.binary).toBe(true);
     expect(diff.partial?.patch).toBeUndefined();
     expect(diff.partial?.afterBytes).toBeGreaterThan(512 * 1024);
+});
+
+/* The Stop hook's path conditions read this beside the edit ledger (rules/turn-ending.ts), so it has to see an
+ * edit however it was made and spell it the way the owner's rule does: root-relative, through the nested repo's
+ * own prefix, and never the root repo's one-line view of the nested repo itself. */
+test("dirtyPathsAcross names every changed path of the root and its nested repos, root-relative", async () => {
+    const root = await tempRepo(); // a.txt committed
+    const nested = join(root, "intentic");
+    await mkdir(nested);
+    await sh(nested, "init", "-q");
+    await writeFile(join(nested, "x.ts"), "export const x = 1;\n");
+    await sh(nested, "add", "-A");
+    await sh(nested, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+    await writeFile(join(nested, "x.ts"), "export const x = 2;\n"); // tracked, modified, in the nested repo
+    await writeFile(join(nested, "new.ts"), "export const y = 1;\n"); // untracked, in the nested repo
+    await writeFile(join(root, "a.txt"), "two\n"); // tracked, modified, in the root repo
+
+    const paths = await dirtyPathsAcross(root, ["intentic"]);
+    expect(paths.sort()).toEqual(["a.txt", "intentic/new.ts", "intentic/x.ts"]);
 });

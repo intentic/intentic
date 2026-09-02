@@ -334,11 +334,12 @@ mod tests {
         // place; an argument that binds differently between them would download for one channel and swap
         // onto another.
         let Ok(Cli {
-            command: Command::Sandbox(SandboxCommand::Prepare {
-                slug,
-                channel,
-                auto,
-            }),
+            command:
+                Command::Sandbox(SandboxCommand::Prepare {
+                    slug,
+                    channel,
+                    auto,
+                }),
         }) = parse(&["sandbox", "prepare", "abc123", "--channel", "beta"])
         else {
             panic!("prepare did not parse")

@@ -1,42 +1,25 @@
 #!/bin/sh
-# The gates that need nothing installed, run before the push rather than after it.
+# THE LAST THING BETWEEN THIS CHECKOUT AND main. Wired by the root `prepare` script (core.hooksPath=.githooks)
+# alongside commit-msg. It runs _tools/scripts/verify-push.mjs, the same script the app's "Check before you push"
+# rule runs (`pnpm verify:push`), with git's ref lines on stdin so the script knows which range is leaving.
 #
-# Wired by the root `prepare` script alongside commit-msg (core.hooksPath=.githooks). What it runs is the check
-# half of _tools/scripts/prepass.mjs — the repo invariants readable from the checkout alone: test-file coverage,
-# the vitest budget every package must name, integration-suite naming, lockfile drift, the fork boundary, the
-# release-heading contract, and the gate that a shrunk wire contract pushes with a declared break. No network,
-# ~70ms.
+# What that script does, cheapest first, stopping at the first refusal: the gates readable from the checkout in
+# well under a second (the prepass invariants, the byte scan, the invariant registry's exhaustiveness and the
+# daemon's module boundaries, then the linter); rustfmt on any Rust crate the push touches; and then, unless the
+# app's check has already measured this exact tree, the three steps CI's verify groups run: typecheck, build, test.
+# The header of that script says why each tier is there and what it costs.
 #
-# ONE OF THEM READS node_modules WHEN IT IS THERE: the .vue templates, which no type checker looks at and only
-# the app bundle used to. That gate was born below the `--checks-only` line because its compiler is a
-# dependency, which left it out of reach of the very hook that stands between a broken template and main — and
-# a broken template is what cost five hours and three red pipelines the day it landed
-# (docs/ci-failure-audit.md, class A). A push comes from a working clone, so the compiler is present and the
-# ~0.8s for ~400 templates is not worth noticing. Where it is absent (the CI preflight job, which runs before
-# its install) prepass says so and moves on rather than failing for a tool nobody promised it.
-#
-# It is here because of what those failures cost in CI. Measured over 40 main pipelines, 10 of the 22 red ones
-# died on one of these three, every one of them AFTER `pnpm install --frozen-lockfile` had resolved 1,800+
-# packages against the registry — 0.6-2.0 min, in four jobs at once, to report something readable from two files
-# in the working tree. The preflight job in .github/workflows/ci.yml is the same check on the other side of the push; this
-# one is what keeps the round trip from happening at all.
-#
-# The byte scan rides along for the same reason and at the same price: 4,300 tracked files read in ~120ms, no
-# install, no network. It was written after a literal NUL in a string literal turned five source files binary to
-# git, grep and every diff viewer — and then sat in `pnpm check` alone, where nothing automatic ever reached it,
-# while seven more files picked up the same byte. A gate no hook and no pipeline runs is a comment.
-#
-# The daemon's two structural gates ride along on the same terms. verify-invariants.mjs is the invariant
-# registry's exhaustiveness: every subsystem under _sandbox/sandbox/src registers a check or says why it has
-# none. verify-daemon-boundaries.mjs holds the module seams where they stand: no new module takes the whole of
-# Services without handing it on, no new pair of subsystems imports each other's values. Both read the checkout
-# and nothing else, in milliseconds; both lived in `pnpm check` alone, and the first was red on main for nine
+# The two structural gates are in the first tier on the same terms as the byte scan. verify-invariants.mjs is the
+# invariant registry's exhaustiveness: every subsystem under _sandbox/sandbox/src registers a check or says why it
+# has none. verify-daemon-boundaries.mjs holds the module seams where they stand: no new module takes the whole of
+# Services without handing it on, no new pair of subsystems imports each other's values. Both read the checkout and
+# nothing else, in milliseconds; both lived in `pnpm check` alone, and the first was red on main for nine
 # subsystems with nothing running it.
 #
-# No dependency guard, unlike commit-msg: this needs only node, which is the thing running the repo. Use
-# `git push --no-verify` when you genuinely mean to push a tree that does not pass.
-set -e
-node _tools/scripts/prepass.mjs --checks-only
-node _tools/scripts/control-chars.mjs
-node _tools/scripts/verify-invariants.mjs
-exec node _tools/scripts/verify-daemon-boundaries.mjs
+# It used to stop at the first tier. Of the 100 pipelines before this was written, 55 were red, and the recent
+# reds were type errors that `pnpm test` (the app's check of the day) cannot see and this hook never looked for. A
+# gate that only checks what is cheap to check is a gate for the failures nobody was having.
+#
+# No dependency guard: this needs node, which is the thing running the repo; the heavy tier needs pnpm and says so
+# when it is missing. `git push --no-verify` when you genuinely mean to push a tree that does not pass.
+exec node _tools/scripts/verify-push.mjs --hook

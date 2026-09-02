@@ -108,6 +108,15 @@ export interface TurnEndingDeps {
      * and one of those ran from end to end of a live turn while this check reported its tree as red. So the
      * question is asked HERE, after the fact, where the answer is still true, rather than assumed anywhere. */
     readonly installing?: (() => Promise<readonly string[]>) | undefined;
+    /* WHAT THE TREE SAYS THE TURN CHANGED, read at the Stop beside the edit ledger, as paths relative to `cwd`.
+     *
+     * The ledger hears the edit TOOLS (Edit, Write, the hashline pair) and nothing else. A model that reaches for
+     * `sed -i`, a heredoc or a script rewrites files the ledger never hears of, and a path condition read from
+     * the ledger alone then says "this turn touched nothing under intentic/**" about a turn that rewrote half of
+     * it. The command rule standing on that condition, the one check between the edit and the land, does not run,
+     * and the first thing to read the change is CI. The tree cannot be fooled that way: whatever wrote the file,
+     * git sees it. Absent ⇒ the ledger is the only reader, which is what a test without a tree wants. */
+    readonly changedPaths?: (() => Promise<readonly string[]>) | undefined;
 }
 
 // The two records this moment keeps. `removal` exists only when a rule standing here reads it: it snapshots
@@ -392,10 +401,13 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         if (input.hook_event_name !== "Stop" || input.stop_hook_active || followUps >= MAX_FOLLOW_UPS) {
                             return {};
                         }
-                        // What the turn touched, which is the only fact a condition can narrow on here. A turn
+                        // What the turn touched, which is the only fact a condition can narrow on here: what the
+                        // edit tools reported, and what the tree itself shows changed (see `changedPaths`). A turn
                         // that edited nothing still reaches rules with no path condition, "always say this
                         // before you finish" is a legitimate thing to want.
-                        const facts = { paths: ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd)) };
+                        const edited = ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd));
+                        const changed = deps.changedPaths === undefined ? [] : await deps.changedPaths().catch(() => []);
+                        const facts = { paths: [...new Set([...edited, ...changed])] };
                         const parts: string[] = [];
                         for (const rule of rules) {
                             // The moment check is redundant with `standing` at the one call site and kept

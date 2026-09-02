@@ -371,6 +371,16 @@ describe("conditions", () => {
         expect(await stop(untouched)).toBeUndefined();
     });
 
+    // The ledger hears the edit tools and nothing else. A file rewritten by `sed -i` or a heredoc is an edit git
+    // can see and the ledger cannot, so the tree's own answer is read beside it: a check standing on
+    // `intentic/**` has to run for a turn that rewrote half of it from the shell.
+    test("a path condition also sees what the tree changed, however it was edited", async () => {
+        const sql = rule({ id: "sql", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "Mention the migration." } });
+        const hooks = armed([sql], { cwd: WORKSPACE_ROOT, changedPaths: async () => ["db/0001.sql"] });
+        // No Edit or Write reached the ledger: the migration was written by a shell command.
+        expect(await stop(hooks)).toContain("Mention the migration.");
+    });
+
     // The agent names files absolutely and a rule is written the way the owner reads their tree, so one glob
     // has to mean the same thing here as it does at the landing moment.
     test("paths are relativised to the turn's tree before a glob sees them", async () => {

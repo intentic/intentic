@@ -852,6 +852,32 @@ export const commitChanges = async (dir: string, sha: string, git: GitRunner = d
     return status.map((change) => Object.assign(change, stats.get(change.path)));
 };
 
+/* EVERY PATH THE WORKING TREES UNDER `root` HAVE CHANGED, root-relative: the root repo's own and each nested
+ * repo's (`repos` as repo-discovery.ts names them), so an edit reads the same whichever repo of the composition it
+ * landed in. A rename contributes both of its names. Read-only and total: a repo that cannot answer contributes
+ * nothing rather than failing the whole read.
+ *
+ * The root repo reports a nested repository as ONE untracked entry (`? intentic/`), never its contents; that entry
+ * is dropped here because the nested repo answers for itself, and left in it would make `intentic/**` match a
+ * turn that touched nothing under it. A gitlink staged for one (root-repo.ts converges those away) is the same
+ * entry under another status and is dropped the same way. */
+export const dirtyPathsAcross = async (root: string, repos: readonly string[], git: GitRunner = defaultGit): Promise<string[]> => {
+    const nested = new Set(repos.flatMap((repo) => [repo, `${repo}/`]));
+    const paths = new Set<string>();
+    const collect = async (dir: string, prefix: string): Promise<void> => {
+        const { conflicted, staged, unstaged } = await changedFiles(dir, git).catch(() => ({ conflicted: [], staged: [], unstaged: [] }));
+        for (const change of [...conflicted, ...staged, ...unstaged]) {
+            for (const path of [change.path, change.from]) {
+                if (path !== undefined && !(prefix === "" && nested.has(path))) {
+                    paths.add(prefix === "" ? path : `${prefix}/${path}`);
+                }
+            }
+        }
+    };
+    await Promise.all([collect(root, ""), ...repos.map((repo) => collect(join(root, repo), repo))]);
+    return [...paths];
+};
+
 /* Both sides of a file AT a commit: the blob at the first parent (`<sha>^`) vs the blob at `<sha>`. A root
  * commit (no parent) or a freshly-added file has no before; a deletion has no after. The route has validated
  * `path` stays inside `dir` (resolveWithin).
