@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
 //
-// The badge's job is to always state a number and to be honest about which reading it is, so what is asserted
-// here is WHICH reading it prints in each state, not its markup, beyond the one class that marks a count as
-// still provisional. Mounted with plain Vue, as markdownFigures.test does, rather than adding @vue/test-utils.
+// The badge's job is to state a number and to be honest about which reading it is, so what is asserted here is
+// WHICH reading it prints in each state, not its markup. Every number it is given is final — the daemon counts
+// the code-only pair and ships it with the change — so there is no provisional state left to assert on. Mounted
+// with plain Vue, as markdownFigures.test does, rather than adding @vue/test-utils.
 import { describe, expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
 
 import ReviewStat from "./ReviewStat.vue";
 import { useLayout } from "../composables/useLayout";
-import type { LineStat } from "../composables/workspace/codeStat";
+import type { LineStat } from "@intentic/code-read";
 
 const { showComments, toggleShowComments } = useLayout();
 
 interface Props {
     code?: LineStat;
-    counting?: boolean;
     additions?: number;
     deletions?: number;
     of?: number;
@@ -86,24 +86,12 @@ describe(`<ReviewStat>`, () => {
         expect(host.querySelector(`[data-tip]`)).toBeNull();
     });
 
-    /* THE CASE THIS COMPONENT WAS GETTING WRONG. A row whose file had not been read printed nothing but a pending
-     * mark, and on the workspace Changes panel, where the reading is a background read that arrives in its own
-     * time, that was every row of the list at once: a review with no numbers on it. It prints git's, marked as
-     * standing in for a reading still being worked out. */
-    it(`stands git's numbers in, at half weight, while the reading is still being worked out`, async () => {
+    /* A FILE THERE IS NO CODE-ONLY READING OF — bytes, one side too large, a language this build ships no
+     * grammar for — arrives with no `code` at all, and git's numbers are then the reading rather than standing in
+     * for one. At full weight and with no hover, because nothing about it is provisional: this is the answer. */
+    it(`prints git's numbers whole for a file that cannot be read as code`, async () => {
         await withComments(false);
-        const host = render({ counting: true, additions: 54, deletions: 0 });
-
-        expect(host.textContent).toContain(`+54`);
-        expect(host.textContent).not.toContain(`…`);
-        expect(host.querySelector(`.opacity-50`)).not.toBeNull();
-        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toContain(`+54`);
-        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toMatch(/counting comments|still working/i);
-    });
-
-    it(`has nothing to wait for when the comments are shown: git's counts are the reading, at full weight`, async () => {
-        await withComments(true);
-        const host = render({ counting: true, additions: 54, deletions: 0 });
+        const host = render({ additions: 54, deletions: 0 });
 
         expect(host.textContent).toContain(`+54`);
         expect(host.querySelector(`.opacity-50`)).toBeNull();
@@ -152,12 +140,6 @@ describe(`<ReviewStat> rail`, () => {
 
     it(`stays away from a row whose size is unknown rather than drawing a zero`, async () => {
         await withComments(false);
-        expect(rail(render({ counting: false, of: 50 }))).toBeNull();
-    });
-
-    it(`marks a rail standing on a provisional count the same way the numbers are marked`, async () => {
-        await withComments(false);
-        const host = render({ counting: true, additions: 54, deletions: 0, of: 54 });
-        expect(rail(host)?.className).toContain(`opacity-50`);
+        expect(rail(render({ of: 50 }))).toBeNull();
     });
 });

@@ -1,4 +1,5 @@
-import { analyzeCode, type CodeAnalysis } from "./codeAnalysis";
+import type { CodeAnalysis } from "@intentic/code-read";
+import { analyzeInApp } from "./appGrammars";
 import type { CodeAnalysisRequest, CodeAnalysisResponse } from "./codeAnalysisProtocol";
 
 export interface WorkerPort {
@@ -21,7 +22,7 @@ type WorkerFactory = () => Promise<WorkerPort | undefined>;
 const CACHE_LIMIT = 64;
 
 /** A cached worker RPC client, with dependency injection for the protocol test and non-browser fallback. */
-export const createCodeAnalysisClient = (workerFactory: WorkerFactory, local = analyzeCode) => {
+export const createCodeAnalysisClient = (workerFactory: WorkerFactory, local = analyzeInApp) => {
     const cache: CacheEntry[] = [];
     const pending = new Map<number, { resolve: (analysis: CodeAnalysis | undefined) => void; reject: (error: Error) => void }>();
     let worker: Promise<WorkerPort | undefined> | undefined;

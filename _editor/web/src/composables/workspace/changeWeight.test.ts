@@ -1,36 +1,30 @@
 // @vitest-environment jsdom
 //
 // The rules the rail and the most-added-first order rest on. `readingOf` is a thin binding of `shownStat` to the
-// showComments preference and is exercised through the panels; the order half is here, since which pair a list
-// is sorted on is the whole of it. jsdom for the module, not for these assertions: the file also declares a
-// stored preference and reaches useLayout, both of which read the document as they load.
+// showComments preference and is exercised through the panels. jsdom for the module, not for these assertions:
+// the file also declares a stored preference and reaches useLayout, both of which read the document as they load.
 import { describe, expect, it } from "vitest";
-import { nextTick, ref } from "vue";
-import { addedIn, bigger, orderStat, shownStat, sumShown, useChangeWeight, weightFill } from "./changeWeight";
+import { addedIn, bigger, shownStat, sumCode, sumShown, weightFill } from "./changeWeight";
 
 describe(`shownStat`, () => {
     it(`shows the code-only counts while the surface is showing code alone`, () => {
-        expect(shownStat(true, { code: { additions: 4, deletions: 1 }, counting: false }, 26, 9)).toEqual({ additions: 4, deletions: 1 });
+        expect(shownStat(true, { additions: 4, deletions: 1 }, 26, 9)).toEqual({ additions: 4, deletions: 1 });
     });
 
     it(`shows git's counts once comments are back on, even with a code reading in hand`, () => {
-        expect(shownStat(false, { code: { additions: 4, deletions: 1 }, counting: false }, 26, 9)).toEqual({ additions: 26, deletions: 9 });
+        expect(shownStat(false, { additions: 4, deletions: 1 }, 26, 9)).toEqual({ additions: 26, deletions: 9 });
     });
 
-    it(`falls back to git's while the code reading is still being worked out`, () => {
-        expect(shownStat(true, { counting: true }, 26, 9)).toEqual({ additions: 26, deletions: 9 });
-    });
-
-    // A file with nothing to strip (bytes, no grammar, an oversized diff sent as an excerpt) settles with no
-    // `code`: git's numbers ARE its code-only reading, and its rail has to be scaled the same way.
-    it(`falls back to git's for a file there was nothing to strip`, () => {
-        expect(shownStat(true, { counting: false }, 26, 9)).toEqual({ additions: 26, deletions: 9 });
+    // A file the daemon could not read as code (bytes, no grammar, one side too large) carries no `code` at all:
+    // git's numbers ARE its reading, and its rail has to be scaled the same way.
+    it(`falls back to git's for a file there was no code reading of`, () => {
+        expect(shownStat(true, undefined, 26, 9)).toEqual({ additions: 26, deletions: 9 });
     });
 
     // A binary file or a conflict: no count on either side. The caller draws no rail rather than an empty one,
     // which would claim a size of zero for something whose size is unknown.
     it(`keeps "no answer" distinguishable from zero`, () => {
-        expect(shownStat(true, { counting: false }, undefined, undefined)).toEqual({ additions: undefined, deletions: undefined });
+        expect(shownStat(true, undefined, undefined, undefined)).toEqual({ additions: undefined, deletions: undefined });
     });
 });
 
@@ -65,102 +59,23 @@ describe(`bigger`, () => {
     });
 });
 
-describe(`orderStat`, () => {
-    it(`takes git's pair off whatever carries it, a row's change or a heading's totals`, () => {
-        // A row as the panel holds it: git's pair, and the code-only reading that arrived for it later.
-        const row = { additions: 40, deletions: 2, code: { additions: 2, deletions: 0 } };
-        expect(orderStat(row)).toEqual({ additions: 40, deletions: 2 });
-        expect(orderStat(sumShown([{ additions: 40, deletions: 2 }, { additions: 8 }]))).toEqual({ additions: 48, deletions: 2 });
+describe(`sumCode`, () => {
+    it(`totals the code-only readings a heading is drawing`, () => {
+        expect(sumCode([{ code: { additions: 4, deletions: 1 }, additions: 26, deletions: 9 }, { code: { additions: 2, deletions: 0 } }])).toEqual({
+            additions: 6,
+            deletions: 1,
+        });
     });
 
-    it(`carries "no counts at all" through rather than calling a binary file a change of zero`, () => {
-        expect(orderStat({})).toEqual({ additions: undefined, deletions: undefined });
-    });
-});
-
-/* THE JUMP THIS EXISTS TO STOP. The order used to take each row's shown reading the moment that reading arrived,
- * and the readings arrive one file at a time — in the background, and on the click that opens one — so a review
- * re-sorted itself as it was read, and the click that selected a row was the thing that moved it. The switch to
- * the shown reading now happens once, for the whole list, and never once the reader has touched it. */
-describe(`orderReading`, () => {
-    const { orderReading, largestFirst } = useChangeWeight();
-    const COUNTED = { code: { additions: 2, deletions: 0 }, counting: false };
-
-    it(`ranks on git's pair until every row on screen has been counted`, async () => {
-        const counted = ref(false);
-        const key = orderReading(
-            () => counted.value,
-            () => false,
-        );
-        expect(key(COUNTED, 40, 2)).toEqual({ additions: 40, deletions: 2 });
-
-        // The list is counted whole: one switch, and from here the key is the reading the badges are drawing.
-        counted.value = true;
-        await nextTick();
-        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
+    /* A row there is no code reading OF contributes git's own, which is what its badge shows too: a heading that
+     * left it out would disagree with the rows under it, and one that counted it as zero would say a 400-line
+     * vendored bundle changed nothing. */
+    it(`takes git's numbers for a row that could not be read as code`, () => {
+        expect(sumCode([{ code: { additions: 4, deletions: 1 } }, { additions: 40, deletions: 2 }])).toEqual({ additions: 44, deletions: 3 });
     });
 
-    /* A latch, not a condition. An agent writing into an open review adds rows that have not been counted, and a
-     * key that fell back to git's for the whole list every time would re-sort it twice per file the agent wrote:
-     * once on the way out, once on the way back. The new row ranks on git's pair until its own count lands. */
-    it(`stays on the shown reading when a later row arrives uncounted`, async () => {
-        const counted = ref(true);
-        const key = orderReading(
-            () => counted.value,
-            () => false,
-        );
-        await nextTick();
-        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
-
-        counted.value = false;
-        await nextTick();
-        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
-        // …and the row that has not been counted yet is the one holding git's numbers, which is where it sorts.
-        expect(key({ counting: true }, 8, 1)).toEqual({ additions: 8, deletions: 1 });
-    });
-
-    it(`never switches under a reader who has already picked a row`, async () => {
-        const counted = ref(false);
-        const touched = ref(false);
-        const key = orderReading(
-            () => counted.value,
-            () => touched.value,
-        );
-
-        // They clicked before the counting finished: this list keeps the order it had, however late it settles.
-        touched.value = true;
-        counted.value = true;
-        await nextTick();
-        expect(key(COUNTED, 40, 2)).toEqual({ additions: 40, deletions: 2 });
-
-        // Working the control is the reader asking to be re-ordered, and is the way back out of that freeze.
-        largestFirst.value = !largestFirst.value;
-        await nextTick();
-        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
-        largestFirst.value = false;
-    });
-});
-
-describe(`bySize`, () => {
-    const { largestFirst, bySize } = useChangeWeight();
-    const rows = [
-        { path: `a/prose.ts`, additions: 40, deletions: 2 },
-        { path: `b/parse.ts`, additions: 30, deletions: 9 },
-        { path: `c/tweak.ts`, additions: 30, deletions: 1 },
-    ];
-
-    it(`hands back the very same list while path order is the reading, so it costs a panel nothing`, () => {
-        largestFirst.value = false;
-        expect(bySize(rows, orderStat)).toBe(rows);
-    });
-
-    it(`puts the most added first and breaks a tie on deletions, leaving path order under both`, () => {
-        largestFirst.value = true;
-        try {
-            expect(bySize(rows, orderStat).map((row) => row.path)).toEqual([`a/prose.ts`, `b/parse.ts`, `c/tweak.ts`]);
-        } finally {
-            largestFirst.value = false;
-        }
+    it(`totals nothing to nothing, so an emptied group draws an empty badge`, () => {
+        expect(sumCode([])).toEqual({ additions: 0, deletions: 0 });
     });
 });
 

@@ -62,6 +62,9 @@ export const PUBLISH_REFUSAL = {
  * anything is the owner's own uncommitted work, so the panel's legend reads "you 5" and no row carries a chip.
  * Press Land now and the soft-deletes agent's files arrive WITH one, the contrast is what makes attribution
  * legible, where a tree that was already covered in chips only made it wallpaper. */
+// Every row carries BOTH readings, because the daemon does: git's own pair and the same change with the
+// comments stripped out (GitChange.code, computed in git/code-counts.ts). A fixture that shipped only git's
+// would demo a review whose badges never show the reading the diffs beside them are drawing.
 const BASE_CHANGES: RepoChanges[] = [
     {
         repo: `web`,
@@ -69,9 +72,9 @@ const BASE_CHANGES: RepoChanges[] = [
         conflicted: [],
         staged: [],
         unstaged: [
-            { path: `src/lib/checkout.ts`, status: `modified`, additions: 6, deletions: 3 },
-            { path: `src/pricing/CheckoutPanel.tsx`, status: `modified`, additions: 28, deletions: 4 },
-            { path: `tests/checkout.spec.ts`, status: `added`, additions: 44, deletions: 0 },
+            { path: `src/lib/checkout.ts`, status: `modified`, additions: 6, deletions: 3, code: { additions: 5, deletions: 3 } },
+            { path: `src/pricing/CheckoutPanel.tsx`, status: `modified`, additions: 28, deletions: 4, code: { additions: 24, deletions: 4 } },
+            { path: `tests/checkout.spec.ts`, status: `added`, additions: 44, deletions: 0, code: { additions: 40, deletions: 0 } },
         ],
     },
     {
@@ -80,9 +83,9 @@ const BASE_CHANGES: RepoChanges[] = [
         conflicted: [],
         staged: [],
         unstaged: [
-            { path: `src/routes/checkout.ts`, status: `added`, additions: 38, deletions: 0 },
+            { path: `src/routes/checkout.ts`, status: `added`, additions: 38, deletions: 0, code: { additions: 33, deletions: 0 } },
             // The owner's own edit, which is what makes the auth agent's land refuse on it below.
-            { path: `src/db/schema.ts`, status: `modified`, additions: 12, deletions: 2 },
+            { path: `src/db/schema.ts`, status: `modified`, additions: 12, deletions: 2, code: { additions: 10, deletions: 2 } },
         ],
     },
 ];
@@ -100,16 +103,16 @@ const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
             repo: `api`,
             branch: `agent/soft-deletes`,
             changes: [
-                { path: `src/db/schema.ts`, status: `modified`, additions: 12, deletions: 3, landed: false },
-                { path: `src/db/migrations.ts`, status: `modified`, additions: 20, deletions: 0, landed: false },
-                { path: `src/routes/users.ts`, status: `modified`, additions: 28, deletions: 9, landed: false },
+                { path: `src/db/schema.ts`, status: `modified`, additions: 12, deletions: 3, code: { additions: 10, deletions: 3 }, landed: false },
+                { path: `src/db/migrations.ts`, status: `modified`, additions: 20, deletions: 0, code: { additions: 16, deletions: 0 }, landed: false },
+                { path: `src/routes/users.ts`, status: `modified`, additions: 28, deletions: 9, code: { additions: 21, deletions: 9 }, landed: false },
             ],
             modules: [{ dir: ``, name: `@acme/api` }],
         },
         {
             repo: `web`,
             branch: `agent/soft-deletes`,
-            changes: [{ path: `src/lib/api.ts`, status: `modified`, additions: 8, deletions: 2, landed: false }],
+            changes: [{ path: `src/lib/api.ts`, status: `modified`, additions: 8, deletions: 2, code: { additions: 6, deletions: 2 }, landed: false }],
             modules: [{ dir: ``, name: `@acme/web` }],
         },
     ],
@@ -118,9 +121,9 @@ const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
             repo: `api`,
             branch: `agent/auth-middleware`,
             changes: [
-                { path: `src/middleware/session.ts`, status: `added`, additions: 52, deletions: 0, landed: false },
-                { path: `src/server.ts`, status: `modified`, additions: 14, deletions: 13, landed: false },
-                { path: `src/db/schema.ts`, status: `modified`, additions: 6, deletions: 5, landed: false },
+                { path: `src/middleware/session.ts`, status: `added`, additions: 52, deletions: 0, code: { additions: 41, deletions: 0 }, landed: false },
+                { path: `src/server.ts`, status: `modified`, additions: 14, deletions: 13, code: { additions: 12, deletions: 13 }, landed: false },
+                { path: `src/db/schema.ts`, status: `modified`, additions: 6, deletions: 5, code: { additions: 5, deletions: 5 }, landed: false },
             ],
             modules: [{ dir: ``, name: `@acme/api` }],
         },

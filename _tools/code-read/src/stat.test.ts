@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { codeLineStat, lineStat } from "./codeStat";
+import { codeLineStat, lineStat } from "./stat.js";
+import { analyze } from "./grammars.js";
 
 describe(`lineStat`, () => {
     it(`counts the lines a minimal diff would report`, () => {
@@ -42,7 +43,7 @@ describe(`codeLineStat`, () => {
         const before = [`// old wording`, `const a = 1;`].join(`\n`);
         const after = [`// new wording, at some length`, `// and a second line of it`, `const a = 1;`].join(`\n`);
 
-        expect(await codeLineStat(before, after, `a.ts`)).toEqual({ additions: 0, deletions: 0 });
+        expect(await codeLineStat(before, after, `a.ts`, analyze)).toEqual({ additions: 0, deletions: 0 });
     });
 
     it(`counts the code in a change that is mostly prose`, async () => {
@@ -50,22 +51,22 @@ describe(`codeLineStat`, () => {
         const after = [`/* a paragraph`, ` * about what`, ` * this does */`, `const a = 1;`, `const b = 2;`].join(`\n`);
 
         // Four of the five added lines are comment; git would call this +4.
-        expect(await codeLineStat(before, after, `a.ts`)).toEqual({ additions: 1, deletions: 0 });
+        expect(await codeLineStat(before, after, `a.ts`, analyze)).toEqual({ additions: 1, deletions: 0 });
     });
 
     it(`counts a trailing comment's line as changed only when its code changed`, async () => {
-        expect(await codeLineStat(`const a = 1; // why`, `const a = 1; // a better why`, `a.ts`)).toEqual({ additions: 0, deletions: 0 });
-        expect(await codeLineStat(`const a = 1; // why`, `const a = 2; // why`, `a.ts`)).toEqual({ additions: 1, deletions: 1 });
+        expect(await codeLineStat(`const a = 1; // why`, `const a = 1; // a better why`, `a.ts`, analyze)).toEqual({ additions: 0, deletions: 0 });
+        expect(await codeLineStat(`const a = 1; // why`, `const a = 2; // why`, `a.ts`, analyze)).toEqual({ additions: 1, deletions: 1 });
     });
 
     it(`declines a file it has no grammar to strip, so the caller keeps git's numbers`, async () => {
-        expect(await codeLineStat(`one`, `two`, `notes.unknownext`)).toBeUndefined();
+        expect(await codeLineStat(`one`, `two`, `notes.unknownext`, analyze)).toBeUndefined();
     });
 
     it(`follows the grammar into another language's comment syntax`, async () => {
         const before = [`# a shell note`, `echo hi`].join(`\n`);
         const after = [`# a different note`, `echo hi`, `echo bye`].join(`\n`);
 
-        expect(await codeLineStat(before, after, `run.sh`)).toEqual({ additions: 1, deletions: 0 });
+        expect(await codeLineStat(before, after, `run.sh`, analyze)).toEqual({ additions: 1, deletions: 0 });
     });
 });

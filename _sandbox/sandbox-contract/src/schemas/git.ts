@@ -107,6 +107,22 @@ export const GitChangeSchema = z.object({
         .optional()
         .describe("Lines added. Absent for a binary file, and for an untracked one, which has nothing to compare against."),
     deletions: z.number().optional().describe("Lines removed. Absent for the same reasons additions is."),
+    /* THE SAME CHANGE WITH THE COMMENTS TAKEN OUT, computed here rather than by whoever renders the row, and
+     * that is the whole point of it being on the wire. A review's diffs open on code alone, so the numbers beside
+     * them are the code's; working those out needs both whole sides of the file and a TextMate walk over each,
+     * which the app used to do per file, as the files were read — so a row arrived showing git's count and
+     * changed to this one the moment anything read it, which moved the row under the reader when the list was
+     * sorted by size. Shipped with the list, the number a reader sees first is the number it stays.
+     *
+     * Absent, not zero, when there is nothing to say: a binary file, one side too large to read, a path whose
+     * grammar this build does not ship, or a list too long to count whole (see git/code-counts.ts). The caller
+     * then shows git's own counts, which for such a file are the only honest reading anyway. */
+    code: z
+        .object({ additions: z.number(), deletions: z.number() })
+        .optional()
+        .describe(
+            "The same +/− with every comment stripped from both sides, which is what a review shows beside a diff that opens on code alone. Absent when the file cannot be read that way (binary, too large, or a language this build ships no grammar for): git's own counts above are then the reading.",
+        ),
 });
 export type GitChange = z.infer<typeof GitChangeSchema>;
 // Where a repo's checked-out branch stands against its remote. Every field is optional-or-zero because every

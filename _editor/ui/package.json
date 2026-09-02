@@ -42,10 +42,6 @@
             "types": "./src/lib/timeWindow.ts",
             "default": "./src/lib/timeWindow.ts"
         },
-        "./langs": {
-            "types": "./src/lib/shikiLangs.ts",
-            "default": "./src/lib/shikiLangs.ts"
-        },
         "./highlighter": {
             "types": "./src/composables/useHighlighter.ts",
             "default": "./src/composables/useHighlighter.ts"
@@ -94,6 +90,7 @@
         "@dicebear/styles": "catalog:",
         "@iconify/vue": "catalog:",
         "@primeuix/themes": "catalog:",
+        "@intentic/code-read": "workspace:*",
         "@shikijs/langs": "catalog:",
         "@shikijs/themes": "catalog:",
         "@vue-flow/core": "catalog:",

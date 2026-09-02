@@ -1,7 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import { type CardDocument, documentOf, type ToolCallContent } from "@intentic/sandbox-contract";
 import type { ChatTool } from "../composables/chat/transcript";
-import { codeLangForPath } from "../pages/workspace/fileType";
+import { codeLangForPath } from "@intentic/code-read";
 import { diffStat } from "./chatToolDiff";
 
 /* How one tool call renders, the single table the chat's tool cards consult, so per-tool knowledge lives in

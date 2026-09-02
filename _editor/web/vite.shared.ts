@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import type { Plugin, ResolvedConfig } from "vite";
-import { shikiLangDeps } from "../../_editor/ui/src/lib/shikiLangs.ts";
+import { shikiLangDeps } from "../../_tools/code-read/src/langs.ts";
 import { sourceAliases } from "./source-aliases.ts";
 
 /* Everything about building THIS SOURCE that holds whichever entry is being served, the app's own

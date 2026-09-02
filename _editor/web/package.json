@@ -24,6 +24,7 @@
         "@intentic-app/capability-catalog": "workspace:*",
         "@intentic-app/localhost-https": "workspace:*",
         "@intentic/base": "workspace:*",
+        "@intentic/code-read": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/ext-acceptance": "workspace:*",
         "@intentic/ext-activity": "workspace:*",

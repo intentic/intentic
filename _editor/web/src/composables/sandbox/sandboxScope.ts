@@ -1,7 +1,6 @@
 import { watch } from "vue";
 import { loadArchived, resetAgents, resetArchive } from "../agents/useAgents";
 import { loadAccountStatus, resetChat } from "../chat/useChat";
-import { resetCodeStats } from "../workspace/useCodeStats";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { resetPreviewSurface } from "../preview/previewSurface";
 import { resetPresence } from "../usePresence";
@@ -55,7 +54,6 @@ export const resetWorkspaceScopedState = (): void => {
     // most consequential thing on this list.
     resetPushFlow();
     // Content-keyed, so never wrong, just unbounded. A switch is where it is worth letting go.
-    resetCodeStats();
     // The preview shows ONE sandbox's app; the parked panel goes with the box, and the new box's own last
     // target comes back (a floating window survives, see resetPreviewSurface).
     resetPreviewSurface();

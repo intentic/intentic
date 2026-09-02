@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from "vue";
-import type { LineStat } from "./codeStat";
+import type { LineStat } from "@intentic/code-read";
 
 /* THE OPEN DIFF'S OWN COUNTS, as its panes report them (DiffView emits `stat`), what the bar above a workspace
  * diff tab shows in place of git's numbers while the comments are hidden.

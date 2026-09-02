@@ -6,10 +6,9 @@ import type { WarmBand } from "../warmPlan";
  * one: the source that builds the wishes and the test that pins this policy can both reach it without dragging in
  * the app shell.
  *
- * The policy exists because of what reading a row's diff BUYS: the +/− the review prints beside it with the
- * comments taken out (useCodeStats). A review read only once its page is open has numbers that arrive while its
- * reader is scanning them, which is the one moment they must not move. So the list reaches back from the click to
- * the reviews a reader is about to open:
+ * The policy exists because of what reading a row's diff BUYS: a click that paints the diff instead of spending a
+ * round trip on it. A review is scanned file by file, so the rows behind the one being read are the next thing
+ * asked for, and the list reaches back from that click to the reviews a reader is about to open:
  *
  *   · THE OPEN ONE, in `now`, whole. Its rows are certainly being looked at.
  *   · THE ONE THE CHAT IS POINTING AT, in `near`, whole. On desktop that conversation sits beside every page in the
@@ -41,13 +40,14 @@ import type { WarmBand } from "../warmPlan";
  * IS THE ONE READ AHEAD, and this one is left to be read when it is opened. That is the surface the user commits
  * from, it is warmed ahead of the board now (useBackgroundLoader), and a landed agent's own review is the rarer
  * visit, a look back at what one agent did, not the thing standing between the user and a commit. Its rows are
- * still read whole the moment its page IS open, which is the same bargain the rows past the caps below get: git's
- * counts hold at half weight until something reads them (ReviewStat). */
+ * still read whole the moment its page IS open, and the caps below cost nothing but a round trip on the row that
+ * outruns them: the numbers, the rails and the order come with the list, counted by the daemon
+ * (git/code-counts.ts), whether or not anything read the file. */
 
 /* How far down A REVIEW BEING READ the rows are taken, the same bound, and the same reason, as the workspace
- * review's (warmRows' WARM_LIMIT): far enough that an ordinary review is covered whole, since its numbers are what
- * this is for. The pathological case (a mass rename, a generated client) is what the bound is for, and its tail
- * keeps git's counts as a provisional reading (ReviewStat) until something reads it. */
+ * review's (warmRows' WARM_LIMIT): far enough that an ordinary review is covered whole, since a reviewer opens
+ * most of what they are reading. The pathological case (a mass rename, a generated client) is what the bound is
+ * for, and its tail pays one round trip per click, nothing more. */
 const WHOLE_REVIEW = 120;
 
 /* And how far down one that is merely LIKELY to be opened. Deliberately much smaller: the attention lane is

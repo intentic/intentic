@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { analyzeCode, modelLineOf } from "./codeAnalysis";
+import { analyzeCode, modelLineOf } from "./analysis.js";
+import { grammars } from "./grammars.js";
 
 // Against the real TypeScript grammar: the point of going through Shiki is that the comment spans are the
 // tokenizer's, so a test with a hand-rolled fake grammar would be testing nothing.
@@ -17,7 +18,7 @@ describe(`comment analysis`, () => {
             `const b = f(/* n */ 2);`, // 8
         ].join(`\n`);
 
-        expect((await analyzeCode(source, `typescript`))?.code).toEqual({
+        expect((await analyzeCode(source, `typescript`, grammars))?.code).toEqual({
             // The trailing comment goes with the line it sits on; the one wedged inside the call stays, because
             // cutting it would splice the statement. Blank lines survive: except the one left behind by a
             // removed block, which collapses into the blank already there.
@@ -29,20 +30,20 @@ describe(`comment analysis`, () => {
     it(`keeps indented code whose comment trails it, and drops indented comment lines whole`, async () => {
         const source = [`function f() {`, `    // explain`, `    return 1; // the answer`, `}`].join(`\n`);
 
-        expect((await analyzeCode(source, `typescript`))?.code).toEqual({
+        expect((await analyzeCode(source, `typescript`, grammars))?.code).toEqual({
             text: [`function f() {`, `    return 1;`, `}`].join(`\n`),
             lines: [1, 3, 4],
         });
     });
 
     it(`empties a file that is nothing but comments`, async () => {
-        expect((await analyzeCode([`// one`, `// two`].join(`\n`), `typescript`))?.code).toEqual({ text: ``, lines: [] });
+        expect((await analyzeCode([`// one`, `// two`].join(`\n`), `typescript`, grammars))?.code).toEqual({ text: ``, lines: [] });
     });
 
     it(`leaves comment-looking text inside a string alone`, async () => {
         const source = [`const url = "https://example.com"; // a link`, `const hash = "# not a comment";`].join(`\n`);
 
-        expect((await analyzeCode(source, `typescript`))?.code).toEqual({
+        expect((await analyzeCode(source, `typescript`, grammars))?.code).toEqual({
             text: [`const url = "https://example.com";`, `const hash = "# not a comment";`].join(`\n`),
             lines: [1, 2],
         });
@@ -52,20 +53,20 @@ describe(`comment analysis`, () => {
         const before = [`// old wording`, `const a = 1;`].join(`\n`);
         const after = [`// new wording, at length`, ``, `const a = 1;`].join(`\n`);
 
-        const left = await analyzeCode(before, `typescript`);
-        const right = await analyzeCode(after, `typescript`);
+        const left = await analyzeCode(before, `typescript`, grammars);
+        const right = await analyzeCode(after, `typescript`, grammars);
         expect(left?.code.text).toBe(right?.code.text);
     });
 
     it(`declines the whole job for a language we ship no grammar for`, async () => {
-        expect(await analyzeCode(`# hi`, undefined)).toBeUndefined();
-        expect(await analyzeCode(`# hi`, `not-a-language`)).toBeUndefined();
+        expect(await analyzeCode(`# hi`, undefined, grammars)).toBeUndefined();
+        expect(await analyzeCode(`# hi`, `not-a-language`, grammars)).toBeUndefined();
     });
 
     it(`follows the grammar into another language's comment syntax`, async () => {
         const source = [`# a shell note`, `echo hi  # trailing`].join(`\n`);
 
-        expect((await analyzeCode(source, `bash`))?.code).toEqual({ text: `echo hi`, lines: [2] });
+        expect((await analyzeCode(source, `bash`, grammars))?.code).toEqual({ text: `echo hi`, lines: [2] });
     });
 });
 

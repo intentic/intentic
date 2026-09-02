@@ -574,9 +574,16 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         // the index moves, the two whole-repo commit shapes, per-path discard, and the per-side file diffs.
         // `head` rides along because the status read already carries it: the scan's other readers (attribution)
         // take it as an argument rather than spawning `rev-parse HEAD` for the answer it just had.
-        readonly changedFiles: (
-            dir: string,
-        ) => Promise<{ branch?: string; head?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }>;
+        readonly changedFiles: (dir: string) => Promise<{
+            branch?: string;
+            head?: string;
+            conflicted: GitChange[];
+            staged: GitChange[];
+            unstaged: GitChange[];
+            // The object names status already reported per path, which is what the code-only counts are cached
+            // on (git/code-counts.ts): free on this read, a spawn per file anywhere else.
+            blobs: Map<string, { head?: string; index?: string }>;
+        }>;
         readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;

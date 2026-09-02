@@ -9,9 +9,7 @@ import {
     type WorkspaceModule,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch, type Ref } from "vue";
-import { rendersAsBytes } from "../../pages/workspace/fileType";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
-import { useCodeStats } from "../workspace/useCodeStats";
 import { sandboxJson, sandboxJsonAt } from "../sandbox/sandboxClient";
 import { AGENTS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
@@ -87,13 +85,6 @@ export const agentFileDiffKey = (agentId: string, repo: string, path: string, at
     path,
 ];
 
-// Where this row's code-only +/− is filed (useCodeStats). Scoped to the agent, because the same path in two
-// agents' worktrees is two different changes.
-// The box qualifies the id for the same reason it qualifies the cache key above: agent ids are minted per
-// sandbox, so two boxes can hold the same one, and this key decides which +/- count a row is shown.
-export const agentStatKey = (agentId: string, repo: string, path: string, at?: string): string =>
-    `agent:${at ?? ``}:${agentId}:${reviewFileKey(repo, path)}`;
-
 /* THE CACHING TERMS, shared rather than defaulted, because the panel OBSERVES this query while the loader
  * merely fills it, and an observer that brought vue-query's defaults would undo the warming it is supposed to
  * benefit from: a default staleTime of 0 makes mounting one refetch on the spot, so every warmed row would be
@@ -112,24 +103,7 @@ export const AGENT_FILE_DIFF_OPTIONS = {
 
 export const readAgentFileDiff = async (agentId: string, repo: string, path: string, at?: string): Promise<FileDiffResponse> => {
     const route = `/agents/${encodeURIComponent(agentId)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`;
-    const body = at === undefined ? await sandboxJson<FileDiffResponse>(route) : await sandboxJsonAt<FileDiffResponse>(at, route);
-    /* Counted here rather than by whoever asked, for the reason the workspace review's read gives at length: the
-     * count needs both whole sides of the file, this read just paid for them, and every caller then gets it at the
-     * same price.
-     *
-     * Bytes and oversized files have no whole sides to count, and that is an ANSWER rather than an absence: a
-     * picture has no text to strip, and an oversized file arrives as a patch of its changed regions, which is an
-     * excerpt, so git's own counts are the ones that describe the whole change. Written off explicitly, because
-     * leaving them unrecorded left the badge unable to tell them from a file whose count had not been taken yet,
-     * so it printed git's number for both, and for one of the two that number was about to change. */
-    const stats = useCodeStats();
-    const key = agentStatKey(agentId, repo, path, at);
-    if (body.partial !== undefined || rendersAsBytes(path, body.binary)) {
-        stats.noCode(key);
-    } else {
-        void stats.record(key, path, body.before ?? ``, body.after ?? ``);
-    }
-    return body;
+    return at === undefined ? sandboxJson<FileDiffResponse>(route) : sandboxJsonAt<FileDiffResponse>(at, route);
 };
 
 /* The query, named apart from the call, so the background loader can be handed the QUERY rather than a function

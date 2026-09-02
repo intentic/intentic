@@ -10,17 +10,16 @@ import type { GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
 // repo. Reading ahead in a different order than the list is drawn in would warm the rows the reader reaches last.
 const SIDES: readonly GitDiffSide[] = [`conflicted`, `staged`, `unstaged`];
 
-/* How far down the list one pass reads. GENEROUS, because a row's ± depends on it.
+/* How far down the list one pass reads. GENEROUS, because a review is READ, not sampled.
  *
- * This used to be 30, on the reasoning that reading further spent daemon time on files nobody would open. That was
- * true while the only thing at stake was a click's latency. It stopped being true when the counts beside the rows
- * became the code's rather than git's (useCodeStats): the count is a by-product of reading the file, so a row this
- * cap left out was a row whose number could not be worked out until it was clicked, and a review is READ before
- * it is clicked. The cap now bounds the pathological case it was always meant for (a mass rename, a fresh clone)
- * and nothing else; an ordinary review of any size falls inside it, which is the point.
+ * This used to be 30, on the reasoning that reading further spent daemon time on files nobody would open. What
+ * warming buys is a click that paints immediately, and a reviewer walking a landing opens most of it, so the cap
+ * is there for the pathological case it was always meant for (a mass rename, a fresh clone) and nothing else.
  *
- * The rows past it are not lost, only unsettled: their badge holds git's count at half weight until something reads
- * them (ReviewStat), and clicking one costs what clicking any row cost before any of this existed. */
+ * It is no longer load-bearing for the NUMBERS. For a while it was: the +/− beside each row was worked out from
+ * this very read, so a row past the cap could not be counted until it was clicked. The daemon ships those counts
+ * with the list now (git/code-counts.ts), so a row this pass never reaches shows exactly the same numbers as one
+ * it did — the only difference is whether its diff is already in hand when the reader gets there. */
 export const WARM_LIMIT = 120;
 
 export interface WarmRow {

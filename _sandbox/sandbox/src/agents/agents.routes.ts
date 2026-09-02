@@ -9,7 +9,7 @@ import type { OrpcContext } from "../context.js";
 import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
-import { agentRepoChanges, agentRepoModules, anchorOf } from "./agent-changes.js";
+import { agentRepoChanges, agentRepoReview, agentRepoModules, anchorOf } from "./agent-changes.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { landAgent, outstandingConflicts } from "./land.js";
@@ -365,7 +365,7 @@ export const createAgentsRoutes = (services: Services) => {
                      * for the card's counter, so the two surfaces cannot disagree about what the agent did.
                      * The cumulative span keeps landed work inspectable (a clean turn auto-lands within ms of
                      * finishing); the outstanding one is the land's own incremental span, and flags the rest. */
-                    const changes = await agentRepoChanges(services.agentWorktrees, entry, composed, "cumulative");
+                    const changes = await agentRepoReview(services.agentWorktrees, entry, composed);
                     if (changes.length === 0) {
                         continue;
                     }

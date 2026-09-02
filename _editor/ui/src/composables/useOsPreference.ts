@@ -1,5 +1,5 @@
 import type { Ref } from "vue";
-import type { ShikiLang } from "../lib/shikiLangs.js";
+import type { ShikiLang } from "@intentic/code-read/langs";
 import { definePreference } from "./preference.js";
 
 export type CommandOs = "unix" | "windows";

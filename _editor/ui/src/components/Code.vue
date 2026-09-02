@@ -6,7 +6,7 @@
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { ui } from "../lib/ui.js";
 import { useHighlighter } from "../composables/useHighlighter.js";
-import type { ShikiLang } from "../lib/shikiLangs.js";
+import type { ShikiLang } from "@intentic/code-read/langs";
 import CopyButton from "./CopyButton.vue";
 
 const {

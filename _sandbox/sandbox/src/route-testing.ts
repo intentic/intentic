@@ -602,7 +602,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             listFiles: async () => [],
             commitAll: async () => false,
             clone: async () => {},
-            changedFiles: async () => ({ conflicted: [], staged: [], unstaged: [] }),
+            changedFiles: async () => ({ conflicted: [], staged: [], unstaged: [], blobs: new Map() }),
             stagePaths: async () => {},
             unstagePaths: async () => {},
             commitIndex: async () => false,

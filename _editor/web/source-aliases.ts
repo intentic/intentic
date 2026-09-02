@@ -60,7 +60,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // And again, for the same module: fileType.ts maps every extension the app knows onto a `ShikiLang`, so the
     // grammar table is what that mapping is type-checked against. A plain map of dynamic-import thunks, nothing
     // from shiki/core is loaded by naming it.
-    "@intentic/ui/langs": fromRoot("_editor/ui/src/lib/shikiLangs.ts"),
+    "@intentic/code-read/langs": fromRoot("_tools/code-read/src/langs.ts"),
+    // The reading itself, shared with the daemon so a row's numbers and the pane's diff cannot disagree
+    // (see the package): the walk, the comment strip and the code-only counts, no Vue in any of it.
+    "@intentic/code-read": fromRoot("_tools/code-read/src/index.ts"),
     // And the highlighter itself: the review analyzer runs inside a dedicated worker, where pulling the UI
     // barrel's Vue components and browser-device composables would be both wasteful and invalid.
     "@intentic/ui/highlighter": fromRoot("_editor/ui/src/composables/useHighlighter.ts"),

@@ -28,7 +28,7 @@
      correctly sized from the first frame. -->
 <script setup lang="ts">
 import { computed, ref, useAttrs, watch } from "vue";
-import type { ShikiLang } from "../lib/shikiLangs.js";
+import type { ShikiLang } from "@intentic/code-read/langs";
 import { useHighlighter } from "../composables/useHighlighter.js";
 
 const {

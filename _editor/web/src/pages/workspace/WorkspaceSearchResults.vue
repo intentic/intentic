@@ -2,7 +2,7 @@
 import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic-app/api-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { iconForEntry } from "@intentic/ui";
-import { codeLangForPath } from "./fileType";
+import { codeLangForPath } from "@intentic/code-read";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
 import type { OpenMode } from "./workspaceTabs";
 import { basename, parentDir } from "@intentic/ui/path";

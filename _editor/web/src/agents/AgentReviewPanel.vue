@@ -2,21 +2,14 @@
 import type { FileDiffResponse } from "@intentic-app/api-contract";
 import { Button, ChangeStatusMark, ui, explorerColorClass, iconForEntry, Notice, SegmentedControl, useDevice, useExplorerStyle } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
+import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../components/ReviewStat.vue";
-import { sumCounts, useCodeStats, type CodeCount } from "../composables/workspace/useCodeStats";
 import { stopAgent } from "../composables/agents/agentActions";
 import { boxNameOf, openInSandbox } from "../composables/agents/fleetScope";
 import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
-import {
-    AGENT_FILE_DIFF_OPTIONS,
-    agentFileDiffKey,
-    agentStatKey,
-    type AgentReviewFile,
-    readAgentFileDiff,
-    useAgentChanges,
-} from "../composables/agents/useAgentChanges";
+import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useSandboxQuery } from "../composables/sandbox/useSandboxQuery";
 import { useLayout } from "../composables/useLayout";
 import { toAppPx, uiLength } from "../composables/uiScale";
@@ -26,7 +19,7 @@ import DiffToolbar from "../pages/workspace/viewers/DiffToolbar.vue";
 import FileDiffPane from "../pages/workspace/viewers/FileDiffPane.vue";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../composables/workspace/changeModules";
 import { useChangeGrouping } from "../composables/workspace/useChangeGrouping";
-import { addedIn, sumShown, useChangeWeight, type ShownStat } from "../composables/workspace/changeWeight";
+import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../composables/workspace/changeWeight";
 import ChangeRowName from "../components/ChangeRowName.vue";
 import ChangeOrderButton from "../components/ChangeOrderButton.vue";
 import ModuleLabel from "../components/ModuleLabel.vue";
@@ -83,8 +76,8 @@ const { agentId, at, changes } = defineProps<{
     // The narrow half: the agent is mid-write, so a land would catch it half-done. What the merge offer waits on.
     writing: boolean;
     /* WHICH SANDBOX THIS AGENT'S WORKTREE IS ON, absent for the one the app is pointed at, which is every
-     * review but the cross-sandbox board's. It reaches the per-file diff read and the code-stat key below; the
-     * list, the conflict report and the mutations all come through `changes`, which the page already aimed.
+     * review but the cross-sandbox board's. It reaches the per-file diff read below; the list, the conflict
+     * report and the mutations all come through `changes`, which the page already aimed.
      *
      * The panel is otherwise unchanged by it, and that is the point: a review is a review, the diff renders
      * the same way, the keyboard pass works the same way, and what differs is one address. */
@@ -173,41 +166,19 @@ const filtered = computed<readonly AgentReviewFile[]>(() => {
 });
 
 /* HOW BIG EACH CHANGE IS IN THE READING ON SCREEN. The diffs here open on code alone unless the reader asks for
- * the comments back, so the counts beside them do too: see useCodeStats for where they come from and why they
- * arrive rather than being computed here. Scoped by agent, since the store is shared with every other review
- * surface in the app and two agents can be holding the same path.
+ * the comments back, so the counts beside them do too — and both readings are on the row when it arrives: the
+ * daemon counts the code-only pair where the files are (git/code-counts.ts), so nothing on this panel is waiting
+ * on a file to be read, and no number, rail, pill or row position changes after it is drawn.
  *
- * Three answers, not two: this file's stripped counts, git's own (for a file with nothing to strip), or that the
- * reading is still being worked out, which the badge prints as such instead of standing git's number in for it.
- * The background reader has normally settled every row of this review before the page opens; a row that arrives
- * ahead of it says "counting" for a moment rather than showing a number that would then change. */
-const { countOf } = useCodeStats();
-const codeOf = (file: AgentReviewFile): CodeCount => countOf(agentStatKey(agentId, file.repo, file.change.path, at));
-
-/* WHICH OF THESE FILES CARRIES THE CHANGE, which is the question this list was worst at answering and the reason
+ * WHICH OF THESE FILES CARRIES THE CHANGE is the question this list was worst at answering and the reason
  * changeWeight.ts exists: read the note there for the rail, the order, and why they are two mechanisms. What
- * this panel owns is the SCOPE of each.
- *
- * The rail's scale is the most-added row the list is currently SHOWING (`filtered`, not every file the agent
- * touched), because it is a comparison between the things on screen: narrowing to Blocked and being told those
- * four files are all tiny — against a 400-line file the filter is hiding — would be comparing them to something
- * the reader cannot see.
- *
- * The ORDER's key is `orderReading`'s, at all three scopes below, and the two questions it asks are this panel's
- * to answer: whether every row IN THE FILTER has been counted (a reading that arrives cannot be allowed to
- * re-sort the list one row at a time), and whether the reader has picked a row yet — after which this list does
- * not re-sort at all, whenever its counting happens to finish. */
-const { readingOf, orderReading, bySize } = useChangeWeight();
-const readingOfRow = (file: AgentReviewFile): ShownStat => readingOf(codeOf(file), file.change.additions, file.change.deletions);
+ * this panel owns is the SCOPE of each: the rail's scale is the most-added row the list is currently SHOWING
+ * (`filtered`, not every file the agent touched), because it is a comparison between the things on screen —
+ * narrowing to Blocked and being told those four files are all tiny, against a 400-line file the filter is
+ * hiding, would be comparing them to something the reader cannot see. */
+const { readingOf, bySize } = useChangeWeight();
+const readingOfRow = (file: AgentReviewFile): ShownStat => readingOf(file.change.code, file.change.additions, file.change.deletions);
 const heaviest = computed(() => filtered.value.reduce((most, file) => Math.max(most, addedIn(readingOfRow(file))), 0));
-// Set by `select` and `jumpTo` — the reader's own picks. NOT by the watcher that opens the first file on arrival,
-// which is the panel choosing for them and must not freeze anything.
-const touched = ref(false);
-const orderKey = orderReading(
-    () => filtered.value.every((file) => !codeOf(file).counting),
-    () => touched.value,
-);
-const orderOfRow = (file: AgentReviewFile): ShownStat => orderKey(codeOf(file), file.change.additions, file.change.deletions);
 
 // The box's name for the conflict report's crossing row, and the crossing itself. Read here rather than passed
 // down from the page: the panel already holds `at`, and a name threaded through two components is a name that
@@ -226,26 +197,21 @@ const cross = (): void => {
 interface GroupStats {
     readonly additions: number;
     readonly deletions: number;
-    /* The same span with the comments out of it: the sum of what its rows are showing, and PENDING until every one
-     * of them is known (sumCounts). A heading that added up the rows it happened to have and printed the result was
-     * the worst number on the panel: part git, part code, agreeing with neither, and re-totalling every time the
-     * reader clicked one of its rows. */
-    readonly code: CodeCount;
+    // The same span with the comments out of it, which is what the heading draws while the diffs are showing
+    // code alone. A row there is no such reading of contributes git's own, exactly as its own badge does.
+    readonly code: LineStat;
     readonly blocked: number;
-    /* What most-added-first orders this heading by: its rows' own keys, added up. Not read off `code` above,
-     * which is deliberately undefined for a heading with one unsettled row under it (a part-sum is not a sum) —
-     * an order is a total ordering or it is nothing, so this sums the key each row is ranked on, whichever of the
-     * two readings that currently is. */
+    // What most-added-first orders this heading by: the reading its rows are drawing, added up, so a heading
+    // and the rows under it are ranked on the same measure.
     readonly order: ShownStat;
 }
-const codeSumOf = (files: readonly AgentReviewFile[]): CodeCount =>
-    sumCounts(files.map((file) => ({ count: codeOf(file), additions: file.change.additions, deletions: file.change.deletions })));
+const codeSumOf = (files: readonly AgentReviewFile[]): LineStat => sumCode(files.map((file) => file.change));
 const statsOf = (files: readonly AgentReviewFile[]): GroupStats => ({
     additions: files.reduce((total, file) => total + (file.change.additions ?? 0), 0),
     deletions: files.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
     code: codeSumOf(files),
     blocked: files.filter((file) => file.blocked !== undefined).length,
-    order: sumShown(files.map(orderOfRow)),
+    order: sumShown(files.map(readingOfRow)),
 });
 // The whole review, for the list header: every file, not the filtered ones, exactly as its git totals are.
 const reviewCode = computed(() => codeSumOf(changes.files.value));
@@ -308,7 +274,7 @@ const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
         for (const bucket of view.buckets) {
             // Biggest first INSIDE a package before the packages themselves are ordered, so the ask is applied at
             // every scope the list has headings for rather than flattening the one thing a reader navigates by.
-            const rows = bySize(bucket.rows, orderOfRow);
+            const rows = bySize(bucket.rows, readingOfRow);
             buckets.push({ ...bucket, rows, ...statsOf(rows) });
         }
         views.set(group.repo, { buckets: bySize(buckets, (bucket) => bucket.order), named: view.named });
@@ -343,7 +309,6 @@ const setRowEl = (key: string, el: unknown): void => {
 };
 
 const select = (file: AgentReviewFile): void => {
-    touched.value = true;
     selectedKey.value = file.key;
     rowEls.get(file.key)?.scrollIntoView({ block: `nearest` });
 };
@@ -362,7 +327,6 @@ const jumpTo = async (blocker: Blocker): Promise<void> => {
     if (file === undefined) {
         return;
     }
-    touched.value = true;
     if (!filtered.value.some((row) => row.key === file.key)) {
         filter.value = `blocked`;
     }
@@ -721,7 +685,7 @@ const endResize = (event: PointerEvent): void => {
                     <!-- Totals for the whole review. The code/tests SPLIT that used to sit here in ± lines is
                          gone: the Code/Tests filter options above already carry that division in files, and
                          saying it twice in two units is how a header becomes something you stop reading. -->
-                    <ReviewStat v-bind="reviewCode" :additions="changes.additions.value" :deletions="changes.deletions.value" />
+                    <ReviewStat :code="reviewCode" :additions="changes.additions.value" :deletions="changes.deletions.value" />
                     <!-- A check and "3/12" beside a file list reads as reviewed-of-total without being told.
                          The keyboard map it used to smuggle in here reached nobody: a hover on a counter is not
                          where anyone looks for shortcuts. -->
@@ -760,7 +724,7 @@ const endResize = (event: PointerEvent): void => {
                                     <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
                                 </span>
                                 <span class="flex-1"></span>
-                                <ReviewStat v-bind="group.code" :additions="group.additions" :deletions="group.deletions" />
+                                <ReviewStat :code="group.code" :additions="group.additions" :deletions="group.deletions" />
                             </button>
                             <ReviewGroupCheck
                                 :name="group.repo"
@@ -804,7 +768,7 @@ const endResize = (event: PointerEvent): void => {
                                         <span class="flex-1"></span>
                                         <!-- Its size, always: folded this is the only place the package's ± is
                                          left, and open it is what tells you which package is worth folding. -->
-                                        <ReviewStat v-bind="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
+                                        <ReviewStat :code="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
                                     </button>
                                     <ReviewGroupCheck
                                         :name="bucket.name"
@@ -865,7 +829,7 @@ const endResize = (event: PointerEvent): void => {
                                      code this file is against the most any file on screen brought, so the list
                                      can be ranked by scanning instead of by reading thirty pairs of digits. -->
                                             <ReviewStat
-                                                v-bind="codeOf(file)"
+                                                :code="file.change.code"
                                                 :additions="file.change.additions"
                                                 :deletions="file.change.deletions"
                                                 :of="heaviest"
@@ -919,7 +883,7 @@ const endResize = (event: PointerEvent): void => {
                     <DiffToolbar
                         :path="selected.label"
                         :status="selected.change.status"
-                        v-bind="codeOf(selected)"
+                        :code="selected.change.code"
                         :additions="selected.change.additions"
                         :deletions="selected.change.deletions"
                         :from="selected.change.from"

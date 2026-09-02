@@ -2,7 +2,7 @@
 import type { PartialFileDiff } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
 import { computed } from "vue";
-import type { LineStat } from "../../../composables/workspace/codeStat";
+import type { LineStat } from "@intentic/code-read";
 import { rendersAsBytes } from "../fileType";
 import BinaryDiffView from "./BinaryDiffView.vue";
 import { patchedSides } from "./diffPatch";

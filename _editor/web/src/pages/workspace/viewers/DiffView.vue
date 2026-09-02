@@ -3,12 +3,10 @@ import { useDevice } from "@intentic/ui";
 import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useLayout } from "../../../composables/useLayout";
-import type { CodeAnalysis } from "../../../composables/workspace/codeAnalysis";
+import { highlightLangFor, lineStat, type CodeAnalysis, type LineStat } from "@intentic/code-read";
 import { requestCodeAnalysis } from "../../../composables/workspace/codeAnalysisClient";
-import { lineStat, type LineStat } from "../../../composables/workspace/codeStat";
 import { landingChange, type ImportSide } from "../../../composables/workspace/codeLanding";
 import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
-import { highlightLangFor } from "../fileType";
 import { PATCH_GAP } from "./diffPatch";
 
 /* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor: the

@@ -1,6 +1,7 @@
 import type { AgentSpan, GitChange, WorkspaceModule } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../git/changes.js";
+import { refAgainstRef, withCodeCounts, worktreeAgainstRef } from "../git/code-counts.js";
 import { readModules } from "../workspace/modules.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -130,11 +131,44 @@ export const agentRepoChanges = async (
     span: AgentSpan,
     git: GitRunner = defaultGit,
 ): Promise<GitChange[]> => {
+    const { dir, attached, from } = await agentRepoScope(worktrees, entry, composed, span, git);
+    return attached ? changesAgainstBase(dir, from, git) : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.branch, git);
+};
+
+/* WHERE those rows were read from, which the counting pass needs and the reading above already worked out: the
+ * checkout or the main repo, and the ref the delta is measured from. Separated rather than recomputed, because
+ * the two answers disagreeing is the whole class of bug agent-changes exists to prevent. */
+const agentRepoScope = async (
+    worktrees: AgentWorktrees,
+    entry: IsolatedAgent,
+    composed: PersistedAgent["repos"][number],
+    span: AgentSpan,
+    git: GitRunner,
+): Promise<{ dir: string; attached: boolean; from: string }> => {
     const main = worktrees.mainDir(composed.repo);
     const attached = await worktrees.attached(entry.id, composed.repo);
     const dir = attached ? worktrees.worktreeDir(entry.id, composed.repo) : main;
-    const from = await anchorOf(dir, main, entry.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git);
-    return attached ? changesAgainstBase(dir, from, git) : changesBetweenRefs(main, from, entry.branch, git);
+    return { dir, attached, from: await anchorOf(dir, main, entry.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git) };
+};
+
+/* THE REVIEW'S OWN READING: the same cumulative rows, each carrying the code-only +/− the panel draws beside it
+ * (git/code-counts.ts), so the number a reviewer sees when the list arrives is the number it keeps.
+ *
+ * Only the review takes this path. The fleet card's counter sums git's own totals and never draws the code's, so
+ * making it pay for a tokenizer walk per file, on a snapshot taken at every land, would be spending the daemon's
+ * loop on a reading nobody looks at. */
+export const agentRepoReview = async (
+    worktrees: AgentWorktrees,
+    entry: IsolatedAgent,
+    composed: PersistedAgent["repos"][number],
+    git: GitRunner = defaultGit,
+): Promise<GitChange[]> => {
+    const { dir, attached, from } = await agentRepoScope(worktrees, entry, composed, "cumulative", git);
+    const main = worktrees.mainDir(composed.repo);
+    const changes = attached ? await changesAgainstBase(dir, from, git) : await changesBetweenRefs(main, from, entry.branch, git);
+    return attached
+        ? withCodeCounts(dir, changes, worktreeAgainstRef(dir, from))
+        : withCodeCounts(main, changes, refAgainstRef(from, entry.branch));
 };
 
 /* THE PACKAGE LAYOUT those changes are grouped under, read from THE SAME TREE they were read from, the one

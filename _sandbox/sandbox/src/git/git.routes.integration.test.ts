@@ -107,12 +107,12 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
                     ...services().git,
                     changedFiles: async (dir) => {
                         if (dir === workspace.root) {
-                            return { branch: "main", conflicted: [], staged: [], unstaged: [{ path: "notes.md", status: "added" as const }] };
+                            return { branch: "main", conflicted: [], staged: [], unstaged: [{ path: "notes.md", status: "added" as const }], blobs: new Map() };
                         }
                         if (dir === join(workspace.root, "shop")) {
                             throw new Error("broken repo");
                         }
-                        return { conflicted: [], staged: [], unstaged: [] };
+                        return { conflicted: [], staged: [], unstaged: [], blobs: new Map() };
                     },
                 },
             }),
@@ -234,8 +234,8 @@ test("git.commit answers with the committed repo's post-commit rows, and omits t
                     commitIndex: async () => true,
                     changedFiles: async (dir) =>
                         dir === left
-                            ? { branch: "main", conflicted: [], staged: [], unstaged: [{ path: "notes.md", status: "added" }] }
-                            : { branch: "main", conflicted: [], staged: [], unstaged: [] },
+                            ? { branch: "main", conflicted: [], staged: [], unstaged: [{ path: "notes.md", status: "added" }], blobs: new Map() }
+                            : { branch: "main", conflicted: [], staged: [], unstaged: [], blobs: new Map() },
                     remoteState: async (dir) =>
                         dir === left ? { remote: "origin", branch: "main", upstream: "origin/main", ahead: 1, behind: 0 } : { ahead: 0, behind: 0 },
                 },
@@ -291,7 +291,7 @@ test("a running commit rides the changes response, and leaves it when it lands",
                 git: {
                     ...services().git,
                     // Something to review, so the repos stay in the response either side of the commit.
-                    changedFiles: async () => ({ branch: "main", conflicted: [], staged: [{ path: "a.ts", status: "modified" }], unstaged: [] }),
+                    changedFiles: async () => ({ branch: "main", conflicted: [], staged: [{ path: "a.ts", status: "modified" }], unstaged: [], blobs: new Map() }),
                     commitIndex: async () => {
                         reached?.();
                         await held;

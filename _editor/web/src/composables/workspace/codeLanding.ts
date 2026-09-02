@@ -1,6 +1,6 @@
 import type * as Monaco from "monaco-editor-core";
 import type { DiffOpen } from "../useLayout";
-import { isBlank } from "./codeTokens";
+import { isBlank } from "@intentic/code-read";
 
 /* WHICH HUNK A DIFF OPENS ON, one function per reading strategy behind one entry point (`landingChange`), so the
  * three settings useLayout.diffOpen offers are one table rather than three call sites in the viewer.

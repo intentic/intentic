@@ -34,7 +34,7 @@ export const LANGS = {
     docker: () => import(`@shikijs/langs/docker`),
     dotenv: () => import(`@shikijs/langs/dotenv`),
     // Local grammar: @shikijs/langs has none for ignore files.
-    gitignore: () => import(`./gitignoreGrammar`),
+    gitignore: () => import(`./gitignore-grammar.js`),
     make: () => import(`@shikijs/langs/make`),
     prisma: () => import(`@shikijs/langs/prisma`),
     graphql: () => import(`@shikijs/langs/graphql`),

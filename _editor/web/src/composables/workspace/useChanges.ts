@@ -10,7 +10,6 @@ import type {
     RepoPaths,
 } from "@intentic-app/api-contract";
 import { computed, ref, watch } from "vue";
-import { rendersAsBytes } from "../../pages/workspace/fileType";
 import { useChat } from "../chat/useChat";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
@@ -19,7 +18,6 @@ import { jsonBody } from "../sandbox/jsonBody";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { outgoingWork } from "./outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
-import { useCodeStats } from "./useCodeStats";
 import { resetEditBuffers } from "./useEditBuffers";
 import { GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../queryKeys";
 
@@ -193,45 +191,12 @@ export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unkn
     path,
 ];
 
-/* Where this row's code-only +/− is filed (useCodeStats). Scoped to the working tree and to the SIDE, because a
- * path that is staged and then edited again is two rows with two different diffs and two different counts. */
-export const workingStatKey = (repo: string, side: GitDiffSide, path: string): string => JSON.stringify([`working`, repo, side, path]);
-
-/* THE COUNT IS A BY-PRODUCT OF THE READ, not of who did the reading.
- *
- * These rows sit beside diffs that open on code alone, so their +/− has to be the code's rather than git's,
- * and working that out needs both whole sides of the file, which is precisely what this read just paid for.
- * Counting HERE rather than in the surface that asked means every path gets it for the same price: the
- * background loader walking the review, the reader clicking a row past where the loader got to, a repeat visit
- * answered from the cache. It used to be the warm walk's job, so a row the walk hadn't reached showed git's
- * number until it was opened AND a second watch existed to catch that case.
- *
- * Bytes and oversized files are WRITTEN OFF rather than left alone. A code-only count needs both whole sides, and
- * neither of those has them: a picture has no text to strip, and an oversized file arrives as a patch of its
- * changed regions, which is an excerpt, so counting it would describe the excerpt rather than the change. Git's
- * own counts stand for both. Written off EXPLICITLY, because a row left unrecorded was indistinguishable from one
- * whose count had simply not been taken yet, which is how a badge ends up printing a number it is about to
- * replace. The store turns away a second ask for content it has already counted, so overlapping callers cost
- * nothing. */
-const countDiff = (repo: string, path: string, side: GitDiffSide, body: FileDiffResponse): void => {
-    const stats = useCodeStats();
-    const key = workingStatKey(repo, side, path);
-    if (body.partial !== undefined || rendersAsBytes(path, body.binary)) {
-        stats.noCode(key);
-        return;
-    }
-    void stats.record(key, path, body.before ?? ``, body.after ?? ``);
-};
-
 /* The query, named apart from the call, so the background loader can be handed the QUERY rather than a function
  * that fetches it, see agentTranscriptQuery for what having those two halves separable cost. */
 export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => ({
     queryKey: fileDiffKey(repo, path, side),
-    queryFn: async (): Promise<FileDiffResponse> => {
-        const body = await sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`);
-        countDiff(repo, path, side, body);
-        return body;
-    },
+    queryFn: (): Promise<FileDiffResponse> =>
+        sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`),
     staleTime: Infinity,
     gcTime: FILE_DIFF_GC_MS,
     // No retry, which is what this read has always done (it was a bare fetch) and what the loader needs it to

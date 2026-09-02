@@ -147,7 +147,39 @@ export interface StatusV2 {
     staged: GitChange[];
     unstaged: GitChange[];
     untracked: string[];
+    /* THE OBJECT NAMES THE STATUS RECORD ALREADY CARRIES, per path: HEAD's blob and the index's. Read out
+     * because they are free here and expensive anywhere else, and because they are what the code-only counts are
+     * cached on (code-counts.ts): the same object name means the same bytes, so a scan whose files have not
+     * moved re-reads none of them. A rename keys on the NEW path, like every other reading in this file. */
+    blobs: Map<string, { head?: string; index?: string }>;
 }
+
+// One space-separated field of a porcelain-v2 record, by position. The path is never read this way (it may hold
+// spaces, see recordPath); the fixed-width leading fields are.
+const recordField = (record: string, index: number): string | undefined => {
+    let cursor = 0;
+    for (let field = 0; field < index; field += 1) {
+        const next = record.indexOf(" ", cursor);
+        if (next === -1) {
+            return undefined;
+        }
+        cursor = next + 1;
+    }
+    const end = record.indexOf(" ", cursor);
+    return end === -1 ? undefined : record.slice(cursor, end);
+};
+
+// `1`/`2` records are `<kind> <XY> <sub> <mH> <mI> <mW> <hH> <hI> …`, so the two object names sit at 6 and 7
+// whichever of the two kinds this is. All-zero means "no blob on that side" (an addition has no HEAD blob).
+const ZERO_OID = /^0+$/;
+const blobsOf = (record: string): { head?: string; index?: string } => {
+    const head = recordField(record, 6);
+    const index = recordField(record, 7);
+    return {
+        ...(head !== undefined && !ZERO_OID.test(head) ? { head } : {}),
+        ...(index !== undefined && !ZERO_OID.test(index) ? { index } : {}),
+    };
+};
 
 const parseStatusV2 = (stdout: string): StatusV2 => {
     const records = stdout.split("\0");
@@ -155,6 +187,7 @@ const parseStatusV2 = (stdout: string): StatusV2 => {
     const staged: GitChange[] = [];
     const unstaged: GitChange[] = [];
     const untracked: string[] = [];
+    const blobs = new Map<string, { head?: string; index?: string }>();
     let branch: string | undefined;
     let head: string | undefined;
     let cursor = 0;
@@ -202,6 +235,7 @@ const parseStatusV2 = (stdout: string): StatusV2 => {
             conflicted.push({ path, status: "conflicted" });
             continue;
         }
+        blobs.set(path, blobsOf(record));
         const index = record[2] ?? ".";
         const worktree = record[3] ?? ".";
         if (index !== ".") {
@@ -211,7 +245,7 @@ const parseStatusV2 = (stdout: string): StatusV2 => {
             unstaged.push(changeAt(worktree, path, from));
         }
     }
-    return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged, untracked };
+    return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged, untracked, blobs };
 };
 
 // HEAD's sha; undefined on an unborn HEAD (a repo initialized but never committed), everything is "added"
@@ -332,9 +366,18 @@ const withUntrackedLineStats = async (dir: string, untracked: readonly string[],
 export const changedFiles = async (
     dir: string,
     git: GitRunner = defaultGit,
-): Promise<{ branch?: string; head?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }> => {
+): Promise<{
+    branch?: string;
+    head?: string;
+    conflicted: GitChange[];
+    staged: GitChange[];
+    unstaged: GitChange[];
+    // What each side's blob is called, for the caller that counts these files' code (git.routes' scan, through
+    // code-counts.ts). Free here, a spawn per file anywhere else.
+    blobs: Map<string, { head?: string; index?: string }>;
+}> => {
     const { stdout } = await git(dir, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "-uall", "--find-renames"]);
-    const { branch, head, conflicted, staged: stagedNames, unstaged: unstagedNames, untracked } = parseStatusV2(stdout);
+    const { branch, head, conflicted, staged: stagedNames, unstaged: unstagedNames, untracked, blobs } = parseStatusV2(stdout);
     // On an unborn HEAD there is no commit to diff the index against, the empty tree stands in, so a repo
     // whose first commit is still being composed reports its staged files instead of nothing.
     const base = head ?? EMPTY_TREE;
@@ -351,7 +394,7 @@ export const changedFiles = async (
     ]);
     // `head` rides along because the status read already carries it, and the scan's other readers (the
     // attribution pass above all) each spend a rev-parse to learn the same sha, see git.routes scanRepo.
-    return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged };
+    return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged, blobs };
 };
 
 // A repo's cumulative delta vs a fixed base sha, committed work since the base PLUS staged and unstaged

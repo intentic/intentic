@@ -1,4 +1,4 @@
-import { isBlank, leadToken, scopedAs, type Token, walkTokens } from "./codeTokens";
+import { isBlank, leadToken, scopedAs, type Grammars, type Token, walkTokens } from "./tokens.js";
 
 /* The two structural readings a review needs from one TextMate walk: the comment-free source it renders and
  * the import lines it may scroll past. Keeping them together matters because tokenizing is overwhelmingly the
@@ -81,14 +81,14 @@ const openedBy = (line: string, tokens: readonly Token[] | undefined): number =>
  * Analyze `text` in one token walk, or return undefined if its grammar is unavailable or abandons the walk.
  * A partial answer is never returned: callers then consistently show the untouched source and git's own stats.
  */
-export const analyzeCode = async (text: string, lang: string | undefined): Promise<CodeAnalysis | undefined> => {
+export const analyzeCode = async (text: string, lang: string | undefined, grammars: Grammars): Promise<CodeAnalysis | undefined> => {
     const kept: string[] = [];
     const lines: number[] = [];
     const imports: number[] = [];
     let dropped = false;
     let openImport = 0;
 
-    const walked = await walkTokens(text, lang, (line, tokens, index) => {
+    const walked = await walkTokens(text, lang, grammars, (line, tokens, index) => {
         const lead = tokens === undefined ? undefined : leadToken(line, tokens);
         if (lead !== undefined && (openImport > 0 || opensImport(lead))) {
             imports.push(index + 1);

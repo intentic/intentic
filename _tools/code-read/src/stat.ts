@@ -1,5 +1,5 @@
-import { highlightLangFor } from "../../pages/workspace/fileType";
-import { requestCodeAnalysis } from "./codeAnalysisClient";
+import type { CodeAnalysis } from "./analysis.js";
+import { highlightLangFor } from "./lang-for-path.js";
 
 /* HOW BIG A CHANGE IS ONCE THE COMMENTS ARE OUT OF IT, the +/− a review shows while its diffs are showing code
  * alone, which (useLayout.showComments being off by default) is what a reader sees before they touch anything.
@@ -25,7 +25,22 @@ export interface LineStat {
  * this only ever fires on two large files with nothing in common. */
 const MAX_CELLS = 1_000_000;
 
-const splitLines = (text: string): string[] => (text === `` ? [] : text.split(`\n`));
+/* The lines of a side, COUNTED THE WAY GIT COUNTS THEM: a trailing newline terminates the last line, it does not
+ * begin another one. Without that rule an added file came out one line bigger than git said it was — the split
+ * leaves an empty element after the final newline, and on a file whose other side is empty there is nothing for
+ * it to pair with, so it counted as a line of its own. On a modified file the phantom sat on both sides and
+ * cancelled, which is exactly why it survived: it only ever showed up on the rows where the two readings were
+ * supposed to differ most (see untrackedLineStats in the daemon, which has always counted this way). */
+const splitLines = (text: string): string[] => {
+    if (text === ``) {
+        return [];
+    }
+    const lines = text.split(`\n`);
+    if (lines.at(-1) === ``) {
+        lines.pop();
+    }
+    return lines;
+};
 
 /* The LENGTH of the longest common subsequence: every line not on it is one a minimal diff reports, so this one
  * number yields both counts. The chat card's row builder (chatToolDiff) computes the same subsequence but has to
@@ -71,12 +86,16 @@ export const lineStat = (before: string, after: string): LineStat | undefined =>
     return { additions: added.length - common, deletions: removed.length - common };
 };
 
+/** One side read with its comments taken out, however the caller runs the walk: the app hands this off to a
+ *  worker, the daemon runs it in-process. Undefined for a file whose grammar it has none of. */
+export type Analyze = (text: string, lang: string | undefined) => Promise<CodeAnalysis | undefined>;
+
 /** The same counts with every comment stripped from both sides, or undefined when this file cannot be stripped. */
-export const codeLineStat = async (before: string, after: string, path: string): Promise<LineStat | undefined> => {
+export const codeLineStat = async (before: string, after: string, path: string, analyze: Analyze): Promise<LineStat | undefined> => {
     // The grammar the diff surface would tokenize this file with, resolved exactly as it resolves it, over the
     // highlight cap there is none, and the pane shows the file whole.
     const lang = highlightLangFor(path, Math.max(before.length, after.length), after === `` ? before : after);
-    const [old, now] = await Promise.all([requestCodeAnalysis(before, lang), requestCodeAnalysis(after, lang)]);
+    const [old, now] = await Promise.all([analyze(before, lang), analyze(after, lang)]);
     // Undefined is the pane's own fallback (it renders the file verbatim), so git's numbers are the true ones.
     if (old === undefined || now === undefined) {
         return undefined;

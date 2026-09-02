@@ -8,7 +8,7 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { modelLineOf } from "../../../composables/workspace/codeAnalysis";
+import { modelLineOf } from "@intentic/code-read";
 import { requestCodeAnalysis } from "../../../composables/workspace/codeAnalysisClient";
 import { normalizationEdits } from "../../../composables/workspace/normalizeOnSave";
 import { useEditorSelection } from "../../../composables/workspace/useEditorSelection";

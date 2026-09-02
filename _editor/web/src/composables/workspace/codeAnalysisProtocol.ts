@@ -1,4 +1,4 @@
-import type { CodeAnalysis } from "./codeAnalysis";
+import type { CodeAnalysis } from "@intentic/code-read";
 
 export interface CodeAnalysisRequest {
     readonly id: number;

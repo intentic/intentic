@@ -1,7 +1,7 @@
 import { useHighlighter } from "@intentic/ui/highlighter";
 import type * as Monaco from "monaco-editor-core";
 import { describe, expect, it } from "vitest";
-import { analyzeCode } from "./codeAnalysis";
+import { analyzeInApp } from "./appGrammars";
 import { landingChange, type ImportSide } from "./codeLanding";
 
 // Against the real grammars: the point of reading TextMate scopes is that the answer is the tokenizer's, so a
@@ -25,7 +25,7 @@ const lines = async (source: readonly string[], lang: string): Promise<ReadonlyS
             stack = grammar.tokenizeLine(line, stack, 0).ruleStack;
         }
     }
-    return new Set((await analyzeCode(source.join(`\n`), lang))?.imports ?? []);
+    return new Set((await analyzeInApp(source.join(`\n`), lang))?.imports ?? []);
 };
 
 describe(`import analysis`, () => {
@@ -86,7 +86,7 @@ describe(`import analysis`, () => {
 
     it(`finds nothing to skip in a language we ship no grammar for`, async () => {
         expect(await lines([`import os`], `not-a-language`)).toEqual(new Set());
-        expect((await analyzeCode(`import os`, undefined))?.imports ?? []).toEqual([]);
+        expect((await analyzeInApp(`import os`, undefined))?.imports ?? []).toEqual([]);
     });
 });
 

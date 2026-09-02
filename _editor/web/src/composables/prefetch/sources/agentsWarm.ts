@@ -50,12 +50,11 @@ const wishesFor = (agent: FleetAgent, focused: boolean): readonly WarmTask[] => 
     ];
 };
 
-/* ONE REVIEW'S ROWS, the read that works out the +/− the review prints beside each file with the comments taken
- * out (useCodeStats), and therefore the read that decides whether those numbers are TRUE when the page opens. It
- * used to be declared for the open page alone, and the arithmetic of that was hopeless: the reader lands, the walk
- * starts, and the numbers arrive over the following seconds into a list that is being scanned right then. Warming a
- * review after its reader has arrived is warming the wrong thing. WHICH reviews are read ahead of that, and how
- * near each is, is reviewsToRead.
+/* ONE REVIEW'S ROWS, the read that decides whether the first file a reviewer clicks paints or waits. It used to be
+ * declared for the open page alone, and the arithmetic of that was hopeless: the reader lands, the walk starts,
+ * and it is still working through the list while they click down it. Warming a review after its reader has
+ * arrived is warming the wrong thing. WHICH reviews are read ahead of that, and how near each is, is
+ * reviewsToRead.
  *
  * Only ever from a list already in hand: the rows follow on the beat after their list lands, never before it. A card
  * with no changes contributes nothing. */

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CodeAnalysis } from "./codeAnalysis";
+import type { CodeAnalysis } from "@intentic/code-read";
 import { createCodeAnalysisClient, type WorkerPort } from "./codeAnalysisClient";
 import type { CodeAnalysisRequest, CodeAnalysisResponse } from "./codeAnalysisProtocol";
 

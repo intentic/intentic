@@ -8,6 +8,7 @@ import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/workspace-files.js";
 import type { ActionResult } from "./changes.js";
+import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./code-counts.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
@@ -204,7 +205,7 @@ export const createGitRoutes = (services: Services) => {
                  *
                  * The halted-operation read spawns nothing at all, it stat()s marker files, so it rides
                  * beside the status pass for free rather than queueing behind it. */
-                const [{ branch, head, conflicted, staged, unstaged }, operation] = await Promise.all([
+                const [{ branch, head, conflicted, staged, unstaged, blobs }, operation] = await Promise.all([
                     services.git.changedFiles(dir),
                     // The read that turns "these files are conflicted" into "a rebase stopped here".
                     services.git.operationInProgress(dir),
@@ -241,6 +242,16 @@ export const createGitRoutes = (services: Services) => {
                     operation !== undefined
                 ) {
                     const capped = capRepoChanges(conflicted, staged, unstaged);
+                    /* The code-only +/− each row shows, worked out HERE rather than by the panel drawing it
+                     * (code-counts.ts): the panel's diffs open on code alone, and a number that arrived after
+                     * its row was drawn moved that row under the reader. Counted after the cap, since a row
+                     * this scan is not shipping is one nobody is going to read, and per side, because a
+                     * partially staged file's two rows are two different diffs. */
+                    const [countedConflicted, countedStaged, countedUnstaged] = await Promise.all([
+                        withCodeCounts(dir, capped.conflicted, conflictedSides(dir, head)),
+                        withCodeCounts(dir, capped.staged, stagedSides(head, blobs)),
+                        withCodeCounts(dir, capped.unstaged, unstagedSides(dir, blobs)),
+                    ]);
                     // Narrowed to the paths this scan actually reports (the capped lists, attribution
                     // decorates rows, and a cut row isn't one): an agent's landed delta outlives the
                     // review (the paths stay in `base..landedTip` until the branch goes), so shipping it
@@ -254,10 +265,10 @@ export const createGitRoutes = (services: Services) => {
                     return {
                         repo,
                         ...(branch !== undefined ? { branch } : {}),
-                        conflicted: capped.conflicted,
+                        conflicted: countedConflicted,
                         ...(operation !== undefined ? { operation } : {}),
-                        staged: capped.staged,
-                        unstaged: capped.unstaged,
+                        staged: countedStaged,
+                        unstaged: countedUnstaged,
                         ...(capped.truncated > 0 ? { truncated: capped.truncated } : {}),
                         remote,
                         ...(Object.keys(origins).length > 0 ? { origins } : {}),

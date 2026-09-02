@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { useHighlighter } from "@intentic/ui";
-import { LANGS } from "@intentic/ui/langs";
+import { LANGS } from "@intentic/code-read/langs";
 import { expect, test } from "vitest";
-import { codeLangForPath } from "../pages/workspace/fileType";
+import { codeLangForPath } from "@intentic/code-read";
 
 /* The grammar table's two silent-failure modes, neither of which the compiler can see.
  *

@@ -1,6 +1,6 @@
 import { createHighlighterCore, type HighlighterCore, type ThemedToken } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import { langLoader } from "../lib/shikiLangs.js";
+import { langLoader } from "@intentic/code-read/langs";
 
 /* Shared Shiki highlighter. One lazily-built core instance for the whole app, using the JavaScript RegExp
  * engine (no WASM, so no asset-pipeline config) and fine-grained, dynamically-imported grammars/themes,

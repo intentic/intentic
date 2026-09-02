@@ -27,9 +27,8 @@ import { warmRows } from "./warmRows";
 /* HOW CLOSE THE READER IS, and the floor under the answer, which is the point of this file.
  *
  * THE LIST BEING ON SCREEN IS `now`. These rows are not one click away when the Changes panel is the open one:
- * they ARE the thing being read, and the +/− beside each of them is worked out from exactly this read
- * (useCodeStats), so a band that put them behind the board's cards put the numbers on the screen in front of the
- * user behind reads for screens that are not.
+ * they ARE the thing being read, row after row, so a band that put them behind the board's cards would spend the
+ * reader's own clicks on round trips while reading ahead for screens nobody is looking at.
  *
  * FROM ANYWHERE ELSE IN THE APP THEY ARE `near`, AND NEVER LOWER. This is the review the user commits from, and
  * every turn that ends drops the whole of it, list and every diff together, since the diffs are filed under the
@@ -43,7 +42,7 @@ import { warmRows } from "./warmRows";
  * ordering that guarantees the panel is cold exactly when it is about to be opened. It is now read ahead of the
  * board from everywhere: the trade is that opening a card on a busy board pays its round trip more often, and
  * that is the cheaper of the two waits, a card opens onto a conversation that streams in either way, while the
- * review opens onto numbers that must already be right. */
+ * review opens onto a diff the reader is waiting to read. */
 const band = (): WarmBand => {
     if (router.currentRoute.value.name !== `workspace`) {
         return `near`;

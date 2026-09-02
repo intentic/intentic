@@ -1,18 +1,21 @@
-import { useHighlighter } from "@intentic/ui/highlighter";
+import type { HighlighterCore } from "shiki/core";
 
-/* One line-by-line walk of a file's TextMate tokens, the pass both of the diff surface's readings of a file
- * are built on: which lines are comments and which are imports (codeAnalysis).
+/* One line-by-line walk of a file's TextMate tokens, the pass both readings of a file are built on: which
+ * lines are comments and which are imports (analysis.ts).
  *
- * The tokens come from the same grammar Shiki already loaded to COLOR the file, so every language we ship
- * highlighting for is covered by both readings for free and there is no per-language table to drift. Types are
- * derived off useHighlighter rather than imported from shiki, which is a dependency of @intentic/ui only. */
+ * WHERE THE GRAMMAR COMES FROM IS THE CALLER'S, and that is the whole reason this takes a `Grammars` rather
+ * than reaching for one. In the browser the tokens have to come from the very core Shiki already loaded to
+ * COLOUR the file, or a review would hold two copies of every grammar it reads; on the daemon there is no
+ * renderer and no core to share, so it builds its own (grammars.ts). Same walk, same answers, either side. */
 
-type ShikiCore = NonNullable<Awaited<ReturnType<ReturnType<typeof useHighlighter>[`ensureLang`]>>>;
-type Grammar = ReturnType<ShikiCore[`getLanguage`]>;
+type Grammar = ReturnType<HighlighterCore[`getLanguage`]>;
 type Tokenized = ReturnType<Grammar[`tokenizeLine`]>;
 export type Token = Tokenized[`tokens`][number];
 // The tokenizer's carry between lines, null starts a file, and a block comment's open stays on it until its close.
 type RuleStack = Parameters<Grammar[`tokenizeLine`]>[1];
+
+/** A language's compiled grammar, or undefined for one this build ships none for. */
+export type Grammars = (lang: string) => Promise<Grammar | undefined>;
 
 // The guard @shikijs/monaco puts on the same grammars, for the same reason: a minified bundle opened as a diff
 // must not cost the frame. Past it, the line is handed over untokenized.
@@ -50,16 +53,16 @@ export const leadToken = (line: string, tokens: readonly Token[]): Token | undef
 export const walkTokens = async (
     text: string,
     lang: string | undefined,
+    grammars: Grammars,
     visit: (line: string, tokens: readonly Token[] | undefined, index: number) => void,
 ): Promise<boolean> => {
     if (lang === undefined) {
         return false;
     }
-    const core = await useHighlighter().ensureLang(lang);
-    if (core === undefined) {
+    const grammar = await grammars(lang);
+    if (grammar === undefined) {
         return false;
     }
-    const grammar = core.getLanguage(lang);
     let stack: RuleStack = null;
     const deadline = performance.now() + TIME_BUDGET;
     for (const [index, line] of text.split(`\n`).entries()) {

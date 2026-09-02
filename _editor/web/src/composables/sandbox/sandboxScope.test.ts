@@ -20,7 +20,6 @@ vi.mock(`../agents/useAgents`, () => ({
     resetArchive: record(`resetArchive`),
 }));
 vi.mock(`../chat/useChat`, () => ({ loadAccountStatus: record(`loadAccountStatus`), resetChat: record(`resetChat`) }));
-vi.mock(`../workspace/useCodeStats`, () => ({ resetCodeStats: record(`resetCodeStats`) }));
 vi.mock(`../workspace/useEditBuffers`, () => ({ resetEditBuffers: record(`resetEditBuffers`) }));
 vi.mock(`../usePresence`, () => ({ resetPresence: record(`resetPresence`) }));
 vi.mock(`../workspace/usePushFlow`, () => ({ resetPushFlow: record(`resetPushFlow`) }));
@@ -55,7 +54,6 @@ const ON_SWITCH = [
     `resetTerminalOpen`,
     `resetWorkspaceLive`,
     `resetPushFlow`,
-    `resetCodeStats`,
     `resetPresence`,
     `resetAgents`,
     `resetArchive`,

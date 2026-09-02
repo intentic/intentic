@@ -6,7 +6,6 @@ import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import HoverCard from "../../components/HoverCard.vue";
 import ReviewStat from "../../components/ReviewStat.vue";
-import { useCodeStats, type CodeCount } from "../../composables/workspace/useCodeStats";
 import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
 import type { ChatAttachment } from "../../composables/chat/transcript";
@@ -30,14 +29,14 @@ import { formatElapsed, unfinishedMark } from "../../composables/agents/agentSta
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../composables/workspace/outgoingWork";
-import { COMMIT_SCOPE, useChanges, workingStatKey } from "../../composables/workspace/useChanges";
+import { COMMIT_SCOPE, useChanges } from "../../composables/workspace/useChanges";
 import { usePushFlow } from "../../composables/workspace/usePushFlow";
 import { useRepos } from "../../composables/workspace/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../composables/workspace/changeModules";
 import type { OpenMode } from "./workspaceTabs";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
-import { addedIn, sumShown, useChangeWeight, type ShownStat } from "../../composables/workspace/changeWeight";
+import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../composables/workspace/changeWeight";
 import { useModules } from "../../composables/workspace/useModules";
 import ChangeRowName from "../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
@@ -551,17 +550,16 @@ const sectionViews = computed<ReadonlyMap<string, SectionView>>(() => {
             const view = moduleView(section.changes, (change) => change.path, modulesOf(repo.repo), repo.repo, groupByModule.value);
             /* Most added first, when that is the asked-for reading (changeWeight.ts): inside a package, and then
              * across the packages, so the ask reaches every scope this list has headings for without flattening
-             * the hierarchy that staging depends on. On `orderOfRow`'s key at both scopes, which is what keeps a
-             * reading arriving for one file from re-sorting the whole panel around it.
+             * the hierarchy that staging depends on. On the reading each row is DRAWING at both scopes, which is
+             * final when the list arrives (git/code-counts.ts), so nothing here moves once it is on screen.
              *
              * IT STOPS THERE. The SIDES keep git's order, because conflicts-then-staged-then-unstaged is a
              * sequence of meanings rather than a list of sizes, and the REPOS keep theirs, because a repo row
              * here is an operable thing — its own sync pills, its own discard, its own failure line — and
              * reordering controls under a pointer is a different act from reordering a list of files. */
-            const order = (change: GitChange): ShownStat => orderOfRow(repo.repo, section.side, change);
             const buckets = bySize(
-                view.buckets.map((bucket) => ({ ...bucket, rows: bySize(bucket.rows, order) })),
-                (bucket) => sumShown(bucket.rows.map(order)),
+                view.buckets.map((bucket) => ({ ...bucket, rows: bySize(bucket.rows, readingOfRow) })),
+                (bucket) => sumShown(bucket.rows.map(readingOfRow)),
             );
             views.set(JSON.stringify([repo.repo, section.side]), { buckets, named: view.named });
         }
@@ -610,13 +608,10 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
  * already in flight.
  *
  * HOW BIG EACH CHANGE IS IN THE READING ON SCREEN: these rows sit beside diffs that open on code alone, so
- * their +/− has to be the code's. That count is a by-product of having both sides of a file, so it is taken
- * where the file is READ (useChanges' fileDiff) rather than by whoever asked for it, and while this panel is the
- * open one the loader reads its rows before anything else in the app (changesWarm's `now` band), far enough down
- * the list (warmRows) that an ordinary review is covered whole. A row it has not reached yet still shows a
- * number: git's, at half weight, until the code's replaces it (ReviewStat). */
-const { countOf } = useCodeStats();
-const codeOf = (repo: string, side: GitDiffSide, path: string): CodeCount => countOf(workingStatKey(repo, side, path));
+ * their +/− has to be the code's. That count rides on the change itself — the daemon works it out where the
+ * files are (git/code-counts.ts) and ships it with the list — so every number, rail and pill here is final the
+ * moment its row is drawn. It used to be a by-product of READING each file, taken wherever a diff happened to be
+ * fetched, so the numbers landed one at a time and a row's badge changed under whoever was looking at it. */
 
 /* WHICH OF THESE FILES CARRIES THE CHANGE. In a 270px sidebar this is the question the panel was least able to
  * answer: the ± is four characters of 3xs mono at the far edge, so finding the one file that matters meant
@@ -628,30 +623,14 @@ const codeOf = (repo: string, side: GitDiffSide, path: string): CodeCount => cou
  * other agent's 400-line file is not on screen to be compared against. A folded repo still counts: folding is
  * "give me back some column", and rescaling every visible rail because a group was collapsed would be the fold
  * reaching somewhere it was never asked to. */
-const { readingOf, orderReading, bySize } = useChangeWeight();
-const readingOfRow = (repo: string, side: GitDiffSide, change: GitChange): ShownStat =>
-    readingOf(codeOf(repo, side, change.path), change.additions, change.deletions);
-/* WHICH READING THE ORDER TAKES, and when it is allowed to change to the other one: the rule is changeWeight's
- * `orderReading`, and the two answers it needs are this panel's. COUNTED is every row the panel is showing, over
- * the same scope the rail scales against; TOUCHED is the reader having clicked a row, after which this list does
- * not re-sort again — a Changes panel is clicked through while an agent writes into it, which is exactly when
- * readings arrive. */
-const touched = ref(false);
-const orderKey = orderReading(
-    () =>
-        scannable.value.every((repo) =>
-            sidesOf(repo).every((section) => section.changes.every((change) => !codeOf(repo.repo, section.side, change.path).counting)),
-        ),
-    () => touched.value,
-);
-const orderOfRow = (repo: string, side: GitDiffSide, change: GitChange): ShownStat =>
-    orderKey(codeOf(repo, side, change.path), change.additions, change.deletions);
+const { readingOf, bySize } = useChangeWeight();
+const readingOfRow = (change: GitChange): ShownStat => readingOf(change.code, change.additions, change.deletions);
 const heaviest = computed(() => {
     let most = 0;
     for (const repo of scannable.value) {
         for (const section of sidesOf(repo)) {
             for (const change of section.changes) {
-                most = Math.max(most, addedIn(readingOfRow(repo.repo, section.side, change)));
+                most = Math.max(most, addedIn(readingOfRow(change)));
             }
         }
     }
@@ -693,7 +672,6 @@ const anchor = ref<string | undefined>(undefined);
 const isSelected = (row: Row): boolean => selected.value.has(rowKey(row));
 
 const clickRow = (row: Row, change: GitChange, event: MouseEvent): void => {
-    touched.value = true;
     const key = rowKey(row);
     const keys = visibleRows.value.map(rowKey);
     if (event.shiftKey && anchor.value !== undefined) {
@@ -2109,7 +2087,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                          edge. It is the one thing here allowed to take width from the path, and
                                          it earns it: the path says WHAT changed, and nothing said HOW MUCH. -->
                                         <ReviewStat
-                                            v-bind="codeOf(group.repo, section.side, change.path)"
+                                            :code="change.code"
                                             :additions="change.additions"
                                             :deletions="change.deletions"
                                             :of="heaviest"

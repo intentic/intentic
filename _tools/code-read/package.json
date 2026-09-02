@@ -1,0 +1,74 @@
+{
+    "name": "@intentic/code-read",
+    "version": "0.0.0",
+    "description": "How the product reads source code: the TextMate walk behind the comment-free diff, the code-only line counts the reviews show, and the grammar a path resolves to",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_tools/code-read"
+    },
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./langs": {
+            "types": "./dist/langs.d.ts",
+            "import": {
+                "@intentic/src": "./src/langs.ts",
+                "default": "./dist/langs.js"
+            },
+            "require": {
+                "@intentic/src": "./src/langs.ts",
+                "default": "./dist/langs.js"
+            }
+        },
+        "./grammars": {
+            "types": "./dist/grammars.d.ts",
+            "import": {
+                "@intentic/src": "./src/grammars.ts",
+                "default": "./dist/grammars.js"
+            },
+            "require": {
+                "@intentic/src": "./src/grammars.ts",
+                "default": "./dist/grammars.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@shikijs/langs": "catalog:",
+        "shiki": "catalog:",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}
