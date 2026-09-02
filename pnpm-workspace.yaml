@@ -32,9 +32,9 @@ verifyDepsBeforeRun: false
 nodeVersion: 24.18.0
 
 overrides:
-  zod: 4.4.3
+  zod: 4.5.4
   # THE ONE PACKAGE THE ZOD OVERRIDE ABOVE MUST NOT REACH. @cursor/sdk asks for `^3.25.0` and the blanket
-  # override hands it 4.4.3 anyway, which is a MAJOR it was not written against, and the damage is silent
+  # override hands it 4.5.4 anyway, which is a MAJOR it was not written against, and the damage is silent
   # rather than loud: the SDK's published .d.ts is a ~52k-line wall of zod-3 type shapes, every public type in
   # it is a `z.infer<typeof …>` over one of them, and against zod 4's generics each of those collapses to
   # `unknown`. So the whole SDK type-checks as `any`-by-another-name — InteractionUpdate, ToolCall,
@@ -359,4 +359,4 @@ catalog:
   wrangler: 4.118.0
   ws: 8.21.1
   yaml: 2.9.0
-  zod: 4.4.3
+  zod: 4.5.4
