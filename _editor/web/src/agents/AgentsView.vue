@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
-import { isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
+import { isTrialProvider, type NativeProvider, PROVIDER_VENDOR, providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
+import { formatWeekdayTime } from "@intentic/ui/format";
 import { Button, clipboardOf, ui, ContextMenu, Modal, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -12,7 +13,7 @@ import { synthesizeSessions, synthesizing } from "../composables/agents/synthesi
 import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
-import { type FleetLane, reviewAction, unregistered, watching } from "../composables/agents/agentStatus";
+import { type FleetLane, limited, reviewAction, unregistered, watching } from "../composables/agents/agentStatus";
 import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, useAgents, windowFinished } from "../composables/agents/useAgents";
 import {
     boxNameOf,
@@ -112,6 +113,7 @@ const {
     dismissNotice,
     busyIds,
     agentById,
+    resumeHeldTurn,
 } = useAgents();
 // The whole store rather than a destructure: the first screen's connect offer acts on the FOCUSED chat, and
 // the card takes that conversation's view (provider, harness, the press that re-points it) as one object.
@@ -306,6 +308,74 @@ const releaseNotice = hold(`fleet-partial`, () => {
           };
 });
 onUnmounted(releaseNotice);
+
+/* ONE WALL, ONE SENTENCE. A spent allowance is an account-wide fact, so it does not stop one agent, it stops
+ * every agent on that account at once: five cards, one cause, one remedy, and until now five identical red
+ * lines saying the same thing five times. Each card still says where IT stands (that is the card's job, and a
+ * reader looking at one wants the hour on it); this says the thing none of them can, which is that they are all
+ * the same event.
+ *
+ * BY VENDOR, because the vendor is what the allowance belongs to and what the reader would go and look at. Two
+ * providers walled at once is two conditions, which is correct: they reopen at different times and the reader's
+ * options differ (move the work to the one with headroom).
+ *
+ * ONLY FROM TWO, since one stranded agent is a card that already says all of this on its own line, and a strip
+ * repeating a single card an inch above it is the noise this is meant to remove.
+ *
+ * A `condition` (notifications.ts) rather than a strip of this component's own: true right now, stated for
+ * exactly as long as it holds, gone by itself when the last card clears, with no dismissal to record because
+ * nothing is owed. INFO while the window is shut, because nothing is wrong and nobody is needed; the press
+ * appears with the window, when there is finally something a press would do. */
+const LIMIT_STRIP_FROM = 2;
+const walledByVendor = computed(() => {
+    const walls = new Map<string, { readonly agents: FleetAgent[]; reopensAt: number | undefined }>();
+    // The BOARD's own cards, in whatever scope it is reading (this sandbox or all of them), because a wall is
+    // an account-wide fact and an account is spent from every box that holds it.
+    for (const agent of Object.values(boardLanes.value).flat().filter(limited)) {
+        const vendor = PROVIDER_VENDOR[agent.provider as NativeProvider] ?? providerLabel(agent.provider);
+        const wall = walls.get(vendor) ?? { agents: [], reopensAt: undefined };
+        wall.agents.push(agent);
+        // The LAST window to reopen, so the sentence is never over before the cards it describes are.
+        wall.reopensAt = Math.max(wall.reopensAt ?? 0, agent.limitResetsAt ?? 0) || undefined;
+        walls.set(vendor, wall);
+    }
+    return [...walls.entries()].filter(([, wall]) => wall.agents.length >= LIMIT_STRIP_FROM);
+});
+const releaseLimitNotice = hold(`fleet-limit`, () => {
+    const [vendor, wall] = walledByVendor.value[0] ?? [];
+    if (vendor === undefined || wall === undefined) {
+        return undefined;
+    }
+    const held = wall.agents.filter((agent) => agent.limitHeld === true);
+    const shut = wall.reopensAt !== undefined && wall.reopensAt * 1_000 > Date.now();
+    return {
+        kind: `condition`,
+        tone: `info`,
+        icon: `clock`,
+        title: `${vendor} allowance spent · ${wall.agents.length} agents waiting`,
+        detail: shut
+            ? `They carry on when it comes back ${formatWeekdayTime((wall.reopensAt ?? 0) * 1_000)}. Nothing is broken and nothing is lost.`
+            : `The allowance is back. Their turns are held and ready to send.`,
+        // Only once the window is open, and only for the turns the daemon still holds: an offer that spends the
+        // user's allowance has to be sure it will do something, and a press that re-fails N times over is worse
+        // than the N cards it was meant to save. The count rides the label, because that is what it costs.
+        ...(shut || held.length === 0
+            ? {}
+            : {
+                  actions: [
+                      {
+                          label: `Send ${held.length} again`,
+                          severity: `secondary` as const,
+                          hint: `Runs each held turn again. Each is the same request as before, not a new message.`,
+                          run: async () => {
+                              await Promise.allSettled(held.map((agent) => resumeHeldTurn(agent.id)));
+                          },
+                      },
+                  ],
+              }),
+    };
+});
+onUnmounted(releaseLimitNotice);
 
 const SCOPE_OPTIONS = [
     { label: `This sandbox`, value: `box` as const },

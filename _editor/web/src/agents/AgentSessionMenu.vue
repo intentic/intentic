@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { effectiveAutoLand, landedAway, writingNow } from "../composables/agents/agentStatus";
+import { effectiveAutoLand, effectiveLimitResume, landedAway, limited, writingNow } from "../composables/agents/agentStatus";
 import type { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useRole } from "../composables/sandbox/useRole";
@@ -32,7 +32,7 @@ const { changes, agentId, landInMenu } = defineProps<{
 // the page rather than inside a menu that closes on every press.
 const emit = defineEmits<{ selected: []; discard: []; forceLand: [] }>();
 
-const { agentById, restore, busyIds } = useAgents();
+const { agentById, restore, busyIds, setResumeAfterLimit } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
 /* WORK THIS SESSION LANDED THAT THE WORKSPACE NO LONGER HOLDS: the reason "Land now" above stands down.
  *
@@ -60,6 +60,28 @@ const toggleAutoLand = async (): Promise<void> => {
     const next = !autoLandOn.value;
     emit(`selected`);
     await changes.setAutoLand(next === sandboxLands.value ? null : next);
+};
+
+/* THE OTHER POSTURE THIS CARD OWNS, and the only one that is not always worth a row: whether the turn a spent
+ * allowance refused goes again by itself when the window reopens.
+ *
+ * OFFERED ONLY ON A CARD IT APPLIES TO, unlike the hold toggle above. Auto-land is a standing property of every
+ * agent, so its row is always true; this one describes a wait that most cards are not in, and a menu row about
+ * an allowance nobody hit is a row that teaches people to stop reading the menu.
+ *
+ * SAME THREE-STATE GRAMMAR as the hold toggle, including the clear: flipping back to what the sandbox already
+ * says drops the override entirely, so a card cannot sit holding a frozen copy of a default it has quietly
+ * stopped following. */
+const limitedCard = computed(() => {
+    const agent = agentById(agentId);
+    return agent !== undefined && limited(agent) ? agent : undefined;
+});
+const sandboxSendsAgain = computed(() => sandboxSettings.value?.resumeAfterLimit ?? false);
+const sendsAgainOn = computed(() => effectiveLimitResume(agentById(agentId), sandboxSendsAgain.value));
+const toggleSendsAgain = async (): Promise<void> => {
+    const next = !sendsAgainOn.value;
+    emit(`selected`);
+    await setResumeAfterLimit(agentId, next === sandboxSendsAgain.value ? null : next);
 };
 
 // The ship-tier items (land, re-land, auto-land posture, discard) leave the menu below maintainer rather
@@ -148,6 +170,25 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                         autoLandOn
                             ? `Finished turns land into your workspace by themselves. Hold keeps this agent's future work on its branch until you press Land now.`
                             : `Holding: finished work waits on this agent's branch. Switch back to landing at turn completion.`
+                    }}
+                </span>
+            </span>
+        </button>
+        <!-- The allowance posture, on the one card in ten that is waiting on one. It is what the card's own
+             readout promises when it says nothing is sending this for you, and the reason that promise is kept
+             here rather than on the card itself: the card already carries a press that spends money now, and a
+             second control beside it, arming something that spends money later, is two decisions in one line. -->
+        <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleSendsAgain">
+            <Icon :name="sendsAgainOn ? 'clock' : 'refresh'" class="mt-0.5 text-xs" :class="sendsAgainOn ? 'text-link' : 'text-subtle'" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{
+                    sendsAgainOn ? `Stop sending this again by itself` : `Send again when the allowance is back`
+                }}</span>
+                <span class="text-2xs text-subtle">
+                    {{
+                        sendsAgainOn
+                            ? `This turn goes again by itself at the reset. Stopping leaves it here to send by hand.`
+                            : `Nothing sends it for you. Arm it and this turn goes once, at the hour the provider named.`
                     }}
                 </span>
             </span>

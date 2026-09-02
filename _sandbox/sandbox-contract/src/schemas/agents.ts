@@ -204,6 +204,37 @@ export const AgentSummarySchema = z.object({
         .describe(
             "Why the last turn failed, in the words it died on. Absent unless it did, and cleared the moment it runs again. Carried here because the word error on its own is not an answer, least of all for a run nobody was watching.",
         ),
+    /* WHICH KIND OF FAILURE IT WAS, the error frame's own code (AgentEvent's `error`), beside the sentence it
+     * came with. The sentence says what happened to a person; this says it to the board, which has to DRAW the
+     * difference and could not.
+     *
+     * The chat has always had it, and the gap between the two surfaces is the whole reason this exists. A chat
+     * reads `rate_limit` and renders a muted notice with a countdown and a press; the board read `status:
+     * "error"` and rendered a red crash line with "View error" on it, because the code never reached the
+     * summary. So one spent allowance looked exactly like a harness that died mid-run, on the surface where
+     * most people meet it, and the state the product knows most about (it knows when it ends) was the one
+     * drawn with the least. */
+    failureCode: z
+        .string()
+        .optional()
+        .describe(
+            "Which kind of failure it was, as the turn's own error frame coded it. Absent for a failure nothing could classify, which reads as the plain red line it is.",
+        ),
+    /* WHEN THE SPENT WINDOW REOPENS (epoch SECONDS), for a card whose last turn a usage limit refused. The one
+     * fact this failure has and no other failure here does, and the reason it is not a failure at all so much
+     * as a wait: nothing is broken, nobody has anything to fix, and the thing that changes the outcome is a
+     * clock. A card that cannot say the hour has to spend its line saying "Error" instead, which is how an
+     * 18-hour-old refusal went on reporting a wall that had reopened before breakfast.
+     *
+     * Absent means the instant is genuinely unknown, which for Grok (no published quota) and Cursor (not routed
+     * through the translator) is the honest answer and stays one. Never invent one: a countdown to a guess is
+     * worse than no countdown, because the reader plans around it. */
+    limitResetsAt: z.number().optional().describe("When the spent allowance reopens, in epoch seconds. Absent when the provider publishes no instant."),
+    /* THE DAEMON IS STILL HOLDING THAT EXACT TURN, so the way on is one press that RE-RUNS it rather than a new
+     * message saying "carry on" (turn-resume.ts's pendingLimit has the whole argument, and the transcript full
+     * of the word "Continue" that made it). On the summary because the board is where somebody with four
+     * stranded agents is standing, and until now the press existed only inside each chat. */
+    limitHeld: z.boolean().optional().describe("Whether the refused turn is held whole, so sending again re-runs it instead of appending to it."),
     provider: AgentProviderSchema.describe("Which model provider it runs on."),
     harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
     // Which machine its turns execute on: a paired runner's id, absent for this sandbox (runners/). Latched
@@ -265,6 +296,19 @@ export const AgentSummarySchema = z.object({
      * never expressed an opinion follows the sandbox wherever it is pointed next. Written by
      * `agents.resumeAfterOutage`; every surface shows the EFFECTIVE value (this ?? the setting). */
     resumeAfterOutage: z.boolean().optional(),
+    /* The same two-level shape again, for the blocker that is not a failure: "when a usage limit refused my
+     * turn, send it again the moment the allowance comes back".
+     *
+     * IT IS THE ONE RESUME WITH A KNOWN HOUR, which is what makes it worth automating and what makes it
+     * different from its neighbour. An outage resume guesses (a backoff, a bounded number of attempts, no idea
+     * when the provider returns); this one waits for an instant the provider published and fires once, at it.
+     *
+     * OFF unless somebody says otherwise, and that default is load-bearing rather than cautious. Every other
+     * blocker here clears at no cost to the user, while this one clears into a window they may have been
+     * saving: spending it the second it reopens is not a decision to make on anybody's behalf. What arming it
+     * buys is the case nothing else can reach, a turn that hit the wall at 2am on a board nobody is watching,
+     * where the alternative is a card that waited eight hours for a press that was always going to come. */
+    resumeAfterLimit: z.boolean().optional(),
     // A collaborator asked for this agent's work to be landed (agents.requestLand), collaborators may drive
     // agents but not merge into the main tree, so the ask rides the summary where every maintainer's board
     // sees it. Cleared by the land or discard that answers it. Absent ⇒ nobody is waiting.
@@ -680,6 +724,18 @@ export const AgentResumeAfterOutageSchema = z.object({
         .boolean()
         .nullable()
         .describe("Whether it retries by itself when the model provider was what failed. Null clears the override back to the sandbox-wide setting."),
+});
+// resumeAfterLimit's input, the same override in the same three states as the outage one above, for the
+// blocker that comes back on a clock. Written by the card's own offer at the moment a limit strands a turn,
+// which is where somebody looking at a stranded card actually is; the settings toggle writes the default.
+export const AgentResumeAfterLimitSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    resumeAfterLimit: z
+        .boolean()
+        .nullable()
+        .describe(
+            "Whether the turn a spent allowance refused is sent again by itself once the window reopens. Null clears the override back to the sandbox-wide setting.",
+        ),
 });
 export const AgentFileDiffQuerySchema = z.object({
     id: z.string().min(1).describe("Which conversation."),

@@ -176,6 +176,16 @@ export const PersistedAgentSchema = z.object({
     // the reader who needs it most arrives hours later, at a card nobody watched fail; a fresh turn rebuilds the
     // entry without it, which is what clears it.
     failure: z.string().optional(),
+    // Which kind of failure it was, the error frame's own code (see AgentSummarySchema.failureCode). Persisted
+    // beside the sentence and cleared with it, for the same reason: the reader who needs to know a wall from a
+    // crash is the one arriving hours later at a card nobody watched fail.
+    failureCode: z.string().optional(),
+    // A refused turn's two limit facts: when the window reopens (epoch seconds) and whether the turn is held
+    // whole for a press. Persisted because the card that has to say both outlives the browser that saw the
+    // frame; `limitHeld` deliberately does NOT survive a daemon restart in substance (pendingLimit is in
+    // memory), which is why the resume route answers NOT_FOUND for one and the card falls back to a plain send.
+    limitResetsAt: z.number().optional(),
+    limitHeld: z.boolean().optional(),
     // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit, see AgentSummarySchema.
     // Persisted because it must govern turns that finish with no browser attached (automations included).
     autoLand: z.boolean().optional(),
@@ -184,6 +194,10 @@ export const PersistedAgentSchema = z.object({
     // conversation is that the resume happens with nobody watching, and an outage regularly outlives the
     // browser tab that answered the offer.
     resumeAfterOutage: z.boolean().optional(),
+    // Per-agent override of the sandbox-wide resumeAfterLimit setting, absent ⇒ inherit. Persisted for the
+    // reason its neighbour is, only more so: an allowance reopens hours out, long past the life of the tab
+    // that armed it, which is the whole case for arming it at all.
+    resumeAfterLimit: z.boolean().optional(),
     // A collaborator's standing ask for this work to be landed (see AgentSummarySchema.landRequested).
     // Persisted so the ask survives a daemon restart, the maintainer it waits for may arrive tomorrow.
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),

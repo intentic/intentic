@@ -287,8 +287,10 @@ export class TurnFailures {
 
     /* THE SUBSCRIPTION ALLOWANCE RAN OUT MID-TURN, which is a wait, not a crash: the daemon's message renders as
      * a muted notice rather than the red error ref, so it reads as "wait and carry on" instead of "the workspace
-     * broke". Nothing re-runs it by itself, unlike an outage or a rotated token: the allowance is the user's OWN
-     * budget, and an automation that spends it the second it reopens is not a decision to make on their behalf.
+     * broke". Nothing re-runs it by itself UNLESS THE USER ASKED FOR THAT, unlike an outage or a rotated token:
+     * the allowance is their OWN budget, so an automation that spends it the second it reopens is a decision
+     * they make (`resumeAfterLimit`, off by default) rather than one made on their behalf. Armed, the frame says
+     * `autoResume: "scheduled"` and the strip counts down to the fire instead of offering a press.
      *
      * WHAT IT DOES LEAVE IS THE PRESS, and `held` is what the press now MEANS. The daemon keeps the refused turn
      * whole and re-runs it (AgentEvent's error `held`), so continuing is the same request again rather than a new
@@ -305,16 +307,31 @@ export class TurnFailures {
     private applyLimitError(error: TurnError): void {
         const { message } = error;
         const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.provider.value, this.host.account.value))?.resetsAt;
+        /* ARMED, THE DAEMON KEEPS THE APPOINTMENT, and the strip says so rather than offering a press: same
+         * `automatic` mark an armed outage raises, for the same reason (the local auto-continue keeps its hands
+         * off something already being brought back), differing only in that this one waits for a published
+         * instant instead of a backoff. Read off the FRAME's own verdict rather than off the posture, so a chat
+         * cannot promise a fire the daemon has not armed, exactly as the outage branch does one method down.
+         *
+         * The instant is the frame's here, never the store's fallback: a scheduled fire is aimed at the reset
+         * the daemon recorded with the held turn, and counting down to a different one would be this window
+         * inventing an appointment. */
+        const scheduled = error.autoResume === `scheduled` && error.resetsAt !== undefined;
         this.host.pickUp.value = {
             reason: `limit`,
             ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }),
             ...(error.held === undefined ? {} : { held: { ran: error.held.ran } }),
+            ...(scheduled && error.resetsAt !== undefined ? { automatic: { at: error.resetsAt * 1_000 } } : {}),
         };
         if (resetsAt === undefined) {
             this.host.transcript.notice(message);
             return;
         }
-        this.host.transcript.notice(`${message} Resets ${formatReset(resetsAt)}.`);
+        this.host.transcript.notice(
+            scheduled
+                ? `${message} Resets ${formatReset(resetsAt)}, and this chat sends it again then.`
+                : `${message} Resets ${formatReset(resetsAt)}.`,
+        );
     }
 
     /* THE PROVIDER FAILED, AND SOMETHING IS ALREADY BEING DONE ABOUT IT.
@@ -422,6 +439,45 @@ export class TurnFailures {
             `This chat picks itself back up in ${formatWait(pending.retryAt)} and keeps doing so through provider outages. Only this chat: Sandbox ▸ Agent sets the default for the rest.`,
         );
         this.scheduleReattach(pending.retryAt * 1000, OUTAGE_PROBE);
+        this.host.persist();
+    }
+
+    /* THE SAME PRESS FOR THE OTHER WAIT, both directions. The daemon holds the refused turn whatever the posture
+     * says (turn-resume.ts's recordLimitFailure), so the write alone arms it and this window only has to reflect
+     * that: the `automatic` mark is what turns the strip from an offer into a report, and what keeps the local
+     * auto-continue's hands off a turn something else is already bringing back.
+     *
+     * Refused without an instant to aim at, which is the one thing that separates this from its outage twin: an
+     * armed limit is an appointment, and there is no appointment to keep when nobody published the hour. The
+     * button is hidden in that case rather than failing here (ChatContinueStrip), and this is the guard behind
+     * it so a caller cannot arm a promise the daemon will not keep.
+     *
+     * The scope is said out loud for the reason armOutageResume says it: the press is one dead turn's business
+     * and must stay cheap, while "make every agent do this" is a decision someone should go and make on
+     * purpose. */
+    armLimitResume(): void {
+        const pending = this.host.pickUp.value;
+        if (pending?.reason !== `limit` || pending.readyAt === undefined) {
+            return;
+        }
+        this.host.pickUp.value = { ...pending, automatic: { at: pending.readyAt } };
+        this.host.transcript.notice(
+            `This chat sends the turn again by itself once the allowance comes back. Only this chat: Sandbox ▸ Agent sets the default for the rest.`,
+        );
+        this.host.persist();
+    }
+
+    /* And the way back out, mid-wait. What goes is the appointment, never the turn: the daemon holds it either
+     * way, so the strip keeps offering the press and the card keeps its countdown, which is the truth the next
+     * press disproves nothing about. */
+    disarmLimitResume(): void {
+        const pending = this.host.pickUp.value;
+        if (pending?.reason !== `limit`) {
+            return;
+        }
+        const { automatic: _stopped, ...held } = pending;
+        this.host.pickUp.value = held;
+        this.host.transcript.notice(`Stopped: nothing sends this turn for you. It is still here to send by hand whenever you like.`);
         this.host.persist();
     }
 

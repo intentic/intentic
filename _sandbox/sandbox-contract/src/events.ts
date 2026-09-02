@@ -1186,22 +1186,33 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // rate_limit_event or the account's persisted usage windows). Absent when the reset instant is unknown
         // (nothing to schedule against).
         resetsAt: z.number().optional(),
-        // Where the daemon's resume of THIS turn stands, for the two codes that have one (provider-outage,
-        // claude-token-refused). "scheduled" = the resume is armed and this turn comes back by itself;
-        // "available" = the daemon remembered the failed turn and arming THIS conversation
-        // (AgentSummarySchema.resumeAfterOutage) picks up that same resume, which is what the chat's offer
-        // banner hangs off, outage only, since a renewal is never gated on a posture at all. The two words
-        // are read against the effective posture (the conversation's override, else the sandbox default), so a
-        // chat armed on its own says "scheduled" while the unarmed board around it says "available".
-        // Absent means there is nothing automatic to resume: a spent usage limit never has one,
-        // and a refused credential has none once re-minting it has already been tried and failed.
+        /* Where the daemon's resume of THIS turn stands, for the three codes that have one (provider-outage,
+         * claude-token-refused, rate_limit). "scheduled" = the resume is armed and this turn comes back by
+         * itself; "available" = the daemon remembered the failed turn and arming THIS conversation
+         * (AgentSummarySchema's resumeAfterOutage / resumeAfterLimit) picks up that same resume, which is what
+         * the offer banner hangs off, gated codes only, since a credential renewal is never gated on a posture
+         * at all. The two words are read against the effective posture (the conversation's override, else the
+         * sandbox default), so a chat armed on its own says "scheduled" while the unarmed board around it says
+         * "available". Absent means there is nothing automatic to resume: a limit whose reset instant nobody
+         * published has nothing to schedule against, and a refused credential has none once re-minting it has
+         * already been tried and failed.
+         *
+         * A SPENT ALLOWANCE USED TO BE ABSENT HERE BY RULE, and the rule was right about the default and wrong
+         * about the ceiling. The budget is the user's, so nothing fires unless they said so, which is what the
+         * posture is; what the old absence also cost was the case a press cannot reach, a 2am wall on a board
+         * nobody is watching. Both words are now honest for it: unarmed says "available", which is an offer,
+         * and armed says "scheduled", which the card counts down to. */
         autoResume: z.enum(["scheduled", "available"]).optional(),
         /* THE DAEMON IS STILL HOLDING THIS EXACT TURN, so the way on is to RE-RUN it rather than to send
          * something after it. rate_limit only, and the counterpart to `autoResume` rather than a member of it:
-         * that field answers "is a machine bringing this back", and a spent allowance is the one failure where
-         * the answer is deliberately no (the allowance is the user's own budget to spend, turn-resume.ts). This
+         * that field answers "is a machine bringing this back", which for a spent allowance is a posture the
+         * user sets and defaults to no (the allowance is their own budget to spend, turn-resume.ts). This
          * answers the question that was never asked, "and if the user says go, what happens", which had exactly
          * one possible answer for as long as it went unasked: a new user message reading "Continue".
+         *
+         * BOTH ANSWERS RUN THROUGH THIS FIELD, which is why it is not folded into the one above: an armed
+         * conversation's scheduled fire and an unarmed one's press are the same held turn re-run the same way,
+         * and the only difference is who says go.
          *
          * That answer was wrong in a way the chat could not show. The press is not a new instruction, it is the
          * same one again, and appending it said otherwise to the only reader that matters: the provider session

@@ -178,14 +178,23 @@ export const recordOutageFailure = (failure: OutageFailure, now: number = Date.n
 
 export const pendingOutageFailure = (conversationId: string): OutageFailure | undefined => pendingOutage.get(conversationId);
 
-/* A TURN A SPENT ALLOWANCE STRANDED, HELD FOR A PRESS AND FOR NOTHING ELSE. The one entry in this module with
- * no poll behind it, which is the point of it rather than an omission.
+/* A TURN A SPENT ALLOWANCE STRANDED, HELD FOR A PRESS AND, WHERE THE USER HAS ASKED FOR IT, FOR A CLOCK.
  *
- * The header above says why a usage limit is not auto-resumed and that argument stands unchanged: the allowance
- * is the user's own budget and spending it is theirs to decide. What that argument never covered is the sentence
- * it ends on, "sending again is the user's call to make", because for as long as re-running was daemon-only the
- * user had no way to send THIS turn again. All they could do was send a NEW message after it, and since the
- * only honest content for that message is "carry on", the harness supplied the word itself.
+ * The header above says why a usage limit is not auto-resumed BY DEFAULT and that argument stands unchanged:
+ * the allowance is the user's own budget and spending it is theirs to decide. What it never justified is the
+ * absence of the CHOICE. Every other blocker here is answered by a posture the user can set; this one was
+ * answered by a rule, and the rule was decided for a case (somebody is in the room, watching the chat) that
+ * describes the minority of turns this product runs. A wall hit at 2am on a board nobody is watching is a card
+ * that waits eight hours for a press that was always going to come.
+ *
+ * So the default is unchanged and the ceiling is not: `resumeAfterLimit` (per conversation, else the sandbox
+ * setting) is what decides, exactly as `resumeAfterOutage` does one blocker over, and the pass below fires at
+ * the instant the provider itself published rather than at a backoff anybody invented.
+ *
+ * What that argument never covered either is the sentence it used to end on, "sending again is the user's call
+ * to make", because for as long as re-running was daemon-only the user had no way to send THIS turn again. All
+ * they could do was send a NEW message after it, and since the only honest content for that message is "carry
+ * on", the harness supplied the word itself.
  *
  * So the transcript filled with it. A chat that bounced off a spent allowance four times recorded four user rows
  * reading "Continue", the fourth turn read all four back, and the provider session underneath had accumulated a
@@ -194,16 +203,22 @@ export const pendingOutageFailure = (conversationId: string): OutageFailure | un
  * turns it never produced. The one thing the model could not learn from any of it was that a provider had said
  * no. This entry is what a press reaches instead.
  *
- * NO STALENESS SWEEP, unlike its neighbours, because nothing here fires on its own: an entry that goes stale is
- * an entry nobody pressed, it costs one map slot, and it is cleared by the next turn on the conversation
- * whatever starts it (clearPendingResume). A press hours later is a person deliberately picking work back up,
- * which is exactly what a reset instant hours out invites, and refusing them on age would be this module
- * inventing a deadline the allowance never had. */
+ * NO STALENESS SWEEP, unlike its neighbours, and the automatic fire below does not introduce one. An entry that
+ * goes stale is an entry nobody pressed and no clock reached, it costs one map slot, and it is cleared by the
+ * next turn on the conversation whatever starts it (clearPendingResume). A press hours later is a person
+ * deliberately picking work back up, which is exactly what a reset instant hours out invites, and refusing them
+ * on age would be this module inventing a deadline the allowance never had. */
 export interface LimitFailure {
     readonly input: AgentTurn & { conversationId: string };
     // The session the failed turn last reported. Kept even when the turn did nothing with it, so the fire can
     // decide (see `ran`); dropping it here would make the two cases indistinguishable one layer down.
     readonly sessionId?: string;
+    /* WHEN THE REFUSED ALLOWANCE IS DUE BACK (epoch seconds), as the failure itself named it, and the only
+     * thing an automatic fire can be scheduled against. Absent is a real answer and a common one: Grok
+     * publishes no readable quota and Cursor is not routed through the translator, so for those two there is
+     * nothing to wait for and the entry stays press-only however the posture is set. A guessed instant would be
+     * strictly worse than none, since what it buys is a request fired into a window that has not opened. */
+    readonly reopensAt?: number;
     /* Whether the refused turn got ANYWHERE before the allowance stopped it, and the only field the fire
      * branches on. False is the common case and the one worth naming: an allowance that is already spent refuses
      * the first request of the turn, so nothing ran, the session holds one unanswered message, and both the
@@ -213,7 +228,11 @@ export interface LimitFailure {
     readonly ran: boolean;
 }
 
-const pendingLimit = new Map<string, LimitFailure>();
+/* `recordedAt` is what the automatic fire measures its one sanity check against, and `fired` is what stops it
+ * happening twice. Both are the pass's bookkeeping rather than the failure's, which is why they live on the map
+ * entry and not on LimitFailure: a caller recording a refusal is describing what happened, and neither of these
+ * is about that. */
+const pendingLimit = new Map<string, LimitFailure & { readonly recordedAt: number; readonly fired: boolean }>();
 
 /* Hold a turn a spent allowance refused. Recorded from the turn's own exit, like its two neighbours and for the
  * same reason (the failing run still owns the conversation at that moment).
@@ -221,9 +240,12 @@ const pendingLimit = new Map<string, LimitFailure>();
  * Recorded unconditionally, including for a turn that is ITSELF already a resume: the auth rule's argument for
  * refusing that (a credential that refuses a fresh token is dead, so retrying is hopeless) has no analogue here.
  * An allowance refusing twice means the allowance is still spent, which is the ORDINARY case and says nothing at
- * all about whether the next press works, and this module is not the thing deciding when to press. */
-export const recordLimitFailure = (failure: LimitFailure): void => {
-    pendingLimit.set(failure.input.conversationId, failure);
+ * all about whether the next press works, and this module is not the thing deciding when to press.
+ *
+ * Recorded whatever the posture says, exactly like recordOutageFailure: the failure frame tells the client an
+ * "available" resume exists, and arming it right afterwards has to arm the very turn that just bounced. */
+export const recordLimitFailure = (failure: LimitFailure, now: number = Date.now()): void => {
+    pendingLimit.set(failure.input.conversationId, { ...failure, recordedAt: now, fired: false });
 };
 
 /** Whether a press on this conversation has a held turn to re-run, and what the strip may say about it. */
@@ -324,6 +346,18 @@ export const outageResumeArmed = async (services: Services, conversationId: stri
     }
     const { resumeAfterOutage } = await services.sandboxSettings.get();
     return resumeAfterOutage;
+};
+
+/* The same question about the other gated blocker, and it is asked by the same two callers a few hours apart
+ * rather than a few seconds: the failure frame says whether a fire is coming, and the pass that performs it
+ * reads this again when the window actually opens. Same two levels, same precedence, same reason for both. */
+export const limitResumeArmed = async (services: Services, conversationId: string): Promise<boolean> => {
+    const override = services.agents.entry(conversationId)?.resumeAfterLimit;
+    if (override !== undefined) {
+        return override;
+    }
+    const { resumeAfterLimit } = await services.sandboxSettings.get();
+    return resumeAfterLimit;
 };
 
 /* The turn a fire runs. The original prompt rides again IN FULL rather than as a bare "continue": whether
@@ -598,16 +632,62 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
     }
 };
 
-// Polls both pending maps (the restart condition has no map, see resumeInterruptedTurns). An auth resume has
-// no gate at all, it is due the moment it is recorded, and it is not the user's budget being spent but the
+/* THE LIMIT PASS. Every conversation whose held turn is waiting on an allowance, sent again at the instant the
+ * provider said the allowance comes back, and only for the conversations whose owner asked for that.
+ *
+ * THREE GATES, and each of them is refusing a different kind of wrong.
+ *
+ * `reopensAt` ABSENT means the failure could not say when the window opens (Grok, Cursor, and anything whose
+ * vendor publishes no readable quota). There is nothing to schedule against, so nothing is scheduled: the entry
+ * stays exactly what it was, a held turn waiting for a press.
+ *
+ * `reopensAt` ALREADY PAST AT RECORD TIME is the gate that matters most and the one whose absence would be
+ * expensive. A provider that answers with a stale instant, one that has been and gone, would otherwise be read
+ * as "the window is open now", so the fire would go immediately, be refused for the same reason, re-record with
+ * the same stale instant, and do it again every five seconds for as long as the daemon lived, spending the
+ * user's money on the arithmetic. An instant that was not in the future when the refusal happened is not a
+ * schedule, and this is where that is said.
+ *
+ * ARMED is read per pass and PER CONVERSATION, never snapshotted at failure time, so arming a stranded card
+ * hours after it stranded arms that card, which is precisely what the card's own offer promises.
+ *
+ * ONE FIRE PER HOLD. `fired` is stamped at dispatch and the entry is left in place rather than deleted, which
+ * is the opposite of the outage pass and deliberate: a press must go on working whatever the automatic attempt
+ * did, and `fireLimitResume` is idempotent by construction. A re-refusal records a FRESH entry (new instant,
+ * new `recordedAt`, `fired` back to false) from its own turn's exit, so the next window gets its own single
+ * attempt and a window that never reopens gets none. */
+const runLimitPass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
+    const stranded = [...pendingLimit.values()];
+    for (const held of stranded) {
+        const conversationId = held.input.conversationId;
+        const reopensAt = held.reopensAt;
+        if (held.fired || reopensAt === undefined || reopensAt * 1000 > now || reopensAt * 1000 <= held.recordedAt) {
+            continue;
+        }
+        if (!(await limitResumeArmed(services, conversationId))) {
+            continue;
+        }
+        // Stamped before the fire, like the outage pass counts its attempt at dispatch and for the same reason:
+        // it has to hold even if starting the turn turns out to conflict with one already running.
+        pendingLimit.set(conversationId, { ...held, fired: true });
+        if ((await fireLimitResume(services, wake, conversationId)) !== undefined) {
+            services.logger.info({ conversationId, reopensAt }, "usage-limit auto-resume fired: the allowance window reopened");
+        }
+    }
+};
+
+// Polls all three pending maps (the restart condition has no map, see resumeInterruptedTurns). An auth resume
+// has no gate at all, it is due the moment it is recorded, and it is not the user's budget being spent but the
 // daemon's own rotation being undone. An outage resume waits on the shared per-provider breaker instead of on
-// any instant of its own, see runOutagePass.
+// any instant of its own, see runOutagePass. A limit resume is the only one with a real appointment to keep,
+// and the only one that does nothing at all unless the user armed it.
 export const createTurnResumeScheduler = (services: Services, wake: WakeFn, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
 
     const tick = async (now: number = Date.now()): Promise<void> => {
         await runAuthPass(services, wake, now);
         await runOutagePass(services, wake, now);
+        await runLimitPass(services, wake, now);
     };
 
     return {

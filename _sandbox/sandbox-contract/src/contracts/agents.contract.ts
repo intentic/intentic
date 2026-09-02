@@ -9,6 +9,7 @@ import {
     AgentLandSchema,
     AgentPlaceSchema,
     AgentRenameSchema,
+    AgentResumeAfterLimitSchema,
     AgentResumeAfterOutageSchema,
     AgentsArchivedSchema,
     AgentSearchQuerySchema,
@@ -154,6 +155,23 @@ export const agentsContract = {
                 "Overrides the sandbox-wide setting for one conversation; clear it to follow the default again. This is what the offer shown when a turn dies writes, because the press happens inside one conversation and honestly means finish this piece of work.",
         })
         .input(AgentResumeAfterOutageSchema)
+        .output(AgentSummarySchema),
+    /* THIS conversation's answer to a spent allowance, the same override in the same shape as the outage one
+     * above; null clears it back to "inherit". Offered on the CARD as well as in the chat, which is the one
+     * placement difference worth stating: an outage is over in minutes and is met by whoever is in the room,
+     * while a limit reopens hours later, so the person deciding is usually looking at a board rather than at a
+     * transcript.
+     *
+     * Legal mid-turn, and for a workspace conversation, for the same two reasons its neighbour is. */
+    resumeAfterLimit: oc
+        .route({
+            method: "POST",
+            path: "/agents/{id}/resume-after-limit",
+            summary: "Whether this conversation sends itself again when its allowance comes back",
+            description:
+                "Overrides the sandbox-wide setting for one conversation; clear it to follow the default again. Off unless asked for, because the allowance is the user's own budget and a turn that spends it the moment it reopens is not a decision to make on their behalf.",
+        })
+        .input(AgentResumeAfterLimitSchema)
         .output(AgentSummarySchema),
     seen: oc
         .route({

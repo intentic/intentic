@@ -53,11 +53,16 @@ import {
 // `armed` is each conversation's OWN answer about outage resumes: the override the chat's offer writes. An id
 // missing from the map is the ordinary state (no opinion, follow the sandbox setting), which is why the default
 // is an empty one.
+//
+// `limitArmed` is the same thing for the OTHER gated resume, kept apart rather than folded into `armed`
+// because the two postures are independent by design: a conversation that retries through outages has said
+// nothing about whether it may spend the user's allowance the moment it reopens.
 const fakeServices = (
     root: string,
     abandoned: string[] = [],
     takes: () => boolean = () => true,
     armed: ReadonlyMap<string, boolean> = new Map(),
+    limitArmed: ReadonlyMap<string, boolean> = new Map(),
 ): Services => {
     const record = fileTranscriptRecord(join(root, "transcripts"));
     return unstubbed<Services>("services", {
@@ -67,7 +72,14 @@ const fakeServices = (
                 abandoned.push(id);
                 return takes();
             },
-            entry: (id: string) => (armed.has(id) ? ({ id, resumeAfterOutage: armed.get(id) } as PersistedAgent) : undefined),
+            entry: (id: string) =>
+                armed.has(id) || limitArmed.has(id)
+                    ? ({
+                          id,
+                          ...(armed.has(id) ? { resumeAfterOutage: armed.get(id) } : {}),
+                          ...(limitArmed.has(id) ? { resumeAfterLimit: limitArmed.get(id) } : {}),
+                      } as PersistedAgent)
+                    : undefined,
         }),
         // No device subscribed, which is what a workspace that has never granted push reports.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
@@ -1305,4 +1317,112 @@ test("the next turn on the conversation supersedes the held one, whatever starte
     clearPendingResume("lim-5");
 
     expect(await fireLimitResume(services, heldWake([]), "lim-5")).toBeUndefined();
+});
+
+/* THE ALLOWANCE'S OWN PASS: the one automatic resume in this module with an appointment to keep rather than a
+ * backoff to guess at, and the one that does nothing at all unless the user armed it.
+ *
+ * Every test below is about a gate. The pass fires a turn that costs real money, at an hour nobody is watching,
+ * on an allowance the user may have been saving — so what is worth pinning is not that it fires but exactly
+ * when it refuses to. `RECORDED` is the instant the refusal happened and `REOPENS` the window it named, stated
+ * as a pair because the relationship between them is what half of these assert.
+ */
+const RECORDED = 1_700_000_000_000;
+const REOPENS = Math.round((RECORDED + 4 * 60 * 60 * 1000) / 1000);
+
+test("an armed conversation sends the held turn again once the window reopens, and not before", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-1", true]]));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-1", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+
+    // An hour in, with three to go: the window is shut, and a fire here would be a request the provider refuses
+    // for exactly the reason it refused the last one.
+    await scheduler.tick(RECORDED + 60 * 60 * 1000);
+    expect(turns).toHaveLength(0);
+
+    await scheduler.tick(REOPENS * 1000 + 1);
+    await settle("lim-auto-1");
+    expect(turns).toHaveLength(1);
+    // The same request again, in full, behind the note that says why it is being repeated.
+    expect(turns[0]!.prompt).toContain("ship the parser");
+    clearPendingResume("lim-auto-1");
+});
+
+/* ONCE. The entry survives its own fire so a press keeps working, which is the opposite of the outage pass's
+ * delete-then-fire, and it is what would otherwise make this a loop: every tick after the window opened would
+ * start another turn on the same conversation, on the user's allowance, for as long as the daemon lived. */
+test("an armed conversation fires exactly once per hold", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-2", true]]));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-2", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+
+    await scheduler.tick(REOPENS * 1000 + 1);
+    await settle("lim-auto-2");
+    await scheduler.tick(REOPENS * 1000 + 5_000);
+    await scheduler.tick(REOPENS * 1000 + 10_000);
+    await settle("lim-auto-2");
+
+    expect(turns).toHaveLength(1);
+    clearPendingResume("lim-auto-2");
+});
+
+// THE DEFAULT, which is the whole product decision: the allowance is the user's budget, so an unarmed
+// conversation waits for them however long the window has been open. The turn stays held, for the press.
+test("an unarmed conversation is never fired for, however long the window has been open", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-3", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+
+    await scheduler.tick(REOPENS * 1000 + 24 * 60 * 60 * 1000);
+    expect(turns).toHaveLength(0);
+    // …and the press still answers, which is what "not fired for" has to mean: the hold is intact.
+    expect(await fireLimitResume(services, heldWake(turns), "lim-auto-3")).toEqual(expect.any(Object));
+    await settle("lim-auto-3");
+    clearPendingResume("lim-auto-3");
+});
+
+// The sandbox-wide default answers for a conversation that never expressed one, which is what makes the
+// setting worth having: a board of unattended agents is armed by one switch rather than card by card.
+test("the sandbox setting arms a conversation that has said nothing itself", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    const settings = await services.sandboxSettings.get();
+    await services.sandboxSettings.set({ ...settings, resumeAfterLimit: true });
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+
+    await createTurnResumeScheduler(services, heldWake(turns)).tick(REOPENS * 1000 + 1);
+    await settle("lim-auto-4");
+    expect(turns).toHaveLength(1);
+    clearPendingResume("lim-auto-4");
+});
+
+/* NOTHING TO AIM AT, NOTHING FIRES. Grok publishes no readable quota and Cursor is not routed through the
+ * translator, so their refusals carry no instant: an armed conversation on one of those keeps the press and
+ * nothing else, because the alternative is guessing an hour and spending the user's money to find out. */
+test("a limit that named no reset instant is never fired for, armed or not", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-5", true]]));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-5", isolated: true }, ran: false }, RECORDED);
+
+    await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 24 * 60 * 60 * 1000);
+    expect(turns).toHaveLength(0);
+    clearPendingResume("lim-auto-5");
+});
+
+/* AN INSTANT ALREADY IN THE PAST IS NOT A SCHEDULE, and this is the gate whose absence would be expensive. A
+ * provider answering with a stale reset would otherwise read as "the window is open now": the fire would go
+ * immediately, be refused for the same reason, re-record with the same stale instant, and do it again on every
+ * tick for the life of the daemon, spending the user's allowance on the arithmetic. */
+test("a reset instant that had already passed when the refusal happened is never fired for", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-6", true]]));
+    const turns: AgentTurn[] = [];
+    const stale = Math.round((RECORDED - 60 * 60 * 1000) / 1000);
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-6", isolated: true }, ran: false, reopensAt: stale }, RECORDED);
+
+    await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 5_000);
+    expect(turns).toHaveLength(0);
+    clearPendingResume("lim-auto-6");
 });

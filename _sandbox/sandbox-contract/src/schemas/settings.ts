@@ -607,6 +607,25 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Whether a turn killed by the model provider failing is re-run automatically, backing off between attempts. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because a retry spends your allowance on a turn you sent once and only you can say whether it was worth paying for twice. Worth turning on for a sandbox whose work mostly happens with nobody in the room.",
         ),
+    /* THE SANDBOX-WIDE DEFAULT for the blocker that is not a failure: "when a spent usage limit refuses a turn,
+     * send that turn again the moment the allowance comes back".
+     *
+     * The one automatic resume here that WAITS FOR A PUBLISHED INSTANT rather than guessing. Its neighbour above
+     * escalates a backoff at a provider nobody can predict; this one sleeps until the hour the provider itself
+     * named and fires once, at it. A limit that publishes no instant (Grok, Cursor) is never fired for at all,
+     * because there is nothing to wait for and a guess would be spending the user's money on arithmetic.
+     *
+     * OFF by default, and this is the setting the default matters most for. Every other blocker in this pair
+     * clears at nobody's expense, while this one clears into an allowance the user may have been holding back
+     * deliberately, so the shipped behaviour is to say when it reopens and let them decide. What arming it buys
+     * is the case a press cannot reach: the 2am wall on a board nobody is watching, where the alternative is a
+     * card that sat waiting eight hours for a press that was always going to come. */
+    resumeAfterLimit: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Whether a turn a spent usage limit refused is sent again by itself once the allowance reopens. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because the allowance is your budget and a turn that spends it the second it comes back is not a decision to make for you. Worth turning on for a sandbox whose work mostly happens with nobody in the room.",
+        ),
     /* When the daemon dies under a running turn, re-run that turn once it is back (agent/turn-journal.ts records
      * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). OFF by default, like
      * the outage resume above and for the same reason: a boot that re-runs turns spends the user's allowance on

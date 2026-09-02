@@ -4,9 +4,16 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 
 /* WHO PICKS A TURN BACK UP WHEN IT DIES THROUGH NO FAULT OF ITS OWN, and, at the end, who stops one that is
- * only ever going to die again. Both resumes are off until the owner asks for them: a re-run spends their
- * allowance on a turn they sent once, which is the same reason a spent usage limit is missing from the pair
- * entirely: it stops the turn, says when it resets, and leaves the next send to them. */
+ * only ever going to die again. Every resume here is off until the owner asks for it, for one reason said three
+ * times: a re-run spends their allowance on a turn they sent once, and only they can say whether it was worth
+ * paying for twice.
+ *
+ * THE SPENT-ALLOWANCE ROW IS THE ODD ONE and worth the row it takes. The other two are guesses, a backoff at a
+ * provider nobody can predict, a boot that may or may not have been the turn's fault; this one waits for an
+ * hour the provider itself published and fires once, at it. It used to be absent from this group on the
+ * grounds that the budget is the user's, which is an argument for the DEFAULT and was quietly serving as an
+ * argument against the choice: the case it left unanswered is the 2am wall on a board nobody is watching, where
+ * the alternative was a card that waited eight hours for a press that was always going to come. */
 
 const { settings, patch } = useSandboxSettings();
 
@@ -44,6 +51,23 @@ const setAutomationFailureLimit = (event: Event): void => {
                     :model-value="settings?.resumeAfterOutage ?? false"
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ resumeAfterOutage: value })"
+                />
+            </template>
+        </Row>
+
+        <!-- The allowance, which is the one wait in this group with an appointment rather than a guess: the
+             provider says when the window reopens, and the turn goes again then, once. The description leads
+             with that, because "retry" is what the row above does and would be the wrong word here. -->
+        <Row
+            icon="clock"
+            title="Send again when the allowance comes back, by default"
+            description="Re-run turns a spent usage limit refused, at the reset the provider named."
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.resumeAfterLimit ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ resumeAfterLimit: value })"
                 />
             </template>
         </Row>

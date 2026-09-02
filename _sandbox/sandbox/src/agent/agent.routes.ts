@@ -52,6 +52,7 @@ import {
     authResumable,
     clearPendingResume,
     fireLimitResume,
+    limitResumeArmed,
     outageResumeArmed,
     recordAuthFailure,
     recordLimitFailure,
@@ -797,6 +798,35 @@ const VERIFICATION_CHECK_CHARS = 200;
  * handle and the one worth waking up for. */
 const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set(["rate_limit", "provider-outage", "claude-token-refused", "claude-not-entitled"]);
 
+/* A SPENT-ALLOWANCE FRAME, DRESSED WITH EVERYTHING THE CLIENT CANNOT WORK OUT FOR ITSELF: when the window
+ * reopens, whether the turn is held whole for a re-run, and whether a clock is going to perform that re-run
+ * without anybody pressing anything.
+ *
+ * `autoResume` needs BOTH halves to be true, a held turn to run and an instant to run it at, and stays absent
+ * otherwise: a frame saying "available" about a fire that could never be scheduled is the same broken promise
+ * the outage branch avoids by going bare once its attempts are spent. Absent is what leaves the client with the
+ * honest offer it already had, a press, on its own timing.
+ *
+ * Read through `limitResumeArmed`, the same reader the resume pass consults when the window actually opens
+ * hours later, so a frame that promised "scheduled" and a pass that then declines cannot disagree. That is the
+ * identical argument `resumeArmed` makes for the credential path inside runTurn, and it is why the posture is
+ * never snapshotted anywhere: arming a card AFTER its turn died has to arm that turn. */
+const limitFrame = async (
+    services: Services,
+    event: Extract<AgentEvent, { kind: "error" }>,
+    params: { readonly conversationId: string | undefined; readonly resetsAt: number | undefined; readonly held: boolean; readonly ran: boolean },
+): Promise<Extract<AgentEvent, { kind: "error" }>> => {
+    const { conversationId, resetsAt, held, ran } = params;
+    const schedulable = held && resetsAt !== undefined && conversationId !== undefined;
+    const armed = schedulable ? await limitResumeArmed(services, conversationId) : false;
+    return {
+        ...event,
+        ...(held ? { held: { ran } } : {}),
+        ...(resetsAt !== undefined ? { resetsAt } : {}),
+        ...(schedulable ? { autoResume: armed ? ("scheduled" as const) : ("available" as const) } : {}),
+    };
+};
+
 /* The session this turn resumes: the one it named, or none, because the runtime serving it does not have that
  * one any more. Which store answers is the adapter's (adapter.ts holdsSession); what a "no" MEANS is here, and
  * it is the same for all four: the turn opens a fresh session, seeded from the conversation's record by the
@@ -1202,6 +1232,12 @@ async function* runTurn(
      * below, which is only final once the stream is, and it is what decides whether the press re-runs this turn
      * from the beginning or resumes the session it got partway through. */
     let limitHit = false;
+    /* WHEN THE ALLOWANCE THAT REFUSED THIS TURN IS DUE BACK, resolved once inside the frame loop (the
+     * precedence is stated where it is computed) and read again in the finally, because the held turn is
+     * recorded there and the scheduled fire has nothing else to aim at. Kept rather than re-derived: the second
+     * derivation would ask a snapshot that has since moved, so the card would count down to one instant while
+     * the fire waited for another. */
+    let limitReopens: number | undefined;
     // Whether the provider has answered THIS turn at all. Any real content proves it is serving requests, which
     // is what clears a standing outage for every conversation stranded on it, recovery is detected off ordinary
     // traffic instead of a probe anyone has to pay for. Once per turn: the breaker only needs the first word.
@@ -1554,16 +1590,18 @@ async function* runTurn(
                  * there is no case where the finally's answer differs from this one on a turn still held. */
                 if (rateLimited) {
                     limitHit = input.conversationId !== undefined;
+                    limitReopens = resetsAt;
                 }
                 // A limit frame is worth dressing for either reason on its own, an instant to count down to or a
                 // turn being held for the press; a limit with neither says nothing more than the bare frame does,
                 // and falls through to it.
                 if (rateLimited && (resetsAt !== undefined || limitHit)) {
-                    yield {
-                        ...event,
-                        ...(limitHit ? { held: { ran: providerAnswered } } : {}),
-                        ...(resetsAt !== undefined ? { resetsAt } : {}),
-                    };
+                    yield await limitFrame(services, event, {
+                        conversationId: input.conversationId,
+                        resetsAt,
+                        held: limitHit,
+                        ran: providerAnswered,
+                    });
                     continue;
                 }
             }
@@ -1611,6 +1649,10 @@ async function* runTurn(
                 input: { ...input, conversationId: input.conversationId },
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 ran: providerAnswered,
+                // The instant the frame already published, carried so the pass can keep the appointment the
+                // card is counting down to. Absent for a provider that names none, which leaves the entry
+                // press-only however the posture is set (runLimitPass says why a guess would be worse).
+                ...(limitReopens !== undefined ? { reopensAt: limitReopens } : {}),
             });
         }
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });

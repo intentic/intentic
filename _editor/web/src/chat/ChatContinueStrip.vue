@@ -33,7 +33,7 @@ const emit = defineEmits<{ (event: "continue"): void }>();
 const { conversation, connected, pickUp, autoContinue, autoContinueAt, setAutoContinue } = usePaneView();
 const { reachable } = useSandbox();
 const { mobile } = useDevice();
-const { setResumeAfterOutage } = useAgents();
+const { setResumeAfterOutage, setResumeAfterLimit } = useAgents();
 
 // The clock runs only while something on screen counts down: an allowance reset, an outage retry, an armed
 // continuation. Every other chat in the app pays nothing for this strip existing.
@@ -97,6 +97,35 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
     }
 };
 
+/* THE SAME PAIR FOR THE OTHER WAIT, and the case for offering it here is stronger than the outage's. An outage
+ * is over in minutes and is met by whoever is in the room; an allowance reopens hours later, so the person who
+ * would want this armed is looking at the line that just told them so, and by the time it fires they are
+ * elsewhere. That is the whole of what arming buys, and it has to be offered at the moment of the wish.
+ *
+ * ONLY WITH AN INSTANT TO AIM AT. An armed limit is an appointment (the daemon's pass fires once, at the hour
+ * the provider published), so with no hour there is nothing to arm and the button does not appear: an offer
+ * that quietly does nothing is worse than no offer. */
+const limitWait = computed(() => (pickUp.value?.reason === `limit` && pickUp.value.readyAt !== undefined ? pickUp.value : undefined));
+const setLimitResume = async (resume: boolean): Promise<void> => {
+    if (!reachable.value || arming.value) {
+        return;
+    }
+    arming.value = true;
+    try {
+        await setResumeAfterLimit(conversation.value.conversationId, resume);
+        if (resume) {
+            conversation.value.failures.armLimitResume();
+            return;
+        }
+        conversation.value.failures.disarmLimitResume();
+    } catch {
+        // Left as it stands, both ways, for the reason its outage twin gives: a strip that redrew itself over a
+        // failed write would be claiming a resume nobody armed.
+    } finally {
+        arming.value = false;
+    }
+};
+
 const autoContinueStrip = computed(() => autoContinue.value && connected.value);
 const autoContinueLine = computed(() =>
     autoContinueAt.value === undefined
@@ -139,6 +168,34 @@ const autoContinueLine = computed(() =>
             @click="() => setOutageResume(true)"
         >
             Keep this chat going
+        </Button>
+        <!-- The allowance's own pair, in the same slot and the same order: the way out first for a chat that is
+             already armed, the way in for one that is not. The words name the appointment rather than a retry,
+             because that is the difference between the two waits: this fires once, when the provider said the
+             window reopens. -->
+        <Button
+            v-else-if="limitWait?.automatic !== undefined"
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
+            :disabled="!reachable || arming"
+            v-tooltip.top="'Stop this chat sending the turn again by itself'"
+            @click="() => setLimitResume(false)"
+        >
+            Stop
+        </Button>
+        <Button
+            v-else-if="limitWait !== undefined"
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
+            :disabled="!reachable || arming"
+            v-tooltip.top="'Send this turn again by itself, once the allowance comes back'"
+            @click="() => setLimitResume(true)"
+        >
+            Send it when it's back
         </Button>
         <!-- The standing version of the press, offered where the wish for it happens: reading this line for the
              third time in half an hour. Only while it is OFF; armed, the strip below carries both the state and

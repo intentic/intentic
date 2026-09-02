@@ -92,6 +92,19 @@ interface RuntimeState {
     // The sentence the last error frame carried, flushed onto the entry at finish so the card can say why
     // rather than only that. Last one wins: a turn that fails twice died of the second.
     failure: string | undefined;
+    /* And what that frame CALLED it, plus the two facts a spent allowance carries that no other failure does:
+     * when its window reopens, and whether the turn is being held whole for a re-run.
+     *
+     * All three travel with the sentence and are flushed by the same finish, because they answer one question
+     * between them, "is this card a crash or a wait", and a card that has the words without the code has to
+     * guess. Guessing is what drew an 18-hour-old spent allowance as a red error with "View error" on it.
+     *
+     * Read off the FRAME rather than looked up: the route decides both at frame time (agent.routes.ts dresses
+     * the limit frame with them), so reading them here is the two surfaces agreeing by construction instead of
+     * by coincidence. */
+    failureCode: string | undefined;
+    limitResetsAt: number | undefined;
+    limitHeld: boolean;
     /* THE USER ENDED THIS TURN and the abort has landed, it is on its way out but not out yet, in the two
      * flavours that end differently.
      *
@@ -145,6 +158,9 @@ const freshRuntime = (): RuntimeState => ({
     pauses: new Map(),
     errored: false,
     failure: undefined,
+    failureCode: undefined,
+    limitResetsAt: undefined,
+    limitHeld: false,
     stopping: undefined,
     resuming: false,
     activity: undefined,
@@ -160,6 +176,79 @@ const freshRuntime = (): RuntimeState => ({
     pendingToolUses: 0,
     pendingSubagents: 0,
 });
+
+/* IS SOMETHING BRINGING THIS TURN BACK SOON ENOUGH THAT THE CARD SHOULD GO ON READING AS WORK IN PROGRESS?
+ *
+ * The frame's own verdict decides it, never the code, so every condition that resumes itself is covered without
+ * this having to know their names. "available" is not one: nothing is armed, so the failure stands.
+ *
+ * A SPENT ALLOWANCE IS THE ONE EXCEPTION, and it is an exception about TIME rather than about certainty. The
+ * other scheduled resumes are due within seconds (a re-minted token) or minutes (an outage backoff), so "coming
+ * back" describes the card fairly for the whole of the wait. A limit's fire is due when the provider says the
+ * window reopens, which is routinely hours and can be days: drawn as work in progress, a card would spin
+ * through Thursday while hiding the one fact its reader wants, which is WHEN. So a limit is recorded as the
+ * failure it is, and what makes it read as a wait rather than as a crash is the classification recorded with it
+ * (failureOf below, and the client's `limited`). */
+const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): boolean => event.autoResume === "scheduled" && event.code !== "rate_limit";
+
+/* WHAT AN ERROR FRAME LEAVES BEHIND ON THE TURN, all four fields at once, because they are one answer rather
+ * than four facts: this is how the turn died, and a reader that has the sentence without the code cannot tell a
+ * wall from a crash. Writing them together is also what keeps them consistent under the last-one-wins rule, a
+ * turn refused by a spent allowance, resumed, and then killed by a bad request must not go on carrying a
+ * countdown describing the refusal it already got past.
+ *
+ * Read off the FRAME rather than looked up anywhere: agent.routes dresses a limit frame with the reset instant
+ * and the hold at frame time, so taking them from it is the client and the card agreeing by construction.
+ *
+ * Pure and outside the closure, like statusOf below: a rule worth stating and testing without a registry. */
+const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Pick<RuntimeState, "failure" | "failureCode" | "limitResetsAt" | "limitHeld"> => {
+    const limit = event.code === "rate_limit";
+    return {
+        failure: sanitizeFailure(event.message),
+        failureCode: event.code,
+        limitResetsAt: limit ? event.resetsAt : undefined,
+        limitHeld: limit && event.held !== undefined,
+    };
+};
+
+/* WHAT A CARD IS CURRENTLY REPORTING ABOUT ITS LAST DEATH: the sentence, the code that says which KIND of
+ * death it was, and, for the one kind that comes back on a clock, when the window reopens and whether the turn
+ * is held for a press.
+ *
+ * ONLY WHILE THE CARD STILL READS AS FAILED, which is the whole of the guard and the reason it is one guard
+ * over four fields rather than four guards. A branch whose standing has moved on (the work landed by another
+ * road, the delta went away) is answered by `landing`, and an explanation left under it would be describing a
+ * turn the board no longer shows as the last word. For the limit facts that would be worse than stale: a
+ * countdown is a promise about the future, and one attached to a death nobody is reporting any more is the one
+ * thing more misleading than the red line this whole classification exists to replace. */
+const reportedFailure = (
+    entry: PersistedAgent,
+    status: AgentStatus,
+): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld">> =>
+    status !== "error"
+        ? {}
+        : {
+              ...(entry.failure !== undefined ? { failure: entry.failure } : {}),
+              ...(entry.failureCode !== undefined ? { failureCode: entry.failureCode } : {}),
+              ...(entry.limitResetsAt !== undefined ? { limitResetsAt: entry.limitResetsAt } : {}),
+              ...(entry.limitHeld === true ? { limitHeld: true } : {}),
+          };
+
+/* AND WHAT A FINISH WRITES THROUGH from it: the whole account of the failure, or nothing at all. The four
+ * fields move as one because the finish that clears them is the same finish that writes them, and a card
+ * carrying a reset instant with no code (or a code with no sentence) would be describing half a death.
+ *
+ * A turn that did NOT error answers `{}`, and the caller's destructure has already dropped whatever the entry
+ * was carrying, so the pair is what clears a previous turn's wall off a card that has since run clean. */
+const endedFailure = (state: RuntimeState | undefined): Partial<Pick<PersistedAgent, "failure" | "failureCode" | "limitResetsAt" | "limitHeld">> =>
+    state?.errored !== true
+        ? {}
+        : {
+              ...(state.failure !== undefined ? { failure: state.failure } : {}),
+              ...(state.failureCode !== undefined ? { failureCode: state.failureCode } : {}),
+              ...(state.limitResetsAt !== undefined ? { limitResetsAt: state.limitResetsAt } : {}),
+              ...(state.limitHeld ? { limitHeld: true } : {}),
+          };
 
 /* THE STATUS PROJECTION, in precedence order: the live turn, then the one that is coming BACK, then how the
  * last one ENDED, then where the work stands. The `idle` rung is why it is the only persisted value that
@@ -354,6 +443,11 @@ export interface AgentsRegistry {
     // the turn has already died, so arming a conversation whose turn is still unwinding is the ordinary case
     // rather than an edge one. Undefined ⇒ unknown id.
     readonly setResumeAfterOutage: (id: string, resumeAfterOutage: boolean | null) => Promise<AgentSummary | undefined>;
+    // Set/clear THIS conversation's limit-resume override (null ⇒ back to "inherit the sandbox setting"), the
+    // same grammar again for the blocker that comes back on a clock. Legal at the same moments and for a
+    // sharper version of the same reason: the press that writes it is made on a card whose turn died hours
+    // ago, and what it arms is a fire scheduled hours further out. Undefined ⇒ unknown id.
+    readonly setResumeAfterLimit: (id: string, resumeAfterLimit: boolean | null) => Promise<AgentSummary | undefined>;
     // Stamp a collaborator's ask for this work to be landed (AgentSummarySchema.landRequested). Like setTitle
     // it leaves updatedAt alone (asking is not the agent's activity) and needs no running guard, the ask is
     // about whatever the branch holds when a maintainer answers it. Re-asking re-stamps (latest asker wins;
@@ -538,7 +632,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // Only while the card still READS as failed. A branch whose standing has moved on (the work landed
             // by another road, the delta went away) is answered by `landing` above, and an explanation left
             // under it would be describing a turn the board no longer shows as the last word.
-            ...(entry.failure !== undefined && status === "error" ? { failure: entry.failure } : {}),
+            ...reportedFailure(entry, status),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...(entry.forkedFrom !== undefined ? { forkedFrom: entry.forkedFrom } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
@@ -553,6 +647,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
             ...(entry.resumeAfterOutage !== undefined ? { resumeAfterOutage: entry.resumeAfterOutage } : {}),
+            ...(entry.resumeAfterLimit !== undefined ? { resumeAfterLimit: entry.resumeAfterLimit } : {}),
             ...(entry.landRequested !== undefined ? { landRequested: entry.landRequested } : {}),
             ...(base !== undefined ? { base } : {}),
             ...(costUsd > 0 ? { costUsd } : {}),
@@ -708,7 +803,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
 
     return {
         init: async () => {
-            entries = await store.load();
+            /* THE HELD TURNS DID NOT SURVIVE, so nothing loaded may claim one. `limitHeld` says a refused turn
+             * is sitting in memory waiting for a press to re-run it (turn-resume.ts's pendingLimit), and that
+             * memory is this process's: a daemon that has just started holds none of them, whatever the file
+             * says. Left standing, every card stranded by a limit before the restart would go on offering a
+             * press that answers NOT_FOUND, which is the one failure mode worse than no offer.
+             *
+             * Not migration and not compatibility, the flag is simply false at boot as a matter of fact, and
+             * this is where the process learns it. The reset instant beside it is untouched: an allowance
+             * reopening at four is still reopening at four, and saying so is what the card is for. */
+            entries = (await store.load()).map(({ limitHeld: _held, ...carried }) => carried);
             /* The roster goes out the moment it is loaded, an /events stream that connected during boot is
              * already holding an empty fleet and this frame is what fills it. Standings are probed BEHIND the
              * broadcast, not before it: a reboot's verdict cache is empty, so the probe is a git spawn per live
@@ -1052,6 +1156,19 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             broadcast();
             return summaryOf(next);
         },
+        setResumeAfterLimit: async (id, resumeAfterLimit) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            // null strips the key, the same three states as its two neighbours: on, off, and inherit.
+            const { resumeAfterLimit: _cleared, ...carried } = entry;
+            const next = { ...carried, ...(resumeAfterLimit !== null ? { resumeAfterLimit } : {}) };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
+        },
         requestLand: async (id, by, at) => {
             const entry = entryOf(id);
             if (entry === undefined) {
@@ -1210,13 +1327,13 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                      * the entry's resting `idle`, which is the Finished lane. The flag is what carries "coming
                      * back" past the finish() that is seconds away (see RuntimeState.resuming). Nothing to
                      * broadcast here: the turn is still running, and `running` is what the card should say until
-                     * it isn't. */
-                    if (event.autoResume === "scheduled") {
+                     * it isn't. Which frames qualify, and the one that does not, is comingBackNow's. */
+                    if (comingBackNow(event)) {
                         state.resuming = true;
                         return;
                     }
                     state.errored = true;
-                    state.failure = sanitizeFailure(event.message);
+                    Object.assign(state, failureOf(event));
                     break;
                 default:
                     return; // delta/thinking/etc, not card-visible, skip the broadcast.
@@ -1271,7 +1388,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // shape recordLanded clears `conflicts` with, and for the same reason: this finish is the one
                 // that decides how the turn ended, so an explanation it did not write is one for a death that
                 // is no longer being reported.
-                const { failure: _ended, ...carried } = entry;
+                const { failure: _ended, failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, ...carried } = entry;
                 replace({
                     ...carried,
                     /* How the turn ENDED, which is all this field says now: an observed error frame, the user's
@@ -1286,7 +1403,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                      * written stays on its branch for a later message to carry on from, exactly as it does
                      * for any turn that ends with an unlanded delta. */
                     status: state?.errored === true ? "error" : ended === "stopped" ? "stopped" : "idle",
-                    ...(state?.errored === true && state.failure !== undefined ? { failure: state.failure } : {}),
+                    ...endedFailure(state),
                     costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
                     inputTokens: entry.inputTokens + (state?.pendingInputTokens ?? 0),
                     outputTokens: entry.outputTokens + (state?.pendingOutputTokens ?? 0),
@@ -1305,6 +1422,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.pendingSessionId = undefined;
                     state.errored = false;
                     state.failure = undefined;
+                    state.failureCode = undefined;
+                    state.limitResetsAt = undefined;
+                    state.limitHeld = false;
                 }
                 await persist();
             }
@@ -1333,7 +1453,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
             state.resuming = false;
             const failure = sanitizeFailure(reason);
-            replace({ ...entry, status: "error", ...(failure !== undefined ? { failure } : {}), updatedAt: now });
+            // The daemon's OWN sentence about a resume that never came, so the classification the original
+            // frame carried is dropped with it: this ending is not that failure any more, and a countdown left
+            // standing under it would be counting down to a window nobody is waiting for.
+            const { failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, ...carried } = entry;
+            replace({ ...carried, status: "error", ...(failure !== undefined ? { failure } : {}), updatedAt: now });
             await persist();
             broadcast();
             return true;

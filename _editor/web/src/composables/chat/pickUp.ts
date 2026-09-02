@@ -74,12 +74,27 @@ export interface PickUpAttempts {
  *
  * Every one of them leads with the fact that decides whether to read on, the work so far is still here, and
  * only then says what is or isn't happening about it. */
+/* WHAT IS BRINGING THIS TURN BACK, AND WHY, when something other than the user is: two waits that look alike on
+ * screen and are not the same promise.
+ *
+ * An OUTAGE retry is a guess at a provider nobody can predict, which is what the attempt count is apologising
+ * for: the automation is spending the user's allowance while they watch, so it accounts for itself out loud or
+ * the reasonable response is to switch it off.
+ *
+ * A LIMIT's is an APPOINTMENT. The hour came from the provider, the fire happens once, and there is nothing to
+ * keep trying, so there is no count to spend and no failure to report: opening this sentence with "the provider
+ * failed this turn" would be wrong twice over about a provider that was working perfectly and said so. */
+const automaticLine = (reason: PickUpReason, at: number, attempts: PickUpAttempts | undefined, now: number): string => {
+    if (reason === `limit`) {
+        return `The allowance was spent, and this chat sends the turn again by itself when it comes back ${pickUpWhen(at, now)}. Sending it sooner works too.`;
+    }
+    const counted = attempts === undefined ? `` : ` Attempt ${attempts.attempt} of ${attempts.maxAttempts}.`;
+    return `The provider failed this turn and this chat picks it back up by itself ${pickUpWhen(at, now)}.${counted} Continuing it yourself works too.`;
+};
+
 export const pickUpLine = (pickUp: PickUp, attempts: PickUpAttempts | undefined, now: number = Date.now()): string => {
     if (pickUp.automatic !== undefined) {
-        // The automation spending the user's allowance while they watch has to account for itself, or the
-        // reasonable response is to switch it off: hence the bound, said out loud, every time.
-        const counted = attempts === undefined ? `` : ` Attempt ${attempts.attempt} of ${attempts.maxAttempts}.`;
-        return `The provider failed this turn and this chat picks it back up by itself ${pickUpWhen(pickUp.automatic.at, now)}.${counted} Continuing it yourself works too.`;
+        return automaticLine(pickUp.reason, pickUp.automatic.at, attempts, now);
     }
     if (pickUp.reason === `outage`) {
         return `The provider failed this turn and nothing is retrying it: the work so far is still here.`;

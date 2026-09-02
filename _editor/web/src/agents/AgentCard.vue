@@ -18,8 +18,12 @@ import {
     contextPct,
     formatCost,
     formatElapsed,
+    effectiveLimitResume,
     landedAway,
     laneOf,
+    limitClosed,
+    limited,
+    limitLine,
     loopMeta,
     reviewAction,
     turnInFlight,
@@ -28,7 +32,8 @@ import {
     watching,
     watchLine,
 } from "../composables/agents/agentStatus";
-import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
+import { type MatchSnippet, type NativeProvider, PROVIDER_VENDOR, providerLabel } from "@intentic/sandbox-contract";
+import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
 import MatchLine from "../components/MatchLine.vue";
@@ -79,8 +84,8 @@ const props = defineProps<{
     matchCase?: boolean;
 }>();
 // Keep the second hand at the card that draws it rather than rerendering every card from the board. Settled
-// cards need no ticks, so the shared clock stands down when no turn or watch is live.
-const now = useNow(() => turnInFlight(props.agent) || watching(props.agent));
+// cards need no ticks, so the shared clock stands down when no turn, watch or shut allowance window is live.
+const now = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent));
 const emit = defineEmits<{
     // The click that opened it, when there was one: a modified click asks for a pane rather than the focus.
     open: [event?: MouseEvent];
@@ -99,6 +104,9 @@ const emit = defineEmits<{
 }>();
 
 const { mobile } = useDevice();
+// The sandbox-wide default behind this card's own limit posture (effectiveLimitResume). Read here rather than
+// passed down because the answer is the same for every card on the board and the query is shared.
+const { settings: sandboxSettings } = useSandboxSettings();
 const meta = computed(() => agentStatusMeta(props.agent.status));
 // The identity tile's category (sessionCategory over the title), undefined for a title that reads as nothing
 //: read here as well as inside IdentityTile because the tooltip (the colour's legend) is this card's to say.
@@ -115,7 +123,21 @@ const box = computed(() =>
         ? undefined
         : { name: boxNameOf.value.get(props.agent.sandboxId) ?? `Another sandbox`, image: boxImageOf.value.get(props.agent.sandboxId) },
 );
-const reason = computed(() => attentionReason(props.agent));
+const reason = computed(() => attentionReason(props.agent, now.value));
+/* WHAT COLOUR THAT CHIP IS, which used to be one answer because every reason it can carry meant the same thing:
+ * a person is needed. A spent allowance broke that, and the chip is where it showed worst, an amber "Error"
+ * over a red sentence, on a card whose entire content was "come back in four hours".
+ *
+ * MUTED while the window is shut, because nothing is owed and the chip's job is to be readable rather than to
+ * be noticed: this is the one card on the board a reader can correctly do nothing about. LINK-BLUE once it
+ * opens, the hue this board already spends on an offer to act (the watch readout, "Land again"), because that
+ * is exactly what the card now is. AMBER for everything else, unchanged. */
+const reasonTone = computed(() => {
+    if (!limited(props.agent)) {
+        return `bg-warning/15 text-warning`;
+    }
+    return limitClosed(props.agent, now.value) ? `bg-overlay text-muted` : `bg-primary-600/15 text-link`;
+});
 // What the live line says: the shared derivation (agentStatus.activityLine), because the rail's cards carry
 // the same line and the two surfaces must never narrate the same turn differently.
 const activityText = computed(() => activityLine(props.agent));
@@ -275,6 +297,54 @@ const loopLine = computed(() => (props.agent.loop === undefined ? undefined : lo
  * the turn ends the watch takes the corner back, which is exactly when the card would otherwise start claiming
  * to be finished. */
 const watch = computed(() => (turnInFlight(props.agent) ? undefined : watchLine(props.agent, now.value)));
+/* AND WHAT IT IS WAITING ON WHEN THE THING IT IS WAITING ON IS AN ALLOWANCE (agentStatus.limitLine): the same
+ * readout, in the same corner, on the same ticking clock, because from the reader's side it is the same kind of
+ * fact. This card is not working and is not finished; something outside it has to happen first, and here is
+ * when.
+ *
+ * The VENDOR is resolved here rather than inside the projection because it is a question about the provider
+ * catalog, which agentStatus is a leaf of and deliberately knows nothing about. PROVIDER_VENDOR names whose
+ * ALLOWANCE was spent, which on a routed provider is not the same as whose model answered: a `gemini` turn
+ * drives Claude through Google's channel, so the quota that refused it is Google's and saying "Claude" would
+ * send the reader to the wrong account entirely. Anything the table has no entry for falls back to the
+ * provider's own label, which is at least true.
+ *
+ * The ARMED half is the effective posture, this conversation's override else the sandbox default, folded by
+ * the one function every surface that states it reads (effectiveLimitResume). */
+const limitWait = computed(() =>
+    limitLine(props.agent, {
+        now: now.value,
+        vendor: PROVIDER_VENDOR[props.agent.provider as NativeProvider] ?? providerLabel(props.agent.provider),
+        armed: effectiveLimitResume(props.agent, sandboxSettings.value?.resumeAfterLimit),
+    }),
+);
+// Whether the line reads as an offer or as a wait: the window is open, so the press is the next thing to
+// happen rather than a thing to happen later. Drives the hue and the glyph together, so the two cannot say
+// different things about the same card.
+const limitPressable = computed(() => limited(props.agent) && !limitClosed(props.agent, now.value));
+/* SEND THE HELD TURN AGAIN, from the board, without opening the chat. The daemon kept the refused turn whole,
+ * so this re-runs THAT turn (useAgents.resumeHeldTurn) rather than posting a message saying "carry on".
+ *
+ * The local flag rather than the board's `pending`: that carries one of the drop actions, which name what the
+ * lane did to a card, and this is neither a drop nor a lane change. It is cleared in a `finally` and never on
+ * success alone, because the card is about to be replaced by a roster frame either way, and a spinner left
+ * turning on a card that has since started running is the one outcome worse than no spinner. */
+const resending = ref(false);
+const sendAgain = async (): Promise<void> => {
+    if (resending.value) {
+        return;
+    }
+    resending.value = true;
+    try {
+        await useAgents().resumeHeldTurn(props.agent.id);
+    } catch {
+        // Left as it stands. The commonest failure here is a hold the daemon no longer has, and the honest
+        // answer to that is the card as it is: the words are still in the chat, where the composer can send
+        // them. A card that redrew itself over a failed press would be claiming a turn nobody started.
+    } finally {
+        resending.value = false;
+    }
+};
 /* The card says WHO RUNS IT exactly once. While the tile wears the provider mark (no category yet), this
  * line needs no floor; once the category glyph takes the tile, a card with no recorded model would say the
  * provider nowhere: so the provider lands here, and only then. */
@@ -502,7 +572,7 @@ const grab = (event: PointerEvent): void => {
                 </button>
             </template>
             <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-xs text-link" />
-            <span v-else-if="reason !== undefined" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">{{
+            <span v-else-if="reason !== undefined" class="shrink-0 rounded-full px-1.5 py-px text-2xs font-semibold" :class="reasonTone">{{
                 reason
             }}</span>
             <span
@@ -544,9 +614,46 @@ const grab = (event: PointerEvent): void => {
                  this the board said "Error", and the sentence naming the spent plan or the organization that
                  switched Claude Code off lived only inside the dead session. Two lines, then the full text on
                  hover: a provider's explanation is a sentence, and a fragment of one is not an explanation. -->
-            <p v-if="agent.failure" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="agent.failure">
+            <p v-if="agent.failure && limitWait === undefined" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="agent.failure">
                 <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ agent.failure }}</span>
+            </p>
+
+            <!-- …AND THE ONE FAILURE THAT IS NOT ONE, drawn as the wait it is (agentStatus.limitLine). This is
+                 the whole complaint answered in one element: a spent allowance used to take the red line above,
+                 with the provider's paragraph in it ("Claude usage limit reached. Send again once it resets."),
+                 an amber Error chip over it and a "View error" link beside it — the entire vocabulary of
+                 something broken, for the most predictable, most self-resolving thing this product does.
+                 MUTED, not red, and the same reading the chat has always given it (turnFailures' applyLimitError
+                 calls it "a wait, not a crash" and renders a notice rather than the error ref). The board saying
+                 something different about the same frame was the bug, not the styling.
+                 THE HOUR IS THE POINT. Everything else on a stranded card is unchanged from the second it
+                 stranded; this line is the only part that moves, and it moves toward being actionable. The
+                 countdown sits at the end in tabular figures so a column of these stays a column.
+                 AND THE PRESS RIDES IT rather than sitting in the summary line below, for the reason the watch
+                 readout puts "Stop" inside its own span: an affordance parted from the fact it acts on is an
+                 affordance nobody connects to it. -->
+            <p v-if="limitWait !== undefined" class="flex min-w-0 items-start gap-2 text-2xs" :class="limitPressable ? 'text-link' : 'text-muted'">
+                <Icon :name="limitPressable ? 'arrow-right' : 'clock'" class="mt-px shrink-0 text-2xs" />
+                <span class="line-clamp-2 min-w-0 flex-1 leading-4" v-tooltip.top="limitWait.hint">{{ limitWait.text }}</span>
+                <span v-if="limitWait.countdown !== undefined" class="shrink-0 tabular-nums">{{ limitWait.countdown }}</span>
+                <!-- Offered whether the window is open or shut, and that is deliberate rather than sloppy: the
+                     reset instant is the provider's own guess and is routinely wrong in the useful direction, so
+                     a press before it costs one refused request and may well go through. The chat strip settled
+                     this argument first (pickUp.ts's pickUpReady): a disabled button and a long countdown taught
+                     users to type "Continue" into the composer instead, which made the same request with none of
+                     the benefits. Absent when the daemon holds nothing to re-run — after a restart the hold is
+                     gone (agents-registry init), and a press that answers NOT_FOUND is worse than no press. -->
+                <button
+                    v-if="agent.limitHeld === true"
+                    type="button"
+                    class="shrink-0 rounded font-medium text-link hover:underline disabled:opacity-50"
+                    :disabled="resending"
+                    v-tooltip.top="'Run the held turn again. It is the same request, not a new message.'"
+                    @click.stop="sendAgain"
+                >
+                    {{ resending ? "Sending…" : "Send again" }}
+                </button>
             </p>
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user never started, "who asked for

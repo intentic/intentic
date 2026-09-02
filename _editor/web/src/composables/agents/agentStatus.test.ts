@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
     type AgentStanding,
     agentStatusMeta,
+    attentionReason,
     awaitingUser,
     blocked,
     type ClientAgentStatus,
     laneOf,
+    limitLine,
+    reviewAction,
     turnInFlight,
     unfinishedMark,
     unregistered,
@@ -336,5 +339,102 @@ describe("watchLine", () => {
     // Pacing in the fewest characters that stay true: a half-hourly check reads as minutes, not as "1800s".
     it("says a slow cadence in minutes", () => {
         expect(watchLine({ status: `idle`, attention: none, watches: [watch({ intervalSeconds: 1800 })] }, NOW)?.hint).toContain(`checked every 30m`);
+    });
+});
+
+/* A SPENT ALLOWANCE, which arrives as `status: "error"` and is the one failure here that nobody has to fix.
+ *
+ * Every assertion below is one half of the same claim: while the window the provider named is SHUT this card
+ * owes nobody anything, and the moment it opens it owes exactly one press. The old behaviour got both halves
+ * wrong in the same direction, an amber "Error" chip over a red sentence and a seat in the Attention lane, held
+ * for as long as it took a person to notice, which for a weekly pool is days after the wall stopped existing.
+ *
+ * The instants are stated as distances from NOW, like the watch fixtures above, because what is being asserted
+ * is always a relationship to the clock and never a wall-clock time. */
+const SHUT = { failureCode: `rate_limit`, limitResetsAt: (NOW + 4 * 60 * 60 * 1000) / 1000 };
+const OPEN = { failureCode: `rate_limit`, limitResetsAt: (NOW - 60 * 60 * 1000) / 1000 };
+describe("a spent allowance", () => {
+    /* THE LANE. Active, beside the watching agents, for the reason laneOf gives: this conversation is waiting
+     * on the world at an instant the world already named, and a lane that demands a press for eight hours is
+     * demanding it for the sake of the demand. */
+    it("waits in active while the window is shut, and moves to attention when it opens", () => {
+        expect(laneOf({ status: `error`, attention: none, ...SHUT }, NOW)).toBe(`active`);
+        expect(laneOf({ status: `error`, attention: none, ...OPEN }, NOW)).toBe(`attention`);
+    });
+
+    /* THE BADGE follows the lane, which is the whole thesis of this module: two surfaces may never disagree
+     * about the same agent. A rail badge counting eight cards that need nothing is how "needs you" stops
+     * meaning anything. */
+    it("is not blocked on the user until the allowance is back", () => {
+        expect(blocked({ status: `error`, attention: none, ...SHUT }, NOW)).toBe(false);
+        expect(blocked({ status: `error`, attention: none, ...OPEN }, NOW)).toBe(true);
+    });
+
+    /* AN UNRESOLVABLE LIMIT IS TREATED AS OPEN. With no published instant (Grok, Cursor) there is nothing to
+     * wait for, so holding the card out of Attention would be waiting on a promise nobody made. */
+    it("reads as actionable when nobody published a reset instant", () => {
+        expect(laneOf({ status: `error`, attention: none, failureCode: `rate_limit` }, NOW)).toBe(`attention`);
+    });
+
+    /* THE CHIP. Never the word this card used to wear, and it names the press exactly when there is one.
+     *
+     * The LENGTH is pinned deliberately, not just the wording: the chip is `shrink-0` beside a title that is
+     * not, so at lane width every character it grows is taken off the agent's own name. "Waiting on limit" was
+     * the first attempt, and it rendered two cards on a 280px lane as "In…" and "C…". */
+    it("says what it is waiting for rather than Error, in a word the lane can afford", () => {
+        expect(attentionReason({ status: `error`, attention: none, ...SHUT }, NOW)).toBe(`Waiting`);
+        expect(attentionReason({ status: `error`, attention: none, ...OPEN }, NOW)).toBe(`Send again`);
+    });
+
+    // THE DRILL-IN. "View error" points at a transcript whose last line is a provider saying no: there is
+    // nothing to diagnose, so the label names the destination instead of promising a report.
+    it("does not offer to view an error", () => {
+        expect(reviewAction({ status: `error`, attention: none, branch: `agent/x`, ...SHUT })).toBe(`Open chat`);
+    });
+
+    /* THE READOUT, in the three states that differ. Whose allowance it was, because a mixed board is what
+     * makes that worth the width; and, armed, that nobody has to do anything at all.
+     *
+     * THE TIME IS NOT IN THE TEXT, which is the half worth pinning. Both carried it at first — "back at Thu
+     * 00:12" in the sentence and "4h 11m" in the slot beside it — and the same fact twice is what left a 280px
+     * card no room for the agent's name. */
+    it("names the vendor and who is going to press, and leaves the time to the clock slot", () => {
+        const shut = limitLine({ status: `error`, attention: none, ...SHUT }, { now: NOW, vendor: `Claude`, armed: false });
+        expect(shut?.text).toContain(`Claude`);
+        expect(shut?.text).not.toMatch(/\d/u);
+        const armed = limitLine({ status: `error`, attention: none, ...SHUT }, { now: NOW, vendor: `Claude`, armed: true });
+        expect(armed?.text).toContain(`goes again`);
+        const open = limitLine({ status: `error`, attention: none, ...OPEN }, { now: NOW, vendor: `Claude`, armed: false });
+        expect(open?.text).toContain(`is back`);
+        // Nothing to count down to once the window is open: a readout counting up from an instant that stopped
+        // mattering is worse than no readout.
+        expect(open?.countdown).toBeUndefined();
+    });
+
+    /* THE CLOCK PICKS THE FORM A PERSON CAN ACT ON. Under an hour and a half it is how long is left, which is
+     * read at a glance; past it, a weekly allowance measured in hours ("74h 12m") is arithmetic, so the slot
+     * switches to the weekday and hour it actually comes back. */
+    it("counts down while that is a number, and names the day once it is not", () => {
+        const soon = { failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 };
+        expect(limitLine({ status: `error`, attention: none, ...soon }, { now: NOW, vendor: `Claude`, armed: false })?.countdown).toBe(`40m 0s`);
+        // Four hours out: a clock time, not a count. The exact string is the locale's, so this pins the shape.
+        expect(limitLine({ status: `error`, attention: none, ...SHUT }, { now: NOW, vendor: `Claude`, armed: false })?.countdown).toMatch(/\d{2}:\d{2}/u);
+    });
+
+    // The hint carries the one thing the line cannot: that the press repeats the turn rather than adding to it.
+    it("says the turn is held, when it is", () => {
+        const line = limitLine({ status: `error`, attention: none, ...SHUT, limitHeld: true }, { now: NOW, vendor: `Claude`, armed: false });
+        expect(line?.hint).toContain(`re-runs it`);
+    });
+
+    /* AND THE GUARD THAT KEEPS ALL OF THE ABOVE HONEST: none of it may reach a failure that is a real failure.
+     * A harness that died mid-run is still red, still blocking, still in Attention, and still offers the
+     * report, because for that card every one of those is the right answer. */
+    it("changes nothing about a failure nobody classified", () => {
+        const crashed: AgentStanding = { status: `error`, attention: none };
+        expect(laneOf(crashed, NOW)).toBe(`attention`);
+        expect(blocked(crashed, NOW)).toBe(true);
+        expect(attentionReason(crashed, NOW)).toBe(`Error`);
+        expect(limitLine(crashed, { now: NOW, vendor: `Claude`, armed: false })).toBeUndefined();
     });
 });

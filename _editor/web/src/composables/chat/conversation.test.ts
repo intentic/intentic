@@ -1875,7 +1875,9 @@ describe(`Conversation`, () => {
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled` },
+                // `available`: the daemon holds the turn and would fire at the reset, but this conversation has
+                // not asked it to. That is the shipped default, and the one the assertions below describe.
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` },
                 { kind: `done` },
             ]),
         );
@@ -1885,12 +1887,40 @@ describe(`Conversation`, () => {
         expect(notice.role).toBe(`notice`);
         expect(notice.text).toContain(`Resets`);
         expect(notice.text).not.toContain(`Auto-resume`);
-        // No opt-out on the notice and nothing marked automatic: there is no automation here to regret.
+        // No opt-out on the notice and nothing marked automatic: nothing has been armed, so there is no
+        // automation here to regret.
         expect(notice.noticeAction).toBeUndefined();
         expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(conversation.error.value).toBeNull();
         // The press, and the instant it starts working: the reset, to the millisecond the frame named.
         expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: resetsAt * 1_000 });
+    });
+
+    /* ARMED, THE SAME FAILURE IS AN APPOINTMENT RATHER THAN AN OFFER. `resumeAfterLimit` is off unless the user
+     * turns it on, because the allowance is their own budget; once it is, the daemon fires the held turn at the
+     * hour the provider published, and the chat has to say so rather than keep offering a press as though
+     * nothing were happening. `automatic` is the mark that says it, the same one an armed outage raises, and it
+     * is also what keeps the local auto-continue's hands off a turn something else is already bringing back. */
+    it(`reports a scheduled send when the conversation is armed for the reset`, async () => {
+        const conversation = new Conversation(`c1`);
+        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled`, held: { ran: false } },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hello`, settings);
+
+        expect(conversation.pickUp.value).toEqual({
+            reason: `limit`,
+            readyAt: resetsAt * 1_000,
+            held: { ran: false },
+            automatic: { at: resetsAt * 1_000 },
+        });
+        // Still a notice rather than the red line: an armed wait is the least alarming state this failure has.
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.messages.value.at(-1)!.text).toContain(`sends it again`);
     });
 
     /* An allowance the daemon could not date (an unpolled pool, a provider that renamed its bucket) still gets

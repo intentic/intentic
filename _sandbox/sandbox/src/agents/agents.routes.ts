@@ -293,6 +293,20 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        /* THIS conversation's spent-allowance posture, the same route one blocker over. `entryOf` for the same
+         * reason the one above uses it: a limit refuses a workspace chat as readily as a branch-backed one.
+         *
+         * Legal mid-turn, and the press that matters most arrives long AFTER one: the window this arms a fire
+         * against is typically hours out, which is exactly why the offer is on the card rather than only in a
+         * transcript somebody would have to still have open. */
+        resumeAfterLimit: i.resumeAfterLimit.handler(async ({ input }) => {
+            entryOf(input.id);
+            const summary = await services.agents.setResumeAfterLimit(input.id, input.resumeAfterLimit);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
         /* A collaborator's ask for a land they may not perform (role floors put land/discard at maintainer).
          * Isolated agents only, a workspace conversation has no land for anyone to perform. Legal mid-turn
          * (no notRunning): the ask is about whatever the branch holds when a maintainer answers it, exactly
