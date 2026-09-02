@@ -638,12 +638,14 @@ it(`keeps an offline runner's row and names the state rather than hiding it`, as
     expect(el.textContent ?? ``).toContain(`Offline`);
 });
 
-// A machine with none says what one is FOR, because the button beside it asks for a decision the reader has
-// never had to make before.
-it(`explains what a runner is on a machine that has none`, async () => {
+// A machine with none still shows where runners live and how to add one; the empty-state paragraph moved out
+// when the section header and Add runner button became enough to orient a first-time reader.
+it(`shows the runners section and add control on a machine that has none`, async () => {
     const el = mount([managed(true)]);
     await nextTick();
-    expect(el.textContent ?? ``).toContain(`None here yet`);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Runners for this sandbox`);
+    expect(text).toContain(`Add runner`);
 });
 
 /* DRIFT IS SAID ON THE ROW, with the button that ends it. A runner months behind the parent runs turns fine

@@ -1,4 +1,4 @@
-import type { EngineId } from "@intentic-app/api-contract";
+import type { EngineId } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 
 /* THE MARK ON AN ENGINE ROW, the same question the environment and skills lists already answer: which program is

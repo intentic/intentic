@@ -19,7 +19,7 @@ import type { LineJump } from "../workspaceTabs";
  * editor, so the two are the same rendering with a VSCode minimap. `lang === undefined` (unknown extension or a
  * file over the highlight cap) opens as plaintext (no tokenizer). Colored by Shiki via @shikijs/monaco.
  *
- * With `hideComments` the reader gets the code alone: the same analysis the diff surface uses (codeAnalysis.ts), so
+ * With `hideComments` the reader gets the code alone: the same analysis the diff surface uses (codeAnalysisClient.ts), so
  * a file reads the same whether it is being reviewed or read. The comments are REMOVED rather than folded: a
  * folded comment still spends a line saying it is there, which shortens the model, so the file's own numbering
  * is carried alongside and used for everything the reader or the app can see: the gutter, a search jump, the

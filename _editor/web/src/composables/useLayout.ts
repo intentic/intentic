@@ -127,7 +127,7 @@ const HIDE_TESTS_KEY = `ui-workspace-hide-tests`;
 const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
 
 // Comments in a diff, off by default, so every diff surface (workspace tab, agent review, environment card)
-// opens on the code alone and comment-only edits don't read as changes. See codeAnalysis.ts. Persists.
+// opens on the code alone and comment-only edits don't read as changes. See codeAnalysisClient.ts. Persists.
 const SHOW_COMMENTS_KEY = `ui-diff-show-comments`;
 
 // Comments in a file being READ (the workspace file viewer), on by default, the opposite of the diff above, and

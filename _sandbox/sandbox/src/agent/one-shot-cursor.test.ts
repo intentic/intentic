@@ -40,10 +40,7 @@ const ask = (): Promise<string> =>
 
 beforeEach(() => {
     vi.clearAllMocks();
-    created.mockImplementation(async () => ({
-        send: (prompt: string, options: unknown) => send(prompt, options),
-        close,
-    }));
+    created.mockImplementation(async () => ({ send, close }));
     send.mockImplementation(async (_prompt, options) => {
         const onDelta = (options as { onDelta?: (input: { update: { type: string; text: string } }) => void }).onDelta;
         onDelta?.({ update: { type: `text-delta`, text: `fix: tree truncation` } });

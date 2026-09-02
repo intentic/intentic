@@ -117,7 +117,9 @@ export const runCursorOneShot = async (params: {
         });
         try {
             run = await agent.send(params.prompt, {
-                onDelta: ({ update }) => updates.push(update),
+                onDelta: ({ update }) => {
+                    updates.push(update);
+                },
             });
             const result = await run.wait();
             if (result.status === `error`) {
