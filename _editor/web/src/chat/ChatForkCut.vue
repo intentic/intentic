@@ -63,8 +63,9 @@ import { errandOf } from "../composables/chat/errands";
 const props = defineProps<{
     /* THE LINE ITSELF: the count of bubbles above it, which is also the index of the first bubble below it.
        Every turn hands its own (forkCutsOf), so the number arrives already meaning "everything down to the end
-       of this answer". A message the turn folded, and the first message in the chat, hand their own instead
-       (cutsAboveOf), which is the same number meaning "everything above this message". */
+       of this answer". A message the turn folded gets its own instead (cutsAboveOf), which is the same
+       number meaning "everything above this message". The first message gets no mark above it: there is
+       nothing to fork from yet, and the affordance at the close of its answer covers the head. */
     cut: number;
 }>();
 

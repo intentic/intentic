@@ -593,9 +593,10 @@ export const forkCutsOf = (turns: readonly ChatTurn[]): Map<number, number> => {
  *     behalf, a message steered into a running turn. It sits INSIDE a turn, so the mark at that turn's close is
  *     a different line entirely — it keeps everything the fold went on to produce, which is precisely what
  *     someone going back to their "keep going" wants to drop.
- *   · The FIRST message in the conversation. Every other opening prompt has the previous turn's close-mark
- *     above it; the first has nothing above it, so the one turn nobody could ever go back to was the one that
- *     set the whole conversation's direction.
+ *   · (The first message is deliberately excluded: there is nothing above it to fork from, and a fork glyph
+ *     sitting over the date line before any turn read as "fork here" when there is no here yet. Edit is on the
+ *     pencil; rewind and file-fork at the head live in the mark at the first answer's close like every other
+ *     turn.)
  *
  * Openers past the first are deliberately absent: their boundary IS the previous turn's close, and a second
  * mark on the same line would be two controls doing one thing three pixels apart.
@@ -608,7 +609,7 @@ export const cutsAboveOf = (turns: readonly ChatTurn[]): Map<number, number> => 
     let index = 0;
     for (const turn of turns) {
         for (const message of turn.messages) {
-            if (message.role === `user` && (index === 0 || message !== turn.messages[0])) {
+            if (message.role === `user` && message !== turn.messages[0]) {
                 cuts.set(message.id, index);
             }
             index += 1;

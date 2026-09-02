@@ -1276,13 +1276,7 @@ watch(
             :class="{ 'chat-realize': realizing }"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
-                <!-- The top inset is one target's worth of air rather than the half of one it was, because the
-                     first message now carries a mark in the gap ABOVE it (cutsAboveOf) and that gap is the only
-                     one in the transcript with nothing else in it: everywhere else a mark hangs over the answer
-                     it follows, in the gutter, where overlapping costs nothing. Here it would hang over the
-                     scroller's own edge and be clipped at the top of the column. Spent at the oldest end of a
-                     conversation, which is the one place in this panel where air is free. -->
-                <div class="chat-turns flex flex-1 flex-col pt-8">
+                <div class="chat-turns flex flex-1 flex-col pt-4">
                     <!-- Where a forked chat says so: above the turns it inherited, which without it read as
                          this conversation's own beginning. -->
                     <ChatForkLine />
@@ -1339,9 +1333,9 @@ watch(
                                     class="contents"
                                 >
                                     <!-- THE WAY BACK TO JUST ABOVE THIS MESSAGE, for the boundaries one mark per
-                                         turn cannot reach: a message the turn folded, and the chat's first (see
-                                         cutsAboveOf). BETWEEN the rows rather than inside one, which is not a
-                                         stylistic choice: `.chat-message` carries `content-visibility: auto`, and
+                                         turn cannot reach: a message the turn folded (see cutsAboveOf).
+                                         BETWEEN the rows rather than inside one, which is not a stylistic
+                                         choice: `.chat-message` carries `content-visibility: auto`, and
                                          that paint-contains the row, so a mark hanging above its top edge is
                                          clipped out of existence — invisible AND unclickable. `.chat-prompt`
                                          happens to opt back out with `content-visibility: visible`, so drawn from

@@ -542,8 +542,8 @@ describe(`Conversation`, () => {
     /* AND THE BOUNDARIES ONE-MARK-PER-TURN CANNOT REACH (cutsAboveOf). A turn is not one message: the ones it
      * FOLDED sit inside it, so the mark at its close is a different line — it keeps everything the fold went on
      * to produce, which is exactly what someone going back to their "keep going" means to drop. And the very
-     * first message has nothing above it at all, so the turn that set the conversation's whole direction was
-     * the one turn nobody could go back to.
+     * first message has nothing above it, so it gets no mark: a fork glyph before the first turn read as
+     * "fork here" when there is no conversation above yet.
      *
      * Openers past the first are deliberately absent: their boundary IS the previous turn's close, and two
      * marks on one line would be two controls doing one thing. */
@@ -557,8 +557,6 @@ describe(`Conversation`, () => {
             { id: 6, role: `assistant`, text: `done` },
         ];
         expect([...cutsAboveOf(turnsOf(messages))]).toEqual([
-            // The first message: everything above it is nothing, which is still a place to go back to.
-            [1, 0],
             // The bare "continue", folded into turn 1 and two rows deep in it.
             [3, 2],
         ]);
