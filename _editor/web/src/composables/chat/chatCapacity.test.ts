@@ -1,8 +1,7 @@
 import type { AccountUsage, OauthAccount, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it } from "vitest";
 import { CAPACITY_RAIL_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
-import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
-import { usageStatusByAccount } from "./usageStatus";
+import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "./providerAccounts";
 
 /* The rail's whole argument is what it LEAVES OUT, so that is what this pins: an offer list is only worth
  * reading if everything on it can actually serve a turn, and only trustworthy if everything it drops is still
@@ -21,7 +20,7 @@ const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [
 // A fresh reading, so nothing here is judged stale: staleness is usageStatus's subject, not this one.
 const usage = (percent: number, resetsAt = 1_700_003_600): AccountUsage => ({
     measuredAt: NOW - 60_000,
-    windows: [{ kind: `seven_day`, utilization: percent, resetsAt }],
+    windows: [{ kind: `seven_day`, utilization: percent, resetsAt, gates: `all` }],
 });
 
 const claude = (over: Partial<OauthAccount>): OauthAccount => ({ id: `acc`, label: `first@example.com`, connectedAt: 0, ...over });
@@ -36,7 +35,7 @@ afterEach(() => {
     providerAccounts.value = {};
     translatorAccounts.value = NO_ROUTED;
     providerRefusals.value = {};
-    usageStatusByAccount.value = {};
+    usageByAccount.value = {};
 });
 
 describe(`what the rail offers`, () => {
@@ -161,8 +160,8 @@ describe(`what the rail says about what it is not offering`, () => {
                     usage: {
                         measuredAt: NOW - 60_000,
                         windows: [
-                            { kind: `five_hour`, utilization: 20, resetsAt: 1_700_003_600 },
-                            { kind: `seven_day`, utilization: 97, resetsAt: 1_700_400_000 },
+                            { kind: `five_hour`, utilization: 20, resetsAt: 1_700_003_600, gates: `all` },
+                            { kind: `seven_day`, utilization: 97, resetsAt: 1_700_400_000, gates: `all` },
                         ],
                     },
                 }),

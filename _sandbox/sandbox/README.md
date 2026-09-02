@@ -730,6 +730,22 @@ conversation's worktree instead of a path that still reaches the shared checkout
   kind that arrives in bursts. `rollup` keeps the money honest by summing only turns the provider counted, and
   the experiment readers drop failed and cancelled turns, whose zero prose and zero searches are arithmetic
   rather than behaviour.
+- **What each account has left is one service, read when something happened, and pushed.** Plan limits (how
+  full a subscription's pools are) live in `src/usage/`: one snapshot shape per account (`account-usage.ts`,
+  the store on `/history`), one reader per provider that fills it (`claude-usage.ts` on the account's own OAuth
+  token; `translator-usage.ts` for ChatGPT, Google and Kimi through CLIProxyAPI's credential-scoped call), and
+  one service that decides WHEN to ask (`headroom.ts`). Every window a reader produces carries `gates`, which
+  models it stands in the way of, because a plan is not one allowance: Google meters Gemini apart from the
+  Claude and GPT models it serves off the same sign-in, Claude keeps a per-model weekly slice, ChatGPT publishes
+  a code-review limit no chat turn spends. Every decision that asks "is this account spent for this model" (the
+  unnamed-account pick, the quick-model chain, the agent-run pin, a refused turn's reset) goes through
+  `fleet-limit.ts` on those gates rather than through a rule of its own. The service reads on triggers, a turn
+  settled, a plan refused, a screen opened, a person pressed re-measure, the proxy came up, and on one long idle
+  floor, never on the two five-minute timers this replaced; every write goes out on `/events` as an
+  `accountUsage` frame, and every refusal as `providerRefusal`, which is what lets a browser's rings agree
+  across windows without polling. A native Codex turn's own rate-limit push (`account/rateLimits/updated`)
+  lands in the same store, and the translator's own bench of a credential (`unavailable` on its auth-file
+  listing) rides each routed row as `cooling`, the one fact fresher than any reading.
 - **And a turn that finished is told apart from one that only stopped talking.** A turn ends at least five
   different ways — its stop condition was met, the model ran out of things to say, the loop hit a cap, the
   budget ran out, or the model asserted it was done and nothing checked the claim — and `outcome` collapses

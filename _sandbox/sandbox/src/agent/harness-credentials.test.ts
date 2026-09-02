@@ -134,13 +134,18 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
         // The refused account looks untouched precisely BECAUSE it is refused: nothing it was handed ever ran.
         accountUsage: {
             read: async () => ({
-                refused: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 3 }] },
-                working: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 74 }] },
+                refused: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 3, gates: "all" }] },
+                working: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 74, gates: "all" }] },
             }),
             record: async () => {},
             clear: async () => {},
         },
-        providerRefusals: { read: async () => (refusal === undefined ? {} : { claude: refusal }), record: async () => {}, clear: async () => {} },
+        providerRefusals: {
+            read: async () => (refusal === undefined ? {} : { claude: refusal }),
+            record: async () => {},
+            clear: async () => {},
+            onChange: () => () => {},
+        },
     });
 
 const resolved = async (refusal: ProviderRefusal | undefined, account?: string, seats?: Record<string, SeatRefusal>) =>

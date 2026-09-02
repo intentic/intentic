@@ -28,7 +28,15 @@ import { claimClosedDrafts, keepClosedDraft } from "./closedDrafts";
 import { drawsChat, elsewhereStrip, publishStrip } from "./chatEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
-import { accountsLoaded, providerAccounts, providerRefusals, rememberedAccountFor, selectedAccountId, translatorAccounts } from "./providerAccounts";
+import {
+    accountsLoaded,
+    providerAccounts,
+    providerRefusals,
+    rememberedAccountFor,
+    selectedAccountId,
+    translatorAccounts,
+    usageByAccount,
+} from "./providerAccounts";
 import {
     acpProviders,
     type CatalogLoadState,
@@ -49,7 +57,6 @@ import { scopeAccountPreference } from "./accountPreference";
 import { type Strip, tabFacts, untouched } from "./tabFacts";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
-import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
 import { sandboxError, sandboxJson, sandboxRequest, sandboxRequestVia } from "../sandbox/sandboxClient";
@@ -1187,19 +1194,9 @@ const refreshAccounts = async (target: AgentProvider, force: boolean): Promise<O
      * gate as much as it is a settings list, so a round-trip there would land on every routed turn's startup. */
     const forced = force && target === `claude` ? `?force=1` : ``;
     const list = (await sandboxJson<{ accounts?: OauthAccount[] }>(`${providerBase(target)}/accounts${forced}`)).accounts ?? [];
+    // The shared usage map is seeded from this list as it lands (providerAccounts.usageByAccount), so a fresh
+    // page load shows each account's headroom immediately instead of staying blank until its next turn.
     providerAccounts.value = { ...providerAccounts.value, [target]: list };
-    // Seed the shared usage map from the daemon's persisted snapshots, so a fresh page load shows each account's
-    // remaining headroom immediately instead of staying blank until that account's next turn. A reading this
-    // session already streamed wins when it is the newer of the two (the daemon's write is fire-and-forget, so
-    // a refresh can land between the frame and its persist).
-    const seeded = { ...usageStatusByAccount.value };
-    for (const entry of list) {
-        const persisted = entry.usage;
-        if (persisted !== undefined && (seeded[entry.id]?.measuredAt ?? 0) <= persisted.measuredAt) {
-            seeded[entry.id] = persisted;
-        }
-    }
-    usageStatusByAccount.value = seeded;
     /* THE REMEMBERED PICK IS NOT REWRITTEN FROM A LIST. It used to be, a pick this answer didn't contain was
      * replaced by `list[0]`, and the watch above then PERSISTED that. Which made every list a verdict on the
      * user's choice, including the ones that are not: a 200 carrying an empty array is what a daemon serves
@@ -1394,6 +1391,8 @@ export const resetChat = (): void => {
     translatorConnectFlow.value = undefined;
     accountBusy.value = undefined;
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
+    // Nor its headroom: the map is keyed by ids the outgoing daemon minted.
+    usageByAccount.value = {};
     // The outgoing sandbox's totals are not an answer about the incoming one, so its rows wait again.
     accountUsage.value = {};
     usageLoaded.value = false;
@@ -2270,16 +2269,39 @@ const showActiveProvider = (): void => {
  * actually came back, so a daemon that is unreachable or mid-restart leaves the surfaces waiting (the reachable
  * seam retries) instead of asserting an empty state it cannot back up. The translator read is excluded from
  * that vote deliberately, it swallows its own failure, so it always "succeeds". */
-export const refreshConnections = async (force = false): Promise<void> => {
+const readConnections = async (force: boolean): Promise<void> => {
+    /* FORCED, EVERY PROVIDER RE-MEASURES FIRST. The daemon holds a reading for a minute before it goes back
+     * upstream, which is right for every read the app takes on its own and wrong for the one a person asks
+     * for: they press it because they doubt the number on screen. One route sweeps every connection, Claude's
+     * and the translator's alike, and the lists read afterwards carry what it found. It used to reach Claude
+     * alone, behind a button whose label promised every connection. */
+    if (force) {
+        await sandboxJson(`/usage/plan-limits/refresh`, jsonBody(`POST`, { force: true })).catch(() => undefined);
+    }
     const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
     const [reads] = await Promise.all([
-        Promise.allSettled(natives.map((target) => refreshAccounts(target, force))),
+        Promise.allSettled(natives.map((target) => refreshAccounts(target, false))),
         refreshTranslatorAccounts(),
         refreshProviderRefusals(),
     ]);
     if (reads.some((read) => read.status === `fulfilled`)) {
         accountsLoaded.value = true;
     }
+};
+
+// The unforced read in flight, so three surfaces mounting together (the picker, the rail, the Usage tab) cost
+// one round of requests and all wait on it. A forced read is never joined: it was asked for precisely to go
+// behind whatever the one in flight is about to answer.
+let connectionsInFlight: Promise<void> | undefined;
+
+export const refreshConnections = (force = false): Promise<void> => {
+    if (force) {
+        return readConnections(true);
+    }
+    connectionsInFlight ??= readConnections(false).finally(() => {
+        connectionsInFlight = undefined;
+    });
+    return connectionsInFlight;
 };
 
 // Everything daemon-owned the chat needs, on the seam where it can first be read. Module-exported (like

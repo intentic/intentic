@@ -19,7 +19,7 @@ const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): Oaut
 const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
     seat === undefined || account.needsReauth === true ? account : { ...account, detail: seat.reason };
 
-export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "claudeUsage">;
+export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "headroom">;
 
 /* How long the account list will wait for a fresh plan-limit reading before answering with what is on file.
  *
@@ -72,7 +72,11 @@ export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
         // moves whether or not this sandbox is the one spending it. Absent only for an account no reading has
         // ever been obtained for; the UI reads that as unknown, not as empty.
         accounts: i.accounts.handler(async ({ input }) => {
-            await services.claudeUsage.refresh(input.force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS, input.force);
+            await services.headroom.refresh({
+                scope: { providers: ["claude"] },
+                ...(input.force ? { maxAgeMs: 0 } : {}),
+                withinMs: input.force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS,
+            });
             const [accounts, usage, seats] = await Promise.all([
                 services.claudeStore.list(),
                 services.accountUsage.read(),
@@ -83,7 +87,7 @@ export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
         // Forget the credential AND everything filed against it: a reconnect mints a fresh account id, so a
         // snapshot or a seat refusal left behind here is orphaned for good.
         disconnect: i.disconnect.handler(async ({ input }) => {
-            await Promise.all([services.claudeStore.clear(input.id), services.accountUsage.clear(input.id), services.claudeSeats.clear(input.id)]);
+            await Promise.all([services.claudeStore.clear(input.id), services.headroom.clear("claude", input.id), services.claudeSeats.clear(input.id)]);
             return { ok: true } as const;
         }),
     };

@@ -60,6 +60,8 @@ export interface FailureHost {
     readonly transcript: TranscriptClock;
     readonly provider: Ref<AgentProvider>;
     readonly account: Ref<string | undefined>;
+    // The model the chat is on, so a refusal's fallback reset is read off the pool THAT model spends.
+    readonly model: Ref<string>;
     // Dropped when the daemon no longer has the session behind this chat.
     readonly session: Ref<SessionRef | undefined>;
     // The red line: this needs the user.
@@ -306,7 +308,8 @@ export class TurnFailures {
      * actually refused). It rides the notice as information and gates nothing. */
     private applyLimitError(error: TurnError): void {
         const { message } = error;
-        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.provider.value, this.host.account.value))?.resetsAt;
+        const model = this.host.model.value === `` ? undefined : { id: this.host.model.value };
+        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.provider.value, this.host.account.value, model), model)?.resetsAt;
         /* ARMED, THE DAEMON KEEPS THE APPOINTMENT, and the strip says so rather than offering a press: same
          * `automatic` mark an armed outage raises, for the same reason (the local auto-continue keeps its hands
          * off something already being brought back), differing only in that this one waits for a published

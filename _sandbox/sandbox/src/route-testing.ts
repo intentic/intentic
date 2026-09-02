@@ -511,12 +511,20 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         claudeSeats: { read: async () => ({}), refuse: async () => {}, clear: async () => {} },
         // No usage measured by default, an account that hasn't run a turn since its window reset reports none.
         accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
-        // …and nothing sweeps for one: the reader would need a live OAuth usage endpoint to reach.
-        claudeUsage: { refresh: async () => {}, start: () => () => {} },
+        // …and nothing sweeps for one: the reader would need a live OAuth usage endpoint to reach. Records
+        // and clears are swallowed for the same reason the store's are: the turn path writes through here.
+        headroom: {
+            refresh: async () => {},
+            record: async () => {},
+            clear: async () => {},
+            read: async () => ({}),
+            onChange: () => () => {},
+            start: () => () => {},
+        },
         // Nothing has ever been refused. Both writes are on the turn path, a refusal is filed when the plan says
         // no, and the account's standing refusal is settled the moment a turn produces content, so every test
         // that runs a turn at all touches this store whether or not it is about refusals.
-        providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {} },
+        providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} },
         // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
         cliProxy: unstubbed("cliProxy", {
             accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),
@@ -524,7 +532,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             complete: async () => {},
             disconnect: async () => {},
             models: async () => [],
-            refreshUsage: async () => {},
+            headroom: { targets: async () => [] },
+            sharedUsageKey: async () => undefined,
             turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
             ...cliProxy,
         }),

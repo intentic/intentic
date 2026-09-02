@@ -4,8 +4,6 @@ import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, health
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../agent/provider-module.js";
 import { planHarnessTurn } from "../agent/turn-plan.js";
 import type { Config } from "../env.config.js";
-import type { AccountUsageStore } from "../usage/account-usage.js";
-import { type ClaudeUsageRefresher, createClaudeUsageRefresher } from "../usage/claude-usage.js";
 import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "./claude-credentials.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude-seats.js";
@@ -24,10 +22,6 @@ export interface ClaudeSlice {
     // them). Kept apart from the account record because that record is rewritten whole on every token
     // rotation, by every sandbox sharing the auth dir, see claude-seats.ts. The picker skips a refused seat.
     readonly claudeSeats: ClaudeSeatStore;
-    // Keeps the Claude half of the account-usage store current for accounts NO turn is running on, the native
-    // counterpart to cliProxy.refreshUsage. /claude/accounts waits on it (briefly) so a Usage tab reports what
-    // claude.ai would report at that moment rather than what was true at the end of the last turn.
-    readonly claudeUsage: ClaudeUsageRefresher;
     // Claude's model catalog (the Agent SDK probe with a persisted floor), held directly as well as in the
     // shared record so this module's row and the account routes read one instance.
     readonly claudeModels: ClaudeCatalog;
@@ -38,15 +32,11 @@ export const createClaudeSlice = (input: {
     readonly authRoot: string;
     readonly workspaceRoot: string;
     readonly logger: Logger;
-    // Shared with the translator client, which records the routed subscriptions' readings into the same file:
-    // headroom is one idea in this product, so the store is core and both halves write it.
-    readonly accountUsage: AccountUsageStore;
 }): ClaudeSlice => {
     const claudeStore = fileClaudeStore(join(input.authRoot, "claude"), input.logger);
     return {
         claudeStore,
         claudeSeats: fileClaudeSeatStore(join(input.authRoot, "claude", "seats.json"), input.logger),
-        claudeUsage: createClaudeUsageRefresher({ store: claudeStore, usage: input.accountUsage }),
         claudeModels: createClaudeCatalog(claudeStore, input.config, input.workspaceRoot, join(input.authRoot, "claude", "models.json")),
     };
 };
@@ -87,12 +77,6 @@ export const claudeProvider: ProviderModule = {
         if (role.roots) {
             startClaudeRefresh(services.claudeStore);
         }
-        // Read every Claude account's plan limits now, and every few minutes after. The account list waits on
-        // its own sweep, so this is for the readings nobody is looking at: which account an unattributed turn
-        // runs on is decided by what is on file (accountWithHeadroom), and before this the file only ever knew
-        // about accounts that had recently run a turn, so an account another Claude Code had spent all week
-        // still looked like the one with the most room.
-        services.claudeUsage.start();
     },
     secretEntries: async (services) =>
         (await services.claudeStore.list()).map((account) =>

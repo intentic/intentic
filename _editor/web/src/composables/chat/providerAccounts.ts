@@ -1,5 +1,5 @@
-import type { AgentProvider, OauthAccount, ProviderRefusal, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { computed, ref, type WritableComputedRef } from "vue";
+import type { AccountUsage, AgentProvider, OauthAccount, ProviderRefusal, TranslatorAccounts } from "@intentic/sandbox-contract";
+import { computed, ref, watch, type WritableComputedRef } from "vue";
 import { type AccountPicks, accountPicks } from "./accountPreference";
 import { perProvider } from "./providerCatalog";
 
@@ -41,6 +41,60 @@ export const translatorAccounts = ref<TranslatorAccounts>({ codex: [], grok: [],
  * a fresh refusal tells the reader the meter is what is wrong, which is the state that sent someone to
  * reconnect a perfectly healthy Kimi account. */
 export const providerRefusals = ref<Record<string, ProviderRefusal>>({});
+
+/* EVERY ACCOUNT'S HEADROOM, ONE MAP, keyed `${provider}:${account}`: a native account by the provider whose
+ * row it is and its id, a translator subscription by its provider and auth-file name. Provider-qualified
+ * throughout, so one provider's reading can never answer for another's under a shared name. Three writers, one
+ * rule: the account lists seed it as they load (the watch below), a turn ending in this tab writes its own
+ * `account_usage` frame, and the daemon pushes every reading it takes on /events (systemEvents.ts). Newer
+ * `measuredAt` wins on every write, so the order the three arrive in cannot matter.
+ *
+ * This replaces a second map that held the streamed frames alone, merged against the rows by comparing
+ * timestamps at every read: a tab left open reported an hours-old floor while the rows two routes away, same
+ * account, drew the current number. One map, written newest-wins, read everywhere, is what the push buys. */
+export const usageByAccount = ref<Record<string, AccountUsage>>({});
+
+// A write, or a clear (`undefined`), that keeps the newest reading: a frame that arrives late, or a list
+// fetched before a turn ended, must not overwrite what a fresher source already wrote.
+export const setAccountUsage = (provider: AgentProvider, account: string, usage: AccountUsage | undefined): void => {
+    const key = `${provider}:${account}`;
+    if (usage === undefined) {
+        const { [key]: _cleared, ...rest } = usageByAccount.value;
+        usageByAccount.value = rest;
+        return;
+    }
+    if ((usageByAccount.value[key]?.measuredAt ?? 0) > usage.measuredAt) {
+        return;
+    }
+    usageByAccount.value = { ...usageByAccount.value, [key]: usage };
+};
+
+// The reading for an account as a SURFACE names it: a native account by id, a routed one by its auth-file
+// name, under the provider whose row it is.
+export const lookupUsage = (provider: AgentProvider, account: string): AccountUsage | undefined => usageByAccount.value[`${provider}:${account}`];
+
+// Seed from the rows as they land. Synchronous, so a surface reading the map right after a list arrives (or a
+// test that sets a list directly) sees the seeded reading in the same tick.
+watch(
+    [providerAccounts, translatorAccounts],
+    ([native, routed]) => {
+        for (const [provider, accounts] of Object.entries(native)) {
+            for (const account of accounts) {
+                if (account.usage !== undefined) {
+                    setAccountUsage(provider, account.id, account.usage);
+                }
+            }
+        }
+        for (const [provider, accounts] of Object.entries(routed)) {
+            for (const account of accounts) {
+                if (account.usage !== undefined) {
+                    setAccountUsage(provider, account.name, account.usage);
+                }
+            }
+        }
+    },
+    { flush: "sync" },
+);
 
 /* Whether the lists above have been READ from this sandbox's daemon yet, the difference between "you have no
  * account" and "we haven't asked". They are the same empty list, and every surface that offers a provider used

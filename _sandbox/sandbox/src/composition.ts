@@ -84,6 +84,8 @@ import { createAuthConnections, type AuthConnections } from "./auth/connections.
 import { createSessions, type MintedSession } from "./auth/session.js";
 
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
+import { claudeHeadroomSource } from "./usage/claude-usage.js";
+import { createHeadroomService, type HeadroomService } from "./usage/headroom.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
 import { fileIssuesStore, type IssuesStore } from "./issues/issues-store.js";
@@ -518,6 +520,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // routed subscriptions; /claude/accounts and /translator/accounts each merge it into their own rows, so
     // every account the user can see reports its headroom from one place.
     readonly accountUsage: AccountUsageStore;
+    // The one place a headroom reading is asked for, coalesced and announced (usage/headroom.ts): every
+    // provider's targets behind one `refresh`, triggered by what happened (a turn settled, a plan refused, a
+    // screen opened) rather than by a clock, and every write pushed to the browsers on /events.
+    readonly headroom: HeadroomService;
     // The last time each PROVIDER refused a turn outright (historyRoot/provider-refusals.json), a spent plan or
     // a credential the API would not take. The observed counterpart to the polled snapshot above: streamAgent
     // records it from the turn that was refused, and /agent/refusals serves it to the account surfaces, which
@@ -889,7 +895,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
     /* The provider slices: each provider directory builds its own Services members (agent/provider-module.ts
      * is the seam), and this function's whole part in it is these calls and the spreads in the literal below.
      * The Gemini slice is built beside OpenCode above, whose knot it is part of. */
-    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: workspace.root, accountUsage });
+    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: workspace.root });
+    // Both halves of "what does each account have left" behind one service: Claude's accounts on their own
+    // tokens, the routed subscriptions through the translator's credential-scoped call.
+    const headroom = createHeadroomService({
+        store: accountUsage,
+        sources: [claudeHeadroomSource(claude.claudeStore), cliProxy.headroom],
+        logger,
+    });
     const codex = createCodexSlice({ config, authRoot });
     const cursor = createCursorSlice({ authRoot, logger });
     const grok = createGrokSlice(openCode);
@@ -1329,6 +1342,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...gemini,
         ...kimi,
         accountUsage,
+        headroom,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
         // Assembled from the provider modules, LATE-BOUND through the same holder the extension backend uses:
         // the record is a member of the object its thunks read from, and the thunks only run per request.

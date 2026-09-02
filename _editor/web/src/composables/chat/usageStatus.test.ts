@@ -1,6 +1,6 @@
 import type { AccountUsage, OauthAccount, ProviderRefusal, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it } from "vitest";
-import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
+import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "./providerAccounts";
 import {
     bindingWindow,
     formatAge,
@@ -23,12 +23,11 @@ import {
     type RefusalReading,
     usageDetail,
     usagePercent,
-    usageStatusByAccount,
     usageStatusFor,
     usageWindowLabel,
 } from "./usageStatus";
 
-const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, ...over });
+const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, gates: `all`, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });
 // The projection every surface draws from. Undefined is reserved for an account nobody has measured, which is
 // its own case below: everywhere else the reading exists, so unwrapping it here keeps the assertions readable.
@@ -86,6 +85,20 @@ describe(`bindingWindow`, () => {
             usage({ windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 98 })] }),
         );
         expect(picked?.kind).toBe(`seven_day`);
+    });
+
+    it(`is the fullest pool the MODEL spends when the surface knows one: a spent Opus slice is not Haiku's ceiling`, () => {
+        // The Antigravity/Claude case the gates exist for: the account's fullest pool and the pool this model
+        // draws on are different allowances, and a ring drawn off the wrong one turns red over a model with a
+        // full week.
+        const reading = usage({
+            windows: [window({ kind: `seven_day`, utilization: 30 }), window({ kind: `model:Opus`, label: `Opus`, utilization: 100, gates: { models: [`Opus`] } })],
+        });
+        expect(bindingWindow(reading, { id: `claude-haiku-4-5` })?.kind).toBe(`seven_day`);
+        expect(bindingWindow(reading, { id: `claude-opus-4-6` })?.kind).toBe(`model:Opus`);
+        expect(usagePercent(reading, { id: `claude-haiku-4-5` })).toBe(30);
+        expect(isSpent(reading, { id: `claude-haiku-4-5` })).toBe(false);
+        expect(isSpent(reading, { id: `claude-opus-4-6` })).toBe(true);
     });
 
     it(`is undefined when no pool was reported, so a row reads unknown rather than 0%`, () => {
@@ -243,50 +256,50 @@ describe(`planHeadroom`, () => {
 });
 
 describe(`modelAllowance`, () => {
-    const pools = (...kinds: readonly string[]): readonly { kind: string; label: string; percent: number; resetsAt: number | undefined }[] =>
-        kinds.map((kind, index) => ({ kind, label: kind, percent: index, resetsAt: undefined }));
+    // A reading with the named pools, scoped the way the Claude reader scopes a per-model slice: gated to the
+    // plan's own name for the tier, which is also the label a sentence prints.
+    const scoped = (...names: readonly string[]): AccountUsage =>
+        usage({
+            windows: [
+                window({ kind: `five_hour`, utilization: 1 }),
+                ...names.map((name, index) => window({ kind: `model:${name}`, label: name, utilization: index + 2, gates: { models: [name] } })),
+            ],
+        });
 
     it(`matches the plan's name for a model against the vendor's id and label alike`, () => {
         // The plan says "Opus", the wire says "claude-opus-4-6" and the picker says "Claude Opus 4.6": the same
-        // tier under three spellings, which is the entire reason this match is written once.
-        const opus = pools(`five_hour`, `model:Opus`, `model:Sonnet`);
+        // tier under three spellings, which is the entire reason this match is written once (plan-pools.ts).
+        const opus = scoped(`Opus`, `Sonnet`);
         expect(modelAllowance(opus, { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })?.name).toBe(`Opus`);
         expect(modelAllowance(opus, { id: `claude-sonnet-4-6`, label: `Claude Sonnet 4.6` })?.name).toBe(`Sonnet`);
     });
 
     it(`carries the pool's own figures, so the sentence and the meter can't disagree`, () => {
-        const [allowance] = [
-            modelAllowance([{ kind: `model:Fable`, label: `Weekly · Fable`, percent: 94, resetsAt: 1_700_000 }], {
-                id: `claude-fable-5`,
-                label: `Claude Fable 5`,
-            }),
-        ];
-        expect(allowance).toEqual({ name: `Fable`, percent: 94, resetsAt: 1_700_000 });
+        const reading = usage({ windows: [window({ kind: `model:Fable`, label: `Fable`, utilization: 94.4, resetsAt: 1_700_000, gates: { models: [`Fable`] } })] });
+        expect(modelAllowance(reading, { id: `claude-fable-5`, label: `Claude Fable 5` })).toEqual({ name: `Fable`, percent: 94, resetsAt: 1_700_000 });
     });
 
     it(`says nothing for a plan that doesn't meter this model on its own`, () => {
-        // Every provider but Claude today. An unscoped weekly pool is not this model's allowance, and claiming
-        // it were would put a number on the screen that describes something else.
-        expect(modelAllowance(pools(`five_hour`, `seven_day`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
-        expect(modelAllowance(pools(`model:Opus`), { id: `grok-4-fast`, label: `Grok 4 Fast` })).toBeUndefined();
-        expect(modelAllowance([], { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
+        // An unscoped weekly pool is not this model's allowance, and claiming it were would put a number on the
+        // screen that describes something else.
+        expect(modelAllowance(usage({ windows: [window({ kind: `five_hour` }), window({ kind: `seven_day` })] }), { id: `claude-opus-4-6` })).toBeUndefined();
+        expect(modelAllowance(scoped(`Opus`), { id: `grok-4-fast`, label: `Grok 4 Fast` })).toBeUndefined();
+        expect(modelAllowance(undefined, { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
     });
 
-    it(`matches whole words only, so a pool never claims a model that merely mentions it`, () => {
-        // "Sonnet" is not in "claude-opus-4-6" and a substring test is what would have said it was.
-        expect(modelAllowance(pools(`model:Son`), { id: `claude-sonnet-4-6`, label: `Claude Sonnet 4.6` })).toBeUndefined();
-        // …and a multi-word scope still has to appear as a run of words.
-        expect(modelAllowance(pools(`model:Claude Opus`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })?.name).toBe(`Claude Opus`);
-        expect(modelAllowance(pools(`model:Opus Claude`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
+    it(`names a Google family pool for the model it gates, in the provider's own words`, () => {
+        const google = usage({
+            windows: [window({ kind: `google:3p-weekly`, label: `Claude and GPT models · Weekly Limit`, utilization: 73, gates: { models: [`claude`, `gpt`] } })],
+        });
+        expect(modelAllowance(google, { id: `claude-opus-4-6-thinking` })?.name).toBe(`Claude and GPT models · Weekly Limit`);
+        expect(modelAllowance(google, { id: `gemini-3-pro` })).toBeUndefined();
     });
 
     it(`prefers the more specific pool, and answers nothing when two are equally specific`, () => {
         // A plan metering both a family and one member of it: the member is the honest answer. Two pools of the
         // same specificity mean we cannot tell which allowance the turn spends, and no sentence beats a wrong one.
-        expect(modelAllowance(pools(`model:Opus`, `model:Claude Opus`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })?.name).toBe(
-            `Claude Opus`,
-        );
-        expect(modelAllowance(pools(`model:Opus`, `model:Claude`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
+        expect(modelAllowance(scoped(`Opus`, `Claude Opus`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })?.name).toBe(`Claude Opus`);
+        expect(modelAllowance(scoped(`Opus`, `Claude`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
     });
 });
 
@@ -305,35 +318,32 @@ describe(`isSpent`, () => {
     });
 });
 
-/* Which of the two readings an account row draws. The daemon's rides the accounts list for every provider; the
- * streamed one is pushed by a turn ending in this tab and only ever exists for Claude. Newer measurement wins,
- * so a routed subscription simply keeps the daemon's. */
+/* Which reading an account row draws: the one shared map (providerAccounts.usageByAccount), written newest-
+ * wins by the lists, a turn's own frame and the daemon's push alike, and only for a caller holding a bare row
+ * the reading that row carried. */
 describe(`liveUsage`, () => {
-    it(`keeps the daemon's reading when nothing has streamed for that account`, () => {
+    afterEach(() => {
+        usageByAccount.value = {};
+    });
+
+    it(`keeps a row's own reading when the map holds nothing for that account`, () => {
         const attached = usage({ measuredAt: 500 });
         expect(liveUsage(`gemini`, `gemini-account`, attached)).toBe(attached);
     });
 
-    it(`prefers a turn's fresher frame over the list it was fetched alongside`, () => {
+    it(`reads the map wherever it has an entry, whichever source wrote it`, () => {
         const streamed = usage({ measuredAt: 900 });
-        usageStatusByAccount.value = { "claude-1": streamed };
+        usageByAccount.value = { "claude:claude-1": streamed };
         // toEqual, not toBe: the shared store is a Vue ref, so what comes back is its reactive proxy.
         expect(liveUsage(`claude`, `claude-1`, usage({ measuredAt: 500 }))).toEqual(streamed);
-        usageStatusByAccount.value = {};
+        expect(liveUsage(`claude`, `claude-1`)).toEqual(streamed);
     });
 
-    it(`does not let a stale frame overwrite a newer reading from the daemon`, () => {
-        const attached = usage({ measuredAt: 900 });
-        usageStatusByAccount.value = { "claude-1": usage({ measuredAt: 500 }) };
-        expect(liveUsage(`claude`, `claude-1`, attached)).toBe(attached);
-        usageStatusByAccount.value = {};
-    });
-
-    it(`falls back to a streamed frame for an account the list carried no reading for`, () => {
-        const streamed = usage({ measuredAt: 100 });
-        usageStatusByAccount.value = { "claude-1": streamed };
-        expect(liveUsage(`claude`, `claude-1`, undefined)).toEqual(streamed);
-        usageStatusByAccount.value = {};
+    it(`finds a routed subscription under its provider-qualified key`, () => {
+        const pulled = usage({ measuredAt: 100 });
+        usageByAccount.value = { "gemini:g-1": pulled };
+        expect(liveUsage(`gemini`, `g-1`)).toEqual(pulled);
+        expect(liveUsage(`kimi`, `g-1`)).toBeUndefined();
     });
 });
 
@@ -434,7 +444,8 @@ describe(`liveUsage under a standing refusal`, () => {
             ],
         };
         providerRefusals.value = kimiSpent;
-        expect(liveUsage(`kimi`, `kimi-1`, reading)).toBe(reading);
+        // toEqual, not toBe: the rows seeded the shared map, and what comes back is its reactive proxy.
+        expect(liveUsage(`kimi`, `kimi-1`, reading)).toEqual(reading);
     });
 
     /* THE PIN MUST NOT FEED ITSELF. The surfaces judge a refusal against percentages this same merge produces, so
@@ -454,6 +465,10 @@ describe(`liveUsage under a standing refusal`, () => {
  * sentence a refused turn prints. They used to read the streamed map alone, which is why a chat left open
  * reported an hours-old floor while the account rows on the next route showed the current number. */
 describe(`usageStatusFor`, () => {
+    afterEach(() => {
+        usageByAccount.value = {};
+    });
+
     it(`finds the daemon's reading on whichever list the account is on`, () => {
         providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
         translatorAccounts.value = { ...translatorAccounts.value, gemini: [{ name: `g-1`, label: `Google`, usage: usage({ measuredAt: 7 }) }] };
@@ -468,11 +483,11 @@ describe(`usageStatusFor`, () => {
         expect(usageStatusFor(`kimi`, `claude-1`)).toBeUndefined();
     });
 
-    it(`still prefers a turn's own frame once it is the newer of the two`, () => {
+    it(`reads a turn's own frame once it has been written, the map being seeded from the rows and then kept newest`, () => {
         providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
-        usageStatusByAccount.value = { "claude-1": usage({ measuredAt: 900 }) };
+        usageByAccount.value = { ...usageByAccount.value, "claude:claude-1": usage({ measuredAt: 900 }) };
         expect(usageStatusFor(`claude`, `claude-1`)?.measuredAt).toBe(900);
-        usageStatusByAccount.value = {};
+        usageByAccount.value = {};
     });
 });
 
@@ -528,11 +543,16 @@ describe(`planLimitRows`, () => {
         expect(rows.map((row) => row.id)).toEqual([`codex:default`, `kimi:default`]);
     });
 
-    it(`prefers a turn's streamed frame over the account row it arrived with`, () => {
-        usageStatusByAccount.value = { "claude-1": usage({ windows: [window({ utilization: 96 })], measuredAt: 900 }) };
+    it(`draws the map's reading over the account row it arrived with`, () => {
+        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 96 })], measuredAt: 900 }) };
         const rows = planLimitRows({ claude: [account({ usage: usage({ measuredAt: 500 }) })] }, noRouted);
         expect(rows[0]?.percent).toBe(96);
-        usageStatusByAccount.value = {};
+        usageByAccount.value = {};
+    });
+
+    it(`carries the translator's own bench of a routed credential onto its row`, () => {
+        const rows = planLimitRows({}, { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code`, cooling: { until: 9_000, reason: `quota exceeded` } }] });
+        expect(rows[0]?.cooling).toEqual({ until: 9_000, reason: `quota exceeded` });
     });
 });
 
@@ -553,6 +573,7 @@ describe(`plan-limit aggregates`, () => {
         readable: true,
         needsReauth: false,
         routed: false,
+        cooling: undefined,
         ...over,
     });
 

@@ -2,13 +2,16 @@ import { randomUUID } from "node:crypto";
 import {
     type ActivityEvent,
     type AgentEvent,
+    type AgentProvider,
     type AgentTurn,
     agentContract,
     capabilitiesOf,
     type ContextUsage,
     type EditorContext,
+    KeyedProviderSchema,
     type SnapshotTurn,
     type TodoItem,
+    type UsageWindow,
     type WorkspaceEvent,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -798,6 +801,39 @@ const VERIFICATION_CHECK_CHARS = 200;
  * handle and the one worth waking up for. */
 const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set(["rate_limit", "provider-outage", "claude-token-refused", "claude-not-entitled"]);
 
+// How fresh a routed provider's readings must be before a settled turn re-reads them. Ten seconds: a fleet of
+// parallel routed turns settling together costs one sweep, and a lone turn's ring is current by the time the
+// user looks at it.
+const SETTLE_MAX_AGE_MS = 10_000;
+
+/* File a turn's own plan-limit reading (the `account_usage` frame) under the account it describes. A native
+ * Claude turn names its account. A native Codex turn names the subscription marker ("codex-subscription"),
+ * which is nobody: the app-server pushed the plan's rate limits for whichever auth file CLIProxyAPI served the
+ * turn on, so the reading is filed under that provider's ONE file when it has one, and the provider's files
+ * are re-read precisely when it has several. An env-token turn names nothing and files nothing. */
+const fileAccountUsage = async (
+    services: Services,
+    provider: AgentProvider,
+    resolvedAccount: string | undefined,
+    windows: readonly UsageWindow[],
+): Promise<void> => {
+    try {
+        const routed = KeyedProviderSchema.safeParse(provider);
+        if (routed.success) {
+            const key = await services.cliProxy.sharedUsageKey(routed.data);
+            await (key === undefined
+                ? services.headroom.refresh({ scope: { providers: [provider] }, maxAgeMs: 0 })
+                : services.headroom.record(provider, key, { windows: [...windows], measuredAt: Date.now() }));
+            return;
+        }
+        if (resolvedAccount !== undefined) {
+            await services.headroom.record(provider, resolvedAccount, { windows: [...windows], measuredAt: Date.now() });
+        }
+    } catch (error) {
+        services.logger.warn({ err: error }, "account usage: snapshot write failed");
+    }
+};
+
 /* A SPENT-ALLOWANCE FRAME, DRESSED WITH EVERYTHING THE CLIENT CANNOT WORK OUT FOR ITSELF: when the window
  * reopens, whether the turn is held whole for a re-run, and whether a clock is going to perform that re-run
  * without anybody pressing anything.
@@ -1434,15 +1470,17 @@ async function* runTurn(
                 yield { ...event, ...attribution };
                 continue;
             } else if (event.kind === "account_usage") {
-                // Persist the windows as well as streaming them, so the account picker can report this
-                // account's headroom on the next page load instead of only for as long as this tab stays open.
-                // Attributed turns only, an env-token turn has no account to key it by. Fire-and-forget: a
-                // usage write must never delay or fail a turn (same contract as the activity append below).
-                if (resolvedAccount !== undefined) {
-                    services.accountUsage
-                        .record(resolvedAccount, { windows: event.windows, measuredAt: Date.now() })
-                        .catch((error: unknown) => services.logger.warn({ err: error }, "account usage: snapshot write failed"));
-                }
+                /* Persist the windows as well as streaming them, so the account picker can report this
+                 * account's headroom on the next page load instead of only for as long as this tab stays open,
+                 * and announce them, so every other open window's rings move too (usage/headroom.ts).
+                 *
+                 * WHICH ACCOUNT. A native Claude turn names the one it ran on. A native Codex turn's reading
+                 * arrives on its own stream too (the app-server pushes the plan's rate limits), but the turn
+                 * names only the subscription, CLIProxyAPI picked the auth file, so it is filed under the one
+                 * file the provider holds, or, with several, the provider's files are re-read precisely instead
+                 * of guessing. Fire-and-forget: a usage write must never delay or fail a turn (same contract
+                 * as the activity append below). */
+                void fileAccountUsage(services, provider, resolvedAccount, event.windows);
                 yield { ...event, ...attribution };
                 continue;
             } else if (event.kind === "plan") {
@@ -1513,8 +1551,19 @@ async function* runTurn(
                             message: event.message,
                             // Routed turns have no account to name: CLIProxyAPI picks the auth file itself.
                             ...attribution,
+                            // The model, so the refusal is read against the pool that model spends rather than
+                            // the account's fullest one (UsageWindow.gates).
+                            ...(request.model === undefined || request.model === "" ? {} : { model: request.model }),
                         })
                         .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: write failed"));
+                    /* AND RE-MEASURE WHAT REFUSED, NOW. A refusal is the strongest live signal a plan gives and
+                     * the moment the reading matters most, so the account that said no (or, for a routed turn,
+                     * the provider's files) is read again at once rather than on the next screen open: the
+                     * ring turns red while the sentence is still on screen, and the picker stops offering it. */
+                    void services.headroom.refresh({
+                        scope: { providers: [provider], ...(resolvedAccount === undefined ? {} : { account: resolvedAccount }) },
+                        maxAgeMs: 0,
+                    });
                 }
                 /* The provider failed us, not the workspace. Open (or re-observe) its outage and tell the client
                  * where the resume stands: which attempt this is, when the next one is due, and whether it is
@@ -1656,6 +1705,14 @@ async function* runTurn(
             });
         }
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
+        /* A ROUTED TURN JUST SPENT SOMETHING, and the only reading of what it spent is the one this re-read
+         * takes. A Claude turn reads its own account's pools at settle (sdk-stream's account_usage frame); a
+         * turn through the translator never learns which auth file served it, so the provider's readable files
+         * are refreshed instead, freshness-bounded so a fleet of parallel turns costs one sweep between them.
+         * Fire-and-forget like every other turn-end write. */
+        if (KeyedProviderSchema.safeParse(provider).success) {
+            void services.headroom.refresh({ scope: { providers: [provider] }, maxAgeMs: SETTLE_MAX_AGE_MS });
+        }
         /* The spend ledger, the durable, never-pruned record the cost dashboard reads, and now the only place a
          * turn's FATE survives longer than the feed that prunes it.
          *

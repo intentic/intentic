@@ -127,13 +127,14 @@ const refusedAccounts = (group: PlanLimitGroup): Refused => {
     return named === undefined ? { all: true, one: undefined } : { all: false, one: group.refusedRow?.id };
 };
 
-/* CAN THIS ACCOUNT SERVE THE NEXT TURN. Three ways to be unusable, and they are genuinely different facts: a
- * spent pool (waits), a rejected credential (needs a person), a standing refusal (needs a person or a plan).
- * An account with NO reading is usable: a plan that publishes no limits (SuperGrok) and one that has not been
- * measured yet are both unknown, and unknown is not exhausted. Saying otherwise would hide the one provider a
- * reader has left on a week when everything measurable is spent. */
+/* CAN THIS ACCOUNT SERVE THE NEXT TURN. Four ways to be unusable, and they are genuinely different facts: a
+ * spent pool (waits), a rejected credential (needs a person), a standing refusal (needs a person or a plan),
+ * and the translator's own bench of a routed credential (waits, on the proxy's clock, and is the freshest fact
+ * of the four). An account with NO reading is usable: a plan that publishes no limits (SuperGrok) and one that
+ * has not been measured yet are both unknown, and unknown is not exhausted. Saying otherwise would hide the one
+ * provider a reader has left on a week when everything measurable is spent. */
 const canServe = (row: PlanLimitRow, refused: Refused): boolean => {
-    if (row.needsReauth || refused.all || refused.one === row.id) {
+    if (row.needsReauth || row.cooling !== undefined || refused.all || refused.one === row.id) {
         return false;
     }
     return row.percent === undefined || row.percent < SPENT_PERCENT;
@@ -208,6 +209,9 @@ const outReason = (group: PlanLimitGroup, refused: Refused): string => {
     if (group.rows.every((row) => row.needsReauth)) {
         return `sign-in expired`;
     }
+    if (group.rows.every((row) => row.cooling !== undefined)) {
+        return `cooling down`;
+    }
     return refused.all || refused.one !== undefined ? `refused your last turn` : `nothing available`;
 };
 
@@ -217,11 +221,13 @@ const outReason = (group: PlanLimitGroup, refused: Refused): string => {
  * spent until Sunday is a promise the plan will not keep. Past instants are ignored rather than reported: a
  * window whose time has passed describes a pool that has already reopened. */
 const reopensAt = (group: PlanLimitGroup, now: number): number | undefined => {
-    const upcoming = group.rows.flatMap((row) =>
-        row.pools.flatMap((pool) =>
+    const upcoming = group.rows.flatMap((row) => [
+        ...row.pools.flatMap((pool) =>
             pool.percent >= SPENT_PERCENT && pool.resetsAt !== undefined && pool.resetsAt * 1000 > now ? [pool.resetsAt] : [],
         ),
-    );
+        // The translator's own retry instant for a benched credential, the same kind of promise a reset is.
+        ...(row.cooling?.until !== undefined && row.cooling.until * 1000 > now ? [row.cooling.until] : []),
+    ]);
     return upcoming.length === 0 ? undefined : Math.min(...upcoming);
 };
 

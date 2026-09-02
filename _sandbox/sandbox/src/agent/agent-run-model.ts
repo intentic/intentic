@@ -1,19 +1,23 @@
 import { endpointProvider, NATIVE_PROVIDERS, type QuickModelChoice, type QuickModelSource, resolveAgentRunModels } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { harnessReadyProviders } from "./harness-credentials.js";
+import { spentRung } from "./quick-model-quota.js";
 
 /* WHICH OF THE OWNER'S AGENT-RUN MODELS THIS SANDBOX CAN ACTUALLY START, the daemon half of the contract's
  * agent-run-model.ts, split the same way its quick-model sibling is: the contract owns the ORDER, because the
  * settings row has to name the same head the daemon will spend, and this file owns the one FACT that order runs
  * on and only the daemon holds, which accounts are connected.
  *
- * THE WALK IS OVER CONNECTIONS, NOT OVER REFUSALS, and that is a narrower promise than askQuickModel's. A
- * one-shot that comes back refused has cost nothing, so the quick chain re-asks the next rung and keeps going.
- * An agent session cannot be replayed that way: by the time a provider refuses mid-turn the agent may already
- * have edited files in a worktree, and starting a second session on the next model would be two agents on one
- * job. So this list is read ONCE, before anything is spent, and steps over exactly the failure that is knowable
- * in advance, an account that is not there. A model that accepts the turn and dies later is a failed run the
- * user reads on its card, like any other.
+ * THE WALK IS OVER WHAT IS KNOWABLE BEFORE THE SESSION STARTS, and that is a narrower promise than
+ * askQuickModel's. A one-shot that comes back refused has cost nothing, so the quick chain re-asks the next
+ * rung and keeps going. An agent session cannot be replayed that way: by the time a provider refuses mid-turn
+ * the agent may already have edited files in a worktree, and starting a second session on the next model would
+ * be two agents on one job. So this list is read ONCE, before anything is spent, and steps over exactly the two
+ * failures that are knowable in advance: an account that is not there, and an allowance the recorded quota
+ * already says is spent (quick-model-quota.ts, the same reading the quick chain steps over on). The second is
+ * the one this used to miss, and it is the commoner: a pinned head whose account the chat had spent all morning
+ * took every Fix-with-agent down for hours while the second pin sat with a full week. A model that accepts the
+ * turn and dies later is a failed run the user reads on its card, like any other.
  *
  * Readiness rather than a full credential resolution, deliberately: this runs at the boundary EVERY detached
  * turn passes through, and the deeper probe reads live provider catalogs. Paying for that on every unattended
@@ -47,5 +51,14 @@ export const agentRunModel = async (services: Services): Promise<QuickModelChoic
     if (agentRunModels.length === 0) {
         return undefined;
     }
-    return resolveAgentRunModels(await readinessSources(services), agentRunModels)[0];
+    const chain = resolveAgentRunModels(await readinessSources(services), agentRunModels);
+    for (const choice of chain) {
+        if ((await spentRung(services, choice)) === undefined) {
+            return choice;
+        }
+    }
+    // Every pin is known-spent. The head runs anyway and fails in the provider's own words, which beats a run
+    // that quietly opens on an account the user never pinned: the reading is a snapshot, and a chain spent to
+    // the bottom is exactly when a window may have reopened since it was taken.
+    return chain[0];
 };

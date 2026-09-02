@@ -123,6 +123,7 @@ export * from "./runner-protocol.js";
 export * from "./listener-protocol.js";
 export * from "./hostnames.js";
 export * from "./model-order.js";
+export * from "./plan-pools.js";
 export * from "./path-refs.js";
 export * from "./prompt-complexity.js";
 export * from "./quick-model.js";

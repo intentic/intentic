@@ -71,7 +71,7 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
             gemini: [4, 44, 91, 30, 12, 7].map((percent, index) => ({
                 name: `gemini-${index}`,
                 label: `radarsuspam${index}@gmail.com`,
-                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: percent }] },
+                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] },
             })),
         },
     );
@@ -110,7 +110,7 @@ it(`does not claim a pool has the most room when nothing in it was measured`, ()
 
 it(`names a provider that has fallen off the list, and when it comes back`, () => {
     const el = mount([
-        { id: `a`, label: `spent@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000 }] } },
+        { id: `a`, label: `spent@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000, gates: `all` }] } },
     ]);
 
     // No offer, so no bar: an empty track over a spent account is the claim this rail exists not to make.
@@ -123,7 +123,7 @@ it(`names a provider that has fallen off the list, and when it comes back`, () =
 
 it(`spells out for a screen reader what the bar says by its width`, () => {
     const el = mount([
-        { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: 1_700_090_000 }] } },
+        { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: 1_700_090_000, gates: `all` }] } },
     ]);
 
     // A bar is decoration to a screen reader and a hover never reaches one, so every part the column drops —

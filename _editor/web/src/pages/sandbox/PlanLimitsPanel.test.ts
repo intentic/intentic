@@ -6,7 +6,7 @@
 //
 //   an account was set exactly like the pool labels underneath it, so a provider holding three accounts drew
 //   nine meters in one column with nothing to say which three belonged to which sign-in.
-import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { AccountUsage, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
@@ -14,7 +14,7 @@ import { type App, createApp, defineComponent, h, nextTick } from "vue";
 // useDevice reads window.matchMedia; environment.ts reads window.env).
 
 const { default: PlanLimitsPanel } = await import("./PlanLimitsPanel.vue");
-const { accountsLoaded, providerAccounts, translatorAccounts } = await import("../../composables/chat/providerAccounts");
+const { accountsLoaded, providerAccounts, translatorAccounts, usageByAccount } = await import("../../composables/chat/providerAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 
@@ -24,7 +24,7 @@ const claudeAccount = (over: Partial<OauthAccount>): OauthAccount => ({
     id: `acc-1`,
     label: `first@example.com`,
     connectedAt: 0,
-    usage: { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 44 }] },
+    usage: { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 44, gates: `all` }] },
     ...over,
 });
 
@@ -45,6 +45,9 @@ const mount = (accounts: OauthAccount[]): HTMLElement => {
 };
 
 afterEach(() => {
+    // The shared usage map is seeded from the rows above and outlives them; a reading one test left under an
+    // id the next reuses would otherwise outrank that test's own (newest wins).
+    usageByAccount.value = {};
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -86,7 +89,7 @@ it(`does not print an identity twice for an account already named by its email`,
  * account at a time, exactly what the capacity strip above it says in one sentence. An alarm that is longest when
  * nothing is wrong is one its reader learns to scroll past, taking the dead credential in it along. */
 
-const spent = { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 96 }] };
+const spent: AccountUsage = { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 96, gates: `all` }] };
 
 const alarm = (el: HTMLElement): HTMLElement | undefined =>
     [...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim().startsWith(`Sign-in expired`) === true);

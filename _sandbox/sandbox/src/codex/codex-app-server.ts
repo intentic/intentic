@@ -158,7 +158,12 @@ export type CodexEvent =
       }
     | { readonly type: "turn.completed"; readonly usage?: CodexUsage }
     | { readonly type: "turn.failed"; readonly error: { readonly message: string } }
-    | { readonly type: "error"; readonly message: string };
+    | { readonly type: "error"; readonly message: string }
+    /* The plan's own rate limits, as app-server pushes them (`account/rateLimits/updated`, its
+     * protocol/v2/account.rs): the same two windows the ChatGPT usage endpoint answers with, read off the
+     * turn's own stream at no cost. Passed through raw; usage/translator-usage.ts maps the snapshot, so the
+     * one reader of ChatGPT's window shape stays the one reader. */
+    | { readonly type: "rate_limits"; readonly snapshot: unknown };
 
 export type CodexRunner = (turn: CodexTurn) => AsyncIterable<CodexEvent>;
 
@@ -905,6 +910,12 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     if (turnIds.has(string(params, "turnId", "thread/tokenUsage/updated params"))) {
                         usage = usageFrom(params);
                     }
+                    continue;
+                }
+                if (notification.method === "account/rateLimits/updated") {
+                    // Account-wide rather than per turn, so no turn id to check: whatever this process is told
+                    // about the plan is about the plan this turn is spending.
+                    yield { type: "rate_limits", snapshot: object(notification.params, "account/rateLimits/updated params")["rateLimits"] };
                     continue;
                 }
                 if (notification.method === "error") {

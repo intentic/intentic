@@ -1214,6 +1214,9 @@ const main = async (): Promise<void> => {
     // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
     // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.
     startRuntimeHealth(services);
+    // The headroom service's idle floor: every account's plan limits are re-read on what happens (a turn, a
+    // refusal, a screen), and this is the long backstop for a sandbox where nothing has.
+    services.headroom.start();
 
     // Realtime agent wake-ups are provider gateways now: a listener extension (ext-discord) runs an autoStart
     // process that holds the connection and drives the daemon's /listeners/<provider> routes, the daemon holds

@@ -1,4 +1,4 @@
-import { type AccountUsage, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
+import { type AccountUsage, TranslatorAccountsSchema, type UsageWindow } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "./translator.js";
 
@@ -242,6 +242,16 @@ describe("translator subscription usage", () => {
                         },
                         // Grok has no readable quota: it must never reach the api-call path.
                         { name: "grok-a.json", provider: "xai", email: "grok@example.com", auth_index: "grok-index" },
+                        // Benched by the proxy itself, the shape CLIProxyAPI's /auth-files lists it in.
+                        {
+                            name: "kimi-a.json",
+                            provider: "kimi",
+                            email: "kimi@example.com",
+                            auth_index: "kimi-index",
+                            unavailable: true,
+                            status_message: "quota exceeded",
+                            next_retry_after: "2027-01-15T08:10:00Z",
+                        },
                     ],
                 });
             }
@@ -271,19 +281,35 @@ describe("translator subscription usage", () => {
             fetchFn: cliProxyFetch(calls),
         });
 
-        await client.refreshUsage();
+        // The headroom service reads every target the client publishes; here the reads are driven directly.
+        const targets = await client.headroom.targets();
+        for (const target of targets) {
+            const reading = await target.read();
+            // As the service does: a read that found no pool leaves nothing behind.
+            if (reading.windows.length > 0) {
+                await store.record(target.key, { windows: [...reading.windows], measuredAt: Date.now() });
+            }
+        }
         const accounts = await client.accounts();
 
         expect(() => TranslatorAccountsSchema.parse(accounts)).not.toThrow();
+        // Every readable file is a target, the benched Kimi one included: the bench is the proxy's, the quota
+        // is still the plan's to report.
+        expect(targets.map((target) => [target.provider, target.key])).toEqual([
+            ["codex", "codex:codex-a.json"],
+            ["kimi", "kimi:kimi-a.json"],
+            ["gemini", "gemini:google-a.json"],
+        ]);
         expect(accounts.codex[0]).toMatchObject({
             name: "codex-a.json",
             label: "chat@example.com",
-            usage: { windows: [{ kind: "five_hour", utilization: 41 }] },
+            usage: { windows: [{ kind: "five_hour", utilization: 41, gates: "all" }] },
         });
         expect(accounts.gemini[0]).toMatchObject({
             name: "google-a.json",
             label: "google@example.com",
-            usage: { windows: [{ kind: "google:weekly", utilization: 70 }] },
+            // A group naming neither family is the plan's own allowance and gates everything.
+            usage: { windows: [{ kind: "google:weekly", utilization: 70, gates: "all" }] },
         });
         // Namespaced by provider, because the store is shared with the native accounts and an auth-file name is
         // only unique within its own provider.
@@ -304,12 +330,12 @@ describe("translator subscription usage", () => {
         expect(accounts.grok[0]).not.toHaveProperty("usage");
     });
 
-    /* `accounts` is the routed-turn credential gate. It answers from the store and SCHEDULES the pull, so the
-     * upstream round-trip can never land on a turn's startup path: the guarantee the earlier split into a
-     * second "with usage" method existed to provide, now held by the one method everything calls. */
-    test("answers from the store and refreshes in the background rather than awaiting upstream", async () => {
+    /* `accounts` is the routed-turn credential gate. It answers from the store and never asks upstream, so the
+     * round-trip can never land on a turn's startup path; the headroom service reads the targets on its own
+     * triggers and the next `accounts` read is drawn from what it recorded. */
+    test("answers from the store rather than awaiting upstream, and carries the proxy's own bench of a credential", async () => {
         const calls: { url: string; body?: Record<string, unknown> }[] = [];
-        const { store, snapshots } = memoryStore();
+        const { store } = memoryStore();
         const client = createCliProxyClient({
             managementUrl: "http://cliproxy.test",
             token: "management-secret",
@@ -319,14 +345,18 @@ describe("translator subscription usage", () => {
             fetchFn: cliProxyFetch(calls),
         });
 
-        // Cold store: the rows come back at once, unmeasured, and nothing was awaited upstream.
+        // Cold store: the rows come back at once, unmeasured, and nothing was asked upstream.
         const first = await client.accounts();
         expect(first.codex[0]).not.toHaveProperty("usage");
         expect(calls.filter((call) => call.url.endsWith("/api-call"))).toHaveLength(0);
-
-        // The sweep it scheduled lands on its own, and the next read is drawn from what it recorded.
-        await vi.waitFor(() => expect(Object.keys(snapshots)).toHaveLength(2));
-        expect((await client.accounts()).codex[0]).toHaveProperty("usage");
+        // The proxy benched the Kimi file (a quota 429 it is routing around): the row says so, with the
+        // proxy's retry instant, whatever the last reading said.
+        expect(first.kimi[0]).toMatchObject({ name: "kimi-a.json", cooling: { until: 1_800_000_600, reason: "quota exceeded" } });
+        expect(first.gemini[0]).not.toHaveProperty("cooling");
+        // …and the fleet reads it as spent for the model it would have served.
+        await expect(client.turnLimit("kimi", "kimi-k2")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_800_000_600 });
+        // A file the provider holds alone is the one a pushed reading can be filed under; a fleet is not.
+        await expect(client.sharedUsageKey("codex")).resolves.toBe("codex:codex-a.json");
     });
 
     /* WHETHER A SPENT PROVIDER CAN SERVE THIS MODEL, and when it next can: the question a routed 429 leaves
@@ -334,6 +364,11 @@ describe("translator subscription usage", () => {
      * it ("All credentials … are cooling down"), naming no account and carrying no per-account reset. These
      * snapshots are the only place either survives, so the lookup is pinned on the ordering, the abstention,
      * and (the correction these tests exist for) the POOL the turn's model actually spends. */
+    // The gates the Google reader gives its two groups (translator-usage.ts googleGates), spelled out here
+    // because these snapshots are recorded by hand rather than read.
+    const GEMINI: Pick<UsageWindow, "label" | "gates"> = { label: "Gemini models", gates: { models: ["gemini"] } };
+    const THIRD_PARTY: Pick<UsageWindow, "label" | "gates"> = { label: "Claude and GPT models", gates: { models: ["claude", "gpt"] } };
+
     const filesNamed = (provider: string, names: readonly string[]) =>
         (async (input: string | URL): Promise<Response> =>
             String(input).endsWith("/auth-files")
@@ -359,7 +394,7 @@ describe("translator subscription usage", () => {
             "spent-early.json": { utilization: 100, resetsAt: 2_000 },
         };
         for (const [name, window] of Object.entries(windows)) {
-            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...window }], measuredAt: 0 });
+            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, ...window }], measuredAt: 0 });
         }
         const client = clientOver(store, "antigravity", Object.keys(windows));
 
@@ -383,8 +418,8 @@ describe("translator subscription usage", () => {
         const { store } = memoryStore();
         await store.record("gemini:spent-for-gemini.json", {
             windows: [
-                { kind: "google:gemini-weekly", utilization: 100, resetsAt: 2_000 },
-                { kind: "google:3p-weekly", utilization: 73, resetsAt: 9_000 },
+                { kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 2_000 },
+                { kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: 9_000 },
             ],
             measuredAt: 0,
         });
@@ -396,11 +431,8 @@ describe("translator subscription usage", () => {
             withHeadroom: 0,
             reopensAt: 2_000,
         });
-        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
-            pool: "Claude and GPT models",
-            spent: 0,
-            withHeadroom: 1,
-        });
+        // Nothing is out, so there is no pool to name; the reading with room says when it was taken.
+        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 0, withHeadroom: 1, roomMeasuredAt: 0 });
     });
 
     /* ONE ACCOUNT WITH ROOM AMONG THIRTY SPENT ONES IS NOT A SPENT PLAN: the translator balances across all of
@@ -410,15 +442,16 @@ describe("translator subscription usage", () => {
     test("reports headroom rather than a reset while any account can still serve the pool", async () => {
         const { store } = memoryStore();
         for (const name of ["spent-1.json", "spent-2.json"]) {
-            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", utilization: 100, resetsAt: 2_000 }], measuredAt: 0 });
+            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 100, resetsAt: 2_000 }], measuredAt: 0 });
         }
-        await store.record("gemini:has-room.json", { windows: [{ kind: "google:3p-weekly", utilization: 73, resetsAt: 9_000 }], measuredAt: 0 });
+        await store.record("gemini:has-room.json", { windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: 9_000 }], measuredAt: 0 });
         const client = clientOver(store, "antigravity", ["spent-1.json", "spent-2.json", "has-room.json"]);
 
         await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
             pool: "Claude and GPT models",
             spent: 2,
             withHeadroom: 1,
+            roomMeasuredAt: 0,
         });
     });
 
@@ -426,14 +459,10 @@ describe("translator subscription usage", () => {
     // since renamed lands here too, which costs the caller its counts rather than handing it another pool's reset.
     test("counts an account with no reading for this pool in neither tally", async () => {
         const { store } = memoryStore();
-        await store.record("gemini:unread.json", { windows: [{ kind: "google:gemini-weekly", utilization: 100, resetsAt: 1_000 }], measuredAt: 0 });
+        await store.record("gemini:unread.json", { windows: [{ kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 1_000 }], measuredAt: 0 });
         const client = clientOver(store, "antigravity", ["unread.json", "never-polled.json"]);
 
-        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
-            pool: "Claude and GPT models",
-            spent: 0,
-            withHeadroom: 0,
-        });
+        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 0, withHeadroom: 0 });
     });
 
     // Codex and Kimi sell one undivided plan, so EVERY window gates every model: a spent 5-hour throttle stops a
@@ -442,8 +471,8 @@ describe("translator subscription usage", () => {
         const { store } = memoryStore();
         await store.record("codex:one.json", {
             windows: [
-                { kind: "five_hour", utilization: 100, resetsAt: 1_000 },
-                { kind: "seven_day", utilization: 12, resetsAt: 8_000 },
+                { kind: "five_hour", utilization: 100, resetsAt: 1_000, gates: "all" },
+                { kind: "seven_day", utilization: 12, resetsAt: 8_000, gates: "all" },
             ],
             measuredAt: 0,
         });
@@ -452,11 +481,11 @@ describe("translator subscription usage", () => {
         await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_000 });
     });
 
-    // Dropping an account drops its snapshot with it: leaving one behind would hand its headroom to whatever
-    // account is next given the same auth-file name.
-    test("clears an account's snapshot when it is disconnected", async () => {
+    // Dropping an account asks the proxy to drop it, by name. Its snapshot is the route's to forget
+    // (translator.routes.ts, through the headroom service, so every window hears).
+    test("asks the proxy to drop the account it is told to disconnect", async () => {
         const calls: { url: string; body?: Record<string, unknown> }[] = [];
-        const { store, snapshots } = memoryStore();
+        const { store } = memoryStore();
         const client = createCliProxyClient({
             managementUrl: "http://cliproxy.test",
             token: "management-secret",
@@ -466,10 +495,7 @@ describe("translator subscription usage", () => {
             fetchFn: cliProxyFetch(calls),
         });
 
-        await client.refreshUsage();
-        expect(snapshots).toHaveProperty("gemini:google-a.json");
-
         await client.disconnect("gemini", "google-a.json");
-        expect(snapshots).not.toHaveProperty("gemini:google-a.json");
+        expect(calls.some((call) => call.url.endsWith("/auth-files?name=google-a.json"))).toBe(true);
     });
 });

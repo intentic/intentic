@@ -152,6 +152,16 @@ async function* systemEvents(
         enqueue({ kind: "runtimeChanged", domains });
         onWake();
     });
+    // An account's plan limits moved, or a provider refused / was answered. What lets the rings in every open
+    // window agree without a single one of them polling (usage/headroom.ts, usage/provider-refusals.ts).
+    const unsubscribeHeadroom = services.headroom.onChange((provider, account, usage) => {
+        enqueue({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) });
+        onWake();
+    });
+    const unsubscribeRefusals = services.providerRefusals.onChange((provider, refusal) => {
+        enqueue({ kind: "providerRefusal", provider, ...(refusal === undefined ? {} : { refusal }) });
+        onWake();
+    });
     // Authentication middleware ran only for the opening request. Register after every setup step that could
     // throw and immediately before the protected loop, so a failed/closed iterator cannot leak a dead entry.
     const unregisterAccess = identity === undefined ? undefined : services.auth?.connections.register(identity, () => controller.abort());
@@ -191,6 +201,8 @@ async function* systemEvents(
         unsubscribeRepos();
         unsubscribeRefs();
         unsubscribeRuntime();
+        unsubscribeHeadroom();
+        unsubscribeRefusals();
         unsubscribeAgents();
         unsubscribeBoot();
         unsubscribePresence();

@@ -21,6 +21,7 @@ const request = computed(() => modelRequest.value);
 const { hasContent } = usePickerAccounts(
     computed(() => request.value?.provider ?? `claude`),
     computed(() => request.value?.harness ?? `native`),
+    computed(() => request.value?.model),
 );
 
 /* A model row. The two pins ride along ONLY under the provider they were made under: an account id is one
@@ -49,6 +50,7 @@ const choose = (entry: PickerEntry): void => {
                 <PickerAccounts
                     :provider="request.provider"
                     :harness="request.harness ?? `native`"
+                    :model="request.model"
                     :account="request.account"
                     @select-account="stageModelPick({ account: $event })"
                     @select-harness="stageModelPick({ harness: $event })"

@@ -18,7 +18,7 @@ const SECOND = 1000;
 // freshly computed one fails for no reason at all.
 const NOW = Date.now();
 const inAnHour = (): number => Math.floor((NOW + 3600 * SECOND) / SECOND);
-const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: "five_hour", utilization: 42, resetsAt: inAnHour(), ...over });
+const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: "five_hour", utilization: 42, resetsAt: inAnHour(), gates: "all", ...over });
 const snapshot = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: Date.now(), ...over });
 
 test("read is empty when the file is absent", async () => {
@@ -97,9 +97,38 @@ test("accountLimitReset answers with the fullest pool's reset, the one that refu
         measuredAt: Date.now(),
         windows: [window({ utilization: 40, resetsAt: inAnHour() }), window({ kind: "seven_day", utilization: 98, resetsAt: inAnHour() + 900 })],
     });
-    expect(await accountLimitReset(store, "acct-1")).toBe(inAnHour() + 900);
-    expect(await accountLimitReset(store, "acct-unknown")).toBeUndefined();
-    expect(await accountLimitReset(store, undefined)).toBeUndefined();
+    expect(await accountLimitReset(store, "acct-1", undefined)).toBe(inAnHour() + 900);
+    expect(await accountLimitReset(store, "acct-unknown", undefined)).toBeUndefined();
+    expect(await accountLimitReset(store, undefined, undefined)).toBeUndefined();
+});
+
+test("accountLimitReset names the reset of the pool the refused MODEL spends, not the account's fullest", async () => {
+    // A plan that meters Opus on its own: the Opus slice is full and reopens on Sunday, the weekly pool the
+    // refused Sonnet turn actually spends is the tightest one it has and reopens in an hour. Naming Sunday
+    // would send the user away for days.
+    const { store } = tempStore();
+    await store.record("acct-1", {
+        measuredAt: Date.now(),
+        windows: [
+            window({ kind: "seven_day", utilization: 90, resetsAt: inAnHour() }),
+            window({ kind: "model:Opus", label: "Opus", utilization: 100, resetsAt: inAnHour() + 86_400, gates: { models: ["Opus"] } }),
+        ],
+    });
+    expect(await accountLimitReset(store, "acct-1", { id: "claude-sonnet-4-6" })).toBe(inAnHour());
+    expect(await accountLimitReset(store, "acct-1", { id: "claude-opus-4-6" })).toBe(inAnHour() + 86_400);
+});
+
+test("ranks accounts on the pools the turn's model spends: a spent Opus slice does not bench an account for Haiku", async () => {
+    const { store } = tempStore();
+    await store.record("opus-spent", {
+        measuredAt: Date.now(),
+        windows: [window({ kind: "seven_day", utilization: 10 }), window({ kind: "model:Opus", utilization: 100, gates: { models: ["Opus"] } })],
+    });
+    await store.record("steady", { measuredAt: Date.now(), windows: [window({ kind: "seven_day", utilization: 60 })] });
+    expect(await accountWithHeadroom(store, ["steady", "opus-spent"], undefined, { id: "claude-haiku-4-5" })).toBe("opus-spent");
+    expect(await accountWithHeadroom(store, ["steady", "opus-spent"], undefined, { id: "claude-opus-4-6" })).toBe("steady");
+    // With no model named, every pool that gates anything counts, and the Opus slice benches its account.
+    expect(await accountWithHeadroom(store, ["steady", "opus-spent"])).toBe("steady");
 });
 
 /* WHICH ACCOUNT AN UNNAMED CALLER RUNS ON. The rule this replaced was "the oldest-connected one, forever",

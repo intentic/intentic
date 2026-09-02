@@ -3,7 +3,6 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createBackoff } from "@intentic/base/async";
 import {
-    type AccountUsage,
     type KeyedProvider,
     KeyedProviderSchema,
     type Model,
@@ -16,7 +15,9 @@ import { compatYaml, endpointCompatEntries, translatedEndpoints } from "../endpo
 import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
 import { engineBinary } from "../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
-import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnLimit } from "../usage/translator-usage.js";
+import { fleetLimit, type TurnLimit } from "../usage/fleet-limit.js";
+import type { HeadroomSource } from "../usage/headroom.js";
+import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../usage/translator-usage.js";
 
 /* The bundled translator is CLIProxyAPI: a Go proxy that lets the Claude Code harness, which speaks only the
  * Anthropic Messages API, drive OpenAI (Codex), xAI (Grok), Kimi Code and Google (Gemini) models on the user's
@@ -283,13 +284,10 @@ export const startTranslator = (services: Services): void => {
 
     /* Warm the routed accounts' headroom once the proxy is answering. Without this the first person to open the
      * Agent tab after a restart reads a cold store and gets dots, because `accounts` serves what is on file and
-     * schedules the pull rather than waiting for it, the tab would fill in only on a later visit. The delay is
-     * for the proxy's own startup: the management API is what these reads go through, and a sweep fired the
-     * instant the child is spawned would simply find nothing listening. Best-effort like everything else here. */
-    setTimeout(
-        () => void services.cliProxy.refreshUsage().catch((error: unknown) => logger.warn({ err: error }, "translator: usage warm-up failed")),
-        WARMUP_DELAY_MS,
-    ).unref();
+     * the tab would fill in only on a later visit. The delay is for the proxy's own startup: the management API
+     * is what these reads go through, and a sweep fired the instant the child is spawned would simply find
+     * nothing listening. Best-effort like everything else here. */
+    setTimeout(() => void services.headroom.refresh({ scope: { providers: KeyedProviderSchema.options }, maxAgeMs: 0 }), WARMUP_DELAY_MS).unref();
 };
 
 // The CLIProxyAPI Management API client + login orchestration the /translator routes and the routed-turn gate
@@ -313,12 +311,16 @@ interface TranslatorLogin {
 export interface CliProxyClient {
     // The connection inventory, each row carrying whatever headroom is on file for it. ONE method, and it never
     // waits on an upstream quota call: this is the routed-turn credential gate as well as the settings list, so
-    // a round-trip here would land on every routed turn's startup path. Freshness comes from the refresh this
-    // read SCHEDULES, not from one it waits for, see the store policy below.
+    // a round-trip here would land on every routed turn's startup path. Freshness is the headroom service's
+    // (usage/headroom.ts), which reads these accounts through `headroom` below whenever something happened.
     readonly accounts: () => Promise<TranslatorAccounts>;
-    // Pull every readable account's quota now and record it. The daemon calls this once at boot so the first
-    // person to open the Agent tab already has rings to look at.
-    readonly refreshUsage: () => Promise<void>;
+    // The routed half of the headroom service: one target per auth file whose quota the proxy can read.
+    readonly headroom: HeadroomSource;
+    /* THE ONE ACCOUNT A PROVIDER'S PUSHED READING CAN BE FILED UNDER. A routed turn never learns which auth file
+     * served it, CLIProxyAPI picks, so a reading that arrives on the turn's own stream (Codex's app-server
+     * pushes its rate limits) is attributable only when the provider holds exactly one file. Undefined
+     * otherwise, and the caller refreshes the provider's files instead, which reads each precisely. */
+    readonly sharedUsageKey: (provider: KeyedProvider) => Promise<string | undefined>;
     // What the recorded quota says about the pool THIS TURN'S MODEL spends, across every account connected for
     // the provider, for the turn that was just refused by it. Reads the recorded snapshots only; see the
     // implementation for why the refusal itself cannot answer this.
@@ -330,8 +332,9 @@ export interface CliProxyClient {
 }
 
 // An account's key in the shared usage store, namespaced by provider, an auth-file name is only unique
-// within the provider it belongs to, and the store is shared with the native accounts.
-const usageKey = (provider: KeyedProvider, name: string): string => `${provider}:${name}`;
+// within the provider it belongs to, and the store is shared with the native accounts. Exported for the
+// route that forgets an account's snapshot when it is disconnected (translator.routes.ts).
+export const usageKey = (provider: KeyedProvider, name: string): string => `${provider}:${name}`;
 
 export const createCliProxyClient = (params: {
     managementUrl: string;
@@ -521,33 +524,21 @@ export const createCliProxyClient = (params: {
                 if (!response.ok) {
                     throw new Error(`The translator refused to drop that account (${response.status}).`);
                 }
-                attemptedAt.delete(usageKey(provider, name));
-                await usageStore.clear(usageKey(provider, name));
             }
         }
     };
 
-    /* WHERE a routed account's headroom lives, and how often it is re-read.
+    /* WHERE a routed account's headroom lives. The readings go in the shared account-usage store, exactly as a
+     * Claude turn's do, so a page load draws its rings from disk instead of owing an upstream round-trip per
+     * account, and a daemon restart doesn't blank the Agent tab. Namespaced by provider because that store is
+     * shared with the native accounts: an auth-file name is only unique within its own provider.
      *
-     * The readings themselves go in the shared account-usage store, exactly as a Claude turn's do, so a page
-     * load draws its rings from disk instead of owing an upstream round-trip per account, and a daemon restart
-     * doesn't blank the Agent tab. Namespaced by provider because that store is shared with the native accounts:
-     * an auth-file name is only unique within its own provider.
-     *
-     * `attemptedAt` deliberately records when each account was last ASKED, not what it answered. The store
-     * caches the successes; this is what bounds the FAILURES, an upstream that is down, or one that answers
-     * with no quota at all, would otherwise be retried on every call, and `accounts` is called on every routed
-     * turn and every three seconds for as long as a connect flow is open. */
-    const REFRESH_AFTER_MS = 5 * 60_000;
-    const attemptedAt = new Map<string, number>();
-
-    /* Every auth file whose quota this client can actually read, paired with the provider it belongs to.
-     *
-     * `auth_index` is the proxy's own handle for the account, and a quota read is addressed by it, so a row that
-     * has none is not readable, whatever else is true of it. That is every row `listFiles` recovers from disk
-     * while the proxy is down (authFilesOnDisk), and without this filter each one would look permanently overdue:
-     * a sweep would fire on every `accounts` call, once per routed turn, and every three seconds through a
-     * connect flow, to ask an upstream it has no address for and record nothing. */
+     * WHEN they are re-read is the headroom service's business (usage/headroom.ts): this client only says which
+     * files can be read and how. `auth_index` is the proxy's own handle for the account, and a quota read is
+     * addressed by it, so a row that has none is not readable, whatever else is true of it. That is every row
+     * `listFiles` recovers from disk while the proxy is down (authFilesOnDisk), and without this filter each one
+     * would look permanently overdue: the service would ask an upstream it has no address for and record
+     * nothing. */
     const readableFiles = (files: readonly TranslatorAuthFile[]): { provider: KeyedProvider; file: TranslatorAuthFile; key: string }[] =>
         KeyedProviderSchema.options
             .filter(reportsPlanLimits)
@@ -559,50 +550,30 @@ export const createCliProxyClient = (params: {
                 ),
             );
 
-    /* One sweep of upstream reads. Concurrency is bounded because a sandbox can hold dozens of Google accounts
-     * and firing every request at once is how a refresh becomes a self-inflicted rate limit. A failed or
-     * quota-less read records the attempt and nothing else, so the last good snapshot stays where it is instead
-     * of being replaced by a blank. */
-    const REFRESH_CONCURRENCY = 4;
-    const refreshUsage = async (): Promise<void> => {
-        const pending = readableFiles(await listFiles());
-        const worker = async (): Promise<void> => {
-            for (let next = pending.shift(); next !== undefined; next = pending.shift()) {
-                attemptedAt.set(next.key, Date.now());
-                const usage = await fetchTranslatorUsage({
-                    fetchFn,
-                    managementUrl,
-                    managementToken: token,
-                    provider: next.provider,
-                    file: next.file,
-                });
-                if (usage !== undefined) {
-                    await usageStore.record(next.key, usage);
-                }
-            }
-        };
-        await Promise.all(Array.from({ length: REFRESH_CONCURRENCY }, worker));
+    const headroom: HeadroomSource = {
+        targets: async () =>
+            readableFiles(await listFiles()).map((entry) => ({
+                key: entry.key,
+                provider: entry.provider,
+                read: async () => ({
+                    windows:
+                        (
+                            await fetchTranslatorUsage({
+                                fetchFn,
+                                managementUrl,
+                                managementToken: token,
+                                provider: entry.provider,
+                                file: entry.file,
+                            })
+                        )?.windows ?? [],
+                }),
+            })),
     };
 
-    // Refresh what has gone stale, in the background, never awaited by `accounts`, whose answer is drawn from
-    // what is already on file. The rings a sweep produces are for the NEXT read, and that is precisely what
-    // keeps an upstream quota call off the routed turn's startup path.
-    let refreshing = false;
-    const refreshStale = (files: readonly TranslatorAuthFile[], stored: Record<string, AccountUsage>): void => {
-        const now = Date.now();
-        const due = readableFiles(files).some(
-            (entry) => stored[entry.key] === undefined || now - (attemptedAt.get(entry.key) ?? 0) > REFRESH_AFTER_MS,
-        );
-        if (!due || refreshing) {
-            return;
-        }
-        refreshing = true;
-        void refreshUsage()
-            .catch(() => undefined)
-            .finally(() => {
-                refreshing = false;
-            });
-    };
+    // The provider's files, as the fleet reads them: the recorded snapshot beside the proxy's own verdict on
+    // the credential, which is the more current of the two.
+    const providerFiles = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): (TranslatorAuthFile & { readonly name: string })[] =>
+        files.flatMap((file) => (file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined ? [{ ...file, name: file.name }] : []));
 
     /* WHETHER THIS PROVIDER CAN SERVE THIS MODEL AT ALL, and when it next can, read from the snapshots above
      * rather than from the refusal, because the refusal cannot say. CLIProxyAPI balances across every auth file
@@ -610,69 +581,44 @@ export const createCliProxyClient = (params: {
      * credentials for model X are cooling down") with no account named and no per-account reset in it. The
      * quota reads do carry both, for every account, and cost nothing here, they are already on file.
      *
-     * SCOPED TO THE POOL THE MODEL SPENDS (quotaPoolFor), which is the correction that makes the rest of this
-     * true. Google meters Gemini and the Claude/GPT models as separate weekly allowances off one sign-in; the
-     * earliest exhausted window across every account and every pool answered a Claude Opus turn with the Gemini
-     * pool's instant, on an account that was not serving it, while another account still had room in the pool
-     * the turn was really spending.
-     *
-     * An account counts as spent when ANY pool this model draws on is spent, it is gated by its tightest, and
-     * for Codex and Kimi (one undivided plan, so every window counts) a spent 5-hour throttle stops a turn that
-     * the weekly pool would have allowed. An account with no reading for the pool counts in neither tally; the
-     * caller reads two zeroes as "nothing on file" and claims nothing about the fleet.
-     *
-     * The reset stays the EARLIEST spent account's, because any one of them reopening unblocks the turn, and it
-     * is deliberately absent while anything still has headroom, see TurnLimit. One deliberate imprecision
-     * remains, erring early: a snapshot up to REFRESH_AFTER_MS stale can miss an account that has since hit its
-     * wall. Early costs one retry that fails the same way; late leaves someone waiting past a window that
-     * already reopened. */
+     * The rule itself is fleetLimit's (usage/fleet-limit.ts), scoped to the pools this MODEL spends through the
+     * windows' own gates, and read beside the proxy's own bench of each credential, which is the one fact
+     * fresher than any reading. One deliberate imprecision remains, erring early: a snapshot can miss an
+     * account that has since hit its wall. Early costs one retry that fails the same way; late leaves someone
+     * waiting past a window that already reopened. */
     const turnLimit = async (provider: KeyedProvider, model: string): Promise<TurnLimit> => {
-        const pool = quotaPoolFor(provider, model);
         const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
-        let spent = 0;
-        let withHeadroom = 0;
-        const resets: number[] = [];
-        for (const file of files) {
-            if (file.provider !== CLIPROXY_PROVIDER[provider] || file.name === undefined) {
-                continue;
-            }
-            const windows = (stored[usageKey(provider, file.name)]?.windows ?? []).filter(
-                (window) => pool === undefined || window.kind === pool.kind,
-            );
-            if (windows.length === 0) {
-                continue;
-            }
-            const exhausted = windows.filter((window) => window.utilization >= 100);
-            if (exhausted.length === 0) {
-                withHeadroom += 1;
-                continue;
-            }
-            spent += 1;
-            resets.push(...exhausted.flatMap((window) => (window.resetsAt === undefined ? [] : [window.resetsAt])));
-        }
-        return {
-            ...(pool === undefined ? {} : { pool: pool.label }),
-            spent,
-            withHeadroom,
-            ...(withHeadroom > 0 || resets.length === 0 ? {} : { reopensAt: Math.min(...resets) }),
-        };
+        return fleetLimit(
+            providerFiles(files, provider).map((file) => ({
+                account: file.name,
+                usage: stored[usageKey(provider, file.name)],
+                cooling: authFileCooling(file),
+            })),
+            { id: model },
+        );
     };
 
     return {
         accounts: async () => {
             const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
-            refreshStale(files, stored);
             const of = (provider: KeyedProvider) =>
-                files.flatMap((file) => {
-                    if (file.provider !== CLIPROXY_PROVIDER[provider] || file.name === undefined) {
-                        return [];
-                    }
+                providerFiles(files, provider).map((file) => {
                     const usage = stored[usageKey(provider, file.name)];
-                    return [{ name: file.name, label: file.email ?? file.label ?? file.name, ...(usage === undefined ? {} : { usage }) }];
+                    const cooling = authFileCooling(file);
+                    return {
+                        name: file.name,
+                        label: file.email ?? file.label ?? file.name,
+                        ...(usage === undefined ? {} : { usage }),
+                        ...(cooling === undefined ? {} : { cooling }),
+                    };
                 });
             return { codex: of("codex"), grok: of("grok"), kimi: of("kimi"), gemini: of("gemini") };
         },
-        refreshUsage,
+        headroom,
+        sharedUsageKey: async (provider) => {
+            const files = providerFiles(await listFiles(), provider);
+            return files.length === 1 && files[0] !== undefined ? usageKey(provider, files[0].name) : undefined;
+        },
         turnLimit,
         connect: (provider) =>
             provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),

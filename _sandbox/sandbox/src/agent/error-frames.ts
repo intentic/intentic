@@ -1,7 +1,7 @@
 import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { TurnAllowance } from "./harness-credentials.js";
-import type { TurnLimit } from "../usage/translator-usage.js";
+import type { TurnLimit } from "../usage/fleet-limit.js";
 import {
     isAuthFailureText,
     isEntitlementRefusalText,

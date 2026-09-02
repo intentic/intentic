@@ -2,7 +2,7 @@ import type { UsageWindow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
-import type { TurnLimit } from "../usage/translator-usage.js";
+import type { TurnLimit } from "../usage/fleet-limit.js";
 import { limitReopensAt } from "./limit-reset.js";
 
 /* ONE ANSWER FOR EVERY RUNTIME. The case that drove this is the native one: a Codex turn refused by a spent
@@ -51,7 +51,7 @@ test("a native Claude turn keeps reading its own account's snapshot", async () =
     // The path that already worked, pinned so unifying the others cannot quietly reroute it: Claude's windows are
     // filed per connected account and the translator knows nothing about them.
     const at = await limitReopensAt({
-        services: services({ usage: { "acct-1": [{ kind: `seven_day`, utilization: 100, resetsAt: SECONDS + 3_600 }] } }),
+        services: services({ usage: { "acct-1": [{ kind: `seven_day`, utilization: 100, resetsAt: SECONDS + 3_600, gates: `all` }] } }),
         provider: `claude`,
         model: `opus`,
         account: `acct-1`,
@@ -63,7 +63,7 @@ test("a native Claude turn keeps reading its own account's snapshot", async () =
 test("the account's own snapshot wins over the pool when both can answer", async () => {
     const at = await limitReopensAt({
         services: services({
-            usage: { "acct-1": [{ kind: `seven_day`, utilization: 100, resetsAt: SECONDS + 600 }] },
+            usage: { "acct-1": [{ kind: `seven_day`, utilization: 100, resetsAt: SECONDS + 600, gates: `all` }] },
             limit: { spent: 1, withHeadroom: 0, reopensAt: SECONDS + 99_999 },
         }),
         provider: `codex`,

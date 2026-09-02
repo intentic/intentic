@@ -3,7 +3,7 @@ import { AgentHarnessSchema, AgentProviderSchema, PermissionModeSchema } from ".
 import { AgentSummarySchema, LandConflictSchema } from "./schemas/agents.js";
 import { RateLimitInfoSchema } from "./schemas/claude-gate.js";
 import { FastModeStateSchema } from "./schemas/fast-mode.js";
-import { AgentReplySchema, UsageWindowSchema } from "./schemas/plan-limits.js";
+import { AccountUsageSchema, AgentReplySchema, ProviderRefusalSchema, UsageWindowSchema } from "./schemas/plan-limits.js";
 import { ShareDetailSchema } from "./schemas/share.js";
 import { MemberRoleSchema } from "./schemas/shared.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "./schemas/terminal.js";
@@ -1568,9 +1568,34 @@ export type Presence = z.infer<typeof PresenceSchema>;
 export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.array(AgentSummarySchema), rev: z.number() });
 export type Agents = z.infer<typeof AgentsSchema>;
 
+/* AN ACCOUNT'S HEADROOM JUST MOVED, the reading itself, keyed the way the daemon's store keys it (a Claude
+ * account id, or `${provider}:${authFile}` for a routed subscription).
+ *
+ * The fifth push, and the one that lets every ring, rail and picker row stop refetching on mount. A reading
+ * lands on the daemon for one of four reasons, a turn settled, a plan refused, a screen asked, a provider
+ * pushed, and until this frame existed only the window that caused it ever heard: every other window drew the
+ * number it had loaded that morning until something in it happened to remount. Snapshot-not-diff per account,
+ * last frame wins, and a browser that missed one simply holds the older reading, which is what `measuredAt`
+ * is for. `usage` absent ⇒ the account's snapshot was cleared (it was disconnected). */
+export const AccountUsageChangedSchema = z.object({
+    kind: z.literal("accountUsage"),
+    // The provider whose row this account is, because the key alone does not say (a native id is bare).
+    provider: z.string(),
+    account: z.string(),
+    usage: AccountUsageSchema.optional(),
+});
+export type AccountUsageChanged = z.infer<typeof AccountUsageChangedSchema>;
+
+// A provider's last refusal was recorded or settled. The observed half of "can I run on this" (see
+// ProviderRefusalSchema), pushed for the same reason the reading above is: a refusal at 4am used to reach a
+// window only when it next reloaded its account rows. `refusal` absent ⇒ settled, nothing stands.
+export const ProviderRefusalChangedSchema = z.object({ kind: z.literal("providerRefusal"), provider: z.string(), refusal: ProviderRefusalSchema.optional() });
+export type ProviderRefusalChanged = z.infer<typeof ProviderRefusalChangedSchema>;
+
 // The /events stream union: the hello identity frame, then liveness heartbeats interleaved with boot progress,
-// workspace-change batches, repo-set snapshots, ref-move batches, runtime-domain nudges, and presence + fleet
-// roster snapshots. oRPC validates every yielded frame against this, so all kinds must live here.
+// workspace-change batches, repo-set snapshots, ref-move batches, runtime-domain nudges, presence + fleet
+// roster snapshots, and account headroom / refusal changes. oRPC validates every yielded frame against this,
+// so all kinds must live here.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
@@ -1581,5 +1606,7 @@ export const SystemEventSchema = z.discriminatedUnion("kind", [
     RuntimeChangedSchema,
     PresenceSchema,
     AgentsSchema,
+    AccountUsageChangedSchema,
+    ProviderRefusalChangedSchema,
 ]);
 export type SystemEvent = z.infer<typeof SystemEventSchema>;

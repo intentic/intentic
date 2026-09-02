@@ -92,7 +92,7 @@ const newChat = () => {
 };
 
 const { closedDrafts } = await import("./closedDrafts");
-const { usageStatusByAccount } = await import("./usageStatus");
+const { usageByAccount } = await import("./providerAccounts");
 const { Conversation } = await import("./conversation");
 const { endpointProviders, endpointsLoaded, trialStatus } = await import("./providerCatalog");
 const { turnDefaults } = await import("./turnDefaults");
@@ -258,7 +258,7 @@ describe(`account usage hydration`, () => {
     beforeEach(() => {
         storage.clear();
         resetChat();
-        usageStatusByAccount.value = {};
+        usageByAccount.value = {};
         mockConnections();
     });
 
@@ -273,7 +273,7 @@ describe(`account usage hydration`, () => {
                               id: `a1`,
                               label: `Personal`,
                               connectedAt: 0,
-                              usage: { windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 },
+                              usage: { windows: [{ kind: `seven_day`, utilization: 12, gates: `all` }], measuredAt: 500 },
                           },
                           { id: `a2`, label: `Work`, connectedAt: 1 },
                       ]
@@ -281,24 +281,24 @@ describe(`account usage hydration`, () => {
         });
         await loadAccountStatus();
 
-        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 });
+        expect(usageByAccount.value[`claude:a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 12, gates: `all` }], measuredAt: 500 });
         // An account the daemon has no reading for stays absent: unknown, not 0%.
-        expect(usageStatusByAccount.value[`a2`]).toBeUndefined();
+        expect(usageByAccount.value[`claude:a2`]).toBeUndefined();
     });
 
     it(`keeps a live streamed reading when the persisted one is older`, async () => {
-        usageStatusByAccount.value = { a1: { windows: [{ kind: `seven_day`, utilization: 80 }], measuredAt: 9_000 } };
+        usageByAccount.value = { "claude:a1": { windows: [{ kind: `seven_day`, utilization: 80, gates: `all` }], measuredAt: 9_000 } };
         mockConnections({
             accounts: (path) =>
                 path.startsWith(`/claude`)
-                    ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 30 }], measuredAt: 500 } }]
+                    ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 30, gates: `all` }], measuredAt: 500 } }]
                     : [],
         });
         await loadAccountStatus();
 
         // The daemon's write is fire-and-forget, so a refresh can land between a frame and its persist:
         // the newer reading must win, or the chip would flicker backwards mid-session.
-        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 80 }], measuredAt: 9_000 });
+        expect(usageByAccount.value[`claude:a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 80, gates: `all` }], measuredAt: 9_000 });
     });
 });
 

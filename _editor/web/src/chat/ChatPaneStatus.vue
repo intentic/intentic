@@ -28,7 +28,7 @@ const { block, hint } = defineProps<{
     hint: string;
 }>();
 
-const { contextUsage, provider, account } = usePaneView();
+const { contextUsage, provider, account, model } = usePaneView();
 const { showToolCalls } = useToolCalls();
 const { meter: creditMeter } = useMembership();
 const { mobile, keyboardInset } = useDevice();
@@ -64,15 +64,17 @@ const contextRing = computed(() => {
     };
 });
 
-// Claude subscription headroom for this conversation's account, pushed from the agent stream at no token cost:
-// a small ring once that account's first Claude turn reports its limits, tinted as the binding pool fills. Keyed
-// by account so switching accounts shows the right one. The ring tracks the FULLEST pool (the one that will gate
-// the next turn); its card lists them all, because which one is binding shifts between turns.
+// Subscription headroom for this conversation's account, from the shared map every surface reads (a turn's own
+// frame, the daemon's push, the account lists): a small ring once the account has a reading, tinted as the
+// binding pool fills. Keyed by account so switching accounts shows the right one. The ring tracks the pool that
+// will gate THIS conversation's model (a Google sign-in spent for Gemini still has a week for Claude Opus); its
+// card lists them all, because which one is binding shifts between turns and models.
 const usageChip = computed(() => {
     // Resolved through effectiveAccount: a conversation that never picked an account runs on the daemon's
     // first, and the usage map is keyed by that real id: looking up `undefined` kept this chip invisible on
     // every single-account setup.
-    const headroom = planHeadroom(usageStatusFor(provider.value, effectiveAccount(provider.value, account.value)));
+    const modelRef = model.value === `` ? undefined : { id: model.value };
+    const headroom = planHeadroom(usageStatusFor(provider.value, effectiveAccount(provider.value, account.value), modelRef), modelRef);
     // No binding pool ⇒ nothing measured, or everything has reset. Unlike an account ROW, a chat's chip stays
     // out of the way rather than pinning a 0% to the composer for a session that has not asked for anything.
     if (headroom?.binding === undefined) {

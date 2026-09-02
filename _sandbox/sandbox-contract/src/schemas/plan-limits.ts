@@ -5,17 +5,42 @@ import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "./
 // (TranslatorAccount) differ in who holds the credential and how the reading is taken, never in what a
 // reading IS, so every surface that draws a percentage reads this one type and no other.
 
+/* WHICH MODELS A POOL GATES, said by the reader that parsed it and carried on the wire, so every surface and
+ * every picker answers "does this pool stand between me and THIS model" from one fact instead of six rules.
+ *
+ * A plan is not one allowance. Google meters Gemini separately from the Claude and GPT models it serves off the
+ * same sign-in; a Claude plan carries a per-model weekly slice ("Opus", "Fable") beside its all-models pools;
+ * ChatGPT publishes a code-review limit that no chat turn spends. Before this field the relation lived in six
+ * places that disagreed (a static Google table, a Claude kind list, a max-over-everything ranking, a fullest-
+ * window reset, and two client-side matchers), so a Google account with its Gemini pool spent drew a red ring
+ * over Claude Opus, and a Claude account with its Opus slice spent was ranked "spent" for a Haiku call.
+ *
+ *   "all"      every model on this plan spends it: the 5-hour and weekly pools, Kimi's throttles.
+ *   "none"     nothing a turn here runs spends it: a code-review limit, a surface-scoped pool for another
+ *              product. Still shown, never binding.
+ *   { models } a slice scoped to the models the names match. Names are matched as runs of whole words against
+ *              the model id AND its label ("opus" is in "claude-opus-4-6" and in "Claude Opus 4.6"; "gemini"
+ *              is in "gemini-3-pro"), see plan-pools.ts, because the plan names a pool by the vendor's word for
+ *              the tier and nothing else connects the two.
+ *
+ * Decided by the READER, never inferred later: the payload is the only place the grouping is known, and it is
+ * the plan's to change, so the fact travels with the reading it describes. */
+export const WindowGatesSchema = z.union([z.literal("all"), z.literal("none"), z.object({ models: z.array(z.string().min(1)).min(1) })]);
+export type WindowGates = z.infer<typeof WindowGatesSchema>;
+
 // One plan-limit pool. `kind` is the provider's own key ('five_hour' | 'seven_day' | 'seven_day_opus' |
 // 'seven_day_sonnet' | 'model:Fable' | …) rather than an enum we'd have to keep in step with the provider: an
 // unrecognised pool is shown under its raw key, which is far better than being silently folded into a
 // neighbour. `label` is the provider's OWN display name where it supplies one (the per-model buckets do), it
 // wins over anything we'd infer, because the model names in a plan's limits are the provider's to rename.
-// `resetsAt` is epoch SECONDS (matching the SDK's frame).
+// `resetsAt` is epoch SECONDS (matching the SDK's frame). `gates` says which models the pool stands in the way
+// of, see WindowGatesSchema.
 export const UsageWindowSchema = z.object({
     kind: z.string(),
     label: z.string().optional(),
     utilization: z.number(), // 0-100
     resetsAt: z.number().optional(),
+    gates: WindowGatesSchema,
 });
 export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 // An account's headroom: EVERY window the provider reports, read together, plus when the reading was taken.
@@ -69,6 +94,10 @@ export const ProviderRefusalSchema = z.object({
     message: z.string().describe("The provider's own words, verbatim. The only part that says which limit or which credential."),
     // The account that was serving, when the daemon knows it (native turns only, see above).
     account: z.string().optional().describe("Which account was serving, where that is known."),
+    // The model the refused turn ran, so a `limit` refusal can be read against the POOL that model spends
+    // (UsageWindow.gates) rather than against the account's fullest pool, which on a plan that meters models
+    // separately is routinely a different allowance from the one that said no.
+    model: z.string().optional().describe("Which model the refused turn was on, where that is known."),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
 export const ProviderRefusalsSchema = z.object({
@@ -89,6 +118,18 @@ export const TranslatorAccountSchema = z.object({
     // or one that did not answer, must still render as the connected account it is, with a dot instead of a
     // ring.
     usage: AccountUsageSchema.optional(),
+    /* THE TRANSLATOR'S OWN VERDICT ON THE CREDENTIAL, the one live fact no quota read can produce. CLIProxyAPI
+     * benches an auth file the moment upstream refuses it (a quota 429, an expired token) and routes around it
+     * until `until`; a reading taken five minutes ago cannot know that, and a green ring over a benched file is
+     * exactly the gap a refusal used to be the only way to see. Absent ⇒ the proxy is routing to it. */
+    cooling: z
+        .object({
+            // Epoch SECONDS, like every reset on this wire. Absent when the proxy named no retry instant.
+            until: z.number().optional(),
+            // The proxy's own sentence, when it gave one.
+            reason: z.string().optional(),
+        })
+        .optional(),
 });
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
 // Which routed-provider subscriptions are connected in the translator, per provider, a LIST per provider, not

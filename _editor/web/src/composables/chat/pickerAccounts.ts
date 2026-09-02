@@ -1,4 +1,4 @@
-import { type AgentHarness, type AgentProvider, type KeyedProvider, reportsPlanLimits } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type KeyedProvider, type ModelRef, reportsPlanLimits } from "@intentic/sandbox-contract";
 import { computed, type Ref, ref } from "vue";
 import { relativeTime } from "./catalog";
 import { providerDisplayLabel } from "./providerCatalog";
@@ -84,8 +84,14 @@ export const matchAccounts = <T extends { readonly label: string; readonly subti
     return needle === `` ? rows : rows.filter((row) => `${row.label} ${row.subtitle ?? ``}`.toLowerCase().includes(needle));
 };
 
-export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>) => {
+export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>, model?: Ref<string | undefined>) => {
     const accounts = computed(() => accountsOf(provider.value));
+    /* THE MODEL THE RINGS ARE ABOUT. A row's ring answers "how much room does this account have for what I am
+     * about to send", and on a plan that meters models separately that depends on the model: a Google sign-in
+     * spent for Gemini has a full week for Claude Opus, and a Claude account with its Opus slice gone still
+     * serves Haiku. With no model (a host picker before a row is chosen) the ring measures the account's
+     * tightest pool, which is the honest answer for a question nobody has finished asking. */
+    const modelRef = computed<ModelRef | undefined>(() => (model?.value === undefined || model.value === `` ? undefined : { id: model.value }));
 
     // The harness axis, shown as footer chips for codex/grok (claude is always its own loop). Both chips NAME
     // the runtime they select, the native one is labelled for the provider whose loop it actually is
@@ -127,7 +133,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
             : translatorAccounts.value[routedProvider.value].map((entry) => ({
                   name: entry.name,
                   label: entry.label,
-                  headroom: planHeadroom(liveUsage(provider.value, entry.name, entry.usage)),
+                  headroom: planHeadroom(liveUsage(provider.value, entry.name, entry.usage, modelRef.value), modelRef.value),
               })),
     );
 
@@ -201,7 +207,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                           : undefined,
                 // liveUsage, not the streamed map alone: the daemon's reading rides the row itself and is the newer
                 // of the two whenever no turn has ended in this tab since, which is most of the time.
-                headroom: planHeadroom(liveUsage(provider.value, entry.id, entry.usage)),
+                headroom: planHeadroom(liveUsage(provider.value, entry.id, entry.usage, modelRef.value), modelRef.value),
                 /* Only while it STANDS, and only on the account it names. A refusal something since has answered is
                  * history, and history does not belong on a row someone is about to click; a refusal the daemon
                  * could not attribute (a routed turn) belongs to no row here at all. Both of those are the Agent

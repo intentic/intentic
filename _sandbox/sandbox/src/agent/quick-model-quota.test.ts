@@ -2,7 +2,7 @@ import { unstubbed } from "@intentic/testing";
 import type { UsageWindow } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
-import type { TurnLimit } from "../usage/translator-usage.js";
+import type { TurnLimit } from "../usage/fleet-limit.js";
 import { spentRung } from "./quick-model-quota.js";
 
 /* READING THE QUOTA INSTEAD OF DISCOVERING IT. Every case here is about the same trade: this may only ever say
@@ -71,6 +71,7 @@ test("asks the rung when the reading itself cannot be taken", async () => {
 const weekly = (utilization: number, resetsAt?: number): UsageWindow => ({
     kind: `seven_day`,
     utilization,
+    gates: `all`,
     ...(resetsAt === undefined ? {} : { resetsAt }),
 });
 
@@ -93,9 +94,12 @@ test("a per-model pool at its cap does not retire the whole Claude rung", async 
      * arrives under the provider's own display name, and nothing connects that name to the model id this helper
      * is about to run, so a spent Fable pool says nothing about a cheap Haiku call. Reading it as one allowance
      * would take the most reliable rung in the chain out of service on a limit it does not spend. */
-    const account = { one: [weekly(12), { kind: `model:Fable`, label: `Fable`, utilization: 100 }] };
+    const account = { one: [weekly(12), { kind: `model:Fable`, label: `Fable`, utilization: 100, gates: { models: [`Fable`] } }] };
 
     await expect(spentRung(claude(account), HAIKU, NOW)).resolves.toBeUndefined();
+    // …while the model the slice IS scoped to is stepped over, in the plan's own words for the pool.
+    const fable = await spentRung(claude(account), { provider: `claude`, model: `claude-fable-5` }, NOW);
+    expect(fable?.reason).toContain(`Fable allowance`);
 });
 
 test("asks Claude when an account has no reading at all", async () => {

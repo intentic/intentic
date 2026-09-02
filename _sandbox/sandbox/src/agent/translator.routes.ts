@@ -1,10 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
-import { translatorContract } from "@intentic/sandbox-contract";
+import { KeyedProviderSchema, translatorContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { usageKey } from "./translator.js";
 
-export type TranslatorRoutesDeps = Pick<Services, "cliProxy">;
+export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom">;
 
 /* THE TRANSLATOR'S OWN WORDS, ALL THE WAY TO THE CARD, the one thing every route here has to preserve.
  *
@@ -39,7 +40,14 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
 export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
     const i = implement(translatorContract).$context<OrpcContext>();
     return {
-        accounts: i.accounts.handler(() => upstream(services.cliProxy.accounts())),
+        accounts: i.accounts.handler(async () => {
+            const accounts = await upstream(services.cliProxy.accounts());
+            // A screen is reading these rows, so what is on file gets brought up to date behind the answer:
+            // never awaited, this list is also the routed turn's credential gate, and the reading that lands
+            // reaches every open window on /events rather than waiting for the next visit.
+            void services.headroom.refresh({ scope: { providers: KeyedProviderSchema.options } });
+            return accounts;
+        }),
         connect: i.connect.handler(({ input }) => upstream(services.cliProxy.connect(input.provider))),
         complete: i.complete.handler(async ({ input }) => {
             await upstream(services.cliProxy.complete(input));
@@ -47,6 +55,9 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
         }),
         disconnect: i.disconnect.handler(async ({ input }) => {
             await upstream(services.cliProxy.disconnect(input.provider, input.name));
+            // Dropping an account drops its snapshot with it: leaving one behind would hand its headroom to
+            // whatever account is next given the same auth-file name.
+            await services.headroom.clear(input.provider, usageKey(input.provider, input.name));
             return { ok: true } as const;
         }),
     };

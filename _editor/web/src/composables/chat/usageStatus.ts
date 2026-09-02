@@ -1,23 +1,21 @@
 import {
     type AccountUsage,
     type AgentProvider,
+    bindingWindow,
+    type ModelRef,
     type OauthAccount,
     type ProviderRefusal,
     reportsPlanLimits,
+    scopedWindow,
     type TranslatorAccounts,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
 import { formatWeekdayTime, timeAgo } from "@intentic/ui/format";
-import { ref } from "vue";
-import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
+import { lookupUsage, providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
 
-// Every plan-limit window a turn ENDING IN THIS TAB reported, keyed by the account the daemon says served it,
-// the `account_usage` frame, read from the provider's usage endpoint at turn end. Account-wide within an
-// account, not per-conversation: the last turn on any tab updates its account's entry. Only half of what is
-// known about an account, and the half that only exists while this window stays open, the durable half rides
-// the account lists (see usageStatusFor). A module singleton so the composer chip, the rate-limit notice and
-// the account picker can read it without threading it through each conversation.
-export const usageStatusByAccount = ref<Record<string, AccountUsage>>({});
+// The pool that gates a model, or the account's tightest: the contract's rule, re-exported so a surface reads
+// it from the same module as the rest of these projections.
+export { bindingWindow };
 
 /* Naming the pools. Every one of these is a SEPARATE allowance, and conflating two of them is exactly the bug
  * this vocabulary exists to prevent: an account can sit at 1% of its weekly Opus pool while its weekly
@@ -56,18 +54,12 @@ export const orderedWindows = (usage: AccountUsage): UsageWindow[] =>
         return rank(left) - rank(right) || usageWindowLabel(left).localeCompare(usageWindowLabel(right));
     });
 
-// The pool that will gate the next turn: the fullest one. A single headroom number can only ever be this one,
-// the account is as constrained as its tightest allowance, whichever that happens to be today.
-export const bindingWindow = (usage: AccountUsage | undefined): UsageWindow | undefined =>
-    usage?.windows.reduce<UsageWindow | undefined>(
-        (worst, window) => (worst === undefined || window.utilization > worst.utilization ? window : worst),
-        undefined,
-    );
-
-// The one-number summary a chip or a picker row shows. Undefined when the account has no usable reading, never
-// measured, or every window it had has since reset, so the row shows nothing rather than a confident 0%.
-export const usagePercent = (usage: AccountUsage | undefined): number | undefined => {
-    const window = bindingWindow(usage);
+/* The one-number summary a chip or a picker row shows: the binding pool's figure, for the MODEL when the
+ * surface knows one (the composer chip, the picker's rows) and for the account's tightest pool when it does
+ * not (the roster, the rail). Undefined when the account has no usable reading, never measured, or every
+ * window it had has since reset, so the row shows nothing rather than a confident 0%. */
+export const usagePercent = (usage: AccountUsage | undefined, model?: ModelRef): number | undefined => {
+    const window = bindingWindow(usage, model);
     return window === undefined ? undefined : Math.round(window.utilization);
 };
 
@@ -83,8 +75,8 @@ export const usageTone = (percent: number): string =>
  * because the capacity counts below have to draw their bands on the SAME two thresholds. */
 export const SPENT_PERCENT = 90;
 const TIGHT_PERCENT = 75;
-export const isSpent = (usage: AccountUsage | undefined): boolean => {
-    const percent = usagePercent(usage);
+export const isSpent = (usage: AccountUsage | undefined, model?: ModelRef): boolean => {
+    const percent = usagePercent(usage, model);
     return percent !== undefined && percent >= SPENT_PERCENT;
 };
 
@@ -94,18 +86,12 @@ export const isSpent = (usage: AccountUsage | undefined): boolean => {
 // than carrying a second copy of this comparison.
 const hasRoom = (percent: number | undefined): boolean => percent !== undefined && percent < SPENT_PERCENT;
 
-/* The freshest reading for an account, given what the server attached to its row. Both sources are the same
- * AccountUsage; they differ only in how they arrive. The daemon's rides the accounts list (any provider, a
- * Claude snapshot it persisted, a routed subscription's quota it pulled), while the streamed one is pushed by a
- * turn ending in THIS tab, which no list fetched a moment earlier can know about. Newer `measuredAt` wins,
- * which for every provider but Claude simply means the daemon's. */
-const freshest = (account: string, attached: AccountUsage | undefined): AccountUsage | undefined => {
-    const streamed = usageStatusByAccount.value[account];
-    if (streamed === undefined || attached === undefined) {
-        return streamed ?? attached;
-    }
-    return streamed.measuredAt >= attached.measuredAt ? streamed : attached;
-};
+/* The reading for an account: the shared map (providerAccounts.usageByAccount), which every source writes
+ * newest-first, or what a caller holding a bare row was handed with it, for the one path that reads lists
+ * rather than the module state (planLimitRows). The map wins wherever it has an entry: it is seeded from the
+ * rows the moment they land and then written by turns and by the daemon's push, so it is never older. */
+const freshest = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
+    lookupUsage(provider, account) ?? attached;
 
 /* AND WHAT THE PLAN HAS SINCE REFUSED, which outranks both readings above, because a refusal knows the one
  * thing no reading can produce.
@@ -141,42 +127,38 @@ const freshest = (account: string, attached: AccountUsage | undefined): AccountU
  * IT SETTLES ITSELF, on the rule that settles the note: a reading taken since the refusal with room in it
  * answers it, and an answered refusal pins nothing. Nor can it feed itself and so outlive its own evidence,
  * because the judgement runs on the RAW readings (providerReadings), never on the pinned ones it produces. */
-const spentByRefusal = (provider: AgentProvider, account: string, usage: AccountUsage | undefined): AccountUsage | undefined => {
-    const binding = bindingWindow(usage);
+/* THE POOL A STANDING REFUSAL PINS: the one binding the model the refused turn ran (`refusal.model`, read
+ * through the windows' own gates), else the model the surface is asking about, else the account's tightest.
+ * On a plan that meters models separately the account's fullest pool is routinely a different allowance from
+ * the one that said no, and pinning that one drew a red Gemini ring over a refused Claude Opus turn. */
+const spentByRefusal = (provider: AgentProvider, account: string, usage: AccountUsage | undefined, model: ModelRef | undefined): AccountUsage | undefined => {
+    const refused = providerRefusals.value[provider]?.model;
+    const binding = bindingWindow(usage, refused === undefined ? model : { id: refused });
     if (usage === undefined || binding === undefined || binding.utilization >= 100 || !limitStandsFor(provider, account, usage)) {
         return usage;
     }
     return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? { ...entry, utilization: 100 } : entry)) };
 };
 
-// The provider rides along because the refusal that corrects a reading is filed under it, not under the account
-// (see spentByRefusal): every caller here holds one, the tab it is drawing being what picked it.
-export const liveUsage = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
-    spentByRefusal(provider, account, freshest(account, attached));
+/* An account's reading as a surface should draw it: the shared map's (or, for a caller holding a bare row, what
+ * that row carried), corrected by whatever the plan has since refused. The provider rides along because the
+ * refusal that corrects a reading is filed under it, not under the account (see spentByRefusal): every caller
+ * here holds one, the tab it is drawing being what picked it. The model, when the surface knows one, decides
+ * which pool a refusal pins. */
+export const liveUsage = (provider: AgentProvider, account: string, attached?: AccountUsage, model?: ModelRef): AccountUsage | undefined =>
+    spentByRefusal(provider, account, freshest(provider, account, attached), model);
 
-/* The same merge for a caller that holds an account ID AND NOTHING ELSE, the composer chip, the picker's rows,
- * the sentence a refused turn prints. They are handed an account by the conversation, never the row it came
- * from, so the attached half has to be looked up rather than passed in.
- *
- * That lookup is the whole point. This used to answer from the streamed map alone, which meant the chat
- * surfaces reported whatever the last turn IN THIS BROWSER TAB happened to see: a tab left open showed an
- * hours-old floor ("≥87%") while the account rows two routes away, same store, same account, drew the
- * current number. A reading nobody can reconcile is worse than no reading, because it is the one the user
- * checks before deciding whether to send. */
 // The subscriptions the translator holds for a provider, or none: it keeps auth files for four of them, and
-// every other provider key simply has no half here. Written once because both the lookup below and the readings
-// a refusal is judged against need the same "and its routed connections too".
+// every other provider key simply has no half here. Written once because the readings a refusal is judged
+// against need "and its routed connections too".
 const routedAccounts = (provider: AgentProvider): TranslatorAccounts[keyof TranslatorAccounts] =>
     translatorAccounts.value[provider as keyof TranslatorAccounts] ?? [];
 
-const attachedUsage = (provider: AgentProvider, account: string): AccountUsage | undefined =>
-    // A provider's own account is keyed by id and a translator subscription by its auth-file name, the same
-    // two keys planLimitRows files them under, because it is the same shared store on the daemon's side.
-    (providerAccounts.value[provider] ?? []).find((entry) => entry.id === account)?.usage ??
-    routedAccounts(provider).find((entry) => entry.name === account)?.usage;
-
-export const usageStatusFor = (provider: AgentProvider, account: string | undefined): AccountUsage | undefined =>
-    account === undefined ? undefined : liveUsage(provider, account, attachedUsage(provider, account));
+/* The same for a caller that holds an account ID AND NOTHING ELSE, the composer chip, the picker's rows, the
+ * sentence a refused turn prints. They are handed an account by the conversation, never a row, and the map is
+ * keyed for exactly that (lookupUsage). */
+export const usageStatusFor = (provider: AgentProvider, account: string | undefined, model?: ModelRef): AccountUsage | undefined =>
+    account === undefined ? undefined : liveUsage(provider, account, undefined, model);
 
 export interface PlanLimitPool {
     readonly kind: string;
@@ -199,65 +181,38 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
     }));
 
 /* ---- which pool a MODEL spends ---------------------------------------------------------------------------
- * A plan that meters models separately publishes one pool per model (`model:Opus`, `model:Fable`; see the
- * sandbox's claude-usage.ts, where the scope's own display name becomes the kind). That is the only place in
- * this product where "what does picking this model cost" has a real answer rather than a guess, so the match
- * from a picked model to its pool is written once, here, beside the pools it reads.
- *
- * TOKENS, NOT SUBSTRINGS. The pool is named by the plan ("Opus"), the model by its vendor ("claude-opus-4-6",
- * "Claude Opus 4.6"), and the two only ever agree on a word. A substring test would match "opus" inside an id
- * that merely mentions it, and a normalized-string equality would match nothing at all. */
-const wordsOf = (text: string): readonly string[] =>
-    text
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter(Boolean);
-
-// Whether `needle` appears as a run of whole words in `words`: "claude opus" is in "claude-opus-4-6", "opus"
-// is in "Claude Opus 4.6", and "sonnet" is in neither.
-const runOfWords = (words: readonly string[], needle: readonly string[]): boolean =>
-    needle.length > 0 && words.some((_, at) => needle.every((word, index) => words[at + index] === word));
-
-const MODEL_SCOPE = `model:`;
+ * A plan that meters models separately publishes one pool per model (`model:Opus`, `model:Fable`; Google's two
+ * families), each carrying the gate that names the models it stands in the way of (UsageWindow.gates). Which
+ * pool a picked model draws on is therefore the contract's question (plan-pools.ts), asked here once for the
+ * one sentence that names an allowance. */
 
 /* WHAT ONE MODEL SPENDS, as much of it as the plan publishes. The pool's own figures, plus the plan's NAME for
- * the model it meters ("Opus"), which is what a sentence about it has to say: the pool's label reads
- * "Weekly · Opus", written for a meter's heading and not for prose. */
+ * the pool ("Opus", "Claude and GPT models · Weekly Limit"), which is what a sentence about it has to say. */
 export interface ModelAllowance {
     readonly name: string;
     readonly percent: number;
     readonly resetsAt: number | undefined;
 }
 
-/* The pool the given model draws on, or undefined when this plan doesn't meter it separately (every provider
- * but Claude today) or when nothing has been read yet. Both the id the wire carries and the label the picker
- * shows are offered to the match, because which of them names the tier differs by vendor.
- *
- * AMBIGUITY ANSWERS NOTHING. Two pools matching one model (a plan that meters "Opus" and "Claude Opus"
- * separately) means we cannot say which allowance a turn spends, so the more specific one wins and a tie
- * returns undefined: no sentence beats a sentence naming the wrong pool. */
-export const modelAllowance = (
-    pools: readonly PlanLimitPool[],
-    model: { readonly id: string; readonly label: string },
-): ModelAllowance | undefined => {
-    const id = wordsOf(model.id);
-    const label = wordsOf(model.label);
-    const matched = pools
-        .filter((pool) => pool.kind.startsWith(MODEL_SCOPE))
-        .map((pool) => ({ pool, scope: wordsOf(pool.kind.slice(MODEL_SCOPE.length)) }))
-        .filter((entry) => runOfWords(id, entry.scope) || runOfWords(label, entry.scope))
-        .toSorted((left, right) => right.scope.length - left.scope.length);
-    const best = matched[0];
-    if (best === undefined || matched[1]?.scope.length === best.scope.length) {
+/* The pool the given model draws on by itself, or undefined when this plan doesn't meter it separately (the
+ * model spends only the all-models pools) or when nothing has been read yet. The contract answers nothing for
+ * an ambiguous match, and so does this: no sentence beats a sentence naming the wrong pool. */
+export const modelAllowance = (usage: AccountUsage | undefined, model: ModelRef): ModelAllowance | undefined => {
+    const pool = scopedWindow(usage, model);
+    if (pool === undefined) {
         return undefined;
     }
-    return { name: best.pool.kind.slice(MODEL_SCOPE.length), percent: best.pool.percent, resetsAt: best.pool.resetsAt };
+    // The plan's own name for the pool where the reader kept one; the kind, less its scope prefix, otherwise.
+    return { name: pool.label ?? pool.kind.replace(/^model:/u, ``), percent: Math.round(pool.utilization), resetsAt: pool.resetsAt };
 };
 
-// The fullest of them, the pool that will gate the next turn, off the ROUNDED figures the meters draw, so a
-// headline number and the pool it names can never come from different arithmetic.
-const bindingPool = (pools: readonly PlanLimitPool[]): PlanLimitPool | undefined =>
-    pools.reduce<PlanLimitPool | undefined>((worst, pool) => (worst === undefined || pool.percent > worst.percent ? pool : worst), undefined);
+// The binding pool, as the meters draw it: the contract's window (gated to the model when one is named), found
+// among the ROUNDED pools by its kind, so a headline number and the pool it names can never come from
+// different arithmetic.
+const bindingPool = (usage: AccountUsage, pools: readonly PlanLimitPool[], model: ModelRef | undefined): PlanLimitPool | undefined => {
+    const window = bindingWindow(usage, model);
+    return window === undefined ? undefined : pools.find((pool) => pool.kind === window.kind);
+};
 
 export interface PlanHeadroom {
     // The binding pool's figure, what the ring draws, and what its tone is taken from.
@@ -285,12 +240,12 @@ export interface PlanHeadroom {
  * every window has reset (an empty array), which is right for a chip that should not be pinned by a stale
  * reading, but wrong for an account row, where a reset account IS at 0%: it was measured, its pools reopened,
  * and "you have room" beats "we don't know". */
-export const planHeadroom = (usage: AccountUsage | undefined): PlanHeadroom | undefined => {
+export const planHeadroom = (usage: AccountUsage | undefined, model?: ModelRef): PlanHeadroom | undefined => {
     if (usage === undefined) {
         return undefined;
     }
     const pools = usagePools(usage);
-    const binding = bindingPool(pools);
+    const binding = bindingPool(usage, pools, model);
     const percent = binding?.percent ?? 0;
     return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, pools, binding };
 };
@@ -403,6 +358,10 @@ export interface PlanLimitRow {
      * over provider names can answer it. Read by any surface that has to decide whether to list a pool's
      * accounts or stand them in for with one line (chatCapacity's rows). */
     readonly routed: boolean;
+    /* THE TRANSLATOR'S OWN BENCH of a routed credential (TranslatorAccount.cooling): the proxy is routing around
+     * this file right now, whatever its last reading says. Read beside the percentage by every surface that asks
+     * "can this serve a turn", because it is the fresher of the two facts. Undefined ⇒ routing to it. */
+    readonly cooling: { readonly until?: number | undefined; readonly reason?: string | undefined } | undefined;
 }
 
 // What a row is built from, in the two lists' common terms, the daemon's key for the account, who it says it
@@ -415,12 +374,13 @@ interface PlanLimitSource {
     readonly attached: AccountUsage | undefined;
     readonly needsReauth: boolean;
     readonly routed: boolean;
+    readonly cooling: PlanLimitRow["cooling"];
 }
 
 const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLimitRow => {
     const usage = liveUsage(provider, source.account, source.attached);
     const pools = usage === undefined ? [] : usagePools(usage);
-    const binding = bindingPool(pools);
+    const binding = usage === undefined ? undefined : bindingPool(usage, pools, undefined);
     return {
         id: `${provider}:${source.account}`,
         provider,
@@ -435,6 +395,7 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLim
         readable: reportsPlanLimits(provider),
         needsReauth: source.needsReauth,
         routed: source.routed,
+        cooling: source.cooling,
     };
 };
 
@@ -453,6 +414,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
                     attached: account.usage,
                     needsReauth: account.needsReauth === true,
                     routed: false,
+                    cooling: undefined,
                 }),
             ),
         ),
@@ -468,6 +430,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
                     attached: account.usage,
                     needsReauth: false,
                     routed: true,
+                    cooling: account.cooling,
                 }),
             ),
         ),
@@ -710,20 +673,20 @@ export const refusalNote = (
  * It is also the list the two surfaces that print a refusal used to each build for themselves, off their own
  * already-decorated rows: one rule, two copies, and the picker and the Agent tab free to describe the same event
  * differently. */
-const rawReading = (account: string, attached: AccountUsage | undefined): Pick<RefusalReading, `measuredAt` | `percent`> => {
-    const raw = freshest(account, attached);
+const rawReading = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): Pick<RefusalReading, `measuredAt` | `percent`> => {
+    const raw = freshest(provider, account, attached);
     return { measuredAt: raw?.measuredAt, percent: usagePercent(raw) };
 };
 
 const providerReadings = (provider: AgentProvider): readonly RefusalReading[] => [
     ...(providerAccounts.value[provider] ?? []).map((entry) => ({
         account: entry.id,
-        ...rawReading(entry.id, entry.usage),
+        ...rawReading(provider, entry.id, entry.usage),
         needsReauth: entry.needsReauth === true,
     })),
     // A routed subscription carries no reauth flag of its own: CLIProxyAPI drops an auth file it can no longer
     // refresh, so a broken one leaves the list rather than sitting in it.
-    ...routedAccounts(provider).map((entry) => ({ account: entry.name, ...rawReading(entry.name, entry.usage), needsReauth: false })),
+    ...routedAccounts(provider).map((entry) => ({ account: entry.name, ...rawReading(provider, entry.name, entry.usage), needsReauth: false })),
 ];
 
 /* THE PROVIDER'S REFUSAL, READ AGAINST EVERYTHING THAT HAS HAPPENED SINCE, for a caller that holds a provider

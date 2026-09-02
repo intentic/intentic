@@ -33,6 +33,10 @@ export interface ProviderRefusalStore {
      * account is connected. The one refusal any success answers is a nameless one, a routed refusal, which
      * CLIProxyAPI only issues once every credential it holds is cooling down. */
     readonly clear: (provider: string, account: string | undefined) => Promise<void>;
+    // Every write, with the provider's refusal as it now stands, or undefined once settled. What the /events
+    // stream forwards, so a refusal recorded at 4am is on every open window's account rows by 4am and one
+    // settled by the next turn leaves them the same way.
+    readonly onChange: (listener: (provider: string, refusal: ProviderRefusal | undefined) => void) => () => void;
 }
 
 /* A week, which is the longest pool cycle any of these providers sells. Past it a limit refusal describes a
@@ -50,6 +54,13 @@ export const fileProviderRefusalStore = (path: string): ProviderRefusalStore => 
         fallback: () => ({}),
     });
 
+    const listeners = new Set<(provider: string, refusal: ProviderRefusal | undefined) => void>();
+    const announce = (provider: string, refusal: ProviderRefusal | undefined): void => {
+        for (const listener of listeners) {
+            listener(provider, refusal);
+        }
+    };
+
     return {
         read: async () => {
             const cutoff = Date.now() - FORGET_AFTER_MS;
@@ -57,17 +68,27 @@ export const fileProviderRefusalStore = (path: string): ProviderRefusalStore => 
         },
         record: async (provider, refusal) => {
             await file.update((current) => ({ ...current, [provider]: refusal }));
+            announce(provider, refusal);
         },
         clear: async (provider, account) => {
+            let settled = false;
             await file.update((current) => {
                 const stored = current[provider];
                 // A refusal that named a different account is somebody else's, and still true.
                 if (stored === undefined || (stored.account !== undefined && stored.account !== account)) {
                     return current;
                 }
+                settled = true;
                 const { [provider]: _settled, ...rest } = current;
                 return rest;
             });
+            if (settled) {
+                announce(provider, undefined);
+            }
+        },
+        onChange: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
         },
     };
 };

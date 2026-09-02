@@ -40,7 +40,7 @@ const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
 
 // Whether the shared block has anything to say for this provider: the one thing this component needs from it
 // BEFORE rendering it, since the footer's border and padding belong to whoever draws them.
-const { hasContent } = usePickerAccounts(provider, harness);
+const { hasContent } = usePickerAccounts(provider, harness, model);
 
 /* WHO SERVES THE TURN IS THE HOST BOX'S BUSINESS WHEN THE HOST BOX IS NOT THIS ONE. An account id is a key in
  * one daemon's credential store, so a conversation homed in another sandbox sends no account at all and that
@@ -178,6 +178,7 @@ const footerVisible = computed(
                     v-if="accountsShown"
                     :provider="provider"
                     :harness="harness"
+                    :model="model"
                     :account="account"
                     :accounts-locked="generating"
                     :harness-locked="streaming"

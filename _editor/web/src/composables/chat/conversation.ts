@@ -26,7 +26,7 @@ import { invalidateAgentTranscript } from "./agentTranscript";
 import { AUTO_CONTINUE_PROGRESS_MS, AUTO_CONTINUE_TRIES, autoContinueDelay } from "./autoContinue";
 import type { PickUp } from "./pickUp";
 import { clampEffort } from "./effortScale";
-import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
+import { rememberedAccountFor, selectedAccountId, setAccountUsage } from "./providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "./providerCatalog";
 import {
     type CardKind,
@@ -45,7 +45,7 @@ import { TurnFailures } from "./turnFailures";
 import { restoredCards, type TurnEffect } from "./turnReducer";
 import { type SessionRef, type TurnSettings, boundSession, resumes, turnRequestBody } from "./turnRequest";
 import { type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
-import { formatReset, formatUtilization, modelAllowance, planHeadroom, SPENT_PERCENT, usageStatusByAccount, usageStatusFor } from "./usageStatus";
+import { formatReset, formatUtilization, isStale, modelAllowance, SPENT_PERCENT, usageStatusFor } from "./usageStatus";
 import { mentionPaths, mentionedPathTokens } from "./useMentions";
 import { uuid } from "../uuid";
 
@@ -607,6 +607,7 @@ export class Conversation {
         transcript: this.transcript,
         provider: this.provider,
         account: this.account,
+        model: this.model,
         session: this.session,
         error: this.error,
         pickUp: this.pickUp,
@@ -959,16 +960,14 @@ export class Conversation {
      * climbed since. The reset instant is spent only on a pool that is effectively spent, where "when does it
      * come back" is the question the number raises; below that it is a date nobody asked for. */
     private allowanceNote(): string {
-        const headroom = planHeadroom(usageStatusFor(this.provider.value, this.account.value));
-        if (headroom === undefined) {
-            return ``;
-        }
-        const allowance = modelAllowance(headroom.pools, { id: this.model.value, label: this.modelLabel() });
-        if (allowance === undefined) {
+        const model = { id: this.model.value, label: this.modelLabel() };
+        const usage = usageStatusFor(this.provider.value, this.account.value, model);
+        const allowance = modelAllowance(usage, model);
+        if (usage === undefined || allowance === undefined) {
             return ``;
         }
         const resetsAt = allowance.percent >= SPENT_PERCENT ? allowance.resetsAt : undefined;
-        return ` · ${allowance.name} ${formatUtilization(allowance.percent, headroom.stale)} used${
+        return ` · ${allowance.name} ${formatUtilization(allowance.percent, isStale(usage))} used${
             resetsAt === undefined ? `` : `, resets ${formatReset(resetsAt)}`
         }`;
     }
@@ -2428,13 +2427,9 @@ export class Conversation {
                 return;
             case `accountUsage`:
                 // Account-wide subscription headroom, keyed by the account that served the turn so switching
-                // accounts shows the right one. Stamped with the read time so it can be compared against the
-                // daemon's persisted snapshot on the next `/accounts` load, whichever is newer wins, and the
-                // picker can say how stale a reading is.
-                usageStatusByAccount.value = {
-                    ...usageStatusByAccount.value,
-                    [effect.account]: { windows: [...effect.windows], measuredAt: Date.now() },
-                };
+                // accounts shows the right one. Stamped with the read time, and written into the one shared map
+                // newest-wins, so the daemon's own push of the same reading and the next list load agree.
+                setAccountUsage(this.provider.value, effect.account, { windows: [...effect.windows], measuredAt: Date.now() });
                 return;
             case `toolCall`: {
                 const { call } = effect;

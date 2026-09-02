@@ -1,6 +1,6 @@
-import type { UsageWindow } from "@intentic/sandbox-contract";
+import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract";
 import { type ClaudeStore, ensureFreshToken } from "../claude/claude-credentials.js";
-import type { AccountUsageStore } from "./account-usage.js";
+import type { HeadroomSource } from "./headroom.js";
 import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
 
 /* The READER for the native Claude accounts, the counterpart to translator-usage.ts next door, and the other
@@ -17,27 +17,32 @@ import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payl
  * treated as binding for that request), which is how a Usage tab came to say "Weekly limit 1%" for an account
  * really sitting at 98% on its all-models weekly pool. All pools or none.
  *
- * TWO TRIGGERS, one reader. A Claude turn reads it at settle, at no token cost (agent.ts). The refresher at the
- * bottom of this file reads it for accounts that are not running anything, because these pools are ACCOUNT-wide:
- * another Claude Code, the desktop app and claude.ai itself all spend the same allowance without this sandbox
- * hearing a word about it, so a reading is only ever as good as it is recent. Before the refresher existed the
- * only reading was the turn's, and an idle sandbox's Usage tab showed a floor ("≥87%") from whenever its last
- * turn happened to end. */
+ * TWO TRIGGERS, one reader. A Claude turn reads it at settle, at no token cost (agent.ts). The headroom
+ * service reads it for accounts that are not running anything (claudeHeadroomSource, at the bottom of this
+ * file), because these pools are ACCOUNT-wide: another Claude Code, the desktop app and claude.ai itself all
+ * spend the same allowance without this sandbox hearing a word about it, so a reading is only ever as good as
+ * it is recent. Before that existed the only reading was the turn's, and an idle sandbox's Usage tab showed a
+ * floor ("≥87%") from whenever its last turn happened to end. */
 
 const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
 
-/* WHICH POOL A `limits[]` ENTRY IS, on our wire.
+/* WHICH POOL A `limits[]` ENTRY IS, on our wire, and WHICH MODELS IT GATES.
  *
  * The two unscoped entries take the SHARED kinds every provider's reader maps onto (WINDOW_NAMES,
  * usageStatus.ts), so a Claude meter sorts and reads beside a Codex or Kimi one instead of inventing a second
- * vocabulary for the same idea.
+ * vocabulary for the same idea. They gate every model: they are the plan's own allowance.
  *
  * A SCOPED entry is named by what it is scoped to. This is the whole reason the list is read at all: a plan's
  * per-model weekly allowance ("Fable", "Opus") arrives only here, the flat keys below carry `null` for it, so
  * reading the flat keys alone showed an account at 10% while its Fable pool sat at 82%. The name is the
  * provider's own display name, which is right for the same reason it is right everywhere else in this
  * directory: the models in a plan's limits are the provider's to rename, and the row has to match the screen
- * the user compares it against. */
+ * the user compares it against. It is ALSO the pool's gate: the plan names the tier by the vendor's word for
+ * it, and that word is what the model id and label carry (plan-pools.ts), so a spent Opus slice binds an Opus
+ * turn and leaves a Haiku call alone, which is the distinction that used to be lost.
+ *
+ * A pool scoped to a SURFACE alone ("Cowork") gates nothing here: it is another product's allowance on the same
+ * plan, shown on the roster and never binding a turn this sandbox runs. */
 const SHARED_KINDS: Record<string, string> = { session: "five_hour", weekly_all: "seven_day" };
 
 // A scope's display name. Both spellings and both shapes (a bare string, or the object the endpoint sends
@@ -48,28 +53,34 @@ const scopeName = (scope: Record<string, unknown> | undefined, key: string): str
     return asString(value) ?? asString(named?.[`display_name`] ?? named?.[`displayName`]);
 };
 
-const poolIdentity = (limit: Record<string, unknown>): { kind: string; label?: string } => {
+interface PoolIdentity {
+    readonly kind: string;
+    readonly label?: string;
+    readonly gates: WindowGates;
+}
+
+const poolIdentity = (limit: Record<string, unknown>): PoolIdentity => {
     const kind = asString(limit[`kind`]);
     const scope = asRecord(limit[`scope`]);
     const model = scopeName(scope, `model`);
     const surface = scopeName(scope, `surface`);
     if (model !== undefined) {
-        return { kind: `model:${model}`, label: surface === undefined ? model : `${model} · ${surface}` };
+        return { kind: `model:${model}`, label: surface === undefined ? model : `${model} · ${surface}`, gates: { models: [model] } };
     }
     if (surface !== undefined) {
-        return { kind: `surface:${surface}`, label: surface };
+        return { kind: `surface:${surface}`, label: surface, gates: "none" };
     }
     const shared = kind === undefined ? undefined : SHARED_KINDS[kind];
     if (shared !== undefined) {
-        return { kind: shared };
+        return { kind: shared, gates: "all" };
     }
     // A pool we can neither map nor name rides under its own raw key rather than being folded into a
     // neighbour: an unrecognised allowance is still an allowance, and one drawn as somebody else's is worse
-    // than one drawn plainly (see UsageWindowSchema).
-    return { kind: `claude:${kind ?? `unknown`}` };
+    // than one drawn plainly (see UsageWindowSchema). Unscoped, so it is the plan's own and gates everything.
+    return { kind: `claude:${kind ?? `unknown`}`, gates: "all" };
 };
 
-const appendWindow = (windows: UsageWindow[], identity: { kind: string; label?: string }, percent: number, resetsAt: number | undefined): void => {
+const appendWindow = (windows: UsageWindow[], identity: PoolIdentity, percent: number, resetsAt: number | undefined): void => {
     // First writer wins. Two entries for one pool is a payload we don't understand, and reporting the pool
     // twice would double it in every count that walks the windows.
     if (windows.some((window) => window.kind === identity.kind)) {
@@ -114,6 +125,18 @@ const windowsFromLimits = (limits: unknown): UsageWindow[] => {
  * spent. */
 const NOT_A_POOL = new Set([`extra_usage`]);
 
+/* What the flat keys gate. The two plan pools gate every model; the two per-model keys the plan has published
+ * by name gate their tier; everything else under a flat key (`seven_day_oauth_apps`, `seven_day_cowork`, a
+ * codename pool) is a slice this sandbox's turns do not spend, shown and never binding. The `limits[]` form
+ * above is the one that can name a codename pool's model; a flat key cannot, which is one more reason it is
+ * the fallback. */
+const FLAT_GATES: Record<string, WindowGates> = {
+    five_hour: "all",
+    seven_day: "all",
+    seven_day_opus: { models: ["opus"] },
+    seven_day_sonnet: { models: ["sonnet"] },
+};
+
 const windowsFromPools = (body: Record<string, unknown>): UsageWindow[] => {
     const windows: UsageWindow[] = [];
     for (const [kind, value] of Object.entries(body)) {
@@ -122,7 +145,7 @@ const windowsFromPools = (body: Record<string, unknown>): UsageWindow[] => {
         if (reading === undefined || utilization === undefined || NOT_A_POOL.has(kind)) {
             continue;
         }
-        appendWindow(windows, { kind }, utilization, resetFromIso(reading[`resets_at`] ?? reading[`resetsAt`]));
+        appendWindow(windows, { kind, gates: FLAT_GATES[kind] ?? "none" }, utilization, resetFromIso(reading[`resets_at`] ?? reading[`resetsAt`]));
     }
     return windows;
 };
@@ -171,136 +194,28 @@ export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch,
 
 /* ---- keeping the readings current -------------------------------------------------------------------------
  *
- * The sweep that makes a Claude row as trustworthy as the provider's own screen. It is the native counterpart
- * to the translator client's refreshUsage, and it exists for the same reason: what an account has left is a
- * fact about the ACCOUNT, not about this sandbox's turns, so a reading only taken when a turn ends describes
- * whatever was true when that turn ended.
- *
- * The reads are free, no tokens, one HTTPS round-trip per account, which is what makes waiting for them
- * affordable where the routed sweep can only schedule them. `/claude/accounts` awaits this within a deadline,
- * so opening the Usage tab produces the same numbers as opening the dialog on claude.ai; the timer covers the
- * accounts nobody is looking at, whose headroom still decides which one an unattributed turn runs on
- * (accountWithHeadroom). */
+ * The Claude half of the headroom service (usage/headroom.ts): one target per connected account, each reading
+ * the endpoint above on the account's own token. What an account has left is a fact about the ACCOUNT, not
+ * about this sandbox's turns, so a reading only taken when a turn ends describes whatever was true when that
+ * turn ended; the service asks these targets whenever something happened, a screen opened or a plan refused,
+ * and on a long idle floor for the accounts nobody is looking at, whose headroom still decides which one an
+ * unattributed turn runs on (accountWithHeadroom). */
 
-// Under this, a reading is current enough that another round-trip would tell us nothing new, pools move with
-// spend, not with the clock. Comfortably inside the ten minutes past which a reading is shown as a floor.
-const FRESH_MS = 60_000;
-// The idle cadence. Same five minutes the routed sweep and the token rotation run on: often enough that no
-// reading is ever old enough to be marked a floor, rare enough to be invisible.
-const SWEEP_MS = 5 * 60_000;
-// Shorter than a turn's read: this one has a page waiting behind it, and a slow endpoint must cost the list
-// its freshness rather than its answer.
+// Shorter than a turn's read: this one may have a page waiting behind it, and a slow endpoint must cost the
+// list its freshness rather than its answer.
 const READ_TIMEOUT_MS = 8_000;
 
-export interface ClaudeUsageRefresher {
-    // Bring every connected account's reading up to date, skipping the ones already current. Resolves when the
-    // sweep lands or at `withinMs`, whichever comes first, a caller that gave up waiting still gets the
-    // reading on its next read, because the sweep it started keeps running. `force` reads every account
-    // whatever FRESH_MS says: it is the request of someone asking whether the number they can SEE is still
-    // true, which a reading from the last minute cannot answer however current it is.
-    readonly refresh: (withinMs?: number, force?: boolean) => Promise<void>;
-    // Sweep now and every `intervalMs` after. Returns the stop.
-    readonly start: (intervalMs?: number) => () => void;
-}
-
-const deadline = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-        // Unref'd: a list that stopped waiting must not hold the process open until its deadline.
-        setTimeout(resolve, ms).unref();
-    });
-
-export const createClaudeUsageRefresher = (deps: {
-    readonly store: ClaudeStore;
-    readonly usage: AccountUsageStore;
-    readonly fetchFn?: typeof fetch;
-}): ClaudeUsageRefresher => {
-    const fetchFn = deps.fetchFn ?? fetch;
-    /* When each account was last ASKED, not what it answered, the same bound the routed sweep keeps. The store
-     * caches the successes; this is what stops an endpoint that is down (or an account whose plan reports
-     * nothing) from being retried on every single account list. */
-    const attemptedAt = new Map<string, number>();
-    /* The endpoint's stay-away, per account. Unlike the freshness bound above, a FORCED read honours this one
-     * too: force exists for the person who doubts the number on screen, but inside this window the endpoint
-     * has already said what it will answer, a guaranteed 429 that keeps the window alive. Retrying on demand
-     * here is how pressing the refresh button made the reading STALER. */
-    const blockedUntil = new Map<string, number>();
-    /* The sweep in flight, so a page load that arrives during one joins it instead of starting a second.
-     *
-     * A FORCED READ NEVER JOINS ONE. That sweep chose its accounts before the question was asked, so an account
-     * it passed over as current would stay passed over, and the caller would be answered with the very reading
-     * it was sent to go behind. It queues AFTER it rather than beside it, which is also what keeps two sweeps
-     * off one account's token at the same moment. */
-    let sweeping: Promise<void> | undefined;
-
-    const readOne = async (id: string): Promise<void> => {
-        attemptedAt.set(id, Date.now());
-        const token = await ensureFreshToken(deps.store, id);
-        if (token === undefined) {
-            return;
-        }
-        const reading = await readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);
-        if (reading.retryAfterMs !== undefined) {
-            blockedUntil.set(id, Date.now() + reading.retryAfterMs);
-            return;
-        }
-        // A read that failed or found no pool at all leaves the last good snapshot standing: an empty window
-        // list would read as "measured, and this account has no limits", the opposite of what happened.
-        if (reading.windows.length > 0) {
-            await deps.usage.record(id, { windows: reading.windows, measuredAt: Date.now() });
-        }
-    };
-
-    const sweep = async (force: boolean): Promise<void> => {
-        const [accounts, stored] = await Promise.all([deps.store.list(), deps.usage.read()]);
-        const now = Date.now();
-        const due = accounts.filter(
-            (account) =>
-                // A revoked credential cannot read anything; asking would only mint a 401 per sweep.
-                account.needsReauth !== true &&
-                (blockedUntil.get(account.id) ?? 0) <= now &&
-                (force || Math.max(stored[account.id]?.measuredAt ?? 0, attemptedAt.get(account.id) ?? 0) < now - FRESH_MS),
-        );
-        // A sandbox holds a handful of Claude accounts (the fleets are on the routed providers, which bound
-        // their own concurrency for exactly that reason), so the whole sweep goes out at once.
-        await Promise.all(
-            due.map((account) =>
-                readOne(account.id).catch((error: unknown) =>
-                    deps.store.logger.warn({ err: error, account: account.id }, "claude usage read failed, the next sweep retries"),
-                ),
-            ),
-        );
-    };
-
-    // Queue one behind whatever is running. Never rejects: an account list must not fail because a quota read
-    // did, the rings are an enhancement to that list, exactly as they are to the routed one.
-    const queue = (force: boolean): Promise<void> => {
-        const next: Promise<void> = (sweeping ?? Promise.resolve())
-            .then(() => sweep(force))
-            .catch((error: unknown) => deps.store.logger.warn({ err: error }, "claude usage sweep failed, the next one retries"))
-            .finally(() => {
-                // Only while it is still the one in flight: clearing a sweep that has since queued behind this
-                // one would let a third start beside it.
-                if (sweeping === next) {
-                    sweeping = undefined;
-                }
-            });
-        sweeping = next;
-        return next;
-    };
-
-    const refresh = (withinMs?: number, force = false): Promise<void> => {
-        const pending = force || sweeping === undefined ? queue(force) : sweeping;
-        return withinMs === undefined ? pending : Promise.race([pending, deadline(withinMs)]);
-    };
-
-    return {
-        refresh,
-        start: (intervalMs = SWEEP_MS) => {
-            const timer = setInterval(() => void refresh(), intervalMs);
-            // The daemon's other loops do the same: a background refresh must never hold the process open.
-            timer.unref();
-            void refresh();
-            return () => clearInterval(timer);
-        },
-    };
-};
+export const claudeHeadroomSource = (store: ClaudeStore, fetchFn: typeof fetch = fetch): HeadroomSource => ({
+    targets: async () =>
+        (await store.list())
+            // A revoked credential cannot read anything; asking would only mint a 401 per sweep.
+            .filter((account) => account.needsReauth !== true)
+            .map((account) => ({
+                key: account.id,
+                provider: "claude",
+                read: async () => {
+                    const token = await ensureFreshToken(store, account.id);
+                    return token === undefined ? { windows: [] } : readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);
+                },
+            })),
+});

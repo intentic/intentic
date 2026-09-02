@@ -1,9 +1,7 @@
-import type { AccountUsage } from "@intentic/sandbox-contract";
 import { pino } from "pino";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { type ClaudeStore, displayLabel, type StoredAccount } from "../claude/claude-credentials.js";
-import type { AccountUsageStore } from "./account-usage.js";
-import { claudeUsageWindows, createClaudeUsageRefresher, readClaudeUsage } from "./claude-usage.js";
+import { claudeHeadroomSource, claudeUsageWindows, readClaudeUsage } from "./claude-usage.js";
 
 /* The Anthropic OAuth usage payload, pinned: a private endpoint rather than a published contract, so what
  * these tests defend is the MAPPING: every pool the account has arrives as its own window, named the way the
@@ -47,9 +45,10 @@ test("reads every pool the limits list names, including the per-model slice the 
     // Whole SECONDS on our wire (the unit the SDK's own rate_limit frame uses), from ISO-8601 with a
     // sub-second part and an offset.
     expect(claudeUsageWindows(LIVE_PAYLOAD)).toEqual([
-        { kind: "five_hour", utilization: 100, resetsAt: 1_785_691_800 },
-        { kind: "seven_day", utilization: 10, resetsAt: 1_786_244_400 },
-        { kind: "model:Fable", label: "Fable", utilization: 82, resetsAt: 1_786_244_400 },
+        { kind: "five_hour", utilization: 100, resetsAt: 1_785_691_800, gates: "all" },
+        { kind: "seven_day", utilization: 10, resetsAt: 1_786_244_400, gates: "all" },
+        // …and gated to the tier the plan named it by, so it binds a Fable turn and leaves a Haiku call alone.
+        { kind: "model:Fable", label: "Fable", utilization: 82, resetsAt: 1_786_244_400, gates: { models: ["Fable"] } },
     ]);
 });
 
@@ -72,9 +71,11 @@ test("names a surface-scoped pool by its surface, and an unrecognised one by its
             ],
         }),
     ).toEqual([
-        { kind: "surface:Cowork", label: "Cowork", utilization: 40 },
-        { kind: "model:Opus", label: "Opus · Cowork", utilization: 5 },
-        { kind: "claude:monthly_all", utilization: 12 },
+        // A surface alone is another product's allowance on this plan: shown, never binding a turn here.
+        { kind: "surface:Cowork", label: "Cowork", utilization: 40, gates: "none" },
+        { kind: "model:Opus", label: "Opus · Cowork", utilization: 5, gates: { models: ["Opus"] } },
+        // Unscoped, so the plan's own, and it gates everything.
+        { kind: "claude:monthly_all", utilization: 12, gates: "all" },
     ]);
 });
 
@@ -90,9 +91,10 @@ test("falls back to the flat pool keys when the payload carries no list", () => 
             limits: [],
         }),
     ).toEqual([
-        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000 },
-        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000 },
-        { kind: "seven_day_cowork", utilization: 3 },
+        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all" },
+        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all" },
+        // A flat key this sandbox's turns do not spend: shown, never binding.
+        { kind: "seven_day_cowork", utilization: 3, gates: "none" },
     ]);
 });
 
@@ -100,7 +102,7 @@ test("never counts purchased credits as a plan pool", () => {
     // `extra_usage` carries a utilization like a window, but it is credits bought BEYOND the plan: reading it
     // as a pool would let a spent credit balance decide which account has the least headroom.
     expect(claudeUsageWindows({ extra_usage: { is_enabled: true, utilization: 96 }, five_hour: { utilization: 4, resets_at: null } })).toEqual([
-        { kind: "five_hour", utilization: 4 },
+        { kind: "five_hour", utilization: 4, gates: "all" },
     ]);
 });
 
@@ -117,159 +119,46 @@ test("a 429 carries the endpoint's own stay-away; without a readable one it is a
     expect(await readClaudeUsage("tok", bare)).toEqual({ windows: [] });
 });
 
-/* ---- the sweep ---------------------------------------------------------------------------------------------
- * What keeps a row as current as the provider's own screen. Two accounts, one fake endpoint, and no filesystem:
- * the store seams are the whole surface this touches. */
+/* ---- the headroom source ---------------------------------------------------------------------------------
+ * The Claude half of the headroom service: one target per connected account that can still read, each on its
+ * own token. The service owns when they are asked (usage/headroom.ts has its own suite); what is pinned here
+ * is which accounts become targets and what a target's read answers. */
 
-const account = (id: string): StoredAccount => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}` });
+const account = (id: string, over: Partial<StoredAccount> = {}): StoredAccount => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}`, ...over });
 
-const memoryStores = (
-    accounts: readonly StoredAccount[],
-    stored: Record<string, AccountUsage> = {},
-): { store: ClaudeStore; usage: AccountUsageStore; recorded: Record<string, AccountUsage> } => {
-    const recorded = { ...stored };
-    return {
-        recorded,
-        store: {
-            logger: silent,
-            read: async (id) => accounts.find((entry) => entry.id === id),
-            write: async () => {},
-            clear: async () => {},
-            list: async () => accounts.map((entry) => ({ id: entry.id, label: displayLabel(entry), connectedAt: entry.connectedAt })),
-            withRefreshLock: (_id, act) => act(),
-        },
-        usage: {
-            read: async () => recorded,
-            record: async (id, usage) => {
-                recorded[id] = usage;
-            },
-            clear: async (id) => {
-                delete recorded[id];
-            },
-        },
-    };
-};
+const memoryStore = (accounts: readonly StoredAccount[]): ClaudeStore => ({
+    logger: silent,
+    read: async (id) => accounts.find((entry) => entry.id === id),
+    write: async () => {},
+    clear: async () => {},
+    list: async () =>
+        accounts.map((entry) => ({
+            id: entry.id,
+            label: displayLabel(entry),
+            connectedAt: entry.connectedAt,
+            // The store's own rule (toAccount): a revoked credential lists as one to reconnect.
+            ...(entry.revokedAt === undefined ? {} : { needsReauth: true }),
+        })),
+    withRefreshLock: (_id, act) => act(),
+});
 
 const endpoint = (body: unknown, ok = true): typeof fetch =>
     (() => Promise.resolve({ ok, json: () => Promise.resolve(body) })) as unknown as typeof fetch;
 
-test("sweeps every connected account, and leaves a current reading alone", async () => {
-    const fresh: AccountUsage = { windows: [{ kind: "five_hour", utilization: 3 }], measuredAt: Date.now() };
-    const { store, usage, recorded } = memoryStores([account("a"), account("b")], { b: fresh });
-    await createClaudeUsageRefresher({ store, usage, fetchFn: endpoint(LIVE_PAYLOAD) }).refresh();
-
-    expect(recorded[`a`]?.windows.map((window) => window.kind)).toEqual(["five_hour", "seven_day", "model:Fable"]);
-    // Measured a moment ago: another round-trip could not tell us anything the store does not already say.
-    expect(recorded[`b`]).toBe(fresh);
+test("publishes one target per account that can read, keyed by the account, and skips a revoked credential", async () => {
+    const source = claudeHeadroomSource(memoryStore([account("a"), account("revoked", { revokedAt: 1 }), account("b")]), endpoint(LIVE_PAYLOAD));
+    const targets = await source.targets();
+    expect(targets.map((target) => [target.provider, target.key])).toEqual([
+        ["claude", "a"],
+        ["claude", "b"],
+    ]);
+    expect((await targets[0]!.read()).windows.map((window) => window.kind)).toEqual(["five_hour", "seven_day", "model:Fable"]);
 });
 
-/* The bound above is right for every read the app takes on its own and wrong for the one a person asks for: they
- * press it precisely because they doubt the number on screen, and "it was current a moment ago" is that number
- * again. Forced, the account is read whatever the store says about it. */
-test("a forced sweep re-reads an account the freshness bound would have passed over", async () => {
-    const fresh: AccountUsage = { windows: [{ kind: "five_hour", utilization: 3 }], measuredAt: Date.now() };
-    const { store, usage, recorded } = memoryStores([account("a")], { a: fresh });
-    const refresher = createClaudeUsageRefresher({ store, usage, fetchFn: endpoint(LIVE_PAYLOAD) });
-
-    await refresher.refresh();
-    expect(recorded[`a`]).toBe(fresh);
-
-    await refresher.refresh(undefined, true);
-    expect(recorded[`a`]?.windows.map((window) => window.kind)).toEqual(["five_hour", "seven_day", "model:Fable"]);
-});
-
-// And it cannot be served by the sweep already running: that one chose its accounts before the question was
-// asked, so joining it would answer the forced caller with the reading it was sent to go behind.
-test("a forced sweep queues behind the one in flight rather than joining it", async () => {
-    let answer = (): void => {};
-    const held = new Promise<void>((resolve) => {
-        answer = resolve;
-    });
-    let reads = 0;
-    const { store, usage } = memoryStores([account("a")]);
-    const refresher = createClaudeUsageRefresher({
-        store,
-        usage,
-        fetchFn: (async () => {
-            reads += 1;
-            await (reads === 1 ? held : Promise.resolve());
-            return { ok: true, json: () => Promise.resolve(LIVE_PAYLOAD) };
-        }) as unknown as typeof fetch,
-    });
-
-    const running = refresher.refresh();
-    const forced = refresher.refresh(undefined, true);
-    answer();
-    await Promise.all([running, forced]);
-    expect(reads).toBe(2);
-});
-
-test("a refused read leaves the last good snapshot standing", async () => {
-    // The failure mode this exists for: an empty window list means "we could not read", never "this account has
-    // no limits": overwriting a 98% reading with nothing is how a spent account starts looking healthy.
-    const known: AccountUsage = { windows: [{ kind: "seven_day", utilization: 98 }], measuredAt: 0 };
-    const { store, usage, recorded } = memoryStores([account("a")], { a: known });
-    await createClaudeUsageRefresher({ store, usage, fetchFn: endpoint({}, false) }).refresh();
-    expect(recorded[`a`]).toBe(known);
-});
-
-/* The failure the freshness bound cannot see: inside the endpoint's stay-away every retry is a guaranteed 429
- * that keeps the window alive, which is how pressing the refresh button made a stale reading STALER. So the
- * stay-away binds the forced read too, and the sweep returns only once the endpoint said it would answer. */
-test("a rate-limited account is left alone: even forced, until the endpoint's stay-away has passed", async () => {
-    vi.useFakeTimers();
-    try {
-        let reads = 0;
-        const { store, usage, recorded } = memoryStores([account("a")]);
-        const refresher = createClaudeUsageRefresher({
-            store,
-            usage,
-            fetchFn: (async () => {
-                reads += 1;
-                return reads === 1
-                    ? { ok: false, status: 429, headers: new Headers({ "retry-after": "600" }) }
-                    : { ok: true, json: () => Promise.resolve(LIVE_PAYLOAD) };
-            }) as unknown as typeof fetch,
-        });
-
-        await refresher.refresh();
-        expect(reads).toBe(1);
-        expect(recorded).toEqual({});
-
-        await refresher.refresh(undefined, true);
-        expect(reads).toBe(1);
-
-        vi.advanceTimersByTime(601_000);
-        await refresher.refresh();
-        expect(reads).toBe(2);
-        expect(recorded[`a`]?.windows).toHaveLength(3);
-    } finally {
-        vi.useRealTimers();
-    }
-});
-
-test("the account list is answered on time even when the endpoint is not", async () => {
-    let answer = (): void => {};
-    const held = new Promise<void>((resolve) => {
-        answer = resolve;
-    });
-    const { store, usage, recorded } = memoryStores([account("a")]);
-    const refresher = createClaudeUsageRefresher({
-        store,
-        usage,
-        fetchFn: (async () => {
-            await held;
-            return { ok: true, json: () => Promise.resolve(LIVE_PAYLOAD) };
-        }) as unknown as typeof fetch,
-    });
-
-    // The deadline, not the sweep: the connection list must never be held up by a quota endpoint having a slow
-    // minute. It gets the rows it has, and the reading it started lands for the next read.
-    await refresher.refresh(1);
-    expect(recorded).toEqual({});
-
-    answer();
-    // A second caller joins the sweep already in flight rather than starting a second one.
-    await refresher.refresh();
-    expect(recorded[`a`]?.windows).toHaveLength(3);
+test("a refused read answers no windows, never an empty measurement", async () => {
+    // The failure mode this exists for: an empty window list means "we could not read", never "this account
+    // has no limits", and the service leaves the last good snapshot standing on it.
+    const source = claudeHeadroomSource(memoryStore([account("a")]), endpoint({}, false));
+    const [target] = await source.targets();
+    expect(await target!.read()).toEqual({ windows: [] });
 });

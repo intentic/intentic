@@ -4,6 +4,7 @@ import { emitFilesChanged } from "../../extension-host/fileEvents";
 import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { desyncAgents, refreshAgents, setAgents } from "../agents/useAgents";
+import { providerRefusals, setAccountUsage } from "../chat/providerAccounts";
 import { useChat } from "../chat/useChat";
 import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
@@ -140,6 +141,19 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         case `presence`:
             setPresenceUsers(event.users);
             return;
+        case `accountUsage`:
+            /* A reading landed on the daemon, for whatever reason (a turn settled, a plan refused, a screen
+             * asked, a provider pushed), and this is how every OTHER window hears. Newest-wins into the one
+             * map every ring, rail and picker row reads (providerAccounts.usageByAccount), so nothing here
+             * refetches: the frame IS the reading. */
+            setAccountUsage(event.provider, event.account, event.usage);
+            return;
+        case `providerRefusal`: {
+            // The observed half of "can I run on this", recorded or settled, pushed for the same reason.
+            const { [event.provider]: _previous, ...rest } = providerRefusals.value;
+            providerRefusals.value = event.refusal === undefined ? rest : { ...rest, [event.provider]: event.refusal };
+            return;
+        }
         case `agents`:
             // With the revision it was taken at, the roster is NOT last-frame-wins: it races an explicit
             // GET /agents and this browser's own optimistic archive/restore, so the store needs to know when

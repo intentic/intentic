@@ -11,12 +11,13 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { endpointConfigOf } from "../endpoints/local-model.js";
+import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { harnessReadyProviders, resolveHarnessCredentials } from "./harness-credentials.js";
 import { runOneShot } from "./one-shot.js";
 import { runCursorOneShot } from "./one-shot-cursor.js";
 import { runGeminiOneShot } from "./one-shot-gemini.js";
 import { type QuickAsk, readQuickAnswer, UnusableAnswerError } from "./quick-answer.js";
-import { spentRung } from "./quick-model-quota.js";
+import { rungLimit, spentRung } from "./quick-model-quota.js";
 
 /* THE SANDBOX'S QUICK MODEL, resolved against what it actually has connected, the daemon half of the rule in
  * the contract's quick-model.ts. The contract owns the ORDER (which of the available models to try, and in
@@ -148,16 +149,38 @@ const refusalText = (error: unknown): string => errorMessage(error);
  * accounts this walk never touched.
  *
  * IN MEMORY, never persisted: a daemon that restarted did not inherit the outage it was in, and a memo restored
- * from disk would skip a working account on the strength of something that happened before the reboot. */
+ * from disk would skip a working account on the strength of something that happened before the reboot.
+ *
+ * TWO KINDS OF MEMO, because two kinds of refusal were being remembered for the same two hours and only one of
+ * them lasts that long. A SPENT ALLOWANCE does: it ends when the provider says, and the memo is right to hold
+ * until then, except that the provider's own reading can say it ended sooner, so a `limit` memo YIELDS to a
+ * headroom reading taken after it (rungLimit's roomMeasuredAt). Everything else, a 20-second deadline the
+ * model happened to miss, a 500, a translator that was restarting, a credential that failed to resolve, lasts
+ * minutes at most, and remembering it for hours was how one slow answer at nine o'clock sent every commit
+ * message until eleven to the second pin while the first sat with a full weekly pool. Those get OTHER_REFUSED_
+ * FOR_MS, long enough to ride out a real outage, short enough that a hiccup costs one landing, not a morning. */
 export const REFUSED_FOR_MS = 2 * 60 * 60 * 1000;
+export const OTHER_REFUSED_FOR_MS = 10 * 60 * 1000;
 
-const refusals = new Map<string, { readonly until: number; readonly reason: string }>();
+interface Memo {
+    readonly at: number;
+    readonly until: number;
+    readonly reason: string;
+    readonly kind: "limit" | "other";
+}
+
+const refusals = new Map<string, Memo>();
+
+const remember = (key: string, reason: string, now: number): void => {
+    const kind = mentionsSpentAllowance(reason) ? "limit" : "other";
+    refusals.set(key, { at: now, until: now + (kind === "limit" ? REFUSED_FOR_MS : OTHER_REFUSED_FOR_MS), reason, kind });
+};
 
 // What this rung last refused with, while that memo still stands. Undefined once the window has run out, and
 // for a rung that has never refused, both of which mean "ask it".
-const cooling = (choice: QuickModelChoice, now: number): string | undefined => {
+const cooling = (choice: QuickModelChoice, now: number): Memo | undefined => {
     const held = refusals.get(quickModelKey(choice));
-    return held !== undefined && held.until > now ? held.reason : undefined;
+    return held !== undefined && held.until > now ? held : undefined;
 };
 
 /* WHICH LOOP RUNS THIS RUNG, asked of the contract, never decided here. `capabilitiesOf` is where a provider's
@@ -234,15 +257,30 @@ export const askQuickModel = async <T>(
     const skipped: QuickModelRefusal[] = [];
     /* WHY THIS RUNG IS NOT WORTH ASKING, in the words the user will read, or undefined, which means ask it.
      *
-     * Two sources, cheapest first. The MEMO is what this rung said last time it was asked, and costs a map
-     * lookup. The READING is what every account of that provider has left and when it renews (quick-model-quota
-     * .ts), and costs a local call, so it is consulted only for the rungs the walk actually reaches, never for
-     * the ones below the one that answers.
+     * Two sources. The MEMO is what this rung said last time it was asked. The READING is what every account of
+     * that provider has left and when it renews (quick-model-quota.ts), consulted only for the rungs the walk
+     * actually reaches, never for the ones below the one that answers.
      *
-     * They are ordered by cost rather than by authority because they rarely disagree, and where they do the
-     * answer is the same either way: step over it. */
-    const stepOverReason = async (choice: QuickModelChoice): Promise<string | undefined> =>
-        cooling(choice, now) ?? (await spentRung(services, choice, now))?.reason;
+     * THE READING OUTRANKS A SPENT-ALLOWANCE MEMO. A memo says the plan said no at some instant; a reading with
+     * room taken AFTER that instant says the plan has since reopened, and the reading is the provider's own
+     * word where the memo is ours. Without this a pin refused at the start of a window stayed skipped for the
+     * full memo while its ring on the Agent tab showed the room that had come back. Only a `limit` memo can be
+     * answered this way: a reading says nothing about a revoked token or an outage. */
+    const stepOverReason = async (choice: QuickModelChoice): Promise<string | undefined> => {
+        const held = cooling(choice, now);
+        if (held?.kind === `other`) {
+            return held.reason;
+        }
+        if (held === undefined) {
+            return (await spentRung(services, choice, now))?.reason;
+        }
+        const limit = await rungLimit(services, choice);
+        if (limit !== undefined && limit.withHeadroom > 0 && (limit.roomMeasuredAt ?? 0) > held.at) {
+            refusals.delete(quickModelKey(choice));
+            return undefined;
+        }
+        return held.reason;
+    };
     /* ONE PASS OVER THE CHAIN. `honourSkips` is what separates the two it may take, see below.
      *
      * `asked` is the fact the caller needs and the answer cannot carry: a walk that skipped every rung and a
@@ -312,7 +350,7 @@ export const askQuickModel = async <T>(
                  * down would sideline the sandbox's best model for hours over one unlucky sample, and cost every
                  * helper in between the rung it should have run on. */
                 if (!(error instanceof UnusableAnswerError)) {
-                    refusals.set(key, { until: Date.now() + REFUSED_FOR_MS, reason: refusalText(error) });
+                    remember(key, refusalText(error), Date.now());
                 }
                 services.logger.debug({ err: error, model: choice.model }, "quick model: refused, trying the next in the chain");
                 skipped.push({ choice, reason: refusalText(error) });

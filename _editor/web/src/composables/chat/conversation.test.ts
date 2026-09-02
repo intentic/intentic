@@ -3,7 +3,7 @@ import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Conversation } from "./conversation";
-import { providerAccounts, selectedAccountId } from "./providerAccounts";
+import { providerAccounts, selectedAccountId, usageByAccount } from "./providerAccounts";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
 import {
@@ -18,7 +18,6 @@ import {
     recordedRows,
     turnsOf,
 } from "./transcript";
-import { usageStatusByAccount } from "./usageStatus";
 
 // `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
 // sandbox stores sandboxRequest reaches for at import time). It keeps the half this file depends on: the daemon
@@ -355,7 +354,7 @@ describe(`Conversation`, () => {
     });
 
     it(`names the allowance the new model spends, when the plan meters it and we have a reading`, async () => {
-        usageStatusByAccount.value = {};
+        usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
         conversation.account.value = `acct-1`;
         sandboxRequestMock.mockImplementation(
@@ -367,8 +366,8 @@ describe(`Conversation`, () => {
                     kind: `account_usage`,
                     account: `acct-1`,
                     windows: [
-                        { kind: `seven_day`, utilization: 20 },
-                        { kind: `model:Opus`, utilization: 61.4, resetsAt: 1_700_000 },
+                        { kind: `seven_day`, utilization: 20, gates: `all` },
+                        { kind: `model:Opus`, label: `Opus`, utilization: 61.4, resetsAt: 1_700_000, gates: { models: [`Opus`] } },
                     ],
                 },
                 { kind: `done` },
@@ -2491,7 +2490,7 @@ describe(`Conversation`, () => {
     });
 
     it(`stores an account_usage frame against its account, stamped so staleness is comparable`, async () => {
-        usageStatusByAccount.value = {};
+        usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
@@ -2499,8 +2498,8 @@ describe(`Conversation`, () => {
                     kind: `account_usage`,
                     account: `acct-1`,
                     windows: [
-                        { kind: `five_hour`, utilization: 12, resetsAt: 1_800_000 },
-                        { kind: `seven_day`, utilization: 87, resetsAt: 2_000_000 },
+                        { kind: `five_hour`, utilization: 12, resetsAt: 1_800_000, gates: `all` },
+                        { kind: `seven_day`, utilization: 87, resetsAt: 2_000_000, gates: `all` },
                     ],
                 },
                 { kind: `done` },
@@ -2510,10 +2509,10 @@ describe(`Conversation`, () => {
 
         // Keyed by the serving account (not the conversation) and carrying measuredAt, so the next /accounts
         // load can tell this live reading from the daemon's persisted one.
-        const stored = usageStatusByAccount.value[`acct-1`]!;
+        const stored = usageByAccount.value[`claude:acct-1`]!;
         expect(stored.windows).toEqual([
-            { kind: `five_hour`, utilization: 12, resetsAt: 1_800_000 },
-            { kind: `seven_day`, utilization: 87, resetsAt: 2_000_000 },
+            { kind: `five_hour`, utilization: 12, resetsAt: 1_800_000, gates: `all` },
+            { kind: `seven_day`, utilization: 87, resetsAt: 2_000_000, gates: `all` },
         ]);
         expect(stored.measuredAt).toBeGreaterThan(0);
         // The frame's envelope fields are not part of the snapshot.
@@ -2522,19 +2521,19 @@ describe(`Conversation`, () => {
     });
 
     it(`ignores an account_usage frame the daemon could not attribute to an account`, async () => {
-        usageStatusByAccount.value = {};
+        usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `account_usage`, windows: [{ kind: `seven_day`, utilization: 5 }] }, { kind: `done` }]),
+            sseResponse([{ kind: `account_usage`, windows: [{ kind: `seven_day`, utilization: 5, gates: `all` }] }, { kind: `done` }]),
         );
         await conversation.send(`hello`, settings);
 
         // An env-token turn has no account to key the snapshot by: better unknown than misattributed.
-        expect(usageStatusByAccount.value).toEqual({});
+        expect(usageByAccount.value).toEqual({});
     });
 
     it(`does not let a rate_limit_info frame stand in for the account's headroom`, async () => {
-        usageStatusByAccount.value = {};
+        usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
         // The gate signal names ONE window: whichever the provider treated as binding for that request. Writing
         // it into the headroom map is how a weekly pool at 1% came to speak for an account at 98% on another.
@@ -2546,7 +2545,7 @@ describe(`Conversation`, () => {
         );
         await conversation.send(`hello`, settings);
 
-        expect(usageStatusByAccount.value).toEqual({});
+        expect(usageByAccount.value).toEqual({});
     });
 
     it(`stop() records a notice and aborts without surfacing the abort as an error`, async () => {

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { codexUsageFromPayload, geminiUsageFromPayload, kimiUsageFromPayload } from "./translator-usage.js";
+import { authFileCooling, codexUsageFromPayload, codexUsageFromRateLimits, geminiUsageFromPayload, kimiUsageFromPayload } from "./translator-usage.js";
 
 // The two upstream payload shapes, pinned. These are private endpoints rather than published contracts, so what
 // these tests really defend is the mapping INTO AccountUsage: every pool the provider names arrives as its own
@@ -30,10 +30,11 @@ test("maps every ChatGPT limit window to utilized percentages and reset instants
     expect(usage).toEqual({
         measuredAt,
         windows: [
-            { kind: "five_hour", utilization: 23, resetsAt: 1_800_000_300 },
-            { kind: "seven_day", utilization: 82, resetsAt: 1_800_604_800 },
-            { kind: "code-review:five_hour", label: "Code review · 5-hour", utilization: 7 },
-            { kind: "additional-1:seven_day", label: "GPT-5 Codex Spark · Weekly", utilization: 11 },
+            { kind: "five_hour", utilization: 23, resetsAt: 1_800_000_300, gates: "all" },
+            { kind: "seven_day", utilization: 82, resetsAt: 1_800_604_800, gates: "all" },
+            // Named features no chat turn spends: shown, never binding.
+            { kind: "code-review:five_hour", label: "Code review · 5-hour", utilization: 7, gates: "none" },
+            { kind: "additional-1:seven_day", label: "GPT-5 Codex Spark · Weekly", utilization: 11, gates: "none" },
         ],
     });
 });
@@ -56,7 +57,7 @@ test("reads a fully spent ChatGPT plan from its single live window", () => {
             },
             measuredAt,
         ),
-    ).toEqual({ measuredAt, windows: [{ kind: "seven_day", utilization: 100, resetsAt: 1_786_019_642 }] });
+    ).toEqual({ measuredAt, windows: [{ kind: "seven_day", utilization: 100, resetsAt: 1_786_019_642, gates: "all" }] });
 });
 
 test("inverts Google's remaining fractions and preserves each named quota bucket", () => {
@@ -89,8 +90,9 @@ test("inverts Google's remaining fractions and preserves each named quota bucket
                 label: "Gemini Pro · 5-hour",
                 utilization: 88,
                 resetsAt: Date.parse("2027-01-15T08:00:00Z") / 1000,
+                gates: { models: ["gemini"] },
             },
-            { kind: "google:pro-weekly", label: "Gemini Pro · Weekly", utilization: 25 },
+            { kind: "google:pro-weekly", label: "Gemini Pro · Weekly", utilization: 25, gates: { models: ["gemini"] } },
         ],
     });
 });
@@ -108,8 +110,9 @@ test("treats an exhausted Google bucket as fully utilized rather than unmeasured
             ],
         })?.windows,
     ).toEqual([
-        { kind: "google:gemini-weekly", label: "Gemini Models · Weekly Limit", utilization: 100 },
-        { kind: "google:3p-weekly", label: "Third Party · Weekly Limit", utilization: 100 },
+        // Each group gates its own family, which is the whole reason the two are read as two pools.
+        { kind: "google:gemini-weekly", label: "Gemini Models · Weekly Limit", utilization: 100, gates: { models: ["gemini"] } },
+        { kind: "google:3p-weekly", label: "Third Party · Weekly Limit", utilization: 100, gates: { models: ["claude", "gpt"] } },
     ]);
 });
 
@@ -137,8 +140,8 @@ test("maps a Kimi Code reading to its plan pool and its throttle", () => {
     ).toEqual({
         measuredAt,
         windows: [
-            { kind: "seven_day", utilization: 40, resetsAt: Math.floor(Date.parse("2026-08-07T07:16:02.549855Z") / 1000) },
-            { kind: "five_hour", utilization: 100, resetsAt: Math.floor(Date.parse("2026-07-31T22:16:02.549855Z") / 1000) },
+            { kind: "seven_day", utilization: 40, resetsAt: Math.floor(Date.parse("2026-08-07T07:16:02.549855Z") / 1000), gates: "all" },
+            { kind: "five_hour", utilization: 100, resetsAt: Math.floor(Date.parse("2026-07-31T22:16:02.549855Z") / 1000), gates: "all" },
         ],
     });
 });
@@ -150,7 +153,7 @@ test("names a Kimi throttle this vocabulary has no shared kind for", () => {
         kimiUsageFromPayload({
             limits: [{ window: { duration: 12, timeUnit: "TIME_UNIT_HOUR" }, detail: { limit: "50", used: "10" } }],
         })?.windows,
-    ).toEqual([{ kind: "kimi:43200s", label: "12-hour window", utilization: 20 }]);
+    ).toEqual([{ kind: "kimi:43200s", label: "12-hour window", utilization: 20, gates: "all" }]);
 });
 
 // No quota in the payload is not a reading of zero: the account must come back unmeasured so the row keeps its
@@ -162,4 +165,41 @@ test("returns nothing when a payload carries no usable window", () => {
     expect(geminiUsageFromPayload("not json")).toBeUndefined();
     expect(kimiUsageFromPayload({ usage: { limit: "0", used: "0" }, limits: [] })).toBeUndefined();
     expect(kimiUsageFromPayload("not json")).toBeUndefined();
+});
+
+/* The same two ChatGPT windows as Codex's own runtime pushes them mid-turn (app-server's
+ * `account/rateLimits/updated`): camelCase, `primary`/`secondary`, minutes rather than seconds. The mapping
+ * lands them on the same kinds the pulled reading uses, so the ring a native Codex turn updates is the ring
+ * the pull would have drawn. */
+test("maps an app-server rate-limit snapshot onto the same windows as the pulled reading", () => {
+    const measuredAt = 1_800_000_000_000;
+    expect(
+        codexUsageFromRateLimits(
+            {
+                limitId: "codex",
+                primary: { usedPercent: 37, windowDurationMins: 300, resetsAt: 1_800_000_900 },
+                secondary: { usedPercent: 91, windowDurationMins: 10_080, resetsAt: 1_800_604_800 },
+            },
+            measuredAt,
+        ),
+    ).toEqual({
+        measuredAt,
+        windows: [
+            { kind: "five_hour", utilization: 37, resetsAt: 1_800_000_900, gates: "all" },
+            { kind: "seven_day", utilization: 91, resetsAt: 1_800_604_800, gates: "all" },
+        ],
+    });
+    expect(codexUsageFromRateLimits({ primary: null, secondary: null })).toBeUndefined();
+    expect(codexUsageFromRateLimits("not a snapshot")).toBeUndefined();
+});
+
+// The proxy's own bench of a credential, off its /auth-files listing: the one fact fresher than any reading.
+test("reads the translator's bench of a credential, and nothing for one it is routing to", () => {
+    expect(authFileCooling({ name: "a.json", unavailable: true, status_message: "quota exceeded", next_retry_after: "2027-01-15T08:10:00Z" })).toEqual({
+        until: Date.parse("2027-01-15T08:10:00Z") / 1000,
+        reason: "quota exceeded",
+    });
+    expect(authFileCooling({ name: "a.json", disabled: true })).toEqual({ reason: "disabled in the translator" });
+    expect(authFileCooling({ name: "a.json", unavailable: false, status: "active" })).toBeUndefined();
+    expect(authFileCooling({ name: "a.json" })).toBeUndefined();
 });

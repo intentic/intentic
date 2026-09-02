@@ -10,6 +10,7 @@ import { openBrowserSession } from "../browser/browser-sessions.js";
 import { ROUTED_BROWSER_SERVER } from "../browser/browser-tools.js";
 import { type CommandGate, vendorSubject } from "../guard/command-gate.js";
 import { createTurnGate } from "../guard/turn-gate.js";
+import { codexUsageFromRateLimits } from "../usage/translator-usage.js";
 import {
     type CodexEvent,
     type CodexItem,
@@ -609,6 +610,14 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
                     cacheReadTokens: event.usage.cached_input_tokens,
                     cacheCreationTokens: event.usage.cache_write_input_tokens,
                 };
+            }
+        } else if (event.type === "rate_limits") {
+            // The plan's headroom, pushed by the runtime as the turn spends it: filed and announced by the route
+            // exactly as a Claude turn's settle-time read is (agent.routes fileAccountUsage). A snapshot with no
+            // window in it yields no frame, an empty list would read as "measured, and you have no limits".
+            const usage = codexUsageFromRateLimits(event.snapshot);
+            if (usage !== undefined) {
+                yield { kind: "account_usage", windows: usage.windows };
             }
         } else if (event.type === "turn.failed") {
             yield { kind: "error", message: event.error.message };

@@ -63,7 +63,7 @@ const fakeServices = (quickModel: readonly string[], spent: readonly string[] = 
         }),
         accountUsage: unstubbed<Services[`accountUsage`]>(`accountUsage`, {
             read: async () => ({
-                "claude-one": { windows: [{ kind: `seven_day`, utilization: spent.includes(`claude`) ? 100 : 4 }], measuredAt: 0 },
+                "claude-one": { windows: [{ kind: `seven_day`, utilization: spent.includes(`claude`) ? 100 : 4, gates: `all` }], measuredAt: 0 },
             }),
         }),
         providerCatalogs: Object.fromEntries(

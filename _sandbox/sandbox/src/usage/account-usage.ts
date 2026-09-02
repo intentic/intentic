@@ -1,4 +1,4 @@
-import { type AccountUsage, AccountUsageSchema, type UsageWindow } from "@intentic/sandbox-contract";
+import { type AccountUsage, AccountUsageSchema, bindingWindow, gatingWindows, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
@@ -40,18 +40,16 @@ const liveWindows = (usage: AccountUsage, now: number): UsageWindow[] =>
     usage.windows.filter((window) => window.resetsAt === undefined || window.resetsAt * 1000 > now);
 
 /* When a spent account's window reopens, for a refusal whose own stream never named an instant: the persisted
- * snapshots above. The pool that refused the turn is the account's FULLEST one, so its reset is when the wait
- * ends, the same binding-window rule the browser's usage readouts apply. It is what lets a rate_limit frame
- * say "resets Friday 11:22 PM" rather than only that the allowance is gone. */
-export const accountLimitReset = async (store: AccountUsageStore, account: string | undefined): Promise<number | undefined> => {
+ * snapshots above. The pool that refused the turn is the fullest of the ones THIS MODEL spends (bindingWindow,
+ * the same rule the browser's readouts apply), so its reset is when the wait ends. Scoped to the model because
+ * a plan that meters models separately routinely has a fuller pool the turn never touched: an Opus slice at
+ * 100% must not name its reset over a refused Sonnet turn. It is what lets a rate_limit frame say "resets
+ * Friday 11:22 PM" rather than only that the allowance is gone. */
+export const accountLimitReset = async (store: AccountUsageStore, account: string | undefined, model: ModelRef | undefined): Promise<number | undefined> => {
     if (account === undefined) {
         return undefined;
     }
-    const usage = (await store.read())[account];
-    return usage?.windows.reduce<UsageWindow | undefined>(
-        (worst, window) => (worst === undefined || window.utilization > worst.utilization ? window : worst),
-        undefined,
-    )?.resetsAt;
+    return bindingWindow((await store.read())[account], model)?.resetsAt;
 };
 
 /* WHICH ACCOUNT TO RUN ON when the caller named none, a turn the user started without picking, and every
@@ -80,13 +78,19 @@ export const accountLimitReset = async (store: AccountUsageStore, account: strin
  *                              kind no reading can contradict (see provider-refusals.ts).
  * Within a tier the account with the LOWEST spend wins, so unattributed work spreads toward room rather than
  * piling onto whichever account happens to be first; equal spends keep the caller's order (connectedAt), which
- * keeps the pick stable rather than flapping between equals and fragmenting attribution. */
+ * keeps the pick stable rather than flapping between equals and fragmenting attribution.
+ *
+ * SPEND IS READ ON THE POOLS THE TURN'S MODEL SPENDS (gatingWindows). Read over every window, an account whose
+ * per-model Opus slice was full ranked as "spent" for a Haiku call that slice never gates, and the pick went
+ * to a sibling with less room on the pool that actually mattered. With no model named, every pool that gates
+ * anything counts, which is the honest reading for a turn whose model the catalog will choose. */
 export const accountWithHeadroom = async (
     store: AccountUsageStore,
     accounts: readonly string[],
     // The account with a refusal still standing against it, when there is one, see tier 3. Undefined leaves the
     // ranking exactly as it was.
     refused?: string,
+    model?: ModelRef,
 ): Promise<string | undefined> => {
     const [first] = accounts;
     // One account is the answer whatever it has refused: there is nothing to fall back TO, and a turn that runs
@@ -99,7 +103,7 @@ export const accountWithHeadroom = async (
     // still counts against this account.
     const usage = await store.read();
     const ranked = accounts.map((account) => {
-        const windows = usage[account]?.windows ?? [];
+        const windows = gatingWindows(usage[account], model);
         const spent = windows.reduce((worst, window) => Math.max(worst, window.utilization), 0);
         return { account, tier: account === refused ? 3 : windows.length === 0 ? 1 : spent >= 100 ? 2 : 0, spent };
     });

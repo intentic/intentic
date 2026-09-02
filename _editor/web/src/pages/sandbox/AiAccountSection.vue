@@ -188,16 +188,13 @@ interface AccountRow<T> {
 /* Decorate and sort in one pass. When a provider holds dozens of accounts the list is only useful if the ones
  * with headroom are at the top; an account with no reading counts as active, because unknown ≠ exhausted.
  * Within each group the daemon's order holds. */
-const rowsOf = <T,>(
-    provider: AgentProvider,
-    accounts: readonly T[],
-    keyOf: (account: T) => string,
-    usageOf: (account: T) => AccountUsage | undefined,
-): AccountRow<T>[] => {
+const rowsOf = <T,>(provider: AgentProvider, accounts: readonly T[], keyOf: (account: T) => string): AccountRow<T>[] => {
     const active: AccountRow<T>[] = [];
     const spent: AccountRow<T>[] = [];
     for (const account of accounts) {
-        const usage = liveUsage(provider, keyOf(account), usageOf(account));
+        // The shared map's reading (seeded from these very rows, then kept current by turns and by the daemon's
+        // push), corrected by whatever the plan has since refused.
+        const usage = liveUsage(provider, keyOf(account));
         const row = { account, headroom: planHeadroom(usage), exhausted: isSpent(usage) };
         (row.exhausted ? spent : active).push(row);
     }
@@ -205,23 +202,13 @@ const rowsOf = <T,>(
 };
 
 const accountRows = computed<readonly AccountRow<OauthAccount>[]>(() =>
-    rowsOf(
-        managedProvider.value,
-        managedAccounts.value,
-        (account) => account.id,
-        (account) => account.usage,
-    ),
+    rowsOf(managedProvider.value, managedAccounts.value, (account) => account.id),
 );
 
 const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
     routedProvider.value === undefined
         ? []
-        : rowsOf(
-              routedProvider.value,
-              translatorAccounts.value[routedProvider.value],
-              (account) => account.name,
-              (account) => account.usage,
-          ),
+        : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], (account) => account.name),
 );
 
 /* --- Collapsing long lists -----------------------------------------------------------------------------------

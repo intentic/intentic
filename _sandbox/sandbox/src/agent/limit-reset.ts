@@ -51,7 +51,9 @@ export const limitReopensAt = async (params: {
     readonly account: string | undefined;
 }): Promise<number | undefined> => {
     const { services, provider, model, account } = params;
-    const stored = await accountLimitReset(services.accountUsage, account).catch(() => undefined);
+    const stored = await accountLimitReset(services.accountUsage, account, model === undefined || model === "" ? undefined : { id: model }).catch(
+        () => undefined,
+    );
     if (stored !== undefined) {
         return stored;
     }

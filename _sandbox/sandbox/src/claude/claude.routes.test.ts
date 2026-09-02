@@ -17,7 +17,7 @@ import { type ClaudeRoutesDeps, createClaudeRoutes } from "./claude.routes.js";
  * what these tests check. Empty by default, which is what a sandbox reports before any turn has run. */
 const claudeClient = (
     claudeStore: ClaudeRoutesDeps["claudeStore"],
-    sweeps: { withinMs: number | undefined; force: boolean | undefined }[] = [],
+    sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined }[] = [],
     // Real state for the same reason accountUsage is: the row an organization has turned away says so, and
     // disconnect forgets that alongside the credential.
     seats = new Map<string, SeatRefusal>(),
@@ -41,10 +41,14 @@ const claudeClient = (
                 // what the sweep would have written is exactly what `accountUsage` is standing in for. What it
                 // was ASKED for is recorded, because the freshness the caller demanded is itself a route
                 // decision: see the forced-read test.
-                claudeUsage: {
-                    refresh: async (withinMs, force) => {
-                        sweeps.push({ withinMs, force });
+                headroom: {
+                    refresh: async (options) => {
+                        sweeps.push({ withinMs: options?.withinMs, maxAgeMs: options?.maxAgeMs });
                     },
+                    record: async () => {},
+                    clear: async () => {},
+                    read: async () => ({}),
+                    onChange: () => () => {},
                     start: () => () => {},
                 },
             }),
@@ -177,7 +181,7 @@ test("Claude OAuth: rename writes the label through, and 404s on an account that
  * cannot tell them. So `force` goes through to the sweep, and it waits longer for it: there is a spinner on the
  * other end of this one, and giving up early would hand back the very reading it was pressed to go behind. */
 test("Claude OAuth: a forced account list re-measures, and waits longer for it", async () => {
-    const sweeps: { withinMs: number | undefined; force: boolean | undefined }[] = [];
+    const sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined }[] = [];
     const client = claudeClient(
         unstubbed("claudeStore", {
             read: async () => undefined,
@@ -189,6 +193,7 @@ test("Claude OAuth: a forced account list re-measures, and waits longer for it",
     );
     await client.accounts({});
     await client.accounts({ force: "1" });
-    expect(sweeps.map((sweep) => sweep.force)).toEqual([false, true]);
+    // Unforced, the service's own freshness bound applies; forced, a reading from a moment ago is re-taken.
+    expect(sweeps.map((sweep) => sweep.maxAgeMs)).toEqual([undefined, 0]);
     expect(sweeps[1]!.withinMs).toBeGreaterThan(sweeps[0]!.withinMs!);
 });

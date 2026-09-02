@@ -14,7 +14,7 @@ import { endpointConfigOf } from "../endpoints/local-model.js";
 import type { Services } from "../composition.js";
 import { providerReadiness } from "./provider-registry.js";
 import { accountWithHeadroom } from "../usage/account-usage.js";
-import type { TurnLimit } from "../usage/translator-usage.js";
+import type { TurnLimit } from "../usage/fleet-limit.js";
 
 /* WHAT AUTHENTICATES A CLAUDE CODE HARNESS TURN, per provider, the one question every caller of that harness
  * has to answer before it can spawn anything, and there is now more than one caller: the chat's own turn route
@@ -332,6 +332,10 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     };
 };
 
+// How long an unnamed pick waits for the accounts' headroom to be re-read before ranking them. Short: a turn's
+// start is what is waiting, and the reading a slow endpoint eventually lands still serves the next pick.
+const PICK_REFRESH_WAIT_MS = 1_000;
+
 export const resolveHarnessCredentials = async (
     services: Services,
     input: { readonly agent: AgentProvider | undefined; readonly account?: string; readonly model?: string },
@@ -435,8 +439,22 @@ export const resolveHarnessCredentials = async (
     const [connected, seats] = await Promise.all([services.claudeStore.list(), services.claudeSeats.read()]);
     const usable = connected.flatMap((account) => (account.needsReauth === true || seats[account.id] !== undefined ? [] : [account.id]));
     const candidates = usable.length > 0 ? usable : connected.map((account) => account.id);
+    /* And FRESH, within a beat: the pick is made off the file, and the file describes the last moment anything
+     * asked. A turn about to spend an account is exactly the moment worth one bounded round-trip per account
+     * (free, no tokens), so a plan spent elsewhere in the last hour steers this pick instead of the next one.
+     * Bounded so a slow endpoint costs the pick its freshness and never the turn its start; the reading still
+     * lands for the next one. A named account is the user's own choice and is not re-measured for it. */
+    if (input.account === undefined && candidates.length > 1) {
+        await services.headroom.refresh({ scope: { providers: ["claude"] }, withinMs: PICK_REFRESH_WAIT_MS });
+    }
     const accountId =
-        input.account ?? (await accountWithHeadroom(services.accountUsage, candidates, refusal?.kind === "limit" ? undefined : refusal?.account));
+        input.account ??
+        (await accountWithHeadroom(
+            services.accountUsage,
+            candidates,
+            refusal?.kind === "limit" ? undefined : refusal?.account,
+            input.model === undefined || input.model === "" ? undefined : { id: input.model },
+        ));
     // A refresh that fails joins the other refusals rather than throwing past the caller: a stored account whose
     // token can no longer be renewed is the same class of problem as one that was never connected, and both end
     // at the same place on the surface. Reported with the store's own message, which says which of the several

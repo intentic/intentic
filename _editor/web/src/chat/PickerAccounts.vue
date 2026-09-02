@@ -30,9 +30,12 @@ import ProviderLogo from "./ProviderLogo.vue";
  * three accounts are three rows, one click each, which is the case that was never broken. */
 
 const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness]; navigate: [] }>();
-const { provider, harness, account, accountsLocked, harnessLocked } = defineProps<{
+const { provider, harness, model, account, accountsLocked, harnessLocked } = defineProps<{
     provider: AgentProvider;
     harness: AgentHarness;
+    // The model the rings measure headroom FOR (pickerAccounts.ts says why a ring is about a model). Absent ⇒
+    // the account's tightest pool.
+    model?: string | undefined;
     // The explicitly pinned account, if there is one. Absent ⇒ the provider's first, the daemon's own default.
     account?: string | undefined;
     /* THE TWO AXES LOCK SEPARATELY, because the chat's mid-turn rule is not one rule.
@@ -66,6 +69,7 @@ const {
 } = usePickerAccounts(
     toRef(() => provider),
     toRef(() => harness),
+    toRef(() => model),
 );
 
 const { mobile } = useDevice();

@@ -1,4 +1,4 @@
-import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow } from "@intentic/sandbox-contract";
+import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow, type WindowGates, wordsOf } from "@intentic/sandbox-contract";
 import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
 
 /* The READER for the routed subscriptions, the counterpart to claude-usage.ts, and the other half of what
@@ -22,7 +22,28 @@ export interface TranslatorAuthFile {
     readonly auth_index?: string;
     readonly project_id?: string;
     readonly id_token?: unknown;
+    /* THE PROXY'S OWN VERDICT ON THE CREDENTIAL, from its `/auth-files` listing (sdk/cliproxy/auth/types.go).
+     * `unavailable` is the transient bench: upstream refused this file (a quota 429, an expired token) and the
+     * proxy routes around it until `next_retry_after`. `disabled` is the operator's switch. Both are more
+     * current than any quota reading, and neither is on disk: only the running proxy reports them. */
+    readonly unavailable?: boolean;
+    readonly disabled?: boolean;
+    readonly status?: string;
+    readonly status_message?: string;
+    readonly next_retry_after?: string;
 }
+
+/* Whether the proxy is routing around this file right now, as the row and the fleet count read it
+ * (TranslatorAccount.cooling). A bench with no retry instant is still a bench; the reason is the proxy's own
+ * sentence where it gave one. */
+export const authFileCooling = (file: TranslatorAuthFile): { until?: number; reason?: string } | undefined => {
+    if (file.unavailable !== true && file.disabled !== true) {
+        return undefined;
+    }
+    const until = resetFromIso(file.next_retry_after);
+    const reason = asString(file.status_message) ?? (file.disabled === true ? "disabled in the translator" : undefined);
+    return { ...(until === undefined ? {} : { until }), ...(reason === undefined ? {} : { reason }) };
+};
 
 interface ApiCallResult {
     readonly status_code?: number;
@@ -65,7 +86,17 @@ const codexWindowLabel = (group: string | undefined, kind: "five_hour" | "seven_
     return group === undefined ? `${period} · all models` : `${group} · ${period}`;
 };
 
-const appendCodexLimit = (windows: UsageWindow[], value: unknown, measuredAt: number, group: string | undefined, keyPrefix: string): void => {
+/* WHAT A CODEX WINDOW GATES. The plan's own `rate_limit` is one undivided allowance, every model spends both
+ * of its windows. The code-review limit and the `additional_rate_limits` are named features ("Code review",
+ * "GPT-5 Codex Spark") that no chat turn here spends: shown, never binding. */
+const appendCodexLimit = (
+    windows: UsageWindow[],
+    value: unknown,
+    measuredAt: number,
+    group: string | undefined,
+    keyPrefix: string,
+    gates: WindowGates,
+): void => {
     const limit = asRecord(value);
     if (limit === undefined) {
         return;
@@ -93,6 +124,7 @@ const appendCodexLimit = (windows: UsageWindow[], value: unknown, measuredAt: nu
             ...(label === undefined ? {} : { label }),
             utilization: clampPercent(used),
             ...(resetsAt === undefined ? {} : { resetsAt }),
+            gates,
         });
     }
 };
@@ -103,8 +135,8 @@ export const codexUsageFromPayload = (payload: unknown, measuredAt: number = Dat
         return undefined;
     }
     const windows: UsageWindow[] = [];
-    appendCodexLimit(windows, body[`rate_limit`] ?? body[`rateLimit`], measuredAt, undefined, "codex");
-    appendCodexLimit(windows, body[`code_review_rate_limit`] ?? body[`codeReviewRateLimit`], measuredAt, "Code review", "code-review");
+    appendCodexLimit(windows, body[`rate_limit`] ?? body[`rateLimit`], measuredAt, undefined, "codex", "all");
+    appendCodexLimit(windows, body[`code_review_rate_limit`] ?? body[`codeReviewRateLimit`], measuredAt, "Code review", "code-review", "none");
 
     const additional = body[`additional_rate_limits`] ?? body[`additionalRateLimits`];
     if (Array.isArray(additional)) {
@@ -115,10 +147,54 @@ export const codexUsageFromPayload = (payload: unknown, measuredAt: number = Dat
             }
             const name =
                 asString(entry[`limit_name`] ?? entry[`limitName`] ?? entry[`metered_feature`] ?? entry[`meteredFeature`]) ?? `Additional limit`;
-            appendCodexLimit(windows, entry[`rate_limit`] ?? entry[`rateLimit`], measuredAt, name, `additional-${index + 1}`);
+            appendCodexLimit(windows, entry[`rate_limit`] ?? entry[`rateLimit`], measuredAt, name, `additional-${index + 1}`, "none");
         }
     }
     return windows.length === 0 ? undefined : { windows, measuredAt };
+};
+
+/* THE SAME TWO WINDOWS AS CODEX'S OWN RUNTIME PUSHES THEM, the app-server's `account/rateLimits/updated`
+ * notification (its protocol/v2/account.rs RateLimitSnapshot): camelCase, `primary`/`secondary` rather than
+ * `primary_window`, and the window length in MINUTES. Read off the turn's own stream at no cost and recorded
+ * exactly as a pulled reading is, which is what makes a native Codex turn's ring current the moment the turn
+ * ends instead of on the next pull. */
+export const codexUsageFromRateLimits = (payload: unknown, measuredAt: number = Date.now()): AccountUsage | undefined => {
+    const snapshot = asRecord(payload);
+    if (snapshot === undefined) {
+        return undefined;
+    }
+    const windows: UsageWindow[] = [];
+    for (const position of ["primary", "secondary"] as const) {
+        const reading = asRecord(snapshot[position]);
+        const used = asNumber(reading?.[`usedPercent`] ?? reading?.[`used_percent`]);
+        if (reading === undefined || used === undefined) {
+            continue;
+        }
+        const minutes = asNumber(reading[`windowDurationMins`] ?? reading[`window_duration_mins`] ?? reading[`windowMinutes`]);
+        const kind = codexWindowKind(minutes === undefined ? undefined : minutes * 60, position);
+        const resetsAt = resetSeconds(reading[`resetsAt`] ?? reading[`resets_at`], undefined, measuredAt);
+        windows.push({ kind, utilization: clampPercent(used), ...(resetsAt === undefined ? {} : { resetsAt }), gates: "all" });
+    }
+    return windows.length === 0 ? undefined : { windows, measuredAt };
+};
+
+/* WHICH MODELS A GOOGLE BUCKET GATES, read off the words the payload names its group and bucket with, because
+ * that is the only place the grouping is stated. Antigravity meters two families off one sign-in: a "Gemini
+ * Models" group and a "Claude and GPT models" group (the buckets are `gemini-weekly` and `3p-weekly`), each
+ * with its own fraction and reset. A group naming neither family is read as the plan's own allowance and gates
+ * everything: a pool this reader cannot place is better drawn as binding than silently ignored, and the
+ * quick-model walk still asks a rung the reading alone would have skipped (its second pass). */
+const GEMINI_WORDS = new Set(["gemini"]);
+const THIRD_PARTY_WORDS = new Set(["claude", "gpt", "3p", "third", "party", "anthropic", "openai"]);
+const googleGates = (...names: (string | undefined)[]): WindowGates => {
+    const words = new Set(names.flatMap((name) => (name === undefined ? [] : wordsOf(name))));
+    if ([...GEMINI_WORDS].some((word) => words.has(word))) {
+        return { models: ["gemini"] };
+    }
+    if ([...THIRD_PARTY_WORDS].some((word) => words.has(word))) {
+        return { models: ["claude", "gpt"] };
+    }
+    return "all";
 };
 
 export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Date.now()): AccountUsage | undefined => {
@@ -155,6 +231,7 @@ export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Da
                 label: bucketName === undefined || bucketName === groupName ? groupName : `${groupName} · ${bucketName}`,
                 utilization: clampPercent((1 - remaining) * 100),
                 ...(resetsAt === undefined ? {} : { resetsAt }),
+                gates: googleGates(groupName, bucketName, bucketId),
             });
         }
     }
@@ -220,11 +297,13 @@ const appendKimiPool = (windows: UsageWindow[], value: unknown, seconds: number 
         return;
     }
     const resetsAt = resetFromIso(pool?.[`resetTime`]);
+    // One undivided plan: the pool and every throttle inside it gate every model.
     windows.push({
         kind,
         ...(label === undefined ? {} : { label }),
         utilization: clampPercent((used / limit) * 100),
         ...(resetsAt === undefined ? {} : { resetsAt }),
+        gates: "all",
     });
 };
 
@@ -243,58 +322,6 @@ export const kimiUsageFromPayload = (payload: unknown, measuredAt: number = Date
     }
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
-
-/* ---- which pool a routed model actually spends --------------------------------------------------------------
- *
- * Google is the whole reason this exists. Its Antigravity channel serves two model families off ONE sign-in and
- * meters them SEPARATELY: `retrieveUserQuotaSummary` answers with a "Gemini Models" group (Gemini Flash, Gemini
- * Pro) and a "Claude and GPT models" group (Claude Opus, Claude Sonnet, GPT-OSS), each carrying its own weekly
- * fraction and its own reset instant. An account is routinely spent for one and healthy for the other, and a
- * fleet of Google sign-ins settles into exactly that state.
- *
- * Reading an account's pools as one allowance is what put "resets Mon 9:41 PM", the GEMINI pool's instant, on
- * an account that was not even serving the turn, under a refused Claude Opus turn, while a connected account
- * still held 27% of the pool that turn was actually spending.
- *
- * Codex and Kimi answer `undefined`, and that is not "unknown": their windows are LENGTHS of one undivided plan
- * (a 5-hour throttle inside a weekly pool) and every model spends all of them, so every window gates every turn.
- * A bucket id the provider has since renamed also matches nothing, which costs the caller its counts rather
- * than handing it the wrong pool, and a caller with no counts claims nothing about the fleet. */
-
-export interface QuotaPool {
-    // The recorded UsageWindow.kind this model's spend lands in.
-    readonly kind: string;
-    // How the provider names the group, as the subject of a sentence. Google's own wording, from the payload
-    // above, because the pool a refusal names has to be the one the user reads on their Antigravity screen.
-    readonly label: string;
-}
-
-const GOOGLE_GEMINI_POOL: QuotaPool = { kind: "google:gemini-weekly", label: "Gemini models" };
-const GOOGLE_THIRD_PARTY_POOL: QuotaPool = { kind: "google:3p-weekly", label: "Claude and GPT models" };
-
-export const quotaPoolFor = (provider: KeyedProvider, model: string): QuotaPool | undefined =>
-    provider !== "gemini" ? undefined : model.startsWith("gemini") ? GOOGLE_GEMINI_POOL : GOOGLE_THIRD_PARTY_POOL;
-
-/* WHAT THE RECORDED QUOTA SAYS ABOUT THAT POOL ACROSS EVERY CONNECTED ACCOUNT, the answer a refused routed
- * turn needs, and three facts rather than one instant.
- *
- * `withHeadroom` is the fact the old single-instant answer could not carry, and the one that changes what the
- * turn means: CLIProxyAPI balances across every auth file it holds, so a refusal is fleet-wide by construction.
- * If an account still has room in this pool then the quota is NOT what refused the turn, the translator had
- * every credential cooling for some other reason (a transient upstream error cools a credential for a minute),
- * and naming a weekly reset would send the user away for days over a condition that clears in seconds.
- *
- * Both counts zero ⇒ nothing on file measures this pool at all (never polled, or a renamed bucket), which is a
- * third state and reads as one: the caller says a limit was hit and claims nothing about the fleet. */
-export interface TurnLimit {
-    // Absent ⇒ the provider sells one undivided allowance, so there is no pool to name.
-    readonly pool?: string;
-    readonly spent: number;
-    readonly withHeadroom: number;
-    // When the earliest spent account reopens. Only ever set when nothing has headroom, with headroom on file
-    // the pool is not the blocker, and there is no reset that answers "when can I send this again".
-    readonly reopensAt?: number;
-}
 
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 const KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages";
