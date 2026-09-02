@@ -75,31 +75,24 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             run: (): void => sources.openHealth(dir),
         });
     }
-    /* WHO WORKS HERE. On every directory, because "give me a persona that starts in this folder" is a thing you
-     * decide about a folder the moment you are looking at it, and the alternative is the Personas page plus
-     * typing the path back in by hand.
-     *
-     * STANDING once the folder HAS one, which puts it in the evidence tier alongside a document: "which of these
-     * packages has its own persona" is a question about the tree that only a permanent glyph can answer, and a
-     * card with limited powers is worth being able to see from the row rather than remember. Empty folders keep it
-     * on hover with everything else you can DO. */
+    /* WHO WORKS HERE. Shown only once a folder HAS one (standing: true), which puts it in the evidence tier
+     * alongside a document: "which of these packages has its own persona" is a question about the tree that
+     * only a permanent glyph can answer, and a card with limited powers is worth being able to see from the row
+     * rather than remember. Setting up directories of personas is done in sandbox settings, so empty folders
+     * do not offer a hover action. */
     const personaCount = sources.personaDirs.get(dir) ?? 0;
-    actions.push({
-        id: `personas`,
-        icon: `user`,
-        /* Names what clicking does, and how many cards are behind it, a "2" is the reason to expect a list. It
-         * says "choose" rather than "add" because the panel it opens can also point a persona you ALREADY have
-         * at this folder, and a tooltip promising to add one sends people to the Personas page to build a second
-         * copy of a card they have. */
-        tooltip:
-            personaCount === 0
-                ? `Choose who works here`
-                : personaCount === 1
-                  ? `Change who works here: 1 persona`
-                  : `Change who works here, ${personaCount} personas`,
-        standing: personaCount > 0,
-        run: (): void => sources.openPersonas(dir),
-    });
+    if (personaCount > 0) {
+        actions.push({
+            id: `personas`,
+            icon: `user`,
+            tooltip:
+                personaCount === 1
+                    ? `Change who works here: 1 persona`
+                    : `Change who works here, ${personaCount} personas`,
+            standing: true,
+            run: (): void => sources.openPersonas(dir),
+        });
+    }
     /* SEE IT RUNNING. A runnable repo's door into the Preview area, with this repo's target selected, it
      * replaces the in-tree iframe tab such repos used to open, because the live preview is a rail surface now
      * (one panel, poppable, parked between looks) rather than one more editor tab. On hover with the other

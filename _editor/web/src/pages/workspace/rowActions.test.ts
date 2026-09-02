@@ -41,14 +41,18 @@ afterEach(() => {
 });
 
 describe(`rowActionsFor`, () => {
-    // Every folder can be given somebody to work in it, so that is the one offer an ordinary directory has.
-    it(`gives an ordinary directory only its personas`, () => {
-        expect(rowActionsFor(`intentic/_editor/web/src`, sources()).map((action) => action.id)).toEqual([`personas`]);
+    it(`gives an ordinary directory without personas no actions`, () => {
+        expect(rowActionsFor(`intentic/_editor/web/src`, sources())).toEqual([]);
+    });
+
+    it(`gives a directory with personas its persona action`, () => {
+        const source = sources({ personaDirs: new Map([[`intentic/_editor/web/src`, 1]]) });
+        expect(rowActionsFor(`intentic/_editor/web/src`, source).map((action) => action.id)).toEqual([`personas`]);
     });
 
     it(`gives a repo its health, and a managed repo its cog`, () => {
         const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) }));
-        expect(actions.map((action) => action.id)).toEqual([`health`, `personas`, `directory`]);
+        expect(actions.map((action) => action.id)).toEqual([`health`, `directory`]);
     });
 
     // The eye is the Preview AREA's door, not another in-tree tab: a runnable repo used to open an iframe tab
@@ -60,7 +64,7 @@ describe(`rowActionsFor`, () => {
             previewableDirs: new Set([`shop`]),
         });
         const actions = rowActionsFor(`shop`, source);
-        expect(actions.map((action) => action.id)).toEqual([`health`, `personas`, `preview`, `directory`]);
+        expect(actions.map((action) => action.id)).toEqual([`health`, `preview`, `directory`]);
         actions.find((action) => action.id === `preview`)?.run();
         expect(source.openPreview).toHaveBeenCalledWith(`shop`);
     });
@@ -70,7 +74,7 @@ describe(`rowActionsFor`, () => {
     it(`puts a document ahead of the repo's own affordances`, () => {
         provider(`architecture`, `intentic`);
         const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) }));
-        expect(actions.map((action) => action.id)).toEqual([`document:acme.docs:architecture`, `health`, `personas`]);
+        expect(actions.map((action) => action.id)).toEqual([`document:acme.docs:architecture`, `health`]);
     });
 
     // The whole point of the path-keyed contribution: a package deep inside a monorepo is not a repo and has no
@@ -95,44 +99,41 @@ describe(`rowActionsFor`, () => {
      * documented monorepo came to look exactly like an undocumented one. What you can DO to a repo does not. */
     it(`lets an offer stand on the row, and never the repo's own affordances`, () => {
         provider(`architecture`, `intentic/_deploy/graph`, true);
-        expect(rowActionsFor(`intentic/_deploy/graph`, sources()).map((action) => action.standing)).toEqual([true, false]);
+        expect(rowActionsFor(`intentic/_deploy/graph`, sources()).map((action) => action.standing)).toEqual([true]);
         expect(
             rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) })).map(
                 (action) => action.standing,
             ),
-        ).toEqual([false, false, false]);
+        ).toEqual([false, false]);
     });
 
     // An offer every directory of its kind gets (a repo always has git history) says nothing by being permanent,
     // so it waits for the pointer like the affordances beside it.
     it(`leaves an offer that is not evidence on hover`, () => {
         provider(`history`, `intentic`);
-        expect(rowActionsFor(`intentic`, sources()).map((action) => action.standing)).toEqual([false, false]);
+        expect(rowActionsFor(`intentic`, sources()).map((action) => action.standing)).toEqual([false]);
     });
 
     /* THE PERSONA ICON IS EVIDENCE ONCE THERE IS ONE: "which of these packages has its own persona" is a
-     * question about the tree, and a hover-only glyph answers it for nobody. An empty folder's stays hidden with
-     * the rest of what you can DO. */
-    it(`stands on a folder that already has a persona, and hides on one that has none`, () => {
+     * question about the tree, and a hover-only glyph answers it for nobody. Empty folders have no persona icon. */
+    it(`stands on a folder that already has a persona, and is absent on one that has none`, () => {
         const withCards = sources({ personaDirs: new Map([[`intentic/_editor`, 1]]) });
         expect(rowActionsFor(`intentic/_editor`, withCards)[0]?.standing).toBe(true);
-        expect(rowActionsFor(`intentic/_sandbox`, withCards)[0]?.standing).toBe(false);
+        expect(rowActionsFor(`intentic/_sandbox`, withCards)).toEqual([]);
     });
 
     /* A folder holds SEVERAL cards, and the count is the reason to expect a list behind the icon rather than one
      * card, so the tooltip carries it rather than saying "personas" and leaving the number to the click. */
     it(`says how many personas start here`, () => {
-        const none = rowActionsFor(`docs`, sources())[0]?.tooltip ?? ``;
         const one = rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 1]]) }))[0]?.tooltip ?? ``;
         const three = rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 3]]) }))[0]?.tooltip ?? ``;
-        expect(none).not.toBe(one);
-        expect(one).toContain(`1`);
-        expect(three).toContain(`3`);
+        expect(one).toContain(`1 persona`);
+        expect(three).toContain(`3 personas`);
         expect(one).not.toBe(three);
     });
 
     it(`opens the panel for the folder that was clicked`, () => {
-        const source = sources();
+        const source = sources({ personaDirs: new Map([[`intentic/_editor/web`, 1]]) });
         rowActionsFor(`intentic/_editor/web`, source)[0]?.run();
         expect(source.openPersonas).toHaveBeenCalledWith(`intentic/_editor/web`);
     });
@@ -150,6 +151,6 @@ describe(`rowActionsFor`, () => {
                 component: () => Promise.resolve({}),
             }),
         );
-        expect(rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) })).map((action) => action.id)).toEqual([`health`, `personas`]);
+        expect(rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) })).map((action) => action.id)).toEqual([`health`]);
     });
 });
