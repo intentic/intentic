@@ -30,6 +30,7 @@ import { landAgent } from "../agents/land.js";
 import { describeLandingInBackground } from "../agents/landed-subject.js";
 import { landingPaths } from "../agents/landing-paths.js";
 import { landingVerdict, standing } from "../rules/rules.js";
+import { landingOutcome, takeCheckVerdict } from "./turn-checks.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
 import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
@@ -555,6 +556,9 @@ async function* runConversationTurn(
         // auto-land OFF (the sandbox setting, or this agent's own override) the same pass runs in `measure`
         // mode instead: provenance and diffstat happen, the main tree is not touched, and the held delta
         // waits on the branch as a "Ready to land" card until the user lands it deliberately.
+        // The turn's own check, taken whether or not anything lands: a verdict left behind would speak about
+        // the next turn's work (turn-checks.ts).
+        const check = takeCheckVerdict(conversationId);
         const finished = services.agents.entry(conversationId);
         if (!failed && signal?.aborted !== true && finished !== undefined && isIsolated(finished)) {
             /* THE `agent.finished` MOMENT, does this work reach the tree by itself? A verdict rather than
@@ -572,7 +576,11 @@ async function* runConversationTurn(
             const paths = finishedRules.some((rule) => (rule.when?.paths?.length ?? 0) > 0)
                 ? await landingPaths(services, finished, span)
                 : undefined;
-            const decided = landingVerdict(rules, { repos: span.map(({ repo }) => repo), paths }, input.autoLand ?? finished.autoLand);
+            const decided = landingVerdict(
+                rules,
+                { repos: span.map(({ repo }) => repo), paths, outcome: landingOutcome(check) },
+                input.autoLand ?? finished.autoLand,
+            );
             /* ONE LAST REBASE, because the sync at the top of this turn is already stale by the time we get
              * here. The branch was put on today's main line before the model read a line of it, and then the
              * turn RAN: two hundred tool calls and half an hour, during which the user lands other agents and
@@ -608,6 +616,19 @@ async function* runConversationTurn(
              * did not arrive is the thing someone goes looking for an explanation of, and "a rule you wrote
              * held it" is that explanation. An empty table holds too, and says nothing: nobody wrote that, so
              * there is no rule to name and nothing was decided that the card does not already show. */
+            /* HELD BY THE TURN'S OWN CHECK: the one hold no rule decided, and the one a person most needs
+             * explained, since the work is finished, the model said so, and it is not in the tree. Named with the
+             * check that failed and what it ran, so the card's "Ready to land" reads as a verdict, not a stall. */
+            if (decided.held === "checks-failed" && check !== undefined) {
+                void services.activity
+                    .append({
+                        direction: "system",
+                        type: "rule.held_work",
+                        content: `"${check.label}" failed on this turn's work (\`${check.command}\`), so it waits on its branch instead of landing.`,
+                        conversationId,
+                    })
+                    .catch((error: unknown) => services.logger.warn({ err: error }, "rule activity append failed"));
+            }
             if (decided.rule !== undefined) {
                 void services.ruleFirings
                     .stamp(decided.rule.id, Date.now())
@@ -1735,6 +1756,7 @@ async function* runTurn(
                 ...(isolation !== undefined ? { isolation: isolation.plan } : {}),
                 cwd: effectiveCwd,
                 ...(request.onRuleFired !== undefined ? { onFired: request.onRuleFired } : {}),
+                ...(request.verifyTests !== undefined ? { tests: request.verifyTests } : {}),
             }).catch((error: unknown) => services.logger.warn({ err: error }, "verify nudge: could not be decided"));
         }
         sniffer.flush();

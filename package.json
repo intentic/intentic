@@ -11,6 +11,7 @@
         "build": "turbo run build",
         "verify": "pnpm typecheck && pnpm test",
         "verify:push": "node _tools/scripts/verify-push.mjs",
+        "ci:audit": "node _tools/scripts/ci-audit.mjs",
         "test": "pnpm prepass && VITEST_MAX_WORKERS=${VITEST_MAX_WORKERS:-4} turbo run test --only",
         "typecheck": "pnpm prepass && turbo run typecheck --continue=dependencies-successful",
         "prepass": "node _tools/scripts/prepass.mjs",

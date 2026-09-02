@@ -3,6 +3,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule, RuleBuiltin } from "@intentic/sandbox-contract";
 import { notFoundBinary } from "../agent/agent-installs.js";
+import { TEST_FILE, TEST_WRITING_NOTE } from "../agent/agent-tests.js";
 import { createRemovalLedger, type FileReader, readWorkspaceFile, type RemovalLedger, verifyRemovalsMessage } from "../agent/agent-removals.js";
 import {
     commandExitCode,
@@ -14,7 +15,7 @@ import {
 import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessage } from "../agent/agent-viewing.js";
 import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
-import { conditionHolds } from "./rules.js";
+import { conditionHolds, type RuleFacts } from "./rules.js";
 
 /* THE MOMENT A TURN TRIES TO END, every rule standing there, driven by one hook set.
  *
@@ -36,9 +37,17 @@ import { conditionHolds } from "./rules.js";
  * one follow-up carrying three things, and a turn that could be sent back once per rule is a turn that can be
  * sent back forever. */
 
-// At most this many follow-ups per turn, across every rule here. The model gets a second round only because
-// the first is sometimes answered with a check that fails, one more to repair it is the point. A third is a
-// loop.
+/* At most this many follow-ups per turn, across every rule here. The model gets a second round only because
+ * the first is sometimes answered with a check that fails, one more to repair it is the point. A third is a
+ * loop.
+ *
+ * THE COUNTER IS THE WHOLE LOOP GUARD, and it has to be, because the SDK's own re-entry flag would end the loop
+ * one Stop too early. `stop_hook_active` is true on the Stop that FOLLOWS a hook-driven continuation, which is
+ * exactly the Stop after the model repaired the failure the first one reported. Bailing on that flag meant the
+ * repair was never re-measured: the check ran once, went red, the model edited, and the turn ended on a tree
+ * nothing had looked at since. The second round below is the one that re-runs the check on the repaired tree, and
+ * a passing run is silent, so the turn ends there; a still-failing one is reported once more, and the third Stop
+ * is silent whatever the tree says. */
 const MAX_FOLLOW_UPS = 2;
 
 // How much of a failed rule command's own words ride back to the model. Enough to act on, not enough to
@@ -117,6 +126,15 @@ export interface TurnEndingDeps {
      * and the first thing to read the change is CI. The tree cannot be fooled that way: whatever wrote the file,
      * git sees it. Absent ⇒ the ledger is the only reader, which is what a test without a tree wants. */
     readonly changedPaths?: (() => Promise<readonly string[]>) | undefined;
+    /* Told about every command rule's run, whatever it said. The one reader is the land at the end of this turn
+     * (agent/turn-checks.ts): a turn whose check went red and whose model answered "cannot be repaired here"
+     * ends clean, and the land has to know that before it decides. The last run wins there, which is what
+     * makes the second round above matter: a repair the check confirmed is a turn that passed. */
+    readonly onCheckRun?: ((rule: Rule, run: RuleCommandRun) => void) | undefined;
+    /* The `verify-tests` built-in's whole answer (agent/agent-tests.ts verifyTestsMessage), bound by the planner
+     * because only it knows the turn's tree and how to run a package's suite in it. Absent ⇒ the built-in has
+     * nothing to read and says nothing, which is what a test without a tree wants. */
+    readonly tests?: (() => Promise<string | undefined>) | undefined;
 }
 
 // The two records this moment keeps. `removal` exists only when a rule standing here reads it: it snapshots
@@ -214,6 +232,7 @@ const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => 
                   now: deps.now,
               }),
     "verify-ui-edits": async (_deps, ledgers) => verifyUiEditsMessage(ledgers.view),
+    "verify-tests": async (deps) => (deps.tests === undefined ? undefined : deps.tests()),
 };
 
 /* RUN THE CHECK, AND RUN IT AGAIN IF ITS OWN TOOL WAS MISSING, which is the only thing that can tell a tree
@@ -237,6 +256,35 @@ const settledRun = async (runCommand: TurnRuleCommand, command: string, timeoutM
     return runCommand(command, timeoutMs);
 };
 
+// A command rule's contribution: what its run said, or what stood in the way of a run saying anything.
+const commandContribution = async (
+    rule: Rule,
+    action: { readonly command: string; readonly timeoutMs: number },
+    runCommand: TurnRuleCommand,
+    deps: TurnEndingDeps,
+): Promise<string | undefined> => {
+    const { command, timeoutMs } = action;
+    const run = await settledRun(runCommand, command, timeoutMs);
+    deps.onCheckRun?.(rule, run);
+    // A command that PASSED has nothing to say, the turn is free to end, which is what it was asked.
+    if (run.status === "passed" || run.status === "cancelled") {
+        return undefined;
+    }
+    const unmeasured = await measuredNothing(run, deps);
+    if (unmeasured !== undefined) {
+        return nothingMeasured(rule.label, command, run, unmeasured);
+    }
+    const why = run.timedOut === true ? `timed out after ${Math.round(timeoutMs / 1000)}s` : `exited ${run.exitCode ?? "abnormally"}`;
+    return [
+        `Before finishing, "${rule.label}" ran this and it ${why}:`,
+        `\`${command}\``,
+        run.output.slice(-COMMAND_OUTPUT_BYTES),
+        `Repair that before finishing, or say plainly why it cannot be repaired here.`,
+    ]
+        .filter((line) => line !== "")
+        .join("\n");
+};
+
 // What one rule contributes to the follow-up, or nothing.
 const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers): Promise<string | undefined> => {
     if (rule.action.kind === "builtin") {
@@ -249,37 +297,15 @@ const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers
         // No runner ⇒ this turn has nowhere to run a command (an ACP or translator turn). Saying nothing is the
         // honest answer: inventing a follow-up about a command that never ran would be the check reporting a
         // result it does not have.
-        if (deps.runCommand === undefined) {
-            return undefined;
-        }
-        const { command, timeoutMs } = rule.action;
-        const run = await settledRun(deps.runCommand, command, timeoutMs);
-        // A command that PASSED has nothing to say, the turn is free to end, which is what it was asked.
-        if (run.status === "passed" || run.status === "cancelled") {
-            return undefined;
-        }
-        const unmeasured = await measuredNothing(run, deps);
-        if (unmeasured !== undefined) {
-            return nothingMeasured(rule.label, command, run, unmeasured);
-        }
-        const why = run.timedOut === true ? `timed out after ${Math.round(timeoutMs / 1000)}s` : `exited ${run.exitCode ?? "abnormally"}`;
-        return [
-            `Before finishing, "${rule.label}" ran this and it ${why}:`,
-            `\`${command}\``,
-            run.output.slice(-COMMAND_OUTPUT_BYTES),
-            `Repair that before finishing, or say plainly why it cannot be repaired here.`,
-        ]
-            .filter((line) => line !== "")
-            .join("\n");
+        return deps.runCommand === undefined ? undefined : commandContribution(rule, rule.action, deps.runCommand, deps);
     }
     return undefined;
 };
 
 /* The hooks. Edits and Bash results feed the ledger; Stop reads it, and the rules, once the turn tries to end.
  *
- * `stop_hook_active` is the SDK's own re-entry flag, true when this Stop is the one that follows a hook that
- * already continued the turn. The follow-up count is kept anyway (a turn can be stopped for other reasons in
- * between) and both are honoured, so neither alone can produce a loop. */
+ * The SDK's `stop_hook_active` flag is deliberately NOT read: it is true on the Stop after a continuation, which
+ * is the Stop that has to re-measure the repair (see MAX_FOLLOW_UPS). The count is the guard. */
 export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {}): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     if (rules.length === 0) {
         return {};
@@ -291,6 +317,10 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
     const wantsRemovals = rules.some(
         (rule) => rule.enabled && rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === "verify-removals",
     );
+    // The two sentences about writing tests are said only where the rule that reads the result stands, and once.
+    const wantsTests = rules.some(
+        (rule) => rule.enabled && rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === "verify-tests",
+    );
     const ledgers: Ledgers = {
         verification: createVerificationLedger(),
         removal: wantsRemovals ? createRemovalLedger() : undefined,
@@ -299,6 +329,26 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
     const { removal } = ledgers;
     const read = deps.read ?? readWorkspaceFile;
     let followUps = 0;
+    let testNoted = false;
+    // What every rule standing here has to say about this occasion, in the owner's order, telling `onFired`
+    // for each that spoke.
+    const contributionsAt = async (facts: RuleFacts): Promise<string[]> => {
+        const parts: string[] = [];
+        for (const rule of rules) {
+            // The moment check is redundant with `standing` at the one call site and kept anyway: the failure
+            // it prevents is a rule firing at a moment it was not written for, which is silent, wrong, and
+            // exactly what a table like this must never do.
+            if (rule.moment !== "turn.ending" || !conditionHolds(rule.when, facts)) {
+                continue;
+            }
+            const contribution = await contributionOf(rule, deps, ledgers);
+            if (contribution !== undefined && contribution !== "") {
+                parts.push(contribution);
+                deps.onFired?.(rule);
+            }
+        }
+        return parts;
+    };
     return {
         ...(removal === undefined
             ? {}
@@ -337,6 +387,13 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                                 // door rather than here: one edit, two records, each with its own idea of
                                 // what is worth asking about.
                                 ledgers.view.noteEdit(path);
+                                /* THE FIRST TEST FILE THIS TURN EDITS gets the two rules that apply to it, at the
+                                 * moment they apply (agent-tests.ts TEST_WRITING_NOTE). Once per turn: the model
+                                 * needs them once, and the Stop reads the result whatever it remembered. */
+                                if (wantsTests && !testNoted && TEST_FILE.test(path)) {
+                                    testNoted = true;
+                                    return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: TEST_WRITING_NOTE } };
+                                }
                             }
                         }
                         return {};
@@ -398,7 +455,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
             {
                 hooks: [
                     async (input) => {
-                        if (input.hook_event_name !== "Stop" || input.stop_hook_active || followUps >= MAX_FOLLOW_UPS) {
+                        if (input.hook_event_name !== "Stop" || followUps >= MAX_FOLLOW_UPS) {
                             return {};
                         }
                         // What the turn touched, which is the only fact a condition can narrow on here: what the
@@ -408,20 +465,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         const edited = ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd));
                         const changed = deps.changedPaths === undefined ? [] : await deps.changedPaths().catch(() => []);
                         const facts = { paths: [...new Set([...edited, ...changed])] };
-                        const parts: string[] = [];
-                        for (const rule of rules) {
-                            // The moment check is redundant with `standing` at the one call site and kept
-                            // anyway: the failure it prevents is a rule firing at a moment it was not written
-                            // for, which is silent, wrong, and exactly what a table like this must never do.
-                            if (rule.moment !== "turn.ending" || !conditionHolds(rule.when, facts)) {
-                                continue;
-                            }
-                            const contribution = await contributionOf(rule, deps, ledgers);
-                            if (contribution !== undefined && contribution !== "") {
-                                parts.push(contribution);
-                                deps.onFired?.(rule);
-                            }
-                        }
+                        const parts = await contributionsAt(facts);
                         if (parts.length === 0) {
                             return {};
                         }

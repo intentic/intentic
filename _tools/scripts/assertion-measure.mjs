@@ -1,0 +1,173 @@
+/* HOW STRONG A TEST FILE'S ASSERTIONS ARE, as three numbers, and whether a second version of the file is weaker.
+ *
+ * The pure half of the assertion ratchet, shared by the push gate (assertion-ratchet.mjs, which runs it over a
+ * commit range or the working tree) and mirrored by the daemon's turn-ending check
+ * (_sandbox/sandbox/src/agent/agent-tests.ts), which asks the same question of the test files a turn touched and
+ * tells the model while it can still act. The daemon cannot import this file (it ships as a package, this is a
+ * repo script that a pre-push hook runs on a clone that may never have installed), so the two implementations are
+ * held to each other by agent-tests.test.ts, which runs both over the same sources and fails if they disagree.
+ *
+ * WHY. On 2026-08-31 eight commits in fifty minutes "relaxed" about 180 test files. `toEqual({ …, message:
+ * "Reached Example, authenticated as ada." })` became `toMatchObject({ … })` plus `toContain("ada")`; `"9 of 12
+ * files still in your workspace"` became `toContain("9")` and `toContain("12")`; `"Start your first agent"`
+ * became `"first agent"`. Every suite stayed green, every gate said yes, and each of those tests can now barely
+ * fail. AGENTS.md forbids exactly this ("an assertion that cannot fail is worse than no test") and no linter can
+ * enforce it: the shape of a weak `toContain` is the shape of a strong one. What CAN be seen is the direction
+ * of travel between two versions of the same file, which is what this measures.
+ *
+ * THREE NUMBERS PER FILE: EXACT matchers (toBe, toEqual, toStrictEqual, toHaveLength, toHaveBeenCalledWith,
+ * snapshots…), LOOSE matchers (toContain, toMatch, toMatchObject, toBeTruthy, toBeGreaterThan, expect.any…), and
+ * the characters of literal text the assertions pin down (every string and regex inside a matcher's argument
+ * list). A file is weaker in either of two shapes:
+ *
+ *   · a DOWNGRADE: fewer exact matchers and more loose ones, the `toEqual` → `toMatchObject` move;
+ *   · a NARROWING: the asserted text shrinks by more than a quarter while the file keeps as many tests as it had,
+ *     the "first agent" move. Tests removed with their text are not a narrowing, and the test count says so.
+ *
+ * A HEURISTIC, AND SAID TO BE ONE. A refactor that replaces twenty `toBe` lines with one `toEqual` of a whole
+ * object reads as fewer exact matchers; a suite that switches from asserting prose to asserting structure reads
+ * as narrowing. Both are legitimate, and both are exactly the changes a reviewer should be told about, which is
+ * why the gate refuses only an UNDECLARED weakening and the turn-ending check reports rather than refuses.
+ *
+ * Deliberately regex over source, not an AST: this runs from a pre-push hook on a clone that may never have
+ * installed, so it can import nothing, and the matchers it counts are names, which a regex reads as well as a
+ * parser does. It cannot see a matcher called through a helper (`expectRow(row).toBe(…)` counts, `check(row)`
+ * does not), which is the direction of error that under-reports rather than nags. */
+
+// Asserted text that shrinks past this fraction of what it was, with no test removed, is a narrowing.
+export const NARROWING = 0.75;
+
+/* The vocabulary. Exact matchers pin a value; loose ones admit a family of them. `toThrow` and `toHaveProperty`
+ * are both depending on their arguments (a message or a value makes them exact) and are counted as neither, so
+ * a file that trades between them moves no number. Asymmetric matchers (`expect.any`, `objectContaining`) loosen
+ * whatever exact matcher they sit inside, so each one counts as loose. */
+export const EXACT = [
+    "toBe",
+    "toEqual",
+    "toStrictEqual",
+    "toHaveLength",
+    "toHaveBeenCalledWith",
+    "toHaveBeenLastCalledWith",
+    "toHaveBeenNthCalledWith",
+    "toHaveBeenCalledTimes",
+    "toHaveBeenCalledOnce",
+    "toHaveReturnedWith",
+    "toHaveLastReturnedWith",
+    "toMatchInlineSnapshot",
+    "toMatchSnapshot",
+    "toMatchFileSnapshot",
+    "toThrowErrorMatchingInlineSnapshot",
+    "toThrowErrorMatchingSnapshot",
+    "toBeNull",
+    "toBeUndefined",
+    "toBeNaN",
+    "toBeCloseTo",
+];
+export const LOOSE = [
+    "toContain",
+    "toContainEqual",
+    "toMatch",
+    "toMatchObject",
+    "toBeTruthy",
+    "toBeFalsy",
+    "toBeDefined",
+    "toBeGreaterThan",
+    "toBeGreaterThanOrEqual",
+    "toBeLessThan",
+    "toBeLessThanOrEqual",
+    "toBeInstanceOf",
+    "toBeTypeOf",
+    "toSatisfy",
+    "toHaveBeenCalled",
+    "toHaveReturned",
+    "toBeOneOf",
+];
+const exact = new Set(EXACT);
+const loose = new Set(LOOSE);
+const ASYMMETRIC = /\bexpect\.(any|anything|stringContaining|stringMatching|objectContaining|arrayContaining|closeTo)\s*\(/g;
+const MATCHER = /\.(to[A-Z][A-Za-z]*)\s*\(/g;
+const TEST_CASE = /^\s*(?:test|it)(?:\.(?:each|skip|only|concurrent|todo|fails|skipIf|runIf))?\s*\(/gm;
+
+/* The literal text a matcher's argument list pins down: from the `(` that opens it to the `)` that closes it,
+ * every string literal's characters and every regex's source. Walked by hand because a matcher's argument is
+ * routinely a multi-line object with nested calls, which no single regex can bound. Template literals count up
+ * to their first `${`: what follows is computed, not asserted. */
+const assertedChars = (source, from) => {
+    let depth = 0;
+    let chars = 0;
+    for (let i = from; i < source.length; i += 1) {
+        const ch = source[i];
+        if (ch === "(") {
+            depth += 1;
+        } else if (ch === ")") {
+            depth -= 1;
+            if (depth === 0) {
+                return chars;
+            }
+        } else if (ch === '"' || ch === "'" || ch === "`") {
+            const quote = ch;
+            let j = i + 1;
+            for (; j < source.length && source[j] !== quote; j += 1) {
+                if (source[j] === "\\") {
+                    j += 1;
+                } else if (quote === "`" && source[j] === "$" && source[j + 1] === "{") {
+                    break;
+                }
+            }
+            chars += j - i - 1;
+            // Past the literal, or, for a template cut at `${`, on to its closing quote by plain scanning.
+            i = quote === "`" && source[j] === "$" ? source.indexOf("`", j) : j;
+            if (i === -1) {
+                return chars;
+            }
+        } else if (ch === "/" && /[(,\s=]/.test(source[i - 1] ?? "(") && source[i + 1] !== "/" && source[i + 1] !== "*") {
+            // A regex literal in argument position: its source is asserted text like a string's.
+            let j = i + 1;
+            for (; j < source.length && source[j] !== "/" && source[j] !== "\n"; j += 1) {
+                if (source[j] === "\\") {
+                    j += 1;
+                }
+            }
+            chars += j - i - 1;
+            i = j;
+        }
+    }
+    return chars;
+};
+
+// The three numbers, and the test count that tells a narrowing from a deletion.
+export const measure = (source) => {
+    let exactCount = 0;
+    let looseCount = 0;
+    let chars = 0;
+    for (const match of source.matchAll(MATCHER)) {
+        const name = match[1];
+        if (exact.has(name)) {
+            exactCount += 1;
+        } else if (loose.has(name)) {
+            looseCount += 1;
+        }
+        chars += assertedChars(source, match.index + match[0].length - 1);
+    }
+    looseCount += [...source.matchAll(ASYMMETRIC)].length;
+    const tests = [...source.matchAll(TEST_CASE)].length;
+    return { exact: exactCount, loose: looseCount, chars, tests };
+};
+
+// Weaker, in either of the two shapes the header names. `before` absent (a new file) can only be stronger.
+export const weakened = (before, after) => {
+    if (before === undefined) {
+        return undefined;
+    }
+    if (after.exact < before.exact && after.loose > before.loose) {
+        return "downgrade";
+    }
+    if (before.chars > 0 && after.chars < before.chars * NARROWING && after.tests >= before.tests) {
+        return "narrowing";
+    }
+    return undefined;
+};
+
+// One line per weakened file, the numbers a reader needs to judge the heuristic for themselves.
+export const describeWeakening = (path, shape, before, after) =>
+    `${path}: ${shape} (exact ${before.exact}→${after.exact}, loose ${before.loose}→${after.loose}, asserted chars ${before.chars}→${after.chars}, tests ${before.tests}→${after.tests})`;

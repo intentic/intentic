@@ -2,12 +2,13 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Thirteen invariants live here, and all of them exist because the checks that catch drift used to run
- * in exactly one place (CI, on main, after the merge. (5 through 13) the release-heading contract, the
+ * --only`. Fifteen invariants live here, and all of them exist because the checks that catch drift used to run
+ * in exactly one place (CI, on main, after the merge. (5 through 15) the release-heading contract, the
  * undeclared-shrink gate on the wire contract, the armed-hooks check, the reusable-workflow permission
  * ceiling, the runner npm will attest a publish from, the tag pushes GitHub never delivers, the packages a
- * lockfile keeps after nothing depends on them, the Vue templates no type checker reads, and the vitest ceiling
- * a package inherits by saying nothing: are documented at their own blocks below.)
+ * lockfile keeps after nothing depends on them, the Vue templates no type checker reads, the vitest ceiling
+ * a package inherits by saying nothing, the allow-list mock of a package that keeps growing, and the emit
+ * order `tsgo -b` cannot know without a project reference: are documented at their own blocks below.)
  *
  * All but invariant 2 need no network, which is what lets `--checks-only` run them from a `pre-push` hook and
  * from a CI job that has not installed anything yet (ci.yml, the `preflight` job). Two of them read
@@ -153,6 +154,10 @@ const walk = (dir, wanted = TEST_FILE) =>
         const path = join(dir, entry.name);
         return entry.isDirectory() ? walk(path, wanted) : wanted.test(entry.name) ? [path] : [];
     });
+
+// A package whose dependents read it from dist: its exports point at compiled files. The set invariant 2 emits
+// and invariant 15 orders.
+const emitsDist = (pkg) => /"\.\/dist\/[^"]+\.js"/.test(JSON.stringify(pkg.exports ?? ""));
 
 // tsconfigs here carry comments and trailing commas; this only needs `exclude`, so read it without a parser.
 const excludesOf = (configPath) => {
@@ -1145,10 +1150,151 @@ for (const { name, dir, pkg } of packages) {
     }
 }
 
+/* 14. MOCK COVERAGE: an allow-list mock of a workspace package provides every name the code under test imports.
+ *
+ * `vi.mock("@intentic/ui", () => ({ useDevice: … }))` replaces the whole package with the object the factory
+ * returns. The test's own imports from that package are the smaller half of what that object has to hold: the
+ * module under test imports from it too, and what IT reaches for is whatever the package grew last week. So the
+ * mock is right on the day it is written and wrong on the day the component takes one more export, and the
+ * failure arrives as `useScrollLock is not a function` from a test that never mentioned it, in a commit that
+ * touched neither (docs/ci-failure-audit.md, class B). A factory that spreads `importOriginal()` or
+ * `importActual()` cannot drift that way and is not read.
+ *
+ * Read by shape: for every such mock, the names the test file and each RELATIVE module it imports (the modules
+ * under test, one level) import from the mocked specifier, against the keys the factory's object states. Type-only
+ * imports need nothing at runtime and are skipped. Workspace packages only: a relative module mocked with a
+ * hand-written object is the "one fake per seam" question (AGENTS.md, Tests), which this cannot judge, and the
+ * class this refuses was a PACKAGE mock in every observed case. */
+const MOCK = /vi\.mock\(\s*["']([^"']+)["']\s*,\s*(async\s*)?\(\s*\)\s*=>\s*\(?\s*\{/g;
+const RELATIVE_IMPORT = /import\s+(?:[\w$]+\s*,?\s*)?(?:\{[^}]*\}\s*)?from\s*["'](\.[^"']+)["']/g;
+// The object literal that opens at `from`, by brace depth.
+const literalAt = (source, from) => {
+    let depth = 0;
+    for (let i = from; i < source.length; i += 1) {
+        if (source[i] === "{") {
+            depth += 1;
+        } else if (source[i] === "}") {
+            depth -= 1;
+            if (depth === 0) {
+                return source.slice(from, i + 1);
+            }
+        }
+    }
+    return source.slice(from);
+};
+// The keys an object literal states: `name:`, `name(`, a shorthand `name,`/`name }`, or a quoted key.
+const keysOf = (literal) =>
+    new Set(
+        [...literal.matchAll(/(?:^|[,{]\s*)(?:async\s+)?(?:["']([^"']+)["']|([A-Za-z_$][\w$]*))\s*(?=[:(,}])/gm)].map(
+            (match) => match[1] ?? match[2],
+        ),
+    );
+// The runtime names `source` imports from `specifier`: default as "default", named by their exported name.
+const namedImportsOf = (source, specifier) => {
+    const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const names = new Set();
+    for (const match of source.matchAll(
+        new RegExp(String.raw`import\s+(?!type\s)([\w$]+)?\s*,?\s*(?:\{([^}]*)\})?\s*from\s*["']${escaped}["']`, "g"),
+    )) {
+        if (match[1] !== undefined) {
+            names.add("default");
+        }
+        for (const binding of (match[2] ?? "").split(",")) {
+            const name = binding
+                .trim()
+                .split(/\s+as\s+/)[0]
+                ?.trim();
+            if (name !== undefined && name !== "" && !name.startsWith("type ")) {
+                names.add(name);
+            }
+        }
+    }
+    return names;
+};
+// The test file and the modules it stands up (its relative imports, one level), each as `[path, text]`.
+const readersOf = (file, source) => {
+    const readers = [[file, source]];
+    for (const [, specifier] of source.matchAll(RELATIVE_IMPORT)) {
+        const target = sourceOf(file, specifier);
+        if (target !== undefined && existsSync(target) && !TEST_FILE.test(target)) {
+            readers.push([target, readFileSync(target, "utf8")]);
+        }
+    }
+    return readers;
+};
+// What one mock leaves unprovided: a line per reader that imports a name the factory's object lacks.
+const mockGaps = (file, source, match, readers) => {
+    const [, specifier] = match;
+    const provided = keysOf(literalAt(source, source.indexOf("{", match.index + match[0].length - 1)));
+    return readers.flatMap(([reader, text]) => {
+        const missing = [...namedImportsOf(text, specifier)].filter((name) => !provided.has(name));
+        return missing.length === 0
+            ? []
+            : [
+                  `${file.slice(root.length + 1)}: vi.mock("${specifier}") provides {${[...provided].join(", ")}} but ` +
+                      `${reader.slice(root.length + 1)} imports {${missing.join(", ")}} from it: spread \`await importOriginal()\` into the factory, or add them`,
+              ];
+    });
+};
+const unmocked = [];
+for (const { dir, pkg } of packages) {
+    if (!/vitest/.test(pkg.scripts?.test ?? "")) {
+        continue;
+    }
+    for (const file of walk(dir)) {
+        const source = readFileSync(file, "utf8");
+        const mocks = [...source.matchAll(MOCK)].filter(([, specifier]) => byName.has(specifier.split("/").slice(0, 2).join("/")));
+        if (mocks.length === 0) {
+            continue;
+        }
+        const readers = readersOf(file, source);
+        unmocked.push(...mocks.flatMap((match) => mockGaps(file, source, match, readers)));
+    }
+}
+
+/* 15. REFERENCES: the emit order is the dependency order.
+ *
+ * Invariant 2 emits every package that dependents read from dist with one `tsgo -b` over the whole set, and
+ * `-b` orders that set from the tsconfig `references` and from nothing else: a package whose tsconfig names no
+ * reference to a workspace dependency is built wherever the command line puts it, against whatever that
+ * dependency's dist holds at the time. On a fresh checkout that is nothing (TS2307, loud); on the self-hosted
+ * runners, which keep their workspace between jobs, and in every agent worktree, it is the PREVIOUS build (TS2305,
+ * "has no exported member", about an export that exists in source). That is how three verify groups went red on
+ * 2026-09-02 the morning after `@intentic/base/async` gained `pollUntil`: `_computers/browser` depends on the
+ * package and referenced nothing, so it compiled against yesterday's declarations, and a second run of the same
+ * command passed. Fifteen packages had the same shape toward `@intentic/base` or `@intentic/constants`.
+ *
+ * Read from the two manifests alone: a dependency (or peer) that is itself emitted has to appear in the
+ * dependent's `references`. Dev dependencies are left out because the emit does not read them (tests are
+ * compiled by `tsconfig.test.json` after the dist exists). */
+const referencesOf = (configPath, dir) =>
+    [...readFileSync(configPath, "utf8").matchAll(/"path"\s*:\s*"([^"]+)"/g)].map((match) => join(dir, match[1]));
+const unreferenced = [];
+{
+    const emitted = new Map(packages.filter(({ pkg }) => emitsDist(pkg)).map(({ name, pkg }) => [pkg.name, name]));
+    for (const { name, dir, pkg } of packages) {
+        const config = join(dir, "tsconfig.json");
+        if (!emitted.has(pkg.name) || !existsSync(config)) {
+            continue;
+        }
+        const referenced = referencesOf(config, name);
+        const missing = Object.keys({ ...pkg.dependencies, ...pkg.peerDependencies })
+            .filter((dependency) => emitted.has(dependency) && !referenced.includes(emitted.get(dependency)))
+            .map((dependency) => `${dependency} (${emitted.get(dependency)})`);
+        if (missing.length > 0) {
+            unreferenced.push(
+                `${name}: depends on ${missing.join(", ")} but its tsconfig.json references no such project, so \`tsgo -b\` may build it against a stale dist`,
+            );
+        }
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
     ["A package's tests run on vitest's default 5s ceiling without saying so", budgetless],
+    ["A workspace package is mocked with an allow-list that misses a name the code under test imports", unmocked],
+    ["An emitted package depends on another without a project reference, so the emit may run in the wrong order", unreferenced],
     ["pnpm-lock.yaml is out of date: run `pnpm install` and commit it (this is CI's ERR_PNPM_OUTDATED_LOCKFILE)", drift],
     ["Self-hosted CI is reachable from a fork's pull request (docs/ci-runner.md, 'The fork boundary')", exposed],
     ["The release-body headings drifted apart (they are parsed, not prose)", headingDrift],
@@ -1172,6 +1318,8 @@ if (reports.some(([, lines]) => lines.length > 0)) {
 }
 console.log(`typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one`);
 console.log(`test budgets: every package running vitest names its ceiling instead of inheriting the 5s hang detector`);
+console.log(`mock coverage: every allow-list mock of a workspace package provides what the code under test imports from it`);
+console.log(`references: every emitted package names the emitted packages it depends on, so tsgo -b builds them first`);
 console.log(
     `lockfile: ${importers.length} importers record the specifiers their package.json declares, and ` +
         `${catalogued.values().reduce((all, entries) => all + entries.size, 0)} catalogued versions are the ones pnpm-workspace.yaml names`,
@@ -1307,9 +1455,7 @@ if (checksOnly) {
  * that are the whole point of publishing it. So there is nothing here for this pass to do, and attempting it
  * kills the gate before a test runs. */
 const BUILT_BY_VUE_TSC = new Set(["_editor/extension-ui"]);
-const needsDeclarations = packages.filter(
-    ({ name, pkg }) => !BUILT_BY_VUE_TSC.has(name) && /"\.\/dist\/[^"]+\.js"/.test(JSON.stringify(pkg.exports ?? "")),
-);
+const needsDeclarations = packages.filter(({ name, pkg }) => !BUILT_BY_VUE_TSC.has(name) && emitsDist(pkg));
 
 /* A package whose sources are themselves GENERATED has nothing for `tsgo -b` to read until its generator has
  * run: `_platform/prisma` is one re-export of `./generated/client.js`, which `prisma generate` writes and git

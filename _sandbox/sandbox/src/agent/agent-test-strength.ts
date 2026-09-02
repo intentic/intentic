@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { TEST_FILE } from "./agent-tests.js";
 
 /* WOULD THIS TEST HAVE PASSED BEFORE THE CHANGE IT TESTS?
  *
@@ -28,6 +28,12 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
  * the first time it crashed between the revert and the restore. The one thing written is a config file next to
  * the package's own, removed in a `finally` and overwritten by the next run if a crash ever leaves it behind.
  *
+ * IT IS ASKED AT THE STOP, of every test file the turn touched, by the `verify-tests` built-in (agent-tests.ts,
+ * rules/turn-ending.ts). It used to run inside a PostToolUse hook on the first edit of each test file, which
+ * measured the first draft rather than the finished test, only where the edit tools could see the edit, and under
+ * a 20-second budget sized to the agent's patience mid-turn. At the Stop the test is finished, the tree says
+ * which files were touched whatever wrote them, and the moment already waits on a check that takes minutes.
+ *
  * IT REPORTS, IT NEVER BLOCKS, and that is not timidity — two entirely legitimate cases pass this check:
  *   a test written BEFORE its implementation, which is red right now and which the agent can already see;
  *   a pure refactor, where a test that keeps passing is the whole point of the exercise.
@@ -40,32 +46,18 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 
 const exec = promisify(execFile);
 
-/* THE BUDGET IS THE AGENT'S PATIENCE, NOT THE SUITE'S NEED. This runs inside a PostToolUse hook, so every
- * millisecond here is a millisecond the Edit's result is withheld and the turn is stopped — and it fires on the
- * first edit of each test file, which is roughly three times in a median session and seven at p90.
- *
- * 90s was sized against "a cold suite on a loaded box", which is the wrong question: at that ceiling a handful of
- * slow packages could add ten minutes to a session, and the finding is worth a fraction of that. 20s buys the
- * fast packages — where most test edits land — and gives up on the slow ones, which is the right trade for a
- * signal that is advisory anyway. A timeout reads as "no answer" and says nothing, like every other failure in
- * this file, so the cost of giving up early is a missed report and never a wrong one. */
-const RUN_TIMEOUT_MS = 20_000;
+/* One package's suite for one file, at the Stop. 60s buys the slow packages a real answer where 20s (the old
+ * mid-turn budget) gave up on them; the built-in caps how many files it asks about, so the worst case at this
+ * moment is bounded by that cap times this. A timeout reads as "no answer" and says nothing, like every other
+ * failure in this file, so the cost of giving up is a missed report and never a wrong one. */
+const RUN_TIMEOUT_MS = 60_000;
 // What a package's own vitest config is called. Without one there is no suite to borrow settings from — jsdom,
 // setup files, the timeouts — and a generated config would run the test under different conditions than the
 // package does, which is a different measurement wearing this one's name.
 const PACKAGE_CONFIG = "vitest.config.ts";
 const GENERATED_CONFIG = ".intentic-head.vitest.config.mts";
 
-const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const SOURCE_FILE = /\.[cm]?[jt]sx?$|\.vue$/;
-
-const EDIT_TOOLS = "Edit|Write|NotebookEdit|mcp__hashline__edit|mcp__hashline__write";
-
-const editedPath = (input: unknown): string | undefined => {
-    const named = input as { file_path?: unknown; path?: unknown };
-    const path = typeof named.file_path === "string" ? named.file_path : named.path;
-    return typeof path === "string" && path !== "" ? path : undefined;
-};
 
 const git = async (cwd: string, ...args: readonly string[]): Promise<string | undefined> => {
     try {
@@ -114,29 +106,10 @@ export const changedSourceIn = (diff: string, repoRoot: string, packageDir: stri
         .map((line) => resolve(repoRoot, line))
         .filter((file) => file.startsWith(packageDir + sep) && !TEST_FILE.test(file) && SOURCE_FILE.test(file));
 
-interface TestStrengthDeps {
+export interface TestStrengthDeps {
     // The repository the turn is working in. Every path below is resolved against it, and git is run in it.
     readonly repoRoot: string;
 }
-
-/* One notice, in the words the agent needs to act. Names the test, says plainly what was and was not shown, and
- * gives the two legitimate answers out loud — because the failure mode of a bare "this test is weak" is a model
- * that dutifully adds assertions to a refactor's test until something goes red. */
-const notice = (testFile: string, changed: readonly string[]): string =>
-    [
-        `${testFile} passes against the code as it was before this turn's changes.`,
-        ``,
-        `It was re-run with ${changed.length === 1 ? "this file" : "these files"} restored to HEAD, and it still passed:`,
-        ...changed.map((file) => `  ${file}`),
-        ``,
-        `That means the test does not depend on what the change did. If the behaviour it covers broke tomorrow,`,
-        `this test would stay green.`,
-        ``,
-        `Two answers are legitimate and neither needs work: the implementation is not written yet, or this is a`,
-        `refactor and the test passing either way is the point. Otherwise, add the assertion that would fail`,
-        `without the change — usually at a boundary, and usually an exact value where the current assertion is a`,
-        `relational one.`,
-    ].join("\n");
 
 /* The generated config: the package's own, plus a `load` hook that answers with HEAD's text for the changed
  * files. `enforce: "pre"` so it runs before vite's own loader, and the plugin is repeated into each project
@@ -176,10 +149,11 @@ const configSource = (packageDir: string, head: ReadonlyMap<string, string>): st
     ].join("\n");
 };
 
-/* Runs the one test file against HEAD's source and answers whether it PASSED, which is the finding. Undefined
- * means no answer: nothing changed to compare against, the package has no config, git could not produce a
- * baseline, or the run itself broke. Every one of those is silence. */
-const passesAgainstHead = async (testFile: string, deps: TestStrengthDeps): Promise<readonly string[] | undefined> => {
+/* Runs the one test file against HEAD's source and answers whether it PASSED, which is the finding: the
+ * repo-relative source files that were restored for the run. Undefined means no answer: nothing changed to
+ * compare against, the package has no config, git could not produce a baseline, or the run itself broke. Every
+ * one of those is silence. */
+export const passesAgainstHead = async (testFile: string, deps: TestStrengthDeps): Promise<readonly string[] | undefined> => {
     const packageDir = packageOf(testFile, deps.repoRoot);
     if (packageDir === undefined) {
         return undefined;
@@ -231,46 +205,4 @@ const passesAgainstHead = async (testFile: string, deps: TestStrengthDeps): Prom
         rmSync(scratch, { recursive: true, force: true });
         rmSync(generated, { force: true });
     }
-};
-
-/* Takes the two raw values rather than a prepared object, so the caller has no branch of its own: the whole of
- * "is this on" lives here, in one place, instead of being half-decided at the call site the way a `deps ?? …`
- * would leave it. */
-export const testStrengthHooks = (enabled: boolean | undefined, repoRoot: string | undefined): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    if (enabled !== true || repoRoot === undefined) {
-        return {};
-    }
-    const deps: TestStrengthDeps = { repoRoot };
-    /* Scoped per turn, so a test file edited five times in a row is reported once. The model needs the fact once;
-     * repeating it is how a notice becomes something to scroll past. */
-    const told = new Set<string>();
-    return {
-        PostToolUse: [
-            {
-                matcher: EDIT_TOOLS,
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name !== "PostToolUse") {
-                            return {};
-                        }
-                        const file = editedPath(input.tool_input);
-                        if (file === undefined || !TEST_FILE.test(file) || told.has(file)) {
-                            return {};
-                        }
-                        told.add(file);
-                        const changed = await passesAgainstHead(resolve(file), deps);
-                        if (changed === undefined) {
-                            return {};
-                        }
-                        return {
-                            hookSpecificOutput: {
-                                hookEventName: "PostToolUse",
-                                additionalContext: notice(relative(deps.repoRoot, resolve(file)), changed),
-                            },
-                        };
-                    },
-                ],
-            },
-        ],
-    };
 };

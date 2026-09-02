@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import type { IsolationPlan, TurnPlacement } from "../agents/isolation.js";
 import { syncHookOutput } from "../testing.js";
 import { type DiagRequest, type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
+import type { ShellEdit, ShellEditTracker } from "./agent-shell-edits.js";
 
 const PLAN: IsolationPlan = {
     worktree: `${HISTORY_ROOT}/worktrees/c1`,
@@ -248,4 +249,94 @@ test("a file that goes clean and breaks again is reported again", async () => {
     expect(await fire(hooks, { file_path: "/work/src/app.ts" })).toEqual({});
     lines = ["src/app.ts:12:5: error TS2304: Cannot find name 'foo'."];
     expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2304");
+});
+
+/* THE SHELL IS AN EDITOR TOO. A tracker says which files a Bash command changed (agent-shell-edits.ts); the hooks
+ * snapshot before the command and review after it, through the same per-file reviewer an Edit goes through, so
+ * the once-per-turn notices and the repeat suppression hold across both doors. */
+const tracked = (changed: readonly ShellEdit[]): ShellEditTracker & { readonly calls: string[] } => {
+    const calls: string[] = [];
+    return {
+        calls,
+        before: async () => {
+            calls.push("before");
+        },
+        changed: async () => {
+            calls.push("changed");
+            return changed;
+        },
+    };
+};
+
+const bash = async (hooks: ReturnType<typeof editDiagnosticsHooks>, event: "PreToolUse" | "PostToolUse") => {
+    const matcher = hooks[event]?.find((entry) => entry.matcher === "Bash");
+    if (matcher === undefined) {
+        throw new Error(`no ${event} matcher for Bash`);
+    }
+    const input = {
+        hook_event_name: event,
+        tool_name: "Bash",
+        tool_input: { command: "sed -i s/a/b/ src/app.ts" },
+        tool_use_id: "t2",
+    } as unknown as HookInput;
+    return matcher.hooks[0]!(input, "t2", { signal: new AbortController().signal });
+};
+
+test("without a tracker no Bash hook is wired at all", () => {
+    const hooks = editDiagnosticsHooks(undefined, checked(), RESOLVABLE);
+    expect(hooks.PreToolUse).toBeUndefined();
+    expect(hooks.PostToolUse?.map((entry) => entry.matcher)).toEqual(["Edit|Write"]);
+});
+
+test("a TypeScript file a command changed is reviewed like an edit, in the agent's name, and the sentence names the command", async () => {
+    const reviewed: string[] = [];
+    const diag: DiagRunner = async ({ file }) => {
+        reviewed.push(file);
+        return { kind: "checked", lines: [`${file}:3:1: error TS2322: Type 'string' is not assignable to type 'number'.`] };
+    };
+    const tracker = tracked([
+        { path: `${WORKSPACE_ROOT}/src/app.ts`, onDisk: `${WORKSPACE_ROOT}/src/app.ts` },
+        { path: `${WORKSPACE_ROOT}/README.md`, onDisk: `${WORKSPACE_ROOT}/README.md` },
+    ]);
+    const hooks = editDiagnosticsHooks(undefined, diag, RESOLVABLE, tracker);
+    expect(await bash(hooks, "PreToolUse")).toEqual({});
+    const result = await bash(hooks, "PostToolUse");
+    const context = (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext;
+    expect(tracker.calls).toEqual(["before", "changed"]);
+    expect(reviewed).toEqual([`${WORKSPACE_ROOT}/src/app.ts`]);
+    expect(context).toContain(`TypeScript diagnostics for ${WORKSPACE_ROOT}/src/app.ts after this command:`);
+    expect(context).toContain("error TS2322");
+    expect(context).toContain("Fix the errors this command introduced before finishing.");
+});
+
+test("a command that changed nothing checkable, or nothing at all, is silent", async () => {
+    const hooks = editDiagnosticsHooks(
+        undefined,
+        withErrors,
+        RESOLVABLE,
+        tracked([{ path: `${WORKSPACE_ROOT}/notes.md`, onDisk: `${WORKSPACE_ROOT}/notes.md` }]),
+    );
+    expect(await bash(hooks, "PostToolUse")).toEqual({});
+    expect(await bash(editDiagnosticsHooks(undefined, withErrors, RESOLVABLE, tracked([])), "PostToolUse")).toEqual({});
+});
+
+test("an unanchored turn reviews the worktree copy of a file the command changed", async () => {
+    const reviewed: string[] = [];
+    const diag: DiagRunner = async ({ file }) => {
+        reviewed.push(file);
+        return { kind: "checked", lines: [] };
+    };
+    const tracker = tracked([{ path: `${WORKSPACE_ROOT}/src/app.ts`, onDisk: `${PLAN.worktree}/src/app.ts` }]);
+    await bash(editDiagnosticsHooks(UNANCHORED, diag, RESOLVABLE, tracker), "PostToolUse");
+    expect(reviewed).toEqual([`${PLAN.worktree}/src/app.ts`]);
+});
+
+test("the same report from an edit and then a command is said once", async () => {
+    const tracker = tracked([{ path: `${WORKSPACE_ROOT}/src/app.ts`, onDisk: `${WORKSPACE_ROOT}/src/app.ts` }]);
+    const hooks = editDiagnosticsHooks(undefined, withErrors, RESOLVABLE, tracker);
+    expect(
+        (syncHookOutput(await fire(hooks, { file_path: `${WORKSPACE_ROOT}/src/app.ts` })).hookSpecificOutput as { additionalContext?: string })
+            .additionalContext,
+    ).toContain("TS2304");
+    expect(await bash(hooks, "PostToolUse")).toEqual({});
 });

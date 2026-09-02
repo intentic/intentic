@@ -28,13 +28,24 @@ import { tsgoExePath } from "./tsgo.js";
  *     diagnostic in the file real. The old engine shimmed them to `any` at resolution time; filtering the
  *     errors of an unresolved import leaves the same `any` in the program and the same silence in the report. */
 
-// The compiler answers about one project; callers ask about files. The nearest tsconfig.json above a file is
-// its project, the same question ts.findConfigFile answers, asked without loading any compiler.
+/* The compiler answers about one project; callers ask about files. The nearest tsconfig.json above a file is
+ * its project, the same question ts.findConfigFile answers, asked without loading any compiler.
+ *
+ * EXCEPT FOR A TEST FILE, whose project is the one beside it. An emitting package's tsconfig.json excludes
+ * `*.test.ts` so test code stays out of dist, and a check of a test file against that config finds the file in no
+ * program: the compiler answers about everything else, the report is sliced to the asked file, and the slice is
+ * empty. "Checked, no errors" about a file nothing compiled: that is how a test file that did not compile reached
+ * main past a green per-edit check. The repo's convention keeps the tests' program in a tsconfig.test.json next
+ * to the build one (`pnpm typecheck` compiles it; AGENTS.md "Tests"), so a test file is checked against that
+ * whenever one exists, and against the build config, honestly empty, where a package has none. */
+const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 export const findTsconfig = (fromPath: string): string | undefined => {
-    for (let dir = dirname(resolve(fromPath)); ;) {
+    const file = resolve(fromPath);
+    for (let dir = dirname(file); ;) {
         const candidate = join(dir, "tsconfig.json");
         if (existsSync(candidate)) {
-            return candidate;
+            const tests = join(dir, "tsconfig.test.json");
+            return TEST_FILE.test(file) && existsSync(tests) ? tests : candidate;
         }
         const parent = dirname(dir);
         if (parent === dir) {

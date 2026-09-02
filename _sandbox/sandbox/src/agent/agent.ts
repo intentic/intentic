@@ -40,10 +40,11 @@ import { depsNoticeHooks } from "./agent-deps.js";
 import type { FreshnessResolver } from "../dependencies/registry-freshness.js";
 import type { WorkspacePins } from "../dependencies/workspace-pins.js";
 import { freshnessHooks } from "./agent-freshness.js";
-import { testStrengthHooks } from "./agent-test-strength.js";
 import { searchNoticeHooks } from "./agent-search.js";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
+import { createShellEditTracker, type DirtyFiles } from "./agent-shell-edits.js";
+import type { RuleCommandRun } from "../rules/rule-command.js";
 import { installSteeringHooks } from "./agent-installs.js";
 import type { ClassifiedInstall } from "../environment/runtime-installs.js";
 import { redactionHooks } from "./agent-redaction.js";
@@ -115,10 +116,10 @@ export interface AgentRequest {
     // What this workspace already pins, so a new package taking the catalog's version is not reported as
     // stale. Bound while planning, for the same reason as the resolver: the workspace root is still known.
     readonly workspacePins?: WorkspacePins;
-    /* Whether a test the agent just wrote is re-run against the code as it was before this turn
-     * (agent-test-strength.ts). One boolean rather than a mode: there is only one question to ask, and the answer
-     * is either wanted or it is not. False ⇒ no hook is wired and no suite is ever run. */
-    readonly testFaultDetection?: boolean;
+    /* The files the tree says are dirty, both names each, so a Bash command's edits get the same diagnostics an
+     * Edit does (agent-shell-edits.ts, agent-diagnostics.ts). Bound while planning, which is where the worktree
+     * layout that decides the two names is known. Absent ⇒ only the edit tools are reviewed. */
+    readonly dirtyFiles?: DirtyFiles;
     // Every image-scoped install this turn attempts, classified, for the runtime-install ledger behind the
     // environment drift sweep (environment/runtime-installs.ts). Silent: nothing about it reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
@@ -216,6 +217,12 @@ export interface AgentRequest {
     // Told when one of them actually said something, so the settings list can show which rules are earning
     // their place and which have been silent for three weeks.
     readonly onRuleFired?: (rule: Rule) => void;
+    // Told what every command rule's run said, so the land at the end of this turn can hold work whose own
+    // check went red (agent/turn-checks.ts, rules/rules.ts landingVerdict).
+    readonly onCheckRun?: (rule: Rule, run: RuleCommandRun) => void;
+    // The `verify-tests` built-in's answer for this turn's tree (agent-tests.ts), bound while planning because
+    // only the planner knows the tree and how to run a package's suite in it. Absent ⇒ the built-in says nothing.
+    readonly verifyTests?: () => Promise<string | undefined>;
     // Absolute Claude Code plugin checkout dirs from plugin-kind capabilities, rebuilt each turn (see
     // pluginDirsOf). The SDK's plugin loader parses their skills/agents/hooks/commands/.mcp.json, the daemon
     // never does, so the plugin format tracks Claude Code via SDK upgrades alone.
@@ -706,11 +713,6 @@ const baseOptions = (
              * about whether the version in it is the version the registry actually has. Mode "off" or no
              * resolver ⇒ no hook is wired and nothing is fetched. */
             freshnessHooks(request.dependencyFreshness, request.freshnessResolver, request.workspacePins),
-            /* The test just written, re-run against the code as it was before this turn (agent-test-strength.ts).
-             * Sits with the freshness check because they are the same posture from two directions: both know
-             * something the model cannot see about work it has just done, both hand it over as a fact, and
-             * neither refuses. Off ⇒ no hook, and no suite is ever run. */
-            testStrengthHooks(request.testFaultDetection, request.workspaceRoot),
             // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
             // the owner's action rules BEFORE they run, and hooks fire even under bypassPermissions, which is what
             // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
@@ -728,6 +730,8 @@ const baseOptions = (
                 installing: request.dependencyInstalling,
                 cwd: request.cwd,
                 onFired: request.onRuleFired,
+                onCheckRun: request.onCheckRun,
+                tests: request.verifyTests,
             }),
             // The worktree the namespace could not build. Only when this turn is isolated AND unanchored: with an
             // anchor the paths already mean the worktree, and rewriting them a second time would aim the tool at a
@@ -754,7 +758,12 @@ const baseOptions = (
             // Handed the turn's placement whole, because where the check STANDS is the difference between an answer
             // and a fiction: an anchored turn's dependencies exist only inside its namespace, so the check is placed
             // in there and speaks the agent's own paths (agent-diagnostics.ts).
-            editDiagnosticsHooks(request.isolation),
+            editDiagnosticsHooks(
+                request.isolation,
+                undefined,
+                undefined,
+                request.dirtyFiles === undefined ? undefined : createShellEditTracker(request.dirtyFiles),
+            ),
             // The same misreading the diagnostics hook heads off after an edit, headed off after a COMMAND: a test
             // or a build that failed on a package the tree is genuinely missing says so once, having checked first
             // (agent-deps.ts). Asked of the main checkout, which is what an isolated turn's dependencies are.

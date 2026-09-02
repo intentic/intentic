@@ -120,18 +120,19 @@ test(`"Look at what it changed" writes the view-ledger rule beside the other two
     expect(ruleById(`verify-removals`)).toBeUndefined();
 });
 
-test(`"Test what the change did" writes a setting and leaves the rules table alone`, async () => {
+test(`"Check what it did to the tests" writes the tests rule beside the other three`, async () => {
     const host = mount(AgentChecks);
 
-    // The fourth switch, and the only one in the group that is not a rule: it fires after a single tool call
-    // rather than at a moment the rules table can name, so there is nothing for a rule to express. Both halves
-    // are worth pinning — that the flag is written, and that nothing was appended to `rules` on the way past,
-    // which is what a copy-paste from the three rows above would have done.
+    // The fourth switch. It used to write a setting (a per-tool-call check with no moment to name); it now
+    // stands at the same moment as the three above and reads the tree the turn is about to land. Turning it on
+    // must leave the other three alone.
     toggleAt(host, 3).click();
     await Promise.resolve();
 
-    expect(settings.value.testFaultDetection).toBe(true);
-    expect(settings.value.rules ?? []).toEqual([]);
+    expect(ruleById(`verify-tests`)?.moment).toBe(`turn.ending`);
+    expect(ruleById(`verify-tests`)?.action).toEqual({ kind: `builtin`, name: `verify-tests` });
+    expect(ruleById(`verify-tests`)?.enabled).toBe(true);
+    expect(settings.value.rules).toHaveLength(1);
 });
 
 test(`switching it back off disables the rule rather than losing where the user put it`, async () => {

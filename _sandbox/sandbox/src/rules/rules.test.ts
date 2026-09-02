@@ -89,4 +89,28 @@ describe(`the landing verdict`, () => {
         expect(landingVerdict(rules, { paths: [`db/migrations/0001.sql`] }, undefined).land).toBe(false);
         expect(landingVerdict(rules, { paths: [`docs/intro.md`] }, undefined).land).toBe(true);
     });
+
+    /* A red check holds against everything that was decided before the check ran: the unconditional allow rule,
+     * and the owner's own press on the card. The one thing written ABOUT red work is a rule naming it. */
+    test(`a turn whose own check failed is held, whatever an unconditional rule or the override says`, () => {
+        const facts = { outcome: `checks-failed` as const };
+        expect(landingVerdict([verdict(`land-everything`, `allow`)], facts, undefined)).toEqual({ land: false, held: `checks-failed` });
+        expect(landingVerdict([verdict(`land-everything`, `allow`)], facts, true)).toEqual({ land: false, held: `checks-failed` });
+        expect(landingVerdict([], facts, true)).toEqual({ land: false, held: `checks-failed` });
+    });
+
+    test(`a rule that names checks-failed decides red work, either way`, () => {
+        const facts = { outcome: `checks-failed` as const, repos: [`docs`] };
+        const lands = verdict(`land-red-docs`, `allow`, { when: { outcome: [`checks-failed`], repo: `docs` } });
+        expect(landingVerdict([verdict(`land-everything`, `allow`), lands], facts, undefined)).toEqual({ land: true, rule: lands });
+        // Named but for another repo: not a decision about this work.
+        expect(landingVerdict([lands], { ...facts, repos: [`api`] }, undefined)).toEqual({ land: false, held: `checks-failed` });
+        const holds = verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } });
+        expect(landingVerdict([holds], facts, true)).toEqual({ land: false, rule: holds });
+    });
+
+    test(`a clean turn is decided exactly as before`, () => {
+        expect(landingVerdict([verdict(`land-everything`, `allow`)], { outcome: `clean` }, undefined).land).toBe(true);
+        expect(landingVerdict([verdict(`land-everything`, `allow`)], { outcome: `clean` }, false).land).toBe(false);
+    });
 });

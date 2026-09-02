@@ -37,12 +37,21 @@
  *   1. the gates that read the checkout and nothing else: the prepass invariants and the control-character scan
  *      (what the hook has always run), the invariant registry's exhaustiveness and the daemon's module boundaries
  *      (verify-invariants.mjs, verify-daemon-boundaries.mjs, each milliseconds, each red on main at some point with
- *      nothing running it), and the linter, which the turn-ending check already holds every agent edit to and
- *      which is the one step here that needs node_modules, so where pnpm is absent it says so and stands down
- *      rather than refusing a push over a linter CI does not run;
+ *      nothing running it), the assertion ratchet over the range's test files (assertion-ratchet.mjs: a test file
+ *      may get stronger by itself and weaker only with a `test!:` subject or a `Test-Note:` trailer saying why),
+ *      the manifest/lockfile lockstep below, and the linter, which the turn-ending check already holds every agent
+ *      edit to and which is the one step here that needs node_modules, so where pnpm is absent it says so and
+ *      stands down rather than refusing a push over a linter CI does not run;
  *   2. `cargo fmt --check` on every Rust crate the push touches. ic-check and desktop-check went red on
  *      formatting alone five times in two weeks, and rustfmt is on this image and takes 0.2s. clippy stays in CI:
  *      it needs a compile, and for the desktop crate a webkit this image does not carry.
+ *
+ * THE MANIFEST AND THE LOCKFILE LEAVE TOGETHER. Nine `fix: lock` commits in two weeks were the same event: an
+ * agent's landed work edited a package.json, the daemon's reinstall rewrote pnpm-lock.yaml beside it, and the
+ * owner committed the first without the second. The working tree passes every gate here, because the suite reads
+ * the tree; CI's checkout fails prepass invariant 3 in the first minute. That is the one place the gap in the
+ * last paragraph of this header has a known shape, so it is refused by name: a push whose range commits any of
+ * package.json, pnpm-workspace.yaml or pnpm-lock.yaml while the tree holds an uncommitted change to any of them.
  *
  * ONE MEASUREMENT PER TREE. The app's rule runs first, then the daemon pushes, and the hook fires on the same tree
  * a minute later; running the suite twice would double the wait for nothing. So a verdict is recorded against a
@@ -158,11 +167,50 @@ const changedPaths = () => {
     return paths;
 };
 
+// The commit ranges the push carries, `[base, head]` each, or none where a base cannot be resolved (a new branch
+// with no upstream, a remote sha this clone lacks). The ratchet reads committed content, so it has nothing to say
+// about an unresolvable range and says so rather than guessing at one.
+const ranges = () =>
+    pushes.flatMap(({ local, remote }) => {
+        const base = remote === undefined ? undefined : git("merge-base", remote, local)?.trim();
+        return base === undefined || base === local ? [] : [[base, local]];
+    });
+
 /* ── tier 1: readable from the checkout ──────────────────────────────────────────────────────────────────── */
 step("prepass invariants", process.execPath, [join(root, "_tools/scripts/prepass.mjs"), "--checks-only"]);
 step("control-character scan", process.execPath, [join(root, "_tools/scripts/control-chars.mjs")]);
 step("invariant registry", process.execPath, [join(root, "_tools/scripts/verify-invariants.mjs")]);
 step("daemon boundaries", process.execPath, [join(root, "_tools/scripts/verify-daemon-boundaries.mjs")]);
+{
+    const measured = ranges();
+    if (measured.length === 0) {
+        say("assertion ratchet: no upstream to measure the range against, so the test files leave unmeasured (CI measures the tree they land in)");
+    }
+    for (const [base, head] of measured) {
+        step(`assertion ratchet (${base.slice(0, 9)}..${head.slice(0, 9)})`, process.execPath, [
+            join(root, "_tools/scripts/assertion-ratchet.mjs"),
+            base,
+            head,
+        ]);
+    }
+}
+const changed = changedPaths();
+{
+    const LOCKSTEP = /(^|\/)package\.json$|^pnpm-workspace\.yaml$|^pnpm-lock\.yaml$/;
+    const committed = changed === undefined ? [] : [...changed].filter((path) => LOCKSTEP.test(path));
+    const uncommitted = (git("status", "--porcelain", "--untracked-files=all") ?? "")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.slice(3).trim())
+        .filter((path) => LOCKSTEP.test(path));
+    if (committed.length > 0 && uncommitted.length > 0) {
+        fail(
+            `the push commits ${committed.join(", ")} while ${uncommitted.join(", ")} ${uncommitted.length === 1 ? "is" : "are"} changed and uncommitted ` +
+                `beside it; CI's checkout gets the first without the second and fails prepass invariant 3 (the lockfile no longer records the manifest). ` +
+                `Commit them together`,
+        );
+    }
+}
 {
     const lint = spawnSync("pnpm", ["lint"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
     if (lint.error !== undefined) {
@@ -186,7 +234,6 @@ const crates = (dir, depth) =>
         }
         return entry.name === "Cargo.toml" ? [relative(root, dir)] : [];
     });
-const changed = changedPaths();
 const touched = crates(root, 0).filter(
     (crate) => changed === undefined || [...changed].some((path) => path === crate || path.startsWith(`${crate}/`)),
 );

@@ -10,6 +10,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],
-    "references": [{ "path": "../sandbox-contract" }],
+    "references": [{ "path": "../../_tools/base" }, { "path": "../../_tools/constants" }, { "path": "../sandbox-contract" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

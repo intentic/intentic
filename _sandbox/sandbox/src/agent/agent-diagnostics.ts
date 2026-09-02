@@ -1,8 +1,9 @@
 import { extname } from "node:path";
 import { type CheckPlacement, diagnose } from "@intentic/lsp/client";
-import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../agents/isolation.js";
 import { modulesNear, type NearbyModules } from "../workspace/dependency-drift.js";
+import type { ShellEditTracker } from "./agent-shell-edits.js";
 
 /* Post-edit diagnostics feedback, the VSCode Claude Code loop, reproduced daemon-side: after every native
  * Edit/Write the touched file is type-checked and any COMPILE ERRORS ride back to the model as additionalContext,
@@ -36,6 +37,9 @@ const CHECKED_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx"
 // Bound the feedback so a cascading break can't flood the transcript: errors only, first lines, capped chars.
 const MAX_LINES = 20;
 const MAX_CHARS = 4_000;
+// How many files one shell command's diagnostics cover. A script that rewrote a hundred files gets the first
+// twenty checked, one compiler run per package either way, and a transcript that is still readable.
+const SHELL_FILES = 20;
 
 // Ask the compiler about one file. Undefined means "no answer to be had", no TypeScript project above the
 // file, which must stay distinguishable from "checked, and clean". `unavailable` is the checker itself
@@ -118,10 +122,17 @@ const staleNote = (missing: readonly string[]): string =>
     "a mistake in this code: do not edit working source to satisfy one, and do not run an install; the daemon " +
     "installs them once this turn ends, so this package's own checks are available next turn, not this one.";
 
-// PostToolUse on the native Edit/Write: type-check the touched file and feed compile errors back. Silent on
-// clean files, non-TS files, and any failure, feedback must never break or stall an edit. Created once
-// per turn (baseOptions), so `explained` scopes each standing notice to one telling per turn: the model needs
-// a reason once, not stapled to every edit it makes for the rest of the conversation.
+/* PostToolUse on the native Edit/Write, AND on Bash: type-check the touched files and feed compile errors back.
+ * Silent on clean files, non-TS files, and any failure, feedback must never break or stall an edit. Created once
+ * per turn (baseOptions), so `explained` scopes each standing notice to one telling per turn: the model needs
+ * a reason once, not stapled to every edit it makes for the rest of the conversation.
+ *
+ * THE SHELL IS AN EDITOR TOO. A model told to prefer `sed -i`, a heredoc or a script (the harness's own
+ * bypass-mode instructions say exactly that) writes files this hook never heard of when it listened to the edit
+ * tools alone, and gets no diagnostics for them: how a test file that did not compile reached main with every
+ * per-edit check green. So when a tracker is supplied (agent-shell-edits.ts), the tree is snapshotted before each
+ * Bash command and read after it, and every TypeScript file the command changed is reviewed exactly as an Edit
+ * would have been, in the agent's own names. */
 /* WHERE THE CHECK STANDS, which decides whether it can answer at all.
  *
  * An isolated turn names its files inside its own mount namespace (/work/...), which from the daemon, where
@@ -145,6 +156,7 @@ export const editDiagnosticsHooks = (
     placement?: TurnPlacement,
     diag: DiagRunner = runNativeDiag,
     modules: ModulesProbe = modulesNear,
+    shell?: ShellEditTracker,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const plan = placement?.plan;
     const anchor = placement?.anchor;
@@ -162,7 +174,89 @@ export const editDiagnosticsHooks = (
     // went out verbatim 2,923 times across the transcripts. Per file rather than global: two files failing the
     // same way are two facts.
     const lastReport = new Map<string, string>();
+    // The absent-tree and refused-checker cases are one fact, no truthful diagnostics from here, said once per
+    // turn and keyed on "".
+    const unavailableOnce = (): string | undefined => {
+        if (explained.has("")) {
+            return undefined;
+        }
+        explained.add("");
+        return UNAVAILABLE_NOTE;
+    };
+    // Whether a drifted tree is news: keyed by the missing names themselves, so an install that fixed half the
+    // list has changed what the model needs to know and is allowed to say so again.
+    const firstSighting = (missing: readonly string[]): boolean => {
+        const key = missing.join(",");
+        if (missing.length === 0 || explained.has(key)) {
+            return false;
+        }
+        explained.add(key);
+        return true;
+    };
+    /* One file's review, in the words the model reads, or undefined for nothing to say. `how` names what just
+     * changed the file, "this edit" or "this command", because the sentence is about what the model just did. */
+    const review = async (file: string, how: string): Promise<string | undefined> => {
+        const target = anchor === undefined ? inWorktree(file, plan) : file;
+        // Anchored, this reads the MAIN checkout's installed tree, which is the right answer,
+        // because that tree is literally what the namespace binds in over the worktree's empty
+        // directories, so it is what the agent resolves against. The one thing it cannot see is
+        // a manifest the agent edited THIS turn: a dependency added and not yet installed reads
+        // as resolvable here, and its unresolved-import error arrives without the sentence
+        // explaining it. The errors are still right; only the reason for them goes unsaid.
+        const nearby = await modules(target);
+        if (nearby.kind === "absent") {
+            return unavailableOnce();
+        }
+        const output = await diag({ file: target, placement: checkPlacement, named: asAgentNames });
+        if (output?.kind === "unavailable") {
+            return unavailableOnce();
+        }
+        const stale = firstSighting(nearby.missing);
+        const errors = output === undefined ? undefined : errorLines(output.lines);
+        if (errors === undefined) {
+            // Forgotten rather than remembered as empty: a file that came clean and breaks again
+            // later is news, and would be swallowed by a match against a stale entry.
+            lastReport.delete(file);
+            // Nothing to report about the edit itself, but a first sighting of a drifted tree
+            // is still worth the one sentence, because the next tool the model reaches for
+            // (a test, a lint) will fail on the same missing package.
+            return stale ? staleNote(nearby.missing) : undefined;
+        }
+        return report(file, how, errors, stale ? nearby.missing : undefined);
+    };
+    // The errors themselves, unless they are this file's last report repeated with nothing new around them: a
+    // first drift sentence is new even when the errors under it are not.
+    const report = (file: string, how: string, errors: string, missing: readonly string[] | undefined): string | undefined => {
+        const repeat = lastReport.get(file) === errors;
+        lastReport.set(file, errors);
+        if (repeat && missing === undefined) {
+            return undefined;
+        }
+        return (
+            `TypeScript diagnostics for ${file} after ${how}:\n${errors}\n` +
+            `${missing === undefined ? "" : `${staleNote(missing)}\n`}Fix the errors ${how} introduced before finishing.`
+        );
+    };
+    const said = (context: string | undefined): HookJSONOutput =>
+        context === undefined ? {} : { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } };
     return {
+        ...(shell === undefined
+            ? {}
+            : {
+                  PreToolUse: [
+                      {
+                          matcher: "Bash",
+                          hooks: [
+                              async (input) => {
+                                  if (input.hook_event_name === "PreToolUse") {
+                                      await shell.before();
+                                  }
+                                  return {};
+                              },
+                          ],
+                      },
+                  ],
+              }),
         PostToolUse: [
             {
                 matcher: "Edit|Write",
@@ -175,68 +269,35 @@ export const editDiagnosticsHooks = (
                         if (typeof file !== "string" || !CHECKED_EXTENSIONS.has(extname(file))) {
                             return {};
                         }
-                        const target = anchor === undefined ? inWorktree(file, plan) : file;
-                        // Anchored, this reads the MAIN checkout's installed tree, which is the right answer,
-                        // because that tree is literally what the namespace binds in over the worktree's empty
-                        // directories, so it is what the agent resolves against. The one thing it cannot see is
-                        // a manifest the agent edited THIS turn: a dependency added and not yet installed reads
-                        // as resolvable here, and its unresolved-import error arrives without the sentence
-                        // explaining it. The errors are still right; only the reason for them goes unsaid.
-                        const nearby = await modules(target);
-                        if (nearby.kind === "absent") {
-                            if (explained.has("")) {
-                                return {};
-                            }
-                            explained.add("");
-                            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: UNAVAILABLE_NOTE } };
-                        }
-                        const output = await diag({ file: target, placement: checkPlacement, named: asAgentNames });
-                        // The checker refusing is the same fact as an absent tree, no truthful diagnostics from
-                        // here, and shares its once-per-turn telling, keyed on "".
-                        if (output !== undefined && output.kind === "unavailable") {
-                            if (explained.has("")) {
-                                return {};
-                            }
-                            explained.add("");
-                            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: UNAVAILABLE_NOTE } };
-                        }
-                        // Keyed by the names themselves: an install that fixed half the list has changed what
-                        // the model needs to know, and should be allowed to say so again.
-                        const key = nearby.missing.join(",");
-                        const stale = nearby.missing.length > 0 && !explained.has(key);
-                        if (stale) {
-                            explained.add(key);
-                        }
-                        const errors = output === undefined ? undefined : errorLines(output.lines);
-                        if (errors === undefined) {
-                            // Forgotten rather than remembered as empty: a file that came clean and breaks again
-                            // later is news, and would be swallowed by a match against a stale entry.
-                            lastReport.delete(file);
-                            // Nothing to report about the edit itself, but a first sighting of a drifted tree
-                            // is still worth the one sentence, because the next tool the model reaches for
-                            // (a test, a lint) will fail on the same missing package.
-                            return stale
-                                ? { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: staleNote(nearby.missing) } }
-                                : {};
-                        }
-                        const repeat = lastReport.get(file) === errors;
-                        lastReport.set(file, errors);
-                        // Silent only when there is nothing new in it at all: a first drift sentence is new even
-                        // when the errors under it are not.
-                        if (repeat && !stale) {
-                            return {};
-                        }
-                        return {
-                            hookSpecificOutput: {
-                                hookEventName: "PostToolUse",
-                                additionalContext:
-                                    `TypeScript diagnostics for ${file} after this edit:\n${errors}\n` +
-                                    `${stale ? `${staleNote(nearby.missing)}\n` : ""}Fix the errors this edit introduced before finishing.`,
-                            },
-                        };
+                        return said(await review(file, "this edit"));
                     },
                 ],
             },
+            ...(shell === undefined
+                ? []
+                : [
+                      {
+                          matcher: "Bash",
+                          hooks: [
+                              async (input: HookInput): Promise<HookJSONOutput> => {
+                                  if (input.hook_event_name !== "PostToolUse") {
+                                      return {};
+                                  }
+                                  const edits = (await shell.changed())
+                                      .filter((edit) => CHECKED_EXTENSIONS.has(extname(edit.path)))
+                                      .slice(0, SHELL_FILES);
+                                  const notes: string[] = [];
+                                  for (const edit of edits) {
+                                      const context = await review(edit.path, "this command");
+                                      if (context !== undefined) {
+                                          notes.push(context);
+                                      }
+                                  }
+                                  return said(notes.length === 0 ? undefined : notes.join("\n\n"));
+                              },
+                          ],
+                      },
+                  ]),
         ],
     };
 };

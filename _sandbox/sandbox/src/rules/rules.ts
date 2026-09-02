@@ -1,4 +1,4 @@
-import type { Rule, RuleCondition, RuleMoment } from "@intentic/sandbox-contract";
+import type { Rule, RuleCondition, RuleMoment, RuleOutcome } from "@intentic/sandbox-contract";
 import { globToRegExp } from "@intentic/iq-engine";
 
 /* WHICH RULES STAND AT THIS MOMENT, the whole of rule resolution, and deliberately the whole of it in one
@@ -39,7 +39,7 @@ export interface RuleFacts {
     // rule naming one of them means "if this touches api", not "if this is only api".
     readonly repos?: readonly string[] | undefined;
     readonly paths?: readonly string[] | undefined;
-    readonly outcome?: "clean" | "error" | "conflict" | undefined;
+    readonly outcome?: RuleOutcome | undefined;
 }
 
 export const conditionHolds = (when: RuleCondition | undefined, facts: RuleFacts): boolean => {
@@ -86,8 +86,30 @@ export const matching = (rules: readonly Rule[], moment: RuleMoment, facts: Rule
  * rather than being restated: work held on its branch costs one press to release, work that landed unread has
  * to be noticed before it can be undone, and the empty table should pick the recoverable mistake.
  *
- * The per-agent override still wins over all of it, an owner who pressed hold on one card meant that card. */
-export const landingVerdict = (rules: readonly Rule[], facts: RuleFacts, override: boolean | undefined): { land: boolean; rule?: Rule } => {
+ * The per-agent override still wins over the table, an owner who pressed hold on one card meant that card.
+ *
+ * A TURN WHOSE OWN CHECK FAILED IS HELD, and that one holds against the override too. The `turn.ending` command
+ * rule ran on this exact tree and went red, the model was told and could not repair it, and the fact rides here
+ * as `outcome: "checks-failed"` (agent/turn-checks.ts). An override was pressed on a card before that check ever
+ * ran, and an unconditional `allow` rule was written about work in general, so neither is a decision about red
+ * work. The one thing that is, is a rule that names `checks-failed` in its condition: an owner who wrote that
+ * meant it, and their verdict stands. Everything else waits on the branch as "Ready to land", which is the
+ * recoverable mistake; red work that landed unread used to be found by the push gate, an hour and a click later,
+ * and before that by CI. */
+export const landingVerdict = (
+    rules: readonly Rule[],
+    facts: RuleFacts,
+    override: boolean | undefined,
+): { land: boolean; rule?: Rule; held?: "checks-failed" } => {
+    if (facts.outcome === "checks-failed") {
+        const rule = standing(rules, "agent.finished").find(
+            (candidate) => candidate.when?.outcome?.includes("checks-failed") === true && conditionHolds(candidate.when, facts),
+        );
+        if (rule === undefined || rule.action.kind !== "verdict") {
+            return { land: false, held: "checks-failed" };
+        }
+        return { land: rule.action.verdict === "allow", rule };
+    }
     if (override !== undefined) {
         return { land: override };
     }

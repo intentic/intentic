@@ -8,5 +8,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../../_tools/base" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

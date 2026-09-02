@@ -67,9 +67,9 @@ const pending = new Set<string>();
 /* The rule the owner stood here, or none. `moment` is re-checked though the planner already filtered on it,
  * the same belt the hook path keeps: a rule firing at a moment it was not written for is silent and wrong.
  *
- * Only the ledger-reading builtins. An `instruct` rule's text and a `command` rule's runner are the hook path's
- * to deliver, and a command rule in particular needs the turn's own tmux runner in the turn's own cwd, which
- * no longer exists by the time this runs. */
+ * Only the builtins that read a record or the tree. An `instruct` rule's text and a `command` rule's runner are
+ * the hook path's to deliver, and a command rule in particular needs the turn's own tmux runner in the turn's
+ * own cwd, which no longer exists by the time this runs. */
 const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly string[]): Rule | undefined =>
     rules.find(
         (rule) =>
@@ -92,6 +92,9 @@ export interface VerifyNudge {
     // spells them (the hook path's rule, kept identical here so the same glob cannot mean two things).
     readonly cwd?: string | undefined;
     readonly onFired?: ((rule: Rule) => void) | undefined;
+    // The `verify-tests` built-in's answer, bound by the planner to the turn's tree (agent-tests.ts). Optional
+    // for the same reason `view` is: a caller without one cannot fire the rule that reads it.
+    readonly tests?: (() => Promise<string | undefined>) | undefined;
 }
 
 /* Decide, then deliver. Returns the message it sent for the tests; undefined means it said nothing, which is
@@ -131,6 +134,13 @@ export const nudgeUnverifiedWork = async (nudge: VerifyNudge): Promise<string | 
         const message = verifyUiEditsMessage(nudge.view);
         if (message !== undefined) {
             asks.push({ rule: viewing, message });
+        }
+    }
+    const tests = nudge.tests === undefined ? undefined : builtinRule(nudge.rules, "verify-tests", paths);
+    if (tests !== undefined && nudge.tests !== undefined) {
+        const message = await nudge.tests();
+        if (message !== undefined) {
+            asks.push({ rule: tests, message });
         }
     }
     if (asks.length === 0) {

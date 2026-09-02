@@ -372,15 +372,33 @@ reports the profile.
   and the only opinion in the feature: it supplies the NAME of a replacement, while whether the incumbent is
   actually finished stays a registry measurement, so an entry that stops being true stops being said. Off by
   default (`dependencyFreshness`); off wires no hook and contacts nothing.
-- [src/agent/agent-test-strength.ts](src/agent/agent-test-strength.ts): whether a test the agent just wrote would
-  have passed BEFORE the change it tests. A test that passes against the old code does not test the new code, and
-  nothing else in the loop can see it: it type-checks, it lints, the suite is green. The hook re-runs the one file
+- [src/agent/agent-tests.ts](src/agent/agent-tests.ts): the `verify-tests` built-in, what a turn did to its tests,
+  read at the Stop over every test file the tree says the turn touched. Two measurements: the assertion ratchet
+  (the file's exact matchers, loose matchers and pinned literal text against the same file at HEAD, reporting a
+  downgrade or a narrowing; the same measure the push gate refuses an undeclared weakening with,
+  `_tools/scripts/assertion-measure.mjs`, and the two are held to each other by a test), and the fault check
+  below. The first test file a turn edits is also told the two rules that apply at that moment, once. Reports,
+  never refuses: a refactor from prose to structure and a test written ahead of its implementation both pass
+  honestly.
+- [src/agent/agent-test-strength.ts](src/agent/agent-test-strength.ts): whether a test the agent wrote would have
+  passed BEFORE the change it tests. A test that passes against the old code does not test the new code, and
+  nothing else in the loop can see it: it type-checks, it lints, the suite is green. The check re-runs the one file
   with the turn's changed source served from HEAD through a vite `load` hook, so the working tree is never written
   over — a check that reverted files in place would trade a whole turn's work for a lint-grade signal the first
   time it died between the revert and the restore. Same package only, because a sibling package resolves to its
-  built output where there is nothing to swap. It reports and never blocks, for a reason that is not timidity: a
-  test written before its implementation and a pure refactor both pass this honestly. Off by default
-  (`testFaultDetection`); off wires no hook and runs no suite.
+  built output where there is nothing to swap. Asked at the Stop by `verify-tests` (above) rather than on the
+  first edit of each test file, where it measured the first draft under a 20-second budget and only where the edit
+  tools could see the edit. Off with the rule; off runs no suite.
+- [src/agent/agent-shell-edits.ts](src/agent/agent-shell-edits.ts): which files a shell command changed, for the
+  hooks that only ever heard the edit tools. The dirty paths of the turn's repos and their mtimes are snapshotted
+  before every Bash command and compared after it, so a file `sed -i` or a heredoc rewrote gets the same type
+  diagnostics an Edit does (agent-diagnostics.ts), in the agent's own names. Two snapshots rather than a rolling
+  comparison, so the edit tools' work between two commands is never charged to the second.
+- [src/agent/turn-checks.ts](src/agent/turn-checks.ts): what the turn's own `turn.ending` command check said, kept
+  per conversation from the Stop that ran it to the land that reads it. The last run wins, which is what the
+  re-measuring follow-up loop (rules/turn-ending.ts) is for; a turn whose check is still red lands as
+  `outcome: "checks-failed"` and is held on its branch whatever the landing rule or the card's override says
+  (rules/rules.ts landingVerdict), with the feed naming the check.
 - [src/extensions/extension-updates.ts](src/extensions/extension-updates.ts): the update lifecycle for git-installed
   extensions: the periodic registry comparison (update badges, blocked-listing advisories that pull the switch), the
   official-registry admission check (an unaudited sha never becomes an install or update offer),
@@ -762,7 +780,7 @@ conversation's worktree instead of a path that still reaches the shared checkout
   full. The composition it hands back carries the moved `base` per repo, because landing from the pre-sync
   record would hand `anchorOf` a sha the rebase has just orphaned.
 - **A rendered surface gets a different question asked of it than a parser does** (`src/agent/agent-viewing.ts`,
-  the `verify-ui-edits` built-in beside `verify-edits` and `verify-removals`). The proof ledger weighs edited
+  the `verify-ui-edits` built-in beside `verify-edits`, `verify-removals` and `verify-tests`). The proof ledger weighs edited
   code against the checks that ran, and for a reducer or a route that is the whole story. It is structurally
   unable to speak to a clipped label: a stylesheet edit type-checks, keeps every test green, and ships a button
   with its text cut off. So a second ledger counts a different population against different evidence — which

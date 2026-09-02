@@ -6,6 +6,7 @@ import { describe, expect, test } from "vitest";
 import type { ScriptsProbe } from "../agent/agent-verification.js";
 import { syncHookOutput } from "../testing.js";
 import type { RuleCommandRun } from "./rule-command.js";
+import { TEST_WRITING_NOTE } from "../agent/agent-tests.js";
 import { type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";
 
 const SCRIPTS: ScriptsProbe = async () => ["test", "lint", "dev"];
@@ -338,10 +339,39 @@ describe("the follow-up budget", () => {
         expect(await stop(hooks)).toBeUndefined();
     });
 
-    test("the SDK's own re-entry flag suppresses the ask on its own", async () => {
-        const hooks = armed([VERIFY]);
+    /* The SDK sets its re-entry flag on the Stop AFTER a continuation, which is the Stop that has to re-measure
+     * the repair. Honouring the flag meant the check ran once, went red, the model edited, and the turn ended on
+     * a tree nothing had looked at since. The budget is the guard; the flag is not read. */
+    test("the SDK's re-entry flag does not suppress the second round: the repair is re-measured", async () => {
+        const runs: string[] = [];
+        const check = rule({ id: "check", action: { kind: "command", command: "pnpm verify", timeoutMs: 900_000 } });
+        const hooks = armed([check], {
+            runCommand: async () => {
+                runs.push("ran");
+                return { status: "failed", exitCode: 1, output: "1 failed" };
+            },
+        });
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        expect(await stop(hooks)).toContain("exited 1");
+        expect(await stop(hooks, true)).toContain("exited 1");
+        expect(runs).toEqual(["ran", "ran"]);
         expect(await stop(hooks, true)).toBeUndefined();
+    });
+
+    test("a check that passes on the second round ends the turn silently, and the land is told the last verdict", async () => {
+        const verdicts: string[] = [];
+        let attempt = 0;
+        const check = rule({ id: "check", action: { kind: "command", command: "pnpm verify", timeoutMs: 900_000 } });
+        const hooks = armed([check], {
+            runCommand: async () => {
+                attempt += 1;
+                return attempt === 1 ? { status: "failed", exitCode: 1, output: "1 failed" } : { status: "passed", exitCode: 0, output: "ok" };
+            },
+            onCheckRun: (fired, run) => verdicts.push(`${fired.id}:${run.status}`),
+        });
+        expect(await stop(hooks)).toContain("exited 1");
+        expect(await stop(hooks, true)).toBeUndefined();
+        expect(verdicts).toEqual(["check:failed", "check:passed"]);
     });
 
     // The budget counts ASKS, not rules: three rules that each want a word are one follow-up carrying three
@@ -354,6 +384,33 @@ describe("the follow-up budget", () => {
         expect(first).toContain("Update the changelog.");
         expect(await stop(hooks)).toEqual(expect.any(String));
         expect(await stop(hooks)).toBeUndefined();
+    });
+});
+
+describe("the verify-tests built-in", () => {
+    const TESTS: Rule = {
+        id: "verify-tests",
+        label: "Check what it did to the tests",
+        moment: "turn.ending",
+        action: { kind: "builtin", name: "verify-tests" },
+        enabled: true,
+    };
+
+    // The answer is the planner's (agent-tests.ts, bound to the turn's tree); this moment only carries it.
+    test("says what the tree said about the turn's tests, and nothing without a tree to read", async () => {
+        const hooks = armed([TESTS], { tests: async () => "src/a.test.ts got weaker than at HEAD" });
+        expect(await stop(hooks)).toContain("src/a.test.ts got weaker than at HEAD");
+        expect(await stop(armed([TESTS], { tests: async () => undefined }))).toBeUndefined();
+        expect(await stop(armed([TESTS]))).toBeUndefined();
+    });
+
+    test("the first test file a turn edits gets the two rules that apply to it, once, and only when the rule stands", async () => {
+        const hooks = armed([TESTS]);
+        const first = await edit(hooks, `${WORKSPACE_ROOT}/src/a.test.ts`);
+        expect((syncHookOutput(first).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext).toBe(TEST_WRITING_NOTE);
+        expect(await edit(hooks, `${WORKSPACE_ROOT}/src/b.test.ts`)).toEqual({});
+        expect(await edit(armed([TESTS]), `${WORKSPACE_ROOT}/src/a.ts`)).toEqual({});
+        expect(await edit(armed([VERIFY]), `${WORKSPACE_ROOT}/src/a.test.ts`)).toEqual({});
     });
 });
 

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 import {
     type AgentCapabilities,
     type AgentEvent,
@@ -13,7 +14,7 @@ import {
     envSuffix,
 } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type IsolationAnchor, nsenterPrefix } from "../agents/isolation.js";
+import { fromWorktree, type IsolationAnchor, nsenterPrefix } from "../agents/isolation.js";
 import { admitTurn, readMemoryHeadroom } from "../platform/memory-admission.js";
 import { createFreshnessResolver } from "../dependencies/registry-freshness.js";
 import { createWorkspacePins } from "../dependencies/workspace-pins.js";
@@ -48,7 +49,10 @@ import type { Services } from "../composition.js";
 import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { createDiagnosticsServer } from "../logs/diagnostics-tools.js";
-import { runRuleCommand } from "../rules/rule-command.js";
+import { type RuleCommandRun, runRuleCommand } from "../rules/rule-command.js";
+import { verifyTestsMessage } from "./agent-tests.js";
+import { passesAgainstHead } from "./agent-test-strength.js";
+import { recordCheckVerdict } from "./turn-checks.js";
 import { standing } from "../rules/rules.js";
 import { turnEndingNote } from "../rules/turn-ending-note.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
@@ -613,9 +617,6 @@ const honoured = (
          * building one unconditionally is an object, while the cost of branching here would be a second place
          * that has to agree with agent.ts about what "off" means. */
         dependencyFreshness: settings.dependencyFreshness,
-        // The differential re-run behind agent-test-strength.ts. Nothing to bind here beyond the flag: the hook
-        // resolves the package and the baseline from `workspaceRoot`, which is set a few lines above.
-        testFaultDetection: settings.testFaultDetection,
         freshnessResolver: createFreshnessResolver({ cacheDir: statePath(services.workspace.root, ".intentic/local/cache/", "freshness") }),
         // Lazy: the tree is walked on the first pin a turn actually sees, and never on a turn that touches no
         // manifest, so building this eagerly here costs nothing.
@@ -883,6 +884,7 @@ export const planHarnessTurn = async (
      * user to decipher. Split off the base rather than overridden below because the field's absence is the
      * whole meaning, and `fast: undefined` is not a thing this repo's tsconfig lets you write. */
     const { fast, ...routable } = context.base;
+    const conversation = input.conversationId;
     return {
         ok: true,
         run: services.agent,
@@ -998,9 +1000,24 @@ export const planHarnessTurn = async (
              *
              * The runner rides along beside them so a `command` rule has somewhere to run, in the turn's own
              * cwd, which under an isolated turn is the worktree the agent is actually editing. */
+            /* WHICH FILES THE TREE SAYS ARE DIRTY, both names each, for the diagnostics a shell command's edits get
+             * (agent-shell-edits.ts). Read on every turn, isolated or not: the tracker attributes a file to a
+             * command by its mtime moving across that command, so the main checkout's standing dirty set (everyone's
+             * landed, uncommitted work) is a baseline there, not a finding. The agent's name for a file is the
+             * worktree path mapped back to the root, which is what it is under an anchor and under the redirect. */
+            dirtyFiles: async () =>
+                (await dirtyPathsAcross(context.localCwd, await discoverRepos(context.localCwd))).map((path) => {
+                    const onDisk = join(context.localCwd, path);
+                    return { onDisk, path: fromWorktree(onDisk, context.base.isolation?.plan) };
+                }),
             ...(turnEndingRules.length > 0
                 ? {
                       turnEndingRules,
+                      // The verdict the land reads (agent/turn-checks.ts). Keyed by conversation, so a turn with
+                      // none behind it (the bench) records nothing and nothing later can read it.
+                      ...(conversation === undefined
+                          ? {}
+                          : { onCheckRun: (rule: Rule, run: RuleCommandRun) => recordCheckVerdict(conversation, rule, run) }),
                       /* A rule that spoke here CONTINUED a turn the model had finished, which is the answer to
                        * "why is this still going" and the one thing about this moment nobody can see from the
                        * outside. Stamped for the settings list and written to the feed, both best-effort: a
@@ -1040,7 +1057,18 @@ export const planHarnessTurn = async (
                        * (land commits the remainder), so its dirty paths are this turn's own; in the main checkout
                        * they would be everyone's landed, uncommitted work. */
                       ...(context.localCwd !== services.workspace.root
-                          ? { changedPaths: async () => dirtyPathsAcross(context.localCwd, await discoverRepos(context.localCwd)) }
+                          ? {
+                                changedPaths: async () => dirtyPathsAcross(context.localCwd, await discoverRepos(context.localCwd)),
+                                /* The `verify-tests` built-in, over the same dirty set and for the same reason only
+                                 * here: in the main checkout those test files are everyone's, and the fault check
+                                 * would revert a sibling agent's landed source to measure this turn's test. */
+                                verifyTests: () =>
+                                    verifyTestsMessage({
+                                        root: context.localCwd,
+                                        changed: async () => dirtyPathsAcross(context.localCwd, await discoverRepos(context.localCwd)),
+                                        faults: (testFile: string) => passesAgainstHead(testFile, { repoRoot: context.localCwd }),
+                                    }),
+                            }
                           : {}),
                   }
                 : {}),

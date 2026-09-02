@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
-import { packageOf, testStrengthHooks } from "./agent-test-strength.js";
+import { packageOf, passesAgainstHead } from "./agent-test-strength.js";
 
 /* THE WHOLE MECHANISM, against a real git repo and a real vitest run: the baseline comes out of git, the changed
  * source is served from HEAD through the generated config's `load` hook, and the verdict is whether the suite
@@ -57,15 +57,9 @@ const repoWithChange = (): { readonly root: string; readonly testFile: string } 
     return { root, testFile: join(pkg, `src/bucket.test.ts`) };
 };
 
-const ask = async (root: string, testFile: string): Promise<string | undefined> => {
-    // A fresh hook per case: the real one remembers which files it has spoken about, so a second call about the
-    // same path is silent by design and would make the second assertion here meaningless.
-    const hook = testStrengthHooks(true, root).PostToolUse?.[0]?.hooks[0];
-    const answer = await hook?.({ hook_event_name: `PostToolUse`, tool_name: `Write`, tool_input: { file_path: testFile } } as never, undefined as never, {
-        signal: new AbortController().signal,
-    });
-    return (answer as { hookSpecificOutput?: { additionalContext?: string } } | undefined)?.hookSpecificOutput?.additionalContext;
-};
+// The finding is the list of source files restored for the run, which the built-in turns into a sentence
+// (agent-tests.ts); undefined is silence.
+const ask = (root: string, testFile: string): Promise<readonly string[] | undefined> => passesAgainstHead(testFile, { repoRoot: root });
 
 /* Which package a test belongs to. Here rather than in the unit suite because it answers by READING THE DISK —
  * walking for a real vitest config — and the budget follows the kind of suite, not the size of the function. */
@@ -112,10 +106,8 @@ describe(`a test re-run against the code as it was`, () => {
                 ``,
             ].join(`\n`),
         );
-        const notice = await ask(root, testFile);
-        expect(notice).toMatch(/passes against the code as it was/i);
         // Names the file whose reversion it survived, so the reader can tell which change went untested.
-        expect(notice).toContain(`pkg/src/bucket.ts`);
+        expect(await ask(root, testFile)).toEqual([`pkg/src/bucket.ts`]);
     });
 
     test(`says nothing about a test that fails without the change`, async () => {

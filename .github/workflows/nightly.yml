@@ -339,3 +339,22 @@ jobs:
   # `contents: read` is the whole grant, which is what this workflow already holds.
   mobile:
     uses: ./.github/workflows/mobile.yml
+
+  # WHICH GATE TO BUILD NEXT. The failing steps of the last hundred pipelines on main, grouped and counted, as
+  # this job's summary: the extraction docs/ci-failure-audit.md was written from (runs → jobs → failed step →
+  # first error line), run every night instead of reconstructed in a two-week retrospective. Reads the Actions
+  # API with the token's read scope and nothing else, so a GitHub-hosted runner is the right place for it and
+  # the self-hosted fleet is never in its path. A red week is a table here, never a failure of this job.
+  ci-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node _tools/scripts/ci-audit.mjs --runs 100 --logs >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

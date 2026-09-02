@@ -56,8 +56,10 @@ export type RuleMoment = z.infer<typeof RuleMomentSchema>;
  * `verify-removals` weighs what a turn DELETED against what the repository's history says about those lines,
  * which is a question `git log` answers and no shell one-liner an owner could type would, and
  * `verify-ui-edits` weighs the rendered surfaces a turn changed against whether it ever looked at one, the one
- * question a passing suite is structurally unable to answer. */
-export const RuleBuiltinSchema = z.enum(["verify-edits", "verify-removals", "verify-ui-edits"]);
+ * question a passing suite is structurally unable to answer, and `verify-tests` weighs the test files a turn
+ * touched against two things a green suite cannot say: whether their assertions got weaker than the same files
+ * at HEAD, and whether a test the turn wrote would have passed before the change it covers. */
+export const RuleBuiltinSchema = z.enum(["verify-edits", "verify-removals", "verify-ui-edits", "verify-tests"]);
 export type RuleBuiltin = z.infer<typeof RuleBuiltinSchema>;
 export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({
@@ -73,6 +75,13 @@ export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("builtin"), name: RuleBuiltinSchema }),
 ]);
 export type RuleAction = z.infer<typeof RuleActionSchema>;
+/* HOW A TURN ENDED, as the `agent.finished` moment sees it. `clean`, `error` and `conflict` are the turn's own
+ * fate. `checks-failed` is a clean turn whose `turn.ending` command check went red on the tree it is about to
+ * land: the model was told, answered, and the last run still failed. It is named separately because a landing
+ * rule has to be able to speak about it, and because its default is not the others': work in that state is HELD
+ * unless a rule names `checks-failed` and says allow (rules/rules.ts landingVerdict). */
+export const RuleOutcomeSchema = z.enum(["clean", "error", "conflict", "checks-failed"]);
+export type RuleOutcome = z.infer<typeof RuleOutcomeSchema>;
 // WHEN a rule narrows. Three keys, chosen because they cover the two things people reach for on day one,
 // "only this repo" and "don't bother for a docs-only change", without opening a query language. Every key
 // absent ⇒ the rule always matches at its moment, which is what the three replaced settings each did.
@@ -81,8 +90,8 @@ export const RuleConditionSchema = z.object({
     repo: z.string().min(1).optional(),
     // Globs the change has to touch for the rule to fire. Absent/empty ⇒ any.
     paths: z.array(z.string().min(1)).max(20).optional(),
-    // How the turn ended. Absent/empty ⇒ any.
-    outcome: z.array(z.enum(["clean", "error", "conflict"])).optional(),
+    // How the turn ended. Absent/empty ⇒ any, except that `checks-failed` never lands by omission.
+    outcome: z.array(RuleOutcomeSchema).optional(),
 });
 export type RuleCondition = z.infer<typeof RuleConditionSchema>;
 /* ONE RULE. `id` is stable and owner-visible: it is what the activity feed names when the rule fires and what
@@ -421,38 +430,6 @@ export const SandboxSettingsSchema = z.object({
     dependencyFreshness: DependencyFreshnessSchema.default("off")
         .describe(
             "Whether a version the agent is about to pin is checked against the package's own registry first. Facts only, or facts plus the name of a maintained replacement where the registry agrees the current choice has been abandoned. It tells the agent and lets it decide rather than refusing, because matching a version your project already uses is usually the right answer and a gate would fight it.",
-        ),
-    /* DOES THE TEST IT JUST WROTE ACTUALLY TEST THE CHANGE?
-     *
-     * A model writes a test that passes, and a passing test is the thing it was asked for, so nothing in the loop
-     * objects. The failure this catches is the one where the test would have passed BEFORE the change too: it
-     * exercises the code without depending on the behaviour that was added, and it will keep passing when that
-     * behaviour is broken later. It type-checks, it lints, `pnpm verify` is green, and the suite has grown a test
-     * that can never fail.
-     *
-     * The check is a differential, and it is cheap for one specific reason: in an agent turn we already know
-     * exactly which source files changed. So the test is re-run with those files' HEAD contents served in place
-     * of the working copies, and the answer is one bit — did it still pass? A test that passes against the old
-     * code did not test the new code. This is one-mutant mutation testing where the mutant is "your change,
-     * reverted", which is the cheapest useful mutant there is and the only one already known for free.
-     *
-     * NOTHING IS WRITTEN TO THE TREE. The HEAD copies are served through a vite `load` hook in a generated config,
-     * never checked out over the working files — a hook that could leave a half-reverted tree behind on a crash
-     * would be trading a whole turn's work for a lint-grade signal.
-     *
-     * IT REPORTS AND GETS OUT OF THE WAY, for the same reason the freshness check above does. Two legitimate
-     * cases pass on HEAD and must not be fought: a test written BEFORE its implementation (it fails now, which
-     * the agent can see without help), and a pure refactor, where a test that keeps passing is the entire point.
-     * Distinguishing those from a weak test needs intent, so the fact rides back as context and the model decides.
-     *
-     * Scoped to source changed in the SAME package as the test, because that is what a package's own vitest run
-     * loads from source; a cross-package import resolves to the other package's built output, where there is
-     * nothing to swap. Off by default like every flag here, and off wires no hook at all. */
-    testFaultDetection: z
-        .boolean()
-        .default(false)
-        .describe(
-            "After the agent writes a test, re-run it against the code as it was before this turn's changes. A test that still passes did not test the change — it will pass just as happily when that behaviour breaks. Reports what it finds and lets the agent decide, because a test written before its implementation and a pure refactor both pass this honestly.",
         ),
     outputCleaners: z
         .string()

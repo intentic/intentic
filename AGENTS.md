@@ -59,7 +59,19 @@ while you work, and a red main is a red main for whoever lands next, whatever th
 
 The rule's path condition is read from the tree as well as from the edit tools, so an edit made with `sed`, a
 heredoc or a script counts like one made with Edit. There is no way to change code under `intentic/**` that
-the check does not see.
+the check does not see. The same goes for the per-edit type diagnostics: the tree is read before and after
+every Bash command, and every TypeScript file the command changed is checked exactly as an Edit would be, test
+files included (they are checked against their package's `tsconfig.test.json`, the program that compiles them).
+
+The check's last run decides whether the work lands. A repair is re-measured: the check runs again on the
+Stop that follows it (two rounds per turn), and a red first run with a green second is a turn that passed. A turn
+whose check is still red when it ends is held on its branch as "Ready to land", whatever the landing rule or the
+card's override says, and the feed names the check that held it.
+
+The test files a turn touched get one more reader at the Stop, the `verify-tests` rule: each is compared with
+the same file at HEAD for assertions that got weaker, and a new test is re-run against the pre-turn source for
+one that passes without the change. The first test file a turn edits is also told the two rules that apply at
+that moment, once. Both findings are reports, not refusals; the push is where a weakening is refused.
 
 ## Before it leaves the machine
 
@@ -71,9 +83,15 @@ on any Rust crate the push touches, then the three steps CI's verify groups run 
 typecheck`, `turbo run build test`), unfiltered, with turbo's cache standing in for a filter. A tree the app's check has already
 measured is not measured twice: the verdict is keyed to a hash of the working tree.
 
+The first tier also runs the assertion ratchet over the range's test files (`_tools/scripts/assertion-ratchet.mjs`):
+a test file may get stronger by itself and weaker only with a `test!:` subject or a `Test-Note:` trailer on a
+commit in the range saying why.
+
 It measures the working tree; CI measures the commit. Landed work not yet committed, or a lockfile an install
 left beside a committed manifest, is in the first and not the second, and the script says how many such paths
-it saw. Commit what belongs together before pushing.
+it saw. The one shape of that gap it knows is refused by name: a push that commits any of `package.json`,
+`pnpm-workspace.yaml` or `pnpm-lock.yaml` while another of them is changed and uncommitted. Commit what
+belongs together before pushing.
 
 ## Tests
 
@@ -128,3 +146,15 @@ rules are about what a test stands the code up with, not about how it asserts.
   `Object.keys(bag)` contains the key, which prints what IS there when it fails). `.oxlintrc.json` rejects that
   family with a reason attached to each and has no backlog; if one is genuinely right somewhere, say why rather
   than reaching past it.
+- A test file gets stronger by itself and weaker only on purpose – a failing test is fixed by updating the value
+  it expects to the new truth, never by widening the matcher. The push gate measures every test file a range
+  changed against its earlier self (`_tools/scripts/assertion-measure.mjs`: exact matchers, loose matchers, the
+  literal text the assertions pin) and refuses a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
+  asserted text cut past a quarter with no test removed) unless a commit in the range carries a `test!:` subject
+  or a `Test-Note:` trailer saying why. The same measure reaches the agent at the Stop (`verify-tests`), where it
+  is a report. On 2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is
+  what this reads for.
+- Mock a workspace package with what the code under test imports, or with the original – prepass invariant 14
+  reads every `vi.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands
+  up import from that package, and refuses a missing one. Spread `await importOriginal()` into the factory rather
+  than listing exports: the list is right the day it is written and wrong the day the package grows.

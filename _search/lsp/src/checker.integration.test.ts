@@ -119,3 +119,28 @@ test("findTsconfig finds the nearest config walking up", async () => {
     writeFileSync(file, "export {};\n");
     expect(findTsconfig(file)).toBe(join(dir, "tsconfig.json"));
 });
+
+/* The build config excludes the tests, so a test file checked against it is in no program and comes back clean
+ * whatever is in it. That is the exact shape of the type error that reached main past a green per-edit check. */
+test("a test file is checked against the tsconfig.test.json beside the build config, where one exists", async () => {
+    const dir = fixture();
+    writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, exclude: ["**/*.test.ts"] }));
+    writeFileSync(join(dir, "tsconfig.test.json"), JSON.stringify({ extends: "./tsconfig.json", exclude: [] }));
+    const testFile = join(dir, "a.test.ts");
+    writeFileSync(testFile, 'export const n: number = "nope";\n');
+    writeFileSync(join(dir, "a.ts"), "export {};\n");
+    expect(findTsconfig(testFile)).toBe(join(dir, "tsconfig.test.json"));
+    expect(findTsconfig(join(dir, "a.ts"))).toBe(join(dir, "tsconfig.json"));
+    const excluded = await checkProject(join(dir, "tsconfig.json"), [testFile], undefined);
+    expect(excluded.diagnostics).toEqual([]);
+    const included = await checkProject(findTsconfig(testFile), [testFile], undefined);
+    expect(included.diagnostics.map((d) => d.code)).toEqual([2322]);
+});
+
+test("a test file with no tsconfig.test.json beside its config is checked against the build config", async () => {
+    const dir = fixture();
+    writeFileSync(join(dir, "tsconfig.json"), TSCONFIG);
+    const testFile = join(dir, "a.test.ts");
+    writeFileSync(testFile, "export {};\n");
+    expect(findTsconfig(testFile)).toBe(join(dir, "tsconfig.json"));
+});

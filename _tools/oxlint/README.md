@@ -166,9 +166,9 @@ measured, 288 + 127 `valid-expect`, 88 + 88 `require-to-throw-message`. Every je
 to the vitest decision it duplicates.
 
 **Neither half says whether a test detects a fault.** That question is answered by running the code broken and
-watching, which is two other things: the `testFaultDetection` setting, which re-runs a new test against the code
-as it was before the turn, and the `test-strength` chore, which mutates the source and counts what the suite
-notices. Measured on `sandbox-contract`'s chore module — 109 tests, every line covered — 16 of 58 mutants
+watching, which is two other things: the `verify-tests` rule, which at the end of a turn re-runs a new test
+against the code as it was before the turn and reads every touched test file's assertions against the same file
+at HEAD, and the `test-strength` chore, which mutates the source and counts what the suite notices. Measured on `sandbox-contract`'s chore module — 109 tests, every line covered — 16 of 58 mutants
 survived.
 
 ## Conflicts, and how they are resolved

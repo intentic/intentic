@@ -19,6 +19,22 @@ stated and the template gate reaches the push. 6, the store shells run nightly. 
 CI runs (`_tools/scripts/verify-push.mjs`, from both the app's push check and the git hook); the note at 7(b)
 records what a second hundred pipelines showed and why the gate is unfiltered rather than scoped.
 
+**Applied after the second hundred (2026-09-02), on the loops that let the reds be written rather than merely
+pushed:** test files get real per-edit diagnostics (`@intentic/lsp` checks them against `tsconfig.test.json`,
+the program that compiles them, instead of the build config that excludes them); a shell-made edit gets the same
+diagnostics as an Edit (`agent-shell-edits.ts`); the turn-ending check re-measures a repair instead of ending
+on the SDK's re-entry flag; a red check holds the turn's work on its branch (`outcome: "checks-failed"`,
+`turn-checks.ts`); the assertion ratchet refuses an undeclared weakening at the push and reports one at the Stop
+(`assertion-ratchet.mjs`, the `verify-tests` rule); the push refuses a manifest committed without its lockfile;
+prepass invariant 14 reads allow-list package mocks (Class B) against the imports of the code under test; mutation
+testing is configured weekly over the daemon's steering hooks, `rules/` and the contract's chores, with one
+vitest-scoping step still outstanding (`stryker.conf.mjs` says which); and
+`_tools/scripts/ci-audit.mjs` produces this document's table as a nightly job summary. Its first run found the
+red of the day: three verify groups failing `prepass.mjs` with `@intentic/base/async has no exported member
+'pollUntil'`, because fifteen emitted packages depended on `@intentic/base` or `@intentic/constants` without a
+tsconfig `references` edge, so `tsgo -b` built them against the stale dist a persistent runner keeps. The edges
+are added and prepass invariant 15 refuses the shape.
+
 **Withdrawn:** 5. The sweep it proposed is the wrong change, and Class B says why with the failing output.
 
 **Left to the team:** 7(c), branch protection. It is a decision about how the repository is worked, not a code

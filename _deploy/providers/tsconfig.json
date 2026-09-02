@@ -7,6 +7,12 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts", "./src/testing.ts"],
-    "references": [{ "path": "../../_tools/base" }, { "path": "../graph" }, { "path": "../engine" }, { "path": "../../_sandbox/sandbox-run" }],
+    "references": [
+        { "path": "../../_tools/constants" },
+        { "path": "../../_tools/base" },
+        { "path": "../graph" },
+        { "path": "../engine" },
+        { "path": "../../_sandbox/sandbox-run" }
+    ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

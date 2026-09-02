@@ -13,6 +13,7 @@ export const NAMED_RULES = {
     verify: `verify-edits`,
     removals: `verify-removals`,
     viewing: `verify-ui-edits`,
+    tests: `verify-tests`,
     prepush: `pre-push`,
     land: `auto-land`,
 } as const;

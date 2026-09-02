@@ -460,9 +460,12 @@ const testStrength: Chore = {
     criterion: `Stryker's mutation score for the repo is under ${MUTATION_FLOOR}%.`,
     stance: `act`,
     needs: [`mutation`],
-    // Quarterly rather than monthly: a mutation score moves when tests are rewritten, which is not a weekly event,
-    // and the probe behind it is the most expensive one here.
-    cadenceMs: 90 * DAY_MS,
+    /* Weekly. This was quarterly on the reasoning that a mutation score moves when tests are rewritten and that
+     * is not a weekly event; on 2026-08-31 agents rewrote about 180 test files in an afternoon, and the score is
+     * exactly the number that should have said so. The probe is still the most expensive one here, and
+     * `--incremental` is what makes a weekly cadence affordable: the first run costs a full run, every one after it
+     * costs the mutants whose code or tests changed. */
+    cadenceMs: 7 * DAY_MS,
     assess: (context) => {
         const facts = factsOf(context, `mutation`);
         if (facts === undefined || facts.mutation.score >= MUTATION_FLOOR) {

@@ -5,6 +5,9 @@ An agent-native CLI over the native TypeScript compiler: project-wide rename, an
 `lsp rename <file> <symbol> <newName>` and `lsp diag <file...>`. Despite the name it is **not** a language-server
 host: every question is answered by a fresh run of the native compiler (`@typescript/native-preview`, the Go
 port of TypeScript), which parses the file's tsconfig project, answers, and exits. TypeScript and JavaScript only.
+A test file's project is the `tsconfig.test.json` beside its `tsconfig.json` when one exists: an emitting package's
+build config excludes `*.test.ts`, and a test checked against that config is in no program and comes back clean
+whatever is in it, which is how a test file that did not compile reached main past a green per-edit check.
 
 **Nothing stays resident.** This package used to keep a warm JS-compiler daemon per view of the tree: ~1 GB of
 LanguageService held through a 15-minute idle window, times one per concurrent agent worktree, which made it the
