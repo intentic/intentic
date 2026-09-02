@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type EngineRow, EnginesViewSchema } from "@intentic-app/api-contract";
-import { Button, Card, Notice, type NoticeModel, Picker, type PickerOption, Row, StatusBadge, ui } from "@intentic/ui";
+import { Button, Card, Notice, type NoticeModel, Picker, type PickerOption, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -96,64 +96,57 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
             </template>
         </Row>
 
-        <ul class="flex flex-col divide-y divide-line">
-            <li v-for="engine in engines" :key="engine.id" class="py-3 first:pt-0 last:pb-0">
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span class="text-sm font-medium">{{ engine.label }}</span>
-                    <span v-if="engine.running.version" class="font-mono text-xs text-muted">{{ engine.running.version }}</span>
-                    <!-- The one state that is neither a version nor a fault: a core image that bakes no copy of
-                         this engine, where the store is the only way to get one. -->
-                    <span v-else class="text-xs text-muted">not installed here</span>
-                    <StatusBadge v-if="engine.running.source === `store`" variant="info" label="installed" />
-                    <StatusBadge v-else-if="engine.running.version" variant="neutral" label="from image" />
-                    <!-- Says which claim the running version carries, because on the latest channel the answer
-                         is routinely "nobody has tested this here" and the row must not imply otherwise. -->
-                    <StatusBadge
-                        v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
-                        variant="warning"
-                        label="not recommended"
+        <RowGroup flat undivided>
+            <Row v-for="engine in engines" :key="engine.id">
+                <template #title>
+                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span>{{ engine.label }}</span>
+                        <span v-if="engine.running.version" class="font-mono text-xs font-normal text-muted">{{ engine.running.version }}</span>
+                        <span v-else class="text-xs font-normal text-muted">not installed here</span>
+                        <StatusBadge v-if="engine.running.source === `store`" variant="info" label="installed" />
+                        <StatusBadge v-else-if="engine.running.version" variant="neutral" label="from image" />
+                        <StatusBadge
+                            v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
+                            variant="warning"
+                            label="not recommended"
+                        />
+                    </span>
+                </template>
+                <template #control>
+                    <Picker
+                        :model-value="engine.channel.kind"
+                        :options="CHANNELS"
+                        variant="ghost"
+                        :disabled="busy || !canOperate"
+                        class="shrink-0"
+                        :aria-label="`Where ${engine.label} gets its version`"
+                        :header="`${engine.label} version source`"
+                        @update:model-value="(kind) => kind !== undefined && setChannel(engine, kind)"
                     />
-
-                    <div class="ml-auto flex flex-wrap items-center gap-2">
-                        <Picker
-                            :model-value="engine.channel.kind"
-                            :options="CHANNELS"
-                            variant="ghost"
-                            :disabled="busy || !canOperate"
-                            class="shrink-0"
-                            :aria-label="`Where ${engine.label} gets its version`"
-                            :header="`${engine.label} version source`"
-                            @update:model-value="(kind) => kind !== undefined && setChannel(engine, kind)"
-                        />
-                        <Button
-                            v-if="engine.offered"
-                            size="sm"
-                            :disabled="busy || !canOperate"
-                            :label="`Update to ${engine.offered.version}`"
-                            @click="update(engine)"
-                        />
-                        <Button
-                            v-if="engine.previous || engine.running.source === `store`"
-                            size="sm"
-                            variant="ghost"
-                            :disabled="busy || !canOperate"
-                            :label="engine.previous ? `Back to ${engine.previous}` : `Back to the image's copy`"
-                            @click="revert(engine)"
-                        />
-                        <span v-if="engine.diskBytes > 0" class="text-xs text-muted">{{ megabytes(engine.diskBytes) }} kept</span>
-                    </div>
-                </div>
-
-                <!-- A version this sandbox installed and then refused. Shown because the alternative is an
-                     unexplained downgrade: the row would say "from image" and nothing would say why.
-
-                     break-words, because the reason usually ENDS in a store path — one unbroken token longer
-                     than a phone's viewport, which ran out past the card's own border before this. -->
-                <p v-for="refused in engine.quarantined" :key="refused.version" class="mt-2 text-xs break-words text-muted">
-                    {{ refused.version }} was refused: {{ refused.reason }}
-                </p>
-            </li>
-        </ul>
+                    <Button
+                        v-if="engine.offered"
+                        size="sm"
+                        :disabled="busy || !canOperate"
+                        :label="`Update to ${engine.offered.version}`"
+                        @click="update(engine)"
+                    />
+                    <Button
+                        v-if="engine.previous || engine.running.source === `store`"
+                        size="sm"
+                        variant="ghost"
+                        :disabled="busy || !canOperate"
+                        :label="engine.previous ? `Back to ${engine.previous}` : `Back to the image's copy`"
+                        @click="revert(engine)"
+                    />
+                    <span v-if="engine.diskBytes > 0" class="text-xs text-muted">{{ megabytes(engine.diskBytes) }} kept</span>
+                </template>
+                <template v-if="engine.quarantined.length > 0" #below>
+                    <p v-for="refused in engine.quarantined" :key="refused.version" class="text-xs break-words text-muted">
+                        {{ refused.version }} was refused: {{ refused.reason }}
+                    </p>
+                </template>
+            </Row>
+        </RowGroup>
 
         <Notice v-if="actionNotice" v-bind="actionNotice" />
 
