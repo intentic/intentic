@@ -8,9 +8,9 @@ import {
     Icon,
     type MenuItem,
     Modal,
-    SearchBar,
     SegmentedControl,
     timeAgo,
+    ui,
     useLoadingReveal,
     vAction,
 } from "@intentic/extension-ui";
@@ -600,16 +600,30 @@ const runPending = async (): Promise<void> => {
             <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
                 searching ? `${matched.length} of ${commits.length}` : commits.length
             }}</span>
-            <div class="ui-search-row flex h-8 min-w-0 max-w-56 flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
-                <SearchBar
-                    v-model="search"
-                    placeholder="Filter commits…"
-                    clearable
-                    aria-label="Filter commits by message, author, or sha"
-                    class="min-w-0 flex-1 border-b-0"
+            <div class="relative min-w-0 flex-1 max-w-44">
+                <Icon
+                    name="search"
+                    class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-2xs text-subtle"
+                    aria-hidden="true"
                 />
+                <input
+                    v-model="search"
+                    type="text"
+                    placeholder="Filter commits…"
+                    aria-label="Filter commits by message, author, or sha"
+                    :class="ui.inputSm('w-full min-w-0 pl-7', search ? 'pr-7' : 'pr-2')"
+                    @keydown.esc="search = ''"
+                />
+                <button
+                    v-if="search"
+                    type="button"
+                    class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
+                    aria-label="Clear filter"
+                    @click="search = ''"
+                >
+                    <Icon name="times" />
+                </button>
             </div>
-            <span class="flex-1"></span>
             <!-- Names the action it will undo, in git's own words on hover. Absent when there is nothing to walk
                  back: a fresh branch, a detached HEAD, or a halted operation (which ends by aborting instead). -->
             <Button
