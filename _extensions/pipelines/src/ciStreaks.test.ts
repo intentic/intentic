@@ -1,6 +1,6 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { failureStreaks, openFailures, streakTooltip, supersededBy } from "./ciStreaks";
+import { failureStreaks, openFailures, runningOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
 /* The rail badge's derivations. Both answer "is this branch red right now?", and both are worth pinning down
@@ -156,6 +156,43 @@ test("canceled and running runs after a failure do not supersede it", () => {
     const failure = run(1, "failed", 10);
     // Neither is a verdict, so neither is evidence the branch recovered: the same rule the streaks follow.
     expect(supersededBy([run(2, "canceled", 30), run(3, "running", 20), failure]).size).toBe(0);
+});
+
+/* Which rows the board opens for you. The rule is two facts about one run, still going AND on the newest commit
+ * its branch has, and each half is load-bearing: the first is why the graph is worth the space, the second is
+ * what stops a stale row taking it. */
+
+test("a run still going on the branch's newest commit is what the board opens", () => {
+    const live = run(1, "running", 50, "main", "head");
+    const stale = run(2, "running", 40, "main", "before");
+    const open = runningOnHead([live, stale]);
+    expect(open.has(live)).toBe(true);
+    // Still running, on code a later push replaced: a re-run somebody left behind, and not what anyone opened
+    // the board to watch.
+    expect(open.has(stale)).toBe(false);
+});
+
+/* THE CASE THE STREAK WALK WOULD GET WRONG, and the reason this is a walk of its own: it keeps only the runs
+ * that reached a verdict, so a push whose pipelines are ALL still going has no commit in that list at all, and
+ * the head would be the commit before it — exactly the moment a live board has to open something. */
+test("a push whose pipelines are all still going is its own head commit", () => {
+    const live = run(1, "running", 60, "main", "pushed");
+    expect(runningOnHead([live, run(2, "success", 50, "main", "before")]).has(live)).toBe(true);
+});
+
+test("a finished run on the head commit is not opened, however new it is", () => {
+    // The graph of a run that is over is evidence to go looking for, not an answer arriving, and every green row
+    // opening itself would bury the board.
+    const done = run(1, "success", 50, "main", "head");
+    expect(runningOnHead([done, run(2, "failed", 49, "main", "head")]).size).toBe(0);
+});
+
+test("every branch with something in flight gets its own row opened", () => {
+    // Not one commit for the whole board: two branches building at once are two answers arriving, and hiding
+    // the earlier push's live run would be a silence the reader cannot account for.
+    const mine = run(1, "running", 40, "feat", "mine");
+    const theirs = run(2, "running", 50, "main", "theirs");
+    expect(runningOnHead([theirs, mine, run(3, "success", 30, "feat", "older")])).toEqual(new Set([theirs, mine]));
 });
 
 const entry = (createdAt: number, failed: readonly string[] | undefined, branch = "main"): JobFailureRun => ({

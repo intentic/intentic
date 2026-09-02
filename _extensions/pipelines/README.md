@@ -5,7 +5,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
 ## Responsibilities
 
 - List pipeline runs for the repos that map to CI projects, with their jobs.
-- Draw a run's job graph, so a failure's blast radius is visible rather than inferred.
+- Draw a run's job graph, so a failure's blast radius is visible rather than inferred, and draw it WITHOUT
+  being asked for the runs that are still going on the code as it stands.
 - Say whether a branch is red RIGHT NOW, on its last commit rather than on its last run, and keep saying it
   until a commit passes.
 - Lead with the repository that needs a person, and keep the quiet ones out of the way without losing them.
@@ -16,6 +17,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
 - [src/repoStandings.ts](src/repoStandings.ts): how loudly each repository is asking, which is the board's order.
 - [src/PipelinesView.vue](src/PipelinesView.vue): the board, and the options it hands the kit's `<Picker>` for the
   top bar's scope: all repositories, or one.
+- [src/PipelinesTally.vue](src/PipelinesTally.vue): the orientation line, counts plus pass rate, in the one shape
+  the title row, the narrow fallback and the loading state all draw.
 - [src/pipelineDag.ts](src/pipelineDag.ts): jobs and their dependencies as a drawable graph, and the grouping of
   identically-wired jobs into one card.
 - [src/PipelineDagGraph.vue](src/PipelineDagGraph.vue): that graph on a canvas, with the hover that traces one
@@ -49,6 +52,18 @@ inside the view rather than gating the tile.
   carries its repository's whole standing (`standingNote`, failing branches first, so the clause worth reading is
   the one that survives truncation), the sections below are ordered worst-first whatever is picked, and the
   sidebar badge still says that a branch is red wherever you are.
+- A RUN STILL GOING ON ITS BRANCH'S NEWEST COMMIT ARRIVES EXPANDED, so the diagram this board exists to draw is
+  on screen before anyone clicks (`runningOnHead`). Both halves of the rule earn their place: "running" is why the
+  graph is worth the height, and "newest commit" is what keeps a re-run somebody left going on last week's code
+  from taking it. It is a DEFAULT, not a binding, seeded once when the row is created: a row the reader closed
+  stays closed, and a run that finishes under them keeps its graph rather than collapsing at the moment it says
+  whether it passed. The head commit here is read off every run, not just the ones with a verdict, because a
+  fresh push has nothing but running pipelines and that is exactly when this has to fire.
+- The status tally rides the TITLE ROW rather than a line of its own above the list, because the ~40px it was
+  costing is the scarcest thing on a page whose body is a job graph. It falls back to its own line under 44rem
+  of board (`TALLY_AT_REM`), measured off the body with a ResizeObserver rather than off the window: this view
+  renders into a pane the reader can halve with the chat panel. In the header it takes a zero flex basis, so the
+  width it needs comes out of the row's slack and never out of the `<h1>`.
 - A repository with no runs is a picker row under "No runs yet", not a card in the body. A repository with a
   `hookWarning` is a card: the warning is usually the reason it looks silent, so hiding it would hide the answer
   along with the question.

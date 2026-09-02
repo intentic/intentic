@@ -2,7 +2,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import {
-    StatusTally,
     Icon,
     Notice,
     noticeOf,
@@ -10,25 +9,27 @@ import {
     Picker,
     type PickerOption,
     type PickerOptions,
-    ProgressRing,
     RowGroup,
     SplitView,
+    useNarrow,
     type AgentRunChoice,
     type TallyItem,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { openFailures, supersededBy } from "./ciStreaks";
+import { openFailures, runningOnHead, supersededBy } from "./ciStreaks";
 import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
+import PipelinesTally from "./PipelinesTally.vue";
 import { type RepoStanding, repoStandings, standingNote } from "./repoStandings";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
 
 /* Pipelines: a DevOps-grade CI dashboard. A top-bar picker scopes the board to one repository or to all of them,
- * summary counts sit above the list, runs are grouped by repo, and each row auto-fetches its jobs and renders an
- * inline GitLab-style connected-circles pipeline graph. Clicking a stage circle pops over job details; clicking
- * the chevron expands a full horizontal job flow. */
+ * the summary counts ride the title row beside it, runs are grouped by repo, and each row auto-fetches its jobs
+ * and renders an inline GitLab-style connected-circles pipeline graph. Clicking a stage circle pops over job
+ * details; clicking the chevron expands a full horizontal job flow, which is where a run that is still going on
+ * its branch's newest commit starts out. */
 
 const api = host();
 const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
@@ -126,6 +127,13 @@ const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurrin
 const open = computed(() => openFailures(runs.value));
 const superseded = computed(() => supersededBy(runs.value));
 
+/* WHICH ROWS ARRIVE OPEN: the ones still running on their branch's newest commit (ciStreaks). Reading a board
+ * whose live run is a strip of five circles means clicking it to see the graph that is the reason this view
+ * exists, and the runs that are moving are the ones nobody has to be asked about. Off every run rather than the
+ * scoped ones, for the same reason `open` is: a branch's head commit is the same commit whichever repository the
+ * reader happens to be scoped to. */
+const live = computed(() => runningOnHead(runs.value));
+
 /* THE WAY OUT TO THE VENDOR, per repo, and pointed at PIPELINES rather than at the project.
  *
  * The header action used to be one link per host ORIGIN: github.com, gitlab.com, which is the vendor's
@@ -176,6 +184,27 @@ const successRate = computed(() => {
     return Math.round((terminal.filter((r) => r.status === `success`).length / terminal.length) * 100);
 });
 
+/* WHERE THE TALLY GOES, and it is a measurement rather than a preference.
+ *
+ * On the TITLE ROW, because the vertical space it was costing is the scarcest thing on this page: the counts are
+ * four short facts, the h1 beside them is one word, and the widest header in the app was still half empty while
+ * a run's job graph, the thing this board exists to show, was pushed 40px further down every screen.
+ *
+ * It only fits there while the pane is wide enough for the title, the counts, the pass rate AND the repository
+ * picker on one line: ~7rem + ~21rem + ~13rem, so 44rem, which is the same width <SplitView> folds at and not a
+ * coincidence, both numbers are "is there room for two things side by side here". Under it the line goes back
+ * above the list, where it costs a row and truncates nothing. Squeezing it into the header instead would take
+ * the width out of the h1, which is the mobile complaint this app already has a page of (docs/mobile-ux-audit).
+ *
+ * Measured off the BODY, not the window: this view renders into the workspace column, which the reader can
+ * shrink to half a screen with the chat panel open. The body and the header are the same width (this board has
+ * no rail), so the element that can carry the observer answers for the one that cannot. */
+const TALLY_AT_REM = 44;
+const body = ref<HTMLElement | undefined>(undefined);
+const narrowBoard = useNarrow(body, TALLY_AT_REM);
+// Nothing to orient by on a board with no runs at all, where the body's own sentence is the whole answer.
+const showTally = computed(() => isPending.value || scopedRuns.value.length > 0);
+
 // ---- actions ----
 const actionKey = (run: PipelineRun): string => `${run.host}:${run.project}:${run.runId}`;
 const busy = ref<string | undefined>();
@@ -215,9 +244,21 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
 <template>
     <!-- `scroll="page"`: the body here is a REPORT, not a document. `panes` earns its keep when a long document
          sits beside a long index and losing your place in either costs you something; this index is a handful of
-         repositories, and the body is a summary bar over a list of runs that is read top-down once. Clamped, it
-         put a scrollbar inside a card inside a page, and the page's own scrollport had nothing to take. -->
+         repositories, and the body is a list of runs that is read top-down once. Clamped, it put a scrollbar
+         inside a card inside a page, and the page's own scrollport had nothing to take. -->
     <SplitView title="Pipelines" scroll="page" :scroll-key="scopeRepo">
+        <!-- HOW CI IS GOING, ON THE TITLE'S OWN LINE (see TALLY_AT_REM for why it is here and when it is not).
+             In the header's #info slot rather than beside the picker in #actions: it is a fact, not a control,
+             and the action cluster is `shrink-0`, so a tally in there would push the verbs off the pane instead
+             of wrapping. -->
+        <template #info>
+            <!-- `min-w-0 flex-1`: the tally is the item on this row that can give. Sized from its content it
+                 shares the squeeze with the h1 and takes a few characters off "Pipelines" (<PageHeader>'s own
+                 note); with a zero basis it takes only what the title, the picker and the repo links leave, and
+                 wraps a count onto a second line instead. The same trade <Row> makes for a run's stage graph. -->
+            <PipelinesTally v-if="showTally && !narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="ml-1 min-w-0 flex-1" />
+        </template>
+
         <template #actions>
             <!-- Only where there is a choice to make: over one repository this would be a control pointing at the
                  only thing on screen. -->
@@ -248,27 +289,20 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
 
         <template #detail>
             <!-- No scroller and no `min-h-0 flex-1`: those are what a pane that must shrink inside a clamp asks
-                 for, and nothing clamps this now. The column is as tall as the runs in it. -->
-            <div class="flex flex-col">
+                 for, and nothing clamps this now. The column is as tall as the runs in it.
+                 THE MEASURED ELEMENT: what this column is wide is what the header above it is wide, and it is
+                 the one of the two that a `ref` can reach (see TALLY_AT_REM). -->
+            <div ref="body" class="flex flex-col">
+                <!-- Too narrow for the header to hold it: the orientation line goes back to being a line, above
+                     the list and ahead of the skeleton, so the wait and the board draw the same shape. -->
+                <PipelinesTally v-if="showTally && narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="mb-5" />
+
                 <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
                      fetch. Show the board's shape rather than a bare page that is indistinguishable from "you have
                      no repos connected". -->
                 <PipelinesSkeleton v-if="isPending" />
 
                 <template v-else>
-                    <!-- ---- Summary bar ---- -->
-                    <StatusTally v-if="scopedRuns.length > 0" :items="counts" class="mb-5">
-                        <span v-if="successRate !== undefined" class="flex items-center gap-2">
-                            <ProgressRing
-                                :value="successRate"
-                                :size="20"
-                                :stroke="2.5"
-                                :class="successRate >= 80 ? `text-success` : successRate >= 50 ? `text-warning` : `text-danger`"
-                            />
-                            <span class="text-xs text-muted">{{ successRate }}% pass rate</span>
-                        </span>
-                    </StatusTally>
-
                     <!-- ---- What keeps breaking ----
                          Above the runs on purpose: on a repo that fails often the list answers "did it fail" (yes,
                          again), while the thing worth acting on is WHICH job has been failing all along. -->
@@ -321,6 +355,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                                 :recurring="recurringFor(run)"
                                 :open="open.has(run)"
                                 :superseded="superseded.get(run)"
+                                :auto-open="live.has(run)"
                                 @rerun="act($event, rerun)"
                                 @cancel="act($event, cancel)"
                                 @fix="fixRun"

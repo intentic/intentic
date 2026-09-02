@@ -124,6 +124,38 @@ export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<Pipeline
     return open;
 };
 
+/* WHAT IS IN FLIGHT ON THE CODE AS IT STANDS: the still-running runs on the newest commit each branch has.
+ *
+ * These are the rows the board opens for you (PipelineRunRow's `autoOpen`). A run that is still going is the one
+ * row whose job graph is worth the vertical space unasked, it is the answer arriving, and somebody who came to
+ * watch it should not have to click for it. The freshness half is what keeps that from becoming noise: a re-run
+ * somebody started on last week's commit is "running" too, and its diagram is not what anyone opened the board
+ * for.
+ *
+ * DELIBERATELY NOT `commitsByBranch` ABOVE, which is why this is a second walk rather than another reader of
+ * that one. That walk keeps only the runs that reached a VERDICT, which is right for judging a branch and wrong
+ * here: a push whose pipelines are all still going has no terminal run at all, so its commit would not be in
+ * that list, and the head would be the commit BEFORE it, exactly at the moment this has to fire.
+ *
+ * So the head is read off every run, by the newest `createdAt` on the branch, the same push-order proxy the walk
+ * above settles for and with the same limit: a re-run of an older commit carries a newer timestamp than the
+ * commit that followed it, so it reads as that branch's head. That run is the one somebody just pressed Re-run
+ * on, so opening its graph is the right answer either way.
+ *
+ * Per BRANCH, not one commit for the whole board: two branches building at once are two answers arriving, and a
+ * board that opened only the later push would hide a live run for no reason a reader could see. */
+export const runningOnHead = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => {
+    const heads = new Map<string, PipelineRun>();
+    for (const run of runs) {
+        const key = branchKey(run);
+        const head = heads.get(key);
+        if (head === undefined || run.createdAt > head.createdAt) {
+            heads.set(key, run);
+        }
+    }
+    return new Set(runs.filter((run) => run.status === `running` && heads.get(branchKey(run))?.sha === run.sha));
+};
+
 /* For each failed run, the run that put its branch back to green, the EARLIEST one on a LATER COMMIT that
  * passed clean, which is the one that actually recovered the branch rather than whichever green happens to be
  * newest. A green run beside it on its OWN commit closes nothing: that is a different workflow passing on the

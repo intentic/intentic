@@ -7,9 +7,10 @@
      across the app: Pipelines and Deployments had each written this out by hand, byte-identical down to the
      `h-2 w-2 rounded-full`, which is how two boards end up disagreeing about what "failed" looks like.
 
-     UNBOXED on purpose. It sits directly under a <PageHeader>, where the heading above and the first section
-     label below already bound it: a border here is one more box in a view that is mostly boxes, and it
-     frames a line that is not a container of anything.
+     UNBOXED on purpose. It sits with a <PageHeader> — under it, or on the title row itself through #info where a
+     board would rather spend that height on its body (Pipelines) — and the heading and the first section label
+     already bound it: a border here is one more box in a view that is mostly boxes, and it frames a line that is
+     not a container of anything.
 
      ZERO IS SILENT by default: "0 unhealthy" is a fact nobody asked for, and dropping it is what lets the eye
      land on the counts that are non-zero. `always` keeps the one count that is the board's subject (running,

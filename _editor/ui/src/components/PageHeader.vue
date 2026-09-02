@@ -21,7 +21,13 @@ const back = usePageBack();
 <template>
     <header :class="description ? 'mb-6' : 'mb-4'">
         <div class="flex items-center justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-2">
+            <!-- THE TITLE CLUSTER TAKES THE ROW'S LEFTOVER WIDTH, not its own content's. Sized by content, an
+                 #info that is more than a glyph (a status tally, a long badge) competed with the h1 for the
+                 squeeze and flexbox split it proportionally: the heading truncated to "Pipeli…" beside a fact
+                 that had room to wrap instead. Growing costs nothing where #info is small (left-aligned content
+                 in a wider box looks identical, and #actions is `shrink-0` at the far end either way) and it
+                 lets a wide #info ask for `flex-1` and give up the width itself. -->
+            <div class="flex min-w-0 flex-1 items-center gap-2">
                 <!-- A button rather than a link: where it goes is history, not an address (see pageBack.ts),
                      and the shell decides between stepping back and falling home to the menu. Negative margin
                      so the arrow hangs in the page's gutter and the title still starts on the page's own left

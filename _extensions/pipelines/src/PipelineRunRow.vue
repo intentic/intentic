@@ -35,6 +35,9 @@ const props = defineProps<{
     // Both are cross-run facts too, and together they set how loudly the row asks to be fixed.
     open: boolean;
     superseded: PipelineRun | undefined;
+    // Whether this row's graph should be on screen without a click: this run is still going, on the newest
+    // commit its branch has (ciStreaks' `runningOnHead`). A third cross-run fact, and a DEFAULT, not a state.
+    autoOpen: boolean;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
@@ -47,7 +50,15 @@ const runRef = computed(() => props.run);
 const { jobs, isLoading: jobsLoading } = useRunJobs(runRef);
 const stages = computed(() => pipelineStages(jobs.value));
 
-const expanded = ref(false);
+/* A LIVE RUN OPENS ITSELF, and `autoOpen` is a seed rather than a binding on purpose.
+ *
+ * A row is keyed by its run (PipelinesView's `actionKey`), so this instance is created once, when the run first
+ * appears in the list, and the 30s poll behind the board re-renders it without touching this ref again. That is
+ * the whole mechanism, and it is what makes the three cases come out right: a pipeline that starts while the
+ * board is open arrives as a NEW row and opens on the same rule; a row the reader closed stays closed, because
+ * nothing re-applies the default; and a run that FINISHES under the reader keeps its graph on screen, because a
+ * bound `open` would collapse it at the exact moment it says whether it passed. */
+const expanded = ref(props.autoOpen);
 const fullscreen = ref(false);
 
 // The run's identity for the parent's in-flight action tracking. A row instance is keyed to one run, so this

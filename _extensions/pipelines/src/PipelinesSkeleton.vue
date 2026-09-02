@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { RowGroup, StatusTally } from "@intentic/extension-ui";
+import { RowGroup } from "@intentic/extension-ui";
 
 /* What the Pipelines view shows before its first /ci/runs response: the SHAPE of the answer, not a spinner.
- * The geometry here is a deliberate copy of the real thing: summary bar, repo group, run rows with a status
- * dot, an avatar, a headline, a meta line, stage circles and an action button, so the page does not jump when
- * the data lands, and so the wait already tells the reader what they are waiting for.
+ * The geometry here is a deliberate copy of the real thing: a repo group and run rows with a status dot, an
+ * avatar, a headline, a meta line, stage circles and an action button, so the page does not jump when the data
+ * lands, and so the wait already tells the reader what they are waiting for.
  *
- * The two shapes the board draws with kit components are drawn here with the SAME ones, in their loading form:
- * <StatusTally skeleton> for the summary line and <RowGroup> for the group, rather than a second copy of their
- * markup that a change to either would leave behind.
+ * THE LIST, AND NOT THE TALLY ABOVE IT. The orientation line rides the title row now and only falls back into
+ * the body on a narrow pane (PipelinesView's TALLY_AT_REM), so its loading form has to be drawn wherever the
+ * real one is: <PipelinesTally skeleton> is that one shape, and the view places it in both states.
+ *
+ * The group is drawn with the kit's own <RowGroup> in its loading form, rather than a second copy of its markup
+ * that a change to it would leave behind.
  *
  * Widths vary per row because a column of identical bars reads as a rendering artifact rather than as a list
  * of commit subjects. They are fixed, not random: a placeholder that reshuffles on every re-render is worse
@@ -30,15 +33,6 @@ const ROWS = [
     <!-- aria-busy over aria-hidden: a screen reader should hear "this region is loading", not silence that is
          indistinguishable from an empty board. The bars themselves carry no text, so there is nothing to read. -->
     <div role="status" aria-busy="true" aria-label="Loading pipelines">
-        <!-- Summary bar: the three status counters and the pass-rate ring, which rides the tally's own slot
-             exactly as the real one does. -->
-        <StatusTally :skeleton="3" class="mb-5">
-            <div class="flex h-5 items-center gap-2">
-                <span class="skeleton h-5 w-5 rounded-full"></span>
-                <span class="skeleton h-3 w-20"></span>
-            </div>
-        </StatusTally>
-
         <!-- One repo group. A second would be a guess about the workspace; one is the floor every board has.
              h-4 in the heading slots is the line box of the label they stand in for (`text-xs`). -->
         <RowGroup>
