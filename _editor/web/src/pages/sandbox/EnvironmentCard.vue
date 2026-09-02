@@ -55,7 +55,7 @@ const VIEWS = [
 // Probing every tool for its version costs process spawns, so it only runs while the contents view is open.
 // Gated on the SELECTION rather than on what ends up drawn: asking is how the card finds out whether this daemon
 // can answer at all, so a fallback derived from the answer must not also decide whether to ask.
-const { groups, awaiting, loading, error: contentsError, unsupported, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
+const { groups, loading, error: contentsError, unsupported, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
 
 /* WHAT IS ACTUALLY DRAWN, as opposed to what is selected. A sandbox whose daemon predates the contents route
  * cannot answer for it, so the card stops offering it: the pill row disappears and the recipe, which every
@@ -100,7 +100,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <div class="flex flex-col gap-4 p-5">
         <!-- What the sandbox has, in plain language. Leads in every state: including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
-        <EnvironmentContents v-if="shown === `contents`" :groups="groups" :awaiting="awaiting" :loading="loading" :error="contentsError" />
+        <EnvironmentContents v-if="shown === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
 
         <!-- A proposal awaiting the owner's decision: the diff against the approved custom section (capability
              fragments are daemon-owned and not up for review here). -->

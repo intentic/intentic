@@ -7,7 +7,7 @@
 //
 // So what is pinned here is the shape, not the inventory (contents.integration.test.ts has that): that the
 // staples are a strip you scan rather than thirteen rows you scroll, that a closed row costs one line, that the
-// filter reaches every group rather than the long one, and that the attribution says nothing three times.
+// attribution says nothing three times.
 import type { EnvironmentItem } from "@intentic-app/api-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
@@ -99,21 +99,17 @@ const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin.
-    app = createApp({ render: () => h(EnvironmentContents, { groups, awaiting: 0, loading: false }) });
+    app = createApp({ render: () => h(EnvironmentContents, { groups, loading: false }) });
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;
 };
 
-/* Every pill in the staples strip. Two other buttons on this tab are not pills and each is excluded by what it
- * IS rather than by where it sits: the filter's own clear button names itself, and a row's disclosure carries
- * `aria-expanded` (it is a <DisclosureRow>, so the pressable part of a row is a real button now, where it used
- * to be a click handler on a div). */
+/* Every pill in the staples strip. Row disclosures carry `aria-expanded` and are excluded: they are
+ * <DisclosureRow> headers, not staples pills. */
 const pills = (el: HTMLElement): HTMLButtonElement[] =>
-    [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter(
-        (button) => button.ariaLabel !== `Clear filter` && !button.hasAttribute(`aria-expanded`),
-    );
+    [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter((button) => !button.hasAttribute(`aria-expanded`));
 
 /* THE ROW'S OWN DISCLOSURE, which is what opens it. `.ui-row-select` used to find it: that is the class <Row>
  * paints on a row you can click, and the row was a div with a click handler. The pressable part is now the
@@ -127,13 +123,6 @@ const wordsOf = (element: Element): string =>
         .map((child) => child.textContent?.trim() ?? ``)
         .filter((text) => text !== ``)
         .join(` `);
-
-const filterBy = async (el: HTMLElement, text: string): Promise<void> => {
-    const input = el.querySelector<HTMLInputElement>(`input[role="searchbox"]`);
-    input!.value = text;
-    input!.dispatchEvent(new Event(`input`));
-    await nextTick();
-};
 
 afterEach(() => {
     app?.unmount();
@@ -201,23 +190,6 @@ it(`opens on the first paragraph and keeps the rest one click away`, async () =>
     expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
 });
 
-it(`filters across every group, and drops the ones that match nothing`, async () => {
-    const el = mount();
-    // A staple, found from the tab's one filter: the question does not know which group its answer is in.
-    await filterBy(el, `python`);
-    expect(el.textContent).toContain(GROUPS[2]!.label);
-    expect(el.textContent).not.toContain(GROUPS[0]!.label);
-    expect(pills(el)).toHaveLength(1);
-
-    await filterBy(el, `ffmpeg`);
-    expect(el.textContent).toContain(GROUPS[0]!.label);
-    expect(el.textContent).not.toContain(GROUPS[2]!.label);
-
-    await filterBy(el, `haskell`);
-    expect(el.querySelectorAll(`button[aria-expanded]`)).toHaveLength(0);
-    expect(pills(el)).toHaveLength(0);
-});
-
 it(`only names the source when it is not already saying the row's own name`, () => {
     const el = mount();
     // The trailing facts cluster, which is where a row states what pulled it in.
@@ -237,7 +209,7 @@ it(`only names the source when it is not already saying the row's own name`, () 
 const mountLoading = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({ render: () => h(EnvironmentContents, { groups: [], awaiting: 0, loading: true }) });
+    app = createApp({ render: () => h(EnvironmentContents, { groups: [], loading: true }) });
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
     app.directive(`tooltip`, {});
     app.mount(el);

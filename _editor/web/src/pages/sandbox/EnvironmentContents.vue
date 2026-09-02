@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic-app/api-contract";
-import { BrandMark, Code, DisclosureRow, Notice, RowGroup, RowNote, SearchBar, SkeletonRows, ui } from "@intentic/ui";
+import { BrandMark, Code, DisclosureRow, Notice, RowGroup, RowNote, SkeletonRows, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentContents";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
@@ -15,7 +15,7 @@ import { environmentVisual } from "./environmentVisual";
  * ships with every sandbox is a LOOKUP: nobody reads "Git, every repo in the workspace is a real git repo",
  * they only ever ask "is Python in here?". Drawing thirteen lookups in the same reading layout as three
  * decisions is what made this tab two screens long and made the decisions the quietest thing on it. So the
- * staples are a strip of marks you scan or filter, and the rows are kept for the entries that earn them.
+ * staples are a strip of marks you scan, and the rows are kept for the entries that earn them.
  *
  * ONE LINE PER ROW. The name, its versions and the sentence sit on one line and the sentence truncates, because
  * the row is a thousand pixels wide and was spending a second line on prose that had horizontal room going
@@ -47,9 +47,8 @@ import { environmentVisual } from "./environmentVisual";
  * one sentence at a time.
  */
 
-const { groups, awaiting, loading, error } = defineProps<{
+const { groups, loading, error } = defineProps<{
     groups: ContentsGroup[];
-    awaiting: number;
     loading: boolean;
     error?: string;
 }>();
@@ -76,25 +75,8 @@ const toggleFull = (id: string): void => {
     full.value = flipped(full.value, id);
 };
 
-/* ONE FILTER FOR THE WHOLE TAB, not one per group. "Is X installed?" does not know which group X is in: ffmpeg
- * is a workspace addition here and a staple on the next sandbox, so a filter attached to the long group would
- * answer the question wrongly rather than not at all. Groups that match nothing drop out entirely: an empty
- * bordered surface under a heading reads as "you have none of these", which would be a lie about a group the
- * query simply missed. */
-const query = ref(``);
-const matches = (item: EnvironmentItem, needle: string): boolean =>
-    [item.name, item.purpose ?? ``, ...item.tools.map((tool) => tool.name)].some((text) => text.toLowerCase().includes(needle));
-const shown = computed((): ContentsGroup[] => {
-    const needle = query.value.trim().toLowerCase();
-    if (needle === ``) {
-        return groups;
-    }
-    return groups
-        .map((group) => ({ origin: group.origin, label: group.label, items: group.items.filter((item) => matches(item, needle)) }))
-        .filter((group) => group.items.length > 0);
-});
-const rowGroups = computed(() => shown.value.filter((group) => group.origin !== `base`));
-const staples = computed(() => shown.value.find((group) => group.origin === `base`));
+const rowGroups = computed(() => groups.filter((group) => group.origin !== `base`));
+const staples = computed(() => groups.find((group) => group.origin === `base`));
 
 /* The strip opens ONE sentence at a time, where the rows open independently. A pill is 100px wide and its
  * sentence is a paragraph: several open at once would push the strip apart and lose the grid that makes it
@@ -164,25 +146,6 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
          against each other, so the space between one group's last row and the next group's label has to be the
          biggest gap in the list, or the labels stop reading as breaks. -->
     <div class="flex flex-col gap-5">
-        <!-- One line, and it earns its place twice: the sentence that makes the versions trustworthy, and the
-             one control that answers "is X in here?" without scrolling. -->
-        <div v-if="groups.length > 0" class="flex flex-wrap items-center justify-between gap-2">
-            <p class="min-w-0 text-2xs text-subtle">
-                Read from this sandbox just now, not from the recipe.
-                <template v-if="awaiting > 0">
-                    {{ awaiting === 1 ? `One entry is` : `${awaiting} entries are` }} waiting for your approval and not installed yet.
-                </template>
-            </p>
-            <SearchBar
-                v-model="query"
-                variant="field"
-                clearable
-                placeholder="Find a tool…"
-                aria-label="Filter what this sandbox has"
-                class="w-44 shrink-0"
-            />
-        </div>
-
         <!-- `flat`, because this list is already inside the Environment group: a bordered group per section drew a
              frame around a surface painted in the group's own colour, so the section labels and the gap between
              them do the grouping and the group stays the only frame. -->
@@ -350,8 +313,8 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             </RowNote>
         </RowGroup>
 
-        <!-- Four different sentences, and telling them apart matters: still asking, could not ask, asked and
-             there is genuinely nothing, and a filter that matched nothing.
+        <!-- Three different sentences, and telling them apart matters: still asking, could not ask, and asked
+             when there is genuinely nothing.
 
              THE FIRST OF THE FOUR IS DRAWN, NOT SAID, and this is the longest wait in the hub to draw: the read
              behind it asks every tool on the overlay for its version, one process spawn each, so it is measured
@@ -391,6 +354,5 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         <div v-else-if="groups.length === 0" :class="ui.emptyState(`py-8`)">
             Nothing added on top of the stock image yet, and nothing in it answered, which usually means the sandbox is still starting.
         </div>
-        <div v-else-if="shown.length === 0" :class="ui.emptyState(`py-8`)">Nothing here matches "{{ query.trim() }}".</div>
     </div>
 </template>
