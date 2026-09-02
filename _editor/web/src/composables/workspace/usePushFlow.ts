@@ -1,4 +1,5 @@
-import { type CommandRun, commandRunOutcome, type PushRun, quickModelKey } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type CommandRun, commandRunOutcome, type PushRun, quickModelKey } from "@intentic/sandbox-contract";
+import type { AgentRunChoice } from "@intentic/ui";
 import { computed, ref, shallowRef, watch } from "vue";
 import { composeSession, startSession } from "../agents/sessionSuggestion";
 import { useAgentRunModel } from "../chat/agentRunModel";
@@ -375,10 +376,19 @@ export function usePushFlow() {
 
     // Hand the failure to an agent. The push does NOT go: the point of accepting the fix is that this tree is
     // not the one to push, and the agent's diff comes back for review like any other.
-    const startFix = (): void => {
+    const startFix = (pick?: AgentRunChoice): void => {
         const fix = proposedFix.value;
         dismiss();
         if (fix !== undefined) {
+            if (pick !== undefined && `selectModel` in fix) {
+                fix.selectModel({ provider: pick.provider as AgentProvider, value: pick.model });
+                if (pick.account !== undefined) {
+                    fix.account.value = pick.account;
+                }
+                if (pick.harness !== undefined) {
+                    fix.harness.value = pick.harness as AgentHarness;
+                }
+            }
             startSession(fix);
         }
     };

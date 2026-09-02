@@ -110,7 +110,12 @@ vi.mock(`../sandbox/useSandbox`, async () => {
 });
 
 vi.mock(`../agents/sessionSuggestion`, () => ({
-    composeSession: vi.fn((draft: { prompt: string }) => ({ draft })),
+    composeSession: vi.fn((draft: { prompt: string }) => ({
+        draft,
+        selectModel: vi.fn(),
+        account: { value: undefined },
+        harness: { value: undefined },
+    })),
     startSession: vi.fn(),
 }));
 
@@ -303,6 +308,20 @@ test(`handing the failure to an agent starts the session and drops the push`, as
     flow.startFix();
     expect(suggestion.startSession).toHaveBeenCalledWith(proposal);
     expect(git.syncAll).not.toHaveBeenCalled();
+    expect(flow.question.value).toBeUndefined();
+    expect(flow.pending.value).toBeUndefined();
+});
+
+test(`starting a fix with a picked model re-points the session before starting`, async () => {
+    const { flow, suggestion, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1 });
+    await flush();
+    const proposal = flow.proposedFix.value as unknown as { selectModel: ReturnType<typeof vi.fn> };
+
+    flow.startFix({ provider: `cursor`, model: `composer-2.5`, label: `Composer 2.5` });
+    expect(proposal.selectModel).toHaveBeenCalledWith({ provider: `cursor`, value: `composer-2.5` });
+    expect(suggestion.startSession).toHaveBeenCalledWith(proposal);
     expect(flow.question.value).toBeUndefined();
     expect(flow.pending.value).toBeUndefined();
 });

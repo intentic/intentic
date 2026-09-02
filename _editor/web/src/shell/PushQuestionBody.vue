@@ -1,21 +1,27 @@
 <script setup lang="ts">
-import { Button, Code, Icon } from "@intentic/ui";
+import { AgentRunButton, Button, Code, Icon, useAgentRunPick } from "@intentic/ui";
 import { computed } from "vue";
-import SuggestedSessionBox from "../agents/SuggestedSessionBox.vue";
+import { shellModelPicking } from "../composables/chat/shellModelPicking";
 import { usePushFlow } from "../composables/workspace/usePushFlow";
 
-/* WHAT THE PUSH QUESTION CARRIES THAT TWO STRINGS CANNOT: the command in monospace, the whole proposed agent
- * turn, and the way back to the terminal it all came out of.
+/* WHAT THE PUSH QUESTION CARRIES THAT TWO STRINGS CANNOT: the command in monospace,
+ * and the way back to the terminal it all came out of.
  *
  * The question itself — its sentence, its tone, its dismiss — is a notification like any other
  * (composables/notificationSources.ts). This is only the part of it that has to be markup, mounted by the lane
  * as the card's body. Splitting it that way is what lets the most complicated thing this app floats use the
- * same box as "3 files deleted". The two ANSWERS are here rather than in the lane's action row, so that they
+ * same box as "3 files deleted". The answers are here rather than in the lane's action row, so that they
  * sit on one row together; see the row itself. */
 
 const pushFlow = usePushFlow();
+const fixModel = useAgentRunPick(() => shellModelPicking());
 
 const pushAnywayLabel = computed(() => (pushFlow.question.value?.kind === `push` ? `Try again` : `${pushFlow.pending.value?.verb ?? `Push`} anyway`));
+
+const startFix = (): void => {
+    pushFlow.startFix(fixModel.overridden.value ? fixModel.model.value : undefined);
+    fixModel.clear();
+};
 </script>
 
 <template>
@@ -33,16 +39,7 @@ const pushAnywayLabel = computed(() => (pushFlow.question.value?.kind === `push`
             </p>
         </div>
 
-        <!-- The proposal: the whole turn composed from the failure — text, model, effort — and editable to the
-             last character before it costs anything (composables/agents/sessionSuggestion.ts). Absent for a check
-             that could not run and for one the user stopped: nothing was learned about the code either way, so an
-             agent sent after it would be hunting a bug that isn't there. -->
-        <template v-if="pushFlow.proposedFix.value">
-            <p class="mb-1.5 mt-3 text-2xs font-medium uppercase tracking-wide text-subtle">Fix it with an agent</p>
-            <SuggestedSessionBox :conversation="pushFlow.proposedFix.value" action="Start agent" @start="pushFlow.startFix" />
-        </template>
-
-        <!-- ONE ROW FOR BOTH ANSWERS: the way back to the output on the left, the override on the right.
+        <!-- ONE ROW FOR ALL ANSWERS: the way back to the output on the left, the actions on the right.
              The override is the card's own decision and used to be a notification action, which put it on a row
              of its own under this one — two strips of chrome, 40px of card, to hold one link and one button that
              read as a pair. It lives here instead, so the lane renders no action row for this question at all
@@ -63,6 +60,18 @@ const pushAnywayLabel = computed(() => (pushFlow.question.value?.kind === `push`
                 <Icon name="terminal" class="text-2xs" />
                 Show terminal
             </button>
+
+            <!-- Hand the failure to an agent. Absent for a check that could not run and for one the user stopped:
+                 nothing was learned about the code either way, so an agent sent after it would be hunting a bug
+                 that isn't there. -->
+            <AgentRunButton
+                v-if="pushFlow.proposedFix.value"
+                label="Fix with agent"
+                :model-label="fixModel.model.value.label"
+                :overridden="fixModel.overridden.value"
+                @run="startFix"
+                @pick="fixModel.choose"
+            />
 
             <!-- Push anyway, and it never asks twice. The user knows things the check does not: that this IS the
                  fix for the failure, that the suite is flaky, that they want it on a branch to look at in CI.
