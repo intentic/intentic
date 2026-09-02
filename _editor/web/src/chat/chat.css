@@ -179,9 +179,6 @@
     padding: 0.125rem 0.25rem;
     color: var(--color-subtle);
     background: color-mix(in srgb, var(--color-overlay) 55%, var(--color-card));
-    /* An open bubble scrolls its text under the chip, so it needs an edge of its own to read as a control
-       floating over the text rather than as a smudge in it. */
-    border: 1px solid var(--color-line);
     transition: color 120ms ease;
 }
 .chat-prompt-toggle:hover {

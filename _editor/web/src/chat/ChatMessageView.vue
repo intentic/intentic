@@ -931,7 +931,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         class="chat-prompt-toggle"
                         :aria-expanded="expanded"
                         :aria-label="expanded ? 'Collapse message' : 'Expand message'"
-                        v-tooltip.left="expanded ? 'Show less' : 'Show more'"
                         @click="toggleExpanded"
                     >
                         <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
