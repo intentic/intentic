@@ -585,9 +585,18 @@ export const browserServersOf = async (
     };
     const manifestPath = join(configDir, `router-${randomBytes(4).toString("hex")}.json`);
     await writeFile(manifestPath, JSON.stringify(manifest), { flag: "wx", mode: 0o600 });
-    /* The one server the harness spawns for every signed-in browser: the router, whose tools are pinned into
-     * the prompt ONCE (alwaysLoad) however many accounts stand behind them, a model that does not know it can
-     * act as its accounts never will. Same per-call ceiling as the backends it launches. */
+    /* The one server the harness spawns for every signed-in browser: the router, whose ~21 tools stand for
+     * however many accounts are behind them. Same per-call ceiling as the backends it launches.
+     *
+     * NOT alwaysLoad, and it was, on a discoverability argument — "a model that does not know it can act as its
+     * accounts never will" — that is true of both browsers and was being spent on the wrong one. Measured over
+     * one day of this workspace's sessions: the credential-free `web` server, deferred, was used in 25 of 58
+     * sessions; this one, pinned into all 58, was used in 3. So every turn paid ~21 schemas for the browser
+     * almost nobody reached for, while the browser they did reach for cost them a ToolSearch anyway.
+     *
+     * Discoverability is a job for the system append, which is where `web` already gets it and now names this
+     * one too (agent/system-prompt.ts): one sentence, told to every turn that has accounts, against ~21 tool
+     * schemas told to every turn whether or not it has any. */
     servers[ROUTED_BROWSER_SERVER] = {
         type: "stdio",
         command: process.execPath,
@@ -597,7 +606,6 @@ export const browserServersOf = async (
             ...(conversationId === undefined ? {} : workloadStamp(conversationId)),
         },
         timeout: BROWSER_CALL_TIMEOUT_MS,
-        alwaysLoad: true,
     };
     return { servers, accounts, ports, passkeys };
 };

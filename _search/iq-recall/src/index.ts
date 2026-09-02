@@ -40,7 +40,9 @@ export interface SessionSummary {
 }
 
 export interface Recall {
-    ingest(): Promise<IngestStats>;
+    // `budgetMs` caps how long indexing may take; what it does not reach keeps its byte offset for next time.
+    // Omitted ⇒ index everything, which is what a run started for its own sake wants.
+    ingest(options?: { budgetMs?: number }): Promise<IngestStats>;
     filesForTopic(query: string, options?: TopicOptions): TopicFile[];
     match(prompt: string, options?: MatchOptions): SessionMatch[];
     grab(query: string, options?: GrabOptions): TurnExcerpt[];
@@ -62,7 +64,12 @@ export const createRecall = (options: RecallOptions): Recall => {
     let opened: RecallDb | undefined;
     const db = (): RecallDb => (opened ??= openRecallDb(dbPath));
     return {
-        ingest: () => ingest(db(), { root: options.root, projectsDir }),
+        ingest: (ingestOptions) =>
+            ingest(db(), {
+                root: options.root,
+                projectsDir,
+                ...(ingestOptions?.budgetMs === undefined ? {} : { deadlineMs: Date.now() + ingestOptions.budgetMs }),
+            }),
         filesForTopic: (query, topicOptions) => rankFilesForTopic(db(), query, topicOptions),
         match: (prompt, matchOptions) => matchSessions(db(), prompt, matchOptions),
         grab: (query, grabOptions) => grabExcerpts(db(), query, grabOptions),

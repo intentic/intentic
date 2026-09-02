@@ -211,14 +211,23 @@ const OUTSIDE_GUIDANCE =
 // convention: the agent could not put a screenshot anywhere else if it tried. It used to promise the same
 // directory while the tool wrote model-named files into the agent's cwd, which cost sessions a failed Read
 // and a `find /`, and, when a session didn't check, left PNGs in the user's workspace (browser-artifacts.ts).
-const browserGuidance = (outputDir: string): string =>
-    "You have a real browser. Load it with ToolSearch (`+browser`) to get `mcp__web__browser_navigate`, " +
-    "`mcp__web__browser_take_screenshot` and the rest. Use it to read pages that need JavaScript, to check a " +
-    "docs site, and to LOOK at web UI you have changed rather than reasoning about it from the source alone. " +
+const browserGuidance = (outputDir: string, accounts = false): string =>
+    `You have a real browser. Load it with ToolSearch (\`+browser\`) to get \`mcp__web__browser_navigate\`, ` +
+    `\`mcp__web__browser_take_screenshot\` and the rest. Use it to read pages that need JavaScript, to check a ` +
+    `docs site, and to LOOK at web UI you have changed rather than reasoning about it from the source alone. ` +
     `Screenshots land in ${outputDir} whatever you name them, never in the repo ` +
-    "you are working in; the result tells you the path, so Read it back from there. Clicks and navigations time " +
-    "themselves out and come back as errors, but `browser_evaluate` awaits whatever the page hands it: give any " +
-    "in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.";
+    `you are working in; the result tells you the path, so Read it back from there. Clicks and navigations time ` +
+    `themselves out and come back as errors, but \`browser_evaluate\` awaits whatever the page hands it: give any ` +
+    `in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.${ 
+    /* The second browser, named only where it exists. This turn holds signed-in accounts, and reaching them is
+     * a DIFFERENT tool prefix rather than an argument to the one above: `mcp__web__` is credential-free and
+     * anonymous, `mcp__browser__` acts as somebody. A turn that reached for the anonymous one to do an
+     * account's work would be quietly signed out and would not know why. */
+    accounts
+        ? " That browser holds no identity. To act as one of this sandbox's signed-in accounts, ToolSearch " +
+          "`+mcp__browser__` instead: those tools take an `account` argument and drive that account's own " +
+          "persisted, signed-in profile. `mcp__accounts__roster` names the accounts you may use."
+        : ""}`;
 
 /* The concise-response steer (terseOutput): cuts the model's OWN output tokens without dropping substance.
  * Kept short so it barely costs tokens itself each turn.
@@ -325,12 +334,18 @@ export interface SdkSystemPromptInput {
     // Where the browser tools actually write screenshots, so the guidance states the enforced path rather than
     // a convention (browser-artifacts.ts redirects them there regardless).
     readonly browserOutputDir: string | undefined;
+    /* Whether an account or identity stands behind the routed browser this turn, which decides whether the
+     * browser sentence names it. It used to need no saying: that server pinned its ~21 tool schemas into every
+     * prompt, and a model that could see them knew. Over one day of this workspace's sessions those schemas
+     * were paid for by all 58 and used by 3, while the deferred credential-free browser was used by 25 — so
+     * the pin went and one sentence, told only to turns that hold an account, does the same job. */
+    readonly browserAccounts?: boolean;
 }
 
 // This harness's own guidance, in most-stable-first order, with whatever the turn composed after it. Shared by
 // both built-in bases so they differ only in the base itself, the guidance describes widgets THIS app renders
 // and conventions THIS workspace enforces, both of which hold whichever prompt the agent is wearing.
-const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
+const harnessGuidance = ({ append, unattended, browserOutputDir, browserAccounts }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
     CHECKLIST_GUIDANCE,
     // How the turn spends its steps, next to the checklist that plans them: these are about the shape of a turn
@@ -344,7 +359,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSyste
     // Only when the turn actually wired browser servers (turn-plan omits the dir when Chromium is absent,
     // a core image without the browser pack): advertising a browser that isn't there sends the model hunting
     // for tools it cannot load, or installing its own.
-    ...(browserOutputDir === undefined ? [] : [browserGuidance(browserOutputDir)]),
+    ...(browserOutputDir === undefined ? [] : [browserGuidance(browserOutputDir, browserAccounts === true)]),
     ...(append === undefined ? [] : [append]),
 ];
 

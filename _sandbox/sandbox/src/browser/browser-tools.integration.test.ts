@@ -252,6 +252,12 @@ test("a browser capability mounts the ONE routed server before anyone has logged
     expect(accounts["reddit"]).toBe("reddit");
     // The passkey store is armed from the first page: a sign-UP is exactly when the account enrolls its key.
     expect(Object.keys(passkeys)).toContain("reddit");
+    /* NEITHER BROWSER PINS ITS SCHEMAS INTO THE PROMPT. The routed one used to, to make itself discoverable,
+     * and that cost every turn ~21 tool schemas: over one day of this workspace's sessions all 58 paid for it
+     * and 3 used it, while the deferred credential-free browser was used by 25. Discovery moved to one
+     * sentence in the system append (agent/system-prompt.ts), which only turns holding an account are told. */
+    expect(servers["browser"]).not.toHaveProperty("alwaysLoad");
+    expect(servers["web"]).not.toHaveProperty("alwaysLoad");
 });
 
 test("a login in progress suppresses that account's server (the profile is locked)", async () => {

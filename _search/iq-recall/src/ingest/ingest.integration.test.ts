@@ -159,3 +159,41 @@ test("a deleted transcript loses its rows", async () => {
     expect(stats.sessions).toBe(1);
     expect(db.get("SELECT COUNT(*) AS n FROM sessions WHERE session_id = ?", SESSION_B)?.["n"]).toBe(0);
 });
+
+/* THE BUDGET, and the contract that makes stopping early safe: byte offsets mean unfinished work is deferred,
+ * never lost. Without a way to stop, this walked every changed transcript inline, and on the UserPromptSubmit
+ * path a workspace with ~1000 of them blew the hook's 10s ceiling on 21 of 43 prompts in one day. */
+const SESSION_C = "aaaaaaaa-0000-4000-8000-000000000003";
+
+const writeSession = async (sessionId: string, prompt: string): Promise<void> => {
+    const ts = new Date().toISOString();
+    await writeFile(
+        join(projectsDir, `${sessionId}.jsonl`),
+        `${[
+            JSON.stringify({ parentUuid: null, type: "user", message: { role: "user", content: prompt }, uuid: `${sessionId}-1`, timestamp: ts, sessionId }),
+            JSON.stringify({
+                parentUuid: `${sessionId}-1`,
+                type: "assistant",
+                message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
+                uuid: `${sessionId}-2`,
+                timestamp: ts,
+                sessionId,
+            }),
+        ].join("\n")}\n`,
+    );
+};
+
+test("an exhausted budget indexes nothing new rather than overrunning", async () => {
+    const before = Number(db.get("SELECT COUNT(*) AS n FROM sessions")?.["n"]);
+    await writeSession(SESSION_C, "Add a budget to the recall ingest loop");
+    // A deadline already in the past: the loop must stop at its first check, before any parse.
+    const stats = await ingest(db, { root, projectsDir, deadlineMs: Date.now() });
+    expect(stats.sessions).toBe(before);
+    expect(db.get("SELECT COUNT(*) AS n FROM sessions WHERE session_id = ?", SESSION_C)?.["n"]).toBe(0);
+});
+
+test("what a budget skipped is picked up by the next run", async () => {
+    const stats = await ingest(db, { root, projectsDir });
+    expect(stats.sessions).toBe(2);
+    expect(turnsOf(SESSION_C)).toEqual([{ ordinal: 0, prompt: "Add a budget to the recall ingest loop" }]);
+});

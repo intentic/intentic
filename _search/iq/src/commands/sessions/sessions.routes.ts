@@ -138,33 +138,87 @@ const forkCommandOf = (recall: Recall, match: SessionMatch, prompt: string): str
     return `iq sessions fork ${match.sessionId}${point === undefined ? "" : ` --at ${point.turnUuid}`}`;
 };
 
-// UserPromptSubmit payload → hookSpecificOutput JSON on a strong first-prompt match, silence otherwise.
-// Exported for tests; never throws on malformed input, a broken hook must not block the user's prompt.
-export const runHookMatch = async (input: string, write: (chunk: string) => void): Promise<void> => {
-    let payload: { session_id?: string; transcript_path?: string; cwd?: string; prompt?: string };
+/* WHAT THIS HOOK MAY SPEND, given that it stands between the user pressing enter and the model reading their
+ * prompt. Nothing here is worth a visible pause: a recall that arrives late is worth less than no recall.
+ *
+ * Both numbers sit under the 10s the hook is configured with in plugin/hooks/hooks.json, because being killed
+ * at that ceiling is the failure this replaces — over one day it happened on 21 of 43 prompts, each one costing
+ * the full ten seconds and delivering nothing. Staying inside our own budget means the outer timeout becomes
+ * what it should be, a backstop nobody reaches. */
+const INGEST_BUDGET_MS = 2_500;
+const HOOK_BUDGET_MS = 5_000;
+
+// Resolves to `undefined` if `work` has not finished in time. The work itself is left running: it is a SQLite
+// write we would rather see finish than abort, and the process exits either way.
+const withinBudget = async <T>(budgetMs: number, work: Promise<T>): Promise<T | undefined> => {
+    let timer: NodeJS.Timeout | undefined;
+    const expiry = new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), budgetMs);
+        timer.unref();
+    });
     try {
-        payload = JSON.parse(input) as typeof payload;
+        return await Promise.race([work, expiry]);
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+interface HookPayload {
+    session_id?: string;
+    transcript_path?: string;
+    cwd?: string;
+    prompt?: string;
+}
+
+// A payload worth answering, or nothing. Malformed input, an empty prompt and a prompt that is not the
+// session's first all come back the same way: this hook's only failure mode may be silence.
+const hookPayloadOf = async (input: string): Promise<HookPayload | undefined> => {
+    let payload: HookPayload;
+    try {
+        payload = JSON.parse(input) as HookPayload;
     } catch {
-        return;
+        return undefined;
     }
     const prompt = payload.prompt ?? "";
     if (prompt === "") {
-        return;
+        return undefined;
     }
     if (payload.transcript_path !== undefined && !(await isFirstPrompt(payload.transcript_path, prompt))) {
+        return undefined;
+    }
+    return payload;
+};
+
+// UserPromptSubmit payload → hookSpecificOutput JSON on a strong first-prompt match, silence otherwise.
+// Exported for tests; never throws on malformed input, a broken hook must not block the user's prompt.
+export const runHookMatch = async (input: string, write: (chunk: string) => void): Promise<void> => {
+    const payload = await hookPayloadOf(input);
+    if (payload === undefined) {
         return;
     }
+    const prompt = payload.prompt ?? "";
     const config = loadConfig();
     const root = config.workspaceRoot !== "" ? config.workspaceRoot : (payload.cwd ?? process.cwd());
     const recall = recallFor(root);
+    const deadline = Date.now() + HOOK_BUDGET_MS;
     try {
-        await recall.ingest();
+        // A stale index still answers: matching is the point, indexing is upkeep, and the SessionStart hook
+        // already backgrounds an unbudgeted `iq sessions ingest` to do the rest.
+        await withinBudget(INGEST_BUDGET_MS, recall.ingest({ budgetMs: INGEST_BUDGET_MS }));
+        if (Date.now() >= deadline) {
+            return;
+        }
         const matches = recall.match(prompt, payload.session_id === undefined ? {} : { excludeSessionId: payload.session_id });
         const top = matches[0];
         if (top === undefined || !top.strong) {
             return;
         }
-        const lead = `A related past session exists: "${top.title ?? top.sessionId}" (${dateOf(top.lastTs)}, ${top.promptCount} prompts). If the user seems to be continuing that work, suggest they fork it instead of rebuilding context: ${forkCommandOf(recall, top, prompt)}`;
+        /* THE EXCERPTS ARE THE PAYLOAD; the fork is an aside. This lead used to open by instructing the model to
+         * "suggest they fork it instead of rebuilding context", which is advice about an action only the user
+         * can take, addressed to the party who cannot take it: offered on 22 prompts in one day and acted on
+         * zero times, while the excerpts underneath it were read and used. So the recall leads, and the fork
+         * command rides along as something to mention if the work really is a continuation. */
+        const lead = `Related past session "${top.title ?? top.sessionId}" (${dateOf(top.lastTs)}, ${top.promptCount} prompts). Use what follows as background. If this prompt is genuinely continuing that work, you can tell the user they may resume it with \`${forkCommandOf(recall, top, prompt)}\` rather than rebuilding the context here.`;
         // Same 45-day window as the strong-match gate; the current session never quotes itself.
         const excerpts = recall.grab(prompt, {
             days: 45,

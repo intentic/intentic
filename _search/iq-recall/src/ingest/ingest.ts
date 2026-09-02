@@ -186,7 +186,17 @@ const applyDelta = (db: RecallDb, transcriptPath: string, sessionId: string, del
 
 // Incrementally mirror the workspace's transcript dir into the recall index: unchanged files are skipped via
 // (mtime, size), grown files are parsed from their stored byte offset, vanished files lose their rows.
-export const ingest = async (db: RecallDb, options: { root: string; projectsDir: string }): Promise<IngestStats> => {
+/* HOW LONG INGEST MAY SPEND, and why a budget rather than a faster parse.
+ *
+ * This is incremental and self-managing by design: every transcript carries a byte offset, so work not done now
+ * is done next time and nothing is lost by stopping early. What it did not have was anyone allowed to stop it.
+ * On the UserPromptSubmit path that mattered — a workspace with ~1000 transcripts and dozens of agents
+ * appending to them concurrently has a lot of changed bytes at any instant, and the hook was killed at its 10s
+ * ceiling on 21 of 43 prompts in one day, delivering nothing after stalling the prompt for the full ten.
+ *
+ * So the caller says how long it has. Absent a deadline, nothing changes: `iq sessions ingest` run for its own
+ * sake still walks everything, which is what the SessionStart hook backgrounds it to do. */
+export const ingest = async (db: RecallDb, options: { root: string; projectsDir: string; deadlineMs?: number }): Promise<IngestStats> => {
     const onDisk = new Map<string, { mtimeMs: number; size: number }>();
     let entries: string[];
     try {
@@ -214,10 +224,22 @@ export const ingest = async (db: RecallDb, options: { root: string; projectsDir:
             db.run("DELETE FROM transcripts WHERE path = ?", path);
         });
     }
-    for (const [path, stat] of onDisk) {
+    /* NEWEST FIRST, which only starts to matter once a run can end early. readdir order is arbitrary, so a
+     * budgeted ingest walking it would spend its whole budget on whichever transcripts happen to sort first and
+     * could miss the same recent ones every time. Recency is also simply the right order for recall: the
+     * session someone is about to be reminded of is a recent one. */
+    const pending = [...onDisk]
+        .filter(([path, stat]) => {
+            const row = known.get(path);
+            return row === undefined || Number(row["mtime_ms"]) !== stat.mtimeMs || Number(row["size"]) !== stat.size;
+        })
+        .sort(([, a], [, b]) => b.mtimeMs - a.mtimeMs);
+    for (const [path, stat] of pending) {
         const row = known.get(path);
-        if (row !== undefined && Number(row["mtime_ms"]) === stat.mtimeMs && Number(row["size"]) === stat.size) {
-            continue;
+        // Out of time: what is left keeps its byte offset and is picked up by the next run, which is the same
+        // contract as a transcript that grew after this one started.
+        if (options.deadlineMs !== undefined && Date.now() >= options.deadlineMs) {
+            break;
         }
         const sessionId = basename(path, ".jsonl");
         let fromByte = row === undefined ? 0 : Number(row["byte_offset"]);

@@ -198,3 +198,37 @@ test("the missing-tool notice is told once per turn", async () => {
     expect(context(await firePost(hooks, "lsof -i :3000", "bash: lsof: command not found"))).toEqual(expect.any(String));
     expect(await firePost(hooks, "tree -L 2", "bash: tree: command not found")).toEqual({});
 });
+
+/* WHAT THE OLD "APPEARS ANYWHERE IN THE COMMAND" GUARD LET THROUGH, drawn from one day of this workspace's own
+ * transcripts. `sh -c` really did run, and what looked like dash reporting a missing shell was the model's OWN
+ * fallback string coming back at it: `sh` sits at /usr/bin/sh and was never missing. The shell's real report
+ * carries the script line (`sh: 1: oxlint: not found`), and requiring it is what separates the two. */
+test("a shell naming itself in echoed text is not a missing shell", async () => {
+    expect(await firePost(installSteeringHooks(), "sh -c 'command -v oxlint || echo \"sh: not found\"'", "sh: not found")).toEqual({});
+});
+
+// The wrapper is not the thing being run: a tool missing inside `sh -c '…'` is still the tool that is missing.
+test("a tool missing inside a shell wrapper is still named", async () => {
+    const told = context(await firePost(installSteeringHooks(), "sh -c 'lsof -i :3000'", "sh: 1: lsof: not found"));
+    expect(told).toContain("`lsof`");
+});
+
+/* Backticks inside a double-quoted argument are command substitution, and this is the one shell mistake the
+ * old notice actively made worse. The pattern the model wrote never reached rg; being told to install `ask`
+ * sent it looking for a package instead of at its own quoting. */
+test("a substituted backtick is answered with the quoting fix, not an install", async () => {
+    const told = context(
+        await firePost(installSteeringHooks(), 'rg -n "kind: `ask`|decision" conversation.test.ts', "bash: line 1: ask: command not found"),
+    );
+    expect(told).toContain("`ask`");
+    expect(told).toMatch(/command substitution/i);
+    expect(told).toMatch(/single-quote|escape the backticks/i);
+    expect(told).not.toMatch(/pnpm exec|records runtime installs/i);
+});
+
+// Two different mistakes, so one latch must not silence the other.
+test("the substitution notice and the missing-tool notice are latched apart", async () => {
+    const hooks = installSteeringHooks();
+    expect(context(await firePost(hooks, 'echo "`ask`"', "bash: line 1: ask: command not found"))).toMatch(/command substitution/i);
+    expect(context(await firePost(hooks, "lsof -i :3000", "bash: lsof: command not found"))).toMatch(/records runtime installs/i);
+});

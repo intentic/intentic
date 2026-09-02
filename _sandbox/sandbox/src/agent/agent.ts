@@ -545,6 +545,11 @@ const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinki
     ...opt("thinking", request.thinking === undefined ? undefined : { type: request.thinking ? ("adaptive" as const) : ("disabled" as const) }),
 });
 
+/* Whether the routed browser has anyone behind it this turn. The same account→owner map the session observer
+ * resolves calls with, asked as a yes/no: it decides whether the browser sentence names that server at all.
+ * Its own function so the answer costs baseOptions no branch of its own. */
+const holdsBrowserAccounts = (accounts: Record<string, string> | undefined): boolean => Object.keys(accounts ?? {}).length > 0;
+
 // Base SDK options for the turn.
 const baseOptions = (
     request: AgentRequest,
@@ -597,6 +602,7 @@ const baseOptions = (
             append: request.systemAppend,
             unattended: request.unattended === true,
             browserOutputDir: request.browserOutputDir,
+            browserAccounts: holdsBrowserAccounts(request.browserAccounts),
         }),
         // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
         // hooks, and .mcp.json, plus the user tier. The SDK default is [] (loads nothing), so every filesystem

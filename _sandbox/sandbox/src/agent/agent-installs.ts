@@ -321,11 +321,67 @@ const BROWSER_ALREADY_BAKED =
  * but the tail is endless and the next one is unknowable. So the failure itself is the trigger, and the notice
  * routes: a project tool through its project, a system tool installed plainly — the ledger and the drift sweep
  * do the durability bookkeeping, so the model is told it need not. */
+/* Ordered most-specific first, and that ordering is not cosmetic: zsh says `zsh: command not found: lsof`,
+ * which the bash pattern below reads as "`zsh` was not found". Whichever runs first wins, so the shape that can
+ * only mean one thing goes first. */
 const NOT_FOUND = [
-    /(?:^|\s)([\w.@+-]+): command not found/, // bash: `bash: line 1: lsof: command not found`
     /command not found: ([\w.@+-]+)/, // zsh
-    /(?:^|\s)([\w.@+-]+): not found/, // dash/sh: `sh: 1: lsof: not found`
+    /(?:^|\s)([\w.@+-]+): command not found/, // bash: `bash: line 1: lsof: command not found`
+    /* dash/sh: `sh: 1: lsof: not found`. THE LINE NUMBER IS LOAD-BEARING and was not always required. Without
+     * it the pattern reads "<word>: not found" anywhere, which is a sentence people write: a turn probing this
+     * very question ran `sh -c 'command -v oxlint || echo "sh: not found"'` and was told that `sh` — the shell
+     * that had just run, sitting at /usr/bin/sh — was missing. Dash always reports through the shell name and
+     * the script line, so the shape it actually emits is the shape to match. */
+    /(?:^|\s)[\w.@+-]+: \d+: ([\w.@+-]+): not found/,
 ];
+
+/* Every name the shell's report could be about, in confidence order. A LIST rather than one answer because the
+ * patterns overlap on real output and the caller is the one holding the tie-breaker: `zsh: command not found:
+ * lsof` yields `lsof` then `zsh`, and only the command knows which of those it tried to run. */
+const notFoundBinaries = (output: string): string[] => {
+    const names: string[] = [];
+    for (const rule of NOT_FOUND) {
+        const name = rule.exec(output)?.[1];
+        if (name !== undefined && !names.includes(name)) {
+            names.push(name);
+        }
+    }
+    return names;
+};
+
+// The shell's report with no question asked about where the name came from. Exported for the turn-ending gate,
+// which asks this of a CHECK's output: a check legitimately reaches its tools through a package script
+// (`pnpm lint` → `oxlint`), so the command-position guard below would be wrong there and the raw probe is right.
+export const notFoundBinary = (output: string): string | undefined => notFoundBinaries(output)[0];
+
+/* Every binary this command runs IN COMMAND POSITION, which is the only place a missing one can be missing
+ * from. One level into `sh -c '…'` as well, because that wrapper is how the tmux runner and `timeout` carry a
+ * real command and the tool that is actually absent is inside it. Depth-capped: the recursion only ever shrinks
+ * the string, but a cap is cheaper than trusting that. */
+const executableOf = (invocation: string): string | undefined => {
+    const word = invocation.split(/\s+/)[0]?.split("/").at(-1);
+    return word === undefined || word === "" ? undefined : word;
+};
+
+// The script a shell wrapper carries, or nothing when this invocation is not one.
+const nestedScript = (invocation: string, executable: string): string | undefined =>
+    /^(?:ba|da|z|k)?sh$/.test(executable) ? /-c\s+(['"])([\s\S]*?)\1/.exec(invocation)?.[2] : undefined;
+
+const invokedBinaries = (command: string, depth = 0): Set<string> => {
+    const names = new Set<string>();
+    for (const invocation of commandInvocations(command)) {
+        const executable = executableOf(invocation);
+        if (executable === undefined) {
+            continue;
+        }
+        names.add(executable);
+        const script = depth < 2 ? nestedScript(invocation, executable) : undefined;
+        for (const nested of script === undefined ? [] : invokedBinaries(script, depth + 1)) {
+            names.add(nested);
+        }
+    }
+    return names;
+};
 
 const MISSING_GUIDANCE =
     "is not on PATH in this sandbox. Do not silently route around it. If it belongs to a project, run it through " +
@@ -333,19 +389,43 @@ const MISSING_GUIDANCE =
     "not globally. If it is a system tool, install it and carry on: the sandbox records runtime installs and " +
     "proposes durable image steps to the owner by itself.";
 
-// The captured name must also appear in the command that produced it. A tool result is full of other people's
-// text, a grep over a log, a test asserting on an error string, and without this guard the notice fires on
-// output that merely QUOTES a shell failure. Anything genuinely missing was named in the command by definition
-// (the tmux wrapper keeps the inner command verbatim), so the guard costs no true positives; a tool missing
-// from inside a script the command merely invoked is given up deliberately, in exchange for never crying wolf.
+/* The captured name must be something the command actually TRIED TO RUN. A tool result is full of other
+ * people's text — a grep over a log, a test asserting on an error string — and the notice has to survive that.
+ *
+ * This guard used to ask only whether the name appeared ANYWHERE in the command, and a word in a quoted
+ * argument satisfies that as easily as a real invocation: a turn searching for the string `ask` in its own test
+ * file was told to install `ask`. Command position is the question that was meant all along, and
+ * commandInvocations already parses it for the install classifier above. What it gives up is a tool reached
+ * through something this cannot see (`xargs foo`, `find -exec`), the same trade the loose version documented
+ * and did not actually make. */
 const missingBinary = (output: string, command: string): string | undefined => {
-    for (const rule of NOT_FOUND) {
-        const name = rule.exec(output)?.[1];
-        if (name !== undefined && new RegExp(`(?:^|[^\\w.@+-])${name.replace(/[.+]/g, "\\$&")}(?:[^\\w.@+-]|$)`).test(command)) {
-            return name;
+    const invoked = invokedBinaries(command);
+    return notFoundBinaries(output).find((name) => invoked.has(name));
+};
+
+const SUBSTITUTION_GUIDANCE =
+    "ran as a COMMAND SUBSTITUTION rather than as text. Backticks inside a double-quoted argument are not " +
+    "literal: the shell executed that word and spliced its (empty) output into the command, so the pattern or " +
+    "string you meant to pass silently lost it and the result you are reading answers a different question. " +
+    "Single-quote the argument, or escape the backticks (\\`), and run it again.";
+
+/* THE MISTAKE THAT LOOKS LIKE A MISSING TOOL AND IS NOT. `rg -n "kind: \`ask\`|decision" file` reads as one
+ * regex and runs as two things: bash substitutes `ask`, reports `command not found`, and rg searches for a
+ * pattern with that alternative missing — silently, with a clean exit and plausible hits. It is the most common
+ * quoting error in this workspace's transcripts and the old notice answered it with "install `ask`", which is
+ * advice pointing exactly away from the bug.
+ *
+ * Told apart from a genuinely missing tool by where the name sits: inside a backtick pair, not in command
+ * position. Asked FIRST for that reason — it is the more specific reading of the same shell message. */
+const substitutedBacktick = (output: string, command: string): string | undefined => {
+    const substituted = new Set<string>();
+    for (const [, inner] of command.matchAll(/`([^`]*)`/g)) {
+        const word = (inner ?? "").trim().split(/\s+/)[0];
+        if (word !== undefined && word !== "") {
+            substituted.add(word);
         }
     }
-    return undefined;
+    return notFoundBinaries(output).find((name) => substituted.has(name));
 };
 
 // Bash results arrive as a plain string from some harness versions and as a stdout/stderr record from others;
@@ -373,20 +453,36 @@ export const installSteeringHooks = (
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     let browserTold = false;
     let missingTold = false;
+    // Its own latch, because it is its own lesson: a turn that has been told about a missing tool has not been
+    // told anything about its quoting, and the two mistakes are made by different commands.
+    let substitutionTold = false;
     return {
         PostToolUse: [
             {
                 matcher: "Bash",
                 hooks: [
                     async (input) => {
-                        if (input.hook_event_name !== "PostToolUse" || missingTold) {
+                        if (input.hook_event_name !== "PostToolUse" || (missingTold && substitutionTold)) {
                             return {};
                         }
                         const command = (input.tool_input as { command?: unknown }).command;
                         if (typeof command !== "string") {
                             return {};
                         }
-                        const missing = missingBinary(toolResultText(input.tool_response), command);
+                        const output = toolResultText(input.tool_response);
+                        // The specific reading of the shell's message first: a substituted backtick IS a
+                        // `command not found`, and answering it with an install is advice pointing away.
+                        const substituted = substitutionTold ? undefined : substitutedBacktick(output, command);
+                        if (substituted !== undefined) {
+                            substitutionTold = true;
+                            return {
+                                hookSpecificOutput: {
+                                    hookEventName: "PostToolUse",
+                                    additionalContext: `\`${substituted}\` ${SUBSTITUTION_GUIDANCE}`,
+                                },
+                            };
+                        }
+                        const missing = missingTold ? undefined : missingBinary(output, command);
                         if (missing === undefined) {
                             return {};
                         }

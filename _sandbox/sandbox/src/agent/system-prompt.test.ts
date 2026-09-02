@@ -165,6 +165,30 @@ test("no browser servers this turn: the prompt advertises no browser", () => {
     expect(prompt as string).not.toContain("mcp__web__browser");
 });
 
+/* THE ROUTED BROWSER IS NAMED IN A SENTENCE RATHER THAN IN ~21 TOOL SCHEMAS. It used to make itself
+ * discoverable by pinning them into every prompt (alwaysLoad), which all 58 of one day's sessions paid for and
+ * 3 used, while the deferred credential-free browser was used by 25. The pin is gone, so this sentence is now
+ * the only thing standing between a turn holding accounts and knowing it can act as them. */
+test("a turn holding accounts is told about the routed browser, and one without is not", () => {
+    const browserOutputDir = `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`;
+    const withAccounts = sdkSystemPrompt({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        browserOutputDir,
+        browserAccounts: true,
+    }) as string;
+    expect(withAccounts).toContain("mcp__browser__");
+    expect(withAccounts).toContain("`account` argument");
+    // Anonymous and signed-in are different prefixes, not one tool with a flag: a turn that confuses them does
+    // an account's work signed out and cannot tell why.
+    expect(withAccounts).toContain("mcp__web__browser_navigate");
+
+    const anonymousOnly = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, browserOutputDir }) as string;
+    expect(anonymousOnly).toContain("mcp__web__browser_navigate");
+    expect(anonymousOnly).not.toContain("mcp__browser__");
+});
+
 test("claude keeps the CLI's preset and hands the same guidance to its append", () => {
     const preset = sdkSystemPrompt({
         ...BASE,

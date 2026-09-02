@@ -112,6 +112,12 @@ test("hook mode emits additionalContext JSON only on a strong first-prompt match
     // The context carries the matched turns' asked→answered excerpts, not just the fork pointer.
     expect(output.hookSpecificOutput.additionalContext).toContain("asked: Fix the JWT refresh token rotation");
     expect(output.hookSpecificOutput.additionalContext).toContain("answered: The rotation bug is in token refresh.");
+    /* The recall leads and the fork is an aside, which is the other way round from how this was worded. Told to
+     * "suggest they fork it instead of rebuilding context", the model was being given an instruction about an
+     * action only the user can take: offered on 22 prompts in one day and acted on zero times. The excerpts
+     * underneath were what actually got read, so they are what the lead now hands over to. */
+    expect(output.hookSpecificOutput.additionalContext).toContain("Use what follows as background");
+    expect(output.hookSpecificOutput.additionalContext).not.toMatch(/suggest they fork it instead/i);
 });
 
 test("hook mode stays silent on non-first prompts, weak matches, and garbage input", async () => {

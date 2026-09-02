@@ -2,6 +2,7 @@ import { isAbsolute } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule, RuleBuiltin } from "@intentic/sandbox-contract";
+import { notFoundBinary } from "../agent/agent-installs.js";
 import { createRemovalLedger, type FileReader, readWorkspaceFile, type RemovalLedger, verifyRemovalsMessage } from "../agent/agent-removals.js";
 import {
     commandExitCode,
@@ -134,28 +135,55 @@ interface Ledgers {
  *
  * Undefined ⇒ the failure is a real verdict and is reported as one. Asked ONLY of a failure, so a healthy turn
  * never pays for the question, and only of a run that actually happened. */
-const measuredNothing = async (run: RuleCommandRun, deps: TurnEndingDeps): Promise<readonly string[] | undefined> => {
+type Unmeasured =
+    | { readonly why: "error" }
+    | { readonly why: "installing"; readonly projects: readonly string[] }
+    | { readonly why: "missing-tool"; readonly binary: string };
+
+const measuredNothing = async (run: RuleCommandRun, deps: TurnEndingDeps): Promise<Unmeasured | undefined> => {
     if (run.status === "error") {
-        return [];
-    }
-    if (deps.installing === undefined) {
-        return undefined;
+        return { why: "error" };
     }
     // A question that cannot be answered leaves the verdict standing: silence here would excuse a genuine
-    // failure, which is the same mistake made from the other side.
-    const installing = await deps.installing().catch(() => []);
-    return installing.length > 0 ? installing : undefined;
+    // failure, which is the same mistake made from the other side. Asked FIRST because a named install is the
+    // more useful sentence when both readings are available: it says when the tree will settle.
+    const installing = deps.installing === undefined ? [] : await deps.installing().catch(() => []);
+    if (installing.length > 0) {
+        return { why: "installing", projects: installing };
+    }
+    /* The check's own toolchain missing from the tree, read off the output when the clock has nothing to say.
+     *
+     * `installing` above answers "is an install running RIGHT NOW", and that question is asked one moment too
+     * late: the daemon's dep repair runs beside the turn and lands between the check failing and this probe, so
+     * the window it was written for is exactly the window it misses. Over one day of this workspace's sessions
+     * that verdict went back 37 times out of 58 — `pnpm lint` reporting `sh: 1: oxlint: not found` while
+     * `oxlint` sat in node_modules/.bin — and turns spent themselves hunting a fault in work that was fine.
+     *
+     * Asked of a CHECK, the raw shell report is the right probe and the command-position guard that protects
+     * the PostToolUse notice would be wrong here: a check reaches its tools THROUGH a package script by design,
+     * and `oxlint` is never going to appear in `pnpm lint`. The re-run in settledRun is what keeps this honest
+     * — nothing is excused on the strength of this pattern alone. */
+    const binary = notFoundBinary(run.output);
+    return binary === undefined ? undefined : { why: "missing-tool", binary };
+};
+
+const unmeasuredReason = (run: RuleCommandRun, unmeasured: Unmeasured): string => {
+    if (unmeasured.why === "installing") {
+        return `a dependency install is running (${unmeasured.projects.join(", ")}), so node_modules is being rewritten under it.`;
+    }
+    if (unmeasured.why === "missing-tool") {
+        return `\`${unmeasured.binary}\` was not on PATH when it ran, and still is not on the re-run, so the check never started. That is a fact about the install, not about the diff.`;
+    }
+    return run.output.slice(-COMMAND_OUTPUT_BYTES);
 };
 
 // Said instead of a verdict, and worded so nobody goes looking for a fault in the diff. It still continues the
 // turn: one more round is exactly what this needs, since the tree usually settles inside it.
-const nothingMeasured = (label: string, command: string, run: RuleCommandRun, installing: readonly string[]): string =>
+const nothingMeasured = (label: string, command: string, run: RuleCommandRun, unmeasured: Unmeasured): string =>
     [
         `Before finishing, "${label}" could not measure anything:`,
         `\`${command}\``,
-        installing.length > 0
-            ? `a dependency install is running (${installing.join(", ")}), so node_modules is being rewritten under it.`
-            : run.output.slice(-COMMAND_OUTPUT_BYTES),
+        unmeasuredReason(run, unmeasured),
         `That is not a verdict on this turn's work and nothing here needs repairing. Re-run it once the tree settles, or say plainly that the check could not run.`,
     ]
         .filter((line) => line !== "")
@@ -179,6 +207,27 @@ const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => 
     "verify-ui-edits": async (_deps, ledgers) => verifyUiEditsMessage(ledgers.view),
 };
 
+/* RUN THE CHECK, AND RUN IT AGAIN IF ITS OWN TOOL WAS MISSING, which is the only thing that can tell a tree
+ * mid-rewrite from a diff that really fails.
+ *
+ * The daemon reinstalls a project beside the turn (agent-deps.ts's "no install runs while a turn is live" is
+ * not true), so `node_modules/.bin` empties and refills underneath this moment. Reading the failure alone
+ * cannot separate the two cases and no probe of the clock can either — the repair lands between the check and
+ * the question. A second run can: by the time it happens the tree has usually settled, and if it has not, the
+ * check still could not start and saying so is the honest answer.
+ *
+ * Costs one extra command ONLY on a failure whose output names a missing binary, so a healthy turn and an
+ * ordinarily-failing one both pay nothing. Deliberately not a retry loop: two runs answer the question, and a
+ * check that keeps losing its toolchain is a workspace problem the owner should see rather than one this
+ * moment should paper over. */
+const settledRun = async (runCommand: TurnRuleCommand, command: string, timeoutMs: number): Promise<RuleCommandRun> => {
+    const first = await runCommand(command, timeoutMs);
+    if (first.status === "passed" || first.status === "cancelled" || notFoundBinary(first.output) === undefined) {
+        return first;
+    }
+    return runCommand(command, timeoutMs);
+};
+
 // What one rule contributes to the follow-up, or nothing.
 const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers): Promise<string | undefined> => {
     if (rule.action.kind === "builtin") {
@@ -195,7 +244,7 @@ const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers
             return undefined;
         }
         const { command, timeoutMs } = rule.action;
-        const run = await deps.runCommand(command, timeoutMs);
+        const run = await settledRun(deps.runCommand, command, timeoutMs);
         // A command that PASSED has nothing to say, the turn is free to end, which is what it was asked.
         if (run.status === "passed" || run.status === "cancelled") {
             return undefined;

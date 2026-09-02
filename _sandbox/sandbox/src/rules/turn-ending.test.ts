@@ -430,6 +430,60 @@ describe("a command rule", () => {
         expect(nudge).not.toContain("Repair that before finishing");
     });
 
+    /* THE SAME FACT ONE MOMENT LATER, which is the case `installing` alone could never catch. The daemon's dep
+     * repair lands BETWEEN the check failing and the probe, so by the time anyone asks, nothing is installing
+     * and the tree is fine — and the check's `oxlint: not found` went back as a verdict on the diff. Over one
+     * day of this workspace's sessions that happened in 37 of 58 turns. The re-run is the whole answer: the
+     * tree has settled by then, so the second run is the true one. */
+    test("that lost its own toolchain mid-run is re-run rather than believed", async () => {
+        const outputs = ["sh: 1: oxlint: not found", ""];
+        let runs = 0;
+        const hooks = armed([failing], {
+            runCommand: async () => {
+                const output = outputs[runs] ?? "";
+                runs += 1;
+                return output === "" ? { status: "passed", exitCode: 0, output } : { status: "failed", exitCode: 1, output };
+            },
+            installing: async () => [],
+        });
+        expect(await stop(hooks)).toBeUndefined();
+        expect(runs).toBe(2);
+    });
+
+    // And when the tool is still gone on the re-run, the check genuinely never started: that is a fact about
+    // the install and saying "repair your diff" about it is the original mistake in the other direction.
+    test("that still has no toolchain on the re-run says so instead of blaming the diff", async () => {
+        let runs = 0;
+        const hooks = armed([failing], {
+            runCommand: async () => {
+                runs += 1;
+                return { status: "failed", exitCode: 1, output: "sh: 1: oxlint: not found" };
+            },
+            installing: async () => [],
+        });
+        const nudge = await stop(hooks);
+        expect(runs).toBe(2);
+        expect(nudge).toContain("could not measure anything");
+        expect(nudge).toContain("`oxlint`");
+        expect(nudge).not.toContain("Repair that before finishing");
+    });
+
+    // An ordinary failure must not pay for any of this: one run, and the verdict it earned.
+    test("that failed on its own merits is run once and reported as a verdict", async () => {
+        let runs = 0;
+        const hooks = armed([failing], {
+            runCommand: async () => {
+                runs += 1;
+                return { status: "failed", exitCode: 1, output: "src/a.ts:1:1 error: unused variable" };
+            },
+            installing: async () => [],
+        });
+        const nudge = await stop(hooks);
+        expect(runs).toBe(1);
+        expect(nudge).toContain("Repair that before finishing");
+        expect(nudge).not.toContain("could not measure anything");
+    });
+
     test("that failed on a settled tree is still a verdict", async () => {
         const hooks = armed([failing], {
             runCommand: async () => ({ status: "failed", exitCode: 2, output: "3 problems" }),
