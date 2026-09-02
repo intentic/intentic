@@ -78,7 +78,7 @@ const VALUE_TONE = { success: `text-success`, content: `text-content`, muted: `t
                     max="100"
                     :value="percent"
                     :disabled="disabled"
-                    :class="ui.input('w-16 text-right text-xs')"
+                    :class="ui.inputSm('w-16 text-right')"
                     @change="(event: Event) => commitPercent(event, percent, (fraction: number) => emit(`commit`, fraction))"
                 />
                 <span class="text-xs text-muted">%</span>

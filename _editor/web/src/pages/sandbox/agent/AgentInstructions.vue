@@ -219,7 +219,7 @@ const reachLine =
                         :maxlength="PROMPT_MAX"
                         :disabled="settings === undefined"
                         placeholder="Write the assistant's system prompt, or start from one of the built-in prompts below."
-                        :class="ui.input('w-full resize-y font-mono text-xs')"
+                        :class="ui.inputSm('w-full resize-y font-mono')"
                         aria-label="System prompt"
                         @change="savePrompt"
                     ></textarea>

@@ -217,7 +217,7 @@ const savePrepush = (): void => {
         <Row icon="shield" title="Check before you push" description="Run a check before pushing code.">
             <template #below>
                 <div
-                    class="flex items-center gap-2 rounded-lg border border-line bg-canvas px-2.5 py-1.5 focus-within:border-line-strong"
+                    class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5"
                     :class="{ 'opacity-50': settings === undefined }"
                 >
                     <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
@@ -230,7 +230,7 @@ const savePrepush = (): void => {
                         autocorrect="off"
                         aria-label="Pre-push check command"
                         :disabled="settings === undefined"
-                        class="min-w-0 flex-1 bg-transparent font-mono text-xs text-content placeholder:text-subtle focus:outline-none"
+                        class="field-bare min-w-0 flex-1 font-mono md:text-xs"
                         @change="savePrepush"
                     />
                 </div>

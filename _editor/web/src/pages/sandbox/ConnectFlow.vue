@@ -282,7 +282,7 @@ watch(flow, (live) => {
                     v-model="pasted"
                     name="connectCode"
                     :placeholder="pastePlaceholder"
-                    :class="ui.input(`min-w-0 flex-1 py-1.5`)"
+                    :class="ui.inputSm(`min-w-0 flex-1`)"
                     @keydown.enter="finish"
                 />
                 <Button label="Finish" size="small" :disabled="pasted.trim().length === 0" :loading="accountBusy === busyKey" @click="finish" />
@@ -292,7 +292,7 @@ watch(flow, (live) => {
             <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
                 Name this account…
             </button>
-            <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="ui.input(`min-w-0 py-1.5`)" />
+            <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="ui.inputSm(`min-w-0`)" />
         </template>
     </div>
 </template>

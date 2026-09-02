@@ -71,6 +71,12 @@
         background: transparent !important;
         font-family: var(--font-mono);
         font-feature-settings: var(--font-mono--font-feature-settings);
+        /* THIS SIZE HAS TO BEAT `.field-bare`'s, and the only thing making it do so is that code.css is imported
+         * after primeng.css into the same layer at the same specificity. Both are bundled sheets in a fixed
+         * order, so that is a promise this repo can keep — but it is worth knowing, because losing it is not
+         * cosmetic. The editable <textarea> and the coloured <pre> beneath it are stacked in one grid cell and
+         * line up only while their metrics are identical; a field one step larger than the text it is
+         * transparent over puts every caret in the wrong place. */
         font-size: 0.75rem;
         /* Roomier than a <Code> block's 1rem: this is text somebody puts a caret into, and the leading is what
          * makes a wrapped line findable. prose.css's ~1.7 for the same reason it applies it to prose. */

@@ -53,10 +53,13 @@ const TAIL = `​`;
 /* The two tiers, and the pair of them is the whole type scale a written document needs. Both sit at or above
  * prose.css's floor (0.875rem read in paragraphs, ~1.7 leading): a writing surface set below the floor is the
  * mistake this component exists to make unrepeatable. */
+/* `max-md:text-base` RAISES the floor rather than bending it, which is why it is allowed to be here: mobile
+ * Safari zooms the page when a field under 16px takes focus and does not zoom back, and 0.875rem is under it.
+ * The field and its invisible sizer read this same constant, so they cannot disagree about a height. */
 const BOX = {
     heading: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-0.5 text-lg font-semibold leading-snug tracking-tight`,
-    prose: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-1 text-sm leading-[1.7]`,
-    post: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-1 text-sm leading-[1.7]`,
+    prose: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-1 text-sm leading-[1.7] max-md:text-base`,
+    post: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-1 text-sm leading-[1.7] max-md:text-base`,
 };
 
 // Exposed as the element rather than as a focus() wrapper: callers that reach for this are placing a CARET
@@ -77,7 +80,7 @@ defineExpose({ field });
             :placeholder="placeholder"
             :class="[
                 BOX[variant],
-                `resize-none overflow-hidden rounded-md bg-transparent text-content placeholder:text-subtle focus:bg-overlay focus:outline-none`,
+                `field-bare ui-field-lit resize-none overflow-hidden rounded-md`,
                 variant === `heading` ? `placeholder:font-normal` : ``,
             ]"
         />

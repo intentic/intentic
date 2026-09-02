@@ -163,18 +163,52 @@ const textAction = (...twClasses: string[]) =>
         ...twClasses,
     );
 
-/* Standard form input (text, password, number, datetime-local, textarea).
+/* ── THE FIELD IS `ui-field-box`, IN THREE VARIANTS AND TWO SIZES. Nothing else. ──────────────────────────────
  *
- * `ui-off` carries the disabled state, and it is baked in here for the same reason `touch-target` is baked into
- * `iconButton`: it is owed by every one of these and remembering it is not a thing ninety call sites do. A
- * field is one of the controls the design system does not repaint when it goes unavailable — there is no plate
- * to swap, the box IS the plate — so it dims, at the one opacity the app has (styles/utilities.css). */
-const input = (...twClasses: string[]) =>
-    twMerge(
-        `ui-off rounded-md border border-line bg-canvas px-3 py-2 text-sm text-content`,
-        `placeholder:text-subtle hover:border-line-strong focus:border-line-strong focus:outline-none`,
-        ...twClasses,
-    );
+ * Everywhere a person types is one class, spelled in primeng.css beside the button tiers, and the sweep that
+ * produced it is docs/input-audit.md. The three variants are KINDS of field, not tones of one:
+ *
+ *   • `ui.input()` — THE FRAMED FIELD. It draws its own box: a rim, a fill and a radius. A form on a page, a
+ *     dialog, a settings card, a filter that stands on its own.
+ *   • `ui.inputInline()` — THE FIELD THAT REPLACES TEXT IN PLACE. A card's title while it is being renamed, a
+ *     chat tab, a tree node. It has no rim, it takes the font of the line it stands in, and the row does not
+ *     change height when it appears.
+ *   • `.field-bare` (a class, no recipe) — THE FIELD WHOSE FRAME BELONGS TO SOMETHING ELSE. The chat composer's
+ *     textarea inside a bordered form; every SearchBar inside `.ui-search-row`. It brings no chrome at all, and
+ *     the wrapper answers `:focus-within` for the whole assembly. Cutting a second box into one of these draws
+ *     a frame a few pixels inside a frame, which is the doubled highlight the skins kept re-inventing.
+ *
+ * ── SIZE IS THE SURFACE'S ANSWER, THE SAME TWO STEPS AS THE BUTTON ───────────────────────────────────────────
+ *
+ *   • `ui.input()` — the 38px control, for a field standing in a PAGE or a DIALOG.
+ *   • `ui.inputSm()` — the compact 26px control, for a dense surface: a row's cluster, a toolbar, a card strip.
+ *
+ * They are the button's two heights exactly, so a field and a <Button> sharing a form row line up instead of
+ * sitting two pixels apart. The compact size exists because a third of this recipe's own call sites were
+ * already drawing it by hand — 33 of 82 passed geometry back in (`text-xs` at 16, `py-1` at 7, `px-2` at 5,
+ * `py-1.5` at 4, plus `text-base`, `py-0.5` and one `min-h-[2.25rem]`), seven spellings of "smaller than the
+ * form size". That is the buttons' retired `px-2.5 py-1 text-2xs`, one control over, and it has the same fix.
+ *
+ * WHAT A CALL SITE MAY STILL PASS is layout and CONTENT: `w-full`, `flex-1`, `min-w-0`, `shrink-0`, a width, a
+ * margin, `resize-y`, `text-right`, `font-mono` for a field holding a path or a token. Not padding, not a text
+ * size, not a radius, not a fill, and never a focus rule — `check:inputs` refuses those, because each of them
+ * is one of the axes the audit found fourteen answers on.
+ *
+ * ── AND THE ONE RULE THAT IS NOT ABOUT LOOKS ─────────────────────────────────────────────────────────────────
+ *
+ * A FIELD'S FOCUS STATE NEVER PAINTS OUTSIDE ITS OWN BOX. Not `ring-*`, not a positive `outline-offset`, not an
+ * outward `shadow-*`. An outward ring lands on top of whatever is a few pixels away in a tight row, and it is
+ * cut off by any ancestor with `overflow: hidden` or `auto` — every scroll pane, rounded card and dialog body
+ * in the app. Both failure modes were shipping. The rim and the inset ring in primeng.css say the same thing
+ * at zero outside pixels, so a field is correct wherever it is mounted and the call site never has to know what
+ * clipped it. */
+const input = (...twClasses: string[]) => twMerge(`ui-field-box`, ...twClasses);
+
+/** The compact 26px field — a row's cluster, a toolbar, a card's strip. The button's `size="small"`, one control over. */
+const inputSm = (...twClasses: string[]) => twMerge(`ui-field-box ui-field-sm`, ...twClasses);
+
+/** The field that stands where a line of text stood: a rename on a card, a tab title, a tree node. */
+const inputInline = (...twClasses: string[]) => twMerge(`ui-field-box ui-field-inline`, ...twClasses);
 
 /* THE ALERT RECIPES USED TO LIVE HERE, and that is why the app had two red boxes. <Notice> was built out of
  * them, so a notice and a hand-rolled `ui.alertDanger()` div were the same tint, the same border and the same
@@ -232,6 +266,8 @@ export const ui = {
     linkButton,
     textAction,
     input,
+    inputSm,
+    inputInline,
     emptyState,
     addTile,
     overlayChip,

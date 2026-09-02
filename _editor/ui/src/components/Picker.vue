@@ -74,10 +74,14 @@ const passAttrs = computed(() => {
  * variant is already big enough for the rule to be a no-op there. */
 const triggerClass = computed(() =>
     twMerge(
-        `touch-target inline-flex cursor-pointer select-none items-center gap-2 transition-colors disabled:cursor-default disabled:opacity-40`,
-        variant === `input`
-            ? `rounded-md border border-line bg-canvas px-3 py-2 text-sm text-content hover:border-line-strong focus:border-line-strong focus:outline-none`
-            : `rounded-md px-1.5 py-0.5 text-xs font-medium text-content hover:bg-overlay focus:outline-none focus-visible:bg-overlay`,
+        `touch-target inline-flex cursor-pointer select-none items-center gap-2 transition-colors disabled:cursor-default`,
+        /* THE BORDERED TRIGGER IS THE FIELD, not a copy of it. This used to spell the recipe out
+         * (`rounded-md border border-line bg-canvas px-3 py-2 text-sm …`), which made <Picker> a second source
+         * of truth for what a field looks like — and it had already drifted: no disabled fade at the app's one
+         * opacity, no placeholder rule, and a focus state identical to its own hover. It wears `ui-field-box`
+         * now, so a picker sitting in a form row beside a text input is the same control by construction, down
+         * to the inset focus ring and the 16px mobile floor. */
+        variant === `input` ? `ui-field-box` : `ui-off rounded-md px-1.5 py-0.5 text-xs font-medium text-content hover:bg-overlay focus:outline-none focus-visible:bg-overlay`,
         typeof attrs[`class`] === `string` ? attrs[`class`] : ``,
     ),
 );

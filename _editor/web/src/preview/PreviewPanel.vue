@@ -293,7 +293,7 @@ const startHint = computed<string | undefined>(() => {
                     spellcheck="false"
                     placeholder="localhost:3000, or any address"
                     aria-label="Address to preview"
-                    class="min-w-0 flex-1 rounded-md border border-line bg-canvas px-2 py-1 font-mono text-xs text-content placeholder:text-subtle focus:border-primary-500 focus:outline-none"
+                    class="ui-field-box ui-field-sm min-w-0 flex-1 font-mono"
                     @keydown.enter.prevent="commitAddress"
                     @keydown.esc.prevent="addressOpen = false"
                 />

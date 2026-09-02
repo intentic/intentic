@@ -85,7 +85,7 @@ const save = (): void => {
                 autocorrect="off"
                 aria-label="Skill name"
                 :disabled="disabled || skill !== undefined"
-                :class="ui.input(`px-2 py-1 font-mono text-xs`)"
+                :class="ui.inputSm(`font-mono`)"
                 @input="onName"
             />
             <!-- Two different reasons this box says what it says, and the reader is owed whichever applies. -->
@@ -100,7 +100,7 @@ const save = (): void => {
              whose carelessness is invisible afterwards. -->
         <div class="flex flex-col gap-1.5">
             <span :class="ui.sectionLabel(`text-2xs`)">When to use it</span>
-            <div class="rounded-md border border-line bg-canvas px-0.5 py-1 focus-within:border-line-strong" :class="{ 'opacity-50': disabled }">
+            <div class="ui-field-shell px-0.5 py-1" :class="{ 'opacity-50': disabled }">
                 <ProseField
                     v-model="description"
                     placeholder="Use when the user asks to draft release notes or a changelog entry for a version."
@@ -129,7 +129,7 @@ const save = (): void => {
                     ]"
                 />
             </div>
-            <div class="rounded-md border border-line bg-canvas p-2 focus-within:border-line-strong" :class="{ 'opacity-50': disabled }">
+            <div class="ui-field-shell p-2" :class="{ 'opacity-50': disabled }">
                 <Markdown v-if="view === `preview`" :source="body" class="min-h-32" style="--prose-measure: 76ch" />
                 <CodeField
                     v-else

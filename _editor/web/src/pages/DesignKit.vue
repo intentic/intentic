@@ -634,11 +634,68 @@ const pickedTier = ref(`collaborator`);
                     <PageAction label="Refresh" icon="refresh" hint="Re-read everything" />
                     <PageAction label="Quiet" icon="cog" quiet />
                 </div>
+                <!-- ── EVERY FIELD AGAINST EVERY STATE ──────────────────────────────────────────────────
+                     The audit that produced this vocabulary found NINE focus treatments across 128 fields
+                     (docs/input-audit.md), and the reason nobody caught it is written in this grid's absence:
+                     the kit used to print one field, at rest. Two states of one control on one screen is what
+                     makes "focus looks like hover" a thing somebody notices in a second rather than a thing
+                     that survives three years.
+
+                     `tabindex` is not needed to see the focus column — click into any of them. The disabled
+                     column is the one worth checking against a skin: a field does not repaint when it goes
+                     unavailable, it dims, and it is the only control here that does. -->
+                <div class="flex flex-col gap-2">
+                    <span :class="ui.sectionLabel(`text-2xs`)">Fields: every variant against every state</span>
+                    <!-- `minmax(0, …)` on the three state columns, not a bare `1fr`. A grid item's implicit
+                         `min-width` is `auto`, so a plain `1fr` column refuses to shrink below its content and
+                         pushes the whole page wider instead — at 375px this grid was forcing the document to
+                         923px and giving the design kit a horizontal scrollbar. `minmax(0, 1fr)` lets the
+                         columns give, which is what `1fr` reads as if you do not know that rule. -->
+                    <div
+                        class="grid max-w-read-lg items-center gap-x-3 gap-y-2 text-2xs text-subtle"
+                        style="grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)"
+                    >
+                        <span></span><span>rest</span><span>invalid</span><span>disabled</span>
+
+                        <span class="text-muted">ui.input</span>
+                        <input :class="ui.input(`w-full`)" placeholder="38px, a page or a dialog" />
+                        <input :class="[ui.input(`w-full`), `ui-field-error-box`]" placeholder="invalid" />
+                        <input :class="ui.input(`w-full`)" placeholder="disabled" disabled />
+
+                        <span class="text-muted">ui.inputSm</span>
+                        <input :class="ui.inputSm(`w-full`)" placeholder="26px, a dense surface" />
+                        <input :class="[ui.inputSm(`w-full`), `ui-field-error-box`]" placeholder="invalid" />
+                        <input :class="ui.inputSm(`w-full`)" placeholder="disabled" disabled />
+
+                        <span class="text-muted">ui.inputInline</span>
+                        <input :class="ui.inputInline(`w-full px-1 text-xs`)" placeholder="stands where text stood" />
+                        <input :class="[ui.inputInline(`w-full px-1 text-xs`), `ui-field-error-box`]" placeholder="invalid" />
+                        <input :class="ui.inputInline(`w-full px-1 text-xs`)" placeholder="disabled" disabled />
+
+                        <span class="text-muted">field-bare<br />in ui-field-shell</span>
+                        <div class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5">
+                            <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
+                            <input class="field-bare min-w-0 flex-1 font-mono md:text-xs" placeholder="the shell takes the focus" />
+                        </div>
+                        <div class="ui-field-shell ui-field-error-box flex items-center gap-2 px-2.5 py-1.5">
+                            <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
+                            <input class="field-bare min-w-0 flex-1 font-mono md:text-xs" placeholder="invalid" />
+                        </div>
+                        <div class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5 opacity-50">
+                            <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
+                            <input class="field-bare min-w-0 flex-1 font-mono md:text-xs" placeholder="disabled" disabled />
+                        </div>
+                    </div>
+                    <!-- THE ROW THAT PROVES THE RULE. Both are inside a `overflow-hidden` box, four pixels
+                         apart. An outward focus ring would be sliced off by the clip and would paint over its
+                         neighbour; the inset one cannot do either, which is the whole argument in tokens.css
+                         made visible. Click from one to the other. -->
+                    <div class="ui-card flex max-w-read-lg gap-1 overflow-hidden p-0">
+                        <input :class="ui.inputSm(`min-w-0 flex-1`)" placeholder="clipped container, 4px apart" />
+                        <input :class="ui.inputSm(`min-w-0 flex-1`)" placeholder="…and neither ring escapes" />
+                    </div>
+                </div>
                 <div class="grid max-w-read-lg gap-3 md:grid-cols-2">
-                    <label class="ui-field">
-                        <span class="ui-field-label">ui.input</span>
-                        <input :class="ui.input()" placeholder="A single-line field" />
-                    </label>
                     <label class="ui-field">
                         <span class="ui-field-label">Picker</span>
                         <Picker v-model="picked" :options="PICKER_OPTIONS" aria-label="Model" class="w-full" />

@@ -111,7 +111,7 @@ const submit = (): void => {
                     <input
                         v-model="instanceNames[template.key]"
                         type="text"
-                        :class="ui.input(`flex-1 px-2 py-1 text-xs`)"
+                        :class="ui.inputSm(`flex-1`)"
                         placeholder="e.g. shop-api"
                     />
                 </div>

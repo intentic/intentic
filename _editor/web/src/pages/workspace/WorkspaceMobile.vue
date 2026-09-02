@@ -431,7 +431,7 @@ const onPick = (event: Event): void => {
                             v-model="filter"
                             type="search"
                             :placeholder="contentMode ? `Search in files…` : `Filter…`"
-                            class="h-10 w-full min-w-0 rounded-lg border border-line bg-canvas pl-8 pr-3 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            class="ui-field-box w-full min-w-0 pl-8 pr-3"
                             @keydown.esc="clearFilter"
                         />
                     </div>
@@ -459,7 +459,7 @@ const onPick = (event: Event): void => {
                             type="search"
                             placeholder="Files to include, e.g. package.json"
                             aria-label="Files to include"
-                            class="h-10 w-full min-w-0 rounded-lg border border-line bg-canvas pl-8 pr-3 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            class="ui-field-box w-full min-w-0 pl-8 pr-3"
                         />
                     </div>
                 </div>
@@ -695,7 +695,7 @@ const onPick = (event: Event): void => {
             <input
                 v-model="renameValue"
                 type="text"
-                class="h-11 w-full rounded-lg border border-line bg-canvas px-3 text-base text-content focus:border-line-strong focus:outline-none"
+                class="ui-field-box w-full"
                 @keydown.enter="confirmRename"
             />
             <template #footer>

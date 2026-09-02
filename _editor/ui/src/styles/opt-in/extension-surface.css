@@ -166,6 +166,12 @@
 @source inline("{snap-none,snap-x,snap-y,snap-start,snap-center,snap-end,snap-mandatory,snap-proximity}");
 /* This app's own, promised by name for the same reason as everything above. */
 @source inline("{scrollbar-thin,scrollbar-stable,ui-softscroll,ui-row-select,ui-row-select-on,skeleton}");
+/* THE FIELD, promised by name — which is half of why it is a class and not a utility string (primeng.css).
+ * An extension cannot be handed `ui.input()`'s old recipe as a promise: an arbitrary Tailwind string is not
+ * something this surface can guarantee across a version. These six are, and between them they are every field
+ * an extension can need: the framed box, its compact size, the two chrome-less variants, the wrapper that
+ * carries a frame on a bare field's behalf, and the invalid state. */
+@source inline("{ui-field-box,ui-field-sm,ui-field-inline,ui-field-shell,ui-field-lit,ui-field-error-box,field-bare}");
 
 /* ── The named group ─────────────────────────────────────────────────────────────────────────────────────
  * `group/<name>` lets a row style its own hover children, and the name is invented by the author — which is

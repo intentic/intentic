@@ -820,7 +820,7 @@ const closeTab = (event: Event, id: string): void => {
                             maxlength="80"
                             aria-label="Chat title"
                             :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
-                            class="w-full shrink-0 select-text rounded-lg bg-overlay px-2.5 py-2 text-xs font-semibold text-content outline-none ring-1 ring-primary-500/50 placeholder:font-normal placeholder:text-subtle"
+                            class="ui-field-box ui-field-inline w-full shrink-0 select-text rounded-lg px-2.5 py-2 text-xs font-semibold placeholder:font-normal"
                             @keydown.enter.stop.prevent="edit.commit()"
                             @keydown.esc.stop.prevent="edit.cancel()"
                             @blur="edit.blurCommit()"

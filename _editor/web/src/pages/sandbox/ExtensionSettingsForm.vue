@@ -55,7 +55,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 v-if="setting.secret === true"
                 type="password"
                 autocomplete="off"
-                :class="ui.input(`w-48 shrink-0 py-1 text-xs`)"
+                :class="ui.inputSm(`w-48 shrink-0`)"
                 :placeholder="secretIsSet(setting) ? `•••••• (set)` : `Enter value`"
                 :aria-label="setting.title"
                 @change="(event) => setValue(setting, (event.target as HTMLInputElement).value)"
@@ -80,7 +80,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
             />
             <input
                 v-else
-                :class="ui.input(`w-48 shrink-0 py-1 text-xs`)"
+                :class="ui.inputSm(`w-48 shrink-0`)"
                 :type="setting.type === `number` ? `number` : `text`"
                 :value="String(valueOf(setting) ?? ``)"
                 :aria-label="setting.title"

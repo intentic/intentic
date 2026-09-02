@@ -74,7 +74,7 @@ const commit = (value: string): void => {
         :ref="focusOnMount"
         type="datetime-local"
         :value="toInput(at)"
-        :class="ui.input(`px-2 py-1 text-xs`)"
+        :class="ui.inputSm()"
         :aria-label="`Go ahead with ${label} at`"
         @change="commit(($event.target as HTMLInputElement).value)"
         @keydown.escape="editing = false"

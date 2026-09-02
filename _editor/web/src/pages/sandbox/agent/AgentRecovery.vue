@@ -105,7 +105,7 @@ const setAutomationFailureLimit = (event: Event): void => {
                     min="0"
                     max="20"
                     aria-label="Consecutive failures before an automation is disabled"
-                    class="w-16 rounded-lg border border-line bg-canvas px-2 py-1 text-right text-xs text-content"
+                    class="ui-field-box ui-field-sm w-16 text-right"
                     :value="settings?.automationFailureLimit ?? 0"
                     :disabled="settings === undefined"
                     @change="setAutomationFailureLimit"

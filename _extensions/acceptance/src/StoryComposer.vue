@@ -63,7 +63,7 @@ const submit = (): void => {
             <input
                 v-model="title"
                 :placeholder="group === `` ? `New story, a title, or group/title to file it under one` : `New story in ${group}/, type a title`"
-                class="min-h-11 min-w-0 flex-1 bg-transparent text-sm text-content placeholder:text-subtle focus:outline-none"
+                class="field-bare ui-field-lit min-h-11 min-w-0 flex-1 rounded-md px-1"
                 @keydown.enter.prevent="submit"
                 @keydown.esc="title = ``"
             />

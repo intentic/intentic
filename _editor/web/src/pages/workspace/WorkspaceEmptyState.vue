@@ -101,7 +101,7 @@ const askAgent = (): void => {
                                 type="text"
                                 :disabled="cloning"
                                 placeholder="https://github.com/owner/repo.git"
-                                class="min-w-0 flex-1 rounded-lg border border-line bg-canvas px-2 py-1.5 text-xs text-content placeholder:text-subtle focus:border-primary-500 focus:outline-none"
+                                class="ui-field-box ui-field-sm min-w-0 flex-1"
                             />
                             <Button size="small" type="submit" :disabled="!canClone" class="shrink-0">
                                 <Icon :name="cloning ? `spinner` : `arrow-down-left`" :spin="cloning" />{{ cloning ? "Cloning…" : "Clone" }}

@@ -350,7 +350,7 @@ const confirmDiscard = async (): Promise<void> => {
                 type="text"
                 maxlength="80"
                 aria-label="Agent title"
-                class="min-w-0 flex-1 rounded bg-overlay px-1 text-xs font-medium text-content outline-none ring-1 ring-primary-500/50"
+                class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-xs font-medium"
                 @keydown.enter.prevent="edit.commit()"
                 @keydown.esc.prevent="edit.cancel()"
                 @blur="edit.blurCommit()"

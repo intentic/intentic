@@ -1362,7 +1362,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 v-model="commitMessage"
                 rows="1"
                 :placeholder="chipNotice ?? commitPlaceholder"
-                class="scrollbar-thin block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto rounded-md border border-line bg-canvas px-2 py-1 text-xs leading-snug text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                class="ui-field-box ui-field-sm scrollbar-thin block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto leading-snug"
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"
             ></textarea>

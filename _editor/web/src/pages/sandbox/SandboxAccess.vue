@@ -405,7 +405,7 @@ const revoke = async (target: string): Promise<void> => {
                                     :class="[
                                         ui.input('min-w-0 sm:flex-1'),
                                         emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())
-                                            ? 'ui-field-input-error'
+                                            ? 'ui-field-error-box'
                                             : '',
                                     ]"
                                     @blur="emailTouched = true"

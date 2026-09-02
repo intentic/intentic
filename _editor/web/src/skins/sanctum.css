@@ -633,22 +633,40 @@
      * A field is a channel cut into the stone: darker than the plate around it, with the light catching the
      * upper lip of the cut. That inset shadow is the whole trick, and it is 3px tall at the top edge of an
      * empty box — it describes the cut without ever getting under a line of text. */
-    /* `.field-bare` IS EXCLUDED FROM ALL OF THIS, and it is not an escape hatch — it is a field whose frame
-     * belongs to the box AROUND it (the chat composer's textarea, which is a transparent slot inside a rounded
-     * form that draws the border, the fill and the focus ring for the whole assembly). Cutting a second recess
-     * into it painted a dark rectangle inside the composer, and the focus rule below drew a THIRD edge: a
-     * 3px accent band with the textarea's own square corners, inside the composer's rounded one. That is the
-     * doubled highlight around the message box. A field that has no frame of its own must not be given one. */
-    [data-skin="sanctum"] .p-inputtext,
-    [data-skin="sanctum"] textarea:not(.field-bare),
-    [data-skin="sanctum"] input[type="text"]:not(.field-bare),
-    [data-skin="sanctum"] input[type="search"]:not(.field-bare),
-    [data-skin="sanctum"] input[type="email"]:not(.field-bare),
-    [data-skin="sanctum"] input[type="password"]:not(.field-bare),
-    [data-skin="sanctum"] input[type="number"]:not(.field-bare) {
+    /* IT ASKS FOR THE FIELD BY ITS CLASS, and it used to ask by element and type: `textarea`, then
+     * `input[type="text"]`, `"search"`, `"email"`, `"password"`, `"number"`. That list is a promise that has to
+     * be renewed every time somebody writes a new `type=`, and it had already lapsed — the app ships `url`,
+     * `time` and `datetime-local` too, so four fields sat on a carved-stone surface as flat dark boxes with no
+     * recess, no gold rim and nothing to say why. `.ui-field-box` is one selector that cannot go out of date,
+     * and it is the reason the field became a class at all (primeng.css).
+     *
+     * `.field-bare` NEEDS NO EXCLUSION ANY MORE, and that is the same change from the other side: a field whose
+     * frame belongs to the box around it now wears a different class rather than the same one with a marker on
+     * it, so there is nothing here for it to match. What the exclusion was protecting is still worth knowing —
+     * cutting a recess into the chat composer's textarea painted a dark rectangle inside the composer, and the
+     * focus rule below drew a THIRD edge: a square-cornered accent band inside the composer's rounded one, which
+     * is the doubled highlight that used to appear around the message box. */
+    [data-skin="sanctum"] .ui-field-box,
+    [data-skin="sanctum"] .p-inputtext {
         background-color: color-mix(in oklab, var(--color-surface-950) 66%, black);
-        border-color: var(--sanctum-rule-strong);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+    }
+
+    /* THE RIM IS A SEPARATE RULE FROM THE MATERIAL, and the two exclusions are why. A skin owns what a field is
+     * MADE of — every field here is a channel cut into stone, including an invalid one and an inline one. It
+     * does not own what a field is SAYING, and a rim is the app saying something.
+     *
+     * Both halves of that were wrong when this was one rule, and measured rather than guessed: an invalid field
+     * came back `rgba(201,160,92,0.26)`, the ordinary gold rule, because `[data-skin] .ui-field-box` outranks
+     * `.ui-field-error-box` — so under this skin a field could fail validation and look exactly like one that
+     * had not. And `ui-field-inline`, whose entire definition is that it has NO rim until you focus it, was
+     * handed the same edge as the framed box beside it, which collapses two variants into one.
+     *
+     * `.field-bare` needed the same exemption and gets it for free now: it wears a different class, so it never
+     * matches either rule. */
+    [data-skin="sanctum"] .ui-field-box:not(.ui-field-inline, .ui-field-error-box),
+    [data-skin="sanctum"] .p-inputtext {
+        border-color: var(--sanctum-rule-strong);
     }
 
     [data-skin="sanctum"] .p-inputtext:enabled:hover {
@@ -657,13 +675,49 @@
 
     /* FOCUS IS THE METAL CATCHING THE LIGHT — a bright gold rim, and one soft ring in the accent, which is the
      * single place the two metals are asked to work together. Stated as box-shadow rather than as an outline,
-     * because a focus ring that shares a property with a decoration is a focus ring that will lose an
-     * argument. */
+     * because a focus ring that shares a property with a decoration is a focus ring that will lose an argument.
+     *
+     * BOTH LAYERS ARE `inset` NOW. The halo used to be `0 0 0 3px`, drawn OUTSIDE the border box, and that is
+     * the bug the flat scheme's contract was written against (tokens.css): an outward ring lands on top of
+     * whatever sits a few pixels away in a tight row, and it is cut off by any ancestor with `overflow: hidden`
+     * or `auto` — every scroll pane, rounded card and dialog body in the app. Under this skin it was the more
+     * visible of the two failures, because a gold band clipped flat on one side reads as damage to the stone.
+     * The same three pixels drawn inward say exactly the same thing and cannot leave the element.
+     *
+     * The buttons and the tabbables keep an OUTWARD ring on purpose: a button is a plate with its own margin
+     * around it, and the halo is what lifts it off the wall. The rule that fields must not paint outside their
+     * box is about fields, and `check:inputs` scopes itself the same way. */
+    /* THE RIM IS THE TOKEN, NOT THE COLOUR, which is the whole of how the invalid state survives this skin.
+     * Written as a literal gold, the rule matched an errored field too and painted its focus rim gold — and
+     * exempting the error with a `:not()` was worse, because then NOTHING in the skin matched, the recess below
+     * won on source order, and a focused invalid field came back with no ring at all. Measured, both times.
+     *
+     * Pointing the token at the skin's root instead makes the cascade do the work: gold is inherited by every
+     * field, and `.ui-field-error-box` re-points the same variable ON THE ELEMENT, which beats an inherited
+     * value without any specificity contest. One rule, both states, and the next skin gets the same deal for
+     * one line. */
+    [data-skin="sanctum"] {
+        --ui-field-focus-line: var(--sanctum-gold);
+    }
+
+    /* The recess is REPEATED here rather than left to the rule above, because `box-shadow` is one property: a
+     * focus ring stated as a shadow replaces the channel instead of joining it, and the field went flat for
+     * exactly as long as it was the one being typed into. */
+    [data-skin="sanctum"] .ui-field-box:focus,
     [data-skin="sanctum"] .p-inputtext:focus,
-    [data-skin="sanctum"] .p-inputtext:focus-visible,
-    [data-skin="sanctum"] textarea:not(.field-bare):focus,
-    [data-skin="sanctum"] input:not(.field-bare):focus-visible,
-    [data-skin="sanctum"] button:focus-visible,
+    [data-skin="sanctum"] .p-inputtext:focus-visible {
+        outline: none;
+        border-color: var(--ui-field-focus-line);
+        box-shadow:
+            inset 0 1px 3px rgba(0, 0, 0, 0.55),
+            inset 0 0 0 1px color-mix(in oklab, var(--ui-field-focus-line) 30%, transparent),
+            inset 0 0 0 3px var(--ui-field-focus-ring);
+    }
+
+    /* `:not(.ui-field-box)` because <Picker>'s bordered trigger is a <button> that IS a field — it sits in form
+     * rows next to text inputs and wears the field class — so it takes the field's inward ring, not the
+     * button's outward one. Without the exclusion it matched both and the button rule, being later, won. */
+    [data-skin="sanctum"] button:not(.ui-field-box):focus-visible,
     [data-skin="sanctum"] [tabindex]:focus-visible {
         outline: none;
         border-color: var(--sanctum-gold);

@@ -40,12 +40,7 @@ const zedSnippet = computed(() =>
         <RowNote variant="block">
             <div class="flex flex-col gap-4">
                 <div class="flex items-center gap-2">
-                    <input
-                        v-model="label"
-                        type="text"
-                        placeholder="Label (e.g. Zed on laptop)"
-                        class="w-56 rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                    />
+                    <input v-model="label" type="text" placeholder="Label (e.g. Zed on laptop)" class="ui-field-box ui-field-sm w-56" />
                     <Button label="Mint token" size="small" :loading="minting" @click="mint" />
                 </div>
                 <Notice v-if="notice" :of="notice" />

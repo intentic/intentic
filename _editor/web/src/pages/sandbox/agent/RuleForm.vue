@@ -200,7 +200,7 @@ const save = (): void => {
             <span :class="ui.sectionLabel(`text-2xs`)">Only if it touches</span>
             <div class="flex items-start gap-1">
                 <div
-                    class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-md border border-line bg-canvas px-2 py-1.5 focus-within:border-line-strong"
+                    class="ui-field-shell flex min-w-0 flex-1 flex-wrap items-center gap-1.5 px-2 py-1.5"
                     :class="{ 'opacity-50': disabled }"
                 >
                     <span
@@ -227,7 +227,7 @@ const save = (): void => {
                         autocorrect="off"
                         aria-label="Paths"
                         :disabled="disabled"
-                        class="min-w-24 flex-1 bg-transparent font-mono text-xs text-content placeholder:text-subtle focus:outline-none"
+                        class="field-bare min-w-24 flex-1 font-mono md:text-xs"
                         @input="onGlobInput"
                         @keydown.enter.prevent="commitDraft"
                         @keydown.backspace="backspaceGlob"
@@ -251,7 +251,7 @@ const save = (): void => {
 
             <div
                 v-if="action === `command`"
-                class="flex items-center gap-2 rounded-md border border-line bg-canvas px-2.5 py-1.5 focus-within:border-line-strong"
+                class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5"
                 :class="{ 'opacity-50': disabled }"
             >
                 <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
@@ -264,7 +264,7 @@ const save = (): void => {
                     autocorrect="off"
                     aria-label="Command to run"
                     :disabled="disabled"
-                    class="min-w-0 flex-1 bg-transparent font-mono text-xs text-content placeholder:text-subtle focus:outline-none"
+                    class="field-bare min-w-0 flex-1 font-mono md:text-xs"
                 />
             </div>
             <!-- The instruction keeps a box even though it is prose, and this is the one place the kit's
@@ -275,7 +275,7 @@ const save = (): void => {
                  sideways out of sight. -->
             <div
                 v-else-if="action === `instruct`"
-                class="rounded-md border border-line bg-canvas px-0.5 py-1 focus-within:border-line-strong"
+                class="ui-field-shell px-0.5 py-1"
                 :class="{ 'opacity-50': disabled }"
             >
                 <ProseField
@@ -301,7 +301,7 @@ const save = (): void => {
                     :placeholder="autoName"
                     aria-label="Rule name"
                     :disabled="disabled"
-                    :class="ui.input(`min-w-0 flex-1 px-2 py-1 text-xs`)"
+                    :class="ui.inputSm(`min-w-0 flex-1`)"
                 />
             </label>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">

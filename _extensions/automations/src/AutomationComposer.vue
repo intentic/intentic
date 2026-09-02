@@ -212,7 +212,7 @@ const finish = (id: string): void => {
                         ref="recipeFilterInput"
                         v-model="recipeFilter"
                         placeholder="Filter templates…"
-                        :class="ui.input('px-2 py-1 text-xs')"
+                        :class="ui.inputSm()"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
                     <div class="scrollbar-thin @container flex max-h-panel flex-col gap-2 overflow-y-auto">

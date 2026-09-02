@@ -1255,7 +1255,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                                     @input="onOtherInput(index, $event)"
                                     @keydown="otherKeydown"
                                     placeholder="Type your answer…"
-                                    class="scrollbar-thin max-h-48 resize-none overflow-y-auto rounded-lg border border-line bg-card px-2.5 py-1.5 text-base leading-relaxed text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
+                                    class="ui-field-box ui-field-sm scrollbar-thin max-h-48 resize-none overflow-y-auto leading-relaxed"
                                 ></textarea>
                                 <!-- Reads as the instruction it is, not as an error: it is on screen from
                                      the moment the row is picked, which is before there is anything to get

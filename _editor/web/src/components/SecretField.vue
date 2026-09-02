@@ -86,7 +86,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocapitalize="off"
                 spellcheck="false"
                 :placeholder="placeholder ?? `Paste the value for ${secretKey}`"
-                :class="[ui.input('flex-1 resize-y font-mono text-xs'), show ? '' : 'blur-mask focus:blur-none']"
+                :class="[ui.inputSm('flex-1 resize-y font-mono'), show ? '' : 'blur-mask focus:blur-none']"
             ></textarea>
             <input
                 v-else

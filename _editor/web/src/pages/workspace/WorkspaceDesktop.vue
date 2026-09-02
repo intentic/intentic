@@ -825,7 +825,7 @@ const endResize = (event: PointerEvent): void => {
                             v-model="filter"
                             type="text"
                             :placeholder="contentMode ? `Search in files…` : `Filter files…`"
-                            class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pl-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            class="ui-field-box ui-field-sm w-full min-w-0 pl-7"
                             :class="textMode ? `pr-[4.75rem]` : `pr-7`"
                             @keydown.esc="clearFilter"
                         />
@@ -881,7 +881,7 @@ const endResize = (event: PointerEvent): void => {
                             v-model="search.include.value"
                             type="text"
                             placeholder="Files to include, e.g. package.json"
-                            class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pr-2 pl-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            class="ui-field-box ui-field-sm w-full min-w-0 pr-2 pl-7"
                             aria-label="Files to include"
                             v-tooltip.bottom="
                                 'Files to include, comma-separated: a name (package.json, src) matches anywhere, ./ anchors it to the workspace root, and ! excludes'

@@ -354,7 +354,7 @@ const advancedSummary = computed(() => {
                         <div v-for="(field, index) in fields" :key="index" class="flex flex-wrap items-start gap-1.5">
                             <input
                                 :value="field.name"
-                                :class="[ui.input(), `w-24 font-mono text-2xs`]"
+                                :class="[ui.inputSm(), `w-24 font-mono`]"
                                 placeholder="name"
                                 @input="patchField(index, { name: ($event.target as HTMLInputElement).value })"
                             />

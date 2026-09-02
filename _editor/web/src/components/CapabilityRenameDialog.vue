@@ -56,7 +56,7 @@ const unchanged = computed(() => renamed.value === props.id);
                 <input
                     v-model="name"
                     autofocus
-                    :class="[ui.input(`font-mono`), touched && problem ? `ui-field-input-error` : ``]"
+                    :class="[ui.input(`font-mono`), touched && problem ? `ui-field-error-box` : ``]"
                     @blur="touched = true"
                 />
                 <span v-if="touched && problem" class="ui-field-error">

@@ -498,7 +498,7 @@ const grab = (event: PointerEvent): void => {
                 type="text"
                 maxlength="80"
                 aria-label="Agent title"
-                class="min-w-0 flex-1 select-text rounded bg-overlay px-1 text-xs font-semibold text-content outline-none ring-1 ring-primary-500/50"
+                class="ui-field-box ui-field-inline min-w-0 flex-1 select-text px-1 text-xs font-semibold"
                 @click.stop
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"

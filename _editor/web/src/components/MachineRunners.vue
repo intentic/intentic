@@ -156,7 +156,7 @@ const add = async (): Promise<void> => {
                 v-model="asked"
                 type="text"
                 placeholder="a name, e.g. rog"
-                :class="ui.input(`w-44 py-1.5`)"
+                :class="ui.inputSm(`w-44`)"
                 @keydown.enter.prevent="add()"
                 @keydown.esc.prevent="adding = false"
             />

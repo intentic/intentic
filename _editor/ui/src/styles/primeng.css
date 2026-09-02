@@ -2,24 +2,12 @@
  * in the later `utilities` layer — see the cssLayer order in vue/plugin.ts) always win.
  * Everything is driven by the density/role tokens, so retuning happens in tokens.css. */
 @layer primeng {
-    .p-inputtext {
-        padding-block: var(--ui-control-padding-y);
-        padding-inline: var(--ui-control-padding-x);
-        border-radius: var(--radius-md);
-        background: var(--color-canvas);
-        border-color: var(--color-line);
-        color: var(--color-content);
-        font-size: var(--text-sm);
-        line-height: var(--text-sm--line-height);
-    }
-
-    .p-inputtext:enabled:hover {
-        border-color: var(--color-line-strong);
-    }
-
-    .p-inputtext::placeholder {
-        color: var(--color-subtle);
-    }
+    /* `.p-inputtext` USED TO BE TUNED HERE and is now one of the selectors on `.ui-field-box`, down in
+     * @layer components. It moved for a reason worth keeping: PrimeVue injects its own styles into THIS layer at
+     * runtime, so a rule here and Aura's rule are the same layer at the same specificity and the winner is
+     * whichever the browser parsed last — which, between a runtime <style> and a bundled sheet, is not ours to
+     * promise. `components` is a later layer, so the field's own rules win outright; `utilities` is later still,
+     * so a call site's Tailwind class keeps beating both. */
 
     /* Button labels never wrap — a squeezed flex row shrinks the button instead of
      * breaking its label onto two lines. */
@@ -369,6 +357,237 @@
         --p-toggleswitch-gap: 0.125rem;
     }
 
+    /* ── THE FIELD, AND THERE IS ONE ──────────────────────────────────────────────────────────────────────
+     * Every place a person types is this class, in three variants and two sizes; the vocabulary and the
+     * argument for it are in lib/ui.ts, beside the button's, and the sweep that produced it is in
+     * docs/input-audit.md.
+     *
+     * IT IS A CLASS AND NOT A TAILWIND STRING, which is the whole reason this rewrite touched CSS at all. A
+     * skin has to be able to repaint a field, and the only handle `ui.input()`'s class string offered was the
+     * ELEMENT: sanctum.css reached fields through a hand-maintained type list — text, search, email, password,
+     * number — and the app also ships `url`, `time` and `datetime-local`, so four fields rendered as flat boxes
+     * on a carved-stone surface and no call site could see why. A list of types is a promise that has to be
+     * renewed every time somebody types a new `type=`; a class is one selector that is right by construction.
+     * It is also what lets the field be promised to extension bundles by name (opt-in/extension-surface.css),
+     * which an arbitrary utility string can never be.
+     *
+     * `.p-inputtext` rides along because PrimeVue puts it on the fields inside its own composite controls (a
+     * picker's filter row, a date panel's spinner), and those must not be a second look. */
+    .ui-field-box,
+    .p-inputtext {
+        /* The rim is TWO VARIABLES, not two colours, so a state that owns the rim (the error below) re-points
+         * them once and every rule that draws an edge follows. Written as literals it took a `:not()` on the
+         * hover rule to stop a pointer resting on an invalid field turning it neutral again — a state quietly
+         * cancelling the state that matters, which is the shape of bug this whole file is about. */
+        --ui-field-line: var(--color-line);
+        --ui-field-line-hover: var(--color-line-strong);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--ui-field-line);
+        background: var(--color-canvas);
+        color: var(--color-content);
+        padding-block: var(--ui-control-padding-y);
+        padding-inline: var(--ui-control-padding-x);
+        /* 16px, AND THE DESIGN SIZE ONLY ONCE THERE IS A KEYBOARD. Mobile Safari zooms the whole page when a
+         * field under 16px takes focus, and it does not zoom back out — the reader is left panning a page that
+         * used to fit. Four call sites in the app knew that and wrote `text-base … md:text-xs` by hand; the
+         * other hundred and twenty-four did not, so most of the product's fields zoomed. It belongs here for
+         * the same reason `touch-target` belongs inside `iconButton`: it is owed by every one of them, and
+         * remembering it at a hundred call sites is not a thing that happens. Restored to the design size at
+         * `md`, where a viewport that wide is a pointer and a keyboard. */
+        font-size: var(--text-base);
+        line-height: var(--text-base--line-height);
+        transition:
+            border-color 0.12s ease-out,
+            box-shadow 0.12s ease-out,
+            background-color 0.12s ease-out;
+    }
+
+    @media (width >= 48rem) {
+        .ui-field-box,
+        .p-inputtext {
+            font-size: var(--text-sm);
+            line-height: var(--text-sm--line-height);
+        }
+    }
+
+    .ui-field-box::placeholder,
+    .p-inputtext::placeholder {
+        color: var(--color-subtle);
+    }
+
+    .ui-field-box:enabled:hover,
+    .p-inputtext:enabled:hover {
+        border-color: var(--ui-field-line-hover);
+    }
+
+    /* `:focus`, NOT `:focus-visible`. On a button the distinction is the point — a mouse press should not leave
+     * a ring behind. A text field is the opposite case: if it holds focus it is receiving keystrokes, so it owes
+     * the reader that signal however the focus arrived, including programmatically. One selector, no ambiguity.
+     *
+     * The `outline` is transparent and its offset is NEGATIVE. Transparent so it shows nothing here — the rim
+     * and the inset ring above are the visible state — but Windows High Contrast repaints system colours over
+     * author ones, and an element with no outline at all is one it cannot mark as focused. Negative offset draws
+     * even that inside the border box, so the one rule this file will not break is the one it exists for. */
+    .ui-field-box:focus,
+    .p-inputtext:focus {
+        border-color: var(--ui-field-focus-line);
+        box-shadow: inset 0 0 0 var(--ui-field-focus-inset) var(--ui-field-focus-ring);
+        outline: 2px solid transparent;
+        outline-offset: -2px;
+    }
+
+    /* A field is one of the controls the design system does not repaint when it goes unavailable — there is no
+     * plate to swap, the box IS the plate — so it dims, at the app's one opacity (`--ui-off-dim`, tokens.css).
+     * Baked into the class rather than left to `ui-off` at the call site: it is owed by every field, and
+     * remembering it is not a thing a hundred call sites do. */
+    .ui-field-box:disabled,
+    .p-inputtext:disabled {
+        opacity: var(--ui-off-dim);
+        cursor: default;
+    }
+
+    /* THE COMPACT SIZE — 26px, the compact button's exact height, for a dense surface. Why it exists and why
+     * `sm` is not a call-site judgement is in tokens.css beside the two numbers. */
+    .ui-field-sm {
+        padding-block: var(--ui-field-padding-y-sm);
+        padding-inline: var(--ui-field-padding-x-sm);
+    }
+
+    /* Only the TYPE waits for `md` — the padding above applies everywhere. Below it this control is 16px like
+     * every other field, for the zoom reason, which makes it a roomier target on the one pointer that needs
+     * one; the 26px that matches the compact button is a desktop measurement and lands where it is measured. */
+    @media (width >= 48rem) {
+        .ui-field-sm {
+            font-size: var(--text-xs);
+            line-height: var(--text-xs--line-height);
+        }
+    }
+
+    /* ── THE FIELD WITH NO BOX, whose frame belongs to whatever it sits in ────────────────────────────────
+     * The chat composer's textarea inside its bordered form; every SearchBar inside `.ui-search-row`; the
+     * command palette's top band. The wrapper draws the rim, the fill and the focus state for the whole
+     * assembly (`:focus-within`), and this brings nothing that would draw a second one a few pixels inside it.
+     *
+     * IT WAS A MARKER CLASS WITH NO RULES. `field-bare` existed only to be excluded — sanctum.css checks for it
+     * before cutting its recess — while the actual "no chrome" was six utilities repeated at each call site
+     * (`bg-transparent … text-content placeholder:text-subtle focus:outline-none`), which is six chances to
+     * write five. Now it means what it says, and the exclusion in the skin is checking a class that does
+     * something. Padding and font stay the caller's: the assembly's shape is the wrapper's decision. */
+    .field-bare {
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        outline: none;
+        color: var(--color-content);
+        /* The same 16px floor as the framed field, and it matters MORE here: these are the composer, the
+         * command palette and every SearchBar — the fields a phone spends the most time in. A caller that
+         * wants a different desktop size says `md:text-xs`, which is the half that is a design choice; the
+         * mobile half is not one. */
+        font-size: var(--text-base);
+        line-height: var(--text-base--line-height);
+    }
+
+    @media (width >= 48rem) {
+        .field-bare {
+            font-size: var(--text-sm);
+            line-height: var(--text-sm--line-height);
+        }
+    }
+
+    /* ── AND THE BOX A `field-bare` FIELD SITS IN ────────────────────────────────────────────────────────
+     * `field-bare` says the frame belongs to the wrapper. This is the wrapper, and until now there was no such
+     * thing — every assembly drew its own, and all of them landed on `focus-within:border-line-strong`, which
+     * is the SAME neutral the box already goes to on hover. So the command field on the agent's checks page,
+     * the two on its rules page and the glob row all had a focus state that was indistinguishable from a
+     * pointer resting on them: the identical defect the framed fields had, one level up, and invisible from
+     * inside the field because the field is not the thing drawing it.
+     *
+     * It is the same rim, the same fill, the same inward ring on focus. A reader cannot tell whether the box
+     * they are typing in is one element or three, and that is the point — an assembly (a `$` prefix, a row of
+     * glob chips, a trailing button) has to look like the plain field beside it, or the layout is what says
+     * "this one is different" about two controls that do the same job. */
+    .ui-field-shell {
+        --ui-field-line: var(--color-line);
+        --ui-field-line-hover: var(--color-line-strong);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--ui-field-line);
+        background: var(--color-canvas);
+        transition:
+            border-color 0.12s ease-out,
+            box-shadow 0.12s ease-out;
+    }
+
+    .ui-field-shell:hover {
+        border-color: var(--ui-field-line-hover);
+    }
+
+    .ui-field-shell:focus-within {
+        border-color: var(--ui-field-focus-line);
+        box-shadow: inset 0 0 0 var(--ui-field-focus-inset) var(--ui-field-focus-ring);
+    }
+
+    /* A BORDERLESS FIELD LIGHTS ITS GROUND, because it has no edge to move. The writing fields (ProseField,
+     * NoteEditor) are chrome-less on purpose — a page of prose must not sit in a grey box — so the focus rule
+     * above has nothing to colour, and they had each grown their own `focus:bg-overlay`. It is the same answer
+     * `.ui-search-row` gives one control over (utilities.css: "FOCUS IS A TINT, NOT AN EDGE"), so it is spelled
+     * once here rather than twice more at call sites. */
+    .ui-field-lit:focus {
+        background: var(--color-overlay);
+    }
+
+    .field-bare::placeholder {
+        color: var(--color-subtle);
+    }
+
+    .field-bare:disabled {
+        opacity: var(--ui-off-dim);
+        cursor: default;
+    }
+
+    /* THE FIELD THAT REPLACES A PIECE OF TEXT IN PLACE — a card's title while you rename it, a chat tab, a tree
+     * node, a terminal's label. Ten of these were in the tree spelled six ways: three radii, four text sizes,
+     * three backgrounds, and at five of them a `ring-1 ring-primary-500/50` that was NOT focus-scoped, so the
+     * ring was lit the entire time the field existed.
+     *
+     * `font: inherit` is the definition of the variant rather than a convenience: the control stands exactly
+     * where a line of text stood, so it takes that line's family, size, weight and leading, and the row it is in
+     * does not change height when the reader starts typing. What says "this is editable now" is the fill, and
+     * the focus rule above still lands on it.
+     *
+     * GEOMETRY IS THE CALLER'S HERE, which is the one place this file says that, and `ui.addTile()` is the
+     * precedent (lib/ui.ts): what these replace is not one shape. A tree node is a line, a terminal tab is a
+     * pill, the chat rail's is a whole CARD, and a sandbox title is a heading beside a hidden sizer twin it has
+     * to match to the pixel. A default block padding would be wrong for three of those and the rail would jump
+     * a row's height every time somebody renamed a chat. So the variant owns what is actually shared — no rim,
+     * a fill that says editable, the focus contract, the disabled fade — and the call site brings the box.
+     * `check:inputs` knows, and exempts this variant from the geometry rule for exactly this reason.
+     *
+     * IT IS THE ONE FIELD THAT DOES NOT TAKE THE 16px MOBILE FLOOR, and that is a conflict rather than an
+     * oversight. Matching the surrounding line and clearing the iOS zoom threshold are the same property asked
+     * for two different numbers, and this variant exists to keep the row still. A rename that grew a list row
+     * by four pixels every time somebody started typing would be the defect, and it would be on screen far more
+     * often than the zoom, which only happens on a phone, only while renaming, and only if the surrounding text
+     * is already under 16px. Named here so the next reader knows it was weighed. */
+    .ui-field-inline {
+        border-color: transparent;
+        background: var(--color-overlay);
+        padding: 0;
+        font: inherit;
+    }
+
+    /* THE ERROR STATE IS THE FOCUS CONTRACT, RE-POINTED. It sets no rule of its own — it moves the two variables
+     * the rule above already reads, so an errored field that is also focused shows one coherent state instead of
+     * two fighting declarations. That is what it replaces: `.ui-field-input-error` was a lone
+     * `border-color: … !important`, which won against the rim and lost to nothing else, so a focused errored
+     * field was a red border with an accent ring inside it. */
+    .ui-field-error-box {
+        --ui-field-line: var(--color-danger-500);
+        --ui-field-line-hover: var(--color-danger-500);
+        --ui-field-focus-line: var(--color-danger-500);
+        --ui-field-focus-ring: color-mix(in srgb, var(--color-danger-500) 22%, transparent);
+        border-color: var(--ui-field-line);
+    }
+
     /* Label + control stack used by forms. */
     .ui-field {
         display: flex;
@@ -422,11 +641,6 @@
         align-items: center;
         gap: 0.25rem;
         animation: ui-field-error-in 200ms ease-out;
-    }
-
-    /* Error border state for native inputs / textareas. */
-    .ui-field-input-error {
-        border-color: var(--color-danger-500) !important;
     }
 }
 

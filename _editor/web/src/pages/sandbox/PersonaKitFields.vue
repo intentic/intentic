@@ -197,7 +197,7 @@ watch(
                     :maxlength="PROMPT_MAX"
                     :disabled="isLoading"
                     placeholder="Write what this persona is, who it is, what it does, how it answers."
-                    :class="ui.input('w-full resize-y font-mono text-xs')"
+                    :class="ui.inputSm('w-full resize-y font-mono')"
                     aria-label="This persona's system prompt"
                     @change="commitPrompt"
                 ></textarea>

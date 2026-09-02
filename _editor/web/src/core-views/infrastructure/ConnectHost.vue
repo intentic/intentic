@@ -125,7 +125,7 @@ onUnmounted(() => clearInterval(timer));
                         type="password"
                         autocomplete="off"
                         placeholder="Paste your Cloudflare API token"
-                        :class="[ui.input(), cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid ? 'ui-field-input-error' : '']"
+                        :class="[ui.input(), cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid ? 'ui-field-error-box' : '']"
                         @blur="cfTokenTouched = true"
                     />
                     <span v-if="cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid" class="ui-field-error">
@@ -141,7 +141,7 @@ onUnmounted(() => clearInterval(timer));
                     <input
                         v-model="hostName"
                         placeholder="defaults to the machine's hostname"
-                        :class="[ui.input(), hostNameTouched && rawHostName !== '' && canonicalHostName === '' ? 'ui-field-input-error' : '']"
+                        :class="[ui.input(), hostNameTouched && rawHostName !== '' && canonicalHostName === '' ? 'ui-field-error-box' : '']"
                         @blur="hostNameTouched = true"
                     />
                     <span v-if="hostNameTouched && rawHostName !== '' && canonicalHostName === ''" class="ui-field-error">

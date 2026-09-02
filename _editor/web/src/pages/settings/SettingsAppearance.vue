@@ -271,7 +271,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                         rows="4"
                         spellcheck="false"
                         placeholder='Paste theme JSON, e.g. { "type": "dark", "colors": { "editor.background": "#1e1e1e", … } }'
-                        class="scrollbar-thin w-full rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content placeholder:text-subtle focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        class="ui-field-box scrollbar-thin w-full font-mono"
                     ></textarea>
                     <div v-if="importError" class="mt-2 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
                         {{ importError }}

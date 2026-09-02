@@ -121,7 +121,7 @@ onUnmounted(stop);
                 </p>
                 <div v-if="!portsOnly" class="flex flex-col gap-1.5">
                     <label class="text-2xs font-medium text-muted" for="desktop-sync-folder">Local folder</label>
-                    <input id="desktop-sync-folder" v-model="folder" spellcheck="false" :class="ui.input('w-full font-mono text-xs')" />
+                    <input id="desktop-sync-folder" v-model="folder" spellcheck="false" :class="ui.inputSm('w-full font-mono')" />
                 </div>
 
                 <template v-if="pairToken === undefined">

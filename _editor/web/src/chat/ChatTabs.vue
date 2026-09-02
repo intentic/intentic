@@ -436,7 +436,7 @@ const openHistory = (event: Event): void => {
                 maxlength="80"
                 aria-label="Chat title"
                 :placeholder="active.isolated.value ? 'New agent' : 'New chat'"
-                class="h-7 min-w-0 flex-1 select-text rounded-md bg-overlay px-2 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
+                class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
                 @blur="edit.blurCommit()"

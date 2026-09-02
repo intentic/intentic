@@ -196,7 +196,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             type="text"
                             placeholder="branch-name"
                             autofocus
-                            class="min-w-0 flex-1 rounded-md border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            class="ui-field-box ui-field-sm min-w-0 flex-1"
                             @keydown.enter="submitCreate"
                             @keydown.escape="creating = false"
                         />

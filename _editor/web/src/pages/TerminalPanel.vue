@@ -1074,7 +1074,7 @@ const endResize = (event: PointerEvent): void => {
                                 maxlength="40"
                                 aria-label="Terminal name"
                                 :placeholder="defaultLabel(name)"
-                                class="w-24 min-w-0 select-text rounded bg-canvas px-1 text-2xs text-content outline-none ring-1 ring-line-strong placeholder:text-subtle"
+                                class="ui-field-box ui-field-inline w-24 min-w-0 select-text px-1 text-2xs"
                                 @click.stop
                                 @dblclick.stop
                                 @keydown.enter.stop.prevent="commitRename"
@@ -1194,7 +1194,7 @@ const endResize = (event: PointerEvent): void => {
                         v-model="helpNote"
                         type="text"
                         placeholder="Optional note back to the agent"
-                        class="min-w-40 flex-1 rounded border border-line bg-card px-2 py-1 text-xs text-content placeholder:text-subtle"
+                        class="ui-field-box ui-field-sm min-w-40 flex-1"
                         @keydown.enter="resolveHelp(true)"
                     />
                     <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> Done: hand back </Button>

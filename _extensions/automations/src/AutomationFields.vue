@@ -278,7 +278,7 @@ const setProvider = (provider: string): void => {
                 ref="nameInput"
                 v-model="form.id"
                 placeholder="morning-briefing"
-                :class="[ui.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
+                :class="[ui.input(), touched.has('name') && nameError ? 'ui-field-error-box' : '']"
                 @blur="markTouched('name')"
             />
             <span v-if="touched.has('name') && nameError" class="ui-field-error">
@@ -407,7 +407,7 @@ const setProvider = (provider: string): void => {
                                 rows="2"
                                 placeholder="https://example.com&#10;https://www.example.com"
                                 class="font-mono"
-                                :class="[ui.input(), touched.has('origins') && originsError ? 'ui-field-input-error' : '']"
+                                :class="[ui.input(), touched.has('origins') && originsError ? 'ui-field-error-box' : '']"
                                 @blur="markTouched('origins')"
                             ></textarea>
                             <span v-if="touched.has('origins') && originsError" class="ui-field-error">
@@ -630,12 +630,8 @@ const setProvider = (provider: string): void => {
                          to meet the trigger column beside it exactly as before; see PROMPT_HEIGHT. -->
                     <div class="flex min-h-0 flex-1 flex-col">
                         <div
-                            class="relative flex-1 rounded-md border bg-canvas transition-colors"
-                            :class="
-                                touched.has('prompt') && promptError
-                                    ? 'ui-field-input-error border-line'
-                                    : 'border-line hover:border-line-strong focus-within:border-line-strong'
-                            "
+                            class="ui-field-shell relative flex-1"
+                            :class="touched.has('prompt') && promptError ? 'ui-field-error-box' : ''"
                             :style="{ minHeight: `${promptHeight}px` }"
                         >
                             <!-- THE PROSE IS TAKEN OUT OF THE FLOW, which is the whole reason this box has a

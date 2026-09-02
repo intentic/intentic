@@ -167,7 +167,7 @@ const onShow = async (): Promise<void> => {
                     v-model="query"
                     type="text"
                     placeholder="Go to file, or paste a session id… (> for commands)"
-                    class="field-bare w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-sm text-content placeholder:text-subtle focus:outline-none"
+                    class="field-bare w-full min-w-0 py-2.5 pl-9 pr-3"
                     role="searchbox"
                     aria-controls="quick-open-list"
                     :aria-activedescendant="activeIndex < rowCount ? `quick-open-opt-${activeIndex}` : undefined"

@@ -389,7 +389,7 @@ const confirmRemove = async (): Promise<void> => {
                         <input
                             v-if="rename.editing && renamingId === persona.id"
                             v-model="rename.draft"
-                            :class="ui.input('w-full max-w-xs py-0.5 font-medium')"
+                            :class="ui.inputSm('w-full max-w-xs font-medium')"
                             aria-label="Name"
                             @vue:mounted="rename.focusInput"
                             @click.stop

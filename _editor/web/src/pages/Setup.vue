@@ -1903,7 +1903,7 @@ watch(commandReady, (ready) => {
                                     autocapitalize="off"
                                     spellcheck="false"
                                     placeholder="sandbox.example.com"
-                                    :class="ui.input('w-full text-base md:text-sm')"
+                                    :class="ui.input('w-full')"
                                     @keydown.enter="connectDomain"
                                 />
                                 <!-- `attaching` is in the disabled expression, not left to the loading prop: the
@@ -1972,7 +1972,7 @@ watch(commandReady, (ready) => {
                                     autocapitalize="off"
                                     spellcheck="false"
                                     placeholder="The CONNECT_TOKEN your sandbox runs with"
-                                    :class="ui.input('w-full text-base md:text-sm')"
+                                    :class="ui.input('w-full')"
                                     @keydown.enter="connectDomain"
                                 />
                                 <span class="text-xs text-muted">
@@ -2383,7 +2383,7 @@ watch(commandReady, (ready) => {
                                             autocapitalize="off"
                                             spellcheck="false"
                                             placeholder="sandbox"
-                                            :class="ui.input('w-full text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
+                                            :class="ui.input('w-full md:w-auto md:min-w-0 md:flex-1')"
                                         />
                                         <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
                                     </div>

@@ -1156,8 +1156,8 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         v-model="createDraft"
                         type="text"
                         :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
-                        class="min-w-0 flex-1 rounded border bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
-                        :class="createError !== undefined ? 'border-danger' : 'border-line-strong'"
+                        class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
+                        :class="createError !== undefined ? 'ui-field-error-box' : ''"
                         @click.stop
                         @keydown.enter.prevent="commitCreate"
                         @keydown.esc.prevent="cancelCreate"
@@ -1230,7 +1230,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             v-if="renamingPath === row.entry.path"
                             v-model="renameDraft"
                             type="text"
-                            class="min-w-0 flex-1 rounded border border-line-strong bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
+                            class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
                             @click.stop
                             @keydown.enter.prevent="commitRename"
                             @keydown.esc.prevent="cancelRename"
@@ -1345,8 +1345,8 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                                 v-model="createDraft"
                                 type="text"
                                 :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
-                                class="min-w-0 flex-1 rounded border bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
-                                :class="createError !== undefined ? 'border-danger' : 'border-line-strong'"
+                                class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
+                                :class="createError !== undefined ? 'ui-field-error-box' : ''"
                                 @click.stop
                                 @keydown.enter.prevent="commitCreate"
                                 @keydown.esc.prevent="cancelCreate"

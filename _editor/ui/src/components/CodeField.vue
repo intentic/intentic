@@ -117,7 +117,7 @@ defineExpose({ field });
             spellcheck="false"
             :readonly="readonly"
             :class="[
-                `field-bare ui-code-field-box ui-code-field-input [grid-area:1/1] min-w-0 resize-none overflow-hidden focus:outline-none`,
+                `field-bare ui-code-field-box ui-code-field-input [grid-area:1/1] min-w-0 resize-none overflow-hidden`,
                 readonly ? `caret-transparent` : ``,
             ]"
         ></textarea>

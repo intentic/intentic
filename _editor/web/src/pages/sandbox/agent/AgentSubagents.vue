@@ -38,7 +38,7 @@ const DEPTH = { min: 1, max: 10 };
                     :value="settings?.subagentsAtOnce ?? 20"
                     :disabled="settings === undefined"
                     aria-label="Subagents at once"
-                    :class="ui.input('w-20 text-right text-xs')"
+                    :class="ui.inputSm('w-20 text-right')"
                     @change="
                         (event: Event) =>
                             commitCount(event, settings?.subagentsAtOnce ?? 20, AT_ONCE, (subagentsAtOnce: number) => patch({ subagentsAtOnce }))
@@ -63,7 +63,7 @@ const DEPTH = { min: 1, max: 10 };
                     :value="settings?.subagentsPerTurn ?? 200"
                     :disabled="settings === undefined"
                     aria-label="Subagents per conversation"
-                    :class="ui.input('w-20 text-right text-xs')"
+                    :class="ui.inputSm('w-20 text-right')"
                     @change="
                         (event: Event) =>
                             commitCount(event, settings?.subagentsPerTurn ?? 200, PER_TURN, (subagentsPerTurn: number) => patch({ subagentsPerTurn }))
@@ -87,7 +87,7 @@ const DEPTH = { min: 1, max: 10 };
                     :value="settings?.subagentDepth ?? 3"
                     :disabled="settings === undefined"
                     aria-label="Nesting depth"
-                    :class="ui.input('w-20 text-right text-xs')"
+                    :class="ui.inputSm('w-20 text-right')"
                     @change="
                         (event: Event) => commitCount(event, settings?.subagentDepth ?? 3, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))
                     "

@@ -1492,7 +1492,7 @@ watch(
                                  being in this mode by accident is the one mistake worth paint, because the words
                                  land in the transcript as the agent's own. -->
                             <form
-                                class="composer-frame relative flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25"
+                                class="ui-field-shell composer-frame relative flex flex-col rounded-2xl border-line-strong bg-overlay shadow-lg"
                                 :class="{ 'composer-voice': voiceAgent }"
                                 @submit.prevent="submit"
                             >
@@ -1568,7 +1568,7 @@ watch(
                                     name="draft"
                                     :disabled="!canDrive"
                                     :placeholder="composerPlaceholder"
-                                    class="field-bare scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-base leading-relaxed text-content placeholder:text-subtle focus:outline-none md:text-xs"
+                                    class="field-bare scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto px-4 py-3 leading-relaxed md:text-xs"
                                     @input="onInput"
                                     @keydown="onKeydown"
                                     @keyup="syncCaret"

@@ -156,6 +156,45 @@
     --ui-control-padding-y: calc(var(--spacing) * 2);
     --ui-field-gap: calc(var(--spacing) * 2);
 
+    /* THE COMPACT FIELD, which is the same decision as `size="small"` on a button and lands on the same two
+     * numbers. 4px of block padding against a 16px line box is a 26px control, exactly the compact button's
+     * height, so a field and a button sharing a toolbar sit on one baseline instead of two pixels apart.
+     *
+     * IT EXISTS BECAUSE A THIRD OF THE FIELDS WERE ALREADY DRAWING IT. `ui.input()` shipped one size, and 33 of
+     * its 82 call sites passed geometry straight back in to get out of it — `text-xs` at 16, `py-1` at 7, `px-2`
+     * at 5, `py-1.5` at 4, plus `text-base`, `py-0.5` and a `min-h-[2.25rem]`. Seven spellings of "smaller than
+     * the form size", chosen by whoever was in the file. That is the buttons' `px-2.5 py-1 text-2xs` story
+     * verbatim (lib/ui.ts), and it has the same fix: the size is a name, so there is nothing left to shrink. */
+    --ui-field-padding-x-sm: calc(var(--spacing) * 2);
+    --ui-field-padding-y-sm: var(--spacing);
+
+    /* ── WHAT A FOCUSED FIELD LOOKS LIKE, ONCE, AND WHY IT IS DRAWN INSIDE THE BOX ────────────────────────
+     * The app had NINE answers to this across 128 fields, and the one on 90 of them —
+     * `focus:border-line-strong focus:outline-none` — is byte-identical to the same field's HOVER state while
+     * also throwing away the browser's own ring. A focused field and a pointed-at field were the same pixels,
+     * so the only thing telling a reader where their keystrokes were going was the caret. Eight more fields
+     * carried `focus:outline-none` with nothing put back at all, and nineteen had no focus rule whatsoever.
+     *
+     * THE RING IS `inset`, AND THAT IS THE LOAD-BEARING PART. Every ring in the tree before this — five
+     * hand-written `ring-1`s, and the skin's own `0 0 0 3px` — painted OUTSIDE the border box, which fails two
+     * ways and both were in the product. It lands on top of whatever sits a few pixels away in a tight flex
+     * row; and it is CUT OFF by any ancestor with `overflow: hidden` or `auto`, which is every scroll pane,
+     * every rounded card and every dialog body in the app. A half-drawn focus ring reads as a rendering bug,
+     * and the call site can never see the ancestor that clipped it.
+     *
+     * Drawn inward, the state costs zero pixels outside the element: correct in a scroller, correct flush
+     * against a panel edge, correct in a row of fields 4px apart, and it adds no layout size so nothing shifts
+     * when focus arrives. `check:inputs` enforces exactly that — no `ring-*`, no positive `outline-offset`, no
+     * outward `shadow-*` on a field — because it is the kind of rule that is invisible until somebody's screen
+     * is the one with the scroll parent.
+     *
+     * Three variables rather than a block, for the reason the button's disabled tokens are three: a skin has to
+     * answer this in its own material (Sanctum's is a gold rim in stone) by re-pointing them, not by copying
+     * the rule. The error state re-points the same two and needs no focus rule of its own. */
+    --ui-field-focus-line: var(--color-primary-fill);
+    --ui-field-focus-ring: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
+    --ui-field-focus-inset: 2px;
+
     /* A BUTTON IS WIDER THAN A FIELD AT THE SAME HEIGHT, and that is not a stylistic preference — it is the
      * difference between the two controls. A text input is a container: its side padding is an inset before
      * content that may be long, so 12px either side of a 38px box is right and more would just push the

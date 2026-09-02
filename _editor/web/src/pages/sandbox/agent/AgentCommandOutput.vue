@@ -133,7 +133,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                                 min="0"
                                 max="100"
                                 :value="holdoutPercent"
-                                :class="ui.input('w-16 text-right text-xs')"
+                                :class="ui.inputSm('w-16 text-right')"
                                 @change="(event: Event) => commitPercent(event, holdoutPercent, (outputHoldout: number) => patch({ outputHoldout }))"
                             />
                             <span class="text-xs text-muted">%</span>

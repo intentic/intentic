@@ -892,7 +892,7 @@ const runPending = async (): Promise<void> => {
                     v-model="nameInput"
                     type="text"
                     :placeholder="ACTIONS[pending.kind].placeholder"
-                    class="mt-3 w-full rounded-md border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                    class="ui-field-box ui-field-sm mt-3 w-full"
                     @keydown.enter="runPending"
                     autofocus
                 />

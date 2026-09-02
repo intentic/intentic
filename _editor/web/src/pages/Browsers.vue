@@ -606,7 +606,7 @@ watch(
                                         v-model="helpNote"
                                         type="text"
                                         placeholder="Optional note back to the agent"
-                                        class="min-w-40 flex-1 rounded border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle"
+                                        class="ui-field-box ui-field-sm min-w-40 flex-1"
                                         @keydown.enter="resolveHelp(true)"
                                     />
                                     <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> Done: hand back </Button>

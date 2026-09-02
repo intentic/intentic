@@ -1509,7 +1509,7 @@ const submitLabel = computed(() => {
                                 <input
                                     v-model="name"
                                     placeholder="my-tool"
-                                    :class="[ui.input(), nameCollision || (attempted && nameProblem) ? 'ui-field-input-error' : '']"
+                                    :class="[ui.input(), nameCollision || (attempted && nameProblem) ? 'ui-field-error-box' : '']"
                                     @input="nameEdited = true"
                                     @blur="finishName"
                                 />
