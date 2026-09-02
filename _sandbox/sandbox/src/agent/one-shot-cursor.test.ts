@@ -64,7 +64,7 @@ test("asks on Cursor's own runtime with every tool switched off", async () => {
         }),
     );
     expect(send).toHaveBeenCalledWith(`fix: name the change`, expect.objectContaining({ onDelta: expect.any(Function) }));
-    expect(close).toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
 });
 
 test("a reply carrying no text is a rung that did not answer", async () => {
@@ -72,7 +72,7 @@ test("a reply carrying no text is a rung that did not answer", async () => {
     wait.mockResolvedValue({ status: `success` });
 
     await expect(ask()).rejects.toThrow(/did not answer/);
-    expect(close).toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
 });
 
 test("refuses when no Cursor account is connected", async () => {
