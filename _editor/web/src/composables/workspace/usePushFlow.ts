@@ -1,4 +1,4 @@
-import { type PrepushRun, quickModelKey } from "@intentic/sandbox-contract";
+import { type CommandRun, commandRunOutcome, type PushRun, quickModelKey } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { composeSession, startSession } from "../agents/sessionSuggestion";
 import { useAgentRunModel } from "../chat/agentRunModel";
@@ -6,9 +6,10 @@ import type { Conversation } from "../chat/conversation";
 import { useSandbox } from "../sandbox/useSandbox";
 import { prepushCommandOf } from "../sandbox/rules";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
-import { checkOutcome, fixPrompt, fixSummary } from "./prepushFix";
+import { checkFixPrompt, checkOutcome, outcomeSummary, pushFixPrompt } from "./fixProposal";
 import { type SyncTarget, useChanges } from "./useChanges";
 import { usePrepush } from "./usePrepush";
+import { resetPushRuns, usePushRun } from "./usePushRun";
 
 /* THE PUSH, FROM THE CLICK TO THE ANSWER, the whole flow in one place, and deliberately not inside the panel
  * the click happens in.
@@ -50,14 +51,16 @@ export type PushStage = "checking" | "pushing";
 export interface PushQuestion {
     // Four words at most: it is read at a glance, from a view the user may have walked back into.
     readonly title: string;
-    // The command, drawn in the monospace it wears while the check is still going, so the line reads the same
-    // either side of the verdict. Absent for a push that git itself refused, there is no command to name, and
-    // setting a repo in that slot would make the sentence claim something was run.
+    // The command, drawn in the monospace it wears while the run is still going, so the line reads the same
+    // either side of the verdict: the check's command, or the push's own `git push …`. Absent only where
+    // several repos refused at once, no one command can stand for them, and where a pull ahead of the push was
+    // what failed, since nothing was run for it.
     readonly command?: string;
     // The predicate that follows it: what happened, in prose.
     readonly detail: string;
     /* `checks` still has a push to send, so the answer is Push anyway or hand it to an agent. `push` is the send
-     * itself having failed, there is nothing to override, and each repo carries its own reason on its own row. */
+     * itself having been refused, there is nothing to override, so the same button is the retry, and where the
+     * repository's own pre-push hook was what refused it, the fix is proposed exactly as for a red check. */
     readonly kind: "checks" | "push";
 }
 
@@ -76,6 +79,10 @@ const question = shallowRef<PushQuestion | undefined>(undefined);
 // (agents/sessionSuggestion.ts), and composed ONCE so edits to its text and model survive every re-render and
 // every navigation between the failure and the decision.
 const proposedFix = shallowRef<Conversation | undefined>(undefined);
+/* The push runs that settled red behind a `push` question (useChanges files them with their failures), held
+ * for the two things the card reads off a run and not off its sentence: the terminal it ran in, and the tail
+ * the proposed fix quotes. The check's run is the prepush watcher's own; these are per repo. */
+const refusedRuns = shallowRef<readonly PushRun[]>([]);
 const pushed = shallowRef<PendingPush | undefined>(undefined);
 let pushedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -120,7 +127,7 @@ const readTypical = (id: string | undefined): void => {
 
 // Only a run that RAN to a verdict measures anything: a cancel and a timeout are the clock being cut short, and
 // remembering either would teach the readout a duration no suite ever takes.
-const rememberTypical = (run: PrepushRun): void => {
+const rememberTypical = (run: CommandRun): void => {
     const { startedAt, finishedAt } = run;
     if (startedAt === undefined || finishedAt === undefined || (run.status !== `passed` && run.status !== `failed`) || run.timedOut === true) {
         return;
@@ -145,6 +152,7 @@ const enter = (push: PendingPush, next: PushStage): void => {
     since.value = Date.now();
     question.value = undefined;
     proposedFix.value = undefined;
+    refusedRuns.value = [];
 };
 
 // Back to rest, having sent what was asked for. The note is the only thing left, and it expires by itself.
@@ -153,6 +161,7 @@ const done = (push: PendingPush): void => {
     stage.value = undefined;
     question.value = undefined;
     proposedFix.value = undefined;
+    refusedRuns.value = [];
     prepush.forget();
     pushed.value = push;
     clearTimeout(pushedTimer);
@@ -179,7 +188,14 @@ const untilIdle = async (): Promise<void> => {
 };
 
 /* Send it. The failures useChanges files per repo ARE the outcome, the batch carries on past a repo that
- * refused, so "did this push go" is a question about which scopes came back marked, not about a thrown error. */
+ * refused, so "did this push go" is a question about which scopes came back marked, not about a thrown error.
+ *
+ * A push is a RUN (usePushRun.ts), and a refused one is filed with its run, so the question raised here is the
+ * same question a red check raises, from the same material: the command in monospace, one line on how it
+ * ended, the terminal it ran in, and, where the repository's own pre-push hook was what said no, the fix
+ * composed from what the hook printed. A rejected ref or a dead host proposes nothing, on the rule `error` and
+ * `cancelled` checks follow: nothing is known to be wrong with the code, and an agent sent after it would hunt
+ * a bug that isn't there. */
 const send = async (push: PendingPush): Promise<void> => {
     enter(push, `pushing`);
     prepush.forget();
@@ -198,14 +214,48 @@ const send = async (push: PendingPush): Promise<void> => {
         return;
     }
     stage.value = undefined;
+    const runs = refused.map((repo) => git!.failures.value.get(repo)?.run).filter((run) => run !== undefined);
+    refusedRuns.value = runs;
+    question.value = refusalQuestion(push, refused);
+    const byHook = runs.filter((run) => run.refusedBy === `hook`);
+    if (byHook.length > 0) {
+        proposedFix.value = composeSession({ prompt: pushFixPrompt(byHook), ...fixWith, isolated: true });
+    }
+};
+
+// The question a refused send raises, from the failures useChanges filed against the repos that refused.
+const refusalQuestion = (push: PendingPush, refused: readonly string[]): PushQuestion => {
     const only = refused.length === 1 ? git!.failures.value.get(refused[0]!) : undefined;
-    question.value = {
-        kind: `push`,
-        title: `${push.verb} failed`,
-        // One repo can say what git said; several cannot share a line, and each row in the panel is already
-        // carrying its own reason under the repo that produced it.
-        detail: only === undefined ? `${refused.length} repos refused it, each row says why.` : `${refused[0]}: ${only.detail}`,
-    };
+    if (only === undefined) {
+        // Several cannot share a line, and each row in the panel is already carrying its own reason under
+        // the repo that produced it.
+        return { kind: `push`, title: `${push.verb} failed`, detail: `${refused.length} repos refused it, each row says why.` };
+    }
+    if (only.run === undefined) {
+        // No run: a pull that failed ahead of the push. The line has to name the repo itself.
+        return { kind: `push`, title: `${push.verb} failed`, detail: `${refused[0]}: ${only.detail}` };
+    }
+    // The run's own outcome names it ("Push timed out"), its command is drawn above the line, and the line is
+    // the predicate that follows the command, exactly as a red check's is.
+    return { kind: `push`, title: commandRunOutcome(only.run, push.verb), command: only.run.command, detail: only.detail };
+};
+
+/* The terminal the current moment is about: the check's while the check runs or after it said no, the push's
+ * while it runs (whichever target's is in a terminal already) or after it was refused. One button on every
+ * surface, pointed at whichever run the user is being asked about. */
+const currentTerminal = (): { readonly session: string; readonly show: () => void } | undefined => {
+    const pushRuns =
+        question.value?.kind === `push`
+            ? refusedRuns.value.map((run) => usePushRun(run.repo))
+            : stage.value === `pushing`
+              ? (pending.value?.targets ?? []).filter((target) => target.push).map((target) => usePushRun(target.repo))
+              : [];
+    const watcher = pushRuns.find((candidate) => candidate.terminal.value !== undefined);
+    if (watcher !== undefined) {
+        return { session: watcher.terminal.value!, show: watcher.showTerminal };
+    }
+    const session = prepush.terminal.value;
+    return session === undefined ? undefined : { session, show: prepush.showTerminal };
 };
 
 /* EVERYTHING THIS FLOW IS HOLDING ABOUT ONE WORKSPACE'S OUTGOING WORK, dropped when the browser is pointed at
@@ -227,8 +277,12 @@ export const resetPushFlow = (): void => {
     since.value = 0;
     question.value = undefined;
     proposedFix.value = undefined;
+    refusedRuns.value = [];
     pushed.value = undefined;
     fixWith = {};
+    // The runs being followed name repositories in the same workspace, and are dropped with the flow that
+    // started them rather than by a second caller that would have to remember to.
+    resetPushRuns();
 };
 
 export function usePushFlow() {
@@ -251,16 +305,18 @@ export function usePushFlow() {
             return;
         }
         const push: PendingPush = { verb, what, targets };
+        // The HEAD of the agent-run list, the entry the daemon would reach for, rather than the raw setting:
+        // this is composed into a draft the user can see and re-point, so it has to name a model that can
+        // actually be sent. `quickModelKey` because composeSession takes the pinned `${provider}:${model}` form.
+        // Read before the check is even considered: a push with no check configured can still be refused by
+        // the repository's own hook, and the fix proposed for that reads the same settings.
+        const head = agentRun.choice.value;
+        fixWith = { ...(head === undefined ? {} : { model: quickModelKey(head) }), effort: settings.value?.agentRunEffort };
         const command = prepushCommandOf(settings.value?.rules ?? []);
         if (command === `` || !targets.some((target) => target.push)) {
             void send(push);
             return;
         }
-        // The HEAD of the agent-run list, the entry the daemon would reach for, rather than the raw setting:
-        // this is composed into a draft the user can see and re-point, so it has to name a model that can
-        // actually be sent. `quickModelKey` because composeSession takes the pinned `${provider}:${model}` form.
-        const head = agentRun.choice.value;
-        fixWith = { ...(head === undefined ? {} : { model: quickModelKey(head) }), effort: settings.value?.agentRunEffort };
         enter(push, `checking`);
         void prepush.start().then((settled) => {
             rememberTypical(settled);
@@ -275,13 +331,13 @@ export function usePushFlow() {
                 return;
             }
             stage.value = undefined;
-            question.value = { kind: `checks`, title: checkOutcome(settled), command: settled.command, detail: fixSummary(settled) };
+            question.value = { kind: `checks`, title: checkOutcome(settled), command: settled.command, detail: outcomeSummary(settled) };
             /* `error` and `cancelled` get no fix proposal. The command could not run, or the user stopped it,
              * either way nothing is known to be wrong with the code, and an agent sent after it would hunt a bug
              * that isn't there. */
             if (settled.status === `failed`) {
                 proposedFix.value = composeSession({
-                    prompt: fixPrompt(settled),
+                    prompt: checkFixPrompt(settled),
                     ...fixWith,
                     // Isolated, like any other fleet agent: the work under test is committed on a branch, so the
                     // fix belongs in a worktree of its own and arrives as a diff to review rather than as edits
@@ -313,6 +369,7 @@ export function usePushFlow() {
         stage.value = undefined;
         question.value = undefined;
         proposedFix.value = undefined;
+        refusedRuns.value = [];
         prepush.forget();
     };
 
@@ -343,11 +400,12 @@ export function usePushFlow() {
         // The command being run, for the line that says what is happening. From the run while there is one, from
         // settings in the moment before the first poll answers.
         command: computed(() => (prepush.run.value.command === `` ? prepushCommandOf(settings.value?.rules ?? []) : prepush.run.value.command)),
-        // The check's terminal, where it exists, absent on a sandbox with no tmux wrapper, where the suite ran
-        // in an invisible shell and a button would only open an empty panel.
-        terminal: prepush.terminal,
+        // The terminal of whichever run the moment is about (currentTerminal), where it exists: absent on a
+        // sandbox with no tmux wrapper, where the command ran in an invisible shell and a button would only
+        // open an empty panel.
+        terminal: computed(() => currentTerminal()?.session),
         typicalMs: computed(() => typicalMs.value),
-        showTerminal: prepush.showTerminal,
+        showTerminal: (): void => currentTerminal()?.show(),
         askSync,
         pushAnyway,
         startFix,

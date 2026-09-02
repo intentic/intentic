@@ -626,7 +626,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             undoLastAction: async () => ({ ok: false as const, reason: "nothing to undo" }),
             fetchRemote: async () => ({ ok: true as const }),
             pullRemote: async () => ({ ok: true as const }),
-            pushBranch: async () => ({ ok: true as const }),
             stagedFileDiff: async () => ({}),
             unstagedFileDiff: async () => ({}),
             fileDiff: async () => ({}),

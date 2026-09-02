@@ -12,7 +12,10 @@ mismatch is a type error rather than a runtime surprise.
 - Declare the wire shapes those contracts are built from, one module per subject area (`src/schemas/`).
 - Declare the event union the daemon pushes over SSE (`src/events.ts`).
 - Hold the small pieces of logic that BOTH sides must agree on rather than each deciding: the chore book,
-  hostname and tunnel-id rules, session naming, terminal protocol, workspace state, runtime state.
+  hostname and tunnel-id rules, session naming, terminal protocol, workspace state, runtime state, and the two
+  things every surface that waits on a daemon-run command needs (`src/command-run.ts`): the loop that follows a
+  `CommandRun` to its verdict, and the words over a settled one, so the card in the app and the notification on
+  a phone say the same thing about the same push.
 - Define workflow designs and immutable run snapshots, including full model/account/harness pins, per-step spend
   ceilings, pinned repository bases, bounded report previews, and complete-report artifact paths.
 

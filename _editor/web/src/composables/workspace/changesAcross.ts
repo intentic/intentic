@@ -1,14 +1,14 @@
-import type { GitActionResult, GitChangesResponse, RepoChanges,SandboxSummary } from "@intentic-app/api-contract";
+import type { GitChangesResponse, RepoChanges,SandboxSummary } from "@intentic-app/api-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { errorMessage } from "@intentic/ui/async";
 import { onScreen } from "../onScreen";
 import { GIT_CHANGES } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
-import { jsonBody } from "../sandbox/jsonBody";
 import { connectedSandboxes } from "../sandbox/roster";
-import { sandboxJsonAt, sandboxJsonQuietly } from "../sandbox/sandboxClient";
+import { sandboxJsonQuietly } from "../sandbox/sandboxClient";
 import { useSandbox } from "../sandbox/useSandbox";
 import { ahead, outgoingWork, unpublished } from "./outgoingWork";
+import { usePushRun } from "./usePushRun";
 
 /* WORK THAT EXISTS ON ONE MACHINE AND NOWHERE ELSE, counted across every sandbox but this one.
  *
@@ -243,8 +243,10 @@ export const pushRow = async (row: LedgerRow): Promise<void> => {
     pushing.value = key;
     pushError.value = undefined;
     try {
-        const result = await sandboxJsonAt<GitActionResult>(row.sandboxId, `/git/${encodeURIComponent(row.repo)}/push`, jsonBody(`POST`, {}));
-        if (!result.ok) {
+        // The push is a run there as it is here (usePushRun.ts): started, then followed to its verdict, so a
+        // hook that takes minutes on that box does not take this request down with it.
+        const result = await usePushRun(row.repo, row.sandboxId).start();
+        if (result.status !== `passed`) {
             pushError.value = result.reason ?? `That push was refused.`;
         }
         // Whether it went or was refused, this box's counts have moved or been proven wrong. Re-read that box

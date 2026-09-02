@@ -1,4 +1,4 @@
-import type { PrepushRun, Rule } from "@intentic/sandbox-contract";
+import type { CommandRun, Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { waitForMemoryHeadroom } from "../platform/memory-admission.js";
 import { prepushFailed } from "../push/notifications.js";
@@ -40,7 +40,7 @@ import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 // on the CLEANED text (plain-text.ts), so the budget buys failure and not a runner's colour codes.
 const PREPUSH_OUTPUT_BYTES = 24_000;
 
-const IDLE: PrepushRun = { status: "idle", command: "", output: "" };
+const IDLE: CommandRun = { status: "idle", command: "", output: "" };
 
 export interface PrepushCheck {
     /* Start the check. Idempotent while one is already going, two clicks must never mean two suites fighting
@@ -54,7 +54,7 @@ export interface PrepushCheck {
     readonly run: () => Promise<void>;
     // The run as it stands. What the push dialog polls: it needs the terminal's name while the check is going,
     // and the verdict when it settles.
-    readonly state: () => Promise<PrepushRun>;
+    readonly state: () => Promise<CommandRun>;
     // Stop the suite: the dialog's Stop checks, and the daemon's own shutdown, a dying daemon must not leave a
     // suite burning CPU with nothing left to report to. One verb for both, because the kill is the same one and
     // the verdict it writes has no reader once the process is going down.
@@ -73,9 +73,9 @@ export const prepushCheck = (services: PrepushDeps): PrepushCheck => (instance ?
 
 export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
     const { logger, terminalRun, workspace } = services;
-    let current: PrepushRun = IDLE;
+    let current: CommandRun = IDLE;
     // The promise every concurrent caller joins instead of starting a second suite.
-    let running: Promise<PrepushRun> | undefined;
+    let running: Promise<CommandRun> | undefined;
     // True from the moment `run` is entered until the command is under way, the window `running` cannot cover,
     // because reading the settings is an await (see `run`).
     let starting = false;
@@ -93,7 +93,7 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
      *
      * `current` is republished before each rule, so a dialog polling it names the command actually running
      * rather than the first of several. */
-    const execute = async (rules: readonly Rule[]): Promise<PrepushRun> => {
+    const execute = async (rules: readonly Rule[]): Promise<CommandRun> => {
         const startedAt = Date.now();
         const abort = new AbortController();
         controller = abort;
@@ -109,8 +109,8 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
          * this stays undefined until the runner says the command has left the queue and its window is being
          * made, which is also the honest answer to "where is my check running" before that. */
         let opened: string | undefined;
-        const settle = (rule: Rule, command: string, run: RuleCommandRun): PrepushRun => {
-            const settled: PrepushRun = {
+        const settle = (rule: Rule, command: string, run: RuleCommandRun): CommandRun => {
+            const settled: CommandRun = {
                 status: run.status,
                 ...(run.exitCode !== undefined ? { exitCode: run.exitCode } : {}),
                 ...(run.timedOut !== undefined ? { timedOut: run.timedOut } : {}),
@@ -135,7 +135,7 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
             return settled;
         };
         try {
-            let last: PrepushRun = IDLE;
+            let last: CommandRun = IDLE;
             for (const rule of rules) {
                 if (rule.action.kind !== "command") {
                     continue;

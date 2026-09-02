@@ -30,6 +30,7 @@
             "POST /git/*/drop",
             "POST /git/*/merge",
             "POST /git/*/push",
+            "GET /git/*/push",
             "POST /git/*/rebase",
             "POST /git/*/reset",
             "POST /git/*/revert",

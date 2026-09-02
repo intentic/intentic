@@ -1,10 +1,13 @@
-import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
+import { followCommandRun, type GitBranch, type GitRemoteBranch } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { groupBranches } from "./groupBranches.js";
 import { useRefRefresh } from "./useRefRefresh.js";
+
+// The wait between "has the push settled yet" reads, the workspace's own cadence for the same question.
+const PUSH_POLL_MS = 700;
 
 /* One repo's local branches, the graph header's switcher. Parameterized by a reactive repo so the query
  * re-keys when the caller swaps repos (the same shape useGitLog takes).
@@ -63,13 +66,17 @@ export function useBranches(repo: Ref<string>) {
      * branch they meant, which is not always the one checked out. The daemon resolves which REMOTE from that
      * branch's own upstream (or the configured default when it has none), so this never has to guess.
      *
-     * A rejected push is a value, not a throw: "no upstream yet", "would not fast-forward" and "no permission"
-     * are all ordinary answers a pill should report rather than blow up on. */
+     * THE PUSH IS A RUN (git.contract.ts push): it starts at once and is followed to its verdict, because it
+     * runs the repository's pre-push hook, minutes on a workspace with a real gate, and a request held open
+     * that long dies before git does. The output is a terminal the workspace can open; this pill only needs
+     * the verdict. A refused push is a value, not a throw: "no upstream yet", "would not fast-forward" and "no
+     * permission" are all ordinary answers a pill should report rather than blow up on. */
     const push = (name: string): Promise<void> =>
         run(async () => {
-            const result = await api.sandbox.rpc.git.push({ repo: repo.value, branch: name });
-            if (!result.ok) {
-                throw new Error(result.reason === undefined ? `Push was rejected.` : `Push was rejected: ${result.reason}`);
+            await api.sandbox.rpc.git.push({ repo: repo.value, branch: name });
+            const settled = await followCommandRun(() => api.sandbox.rpc.git.pushState({ repo: repo.value }), { intervalMs: PUSH_POLL_MS });
+            if (settled === undefined || settled.status !== `passed`) {
+                throw new Error(settled?.reason === undefined ? `Push was refused.` : `Push was refused: ${settled.reason}`);
             }
             await invalidateRefs();
         }, `Could not push that branch.`);

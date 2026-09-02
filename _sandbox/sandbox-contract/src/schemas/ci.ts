@@ -167,21 +167,28 @@ export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
  * dialog that started it, and is gone. Nothing survives a daemon restart because nothing needs to: the next
  * push asks again. */
 
-/* Where a run is.
+/* A COMMAND RUN ON A CLICK, in a visible terminal, with a verdict and a quotable tail: the ONE shape for
+ * everything the daemon runs because the owner pressed a button and then has to be told how it went. The
+ * pre-push check is one (above); the push itself is another (PushRunSchema, schemas/git.ts), because a push
+ * runs the repository's own pre-push hook, which is a suite in disguise. One shape rather than one per
+ * moment, so a field the browser learns to read for the check (the terminal to open, the tail to quote, the
+ * kill to distinguish from the timeout) is read for the push by the same code, and cannot drift.
+ *
+ * Where a run is.
  *
  *   idle     , nothing has run in this daemon's life, or the last run was cleared.
- *   running  , the check is live. Its output is the terminal's (`session`), not this object's.
- *   passed   , exited 0. The push goes.
- *   failed   , exited non-zero, or was killed by prepushTimeoutMs (`timedOut`). The state a fix answers.
- *   error    , the check could not run at all: the command was not spawnable. NOT a fix-able failure, because
- *               there is nothing wrong with the code, the command is misconfigured, and saying "tests failed"
- *               would send an agent hunting a bug that isn't there.
+ *   running  , the command is live. Its output is the terminal's (`session`), not this object's.
+ *   passed   , exited 0. The push goes (or went).
+ *   failed   , exited non-zero, or was killed by its ceiling (`timedOut`). The state a fix answers.
+ *   error    , the command could not run at all: it was not spawnable. NOT a fix-able failure, because there
+ *               is nothing wrong with the code, the command is misconfigured, and saying "tests failed" would
+ *               send an agent hunting a bug that isn't there.
  *   cancelled, the user stopped the run.
  */
-export const PrepushStatusSchema = z.enum(["idle", "running", "passed", "failed", "error", "cancelled"]);
-export type PrepushStatus = z.infer<typeof PrepushStatusSchema>;
-export const PrepushRunSchema = z.object({
-    status: PrepushStatusSchema.describe(
+export const CommandRunStatusSchema = z.enum(["idle", "running", "passed", "failed", "error", "cancelled"]);
+export type CommandRunStatus = z.infer<typeof CommandRunStatusSchema>;
+export const CommandRunSchema = z.object({
+    status: CommandRunStatusSchema.describe(
         "Where the run is. Failed and error are deliberately different: failed means the code is wrong, error means the command could not be run at all, and calling the second one a test failure would send an agent hunting a bug that is not there.",
     ),
     // The command this run executed, echoed rather than read back from settings: a result read after the
@@ -218,4 +225,4 @@ export const PrepushRunSchema = z.object({
             "The end of what it printed, as plain text with the colour codes and redrawn progress lines resolved away. The end rather than the beginning, because a suite's verdict is at the end. Empty while it runs, and for one that was killed.",
         ),
 });
-export type PrepushRun = z.infer<typeof PrepushRunSchema>;
+export type CommandRun = z.infer<typeof CommandRunSchema>;

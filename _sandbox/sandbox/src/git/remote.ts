@@ -96,7 +96,14 @@ export const pullRemote = async (dir: string, git: GitRunner = defaultGit): Prom
 // Naming the branch's OWN remote is what keeps a fork honest: with `origin` and `upstream` both configured,
 // the first remote git lists is not the one a branch tracks, and pushing to it lands the commits somewhere the
 // ahead count will never clear, a silent success that reads as a broken button.
-export const pushBranch = async (dir: string, options: { readonly branch?: string }, git: GitRunner = defaultGit): Promise<ActionResult> => {
+//
+// THE PLAN IS ITS OWN STEP, because two things execute it: this function, inline, for the daemon's internal
+// pushes (a published file, an arriving workspace), and the owner's push, which runs the same argv in a
+// visible terminal so the repository's pre-push hook has somewhere to print (git/push-run.ts). One planner is
+// what keeps "which remote, which branch, publish or not" from being decided twice.
+export type PushPlan = { readonly ok: true; readonly args: readonly string[]; readonly remote: string; readonly branch: string } | { readonly ok: false; readonly reason: string };
+
+export const pushPlan = async (dir: string, options: { readonly branch?: string }, git: GitRunner = defaultGit): Promise<PushPlan> => {
     const state = await remoteState(dir, {}, git);
     const branch = options.branch ?? state.branch;
     if (branch === undefined || branch === "") {
@@ -114,5 +121,15 @@ export const pushBranch = async (dir: string, options: { readonly branch?: strin
         return { ok: false, reason: "no remote configured" };
     }
     const publish = tracking?.upstream === undefined || tracking.upstream === "";
-    return run(dir, ["push", ...(publish ? ["-u"] : []), "--quiet", remote, branch], git);
+    return { ok: true, args: ["push", ...(publish ? ["-u"] : []), remote, branch], remote, branch };
+};
+
+export const pushBranch = async (dir: string, options: { readonly branch?: string }, git: GitRunner = defaultGit): Promise<ActionResult> => {
+    const plan = await pushPlan(dir, options, git);
+    if (!plan.ok) {
+        return plan;
+    }
+    // `--quiet` here and not in the plan: nobody watches an inline push, and the terminal one WANTS git's
+    // progress lines in the pane.
+    return run(dir, [...plan.args, "--quiet"], git);
 };

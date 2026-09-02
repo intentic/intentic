@@ -1,4 +1,4 @@
-import type { PrepushRun, PushNotification } from "@intentic/sandbox-contract";
+import { type CommandRun, commandRunOutcome, type PushNotification, type PushRun } from "@intentic/sandbox-contract";
 
 /* The wording of every notification this daemon sends, in one file. Kept out of the subsystems that TRIGGER
  * them (turn-runs knows a turn settled; the scheduler knows a wake is held) so that neither has to carry copy,
@@ -60,13 +60,25 @@ export const turnAwaiting = (
  * `requireInteraction`, because this IS the blocked case, the push is held waiting on an answer, and a notice
  * that auto-dismisses is a decision nobody made. The url goes to the workspace, though the app raises the same
  * question wherever the user lands. */
-export const prepushFailed = (run: PrepushRun): PushNotification => ({
-    title: run.timedOut === true ? "Checks timed out" : run.status === "error" ? "Checks couldn't run" : "Checks failed",
+export const prepushFailed = (run: CommandRun): PushNotification => ({
+    title: commandRunOutcome(run, "Checks"),
     body: `${run.command}, your push is waiting on you.`,
     url: "/workspace",
     // One tag for the check, of which this daemon has exactly one: a second verdict replaces the first rather
     // than stacking a notification per push attempt.
     tag: "prepush",
+    requireInteraction: true,
+});
+
+/* The push itself not going, while the user was somewhere else: the same interruption as a red check, for the
+ * same reason, work they asked to leave the machine is still on it. Titled by the same words the card in the
+ * app uses (commandRunOutcome), so the phone and the workspace agree about what happened. */
+export const pushRefused = (run: PushRun): PushNotification => ({
+    title: commandRunOutcome(run, "Push"),
+    body: `${run.repo}: ${run.reason ?? run.command}`,
+    url: "/workspace",
+    // Per repository: a workspace pushes several, and a second verdict for the same one replaces the first.
+    tag: `push-${run.repo}`,
     requireInteraction: true,
 });
 

@@ -9,6 +9,7 @@ import type {
     RepoChanges,
     RepoPaths,
 } from "@intentic-app/api-contract";
+import type { PushRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
@@ -16,9 +17,11 @@ import { throttleTrailing } from "../throttleTrailing";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
+import { refusalSummary } from "./fixProposal";
 import { outgoingWork } from "./outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 import { resetEditBuffers } from "./useEditBuffers";
+import { usePushRun } from "./usePushRun";
 import { AGENT_DIFF, GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../queryKeys";
 
 /* The Changes review. VSCode's SCM model over the workspace's real repos, including git's index: each repo
@@ -78,6 +81,18 @@ export interface ActionFailure {
     readonly action: string;
     // git's own account of why, verbatim.
     readonly detail: string;
+    /* The settled run, for the one verb that IS a run: a push (usePushRun.ts). What the push flow's question
+     * reads to offer more than a line, the command, the terminal it ran in, who refused it, and the tail the
+     * proposed fix quotes. Absent for every other verb, which fails inside its own request. */
+    readonly run?: PushRun;
+}
+
+// A push that settled red, thrown out of its task so the batch below files it with its run attached, the
+// way every other verb's failure is filed with its message.
+class PushRefused extends Error {
+    constructor(readonly run: PushRun) {
+        super(refusalSummary(run));
+    }
 }
 
 // The commit box spans every repo, so its failures cannot belong to any one of them.
@@ -151,6 +166,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
                     failures.value = new Map(failures.value).set(task.scope, {
                         action: task.action,
                         detail: errorMessage(caught, `git gave no reason.`),
+                        ...(caught instanceof PushRefused ? { run: caught.run } : {}),
                     });
                 }
             }),
@@ -425,9 +441,13 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
                     await afterPull();
                 }
                 if (target.push) {
-                    const pushed = await post<GitActionResult>(target.repo, `push`, {});
-                    if (!pushed.ok) {
-                        throw new Error(pushed.reason);
+                    /* The push is a RUN (usePushRun.ts): started and followed to its verdict rather than
+                     * awaited as one request, because it runs the repository's pre-push hook, minutes on a
+                     * workspace with a real gate. `passed` is the push having gone; anything else is filed
+                     * with the run itself, so the flow's question can show what git said and who said it. */
+                    const pushed = await usePushRun(target.repo).start();
+                    if (pushed.status !== `passed`) {
+                        throw new PushRefused(pushed);
                     }
                 }
             },

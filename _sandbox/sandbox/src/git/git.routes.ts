@@ -10,6 +10,7 @@ import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../wor
 import type { ActionResult } from "./changes.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./code-counts.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
+import { createPushRuns } from "./push-run.js";
 
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
 // per-batch refetch storm, short enough that a save still shows up in the panel as it happens.
@@ -161,6 +162,9 @@ export const createGitRoutes = (services: Services) => {
         scan = undefined;
         reusableUntil = 0;
     };
+    // One set of push runs per router, which is one per daemon: the routes are the only thing that reaches
+    // them, so unlike the check there is no shutdown hook to share an instance with.
+    const pushRuns = createPushRuns(services, invalidateScan);
     // A sequence/HEAD-moving op: checkpoint the pre-action tree FIRST (so even a rewrite stays reversible from
     // the Checkpoints timeline), run it, and record the resulting tree on the timeline on a clean apply.
     const guarded = (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> =>
@@ -682,13 +686,19 @@ export const createGitRoutes = (services: Services) => {
                 return { ok: true } as const;
             }),
         ),
+        /* The push, as a run (git/push-run.ts): started here, watched in its terminal, polled for below. Not
+         * under the repo lock, as the inline push never was: a push writes nothing in the worktree, and
+         * queueing a diff behind the hook's suite would be a stall the user feels for nothing. */
         push: i.push.handler(async ({ input }) => {
-            const result = await services.git.pushBranch(await repoDir(input.repo), input.branch !== undefined ? { branch: input.branch } : {});
-            if (result.ok) {
-                // Push changes nothing locally except ahead/behind, which rides the Changes response.
-                invalidateScan();
-            }
-            return result;
+            await pushRuns.start(input.repo, await repoDir(input.repo), input.branch !== undefined ? { branch: input.branch } : {});
+            return { ok: true as const };
+        }),
+        pushState: i.pushState.handler(({ input }) => pushRuns.state(input.repo)),
+        // Cancelling a push that has already settled is not an error, the kill finds no pid and does nothing,
+        // which is what makes a stale click on a card the user has since resolved harmless.
+        pushCancel: i.pushCancel.handler(({ input }) => {
+            pushRuns.cancel(input.repo);
+            return { ok: true as const };
         }),
         files: i.files.handler(async ({ input }) => ({ files: await services.git.listFiles(await repoDir(input.repo)) })),
         readFile: i.readFile.handler(async ({ input }) => {

@@ -1,9 +1,9 @@
 import { oc } from "@orpc/contract";
-import { PrepushRunSchema } from "../schemas/ci.js";
+import { CommandRunSchema } from "../schemas/ci.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // The pre-push check, the command the workspace runs when the user pushes, before anything leaves the machine
-// (see PrepushRunSchema for where this sits and why). Three verbs about ONE run: the check answers about the
+// (see CommandRunSchema for where this sits and why). Three verbs about ONE run: the check answers about the
 // main working tree, of which there is exactly one, so nothing here is addressed by id.
 //
 // `run` starts the check and returns immediately, a suite takes minutes, and an oRPC call held open for one
@@ -20,7 +20,7 @@ export const prepushContract = {
             description:
                 "The verdict, or the progress so far. Nothing is addressed by id here, because there is one working tree and so exactly one check.",
         })
-        .output(PrepushRunSchema),
+        .output(CommandRunSchema),
     run: oc
         .route({
             method: "POST",

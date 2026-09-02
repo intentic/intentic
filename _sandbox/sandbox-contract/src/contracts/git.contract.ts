@@ -16,6 +16,7 @@ import {
     GitRemoteStateSchema,
     GitStageSchema,
     GitStatusSchema,
+    PushRunSchema,
     PushSchema,
 } from "../schemas/git.js";
 import {
@@ -452,16 +453,40 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitActionResultSchema),
+    /* THE PUSH IS A RUN, the pre-push check's three verbs over again (prepush.contract.ts), for the same reason:
+     * a push runs the repository's own pre-push hook, which for a workspace with a real gate is the whole suite,
+     * and a request held open for minutes dies at the first proxy and at the browser's own header deadline. So
+     * `push` starts it and answers at once, `pushState` is polled for the verdict, and the output is a terminal
+     * the owner can watch. Addressed by repo, unlike the check: there is one working tree but many remotes. */
     push: oc
         .route({
             method: "POST",
             path: "/git/{repo}/push",
-            summary: "Send commits to the remote",
+            summary: "Start sending commits to the remote",
             description:
-                "Pushes the current branch, setting its upstream on first push. A rejected push, a missing remote and missing credentials all come back as reported outcomes rather than failures.",
+                "Starts pushing the current branch, setting its upstream on first push, and answers at once: the push runs in a real terminal (it runs this repository's pre-push hook, which can be a whole suite), so watch it there and poll pushState for the verdict. A second start while one is going joins it rather than pushing twice.",
         })
         .input(PushSchema)
-        .output(GitActionResultSchema),
+        .output(OkSchema),
+    pushState: oc
+        .route({
+            method: "GET",
+            path: "/git/{repo}/push",
+            summary: "How the push is going",
+            description:
+                "The verdict, or the progress so far: where it is, the terminal it runs in, and for a push that did not go, git's last words and who refused it, the repository's own pre-push hook, the remote, or the transport. Idle when nothing has been started for this repository.",
+        })
+        .input(RepoParamSchema)
+        .output(PushRunSchema),
+    pushCancel: oc
+        .route({
+            method: "POST",
+            path: "/git/{repo}/push/cancel",
+            summary: "Stop the push",
+            description: "Kills the run. It settles as cancelled; nothing that git had not already sent reaches the remote.",
+        })
+        .input(RepoParamSchema)
+        .output(OkSchema),
     files: oc
         .route({
             method: "GET",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AgentProviderSchema } from "./agent.js";
 import { LandConflictSchema, LandedMessageSchema } from "./agents.js";
+import { CommandRunSchema } from "./ci.js";
 import { RefNameSchema } from "./internal.js";
 import { RepoParamSchema } from "./shared.js";
 // What a commit records, three shapes, each a real git spelling. The last two are for the case where nothing
@@ -48,6 +49,34 @@ export const PushSchema = RepoParamSchema.extend({
         .optional()
         .describe("Which branch to push. Leave it out for the checked-out one. A branch with no upstream yet gets one set on this push."),
 });
+/* WHO SAID NO to a push, read off git's final words (git/git.ts pushRefusal), because the three answers ask
+ * three different things of the owner and only one of them is an agent's to fix:
+ *   hook      , this repository's own pre-push hook refused it: the code is known to be wrong, the hook's
+ *               output says how, and a fix is worth proposing.
+ *   remote    , the server rejected the refs: a non-fast-forward, a protected branch. Pull first, or push
+ *               somewhere else; nothing about the code has been judged.
+ *   transport , it never got there: credentials, a host that does not answer, a remote that is not a
+ *               repository. The same again, and a retry is the only sensible button. */
+export const PushRefusalSchema = z.enum(["hook", "remote", "transport"]);
+export type PushRefusal = z.infer<typeof PushRefusalSchema>;
+/* THE PUSH AS A RUN: the pre-push check's shape (CommandRunSchema) with the three things a push adds. A push is
+ * a command that runs this repository's pre-push hook, which for a workspace with a real gate is the whole
+ * suite, minutes of output; it is a terminal to watch and a verdict to poll for exactly as the check is, and
+ * NOT a request held open for its duration (the browser's header deadline is seconds, and a push that ran a
+ * suite inside its own request reported "failed" over a push that had gone). One shape for both halves of
+ * the push flow is what lets the browser render a refused push with the card, the terminal link and the
+ * proposed fix it already has for a red check. */
+export const PushRunSchema = CommandRunSchema.extend({
+    repo: z.string().describe("The repository this run is about, the same id the routes take."),
+    reason: z
+        .string()
+        .optional()
+        .describe("Why not, in git's own words: the last verdict line, for a row that has room for one line. The whole tail is `output`."),
+    refusedBy: PushRefusalSchema.optional().describe(
+        "Who refused a failed push: this repository's pre-push hook (the code is wrong, a fix is worth proposing), the remote (pull first), or the transport (credentials, network: retry). Absent while it runs and for a push that went.",
+    ),
+});
+export type PushRun = z.infer<typeof PushRunSchema>;
 export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1).describe("The file to read, relative to the repository root.") });
 export const GitFileWriteSchema = RepoParamSchema.extend({
     path: z.string().min(1).describe("Where to write, relative to the repository root. Missing folders are created."),

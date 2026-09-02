@@ -185,7 +185,8 @@ export const agentChanges = (agentId: string): AgentChanges => {
             change.landed = landed;
         }
     }
-    return { repos, ...(conflicts === undefined ? {} : { conflicts }) };
+    // The recording keeps every row listed, so none of them has been absorbed into the tree's history.
+    return { repos, absorbed: 0, ...(conflicts === undefined ? {} : { conflicts }) };
 };
 
 /* LAND NOW. The recording's answer to the one press the fleet exists for: the agent's delta stops being a

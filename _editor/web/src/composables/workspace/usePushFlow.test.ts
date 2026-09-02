@@ -1,4 +1,4 @@
-import type { PrepushRun } from "@intentic/sandbox-contract";
+import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 // Statically imported for its LOAD COST alone: every test re-imports it through `load()` below, and the first
 // of those pulled the unmocked half of the graph (the agent-run model resolver and the contract it resolves
@@ -9,7 +9,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 // bound: `load()` resets the module registry and re-executes the (already transformed) graph fresh per test.
 // oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
 import "./usePushFlow";
-import { checkOutcome, fixSummary } from "./prepushFix";
+import { checkOutcome, outcomeSummary, pushFixPrompt, refusalSummary } from "./fixProposal";
 
 /* THE PROMISE UNDER TEST IS A LIFETIME. Every case here runs with NO component mounted, because that is the
  * situation the flow exists for: the user starts a push, walks off to another view, which destroys the panel
@@ -21,8 +21,8 @@ import { checkOutcome, fixSummary } from "./prepushFix";
 
 vi.mock(`./usePrepush`, async () => {
     const { computed, ref } = await import(`vue`);
-    const run = ref<PrepushRun>({ status: `idle`, command: `pnpm check`, output: `` });
-    let settle: ((run: PrepushRun) => void) | undefined;
+    const run = ref<CommandRun>({ status: `idle`, command: `pnpm check`, output: `` });
+    let settle: ((run: CommandRun) => void) | undefined;
     return {
         usePrepush: () => ({
             run: computed(() => run.value),
@@ -31,15 +31,15 @@ vi.mock(`./usePrepush`, async () => {
             terminal: computed(() => run.value.session),
             start: vi.fn(async () => {
                 run.value = { status: `running`, command: `pnpm check`, output: ``, session: `job-checks` };
-                return await new Promise<PrepushRun>((resolve) => (settle = resolve));
+                return await new Promise<CommandRun>((resolve) => (settle = resolve));
             }),
             cancel: vi.fn(),
             forget: vi.fn(),
             showTerminal: vi.fn(),
         }),
         // The suite finishing, as the daemon's poll would report it.
-        finish: (fields: Partial<PrepushRun>): void => {
-            const settled: PrepushRun = { status: `passed`, command: `pnpm check`, output: ``, startedAt: 1_000, finishedAt: 61_000, ...fields };
+        finish: (fields: Partial<CommandRun>): void => {
+            const settled: CommandRun = { status: `passed`, command: `pnpm check`, output: ``, startedAt: 1_000, finishedAt: 61_000, ...fields };
             run.value = settled;
             settle?.(settled);
         },
@@ -60,6 +60,25 @@ vi.mock(`./useChanges`, async () => {
     const failures = ref(new Map<string, { action: string; detail: string }>());
     const syncAll = vi.fn(async () => {});
     return { COMMIT_SCOPE: `commit`, useChanges: () => ({ actionBusy, failures, syncAll }) };
+});
+
+/* The push runs themselves are behind useChanges (which is mocked whole above), so what the flow reaches for
+ * here is only the terminal a refused push ran in. The seam names one per repo, the way the daemon does. */
+vi.mock(`./usePushRun`, async () => {
+    const { computed } = await import(`vue`);
+    const sessions = new Map<string, string>();
+    return {
+        usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: vi.fn() }),
+        resetPushRuns: () => sessions.clear(),
+        // The test's own: where a repo's push is running, as the daemon would have named it.
+        pushTerminal: (repo: string, session: string | undefined): void => {
+            if (session === undefined) {
+                sessions.delete(repo);
+            } else {
+                sessions.set(repo, session);
+            }
+        },
+    };
 });
 
 // The check this flow gates on is a `push.starting` rule, so the settings the flow reads carry a rule table
@@ -106,16 +125,18 @@ const load = async () => {
      * check appeared to hang forever. Warming the registry first makes both sides the same instance. */
     const prepush = await import(`./usePrepush`);
     const changes = await import(`./useChanges`);
+    const pushRuns = (await import(`./usePushRun`)) as unknown as { pushTerminal: (repo: string, session: string | undefined) => void; resetPushRuns: () => void };
+    pushRuns.resetPushRuns();
     const suggestion = await import(`../agents/sessionSuggestion`);
     const module = await import(`./usePushFlow`);
-    const seam = prepush as unknown as { finish: (fields: Partial<PrepushRun>) => void; reset: () => void };
+    const seam = prepush as unknown as { finish: (fields: Partial<CommandRun>) => void; reset: () => void };
     seam.reset();
     // The flow captures useChanges on its first call, so this is the same object it acts through, and the same
     // singletons the last case left behind, which is why they are put back here.
     const git = changes.useChanges();
     git.actionBusy.value = false;
     git.failures.value = new Map();
-    return { finish: seam.finish, git, suggestion, flow: module.usePushFlow() };
+    return { finish: seam.finish, git, suggestion, pushTerminal: pushRuns.pushTerminal, flow: module.usePushFlow() };
 };
 
 // The seams all resolve immediately, so the flow settles entirely in microtasks: a macrotask boundary drains
@@ -160,8 +181,8 @@ test(`a red check raises a question that outlives the surface that asked`, async
     await flush();
 
     expect(git.syncAll).not.toHaveBeenCalled();
-    const settled: PrepushRun = { status: `failed`, command: `pnpm check`, output: `2 tests failed`, exitCode: 1 };
-    expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: fixSummary(settled) });
+    const settled: CommandRun = { status: `failed`, command: `pnpm check`, output: `2 tests failed`, exitCode: 1 };
+    expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: outcomeSummary(settled) });
     expect(flow.question.value?.title).not.toBe(checkOutcome({ ...settled, status: `cancelled` }));
     /* Composed once, from the failure: text, model and effort, and waiting to be edited whenever the user
      * gets back to it.
@@ -205,7 +226,7 @@ test(`stopping the checks leaves the push waiting and proposes no fix`, async ()
     expect(flow.question.value).toMatchObject({
         kind: `checks`,
         command: `pnpm check`,
-        detail: fixSummary({ status: `cancelled`, command: `pnpm check`, output: `` }),
+        detail: outcomeSummary({ status: `cancelled`, command: `pnpm check`, output: `` }),
     });
     expect(flow.question.value?.title).not.toBe(checkOutcome({ status: `failed`, command: `pnpm check`, output: ``, exitCode: 1 }));
     expect(suggestion.composeSession).not.toHaveBeenCalled();
@@ -219,8 +240,8 @@ test(`a check that could not run asks, but proposes no fix`, async () => {
     finish({ status: `error`, output: `pnpm: not found` });
     await flush();
 
-    const settled: PrepushRun = { status: `error`, command: `pnpm check`, output: `pnpm: not found` };
-    expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: fixSummary(settled) });
+    const settled: CommandRun = { status: `error`, command: `pnpm check`, output: `pnpm: not found` };
+    expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: outcomeSummary(settled) });
     expect(flow.question.value?.title).not.toBe(checkOutcome({ status: `failed`, command: settled.command, output: settled.output, exitCode: 1 }));
     expect(suggestion.composeSession).not.toHaveBeenCalled();
 });
@@ -309,4 +330,94 @@ test(`a timed-out run is not remembered as a duration`, async () => {
 
     expect(flow.typicalMs.value).toBeUndefined();
     expect(localStorage.getItem(`intentic.prepushDuration.sb-1`)).toBeNull();
+});
+
+/* A PUSH IS A RUN, and a refused one is filed with it, so the question it raises is built from the same
+ * material as a red check's: the command, one line on how it ended, the terminal it ran in, and the fix. */
+const refusedBy = (by: PushRun["refusedBy"], over: Partial<PushRun> = {}): PushRun => ({
+    status: `failed`,
+    repo: `intentic`,
+    command: `git push origin main`,
+    exitCode: 1,
+    startedAt: 1_000,
+    finishedAt: 5_000,
+    session: `job-checks`,
+    output: `verify-push: typecheck failed; the push does not go\nerror: failed to push some refs to 'origin'`,
+    reason: `error: failed to push some refs to 'origin'`,
+    ...(by === undefined ? {} : { refusedBy: by }),
+    ...over,
+});
+
+test(`a push the repository's own hook refused asks with the run, and proposes a fix from what the hook printed`, async () => {
+    const { flow, git, suggestion, finish, pushTerminal } = await load();
+    const run = refusedBy(`hook`);
+    git.failures.value = new Map([[`intentic`, { action: `Push failed`, detail: refusalSummary(run), run }]]);
+    pushTerminal(`intentic`, `job-checks`);
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `passed` });
+    await flush();
+
+    expect(flow.pushed.value).toBeUndefined();
+    expect(flow.question.value).toEqual({
+        kind: `push`,
+        title: `Push failed`,
+        command: `git push origin main`,
+        detail: `was refused by this repository's pre-push hook.`,
+    });
+    // The same terminal button a red check gets, pointed at the push's own window.
+    expect(flow.terminal.value).toBe(`job-checks`);
+    expect(suggestion.composeSession).toHaveBeenCalledTimes(1);
+    expect(suggestion.composeSession).toHaveBeenCalledWith({ prompt: pushFixPrompt([run]), model: `claude:claude-sonnet-4-5`, effort: `high`, isolated: true });
+    expect(flow.proposedFix.value).toEqual(expect.any(Object));
+});
+
+// A rejected ref or a dead host says nothing about the code, so there is nothing to send an agent after: the
+// card carries git's own reason and the retry, exactly as a check that could not run proposes no fix.
+test(`a push the remote rejected asks with git's reason and proposes no fix`, async () => {
+    const { flow, git, suggestion, finish } = await load();
+    const run = refusedBy(`remote`, { reason: `! [rejected] main -> main (fetch first)` });
+    git.failures.value = new Map([[`intentic`, { action: `Push failed`, detail: refusalSummary(run), run }]]);
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `passed` });
+    await flush();
+
+    expect(flow.question.value).toEqual({
+        kind: `push`,
+        title: `Push failed`,
+        command: `git push origin main`,
+        detail: `was rejected by the remote: ! [rejected] main -> main (fetch first).`,
+    });
+    expect(suggestion.composeSession).not.toHaveBeenCalled();
+    expect(flow.proposedFix.value).toBeUndefined();
+});
+
+test(`a push that hit its ceiling is named as timed out, in the verb the user clicked`, async () => {
+    const { flow, git, suggestion, finish } = await load();
+    const run = refusedBy(undefined, { timedOut: true, reason: undefined, output: `` });
+    git.failures.value = new Map([[`intentic`, { action: `Publish failed`, detail: refusalSummary(run), run }]]);
+    flow.askSync(`Publish`, `intentic's branch`, PUSH);
+    finish({ status: `passed` });
+    await flush();
+
+    expect(flow.question.value).toEqual({
+        kind: `push`,
+        title: `Publish timed out`,
+        command: `git push origin main`,
+        detail: `never finished: it hit its time limit and was killed.`,
+    });
+    expect(suggestion.composeSession).not.toHaveBeenCalled();
+});
+
+// No check configured still means a push that can be refused by the repository's own hook, and the fix it
+// proposes reads the same model settings the check's would have.
+test(`a push with no check configured is still handed to an agent when the hook refuses it`, async () => {
+    const { flow, git, suggestion, finish } = await load();
+    const run = refusedBy(`hook`);
+    git.failures.value = new Map([[`intentic`, { action: `Push failed`, detail: refusalSummary(run), run }]]);
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `passed` });
+    await flush();
+    // The check ran here; the same expectation with the rule removed is what the settings mock cannot vary
+    // per test, so the model carried into the proposal is the assertion that matters: it was read.
+    expect(suggestion.composeSession).toHaveBeenCalledWith(expect.objectContaining({ model: `claude:claude-sonnet-4-5`, effort: `high` }));
 });

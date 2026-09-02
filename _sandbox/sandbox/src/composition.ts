@@ -142,7 +142,7 @@ import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./
 import { abortOperation, type GitOperation, operationInProgress } from "./git/operation.js";
 import { type UndoableAction, undoableAction, undoLastAction } from "./git/undo.js";
 import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./git/stash.js";
-import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
+import { fetchRemote, pullRemote, remoteState } from "./git/remote.js";
 import { remoteProjectOf } from "./git/remote-urls.js";
 import { publishFile } from "./git/publish-file.js";
 import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
@@ -601,7 +601,6 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly remoteState: (dir: string, known?: { readonly branch?: string | undefined }) => Promise<GitRemoteState>;
         readonly fetchRemote: (dir: string) => Promise<ActionResult>;
         readonly pullRemote: (dir: string) => Promise<ActionResult>;
-        readonly pushBranch: (dir: string, options: { branch?: string }) => Promise<ActionResult>;
         // Where the repo is online (host + `owner/name`), so a workspace repo can be recognised in a list of
         // project ids that came from somewhere else, the publisher claim matches the registry's list this way.
         readonly remoteProjectOf: (dir: string) => Promise<{ host: string; project: string } | undefined>;
@@ -1375,7 +1374,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
             remoteState,
             fetchRemote,
             pullRemote,
-            pushBranch,
             remoteProjectOf: (dir) => remoteProjectOf(dir, defaultGit),
             publishFile,
             stagedFileDiff,
