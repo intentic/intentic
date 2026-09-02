@@ -590,12 +590,8 @@ const runPending = async (): Promise<void> => {
 
 <template>
     <div ref="rootEl" class="flex h-full min-h-0 flex-col bg-canvas text-content">
-        <!-- Header: which repository this is · its checked-out branch · how many commits are drawn. The repo is
-             a LABEL, not a control: this tab belongs to one directory, and the tree row beside the next repo is
-             how you reach its history. -->
+        <!-- Header: checked-out branch · how many commits are drawn. Which repo this is lives on the tab. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line-subtle bg-card px-3">
-            <Icon name="sitemap" class="shrink-0 text-xs text-subtle" />
-            <span class="truncate text-xs font-medium text-content">{{ repoRef }}</span>
             <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
                  no branch to show as a pill, but the switcher is still the way BACK onto one. -->
             <BranchSwitcher :repo="repoRef" />
