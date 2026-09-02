@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, Code, CopyButton, formatDate, Notice, Row } from "@intentic/ui";
+import { Button, Code, CopyButton, formatDate, Notice, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
 import { useControlTokens } from "../../composables/sandbox/useControlTokens";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -36,46 +36,43 @@ const zedSnippet = computed(() =>
 </script>
 
 <template>
-    <Card class="flex flex-col gap-4">
-        <Row
-            flush
-            :heading="2"
-            icon="code"
-            title="Editor bridge (ACP)"
-        />
+    <RowGroup label="Editor bridge (ACP)">
+        <RowNote variant="block">
+            <div class="flex flex-col gap-4">
+                <div class="flex items-center gap-2">
+                    <input
+                        v-model="label"
+                        type="text"
+                        placeholder="Label (e.g. Zed on laptop)"
+                        class="w-56 rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                    />
+                    <Button label="Mint token" size="small" :loading="minting" @click="mint" />
+                </div>
+                <Notice v-if="notice" :of="notice" />
 
-        <div class="flex items-center gap-2">
-            <input
-                v-model="label"
-                type="text"
-                placeholder="Label (e.g. Zed on laptop)"
-                class="w-56 rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-            />
-            <Button label="Mint token" size="small" :loading="minting" @click="mint" />
-        </div>
-        <Notice v-if="notice" :of="notice" />
+                <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
+                    <p class="text-2xs text-subtle">Shown once: copy it now. The sandbox stores only a hash.</p>
+                    <div class="flex items-center gap-2">
+                        <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
+                        <CopyButton :text="minted.token" label="Copy" />
+                    </div>
+                    <!-- The shared code block: it is JSON going into a settings file, so it is coloured as JSON and
+                         carries its own copy button. The snippet's whole purpose is to be pasted elsewhere. -->
+                    <Code :code="zedSnippet" lang="json" label="Zed → settings.json (JetBrains takes the same command + env)" />
+                </div>
 
-        <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
-            <p class="text-2xs text-subtle">Shown once: copy it now. The sandbox stores only a hash.</p>
-            <div class="flex items-center gap-2">
-                <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
-                <CopyButton :text="minted.token" label="Copy" />
+                <!-- Every control token against this sandbox, not just the editor ones this card mints: a revoke
+                     surface that hides the token somebody minted elsewhere is how a leaked one stays live. -->
+                <ul v-if="tokens.length > 0" class="flex flex-col gap-1">
+                    <li v-for="token in tokens" :key="token.id" class="flex items-center gap-2 text-xs">
+                        <Icon name="key" class="text-2xs text-subtle" />
+                        <span class="text-content">{{ token.label }}</span>
+                        <span class="rounded bg-canvas px-1 py-0.5 font-mono text-2xs text-subtle">{{ token.scope }}</span>
+                        <span class="text-2xs text-subtle">{{ formatDate(token.createdAt) }}</span>
+                        <Button label="Revoke" size="small" severity="danger" :text="true" class="ml-auto" @click="revoke(token.id)" />
+                    </li>
+                </ul>
             </div>
-            <!-- The shared code block: it is JSON going into a settings file, so it is coloured as JSON and
-                 carries its own copy button. The snippet's whole purpose is to be pasted elsewhere. -->
-            <Code :code="zedSnippet" lang="json" label="Zed → settings.json (JetBrains takes the same command + env)" />
-        </div>
-
-        <!-- Every control token against this sandbox, not just the editor ones this card mints: a revoke
-             surface that hides the token somebody minted elsewhere is how a leaked one stays live. -->
-        <ul v-if="tokens.length > 0" class="flex flex-col gap-1">
-            <li v-for="token in tokens" :key="token.id" class="flex items-center gap-2 text-xs">
-                <Icon name="key" class="text-2xs text-subtle" />
-                <span class="text-content">{{ token.label }}</span>
-                <span class="rounded bg-canvas px-1 py-0.5 font-mono text-2xs text-subtle">{{ token.scope }}</span>
-                <span class="text-2xs text-subtle">{{ formatDate(token.createdAt) }}</span>
-                <Button label="Revoke" size="small" severity="danger" :text="true" class="ml-auto" @click="revoke(token.id)" />
-            </li>
-        </ul>
-    </Card>
+        </RowNote>
+    </RowGroup>
 </template>

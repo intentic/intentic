@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, Row, StatusBadge, useOsPreference } from "@intentic/ui";
+import { Button, RowGroup, RowNote, StatusBadge, useOsPreference } from "@intentic/ui";
 import { computed, ref } from "vue";
 import HostRecreate from "../../components/HostRecreate.vue";
 import { turnInFlight } from "../../composables/agents/agentStatus";
@@ -72,54 +72,53 @@ const toggleRollback = (): void => {
  * are kept" and nothing about the forty-minute turn; this line is what makes updating mid-run a choice. */
 const { fleet } = useAgents();
 const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
+
+const updateHeading = computed(() => {
+    if (breaking.value) {
+        return `Update available: changes how things work`;
+    }
+    if (updateAvailable.value) {
+        return updateStaged.value ? `Update ready to apply` : `Update available`;
+    }
+    return `Sandbox image`;
+});
 </script>
 
 <template>
-    <Card v-if="updateAvailable || rollbackTo" class="flex flex-col gap-4">
-        <Row
-            flush
-            :heading="2"
-            :icon="breaking ? `exclamation-triangle` : updateAvailable ? `arrow-circle-up` : `image`"
-            :tone="breaking ? `danger` : `default`"
-            :title="
-                breaking
-                    ? `Update available: changes how things work`
-                    : updateAvailable
-                      ? updateStaged
-                          ? `Update ready to apply`
-                          : `Update available`
-                      : `Sandbox image`
-            "
-        >
-            <template #description>
-                <template v-if="breaking">
-                    This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are kept
-                    either way, and you can roll back afterwards:
-                    <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content"
-                        >what updates never break</a
-                    >.
-                </template>
-                <!-- The sentence this whole card was rebuilt around. A bounded half-minute is a completely
-                     different decision from an unbounded "a few minutes", and until the host started reporting
-                     what it had already downloaded there was no way to tell the two apart. -->
-                <template v-else-if="updateAvailable && updateStaged">
-                    It is already downloaded and built on the computer that runs this sandbox. Applying it restarts your sandbox for about half a
-                    minute: your files (in /work) are kept.
-                </template>
-                <template v-else-if="updateAvailable">
-                    A newer sandbox image has been released. Downloading it interrupts nothing: your sandbox keeps working until you apply it, and
-                    your files (in /work) are kept.
-                </template>
-                <!-- The all-clear state says only that it is all clear. The way back lives one click below;
-                     advertising it here would put a recovery offer in the status line. -->
-                <template v-else>You are on the newest image for this channel.</template>
-            </template>
-            <template #meta>
+    <RowGroup v-if="updateAvailable || rollbackTo" :label="updateHeading">
+        <template #actions>
+            <div class="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="downloaded" dot />
                 <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
                 <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
-            </template>
-        </Row>
+            </div>
+        </template>
+
+        <RowNote variant="block">
+            <div class="flex flex-col gap-4">
+                <p class="text-xs text-muted">
+                    <template v-if="breaking">
+                        This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are kept
+                        either way, and you can roll back afterwards:
+                        <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content"
+                            >what updates never break</a
+                        >.
+                    </template>
+                    <!-- The sentence this whole card was rebuilt around. A bounded half-minute is a completely
+                         different decision from an unbounded "a few minutes", and until the host started reporting
+                         what it had already downloaded there was no way to tell the two apart. -->
+                    <template v-else-if="updateAvailable && updateStaged">
+                        It is already downloaded and built on the computer that runs this sandbox. Applying it restarts your sandbox for about half a
+                        minute: your files (in /work) are kept.
+                    </template>
+                    <template v-else-if="updateAvailable">
+                        A newer sandbox image has been released. Downloading it interrupts nothing: your sandbox keeps working until you apply it, and
+                        your files (in /work) are kept.
+                    </template>
+                    <!-- The all-clear state says only that it is all clear. The way back lives one click below;
+                         advertising it here would put a recovery offer in the status line. -->
+                    <template v-else>You are on the newest image for this channel.</template>
+                </p>
 
         <!-- WHAT STOPS WORKING, before anything else on the card and never truncated: a warning that fell off
              the end of a capped list is a breaking update taken unwarned. Each line was written in the commit
@@ -232,5 +231,7 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
                 <HostRecreate :slug="slug" action="Roll back" />
             </div>
         </template>
-    </Card>
+            </div>
+        </RowNote>
+    </RowGroup>
 </template>

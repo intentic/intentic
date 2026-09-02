@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar, Button, Card, ui, Row } from "@intentic/ui";
+import { Avatar, Button, ui, RowGroup, RowNote } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
@@ -66,24 +66,25 @@ const saveProfile = async (): Promise<void> => {
 </script>
 
 <template>
-    <Card>
-        <form @submit.prevent="saveProfile">
-            <Row flush :heading="2" icon="user" title="Profile" />
-            <div class="mt-3 flex items-center gap-3">
-                <Avatar :size="56" :src="avatarImage" />
-                <Button label="Change avatar" severity="secondary" size="small" @click="avatarInput?.click()">
-                    <template #icon><Icon name="image" /></template>
-                </Button>
-                <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="pickAvatar" />
-            </div>
-            <label class="mt-3 flex flex-col gap-1">
-                <span class="text-xs font-medium text-muted">Display name</span>
-                <input v-model="profileName" type="text" autocomplete="off" maxlength="60" :class="ui.input('w-full')" />
-            </label>
-            <div class="mt-3 flex justify-end">
-                <Button type="submit" label="Save" size="small" :loading="saving" :disabled="saving || !canSaveProfile" />
-            </div>
-            <p v-if="saveError" class="mt-2 text-2xs text-danger">{{ saveError }}</p>
-        </form>
-    </Card>
+    <RowGroup label="Profile">
+        <RowNote variant="block">
+            <form @submit.prevent="saveProfile">
+                <div class="flex items-center gap-3">
+                    <Avatar :size="56" :src="avatarImage" />
+                    <Button label="Change avatar" severity="secondary" size="small" @click="avatarInput?.click()">
+                        <template #icon><Icon name="image" /></template>
+                    </Button>
+                    <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="pickAvatar" />
+                </div>
+                <label class="mt-3 flex flex-col gap-1">
+                    <span class="text-xs font-medium text-muted">Display name</span>
+                    <input v-model="profileName" type="text" autocomplete="off" maxlength="60" :class="ui.input('w-full')" />
+                </label>
+                <div class="mt-3 flex justify-end">
+                    <Button type="submit" label="Save" size="small" :loading="saving" :disabled="saving || !canSaveProfile" />
+                </div>
+                <p v-if="saveError" class="mt-2 text-2xs text-danger">{{ saveError }}</p>
+            </form>
+        </RowNote>
+    </RowGroup>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Row, StatusBadge } from "@intentic/ui";
+import { RowGroup, RowNote, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { useManifestProblems } from "../../composables/sandbox/useManifestProblems";
 
@@ -33,20 +33,21 @@ const describe = (problem: { kind: string; detail: string; suggestion?: string }
 </script>
 
 <template>
-    <Card v-if="hasProblems" class="flex flex-col gap-4">
-        <Row
-            flush
-            :heading="2"
-            icon="info-circle"
-            title="Some settings aren't being applied"
-            description="This sandbox read its settings files and couldn't make sense of part of them, so it fell back to defaults there. Everything else is unaffected, and fixing the file puts this right on its own."
-        >
-            <template #meta><StatusBadge variant="warning" :label="`${problemCount} to fix`" dot /></template>
-        </Row>
-
-        <div v-for="report in reports" :key="report.path" class="flex flex-col gap-1">
-            <p class="font-mono text-2xs text-content">{{ report.path }}</p>
-            <p v-for="(problem, index) in report.problems" :key="index" class="text-2xs text-subtle">{{ describe(problem) }}</p>
-        </div>
-    </Card>
+    <RowGroup v-if="hasProblems" label="Some settings aren't being applied">
+        <template #actions>
+            <StatusBadge variant="warning" :label="`${problemCount} to fix`" dot />
+        </template>
+        <RowNote variant="block">
+            <div class="flex flex-col gap-4">
+                <p class="text-xs text-muted">
+                    This sandbox read its settings files and couldn't make sense of part of them, so it fell back to defaults there. Everything else is
+                    unaffected, and fixing the file puts this right on its own.
+                </p>
+                <div v-for="report in reports" :key="report.path" class="flex flex-col gap-1">
+                    <p class="font-mono text-2xs text-content">{{ report.path }}</p>
+                    <p v-for="(problem, index) in report.problems" :key="index" class="text-2xs text-subtle">{{ describe(problem) }}</p>
+                </div>
+            </div>
+        </RowNote>
+    </RowGroup>
 </template>

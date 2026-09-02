@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, Icon, Notice, Row, useLoadingReveal } from "@intentic/ui";
+import { Button, Notice, RowGroup, RowNote, useLoadingReveal } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
@@ -156,25 +156,27 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
     <div class="@container flex flex-col gap-4">
         <Notice v-if="loadError" :of="{ tone: `danger`, title: `Couldn't load your membership.`, detail: loadError }" />
 
-        <Card v-else-if="membership && !membership.enabled">
-            <Row flush :heading="2" icon="star" title="Membership" description="This platform doesn't offer memberships." />
-        </Card>
+        <RowGroup v-else-if="membership && !membership.enabled" label="Membership">
+            <RowNote variant="block">
+                <p class="text-xs text-muted">This platform doesn't offer memberships.</p>
+            </RowNote>
+        </RowGroup>
 
         <!-- ══ MEMBER ══════════════════════════════════════════════════════════════════════════════════════
              A meter first, because that is the question this page gets asked. Everything the offer spends its
              room arguing is settled: what is left today, when it comes back, and where the money went. -->
-        <template v-else-if="membership && membership.member">
-            <Card>
-                <Row flush :heading="2" icon="check-circle" tone="success" :title="onTrial ? `You're on trial` : `You're a member`">
-                    <template #meta>
-                        <span v-if="renewsOn">{{ onTrial ? `trial ends` : `renews` }} {{ renewsOn }}</span>
-                    </template>
-                </Row>
+        <RowGroup v-else-if="membership && membership.member" label="Membership">
+            <template v-if="renewsOn" #actions>
+                <span class="text-2xs text-subtle">{{ onTrial ? `trial ends` : `renews` }} {{ renewsOn }}</span>
+            </template>
+            <RowNote variant="block">
+                <div class="flex flex-col gap-4">
+                    <p class="text-sm font-medium text-content">{{ onTrial ? `You're on trial` : `You're a member` }}</p>
 
                 <!-- The meter. The number is the headline because it is the answer; the bar exists to make
                      "a lot left" and "nearly out" readable without reading, and carries no colour meaning of
                      its own: a low meter is not a fault, it is a day's work done. -->
-                <div v-if="credits" class="mt-4 flex flex-col gap-2">
+                <div v-if="credits" class="flex flex-col gap-2">
                     <div class="flex flex-wrap items-baseline gap-x-2">
                         <span class="text-3xl font-semibold leading-none tabular-nums text-content">{{ n(credits.remaining) }}</span>
                         <span class="text-sm text-muted">of {{ n(credits.allowance) }} credits left today</span>
@@ -201,7 +203,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                     </p>
                 </div>
 
-                <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <p class="min-w-0 flex-1 text-xs text-muted">
                         {{ sharePercent }}% of every credit you spend reaches the creator of what you installed or ran, on a
                         <a :href="transparencyUrl" target="_blank" rel="noopener" class="text-link hover:underline">public ledger</a>.
@@ -212,43 +214,36 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                          that looked like money. -->
                     <Button label="Manage on Stripe" size="small" class="ui-button-loud" :loading="working" @click="open(`portal`)" />
                 </div>
-            </Card>
-        </template>
+                </div>
+            </RowNote>
+        </RowGroup>
 
         <!-- ══ LAPSED ══════════════════════════════════════════════════════════════════════════════════════
              A member whose card stopped working. One thing to do, said warmly and without a sales pitch: this
              reader has already decided, and the only question left is a payment method. -->
-        <Card v-else-if="membership && lapsed" class="border-warning/40 bg-warning/[0.07]">
-            <Row
-                flush
-                :heading="2"
-                icon="exclamation-circle"
-                tone="warning"
-                title="Your membership needs a working card"
-                description="Payment failed. Update your card to restore access."
-            >
-                <template #below>
+        <RowGroup v-else-if="membership && lapsed" label="Membership">
+            <RowNote variant="block">
+                <div class="flex flex-col gap-3">
+                    <p class="text-sm font-medium text-warning">Your membership needs a working card</p>
+                    <p class="text-xs text-muted">Payment failed. Update your card to restore access.</p>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <Button label="Update payment on Stripe" :loading="working" class="ui-button-loud" @click="open(`portal`)" />
                         <p class="text-2xs text-subtle">Stripe reports this membership as "{{ lapsed }}".</p>
                     </div>
-                </template>
-            </Row>
-        </Card>
+                </div>
+            </RowNote>
+        </RowGroup>
 
         <!-- ══ ACTIVATING ══════════════════════════════════════════════════════════════════════════════════
              The webhook's few seconds, owned by the app rather than handed back to the person who just paid. -->
-        <Card v-else-if="membership && justJoined && activating" class="border-primary-fill/25 bg-primary-fill/5">
-            <Row
-                flush
-                :heading="2"
-                icon="spinner"
-                spin
-                tone="info"
-                title="Payment received, activating your membership"
-                description="Activating membership…"
-            />
-        </Card>
+        <RowGroup v-else-if="membership && justJoined && activating" label="Membership">
+            <RowNote variant="block">
+                <div class="flex flex-col gap-2">
+                    <p class="text-sm font-medium text-content">Payment received, activating your membership</p>
+                    <p class="text-xs text-muted">Activating membership…</p>
+                </div>
+            </RowNote>
+        </RowGroup>
 
         <!-- ══ THE OFFER ═══════════════════════════════════════════════════════════════════════════════════
              The one buying surface in the product, laid out as one: the promise, the figures behind it, the
@@ -289,23 +284,19 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
              member, and outlining the meter would promise a number to somebody about to be sold to. So this
              promises only what BOTH open with: a masthead row, one large figure or headline, and a couple of
              supporting lines, and stops there rather than guessing at the half that differs. -->
-        <Card v-else-if="outline" role="status" aria-busy="true">
+        <RowGroup v-else-if="outline" role="status" aria-busy="true">
             <span class="sr-only">Reading your membership…</span>
-            <Row flush :heading="2" aria-hidden="true">
-                <template #lead><span class="skeleton block h-4.5 w-4.5 shrink-0" /></template>
-                <template #title>
-                    <span class="flex min-h-[1lh] items-center"><span class="skeleton block h-4 w-44" /></span>
-                </template>
-                <template #meta><span class="skeleton block h-2.5 w-28" /></template>
-            </Row>
-            <div class="mt-4 flex flex-col gap-2" aria-hidden="true">
-                <!-- The large figure both branches lead with: the meter's remaining-credits number and the
-                     offer's headline are the same size on screen, so one bar stands in for either. -->
-                <span class="skeleton block h-8 w-56" />
-                <span class="skeleton block h-2.5 w-full max-w-md" />
-                <span class="skeleton block h-2.5 w-2/3 max-w-sm" />
-            </div>
-        </Card>
+            <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
+            <RowNote variant="block">
+                <div class="flex flex-col gap-2" aria-hidden="true">
+                    <!-- The large figure both branches lead with: the meter's remaining-credits number and the
+                         offer's headline are the same size on screen, so one bar stands in for either. -->
+                    <span class="skeleton block h-8 w-56" />
+                    <span class="skeleton block h-2.5 w-full max-w-md" />
+                    <span class="skeleton block h-2.5 w-2/3 max-w-sm" />
+                </div>
+            </RowNote>
+        </RowGroup>
 
         <Notice v-if="actionError" :of="{ tone: `danger`, title: `Couldn't open the payment page.`, detail: actionError }" />
     </div>

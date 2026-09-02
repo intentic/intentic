@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, Code, CopyButton, Row } from "@intentic/ui";
+import { Button, Code, CopyButton, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
@@ -56,35 +56,35 @@ const { slug } = useEnvironment();
  * yet, where the detect is right anyway. */
 const reloadCommand = computed(() => `sh _sandbox/sandbox/scripts/dev-reload.sh${slug.value === undefined ? `` : ` ${slug.value}`}`);
 const reloadPage = (): void => location.reload();
+
+const heading = computed(() => (daemonBehind.value ? `Sandbox is behind the app` : `App and sandbox are out of sync`));
+const detail = computed(() =>
+    daemonBehind.value ? `${missingLabel.value} won't work until the sandbox is reloaded.` : `${driftedLabel.value} may show blank values or fail to save.`,
+);
 </script>
 
 <template>
-    <Card v-if="daemonBehind || daemonDrifted" class="flex flex-col gap-3">
-        <Row
-            flush
-            :heading="2"
-            icon="exclamation-triangle"
-            tone="warning"
-            :title="daemonBehind ? `Sandbox is behind the app` : `App and sandbox are out of sync`"
-            :description="
-                daemonBehind ? `${missingLabel} won't work until the sandbox is reloaded.` : `${driftedLabel} may show blank values or fail to save.`
-            "
-        />
+    <RowGroup v-if="daemonBehind || daemonDrifted" :label="heading">
+        <RowNote variant="block">
+            <div class="flex flex-col gap-3">
+                <p class="text-xs text-muted">{{ detail }}</p>
 
-        <div v-if="isDev" class="flex flex-wrap items-center gap-2 sm:pl-7">
-            <Button v-if="daemonDrifted" label="Reload page" size="small" @click="reloadPage" />
-            <span class="text-2xs text-subtle">{{ daemonDrifted ? `Still here? Run` : `Run` }}</span>
-            <div class="sandbox-reload-command flex min-w-0 flex-1 items-center rounded-md border border-line bg-canvas">
-                <Code class="min-w-0 flex-1" :code="reloadCommand" lang="bash" :copyable="false" />
-                <CopyButton :text="reloadCommand" label="Copy" aria-label="Copy reload command" class="mr-1" />
+                <div v-if="isDev" class="flex flex-wrap items-center gap-2">
+                    <Button v-if="daemonDrifted" label="Reload page" size="small" @click="reloadPage" />
+                    <span class="text-2xs text-subtle">{{ daemonDrifted ? `Still here? Run` : `Run` }}</span>
+                    <div class="sandbox-reload-command flex min-w-0 flex-1 items-center rounded-md border border-line bg-canvas">
+                        <Code class="min-w-0 flex-1" :code="reloadCommand" lang="bash" :copyable="false" />
+                        <CopyButton :text="reloadCommand" label="Copy" aria-label="Copy reload command" class="mr-1" />
+                    </div>
+                </div>
+                <div v-else-if="daemonDrifted" class="flex flex-wrap items-center gap-2">
+                    <Button label="Reload page" size="small" @click="reloadPage" />
+                    <span class="text-2xs text-subtle">If it stays, update the sandbox image.</span>
+                </div>
+                <p v-else class="text-2xs text-subtle">Update the sandbox image.</p>
             </div>
-        </div>
-        <div v-else-if="daemonDrifted" class="flex flex-wrap items-center gap-2 sm:pl-7">
-            <Button label="Reload page" size="small" @click="reloadPage" />
-            <span class="text-2xs text-subtle">If it stays, update the sandbox image.</span>
-        </div>
-        <p v-else class="text-2xs text-subtle sm:pl-7">Update the sandbox image.</p>
-    </Card>
+        </RowNote>
+    </RowGroup>
 </template>
 
 <style scoped>
