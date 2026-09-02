@@ -287,3 +287,50 @@ test("both built-in bases name orientation as the place to batch", () => {
         expect(text).toContain("ONE response");
     }
 });
+
+/* WHAT THE AGENT IS INSIDE OF. The base prompt names the product in four words and the Claude preset never does,
+ * so this block is where "Intentic" is explained at all, and it is a POINTER: the reference is the image-baked
+ * `intentic` skill, read on demand, so the always-on cost is the identity, the precedence rule and the rule that
+ * the product is never denied a feature from memory. */
+test("both built-in bases say what the agent runs inside and where the product's reference is", () => {
+    for (const mode of ["intentic", "claude"] as const) {
+        const composed = sdkSystemPrompt({ ...BASE, mode, custom: undefined, append: undefined });
+        const text = typeof composed === "string" ? composed : (composed as { append: string }).append;
+        expect(text).toContain("You run inside Intentic");
+        expect(text).toContain("`intentic` skill");
+        // The one sentence the model cannot infer: in a workspace holding this product's own checkout, its
+        // CLAUDE.md reads like the manual, and it is the owner's instruction.
+        expect(text).toMatch(/CLAUDE\.md.*owner's instruction/);
+        expect(text).toMatch(/never say Intentic cannot/i);
+    }
+});
+
+// The skill lives in /root/.claude/skills, which only the Claude Code loop's settingSources load: a Codex turn
+// told to load it would look for something that is not there.
+test("a runtime outside the Claude Code loop is not pointed at a skill it cannot load", () => {
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, terseOutput: false });
+    expect(codex.systemAppend).not.toContain("`intentic` skill");
+});
+
+/* THE RECORDS ARE NAMED WHERE THEY CAN BE READ. The diagnostics server is deferred, and a deferred tool's name in
+ * a list was reached for in 5 of 1,084 sessions; the sentence names the situations it answers. It is gated the
+ * way the browser is: turn-plan withholds the server from a persona whose files power is `none`, and a prompt
+ * that named it there would send the turn to ToolSearch for tools it may not load. */
+test("the diagnostics tools are named on the turns that mounted them, and nowhere else", () => {
+    const mounted = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, diagnostics: true }) as string;
+    expect(mounted).toContain("mcp__diagnostics__errors");
+    expect(mounted).toContain("mcp__diagnostics__turns");
+    expect(mounted).toContain("mcp__diagnostics__slow");
+    expect(mounted).toContain("mcp__diagnostics__resources");
+    // WHEN, not only what: the habit it replaces starts before the problem is framed as "already recorded".
+    expect(mounted).toMatch(/before re-instrumenting/i);
+
+    const withheld = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    expect(withheld).not.toContain("mcp__diagnostics__");
+    // An unattended wake keeps it: an automation's own failure is exactly what those records answer.
+    const unattended = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, unattended: true, diagnostics: true }) as string;
+    expect(unattended).toContain("mcp__diagnostics__errors");
+    // And a Codex turn, which has no such server, is not sent looking for one.
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, terseOutput: false });
+    expect(codex.systemAppend).not.toContain("mcp__diagnostics__");
+});

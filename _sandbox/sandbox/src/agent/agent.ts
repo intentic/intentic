@@ -232,6 +232,10 @@ export interface AgentRequest {
     // because @playwright/mcp honours it only for the files IT names (browser/browser-artifacts.ts). Drives
     // both the redirect hook and the sentence that tells the agent where to Read a screenshot back from.
     readonly browserOutputDir?: string;
+    // Whether turn-plan mounted the daemon's diagnostics server this turn (it withholds it from a persona whose
+    // `files` power is `none`), so the prompt names those tools exactly where they can be loaded
+    // (system-prompt.ts DIAGNOSTICS_GUIDANCE) and nowhere else.
+    readonly diagnostics?: boolean;
     // Whether the iq plugin is actually loaded for this turn (turn-plan.ts resolves the gate: the `iqSearch`
     // setting, its holdout arm, and the plugin dir existing at all). Carried rather than re-derived so the
     // empty-search notice can name iq exactly where it is real and nowhere else (agent-search.ts).
@@ -603,6 +607,7 @@ const baseOptions = (
             unattended: request.unattended === true,
             browserOutputDir: request.browserOutputDir,
             browserAccounts: holdsBrowserAccounts(request.browserAccounts),
+            diagnostics: request.diagnostics === true,
         }),
         // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
         // hooks, and .mcp.json, plus the user tier. The SDK default is [] (loads nothing), so every filesystem

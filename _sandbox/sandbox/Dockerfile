@@ -459,7 +459,8 @@ RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
 RUN chmod +x /opt/sandbox/dist/platform/memory-gate.js \
     && ln -s /opt/sandbox/dist/platform/memory-gate.js /usr/local/bin/memory-gate
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The
-# environment skill teaches the agent to extend this very image via an approved overlay Dockerfile.
+# environment skill teaches the agent to extend this very image via an approved overlay Dockerfile; the
+# intentic skill is the product's own reference, what the agent reads before it answers for the product.
 COPY _sandbox/sandbox/skills /root/.claude/skills
 # The tmux command runner — the agent's PreToolUse hook (src/agent/agent-terminals.ts) wraps every Bash tool
 # command through it, and the daemon's terminal runner (src/terminal/terminal-run.ts) executes user-triggered

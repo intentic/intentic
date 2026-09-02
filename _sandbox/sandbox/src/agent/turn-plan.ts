@@ -922,6 +922,9 @@ export const planHarnessTurn = async (
             // the turn wired no browser servers (no Chromium in this image, the browser pack rides a rebuild):
             // its absence is what keeps the system prompt from advertising a browser that isn't there.
             ...(Object.keys(browser.servers).length > 0 ? { browserOutputDir: browserOutputDir(services.workspace.root) } : {}),
+            // Whether the diagnostics server above was mounted, so the prompt names its four tools only on the
+            // turns that can load them: a `files: none` persona hears nothing about records it may not read.
+            ...(sdkServers.diagnostics === undefined ? {} : { diagnostics: true }),
             // Whether this turn actually carries the iq plugin, so the notice that fires on an empty `rg` names iq
             // where it is real and stays quiet in the holdout arm and in every sandbox that never opted in.
             iqAvailable: iqLoaded,

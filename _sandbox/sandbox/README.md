@@ -234,7 +234,12 @@ reports the profile.
   purpose (src/settings/loaded-skills.ts): Codex reads `.agents/skills/` natively, Claude Code reads it through
   per-skill symlinks under `.claude/skills/`, and runtimes with no skill loader get the same name, description
   and file path as a disclosed note on the conversation's opening prompt. `AGENTS.md` remains entirely the
-  user's file.
+  user's file. The one skill about the product itself is image-baked beside the task skills
+  (`skills/intentic/SKILL.md`, copied to `/root/.claude/skills` by the Dockerfile): what Intentic is in the
+  owner's words, a routing table from what they want to the skill or seam that does it, the key paths, a
+  read-only diagnostics playbook, the editor's own vocabulary, and the rule that a negative answer about the
+  product is checked before it is given. The system prompt points at it; nothing else describes the product to
+  the model, and a customer's workspace holds no README about it.
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.
@@ -603,8 +608,12 @@ reports the profile.
   makes the setting honest: which guidance is a fact about the WORKSPACE or the image (the reference shelf, the
   public outbox, `rg` being the search binary that is installed) and therefore travels to every runtime, and
   which names a mechanism only the Claude Code loop wires (the question and plan cards, the checklist tools, the
-  secret references, the outside-content envelopes, the browser servers, and the `run_in_background`/watch seams
-  that exist so a turn never polls a build with `sleep`).
+  secret references, the outside-content envelopes, the browser servers, the diagnostics server, the
+  `run_in_background`/watch seams that exist so a turn never polls a build with `sleep`, and the `intentic`
+  skill). It also says what the agent is INSIDE OF: the base prompt names the product in four words and the
+  Claude preset never does, and an agent that knows only that answers questions about the product from its
+  training, so one unconditional block gives the identity, points at the skill, and states the precedence rule
+  that a workspace's CLAUDE.md is the owner's instruction rather than a description of the product.
   [src/codex/codex-instructions.ts](src/codex/codex-instructions.ts) is the Codex half: two
   undocumented config keys, verified by reading what reached the wire.
 - [src/agent/workspace-map.ts](src/agent/workspace-map.ts): the AREAS of the project a run starts in, read off
@@ -834,8 +843,11 @@ conversation's worktree instead of a path that still reaches the shared checkout
   reduced to "the 35 warnings from the last ten minutes". An answer whose read started mid-file says so, because
   an empty result over a window nothing could see reads exactly like proof that nothing happened. The tools are
   read-only and confined to `historyRoot/logs` plus the ledger — a turn reads the record of what it did and can
-  never edit it — and they are withheld from a persona whose `files` power is `none`. Their results are
-  deliberately **not** in `INTERNAL_SERVERS`: two of the four relay a provider's own sentence verbatim, and a
+  never edit it — and they are withheld from a persona whose `files` power is `none`. Being a tool was not
+  enough to be found: the server is deferred, so what reaches the prompt is a name in a list, and over this
+  workspace's 1,084 transcripts the four were called from 5 sessions (`errors` 10 times, `turns` once).
+  `src/agent/system-prompt.ts` now names them, with the situations each answers, on every turn that mounted
+  them. Their results are deliberately **not** in `INTERNAL_SERVERS`: two of the four relay a provider's own sentence verbatim, and a
   third party's words dressed as the platform's own log is what the outside-content envelope is for.
 - **The browser is the only witness to its own crashes**, so it gets the one write on the logs router.
   `POST /logs/client` (`src/logs/logs.routes.ts`) accepts a capped batch of what the editor caught, measured or

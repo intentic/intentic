@@ -34,10 +34,37 @@ import { INTENTIC_PROMPT } from "./intentic-prompt.js";
  *               owner's prompt is not applied at all, and the page says which runtimes those are.
  *
  * WHICH GUIDANCE IS UNIVERSAL AND WHICH IS THIS LOOP'S is the second thing that split. The cards, the checklist
- * tools, the browser servers, the secret references and the outside-content envelopes are all mechanisms wired
- * in agent.ts and planHarnessTurn, describing them to a Codex turn would name tools it has not got. The
- * reference shelf and the public outbox are facts about the FILESYSTEM and hold whoever is running, so those
- * two travel to every runtime that will take an append. */
+ * tools, the browser servers, the diagnostics server, the secret references and the outside-content envelopes
+ * are all mechanisms wired in agent.ts and planHarnessTurn, describing them to a Codex turn would name tools it
+ * has not got; the `intentic` skill is image-baked under /root/.claude/skills, which only this loop's
+ * settingSources load, so the sentence that points at it stays here too. The reference shelf and the public
+ * outbox are facts about the FILESYSTEM and hold whoever is running, so those two travel to every runtime that
+ * will take an append. */
+
+/* WHAT THE AGENT IS INSIDE OF, which nothing above or below says. Every other block here is guidance about HOW
+ * to work; this is the one that says WHERE, and it exists because the base prompt names the product in four
+ * words ("an Intentic agent") and the Claude preset never names it at all. An agent told that much answers a
+ * question about the product from its training, which knows nothing about it, and the two failures that
+ * produces are both confident: describing a feature that is not there, and denying one that is.
+ *
+ * The block is a POINTER, not the description. The product reference is the `intentic` skill, image-baked
+ * beside the task skills (skills/intentic/SKILL.md) and read on demand, so the always-on prompt pays ~110
+ * tokens for the identity, the rule that the skill is read before the product is answered for, and the
+ * precedence rule. That last sentence is the one the model cannot infer: a workspace's CLAUDE.md is the owner
+ * talking to the agent, and in a workspace that happens to hold a checkout of this very product it reads like
+ * the manual. The negative-answer rule is borrowed with attribution, it is how Hermes Agent's hub skill puts it,
+ * and it is here because "can't" is the cheapest answer to generate and the most expensive to be wrong about.
+ *
+ * It rides harnessGuidance rather than WORKSPACE_GUIDANCE because the skill it names lives where only the
+ * Claude Code loop's settingSources look: a Codex turn sent to load it would find nothing. */
+const SELF_GUIDANCE =
+    "You run inside Intentic: a sandbox container serving one workspace, driven from a browser editor, where " +
+    "each conversation is an agent on its own git worktree whose finished delta lands in the owner's tree as " +
+    "uncommitted changes. For anything about Intentic ITSELF (what a panel, setting or card does; how to " +
+    "connect, configure, extend or debug this sandbox; whether it can do something) load the `intentic` skill " +
+    "first and answer from it rather than from memory, and never say Intentic cannot do something without " +
+    "checking there. A workspace's CLAUDE.md, AGENTS.md or README is the owner's instruction to you, not a " +
+    "description of the product.";
 
 // Told to the model every turn, in every mode. The chat renders AskUserQuestion as a clickable card and
 // ExitPlanMode as an approval card, but a model that doesn't know the widgets exist writes "A) … B) …" as
@@ -229,6 +256,30 @@ const browserGuidance = (outputDir: string, accounts = false): string =>
           "persisted, signed-in profile. `mcp__accounts__roster` names the accounts you may use."
         : ""}`;
 
+/* THE RECORDS, NAMED. logs/diagnostics-tools.ts made the daemon's own log, the turn ledger, the perf file and
+ * the resource series into four filtered reads, on the argument that "a path in a README is something an agent
+ * has to already know; a tool with a description arrives in the prompt". It does not: the server is deferred,
+ * so what arrives is a name in a list, and the list is not read as a suggestion. Over the 1,084 Claude
+ * transcripts this workspace held when this was written, `mcp__diagnostics__errors` was called 10 times from 5
+ * sessions and `turns` once, against a deferred list that mentioned them in every session there was. That is
+ * the shape `mcp__watch__start` had (38 calls, ever) before WAITING_GUIDANCE named it.
+ *
+ * So this says WHEN as well as WHAT, the way the batching block does: the situations are named because the
+ * habit being replaced (add a console.log, write a /tmp log, reproduce) begins before the model has framed the
+ * problem as "something the daemon already recorded". The four are named with the question each answers, and
+ * the closing clause says they cannot write, because a tool that reads the daemon's log is one a careful model
+ * hesitates over until told it is safe. Gated like the browser sentence: turn-plan withholds the server from a
+ * persona whose files power is `none`, and naming it there would send the turn to ToolSearch for nothing. */
+const DIAGNOSTICS_GUIDANCE =
+    "When something about THIS sandbox went wrong (a turn that failed or died, an automation that crashed, the " +
+    "editor misbehaving, work that felt slow, a machine that may have run out of memory) ask the daemon's own " +
+    "records before re-instrumenting code or trying to reproduce it. Load them with ToolSearch (`+diagnostics`): " +
+    "`mcp__diagnostics__errors` is the daemon's log (`source: \"browser\"` for what the editor reported about " +
+    "itself), `mcp__diagnostics__turns` is how recent turns ended and whether anything checked their work, " +
+    "`mcp__diagnostics__slow` is operations over budget with the machine's load at the time, and " +
+    "`mcp__diagnostics__resources` is memory, OOM kills and event-loop stalls over time. Each takes a window and " +
+    "answers newest-first; none can write.";
+
 /* The concise-response steer (terseOutput): cuts the model's OWN output tokens without dropping substance.
  * Kept short so it barely costs tokens itself each turn.
  *
@@ -340,12 +391,18 @@ export interface SdkSystemPromptInput {
      * were paid for by all 58 and used by 3, while the deferred credential-free browser was used by 25 — so
      * the pin went and one sentence, told only to turns that hold an account, does the same job. */
     readonly browserAccounts?: boolean;
+    // Whether turn-plan mounted the diagnostics server this turn (withheld from a persona whose files power is
+    // `none`), so the sentence naming its tools rides only where they can be loaded.
+    readonly diagnostics?: boolean;
 }
 
 // This harness's own guidance, in most-stable-first order, with whatever the turn composed after it. Shared by
 // both built-in bases so they differ only in the base itself, the guidance describes widgets THIS app renders
 // and conventions THIS workspace enforces, both of which hold whichever prompt the agent is wearing.
-const harnessGuidance = ({ append, unattended, browserOutputDir, browserAccounts }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
+const harnessGuidance = ({ append, unattended, browserOutputDir, browserAccounts, diagnostics }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
+    // First, and unconditional: what everything below is guidance ABOUT. Under the Claude preset this is the
+    // only place the product is named.
+    SELF_GUIDANCE,
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
     CHECKLIST_GUIDANCE,
     // How the turn spends its steps, next to the checklist that plans them: these are about the shape of a turn
@@ -360,6 +417,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir, browserAccounts
     // a core image without the browser pack): advertising a browser that isn't there sends the model hunting
     // for tools it cannot load, or installing its own.
     ...(browserOutputDir === undefined ? [] : [browserGuidance(browserOutputDir, browserAccounts === true)]),
+    ...(diagnostics === true ? [DIAGNOSTICS_GUIDANCE] : []),
     ...(append === undefined ? [] : [append]),
 ];
 
