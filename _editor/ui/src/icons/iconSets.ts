@@ -26,6 +26,7 @@ export type IconName =
     | "book"
     | "box"
     | "boxes"
+    | "camera"
     | "check"
     | "check-circle"
     | "check-square"
@@ -150,6 +151,7 @@ export const ICONS: Record<IconName, string> = {
      * boxes rather than this one (the rail's Agents tile while the board reads across, the composer's
      * placement rows), so the two glyphs answer "here" and "everywhere" as a pair. */
     boxes: "ri:stack-line",
+    camera: "ri:camera-line",
     check: "ri:check-line",
     "check-circle": "ri:checkbox-circle-line",
     "check-square": "ri:checkbox-line",

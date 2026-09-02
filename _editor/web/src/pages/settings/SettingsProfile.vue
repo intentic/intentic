@@ -1,29 +1,57 @@
 <script setup lang="ts">
-import { Avatar, Button, ui, RowGroup, RowNote } from "@intentic/ui";
+import { Avatar, ui, RowGroup, RowNote } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useAuth } from "../../composables/useAuth";
-import { useDraft } from "../../composables/useDraft";
 
-/* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). The picked file
- * becomes a small square data URL in the browser, with no upload. Re-seeded from the shared user ref, so a save
- * (which refreshes the session) syncs the form back to what the server stored. */
+/* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). The avatar is a
+ * live control (pick → save immediately, like the sandbox logo on /sandbox); the name is inline-editable with
+ * the same pencil / check / cancel affordances as the sandbox name on that page. */
 
 const { user, updateProfile } = useAuth();
 
-// Seeded from the session's name and following a rename made elsewhere, but never over an edit in this form:
-// refresh() rebuilds `user` as a fresh object on every call, so an unconditional re-seed here was one new
-// refresh() caller away from wiping a half-typed name (see useDraft).
-const profileName = useDraft(() => user.value?.name);
-// A freshly picked avatar, previewed until Save sends it. Undefined = keep the current one.
-const stagedAvatar = ref<string | undefined>(undefined);
 const avatarInput = ref<HTMLInputElement | null>(null);
-// A broken picture URL is <Avatar>'s problem, not this form's: it falls back on its own, so there is no
-// load-failure flag to hold here any more.
-const avatarImage = computed(() => stagedAvatar.value ?? user.value?.image);
-const saving = ref(false);
-const saveError = ref<string | undefined>(undefined);
+const avatarBusy = ref(false);
+const avatarError = ref<string | undefined>(undefined);
+
+const editing = ref(false);
+const name = ref(``);
+const nameInput = ref<HTMLInputElement | null>(null);
+const nameTouched = ref(false);
+const nameBusy = ref(false);
+const nameError = ref<string | undefined>(undefined);
+
+const nameValidationError = computed<string | undefined>(() => {
+    const trimmed = name.value.trim();
+    if (trimmed.length === 0) {
+        return `Name is required.`;
+    }
+    if (trimmed.length > 60) {
+        return `Name must be 60 characters or fewer.`;
+    }
+    return undefined;
+});
+const canSaveName = computed(() => {
+    const trimmed = name.value.trim();
+    return trimmed.length > 0 && trimmed.length <= 60 && trimmed !== user.value?.name;
+});
+
+const subline = computed<{ text: string; tone: string }>(() => {
+    if (avatarError.value !== undefined) {
+        return { text: avatarError.value, tone: `text-danger` };
+    }
+    if (nameError.value !== undefined) {
+        return { text: nameError.value, tone: `text-danger` };
+    }
+    if (editing.value && nameTouched.value && nameValidationError.value !== undefined) {
+        return { text: nameValidationError.value, tone: `text-danger` };
+    }
+    if (editing.value) {
+        return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
+    }
+    return { text: ``, tone: `text-muted` };
+});
 
 const pickAvatar = async (event: Event): Promise<void> => {
     const file = (event.target as HTMLInputElement).files?.[0];
@@ -31,36 +59,53 @@ const pickAvatar = async (event: Event): Promise<void> => {
     if (file === undefined) {
         return;
     }
-    saveError.value = undefined;
+    avatarError.value = undefined;
+    avatarBusy.value = true;
+    let square: string;
     try {
-        stagedAvatar.value = await fileToSquareDataUrl(file, `cover`);
+        square = await fileToSquareDataUrl(file, `cover`);
     } catch {
-        saveError.value = `Couldn't read that file as an image.`;
+        avatarError.value = `Couldn't read that file as an image.`;
+        avatarBusy.value = false;
+        return;
+    }
+    try {
+        await updateProfile({ image: square });
+    } catch (error) {
+        avatarError.value = errorMessage(error, `Profile update failed.`);
+    } finally {
+        avatarBusy.value = false;
     }
 };
 
-const canSaveProfile = computed(() => {
-    const trimmed = profileName.value.trim();
-    return trimmed.length > 0 && trimmed.length <= 60 && (trimmed !== user.value?.name || stagedAvatar.value !== undefined);
-});
+const startEdit = async (): Promise<void> => {
+    name.value = user.value?.name ?? ``;
+    nameError.value = undefined;
+    nameTouched.value = false;
+    editing.value = true;
+    await nextTick();
+    nameInput.value?.select();
+};
 
-const saveProfile = async (): Promise<void> => {
-    const trimmed = profileName.value.trim();
-    if (saving.value || !canSaveProfile.value) {
+const cancelEdit = (): void => {
+    editing.value = false;
+    nameError.value = undefined;
+};
+
+const saveName = async (): Promise<void> => {
+    const trimmed = name.value.trim();
+    if (nameBusy.value || !canSaveName.value) {
         return;
     }
-    saving.value = true;
-    saveError.value = undefined;
+    nameBusy.value = true;
+    nameError.value = undefined;
     try {
-        await updateProfile({
-            ...(trimmed !== user.value?.name && { name: trimmed }),
-            ...(stagedAvatar.value !== undefined && { image: stagedAvatar.value }),
-        });
-        stagedAvatar.value = undefined;
+        await updateProfile({ name: trimmed });
+        editing.value = false;
     } catch (error) {
-        saveError.value = errorMessage(error, `Profile update failed.`);
+        nameError.value = errorMessage(error, `Profile update failed.`);
     } finally {
-        saving.value = false;
+        nameBusy.value = false;
     }
 };
 </script>
@@ -68,23 +113,96 @@ const saveProfile = async (): Promise<void> => {
 <template>
     <RowGroup label="Profile">
         <RowNote variant="block">
-            <form @submit.prevent="saveProfile">
-                <div class="flex items-center gap-3">
-                    <Avatar :size="56" :src="avatarImage" />
-                    <Button label="Change avatar" severity="secondary" size="small" @click="avatarInput?.click()">
-                        <template #icon><Icon name="image" /></template>
-                    </Button>
-                    <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="pickAvatar" />
+            <div class="flex min-w-0 items-center gap-3">
+                <button
+                    type="button"
+                    :disabled="avatarBusy"
+                    aria-label="Change avatar"
+                    v-tooltip.bottom="`Change avatar`"
+                    class="group relative h-14 w-14 shrink-0 cursor-pointer rounded-full"
+                    @click="avatarInput?.click()"
+                >
+                    <Avatar :size="56" :src="user?.image" :name="user?.name" />
+                    <span
+                        class="absolute inset-0 flex items-center justify-center rounded-full bg-canvas/70 text-content transition-opacity"
+                        :class="avatarBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'"
+                    >
+                        <Icon :name="avatarBusy ? `spinner` : `camera`" :spin="avatarBusy" class="text-base" />
+                    </span>
+                </button>
+                <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="pickAvatar" />
+
+                <div class="min-w-0 flex-1">
+                    <div class="flex min-w-0 items-center gap-2">
+                        <div class="flex min-w-0 items-center">
+                            <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
+                                <template v-if="editing">
+                                    <span
+                                        aria-hidden="true"
+                                        class="invisible col-start-1 row-start-1 flex h-8 min-w-0 items-center truncate rounded-md border border-transparent px-2 text-base font-medium"
+                                        >{{ name === `` ? ` ` : name }}</span
+                                    >
+                                    <input
+                                        ref="nameInput"
+                                        v-model="name"
+                                        type="text"
+                                        aria-label="Display name"
+                                        autocomplete="off"
+                                        maxlength="60"
+                                        class="ui-field-box col-start-1 row-start-1 h-8 w-full min-w-0 px-2 text-base font-medium"
+                                        :class="nameTouched && nameValidationError ? 'ui-field-error-box' : ''"
+                                        @blur="nameTouched = true"
+                                        @keydown.enter.prevent="saveName"
+                                        @keydown.esc.prevent="cancelEdit"
+                                    />
+                                </template>
+                                <h2
+                                    v-else
+                                    class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-base font-medium"
+                                >
+                                    <span class="truncate">{{ user?.name ?? `Account` }}</span>
+                                </h2>
+                            </div>
+
+                            <div class="flex shrink-0 items-center gap-1">
+                                <template v-if="editing">
+                                    <button
+                                        type="button"
+                                        :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
+                                        :disabled="nameBusy || !canSaveName"
+                                        aria-label="Save display name"
+                                        v-tooltip.bottom="`Save · Enter`"
+                                        v-action="saveName"
+                                    >
+                                        <Icon :name="nameBusy ? `spinner` : `check`" :spin="nameBusy" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        :class="ui.iconButton(`h-8 w-8 text-subtle`)"
+                                        :disabled="nameBusy"
+                                        aria-label="Cancel rename"
+                                        v-tooltip.bottom="`Cancel · Esc`"
+                                        @click="cancelEdit"
+                                    >
+                                        <Icon name="times" />
+                                    </button>
+                                </template>
+                                <button
+                                    v-else
+                                    type="button"
+                                    :class="ui.iconButton(`h-8 w-8 text-subtle`)"
+                                    aria-label="Rename display name"
+                                    v-tooltip.bottom="`Rename display name`"
+                                    v-action="startEdit"
+                                >
+                                    <Icon name="pencil" class="text-xs" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <p v-if="subline.text" class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                 </div>
-                <label class="mt-3 flex flex-col gap-1">
-                    <span class="text-xs font-medium text-muted">Display name</span>
-                    <input v-model="profileName" type="text" autocomplete="off" maxlength="60" :class="ui.input('w-full')" />
-                </label>
-                <div class="mt-3 flex justify-end">
-                    <Button type="submit" label="Save" size="small" :loading="saving" :disabled="saving || !canSaveProfile" />
-                </div>
-                <p v-if="saveError" class="mt-2 text-2xs text-danger">{{ saveError }}</p>
-            </form>
+            </div>
         </RowNote>
     </RowGroup>
 </template>

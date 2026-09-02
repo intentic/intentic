@@ -90,7 +90,7 @@ const SURFACES: readonly Surface[] = [
      * worse than no gate on those routes, because the row still says ✓. Warm, they measure 16 / 20 / 19 / 11.
      * `waitFor` holds until the view is actually there and `primary` fails the run if what the reader came for
      * has no height — the same pair every surface above already carries. */
-    { path: "/settings", waitFor: "text=Keybindings", primary: "text=Display name", settleMs: 1_200 },
+    { path: "/settings", waitFor: "text=Keybindings", primary: "text=Profile", settleMs: 1_200 },
     // The accessory key row, which is the whole reason this route is gated: it is `coarse`-only, so a run that
     // is not in a touch context finds nothing here and says so instead of passing quietly.
     { path: "/terminal", waitFor: "text=Esc", primary: "text=Ctrl", settleMs: 1_600 },
