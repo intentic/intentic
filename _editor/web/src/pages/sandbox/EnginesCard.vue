@@ -18,8 +18,8 @@ import { useRole } from "../../composables/sandbox/useRole";
  *
  * So each row says three things and offers three actions. What is RUNNING (and whether it came from the image
  * or from the store on this machine's volume), what its CHANNEL would move it to, and what going BACK means.
- * Blessed is the default and means "a version this project's suite has run against"; latest takes upstream's
- * newest without waiting for anyone to bless it; pinned holds one still. Nothing here downloads without a
+ * Recommended is the default and means "a version this project's suite has run against"; latest takes upstream's
+ * newest without waiting for anyone to recommend it; pinned holds one still. Nothing here downloads without a
  * click except what the channel already said to take.
  *
  * Owner-only, like the environment decisions above it: this installs code that every turn in this sandbox then
@@ -38,19 +38,19 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
 
 const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>[] = [
     {
-        label: `Blessed`,
+        label: `Recommended`,
         value: `blessed`,
         icon: `check`,
-        hint: `The version Intentic has run its own suite against. Updates arrive without a new image.`,
+        hint: `Intentic-tested. Updates in place.`,
     },
     {
         label: `Latest`,
         value: `latest`,
         icon: `download`,
-        hint: `Whatever upstream published most recently, without waiting for anyone to bless it.`,
+        hint: `Upstream's newest release.`,
     },
-    { label: `Pinned`, value: `pinned`, icon: `lock`, hint: `Hold the version that is running now until you say otherwise.` },
-    { label: `Image`, value: `image`, icon: `box`, hint: `Ignore the store and run the copy baked into the sandbox image.` },
+    { label: `Pinned`, value: `pinned`, icon: `lock`, hint: `Freeze the running version.` },
+    { label: `Image`, value: `image`, icon: `box`, hint: `Image copy only.` },
 ];
 
 // Every write answers with the whole view, so the card never has to guess what the daemon did with a request.
@@ -101,8 +101,8 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
         </p>
 
         <ul class="flex flex-col divide-y divide-line">
-            <li v-for="engine in engines" :key="engine.id" class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-                <div class="flex flex-wrap items-center gap-2">
+            <li v-for="engine in engines" :key="engine.id" class="py-3 first:pt-0 last:pb-0">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <span class="text-sm font-medium">{{ engine.label }}</span>
                     <span v-if="engine.running.version" class="font-mono text-xs text-muted">{{ engine.running.version }}</span>
                     <!-- The one state that is neither a version nor a fault: a core image that bakes no copy of
@@ -115,37 +115,37 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
                     <StatusBadge
                         v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
                         variant="warning"
-                        label="unblessed"
+                        label="not recommended"
                     />
-                </div>
 
-                <div class="flex flex-wrap items-center gap-2">
-                    <Picker
-                        :model-value="engine.channel.kind"
-                        :options="CHANNELS"
-                        variant="ghost"
-                        :disabled="busy || !canOperate"
-                        class="shrink-0"
-                        :aria-label="`Where ${engine.label} gets its version`"
-                        :header="`${engine.label} version source`"
-                        @update:model-value="(kind) => kind !== undefined && setChannel(engine, kind)"
-                    />
-                    <Button
-                        v-if="engine.offered"
-                        size="sm"
-                        :disabled="busy || !canOperate"
-                        :label="`Update to ${engine.offered.version}`"
-                        @click="update(engine)"
-                    />
-                    <Button
-                        v-if="engine.previous || engine.running.source === `store`"
-                        size="sm"
-                        variant="ghost"
-                        :disabled="busy || !canOperate"
-                        :label="engine.previous ? `Back to ${engine.previous}` : `Back to the image's copy`"
-                        @click="revert(engine)"
-                    />
-                    <span v-if="engine.diskBytes > 0" class="text-xs text-muted">{{ megabytes(engine.diskBytes) }} kept</span>
+                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                        <Picker
+                            :model-value="engine.channel.kind"
+                            :options="CHANNELS"
+                            variant="ghost"
+                            :disabled="busy || !canOperate"
+                            class="shrink-0"
+                            :aria-label="`Where ${engine.label} gets its version`"
+                            :header="`${engine.label} version source`"
+                            @update:model-value="(kind) => kind !== undefined && setChannel(engine, kind)"
+                        />
+                        <Button
+                            v-if="engine.offered"
+                            size="sm"
+                            :disabled="busy || !canOperate"
+                            :label="`Update to ${engine.offered.version}`"
+                            @click="update(engine)"
+                        />
+                        <Button
+                            v-if="engine.previous || engine.running.source === `store`"
+                            size="sm"
+                            variant="ghost"
+                            :disabled="busy || !canOperate"
+                            :label="engine.previous ? `Back to ${engine.previous}` : `Back to the image's copy`"
+                            @click="revert(engine)"
+                        />
+                        <span v-if="engine.diskBytes > 0" class="text-xs text-muted">{{ megabytes(engine.diskBytes) }} kept</span>
+                    </div>
                 </div>
 
                 <!-- A version this sandbox installed and then refused. Shown because the alternative is an
@@ -153,7 +153,7 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
 
                      break-words, because the reason usually ENDS in a store path — one unbroken token longer
                      than a phone's viewport, which ran out past the card's own border before this. -->
-                <p v-for="refused in engine.quarantined" :key="refused.version" class="text-xs break-words text-muted">
+                <p v-for="refused in engine.quarantined" :key="refused.version" class="mt-2 text-xs break-words text-muted">
                     {{ refused.version }} was refused: {{ refused.reason }}
                 </p>
             </li>
@@ -162,7 +162,7 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
         <Notice v-if="actionNotice" v-bind="actionNotice" />
 
         <p v-if="view?.listReadAt === undefined" class="text-xs break-words text-muted">
-            The blessed list at {{ view?.listSource }} has not been reachable from here, so blessed rows are showing whatever they last knew.
+            The recommended list at {{ view?.listSource }} has not been reachable from here, so recommended rows are showing whatever they last knew.
         </p>
     </Card>
 </template>
