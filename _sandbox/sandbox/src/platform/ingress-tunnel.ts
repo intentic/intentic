@@ -1,3 +1,4 @@
+import { createBackoff, sleep } from "@intentic/base/async";
 import {
     INGRESS_GRANT_HEADER,
     INGRESS_TUNNEL_PATH,
@@ -34,7 +35,10 @@ const BACKOFF_MAX_MS = 30_000;
 
 /* A session that lasted this long was a WORKING tunnel, so the next failure starts its backoff from the floor
  * again. Without this, a container that has been up for a week reconnects at the ceiling after one blip,
- * because the counter still remembers a bad afternoon in between. */
+ * because the counter still remembers a bad afternoon in between. One that opened and died young keeps
+ * climbing, which is what keeps a refused grant or a dead edge from being hammered. The ladder itself, with
+ * the full jitter every container in a region needs when it redials the same edge at the same instant, is
+ * @intentic/base's createBackoff. */
 const STABLE_AFTER_MS = 60_000;
 
 /* DISPLACEMENT IS NOT A FAILURE, and redialing straight into it is how two containers sharing one connect
@@ -58,10 +62,6 @@ export const tunnelUrl = (base: string): string => {
     return url.toString();
 };
 
-// Full jitter on the backoff. Every container in a region redials the same edge at the same instant when it
-// restarts, so a fixed schedule reconvenes the whole fleet on one socket at one moment, repeatedly.
-const jittered = (ceiling: number, random: () => number): number => Math.round(BACKOFF_MIN_MS + random() * (ceiling - BACKOFF_MIN_MS));
-
 /* The bits of `ws` this uses, named so a test can supply a fake without a network. Nothing here is a
  * WebSocket-the-spec, it is the node client's surface. */
 export interface TunnelSocket {
@@ -79,8 +79,7 @@ export interface IngressTunnelDeps {
     readonly random?: () => number;
 }
 
-const realConnect = (url: string, headers: Record<string, string>): TunnelSocket =>
-    new WebSocket(url, { headers }) as unknown as TunnelSocket;
+const realConnect = (url: string, headers: Record<string, string>): TunnelSocket => new WebSocket(url, { headers }) as unknown as TunnelSocket;
 
 const realServe = async (socket: TunnelSocket, targetPort: number): Promise<IngressSessionServer> =>
     serveIngressSession(createWebSocketStream(socket as unknown as WebSocket), { targetPort });
@@ -121,15 +120,19 @@ export const startIngressTunnelWhenConfigured = (options: {
 export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnelDeps): IngressTunnelHandle => {
     const connect = options.connect ?? realConnect;
     const serve = options.serve ?? realServe;
-    const delay = options.delay ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.()));
+    const delay = options.delay ?? ((ms: number) => sleep(ms, { unref: true }));
     const now = options.now ?? Date.now;
-    const random = options.random ?? Math.random;
+    const ladder = createBackoff({
+        floorMs: BACKOFF_MIN_MS,
+        capMs: BACKOFF_MAX_MS,
+        stableMs: STABLE_AFTER_MS,
+        random: options.random ?? Math.random,
+    });
     const url = tunnelUrl(options.url);
 
     let stopped = false;
     let connected = false;
     let socket: TunnelSocket | undefined;
-    let ceiling = BACKOFF_MIN_MS;
 
     /* ONE DIAL, resolving with how long to wait before the next one. Written as a promise the loop awaits
      * rather than as a web of listeners, because every way a tunnel ends — refused, opened-then-dropped,
@@ -160,7 +163,6 @@ export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnel
                         server = await serve(ws, options.targetPort);
                         openedAt = now();
                         connected = true;
-                        ceiling = BACKOFF_MIN_MS;
                         options.log(`reachable: the ingress tunnel is registered`);
                     } catch (error) {
                         options.log(`the ingress tunnel opened but could not serve`, error);
@@ -170,21 +172,14 @@ export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnel
             });
 
             ws.on(`close`, ((code: number) => {
-                /* A session that ran long enough to be a working tunnel earns the floor back; one that died on
-                 * arrival does not, which is what keeps a refused dial (a bad grant, an edge that is down) from
-                 * hammering. */
-                const stable = openedAt !== undefined && now() - openedAt >= STABLE_AFTER_MS;
                 if (code === DISPLACED_CODE) {
                     options.log(`another tunnel took this sandbox's address; standing back`);
                     settle(DISPLACED_BACKOFF_MS);
                     return;
                 }
-                if (stable) {
-                    ceiling = BACKOFF_MIN_MS;
-                } else {
-                    ceiling = Math.min(ceiling * 2, BACKOFF_MAX_MS);
-                }
-                settle(jittered(ceiling, random));
+                // How long the session worked is what the ladder reads: long enough earns the floor back, a
+                // dial that was refused or died on arrival keeps climbing.
+                settle(ladder.next(openedAt === undefined ? 0 : now() - openedAt));
             }) as (...args: never[]) => void);
 
             /* `error` and `close` both fire for a refused dial, in that order, so the wait is decided by the

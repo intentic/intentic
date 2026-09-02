@@ -1,10 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, renameSync, statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import net from "node:net";
 import { join } from "node:path";
+import { type Backoff, createBackoff } from "@intentic/base/async";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { freePort } from "./free-port.js";
 
 /* SERVICE PROCESSES: the daemon's own children, supervised, for everything that is a background SERVICE
  * rather than a terminal — the messaging connectors' gateway processes and any other process an extension
@@ -19,7 +20,8 @@ import { publishRuntimeChange } from "../system/runtime-watch.js";
  * flipped something, and the exit code lived in a pane nobody read.
  *
  * Here the daemon is the parent, which is what a supervisor is: exits are events, not poll results; a crash
- * respawns with capped backoff (the backend host's pattern, backend-supervisor.ts); `running` means the
+ * respawns on the shared ladder (@intentic/base's createBackoff, the same one under the backend host and the
+ * translator); `running` means the
  * process is alive; and the output goes to one log file per service, which the terminal panel's read-only
  * log view tails (terminal.ts spawns `tail -F` for `svc-*` names — no tmux session exists).
  *
@@ -94,19 +96,6 @@ const DEFAULT_TIMING: ServiceTiming = { backoffStartMs: 1_000, backoffCapMs: 60_
 // is enough to see what happened before the last respawn.
 const LOG_ROTATE_BYTES = 4 * 1_048_576;
 
-// An OS-assigned free port (the managed-processes pattern): a tiny TOCTOU window before the child binds it,
-// fine for a handful of services that own their port a moment later.
-const freePort = (): Promise<number> =>
-    new Promise((resolve, reject) => {
-        const server = net.createServer();
-        server.on("error", reject);
-        server.listen(0, "127.0.0.1", () => {
-            const address = server.address();
-            const port = typeof address === "object" && address !== null ? address.port : 0;
-            server.close(() => resolve(port));
-        });
-    });
-
 // SIGTERM the child's whole process group now, SIGKILL whatever of it is left after the grace. The group is
 // the child's own (detached spawn), so a gateway's own children (an ffmpeg, a headless helper) go with it.
 const killGroup = (child: ChildProcess, graceMs: number): void => {
@@ -139,7 +128,7 @@ interface Entry {
     since: number;
     lastExitCode: number | undefined;
     spawnedAt: number;
-    backoffMs: number;
+    readonly ladder: Backoff;
     retry: NodeJS.Timeout | undefined;
 }
 
@@ -197,18 +186,13 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
             }
             entry.child = undefined;
             entry.lastExitCode = code ?? undefined;
-            // A run that lasted was a working service; its next crash starts the ladder over rather than
-            // inheriting a cap it grew during some earlier bad hour.
-            if (Date.now() - entry.spawnedAt >= timing.stableMs) {
-                entry.backoffMs = timing.backoffStartMs;
-            }
             entry.state = "backoff";
             entry.since = Date.now();
             entry.restarts += 1;
-            logger.warn(
-                { service: key, code, signal, restarts: entry.restarts, retryInMs: entry.backoffMs },
-                "service process exited, respawning after backoff",
-            );
+            // A run that lasted was a working service; its next crash starts the ladder over rather than
+            // inheriting a cap it grew during some earlier bad hour (the ladder's stableMs).
+            const retryInMs = entry.ladder.next(Date.now() - entry.spawnedAt);
+            logger.warn({ service: key, code, signal, restarts: entry.restarts, retryInMs }, "service process exited, respawning after backoff");
             publishRuntimeChange("panels", "terminals");
             entry.retry = setTimeout(() => {
                 entry.retry = undefined;
@@ -216,8 +200,7 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
                     spawnChild(key, entry);
                     publishRuntimeChange("panels", "terminals");
                 }
-            }, entry.backoffMs);
-            entry.backoffMs = Math.min(entry.backoffMs * 2, timing.backoffCapMs);
+            }, retryInMs);
         });
     };
 
@@ -240,7 +223,7 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
                 since: Date.now(),
                 lastExitCode: undefined,
                 spawnedAt: Date.now(),
-                backoffMs: timing.backoffStartMs,
+                ladder: createBackoff({ floorMs: timing.backoffStartMs, capMs: timing.backoffCapMs, stableMs: timing.stableMs }),
                 retry: undefined,
             };
             current.set(key, entry);

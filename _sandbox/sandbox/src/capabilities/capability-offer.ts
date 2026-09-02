@@ -1,5 +1,6 @@
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import { instancesOf } from "@intentic-app/capability-catalog";
+import { sleep } from "@intentic/base/async";
 import type { AgentEvent, CapabilityOffer, CapabilityStatus } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../platform/leftovers.js";
@@ -93,21 +94,6 @@ export interface AskedCapability {
 const answer = (status: number, body: unknown): AskAnswer => ({ status, body: JSON.stringify(body), contentType: "application/json" });
 const refusal = (status: number, type: string, message: string): AskAnswer => answer(status, { error: { type, message } });
 
-// An abortable pause, the watcher's tick. Resolves early (not rejects) on abort; the loop's own guard reads
-// the signal, so an aborted sleep simply ends the watch.
-const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(() => {
-            signal.removeEventListener("abort", onAbort);
-            resolve();
-        }, ms);
-        const onAbort = (): void => {
-            clearTimeout(timer);
-            resolve();
-        };
-        signal.addEventListener("abort", onAbort, { once: true });
-    });
-
 /* One conversation's memory of its asks. `parked` prevents a second card for a capability whose first card is
  * still up; `declined` is the owner's no, held for the conversation so a repeat ask is answered without
  * bothering them again. In-memory on purpose: a decline is scoped to the conversation it happened in, and a
@@ -150,7 +136,7 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
             if (signal.aborted || Date.now() >= deadline) {
                 return undefined;
             }
-            await sleep(deps.pollMs ?? POLL_MS, signal);
+            await sleep(deps.pollMs ?? POLL_MS, { signal });
         }
     };
 

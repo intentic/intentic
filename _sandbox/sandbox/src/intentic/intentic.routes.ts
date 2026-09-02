@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { intenticContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -24,7 +25,7 @@ export const createIntenticRoutes = (services: Services) => {
                     yield* services.intentic({ args: input.args, cwd: services.workspace.root }, signal);
                 }
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = errorMessage(error);
                 yield { kind: "error", message };
                 throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
             }

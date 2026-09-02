@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import type { CommandContext } from "@stricli/core";
 import { createEngine, parseFeatures, type QueryOutcome, type Verb, type VerbOptions } from "@intentic/iq-engine";
 import { loadConfig } from "../env.config.js";
@@ -194,7 +195,7 @@ export const parseMultiLine = (line: string): MultiLine => {
             try {
                 lang = parseLangs(raw);
             } catch (error) {
-                return fail(error instanceof Error ? error.message : String(error));
+                return fail(errorMessage(error));
             }
         } else if (token === "--in") {
             const path = value();
@@ -298,7 +299,7 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
                     scope: parsed.scope.in === undefined ? parsed.scope : { ...parsed.scope, in: rootRelativePaths(parsed.scope.in, root) },
                 };
             } catch (error) {
-                parsed = { ...parsed, error: error instanceof Error ? error.message : String(error) };
+                parsed = { ...parsed, error: errorMessage(error) };
             }
         }
         if (parsed.error !== undefined) {

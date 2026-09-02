@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type AgentTurn, ciContract, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
@@ -31,7 +32,7 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
     try {
         return await action;
     } catch (error) {
-        throw new ORPCError("BAD_GATEWAY", { message: error instanceof Error ? error.message : String(error) });
+        throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
     }
 };
 

@@ -60,6 +60,17 @@
                 "@intentic/src": "./src/async.ts",
                 "default": "./dist/async.js"
             }
+        },
+        "./errors": {
+            "types": "./dist/errors.d.ts",
+            "import": {
+                "@intentic/src": "./src/errors.ts",
+                "default": "./dist/errors.js"
+            },
+            "require": {
+                "@intentic/src": "./src/errors.ts",
+                "default": "./dist/errors.js"
+            }
         }
     },
     "scripts": {

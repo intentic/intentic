@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { errorMessage } from "@intentic/base/errors";
 import type { Capability, WebExtSessionImport } from "@intentic/sandbox-contract";
 import { acquireProfileLock, isProfileOpen, markConnected, profileOwner, releaseProfileLock, sessionDir } from "../browser/session-store.js";
 
@@ -106,7 +107,7 @@ export const importBrowserSession = async (
         // a session.
         return {
             ok: false,
-            message: `Could not write the session into "${payload.account}": ${error instanceof Error ? error.message : String(error)}`,
+            message: `Could not write the session into "${payload.account}": ${errorMessage(error)}`,
         };
     } finally {
         releaseProfileLock(owner);

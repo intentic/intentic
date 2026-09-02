@@ -9,6 +9,7 @@
 
 import { appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { errorMessage } from "@intentic/base/errors";
 import { clientTimeoutMs, readVerdict, targetOf } from "@intentic/gate";
 import { annotationOf, defaultRequest, outputLines, parseInputs, stepExitOf, summaryOf } from "./action.js";
 
@@ -66,7 +67,7 @@ if (inputs.door === "fire") {
         // The fire route answers immediately, the minute is for the network, not for the agent.
         response = await fetch(inputs.url, { method: "POST", body, signal: AbortSignal.timeout(60_000) });
     } catch (error) {
-        wiring(`the automation could not be reached: ${error instanceof Error ? error.message : String(error)}`);
+        wiring(`the automation could not be reached: ${errorMessage(error)}`);
     }
     if (!response.ok) {
         wiring(`the automation answered ${response.status}: ${detailOf(await response.text())}`);
@@ -95,7 +96,7 @@ try {
         signal: AbortSignal.timeout(clientTimeoutMs(inputs.waitS)),
     });
 } catch (error) {
-    wiring(`the gate could not be reached: ${error instanceof Error ? error.message : String(error)}`);
+    wiring(`the gate could not be reached: ${errorMessage(error)}`);
 }
 const text = await response.text();
 if (!response.ok) {

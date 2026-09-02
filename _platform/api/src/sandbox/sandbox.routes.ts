@@ -6,7 +6,7 @@ import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
-import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
@@ -23,6 +23,7 @@ import {
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
+import { mintSandbox } from "./mint-sandbox.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
 import { ensureReachability, ingressEnabled } from "./reachability.js";
@@ -206,26 +207,11 @@ export const sandboxRoutes = {
     }),
     /* Mint a new sandbox for the caller. Unlimited, own as many as you like. Nothing is provisioned anywhere:
      * reachability is a signature the first setup mint (or hosted provision) computes in-process, which is why
-     * the pre-provisioned pool the Cloudflare tunnels needed died with them and never came back.
-     *
-     * `tunnelId` is written HERE and never again: it is the 12-hex id every hostname this sandbox will ever
-     * serve is built from, and the row's copy of a derivation the connect token already fixes
-     * (sandboxIdFromToken). Stored rather than re-derived because two readers need it as a KEY — the ingress's
-     * registration check (GET /api/reachability/<id>) and the DNS sweep — and neither can decrypt a token or
-     * scan a table for a digest prefix. */
+     * the pre-provisioned pool the Cloudflare tunnels needed died with them and never came back. The row and
+     * its token-derived columns come from mintSandbox, the same mint the hosted canary runs. */
     create: os.sandbox.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
-        const token = randomBytes(16).toString(`base64url`);
-        const sandbox = await context.prisma.sandbox.create({
-            data: {
-                name: input.name,
-                ownerId: user.id,
-                token: encryptSecret(context.config, token),
-                tokenDigest: sha256Hex(token),
-                tunnelId: sandboxIdFromToken(token) ?? ``,
-            },
-            include: { hosted: true },
-        });
+        const { sandbox } = await mintSandbox(context.prisma, context.config, { name: input.name, ownerId: user.id });
         return toSummary(sandbox, `owner`, context);
     }),
     // Rename an owned sandbox and/or set its switcher logo (a small data URL the browser produced), `null`
@@ -466,7 +452,7 @@ export const sandboxRoutes = {
         const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
         if (budget.metered && budget.remainingMinutes === 0) {
             throw new ORPCError(`PAYMENT_REQUIRED`, {
-            message: `your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`,
+                message: `your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`,
             });
         }
         try {

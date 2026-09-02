@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { type CliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub } from "./launcher.js";
 import type { Log } from "./home.js";
 
@@ -91,7 +92,7 @@ const systemdUnitPath = (spec: AutostartSpec): string => join(homedir(), ".confi
 // can't find its command fails indistinguishably from one that ran and refused.
 const regExe = (): string => join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "reg.exe");
 
-const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const reason = (error: unknown): string => errorMessage(error);
 
 // Run a registration tool and fail with what it ACTUALLY said. These calls were once `stdio: "ignore"` plus an
 // exit-code check, which reduced every failure to a guess we wrote ourselves: the note read "schtasks /Create

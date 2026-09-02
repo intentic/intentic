@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { exitContract, type IntenticLine } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -45,7 +46,7 @@ export const createExitRoutes = (services: ExitRoutesDeps) => {
             yield { kind: "log", message: `${link.id}: ${link.state}${where === "" ? "" : ` · ${where}`}` };
             yield { kind: "result", ok: true };
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = errorMessage(error);
             yield { kind: "error", message };
             throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
         } finally {

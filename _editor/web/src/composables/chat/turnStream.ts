@@ -1,3 +1,4 @@
+import { createBackoff, sleep } from "@intentic/base/async";
 import { type AgentEvent, type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFrames } from "@intentic/sandbox-contract";
 import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxRequestVia } from "../sandbox/sandboxClient";
@@ -31,8 +32,6 @@ export interface TurnContext {
 // The head frame of an /agent/attach stream, the run's identity plus what a non-initiating window needs to
 // synthesize the turn locally (user bubble from the prompt, elapsed readout from the start time).
 export type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
-
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /* What a followed run needs from the conversation rendering it: whose turn the frames belong to and where to
  * put them. */
@@ -75,7 +74,7 @@ export const followRun = async (
     let run = initialRun;
     let after = 0;
     let attached = false;
-    let retryMs = 500;
+    const ladder = createBackoff({ floorMs: 500, capMs: 5_000 });
     let turn: TurnContext | undefined;
     /* THE REPLAY/LIVE BOUNDARY, which the daemon has always published on the head (`seq` is the run's frame
      * count at the moment this attach opened) and this loop used to drop on the floor.
@@ -162,15 +161,14 @@ export const followRun = async (
             if (controller.signal.aborted || !attached) {
                 return attached;
             }
-            await delay(retryMs);
-            retryMs = Math.min(retryMs * 2, 5_000);
+            await sleep(ladder.next());
             continue;
         }
         if (!response.ok || !response.body) {
             slot();
             return attached;
         }
-        retryMs = 500;
+        ladder.reset();
         const beforeAfter = after;
         try {
             for await (const frame of sseFrames(response.body)) {
@@ -200,8 +198,7 @@ export const followRun = async (
             if (idleRounds >= 3) {
                 return attached;
             }
-            await delay(retryMs);
-            retryMs = Math.min(retryMs * 2, 5_000);
+            await sleep(ladder.next());
         } else {
             idleRounds = 0;
         }

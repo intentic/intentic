@@ -1,4 +1,5 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { pollUntil } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import type { DialedPairing } from "./daemon-base.js";
 
@@ -292,23 +293,17 @@ export const createTunnelPool = (log: Log) => {
  * a few hundred milliseconds of startup. */
 const READY_POLL_MS = 100;
 
-export const tunnelReady = async (port: number, timeoutMs: number): Promise<boolean> => {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded poll on one port, serial by definition
-        const open = await new Promise<boolean>((resolve) => {
-            const probe = connect(port, "127.0.0.1");
-            const settle = (value: boolean): void => {
-                probe.destroy();
-                resolve(value);
-            };
-            probe.once("connect", () => settle(true));
-            probe.once("error", () => settle(false));
-        });
-        if (open || Date.now() >= deadline) {
-            return open;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- same
-        await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
-    }
-};
+export const tunnelReady = (port: number, timeoutMs: number): Promise<boolean> =>
+    pollUntil(
+        () =>
+            new Promise<boolean>((resolve) => {
+                const probe = connect(port, "127.0.0.1");
+                const settle = (value: boolean): void => {
+                    probe.destroy();
+                    resolve(value);
+                };
+                probe.once("connect", () => settle(true));
+                probe.once("error", () => settle(false));
+            }),
+        { intervalMs: READY_POLL_MS, timeoutMs },
+    );

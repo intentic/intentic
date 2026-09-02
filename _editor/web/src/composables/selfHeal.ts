@@ -16,6 +16,7 @@
  * Unhandled REJECTIONS are deliberately not a trigger: the first seconds of a session legitimately reject
  * promises, a daemon asleep behind its tunnel, a lost loopback probe, and none of that is storage's fault. */
 
+import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
 
 // How long after boot an error still reads as "the app failed to start" rather than "the app hit a bug".
@@ -135,5 +136,5 @@ export const purgeIfMarked = async (): Promise<void> => {
         return;
     }
     // Bounded so a pathological delete can never brick the boot it exists to save.
-    await Promise.race([deleteAllDatabases(), new Promise((resolve) => setTimeout(resolve, 3000))]);
+    await Promise.race([deleteAllDatabases(), sleep(3000)]);
 };

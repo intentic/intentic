@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import {
     StatusTally,
@@ -192,7 +193,7 @@ const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Prom
     try {
         await action.mutateAsync(run);
     } catch (failure) {
-        actionError.value = failure instanceof Error ? failure.message : String(failure);
+        actionError.value = errorMessage(failure);
     } finally {
         busy.value = undefined;
     }
@@ -210,7 +211,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         // is the fleet's own deep link: it waits for the card to reach the roster, then selects and reveals it.
         api.navigate(`/agents?focus=${encodeURIComponent(conversationId)}`);
     } catch (failure) {
-        actionError.value = failure instanceof Error ? failure.message : String(failure);
+        actionError.value = errorMessage(failure);
     } finally {
         busy.value = undefined;
     }
@@ -222,11 +223,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
          sits beside a long index and losing your place in either costs you something; this index is a handful of
          repositories, and the body is a summary bar over a list of runs that is read top-down once. Clamped, it
          put a scrollbar inside a card inside a page, and the page's own scrollport had nothing to take. -->
-    <SplitView
-        title="Pipelines"
-        scroll="page"
-        :scroll-key="scopeRepo"
-    >
+    <SplitView title="Pipelines" scroll="page" :scroll-key="scopeRepo">
         <template #actions>
             <!-- Only where there is a choice to make: over one repository this would be a control pointing at the
                  only thing on screen. -->

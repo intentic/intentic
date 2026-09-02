@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -109,7 +110,7 @@ const sshRegistrationWarning = (host: GitHost, publicKey: string, err: unknown):
         host.provider === "github"
             ? 'a classic PAT with the write:public_key scope, or a fine-grained token with the "Git SSH keys: write" permission'
             : "a token with the api scope";
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = errorMessage(err);
     return [
         `Git access is on and works over HTTPS (ssh-form remotes are routed there too), but registering a native SSH key failed: ${reason}`,
         `Native ssh://git needs ${scopeHint}. Fix the token and re-add, or add this public key to your ${host.provider} account manually:`,

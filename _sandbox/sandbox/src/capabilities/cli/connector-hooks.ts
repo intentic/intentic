@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
 import type { CapabilitiesStore } from "../capabilities-store.js";
@@ -42,7 +43,7 @@ export const restoreConnectorHooks = async (capabilities: CapabilitiesStore, log
                 logger.warn(`connector ${capability.id}: ${warning}`);
             }
         } catch (error) {
-            logger.warn(`connector ${capability.id}: could not restore: ${error instanceof Error ? error.message : String(error)}`);
+            logger.warn(`connector ${capability.id}: could not restore: ${errorMessage(error)}`);
         }
     }
 };

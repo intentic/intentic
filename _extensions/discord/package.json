@@ -13,6 +13,7 @@
     "dependencies": {
         "@discordjs/voice": "catalog:",
         "@huggingface/hub": "catalog:",
+        "@intentic/base": "workspace:*",
         "@intentic/connector-runtime": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "discord.js": "catalog:",

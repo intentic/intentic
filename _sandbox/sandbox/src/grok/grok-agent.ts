@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import type { Event, FilePartInput, ToolPart } from "@opencode-ai/sdk";
 import type { AgentEvent, ToolCallLocation } from "@intentic/sandbox-contract";
 import { whenAborted } from "../abort.js";
@@ -224,7 +225,7 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
         try {
             await sendPrompt(turn.model);
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = errorMessage(error);
             const suggestions = selfHeals && MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
             if (suggestions[0] === undefined) {
                 throw error;

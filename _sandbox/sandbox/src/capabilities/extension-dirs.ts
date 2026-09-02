@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { statePath } from "../workspace/state-paths.js";
 
@@ -35,7 +36,7 @@ export const parseExtensionManifest = async (dir: string): Promise<{ manifest: E
     try {
         return { manifest: ExtensionManifestSchema.parse(JSON.parse(raw)) };
     } catch (error) {
-        return { error: error instanceof Error ? error.message : String(error) };
+        return { error: errorMessage(error) };
     }
 };
 

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { SshExecutor, SshSession, SshTarget } from "./ssh.js";
 
 // One SSH sweep per host after a readiness timeout, so a field failure self-explains instead of ending in a
@@ -20,7 +21,7 @@ const diagnoseHost = async (target: SshTarget, executor: SshExecutor, failure: {
     try {
         session = await executor.connect(target);
     } catch (error) {
-        lines.push(`host ${target.address} unreachable over SSH: ${error instanceof Error ? error.message : String(error)}`);
+        lines.push(`host ${target.address} unreachable over SSH: ${errorMessage(error)}`);
         return lines.join("\n");
     }
     try {
@@ -30,7 +31,7 @@ const diagnoseHost = async (target: SshTarget, executor: SshExecutor, failure: {
                 const output = `${result.stdout}${result.stderr}`.trim();
                 return `$ ${command}\n${output === "" ? "(no output)" : output}${result.code === 0 ? "" : `\n(exit ${result.code})`}`;
             } catch (error) {
-                return `$ ${command}\nfailed: ${error instanceof Error ? error.message : String(error)}`;
+                return `$ ${command}\nfailed: ${errorMessage(error)}`;
             }
         };
         lines.push(await run("docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}'"));

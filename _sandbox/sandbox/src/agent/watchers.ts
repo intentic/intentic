@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
+import { sleep } from "@intentic/base/async";
 import type { AgentTurn } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -358,7 +359,7 @@ const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: Wat
         } catch (error) {
             live.logger.warn({ err: error, watch: record.id, conversationId }, "watch: wake turn failed to start, retrying");
         }
-        await new Promise<void>((resolve) => setTimeout(resolve, DELIVER_RETRY_MS).unref());
+        await sleep(DELIVER_RETRY_MS, { unref: true });
     }
     // The bounded loss, said whole: the report goes into the log rather than nowhere.
     live.logger.error({ watch: record.id, conversationId, report: message }, "watch: report could not be delivered");

@@ -1,4 +1,5 @@
 import { upgradeWebSocket } from "@hono/node-server";
+import { errorMessage } from "@intentic/base/errors";
 import type { WSContext } from "hono/ws";
 import type { BrowserContext, Page } from "playwright";
 import { ensureDisplay } from "./display.js";
@@ -180,7 +181,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                  * the one outcome worth failing loudly over, a login is exactly when a site records where you
                  * are. Starts the exit if it was down; see browser-exit.ts. */
                 const bound = await resolveProfileExit(await services.capabilities.list(), profile).catch((error: unknown) => ({
-                    refusal: `its exit could not be resolved (${error instanceof Error ? error.message : String(error)})`,
+                    refusal: `its exit could not be resolved (${errorMessage(error)})`,
                 }));
                 if (bound !== undefined && "refusal" in bound) {
                     ws.send(JSON.stringify({ type: "error", message: bound.refusal }));

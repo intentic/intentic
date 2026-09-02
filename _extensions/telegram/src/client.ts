@@ -1,3 +1,4 @@
+import { createBackoff, sleep } from "@intentic/base/async";
 /* The gateway's Telegram connections, one long-polling loop plus one Bot API caller per configured bot, alive
  * only while the daemon says an enabled telegram listener automation exists. A module singleton map, like
  * ext-slack's and ext-discord's: the reconcile loop and the listener both reach it directly.
@@ -184,7 +185,7 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
         username: identity.username,
         call: (method, body) => callWith(botToken, method, body, undefined),
         listen: (onUpdate, onFatal) => {
-            let backoff = RETRY_MIN_MS;
+            const ladder = createBackoff({ floorMs: RETRY_MIN_MS, capMs: RETRY_MAX_MS });
             const loop = async (): Promise<void> => {
                 for (;;) {
                     // `closed` flips from the closer registered below, which is another task's turn to run,
@@ -199,7 +200,7 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
                             { ...(offset === undefined ? {} : { offset }), timeout: POLL_TIMEOUT_S, allowed_updates: ALLOWED_UPDATES },
                             aborter.signal,
                         );
-                        backoff = RETRY_MIN_MS;
+                        ladder.reset();
                         for (const update of updates) {
                             // Advance BEFORE handling: the offset is an acknowledgement, and an update that
                             // makes the listener throw must not be redelivered forever.
@@ -218,9 +219,8 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
                             onFatal(new FatalTelegramError(fatal));
                             return;
                         }
-                        const wait = error instanceof TelegramApiError ? (error.retryAfterMs ?? backoff) : backoff;
-                        await new Promise((resolve) => setTimeout(resolve, wait));
-                        backoff = Math.min(backoff * 2, RETRY_MAX_MS);
+                        const rung = ladder.next();
+                        await sleep(error instanceof TelegramApiError ? (error.retryAfterMs ?? rung) : rung);
                     }
                 }
             };

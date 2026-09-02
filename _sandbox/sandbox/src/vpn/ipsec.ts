@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { setTimeout as delay } from "node:timers/promises";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { pollUntil } from "@intentic/base/async";
 import type { IpsecVpnConfig, VpnConfig } from "@intentic/sandbox-contract";
 import { activeResolvers, toolMissing } from "./net-probe.js";
 import type { VpnDriver, VpnProbe } from "./vpn-driver.js";
@@ -153,16 +153,14 @@ export const parseIpsecLoaded = (conn: string, output: string): boolean =>
 // message, "no config named '<conn>'", which reads like the config was never written when in fact it was
 // written microseconds earlier. So wait for the connection to actually appear before `ipsec up`.
 const CONN_LOAD_TIMEOUT_MS = 20_000;
-const waitForConn = async (conn: string): Promise<boolean> => {
-    for (let attempt = 0; attempt * 500 < CONN_LOAD_TIMEOUT_MS; attempt++) {
-        const { stdout } = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
-        if (parseIpsecLoaded(conn, stdout)) {
-            return true;
-        }
-        await delay(500);
-    }
-    return false;
-};
+const waitForConn = (conn: string): Promise<boolean> =>
+    pollUntil(
+        async () => {
+            const { stdout } = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
+            return parseIpsecLoaded(conn, stdout);
+        },
+        { intervalMs: 500, timeoutMs: CONN_LOAD_TIMEOUT_MS },
+    );
 
 // One connection's line pair from `ipsec statusall`. The IKE_SA line carries ESTABLISHED; the CHILD_SA line
 // carries "<localTS> === <remoteTS>", where the local traffic selector IS the virtual IP the gateway assigned

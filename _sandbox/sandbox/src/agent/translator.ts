@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { createBackoff } from "@intentic/base/async";
 import {
     type AccountUsage,
     type KeyedProvider,
@@ -205,15 +206,11 @@ const portOf = (url: string): number | undefined => {
     }
 };
 
-// The restart ladder: a proxy that crashes on arrival must not be respawned every 5 seconds forever (it has
-// been, hundreds of spawns and log lines an hour, all saying nothing). Each exit after a SHORT life doubles
-// the wait up to the ceiling; a run that survived past STABLE_MS was a working proxy whose exit is news, so
-// the ladder resets. Exported for the test, this is the whole policy.
-export const RESTART_DELAY_BASE_MS = 5_000;
-export const RESTART_DELAY_CAP_MS = 300_000;
-const STABLE_MS = 60_000;
-export const nextRestartDelay = (previousDelayMs: number, uptimeMs: number): number =>
-    uptimeMs >= STABLE_MS ? RESTART_DELAY_BASE_MS : Math.min(previousDelayMs * 2, RESTART_DELAY_CAP_MS);
+// The restart ladder: a proxy that crashes on arrival must not be respawned every few seconds forever (it has
+// been, hundreds of spawns and log lines an hour, all saying nothing). Ten seconds after the first short life,
+// doubling to five minutes; a run that survived past a minute was a working proxy whose exit is news, so the
+// ladder starts over (the shared createBackoff, whose test pins this policy).
+const RESTART_LADDER = { floorMs: 10_000, capMs: 300_000, stableMs: 60_000 } as const;
 
 // The tail of the proxy's output kept per run, enough to carry a Go panic or a bind error into the exit log.
 const OUTPUT_TAIL_BYTES = 2_048;
@@ -238,7 +235,7 @@ export const startTranslator = (services: Services): void => {
     const authDir = cliProxyAuthDir(authRoot);
     const configPath = cliProxyConfigPath(config);
     let child: ChildProcess | undefined;
-    let delayMs = RESTART_DELAY_BASE_MS;
+    const ladder = createBackoff(RESTART_LADDER);
 
     const start = async (): Promise<void> => {
         await mkdir(authDir, { recursive: true });
@@ -276,9 +273,9 @@ export const startTranslator = (services: Services): void => {
         child.stderr?.on("data", keepTail);
         child.on("exit", (code) => {
             child = undefined;
-            delayMs = nextRestartDelay(delayMs, Date.now() - startedAt);
-            logger.warn({ code, output: outputTail.trim(), restartInMs: delayMs }, "translator: cli-proxy-api exited, restarting");
-            setTimeout(() => void start().catch((error: unknown) => logger.warn({ err: error }, "translator restart failed")), delayMs).unref();
+            const restartInMs = ladder.next(Date.now() - startedAt);
+            logger.warn({ code, output: outputTail.trim(), restartInMs }, "translator: cli-proxy-api exited, restarting");
+            setTimeout(() => void start().catch((error: unknown) => logger.warn({ err: error }, "translator restart failed")), restartInMs).unref();
         });
     };
 

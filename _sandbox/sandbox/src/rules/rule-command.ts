@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
 import { plainText } from "../terminal/plain-text.js";
 
@@ -92,7 +93,7 @@ export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommand
         // Not our abort ⇒ the command never ran at all. `error`, not `failed`: nothing was learned about the
         // work, so nobody should be sent to fix it.
         if (!abort.signal.aborted) {
-            return { status: "error", output: tail(`${command}: ${cause instanceof Error ? cause.message : String(cause)}`) };
+            return { status: "error", output: tail(`${command}: ${errorMessage(cause)}`) };
         }
         // A kill the watchdog caused is a TIMEOUT, not a cancellation, nobody asked for it, and reporting it as
         // cancelled would hide the one outcome a check most needs to be loud about. The output stays with the

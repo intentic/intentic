@@ -5,6 +5,7 @@ import { arch, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import { type EngineId, isNewer } from "@intentic/sandbox-contract";
 import { readPack } from "../environment/packs.js";
 
@@ -84,7 +85,11 @@ const packPin = async (pack: string, pattern: RegExp): Promise<string | undefine
     return matches.length === 1 ? matches[0] : undefined;
 };
 
-const exists = async (path: string): Promise<boolean> => access(path, constants.F_OK).then(() => true, () => false);
+const exists = async (path: string): Promise<boolean> =>
+    access(path, constants.F_OK).then(
+        () => true,
+        () => false,
+    );
 
 // A binary that answers any of these is present and runnable, which is all a spawned engine's probe claims. A
 // non-zero exit still proves it launched (version-probe.ts's rule), so only ENOENT and a timeout are failures.
@@ -124,7 +129,7 @@ const missingExports = async (entry: string, names: readonly string[]): Promise<
     try {
         loaded = (await import(pathToFileURL(entry).href)) as Record<string, unknown>;
     } catch (error) {
-        return `${entry} could not be imported: ${error instanceof Error ? error.message : String(error)}`;
+        return `${entry} could not be imported: ${errorMessage(error)}`;
     }
     const missing = names.filter((name) => loaded[name] === undefined);
     return missing.length === 0 ? undefined : `${entry} does not export ${missing.join(", ")}`;

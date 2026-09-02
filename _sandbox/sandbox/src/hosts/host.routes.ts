@@ -1,4 +1,5 @@
 import { upgradeWebSocket } from "@hono/node-server";
+import { errorMessage } from "@intentic/base/errors";
 import { type Capability, HostHelloSchema, type HostSummary, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
@@ -161,7 +162,7 @@ export const createHostMcpRoute =
             return c.json({
                 jsonrpc: "2.0",
                 id: request.id,
-                error: { code: -32000, message: error instanceof Error ? error.message : String(error) },
+                error: { code: -32000, message: errorMessage(error) },
             });
         }
     };

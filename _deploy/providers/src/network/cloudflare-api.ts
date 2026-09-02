@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 
@@ -126,7 +127,7 @@ const request = async (apiToken: string, path: string, init?: RequestInit): Prom
             signal: AbortSignal.timeout(30_000),
         });
     } catch (error) {
-        throw new Error(`${label} transport failed after ${Date.now() - started}ms: ${error instanceof Error ? error.message : String(error)}`, {
+        throw new Error(`${label} transport failed after ${Date.now() - started}ms: ${errorMessage(error)}`, {
             cause: error,
         });
     }

@@ -1,3 +1,4 @@
+import { createBackoff } from "@intentic/base/async";
 import { runnerConnectUrl } from "@intentic/sandbox-contract";
 import { RPCHandler } from "@orpc/server/websocket";
 import type { Services } from "../composition.js";
@@ -13,11 +14,14 @@ import { createRunnerService } from "./runner-service.js";
  * and everything the parent asks arrives on this socket as oRPC against runnerContract.
  *
  * Reconnection is the normal case: lids close on the machines runners share, parents restart on rebuilds.
- * A dropped socket comes back on exponential backoff; the one close that is NOT retried is 1008, the parent
- * refusing the enrollment, which only re-pairing heals and which retrying would turn into log spam. */
+ * A dropped socket comes back on the shared exponential ladder (@intentic/base's createBackoff): a link that
+ * held for a minute was working and its drop redials at the floor, one that opened and died at once keeps
+ * climbing. The one close that is NOT retried is 1008, the parent refusing the enrollment, which only
+ * re-pairing heals and which retrying would turn into log spam. */
 
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
+const STABLE_MS = 60_000;
 const UNAUTHORIZED = 1008;
 
 export interface RunnerLink {
@@ -28,13 +32,14 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity): R
     const handler = new RPCHandler(createRunnerService(services, identity));
     let stopped = false;
     let socket: WebSocket | undefined;
-    let attempt = 0;
+    let openedAt: number | undefined;
+    const ladder = createBackoff({ floorMs: RETRY_MIN_MS, capMs: RETRY_MAX_MS, stableMs: STABLE_MS });
 
     const open = (): void => {
         const ws = new WebSocket(runnerConnectUrl(identity.parentUrl));
         socket = ws;
         ws.addEventListener("open", () => {
-            attempt = 0;
+            openedAt = Date.now();
             // Handler before hello, the host agent's rule: the parent may call the moment the token verifies.
             handler.upgrade(ws as Parameters<RPCHandler<object>["upgrade"]>[0]);
             void (async () => {
@@ -70,8 +75,8 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity): R
                 stopped = true;
                 return;
             }
-            attempt += 1;
-            const delay = Math.min(RETRY_MIN_MS * 2 ** (attempt - 1), RETRY_MAX_MS);
+            const delay = ladder.next(openedAt === undefined ? 0 : Date.now() - openedAt);
+            openedAt = undefined;
             services.logger.warn({ code: event.code, delayMs: delay }, "runner: parent link dropped, reconnecting");
             setTimeout(open, delay);
         });

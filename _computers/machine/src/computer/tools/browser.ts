@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { type Browser, BrowserError, renderPage } from "@intentic/browser";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
@@ -96,4 +97,4 @@ export const selectTab = async (web: Browser, id: string, scopes: HostScopes): P
 
 // A page needs a beat after an action before its next state is worth reading: a click that triggers a fetch, a
 // framework that re-renders on the next tick. Without it the snapshot describes the page BEFORE the action.
-const settle = (): Promise<void> => new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+const settle = (): Promise<void> => sleep(500);

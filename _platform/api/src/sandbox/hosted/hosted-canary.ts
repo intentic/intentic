@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@intentic-app/prisma";
+import { sleep as pause } from "@intentic/base/async";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
-import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { encryptSecret } from "../../crypto.js";
+import { mintSandbox } from "../mint-sandbox.js";
 import { ensureReachability } from "../reachability.js";
 import { JOB_HOSTED_CANARY, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
@@ -68,9 +68,9 @@ const ensureCanaryUser = async (prisma: PrismaClient, email: string): Promise<st
  * the machine it was cleaning up. */
 const teardown = async (prisma: PrismaClient, config: Config, logger: Logger, sandboxId: string): Promise<void> => {
     const hosted = await prisma.hostedMachine.findUnique({ where: { sandboxId } }).catch(() => null);
-    await prisma.sandbox.delete({ where: { id: sandboxId } }).catch((error: unknown) =>
-        logger.warn({ err: error, sandboxId }, `hosted canary: deleting the canary sandbox failed`),
-    );
+    await prisma.sandbox
+        .delete({ where: { id: sandboxId } })
+        .catch((error: unknown) => logger.warn({ err: error, sandboxId }, `hosted canary: deleting the canary sandbox failed`));
     if (hosted !== null) {
         await destroyHosted(config, hosted.appName).catch((error: unknown) =>
             logger.warn({ err: error, app: hosted.appName }, `hosted canary: destroying the canary machine failed; left for the reaper`),
@@ -93,7 +93,12 @@ const collectPreviousRuns = async (prisma: PrismaClient, config: Config, logger:
  * the attempts run out. Bounded by a COUNT rather than by the clock, so the loop terminates on its own terms
  * whatever the clock is doing, which is what keeps a stubbed sleep (tests) from spinning until the process
  * dies and a suspended event loop from silently extending the deadline. */
-const waitForAnnounce = async (prisma: PrismaClient, sandboxId: string, deadlineMs: number, sleep: (ms: number) => Promise<void>): Promise<boolean> => {
+const waitForAnnounce = async (
+    prisma: PrismaClient,
+    sandboxId: string,
+    deadlineMs: number,
+    sleep: (ms: number) => Promise<void>,
+): Promise<boolean> => {
     for (let attempt = 0; attempt < Math.ceil(deadlineMs / POLL_MS); attempt += 1) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
         const row = await prisma.sandbox.findUnique({ where: { id: sandboxId }, select: { lastSeenAt: true } });
@@ -112,7 +117,7 @@ export const runHostedCanary = async (
     prisma: PrismaClient,
     config: Config,
     logger: Logger,
-    sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: (ms: number) => Promise<void> = pause,
 ): Promise<CanaryResult> => {
     const email = config.hosted.canaryEmail;
     if (!hostedEnabled(config) || email === ``) {
@@ -120,16 +125,7 @@ export const runHostedCanary = async (
     }
     const ownerId = await ensureCanaryUser(prisma, email);
     await collectPreviousRuns(prisma, config, logger, ownerId);
-    const token = randomBytes(16).toString(`base64url`);
-    const sandbox = await prisma.sandbox.create({
-        data: {
-            name: canarySandboxName,
-            ownerId,
-            token: encryptSecret(config, token),
-            tokenDigest: sha256Hex(token),
-            tunnelId: sandboxIdFromToken(token) ?? ``,
-        },
-    });
+    const { token, sandbox } = await mintSandbox(prisma, config, { name: canarySandboxName, ownerId });
     const startedAt = Date.now();
     try {
         const grant = ensureReachability(config, sandbox);

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { record } from "./audit.js";
@@ -236,7 +237,7 @@ export const handleMcpMessage = async (message: unknown, version: string): Promi
             return reply(result);
         } catch (error) {
             const refused = error instanceof RefusedError;
-            const said = error instanceof Error ? error.message : String(error);
+            const said = errorMessage(error);
             await record(name, args, false, `${refused ? "refused" : "failed"}: ${said}`);
             return reply(textResult(said, true));
         }

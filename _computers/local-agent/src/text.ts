@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 /* WHAT A FAILING AGENT SAYS TO THE PERSON RUNNING IT, a sentence, not a stack.
  *
  * The CLI framework reports a thrown Error as `exc.stack`, and these agents ship as COMPILED SINGLE-FILE
@@ -19,4 +20,4 @@
  *
  * A plain function rather than the framework's text object, so this package keeps its "no dependencies of its
  * own" shape: each agent already builds that object, and this is the one field they must agree on. */
-export const agentException = (exc: unknown): string => (exc instanceof Error ? exc.message : String(exc));
+export const agentException = (exc: unknown): string => errorMessage(exc);

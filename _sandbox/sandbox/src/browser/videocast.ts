@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { errorMessage } from "@intentic/base/errors";
 import type { Display } from "./display.js";
 
 /* THE BROWSER AS VIDEO, grabbed off its X display instead of out of one page's compositor.
@@ -152,7 +153,10 @@ export const readCodec = (unit: Buffer): string | undefined => {
     if (bytes.some((byte) => byte === undefined)) {
         return undefined;
     }
-    return `avc1.${bytes.map((byte) => byte!.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+    return `avc1.${bytes
+        .map((byte) => byte!.toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase()}`;
 };
 
 /* Grab `display` and call `onFrame` with each encoded frame.
@@ -245,7 +249,7 @@ export const startVideocast = (display: Display, handlers: VideocastHandlers): V
     });
     child.on("error", (error) => {
         // ENOENT: ffmpeg rides the browser pack, so a sandbox without it has none. The caller falls back.
-        handlers.onExit(error instanceof Error ? error.message : String(error));
+        handlers.onExit(errorMessage(error));
     });
     child.on("exit", (code) => {
         if (!stopped) {

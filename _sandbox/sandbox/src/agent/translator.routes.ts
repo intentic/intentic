@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { translatorContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -25,7 +26,7 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
         if (error instanceof ORPCError) {
             throw error;
         }
-        throw new ORPCError("BAD_GATEWAY", { message: error instanceof Error ? error.message : String(error) });
+        throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
     }
 };
 

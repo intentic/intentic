@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { expect, test } from "@playwright/test";
 import { readWorldFile } from "../src/world-file.js";
 
@@ -38,7 +39,7 @@ test(`the browser can call the api from the app's own origin`, async ({ page }) 
             const response = await fetch(`${apiUrl}/api/auth/get-session`, { credentials: `include` });
             return { reached: true, status: response.status, signedIn: ((await response.json()) as { user?: unknown } | null)?.user !== undefined };
         } catch (error) {
-            return { reached: false, why: error instanceof Error ? error.message : String(error) };
+            return { reached: false, why: errorMessage(error) };
         }
     }, world.apiUrl ?? ``);
 

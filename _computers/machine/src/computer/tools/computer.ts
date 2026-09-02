@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDirection } from "@intentic/desktop";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
@@ -75,8 +76,6 @@ export const describeAction = (input: ComputerInput): string => {
             return `${input.action.replace(/_/g, " ")} at (${input.coordinate?.join(", ") ?? ""}).`;
     }
 };
-
-const sleep = (ms: number): Promise<void> => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 
 // Perform one action. Returns nothing, what the caller reports is describeAction plus, when it may look, a
 // fresh screenshot.

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type Args, UsageError, bool, flag, parseArgs } from "./cli/args.js";
 import type { Command, CommandGroup, RootCommand, RootContext } from "./cli/command.js";
 import { type Connection, connectionsFrom, describe, selectConnection } from "./google/accounts.js";
@@ -152,7 +153,7 @@ const out = (line: string): void => {
 try {
     process.exitCode = await run(args, out);
 } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     process.stderr.write(`${message}\n`);
     process.exitCode = error instanceof UsageError ? 2 : 1;
 }

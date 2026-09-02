@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/scaffold";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -46,7 +47,7 @@ const COMMITLINT_FINDING = /^✖\s+(.+\[[a-z-]+\])$/;
 // non-git rejections (a spawn failure, ENOENT) readable, since those carry no prefix at all.
 export const gitFailureReason = (error: unknown, fallback: string): string => {
     const stderr = (error as { stderr?: unknown }).stderr;
-    const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : error instanceof Error ? error.message : String(error);
+    const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : errorMessage(error);
     const lines = text
         .split("\n")
         .map((line) => line.trim())

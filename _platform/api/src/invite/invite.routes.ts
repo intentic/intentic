@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { apiContract, type InviteDelivery } from "@intentic-app/api-contract";
+import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
@@ -41,7 +42,7 @@ const deliverInvite = async (
         return { link, delivery: await sendInviteEmail(context.config, context.logger, { to, sandboxName, inviterName, link }) };
     } catch (error) {
         context.logger.error({ err: error, to }, `invite email refused, the invite stands, the link did not travel`);
-        const said = error instanceof Error ? error.message : String(error);
+        const said = errorMessage(error);
         return { link, delivery: `refused`, reason: said.slice(0, REASON_LIMIT) };
     }
 };

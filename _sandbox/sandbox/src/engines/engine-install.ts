@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readdir, rename, rm, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import type { EngineId } from "@intentic/sandbox-contract";
 import { engineDescriptor, type EngineDescriptor } from "./engine-descriptors.js";
 import { activateVersion, collectGarbage, engineDir, engineVersionDir, installedVersions, quarantineVersion } from "./engine-store.js";
@@ -175,6 +176,6 @@ const stage = async (
         await rm(prefix, { recursive: true, force: true });
         // Not quarantined: a 404, a timeout or a full disk says nothing about the version itself, and the next
         // check should be free to try again.
-        return { ok: false, version, reason: error instanceof Error ? error.message : String(error), quarantined: false };
+        return { ok: false, version, reason: errorMessage(error), quarantined: false };
     }
 };

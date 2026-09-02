@@ -1,13 +1,6 @@
 import { type AccountUsage, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import {
-    createCliProxyClient,
-    nextRestartDelay,
-    renderConfig,
-    RESTART_DELAY_BASE_MS,
-    RESTART_DELAY_CAP_MS,
-    TRANSLATOR_BINARY_MISSING,
-} from "./translator.js";
+import { createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "./translator.js";
 
 /* The shared account-usage store, in memory. Every client in this file gets one: `accounts` reads it on every
  * call now that a row's headroom travels with the row, so a test that skipped it would be exercising a client
@@ -27,23 +20,6 @@ const memoryStore = () => {
         },
     };
 };
-
-// The restart ladder in one property: crash-on-arrival climbs, a stable run resets. This policy is what keeps
-// a proxy that exits immediately (a taken port, a bad binary) from being respawned every 5s forever.
-
-test("consecutive fast exits double the delay up to the cap", () => {
-    let delay = RESTART_DELAY_BASE_MS;
-    const seen: number[] = [];
-    for (let i = 0; i < 8; i += 1) {
-        delay = nextRestartDelay(delay, 100);
-        seen.push(delay);
-    }
-    expect(seen).toEqual([10_000, 20_000, 40_000, 80_000, 160_000, RESTART_DELAY_CAP_MS, RESTART_DELAY_CAP_MS, RESTART_DELAY_CAP_MS]);
-});
-
-test("a run that stayed up resets the ladder", () => {
-    expect(nextRestartDelay(RESTART_DELAY_CAP_MS, 61_000)).toBe(RESTART_DELAY_BASE_MS);
-});
 
 /* ONE REQUEST MAY NOT COST THE WHOLE FLEET. CLIProxyAPI retries a refusal on the next credential, and its own
  * default (0) means "every auth file you hold": correct only if a refusal is always about the account it came

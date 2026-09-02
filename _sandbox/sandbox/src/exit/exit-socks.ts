@@ -1,4 +1,5 @@
 import { connect, createServer, isIP, type Server, type Socket } from "node:net";
+import { errorMessage } from "@intentic/base/errors";
 import { type ExitResolver, resolveThroughExit } from "./exit-dns.js";
 
 /* THE OPT-IN SEAM. An exit brings up a tunnel and installs a default route in ITS OWN routing table; nothing
@@ -218,7 +219,7 @@ export const startSocks = (options: SocksOptions): Promise<SocksHandle> =>
                     client.pipe(upstream);
                     upstream.pipe(client);
                 } catch (error) {
-                    const message = error instanceof Error ? error.message : String(error);
+                    const message = errorMessage(error);
                     options.onError?.(message);
                     const code = typeof (error as { code?: unknown }).code === "number" ? (error as { code: number }).code : REP_HOST_UNREACHABLE;
                     if (client.writable) {

@@ -1,4 +1,5 @@
 import type { AdminActionResult } from "@intentic-app/api-contract";
+import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic-app/prisma";
 import type { Config } from "../config.js";
@@ -53,7 +54,7 @@ export const stopHostedMachine = async (prisma: PrismaClient, config: Config, sa
     try {
         await stopMachine(config.hosted.flyApiToken, machine.appName, machine.machineId);
     } catch (error) {
-        return { ok: false, message: `Fly refused the stop: ${error instanceof Error ? error.message : String(error)}` };
+        return { ok: false, message: `Fly refused the stop: ${errorMessage(error)}` };
     }
     return { ok: true, message: `${machine.appName} stopped. The owner's next visit wakes it; nothing was destroyed.` };
 };

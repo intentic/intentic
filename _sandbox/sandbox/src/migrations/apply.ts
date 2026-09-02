@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type Automation, type Capability, type MigrationReport, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
 import type { PlannedItem, SourcePlan } from "./adapter-shared.js";
 import { mergeFenced } from "./merge.js";
@@ -118,7 +119,7 @@ export const applyMigration = async (
             await applyOne(planned);
             applied.push({ id: planned.item.id, target: planned.item.target, label: planned.item.label });
         } catch (error) {
-            failed.push({ id: planned.item.id, label: planned.item.label, error: error instanceof Error ? error.message : String(error) });
+            failed.push({ id: planned.item.id, label: planned.item.label, error: errorMessage(error) });
         }
     }
 

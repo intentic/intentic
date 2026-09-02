@@ -20,6 +20,7 @@
  * the knowledge base's own parser is what reads a vault note, one reader, one link resolver, one idea of what
  * a note says, whether the file sits in the workspace or in the owner's vault. */
 
+import { errorMessage } from "@intentic/base/errors";
 import type { VaultConnection } from "./connection.js";
 
 // One failed call, in the terms the caller has to print. `status` is undefined when the request never landed.
@@ -99,7 +100,7 @@ export const vaultCall = async (vault: VaultConnection, call: Call): Promise<str
     } catch (error) {
         return {
             error: [
-                `couldn't reach Obsidian at ${vault.url} (${error instanceof Error ? error.message : String(error)}).`,
+                `couldn't reach Obsidian at ${vault.url} (${errorMessage(error)}).`,
                 "Obsidian has to be OPEN on that machine with the Local REST API plugin enabled.",
                 "From a sandbox the address is host.docker.internal, never localhost.",
             ].join(" "),

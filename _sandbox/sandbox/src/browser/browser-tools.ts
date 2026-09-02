@@ -1,4 +1,3 @@
-import { createServer } from "node:net";
 import { existsSync, mkdtempSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -7,8 +6,10 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
+import { errorMessage } from "@intentic/base/errors";
 import type { Capability } from "@intentic/sandbox-contract";
 import { workloadStamp } from "../platform/leftovers.js";
+import { freePort as bindEphemeral } from "../processes/free-port.js";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { type ProfileExit, resolveProfileExit } from "./browser-exit.js";
 import { type Display, ensureDisplay } from "./display.js";
@@ -139,17 +140,6 @@ const sweepConfigs = async (now: number): Promise<void> => {
  * forever, and a port from hundreds of turns ago is not a port anyone is racing for. */
 const ISSUED_MEMORY = 256;
 const issued: number[] = [];
-
-const bindEphemeral = async (): Promise<number> =>
-    new Promise((resolve, reject) => {
-        const server = createServer();
-        server.on("error", reject);
-        server.listen(0, "127.0.0.1", () => {
-            const address = server.address();
-            const port = typeof address === "object" && address !== null ? address.port : 0;
-            server.close(() => (port === 0 ? reject(new Error("no free port")) : resolve(port)));
-        });
-    });
 
 const freePort = async (): Promise<number> => {
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -523,7 +513,7 @@ export const browserServersOf = async (
                     [
                         owner,
                         await resolveProfileExit(capabilities, owner, EXIT_START_BUDGET_MS).catch((error: unknown) => ({
-                            refusal: `${owner}: its exit could not be resolved (${error instanceof Error ? error.message : String(error)})`,
+                            refusal: `${owner}: its exit could not be resolved (${errorMessage(error)})`,
                         })),
                     ] as const,
             ),

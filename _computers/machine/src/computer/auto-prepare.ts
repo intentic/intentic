@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import type { MachineSandbox } from "@intentic/sandbox-contract";
 import { readPrepareUpdates } from "./config.js";
@@ -78,7 +79,7 @@ const prepareOne = async (
     } catch (error) {
         // runIc throws when this machine has no `ic` at all — the one failure shared by every slug, and
         // still just a failure here: backoff keeps it from repeating every tick for every sandbox.
-        run = { code: 1, output: error instanceof Error ? error.message : String(error) };
+        run = { code: 1, output: errorMessage(error) };
     } finally {
         icInFlight.delete(slug);
     }
@@ -91,7 +92,9 @@ const prepareOne = async (
     const failures = (state.failures.get(slug) ?? 0) + 1;
     state.failures.set(slug, failures);
     state.waits.set(slug, ticksToSkip(failures));
-    log(`auto-prepare ${slug}: failed (attempt ${failures}, retrying after ${ticksToSkip(failures)} tick(s)) — ${lastLine(run.output) ?? "no output"}`);
+    log(
+        `auto-prepare ${slug}: failed (attempt ${failures}, retrying after ${ticksToSkip(failures)} tick(s)) — ${lastLine(run.output) ?? "no output"}`,
+    );
 };
 
 /* One pass over the fleet, serialised: two pulls at once double the disk's worst moment for zero wall-clock
@@ -148,7 +151,7 @@ export const startAutoPrepare = (log: Log): { stop: () => void } => {
         } catch (error) {
             // `fleet` throws where docker itself is missing or wedged; the machine has bigger problems than a
             // background download, and this loop's job is to still be there when docker is back.
-            log(`auto-prepare: skipped this round — ${error instanceof Error ? error.message : String(error)}`);
+            log(`auto-prepare: skipped this round — ${errorMessage(error)}`);
         }
         if (!stopped) {
             schedule(TICK_MS + Math.floor(Math.random() * JITTER_MS));

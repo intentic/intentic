@@ -1,6 +1,7 @@
 import { mkdir, statfs, writeFile } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
 import { dirname, join, normalize } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import {
     type AgentEvent,
     AgentHarnessSchema,
@@ -57,7 +58,7 @@ async function* narrated(run: (onLine: (line: string) => void) => Promise<void>)
         nudge();
     })
         .then(() => ({ ok: true }))
-        .catch((error: unknown) => ({ ok: false, detail: error instanceof Error ? error.message : String(error) }))
+        .catch((error: unknown) => ({ ok: false, detail: errorMessage(error) }))
         .then((outcome) => {
             settled = outcome;
             nudge();
@@ -76,7 +77,9 @@ async function* narrated(run: (onLine: (line: string) => void) => Promise<void>)
         });
     }
     await finished;
-    yield settled?.ok === true ? { kind: "done", ok: true } : { kind: "done", ok: false, ...(settled?.detail !== undefined ? { detail: settled.detail } : {}) };
+    yield settled?.ok === true
+        ? { kind: "done", ok: true }
+        : { kind: "done", ok: false, ...(settled?.detail !== undefined ? { detail: settled.detail } : {}) };
 }
 
 /* The dispatched turn as this daemon's own AgentTurn. Two refusals guard the translation: a provider or
@@ -86,7 +89,9 @@ const turnOf = (input: RunnerTurn): { turn?: AgentTurn; refusal?: string } => {
     const provider = AgentProviderSchema.safeParse(input.provider);
     const harness = AgentHarnessSchema.safeParse(input.harness);
     if (!provider.success || !harness.success) {
-        return { refusal: `this runner's build does not know the ${provider.success ? "harness" : "provider"} "${provider.success ? input.harness : input.provider}" — update the runner.` };
+        return {
+            refusal: `this runner's build does not know the ${provider.success ? "harness" : "provider"} "${provider.success ? input.harness : input.provider}" — update the runner.`,
+        };
     }
     return {
         turn: {
@@ -157,7 +162,9 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         ping: os.ping.handler(() => ({ ok: true })),
         syncWorkspace: os.syncWorkspace.handler(({ input }) =>
             narrated((onLine) =>
-                input.op === "pull" ? syncFromParent(deps, identity, input as RunnerSync, onLine) : pushToParent(deps, identity, input as RunnerSync, onLine),
+                input.op === "pull"
+                    ? syncFromParent(deps, identity, input as RunnerSync, onLine)
+                    : pushToParent(deps, identity, input as RunnerSync, onLine),
             ),
         ),
         runTurn: os.runTurn.handler(({ input }) => runTurn(input)),

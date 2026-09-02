@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/p
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { errorMessage } from "@intentic/base/errors";
 import type { BundleExport } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { packBundle } from "./bundle.js";
@@ -176,7 +177,7 @@ export const startExport = async (services: Services, options: { readonly secret
             await pipeline(Readable.fromWeb(packBundle(services, options) as never), createWriteStream(part));
             await rename(part, join(dir, `${stem}${READY}`));
         } catch (error) {
-            await writeFile(join(dir, `${stem}${FAILED}`), `${error instanceof Error ? error.message : String(error)}\n`).catch(() => {});
+            await writeFile(join(dir, `${stem}${FAILED}`), `${errorMessage(error)}\n`).catch(() => {});
             await rm(part, { force: true }).catch(() => {});
             services.logger.warn({ err: error, export: stem }, "environment export failed");
         }

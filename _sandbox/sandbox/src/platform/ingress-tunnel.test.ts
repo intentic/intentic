@@ -129,7 +129,9 @@ describe(`startIngressTunnel`, () => {
     });
 
     /* …AND A TUNNEL THAT ACTUALLY WORKED EARNS THE FLOOR BACK. Without this, a container up for a week
-     * reconnects at the ceiling after one blip, because the counter still remembers a bad afternoon. */
+     * reconnects at the ceiling after one blip, because the counter still remembers a bad afternoon. The floor
+     * is the same jittered first rung a fresh container dials on: a fleet whose edge deployed under it must
+     * not all redial at exactly one second either. */
     test(`resets the backoff after a session that lasted`, async () => {
         let clock = 0;
         const world = harness({ now: () => clock });
@@ -143,7 +145,7 @@ describe(`startIngressTunnel`, () => {
         clock += 120_000;
         world.sockets[1]?.emit(`close`, 1006);
         await world.settle();
-        expect(world.waits).toEqual([2_000, 1_000]);
+        expect(world.waits).toEqual([2_000, 2_000]);
     });
 
     // The tunnel is this sandbox's reachability, so shutdown is the only thing that ends the loop.

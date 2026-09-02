@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import type { AgentTurn, Rule, RuleBuiltin } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -71,7 +72,8 @@ const pending = new Set<string>();
  * no longer exists by the time this runs. */
 const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly string[]): Rule | undefined =>
     rules.find(
-        (rule) => rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === name && conditionHolds(rule.when, { paths }),
+        (rule) =>
+            rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === name && conditionHolds(rule.when, { paths }),
     );
 
 export interface VerifyNudge {
@@ -169,7 +171,7 @@ const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: st
         } catch (error) {
             live.logger.warn({ err: error, conversationId }, "verify nudge: follow-up failed to start, retrying");
         }
-        await new Promise<void>((resolve) => setTimeout(resolve, RETRY_MS).unref());
+        await sleep(RETRY_MS, { unref: true });
     }
     /* It never landed, so the conversation is released rather than left holding a guard against a follow-up
      * that is not coming. The loss is bounded and said whole: the record of the unverified turn is on the

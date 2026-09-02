@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { CHORE_KINDS, CHORES, type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
 import {
     Button,
@@ -220,7 +221,7 @@ const attempt = async (what: string, action: () => Promise<unknown>): Promise<vo
     try {
         await action();
     } catch (failure) {
-        notice.value = `Could not ${what}: ${failure instanceof Error ? failure.message : String(failure)}`;
+        notice.value = `Could not ${what}: ${errorMessage(failure)}`;
     } finally {
         busy.value = false;
     }
@@ -266,11 +267,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
     <!-- `scroll="page"`: this body is a REPORT read top-down, which is the `page` case. It was clamped and given
          a scroller of its own, so a workspace with a full book of chores was read through a window with the page
          around it holding still and nothing to scroll. -->
-    <SplitView
-        title="Maintenance"
-        scroll="page"
-        :scroll-key="`${repo ?? ``}/${filter}`"
-    >
+    <SplitView title="Maintenance" scroll="page" :scroll-key="`${repo ?? ``}/${filter}`">
         <template #actions>
             <SegmentedControl
                 v-model="filter"

@@ -9,6 +9,7 @@
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
     "references": [
+        { "path": "../../_tools/base" },
         { "path": "../../_deploy/graph" },
         { "path": "../../_deploy/need-resolver" },
         { "path": "../../_deploy/state-resolver" },

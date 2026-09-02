@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { BrowserContext, Page } from "playwright";
 import { type Display, displayOf } from "./display.js";
 import {
@@ -211,7 +212,7 @@ const startFramesView = (context: BrowserContext, sink: Sink, onError: (reason: 
                 // See Screencast.noteInput: told BEFORE the dispatch, or the frame answering this input is
                 // judged as the still camera's own shake and dropped.
                 cast.noteInput();
-                await dispatchInput(session, message).catch((error: unknown) => onError(error instanceof Error ? error.message : String(error)));
+                await dispatchInput(session, message).catch((error: unknown) => onError(errorMessage(error)));
                 if (message.type === "mouse" && message.action === "move") {
                     // Fire-and-forget and throttled: the shape follows the pointer, it never stands in front of
                     // the next input.

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@intentic-app/prisma";
+import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import { isPremium } from "./pool-membership.js";
@@ -134,7 +135,7 @@ export const closeMonth = async (month: string, { prisma, config, gateway, now =
     try {
         settled = await gateway.settledRevenue({ from, to });
     } catch (error) {
-        return { month, closed: false, reason: `settled revenue unreadable: ${error instanceof Error ? error.message : String(error)}` };
+        return { month, closed: false, reason: `settled revenue unreadable: ${errorMessage(error)}` };
     }
 
     const donationAggregates = new Map<string, DonationAggregate>();

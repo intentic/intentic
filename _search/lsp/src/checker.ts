@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { type Diagnostic, type DiagReport, parseCompilerOutput } from "./report.js";
 import { tsgoExePath } from "./tsgo.js";
 
@@ -93,7 +94,7 @@ const runCompiler = (args: readonly string[], cwd: string, placement: CheckPlace
         try {
             exe = tsgoExePath();
         } catch (error) {
-            settle({ output: "", failure: error instanceof Error ? error.message : String(error) });
+            settle({ output: "", failure: errorMessage(error) });
             return;
         }
         /* The compiler prints paths relative to its working directory. A direct spawn sets that directory

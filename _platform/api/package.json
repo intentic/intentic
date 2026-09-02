@@ -17,6 +17,7 @@
         "@intentic-app/api-contract": "workspace:*",
         "@intentic-app/localhost-https": "workspace:*",
         "@intentic-app/prisma": "workspace:*",
+        "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",

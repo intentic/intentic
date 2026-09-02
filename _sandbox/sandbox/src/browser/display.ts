@@ -1,7 +1,7 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import { type ChildProcess, spawn } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
+import { pollUntil } from "@intentic/base/async";
 
 /* A VIRTUAL X DISPLAY PER BROWSER, which is a change from the one display every browser used to share.
  *
@@ -116,13 +116,9 @@ const answers = (number: number): Promise<boolean> =>
     });
 
 const waitForDisplay = async (number: number): Promise<void> => {
-    for (let attempt = 0; attempt < 100; attempt++) {
-        if (await answers(number)) {
-            return;
-        }
-        await sleep(50);
+    if (!(await pollUntil(() => answers(number), { intervalMs: 50, timeoutMs: 5_000 }))) {
+        throw new Error(`Xvfb did not come up on :${number} (nothing answering on ${socketPath(number)}): rebuild the sandbox to install it`);
     }
-    throw new Error(`Xvfb did not come up on :${number} (nothing answering on ${socketPath(number)}): rebuild the sandbox to install it`);
 };
 
 const displayAt = (number: number): Display => ({ name: `:${number}`, width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT });

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { buildIndex, type KnowledgeIndex } from "../notes/index-notes.js";
 import { formatFrontmatter } from "../notes/frontmatter.js";
 import { factsOf, type NoteFile, parseNote, type ParsedNote } from "../notes/note.js";
@@ -471,7 +472,7 @@ main().then(
         process.exitCode = code;
     },
     (error: unknown) => {
-        process.stderr.write(`obsidian: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`obsidian: ${errorMessage(error)}\n`);
         process.exitCode = 2;
     },
 );

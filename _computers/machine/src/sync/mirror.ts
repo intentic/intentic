@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
+import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import {
@@ -355,7 +356,7 @@ const postReports = async (dialed: readonly DialedPairing[], mutagen: string, un
                 log(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports, its Computers view will stay empty.`);
             }
         } catch (error) {
-            log(`  ${pairing.sandboxId}: report skipped: ${error instanceof Error ? error.message : String(error)}`);
+            log(`  ${pairing.sandboxId}: report skipped: ${errorMessage(error)}`);
         }
     }
 };
@@ -392,7 +393,7 @@ const guard = async (log: Log, what: string, step: () => void | Promise<void>): 
         await step();
         return true;
     } catch (error) {
-        log(`  ${what} failed: ${error instanceof Error ? error.message : String(error)}`);
+        log(`  ${what} failed: ${errorMessage(error)}`);
         return false;
     }
 };
@@ -507,7 +508,11 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
      * The verdict is per sandbox and cached, so asking on every tick costs a map lookup and only a pairing whose
      * answer could have changed pays for a probe. */
     const bases = createDaemonBases(log);
-    await guard(log, "opening the sync transports", async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))));
+    await guard(
+        log,
+        "opening the sync transports",
+        async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))),
+    );
     // The watcher runs at every login, which makes it the one place an upgraded agent reliably reaches the file
     // syncs it INHERITED. Mutagen bakes a session's ignores at creation, so an install that swapped the binary
     // without re-pairing would otherwise keep syncing on whatever rules were current the day it first paired.
@@ -542,7 +547,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         // one removed by `uninstall` stops, without restarting the watcher. A state that won't parse (a `setup`
         // mid-write) leaves nothing to do this tick.
         const state = await readState().catch((error: unknown) => {
-            log(`  tick skipped: the sync state didn't read (${error instanceof Error ? error.message : String(error)})`);
+            log(`  tick skipped: the sync state didn't read (${errorMessage(error)})`);
             return undefined;
         });
         // Nothing parsed this tick — a `setup` caught mid-write. Wait out the interval and try again rather
@@ -620,7 +625,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 }
                 pausedThisPass = outcome.paused;
                 // A transient tunnel blip must not kill the loop, log and try again next tick.
-                log(`  ${pairing.sandboxId}: reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
+                log(`  ${pairing.sandboxId}: reconcile skipped: ${errorMessage(error)}`);
             }
             // An auto-paused pairing still gets the cheap HTTPS liveness probe above; do not immediately
             // defeat the pause with the SSH-heavy git bridge below.
@@ -642,7 +647,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                     repos.set(pairing.sandboxId, listed);
                 }
             } catch (error) {
-                log(`  ${pairing.sandboxId}: git bridge skipped: ${error instanceof Error ? error.message : String(error)}`);
+                log(`  ${pairing.sandboxId}: git bridge skipped: ${errorMessage(error)}`);
             }
         }
         // After the pairings, not during: servePairing has just persisted this tick's mirrored/skipped ports,

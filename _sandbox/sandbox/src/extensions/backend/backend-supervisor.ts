@@ -2,13 +2,15 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import { createRequire } from "node:module";
-import net from "node:net";
 import { fileURLToPath } from "node:url";
+import { createBackoff, pollUntil } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import type { Logger } from "pino";
 import { tokenEquals } from "../../auth/auth.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
 import { enabledExtensions, type ExtensionHost } from "../installed-extensions.js";
+import { freePort } from "../../processes/free-port.js";
 import {
     BACKEND_CONFIG_ENV,
     BACKEND_HOST_HEADER,
@@ -60,19 +62,6 @@ export interface ExtensionBackend {
     verifyExtensionToken(presented: string): { readonly permissions: readonly string[] } | undefined;
 }
 
-// An OS-assigned free loopback port (the managed-processes pattern): a tiny TOCTOU window before the host
-// binds it, fine for one supervised child that owns the port a moment later.
-const freePort = (): Promise<number> =>
-    new Promise((resolve, reject) => {
-        const server = net.createServer();
-        server.on("error", reject);
-        server.listen(0, "127.0.0.1", () => {
-            const address = server.address();
-            const port = typeof address === "object" && address !== null ? address.port : 0;
-            server.close(() => resolve(port));
-        });
-    });
-
 /* The host entry, resolved beside THIS file so dev and dist stay one code path: compiled, both are .js in
  * dist/ and node runs the entry directly; under tsx (dev, tests) both are .ts and the child needs the same
  * loader, resolved by absolute path so the spawn's cwd doesn't decide whether dev works. */
@@ -117,7 +106,8 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
     let desired = false;
     let host: SpawnedHost | undefined;
     let state: ExtensionBackendState = { state: "stopped", extensions: [] };
-    let backoffMs = BACKOFF_START_MS;
+    // Climbs while the host keeps dying on arrival, back to the floor the moment one answers /health.
+    const ladder = createBackoff({ floorMs: BACKOFF_START_MS, capMs: BACKOFF_CAP_MS });
     let debounce: NodeJS.Timeout | undefined;
     let retry: NodeJS.Timeout | undefined;
 
@@ -165,25 +155,32 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         return { runnable, reported, tokenReach };
     };
 
-    const waitHealthy = async (spawned: SpawnedHost, until: number): Promise<BackendHealth | undefined> => {
-        while (Date.now() < until) {
-            if (spawned.child.exitCode !== null) {
-                return undefined;
-            }
-            try {
-                const response = await fetch(`http://127.0.0.1:${spawned.port}/health`, {
-                    headers: { [BACKEND_HOST_HEADER]: spawned.hostToken },
-                    signal: AbortSignal.timeout(HEALTH_POLL_MS * 4),
-                });
-                if (response.ok) {
-                    return (await response.json()) as BackendHealth;
+    // The host's own /health answer, or undefined when it died first or never answered within the timeout, the
+    // two misses the caller reports the same way.
+    const waitHealthy = async (spawned: SpawnedHost): Promise<BackendHealth | undefined> => {
+        let health: BackendHealth | undefined;
+        await pollUntil(
+            async () => {
+                if (spawned.child.exitCode !== null) {
+                    return true;
                 }
-            } catch {
-                // Not up yet, the poll IS the wait.
-            }
-            await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_MS));
-        }
-        return undefined;
+                try {
+                    const response = await fetch(`http://127.0.0.1:${spawned.port}/health`, {
+                        headers: { [BACKEND_HOST_HEADER]: spawned.hostToken },
+                        signal: AbortSignal.timeout(HEALTH_POLL_MS * 4),
+                    });
+                    if (response.ok) {
+                        health = (await response.json()) as BackendHealth;
+                        return true;
+                    }
+                } catch {
+                    // Not up yet, the poll IS the wait.
+                }
+                return false;
+            },
+            { intervalMs: HEALTH_POLL_MS, timeoutMs: HEALTH_TIMEOUT_MS },
+        );
+        return health;
     };
 
     const converge = async (): Promise<void> => {
@@ -194,7 +191,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         try {
             collected = await collect();
         } catch (error) {
-            state = { state: "error", detail: error instanceof Error ? error.message : String(error), extensions: [] };
+            state = { state: "error", detail: errorMessage(error), extensions: [] };
             return;
         }
         if (run !== generation) {
@@ -242,10 +239,9 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             // line every few seconds instead of a dead /x namespace forever.
             state = { state: "error", detail: `the backend host exited (${signal ?? code})`, extensions: collected.reported };
             host = undefined;
-            retry = setTimeout(() => void converge(), backoffMs);
-            backoffMs = Math.min(backoffMs * 2, BACKOFF_CAP_MS);
+            retry = setTimeout(() => void converge(), ladder.next());
         });
-        const health = await waitHealthy(spawned, Date.now() + HEALTH_TIMEOUT_MS);
+        const health = await waitHealthy(spawned);
         if (run !== generation) {
             return;
         }
@@ -253,7 +249,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             state = { state: "error", detail: "the backend host did not become healthy", extensions: collected.reported };
             return;
         }
-        backoffMs = BACKOFF_START_MS;
+        ladder.reset();
         state = { state: "running", extensions: [...health.extensions, ...collected.reported] };
     };
 

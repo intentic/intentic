@@ -1,5 +1,6 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityProbe } from "@intentic/sandbox-contract";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
 
@@ -69,7 +70,7 @@ const transportReason = (error: unknown): string => {
     if (code?.includes("CERT") === true || code === "ERR_TLS_CERT_ALTNAME_INVALID") {
         return "its certificate was refused";
     }
-    return error instanceof Error ? error.message : String(error);
+    return errorMessage(error);
 };
 
 // What an HTTP answer means for a credential, said once so every card refuses in the same words.

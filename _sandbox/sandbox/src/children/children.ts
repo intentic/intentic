@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent, AgentHarness, AgentProvider, AgentTurn, AskQuestion } from "@intentic/sandbox-contract";
 import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
@@ -79,8 +80,7 @@ export interface ChildParent {
 
 export type ChildSpawnResult =
     // `id` is the child's conversation id, the roster record's id, and the wait tool's target, one string.
-    | { readonly ok: true; readonly id: string }
-    | { readonly ok: false; readonly message: string };
+    { readonly ok: true; readonly id: string } | { readonly ok: false; readonly message: string };
 
 export type ChildActionResult = { readonly ok: true; readonly note?: string } | { readonly ok: false; readonly message: string };
 
@@ -264,7 +264,7 @@ const runChildTurn = (
                 }
             }
         } catch (error) {
-            failure = error instanceof Error ? error.message : String(error);
+            failure = errorMessage(error);
         } finally {
             const closing = (bubble.trim() !== "" ? bubble : report).trim().slice(0, REPORT_KEPT);
             if (kid !== undefined) {
@@ -388,8 +388,14 @@ const askOwner = async (
         // Told apart the payment offer's way: a resolved frame carrying no reply is the deadline or a dead
         // client, and reading that as "declined" would put a refusal in the owner's mouth they never gave.
         return resolved.reply === undefined
-            ? { ok: false, message: `Nobody answered the request to ${move === "spawn" ? "start" : move} a child agent, so it did not run. Carry on without it and say what you left undone.` }
-            : { ok: false, message: `The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.` };
+            ? {
+                  ok: false,
+                  message: `Nobody answered the request to ${move === "spawn" ? "start" : move} a child agent, so it did not run. Carry on without it and say what you left undone.`,
+              }
+            : {
+                  ok: false,
+                  message: `The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
+              };
     }
     return { ok: true };
 };
@@ -475,12 +481,16 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
         const placement =
             spec.on === "here"
                 ? undefined
-                : placeFanOut(await runnerSummaries(services), { inFlight: services.agents.inFlightByRunner() }, {
-                      ...(spec.on !== undefined ? { asked: spec.on } : {}),
-                      // A child on a runtime whose credential cannot travel stays here unless somebody names a
-                      // machine themselves (credentialsTravel says which, and why).
-                      travels: credentialsTravel(provider, harness),
-                  }).runner;
+                : placeFanOut(
+                      await runnerSummaries(services),
+                      { inFlight: services.agents.inFlightByRunner() },
+                      {
+                          ...(spec.on !== undefined ? { asked: spec.on } : {}),
+                          // A child on a runtime whose credential cannot travel stays here unless somebody names a
+                          // machine themselves (credentialsTravel says which, and why).
+                          travels: credentialsTravel(provider, harness),
+                      },
+                  ).runner;
         const id = `sub-${newConversationId()}`;
         const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
         const turn: AgentTurn & { conversationId: string } = {

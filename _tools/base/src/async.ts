@@ -19,6 +19,9 @@ import type { IDisposable } from "./lifecycle.js";
  *                 else waits for the answer that is already coming."
  *   retry      , the loop, with the delay in it.
  *
+ * And, below them, the three primitives every reconnect loop, readiness wait and respawn ladder in the product
+ * was hand-rolling beside its own copy of `setTimeout`-in-a-promise: `sleep`, `pollUntil` and `createBackoff`.
+ *
  * All three classes are disposables, which is the other half of what the hand-rolled versions kept getting
  * wrong: a pending timer is a live handle, and every one of these sites had a teardown path that dropped it.
  */
@@ -195,9 +198,105 @@ export const retry = async <T>(task: () => Promise<T>, delay: number, attempts: 
             last = error;
             if (attempt < attempts - 1) {
                 // oxlint-disable-next-line eslint/no-await-in-loop -- the delay between attempts
-                await new Promise((resolve) => setTimeout(resolve, delay));
+                await sleep(delay);
             }
         }
     }
     throw last;
+};
+
+/* A promise that resolves after `ms`, and EARLY when the signal aborts, never rejecting: the loops that wait
+ * this way read their own stop flag on the next line, so an aborted sleep simply ends the wait and the loop
+ * sees why for itself. Rejecting would turn every ordinary teardown into a catch block at every call site.
+ *
+ * `unref` is for a daemon's own long waits (a tunnel's redial, a nudge's retry): a pending timer is a live
+ * handle, and one that holds the process open past its shutdown is a leak with a stack trace nobody sees. It
+ * is a no-op wherever the timer has no such handle (a browser). */
+export const sleep = (ms: number, options?: { readonly signal?: AbortSignal | undefined; readonly unref?: boolean }): Promise<void> =>
+    new Promise((resolve) => {
+        const signal = options?.signal;
+        if (signal?.aborted === true) {
+            resolve();
+            return;
+        }
+        const done = (): void => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", done);
+            resolve();
+        };
+        const timer = setTimeout(done, ms);
+        if (options?.unref === true) {
+            (timer as { unref?: () => void }).unref?.();
+        }
+        signal?.addEventListener("abort", done, { once: true });
+    });
+
+/* Ask until it is true, or until the deadline. Always probes once BEFORE consulting the clock, so a wait is
+ * never skipped by a deadline that has already passed, and answers whether the check passed rather than
+ * throwing: what a miss MEANS ("dockerd did not come up", "the display never answered") belongs to the caller,
+ * which is the one that can name it. A check that throws propagates: some waits (a process that already
+ * exited) must fail fast rather than burn the whole deadline. An aborted signal ends the wait as a miss. */
+export const pollUntil = async (
+    check: () => boolean | Promise<boolean>,
+    options: { readonly intervalMs: number; readonly timeoutMs: number; readonly signal?: AbortSignal | undefined },
+): Promise<boolean> => {
+    const deadline = Date.now() + options.timeoutMs;
+    for (;;) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
+        if (await check()) {
+            return true;
+        }
+        if (Date.now() >= deadline || options.signal?.aborted === true) {
+            return false;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between probes
+        await sleep(options.intervalMs, { signal: options.signal });
+    }
+};
+
+export interface BackoffOptions {
+    readonly floorMs: number;
+    readonly capMs: number;
+    /* A run that lasted at least this long was a WORKING one, and its failure restarts the ladder from the
+     * floor. Without it a link that has been up for a week reconnects at the ceiling after one blip, because
+     * the ladder still remembers a bad afternoon in between; with it, a dial that is refused on arrival keeps
+     * climbing, which is what keeps a bad grant or a dead edge from being hammered. */
+    readonly stableMs?: number;
+    /* Full jitter: each wait is a random point between the floor and the rung it would otherwise be, so a
+     * fleet that lost the same edge at the same instant does not reconvene on it at the same instant,
+     * repeatedly. Injected rather than `Math.random` so a test can read the schedule off the ceiling. */
+    readonly random?: () => number;
+}
+
+export interface Backoff {
+    /* How long to wait before the next attempt, and the ladder climbs one rung for the time after that:
+     * floor, 2×, 4×, … capped. `uptimeMs` is how long the attempt that just failed had been working, and at
+     * or past `stableMs` it puts the ladder back on the floor first. */
+    readonly next: (uptimeMs?: number) => number;
+    // Back to the floor: the attempt succeeded outright (a health check passed, a poll answered).
+    readonly reset: () => void;
+}
+
+/* THE EXPONENTIAL LADDER, written once. It existed fifteen times across the tunnel, the runner link, the
+ * machine agent, the web extension, two process supervisors, two messaging connectors and four browser
+ * streams, out of a `let delay` and a `Math.min(delay * 2, cap)`, and the copies did not agree on the two
+ * things that decide whether a flapping link is a nuisance or an outage: whether a session that WORKED earns
+ * the floor back (four did, five reset on any `open`, which lets a socket that opens and dies at once hammer
+ * at the floor forever), and whether there is any jitter at all (one had it). */
+export const createBackoff = ({ floorMs, capMs, stableMs, random }: BackoffOptions): Backoff => {
+    let rung = floorMs;
+    return {
+        next: (uptimeMs) => {
+            if (stableMs !== undefined && uptimeMs !== undefined && uptimeMs >= stableMs) {
+                rung = floorMs;
+            }
+            const ceiling = Math.min(rung * 2, capMs);
+            const wait = random === undefined ? rung : Math.round(floorMs + random() * (ceiling - floorMs));
+            rung = ceiling;
+            return wait;
+        },
+        reset: () => {
+            rung = floorMs;
+        },
+    };
 };

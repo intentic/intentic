@@ -1,3 +1,4 @@
+import { pollUntil } from "@intentic/base/async";
 import { BrowserError } from "./types.js";
 
 /* The Chrome DevTools Protocol, as much of it as driving a page needs: an HTTP handshake to find the tabs, then
@@ -44,14 +45,9 @@ export const probe = async (port: number): Promise<boolean> => {
 };
 
 export const waitForPort = async (port: number, timeoutMs: number): Promise<void> => {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        if (await probe(port)) {
-            return;
-        }
-        await new Promise((resolvePromise) => setTimeout(resolvePromise, 150));
+    if (!(await pollUntil(() => probe(port), { intervalMs: 150, timeoutMs }))) {
+        throw new BrowserError(`The browser did not open its debugging port (${port}) in time.`);
     }
-    throw new BrowserError(`The browser did not open its debugging port (${port}) in time.`);
 };
 
 export const listTargets = async (port: number): Promise<CdpTarget[]> => {

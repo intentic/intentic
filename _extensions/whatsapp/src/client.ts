@@ -1,5 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
+import { createBackoff } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 // oxlint-disable-next-line import/no-named-as-default -- baileys exports the socket factory as BOTH its default and a same-named named export; the default is the documented import.
 import makeWASocket, { DisconnectReason, downloadMediaMessage, jidNormalizedUser, useMultiFileAuthState } from "baileys";
 import type { ListenerPairing } from "@intentic/sandbox-contract";
@@ -141,7 +143,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
     let selfJid: string | undefined;
     let selfLid: string | undefined;
     let closed = false;
-    let backoff = RETRY_MIN_MS;
+    const ladder = createBackoff({ floorMs: RETRY_MIN_MS, capMs: RETRY_MAX_MS });
 
     // Recent raw messages by id (download needs the envelope to decrypt; replies quote it), and the chats this
     // session has seen (WhatsApp has no on-demand chat list, groups come from the API, DMs from traffic).
@@ -206,14 +208,14 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                     .catch((error: unknown) => {
                         // WhatsApp refusing the number (not a WhatsApp account, malformed, asked too often) is
                         // the owner's problem to fix, and a warning in a log nobody opens is not telling them.
-                        pairing = { state: "failed", detail: error instanceof Error ? error.message : String(error) };
+                        pairing = { state: "failed", detail: errorMessage(error) };
                         log.warn({ err: error, capabilityId }, "pairing code request failed");
                     });
             }
             if (update.connection === "open") {
                 phase = "ready";
                 pairing = undefined;
-                backoff = RETRY_MIN_MS;
+                ladder.reset();
                 const me = socket.user;
                 selfJid = me?.id === undefined ? undefined : jidNormalizedUser(me.id);
                 selfLid = me?.lid === undefined || me.lid === "" ? undefined : jidNormalizedUser(me.lid);
@@ -238,8 +240,8 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                     return;
                 }
                 // restartRequired (515) is the NORMAL close right after pairing succeeds, reconnect at once.
-                const wait = reason === (DisconnectReason.restartRequired as number) ? 0 : backoff;
-                backoff = Math.min(backoff * 2, RETRY_MAX_MS);
+                const rung = ladder.next();
+                const wait = reason === (DisconnectReason.restartRequired as number) ? 0 : rung;
                 phase = auth.state.creds.registered ? "connecting" : "pairing";
                 // A CODE DIES WITH THE SOCKET THAT MINTED IT, and the next one is up to a minute of backoff
                 // away. Left on the card it is worse than nothing: it reads as the live code, and the owner

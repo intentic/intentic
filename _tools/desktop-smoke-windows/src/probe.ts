@@ -6,6 +6,7 @@
  * "is the app already installed?", which wants `undefined`) and by one that expects "yes".
  */
 
+import { errorMessage } from "@intentic/base/errors";
 import { desktop, type WindowInfo } from "@intentic/desktop";
 import { asList, dockerOsType, installedApp, titled, webView2Version, type InstalledApp, type RunnerTask, type UninstallEntry } from "./parse.js";
 import { powershell, run } from "./run.js";
@@ -240,7 +241,7 @@ export const answerConfirm = async (
             await ops.focus(dialog);
             await ops.press();
         } catch (error) {
-            refusal = error instanceof Error ? error.message : String(error);
+            refusal = errorMessage(error);
             await ops.sleep(ANSWER_POLL_MS);
             continue;
         }

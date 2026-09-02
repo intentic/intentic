@@ -1,3 +1,4 @@
+import { pollUntil } from "@intentic/base/async";
 import { ref } from "vue";
 import { desktopVersion } from "../environments/desktop";
 import { environment } from "../environments/environment";
@@ -126,14 +127,12 @@ const waitForGis = async (): Promise<GoogleAccountsId> => {
             setTimeout(resolve, 5000);
         });
     }
-    for (let attempt = 0; attempt < 20; attempt++) {
-        const id = ready();
-        if (id !== undefined) {
-            return id;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
+    await pollUntil(() => ready() !== undefined, { intervalMs: 50, timeoutMs: 1_000 });
+    const id = ready();
+    if (id === undefined) {
+        throw new Error(`Google Identity Services failed to load`);
     }
-    throw new Error(`Google Identity Services failed to load`);
+    return id;
 };
 
 const ensureInitialized = async (): Promise<void> => {

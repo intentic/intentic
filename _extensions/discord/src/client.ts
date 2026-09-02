@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 
 export interface DiscordConnectorConfig {
@@ -82,7 +83,7 @@ export const releaseDiscordClient = (token: string, consumer: Consumer): void =>
 // Map discord.js login rejections onto messages a user can act on. Both are FATAL: retrying with the same
 // token/portal state can never succeed.
 const loginFailure = (error: unknown): Error => {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     if (/token/i.test(message)) {
         return new Error("Discord rejected the bot token: check the capability's botToken");
     }

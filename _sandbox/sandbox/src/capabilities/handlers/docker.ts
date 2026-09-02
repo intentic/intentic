@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
+import { pollUntil } from "@intentic/base/async";
 import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
 import { packFragment } from "../../environment/packs.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
@@ -164,12 +164,9 @@ const privileged = async (): Promise<boolean> => isPrivileged(await readFile("/p
 // startup output stays in the panel's terminal either way.
 const startDockerd = async (ctx: CapabilityCtx): Promise<boolean> => {
     await ctx.panels.start(DOCKER_PANEL_KEY, { command: "dockerd", cwd: ctx.workspace.root });
-    for (let attempt = 0; attempt < 30; attempt++) {
-        await delay(1000);
-        if (await dockerUp()) {
-            ctx.logger.info("docker: daemon started");
-            return true;
-        }
+    if (await pollUntil(dockerUp, { intervalMs: 1_000, timeoutMs: 30_000 })) {
+        ctx.logger.info("docker: daemon started");
+        return true;
     }
     ctx.logger.warn("docker: dockerd did not become ready within 30s, its output is in the panel-docker terminal");
     return false;

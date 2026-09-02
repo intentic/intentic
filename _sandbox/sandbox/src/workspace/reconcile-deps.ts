@@ -1,4 +1,5 @@
 import { basename, join } from "node:path";
+import { sleep } from "@intentic/base/async";
 import { isManifest } from "@intentic/workspace-setup";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -97,8 +98,6 @@ export interface DependencyCoordinatorDeps {
     readonly pollMs?: number;
     readonly installMaxMs?: number;
 }
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isInside = (project: string, dir: string): boolean => project === "" || dir === project || dir.startsWith(`${project}/`);
 

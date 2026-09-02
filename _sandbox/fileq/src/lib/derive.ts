@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { IGNORED_DIRS, isAgentWorktreePath, isReferencePath } from "@intentic/workspace-ignore";
 import { STATE_DIR } from "@intentic/constants";
 import { detectFormat, type Format } from "./formats.js";
@@ -46,8 +47,23 @@ export const isDeriveIgnored = (relPath: string): boolean => {
 };
 
 export type Outcome =
-    | { readonly kind: "derived"; readonly relPath: string; readonly format: Format; readonly sidecarPath: string; readonly body: string; readonly doc: DerivedDoc; readonly tokens: number }
-    | { readonly kind: "fresh"; readonly relPath: string; readonly format: Format; readonly sidecarPath: string; readonly body: string; readonly tokens: number }
+    | {
+          readonly kind: "derived";
+          readonly relPath: string;
+          readonly format: Format;
+          readonly sidecarPath: string;
+          readonly body: string;
+          readonly doc: DerivedDoc;
+          readonly tokens: number;
+      }
+    | {
+          readonly kind: "fresh";
+          readonly relPath: string;
+          readonly format: Format;
+          readonly sidecarPath: string;
+          readonly body: string;
+          readonly tokens: number;
+      }
     | { readonly kind: "removed"; readonly relPath: string; readonly sidecarPath: string }
     | { readonly kind: "skipped"; readonly relPath: string; readonly reason: string };
 
@@ -90,7 +106,7 @@ export const ensureSidecar = async (workspaceRoot: string, absPath: string, now:
     try {
         doc = neutralizeDoc(await deriver.derive(absPath));
     } catch (error) {
-        const detail = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+        const detail = errorMessage(error).split("\n")[0];
         return { kind: "skipped", relPath, reason: `derive-failed (${format}): ${detail}` };
     }
     const written = await writeSidecar(workspaceRoot, { relPath, sourceSha, deriverStamp: stamp, doc, derivedAt: now() });

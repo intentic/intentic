@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { attach, type CdpSession, listTargets, newTab } from "./cdp.js";
 import { DEFAULT_PORT, ensureBrowser } from "./launch.js";
 import { type PageState, type RawSnapshot, refIndex, toPageState } from "./page.js";
@@ -79,7 +80,7 @@ export const browser = (port: number = DEFAULT_PORT): Browser => {
                 session?.close();
                 session = undefined;
                 // Give the navigation a moment to produce a document worth snapshotting.
-                await new Promise((resolvePromise) => setTimeout(resolvePromise, 600));
+                await sleep(600);
             }
             return await snapshot();
         },

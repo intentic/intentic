@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 
 /* THE PROMISES THIS DAEMON MAKES TO ITSELF, CHECKED WHILE IT RUNS.
@@ -142,7 +143,7 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
                 owner,
                 check: check.name,
                 moment,
-                message: error instanceof Error ? error.message : String(error),
+                message: errorMessage(error),
                 at: Date.now(),
                 broken,
             };

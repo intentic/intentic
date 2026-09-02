@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { sleep } from "@intentic/base/async";
 import { parsePressure } from "./loop-watchdog.js";
 
 /* WHETHER THIS SANDBOX HAS THE MEMORY TO START ANOTHER TURN.
@@ -163,17 +164,6 @@ export interface HeadroomWait {
 const WAIT_INTERVAL_MS = 5_000;
 const WAIT_DEADLINE_MS = 5 * 60_000;
 
-const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
-    new Promise((resolve) => {
-        const done = (): void => {
-            clearTimeout(timer);
-            signal?.removeEventListener("abort", done);
-            resolve();
-        };
-        const timer = setTimeout(done, ms);
-        signal?.addEventListener("abort", done, { once: true });
-    });
-
 export const waitForMemoryHeadroom = async (
     options: {
         readonly signal?: AbortSignal;
@@ -192,7 +182,7 @@ export const waitForMemoryHeadroom = async (
     }
     // oxlint-disable-next-line no-unmodified-loop-condition -- `signal.aborted` is flipped by the AbortController, not by this loop; the rule cannot see the external writer.
     while (!verdict.admit && Date.now() - startedAt < deadlineMs && signal?.aborted !== true) {
-        await sleep(intervalMs, signal);
+        await sleep(intervalMs, { signal });
         verdict = admitTurn(await read(), true);
     }
     const waitedMs = Date.now() - startedAt;

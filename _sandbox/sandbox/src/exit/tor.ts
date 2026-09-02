@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { promisify } from "node:util";
+import { sleep } from "@intentic/base/async";
 import type { ExitPoint, IntenticLine } from "@intentic/sandbox-contract";
 import { logTail, processAlive, readPid, toolMissing } from "../vpn/net-probe.js";
 import { rankCountries, TOR_FALLBACK } from "./exit-countries.js";
@@ -151,7 +152,7 @@ const awaitBootstrap = async (id: string): Promise<void> => {
         if (Date.now() >= deadline) {
             throw new Error(`tor did not finish bootstrapping within ${BOOTSTRAP_TIMEOUT_MS / 1000}s.\n${await logTail(logPath(id))}`);
         }
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await sleep(500);
     }
 };
 
@@ -282,7 +283,7 @@ export const torDriver: ExitDriver = {
         await control(id, ["SIGNAL NEWNYM"]);
         // Tor accepts NEWNYM at most every 10s and drops the rest silently, so the wait is what makes a
         // second rotate mean anything. Also gives the new circuits time to be built before the check.
-        await new Promise((resolve) => setTimeout(resolve, NEWNYM_COOLDOWN_MS));
+        await sleep(NEWNYM_COOLDOWN_MS);
     },
     stop: async (id) => {
         await halt(id);

@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 
 /* THE WORLD IS SERVED OVER HTTPS, and that is the product's requirement rather than this tier's taste.
  *
@@ -66,7 +67,7 @@ export const mintCertificate = async (): Promise<Certificate> => {
             { timeout: 60_000 },
         );
     } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
+        const message = errorMessage(cause);
         throw new Error(`could not mint the run's TLS certificate, openssl failed: ${message}`, { cause });
     }
     return { dir, keyPath, certPath };

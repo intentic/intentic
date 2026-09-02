@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { buildApplication, buildRouteMap, text_en } from "@stricli/core";
 import { addAppCommand } from "./add-app/add-app.command.js";
 import { adopt } from "./adopt/adopt.command.js";
@@ -25,7 +26,7 @@ import { secretsCommand } from "./secrets/secrets.command.js";
 // stricli prints it on STDERR, which the run log's stdout tee never sees; without this a crashed run's log
 // reads exactly like a hung run's.
 const formatException = (exc: unknown): string => {
-    const message = exc instanceof Error ? exc.message : String(exc);
+    const message = errorMessage(exc);
     recordRunFailure(message);
     if (exc instanceof Error) {
         return loadConfig().intenticDebug ? (exc.stack ?? message) : message;

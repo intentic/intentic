@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { agentsContract, type AgentChange, type AgentRepoChanges, capabilitiesOf } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
@@ -227,7 +228,7 @@ export const createAgentsRoutes = (services: Services) => {
                     try {
                         delivered = await deliverToListenerChannel(services, origin.provider, origin.channelId, input.text);
                     } catch (error) {
-                        throw new ORPCError("BAD_GATEWAY", { message: error instanceof Error ? error.message : String(error) });
+                        throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
                     }
                     if (delivered === "delivered") {
                         // The outbound trail: the same row an agent's own send leaves, so the activity feed

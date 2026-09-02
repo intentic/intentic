@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import type { DeployAction, DeployResource, DeployServer } from "./contract";
 import {
     Button,
@@ -194,7 +195,7 @@ const clearFailure = (key: string): void => {
     failures.value = next;
 };
 const recordFailure = (key: string, cause: unknown): void => {
-    failures.value = new Map(failures.value).set(key, cause instanceof Error ? cause.message : String(cause));
+    failures.value = new Map(failures.value).set(key, errorMessage(cause));
 };
 
 const runAction = async (resource: DeployResource, action: DeployAction): Promise<void> => {

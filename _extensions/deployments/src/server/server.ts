@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { implement, ORPCError } from "@orpc/server";
@@ -40,7 +41,7 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
     try {
         return await action;
     } catch (error) {
-        throw new ORPCError("BAD_GATEWAY", { message: error instanceof Error ? error.message : String(error) });
+        throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
     }
 };
 
@@ -145,7 +146,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
             } catch (error) {
                 // Degrade, don't throw: an unreachable Komodo is the single most important thing this view can
                 // say, and it can only say it by rendering.
-                const reason = error instanceof Error ? error.message : String(error);
+                const reason = errorMessage(error);
                 api.log(`overview unreachable for "${input.capability}": ${reason}`);
                 return {
                     komodoUrl: connection.baseUrl,
@@ -221,7 +222,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                     }),
                 })
                 .catch((error: unknown) => {
-                    throw new ORPCError("CONFLICT", { message: error instanceof Error ? error.message : String(error) });
+                    throw new ORPCError("CONFLICT", { message: errorMessage(error) });
                 });
             return { conversationId };
         }),

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { browser } from "@intentic/browser";
 import { desktop, pngSize } from "@intentic/desktop";
 import { type HostScopes, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
@@ -428,9 +429,9 @@ export const handleMcpMessage = async (message: unknown, scopes: () => HostScope
             void audit({
                 tool: name,
                 ok: false,
-                detail: `${refused ? "refused" : "failed"}: ${error instanceof Error ? error.message : String(error)}`,
+                detail: `${refused ? "refused" : "failed"}: ${errorMessage(error)}`,
             });
-            return reply(textResult(error instanceof Error ? error.message : String(error), true));
+            return reply(textResult(errorMessage(error), true));
         }
     }
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `method "${String(method)}" is not supported` } };

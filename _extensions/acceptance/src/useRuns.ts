@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type AgentSummary, AgentsListSchema, StartedTurnSchema, BrowsersListSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
@@ -39,7 +40,7 @@ import { criteriaOf, type Story, targetKeyOf, titleOf } from "./stories";
 const POLL_MS = 3000;
 
 const launchError = (reason: unknown): string => {
-    const message = reason instanceof Error ? reason.message : String(reason);
+    const message = errorMessage(reason);
     return message === `` ? `The session could not be started.` : message;
 };
 

@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { errorMessage } from "@intentic/base/errors";
 import { sdk } from "../claude/claude-sdk.js";
 import type { AgentEvent, BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -291,7 +292,7 @@ export const accountsServer =
                             const links = match.links.length === 0 ? "" : `\nlinks:\n${match.links.slice(0, 3).join("\n")}`;
                             return ok(`newest mail from ${siteToken(site)}: "${match.subject}" (${match.from})${codes}${links}`);
                         } catch (error) {
-                            const message = error instanceof Error ? error.message : String(error);
+                            const message = errorMessage(error);
                             return fail(`could not read the mailbox: ${message}, check the mailbox entry on the identity's card`);
                         }
                     },
@@ -333,7 +334,7 @@ export const accountsServer =
                                 `${report}\nNow perform the sign-up in the identity's browser (the browser tools with account "${identity}"), SSO first; call mark_connected("${account}") once you verifiably are the account.`,
                             );
                         } catch (error) {
-                            return fail(error instanceof Error ? error.message : String(error));
+                            return fail(errorMessage(error));
                         }
                     },
                 ),

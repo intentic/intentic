@@ -1,3 +1,4 @@
+import { type Backoff, createBackoff } from "@intentic/base/async";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -72,7 +73,8 @@ export type TerminalSession = {
     reconnect?: number;
     // Pending PTY resize frame, the drag-settle timer (scheduleResizeFrame).
     resizeSettle?: number;
-    retryDelay: number;
+    // The reconnect ladder, uptime-keyed: a connection that lived past STABLE_MS drops back to a 1s retry.
+    backoff: Backoff;
     // Set by dispose (and the exit frame) so the socket's close handler stops reconnecting.
     closing: boolean;
     // True while the connection is known-down, gates the disconnect/not-reachable banner to once per outage.
@@ -147,9 +149,8 @@ const attachRenderer = (s: TerminalSession): void => {
 const socketUrl = (name: string, cols: number, rows: number): Promise<string | undefined> =>
     wsSocketUrl(`/system/terminal`, { session: name, cols: String(cols), rows: String(rows) });
 
-const scheduleRetry = (s: TerminalSession): void => {
-    s.reconnect = window.setTimeout(() => void connectSocket(s), s.retryDelay);
-    s.retryDelay = Math.min(s.retryDelay * 2, MAX_RETRY_MS);
+const scheduleRetry = (s: TerminalSession, uptimeMs = 0): void => {
+    s.reconnect = window.setTimeout(() => void connectSocket(s), s.backoff.next(uptimeMs));
 };
 
 // Open (or re-open) one session's PTY socket. Reconnects reuse the xterm, tmux redraws the screen on attach, so
@@ -253,18 +254,15 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         if (s.socket !== ws || s.closing) {
             return;
         }
-        // Uptime-keyed backoff: a stable connection's drop retries at 1s; a connection that never opened or
-        // died young keeps the escalated delay.
-        if (openedAt !== 0 && Date.now() - openedAt > STABLE_MS) {
-            s.retryDelay = RETRY_MS;
-        }
         // Banner once per outage, the retries themselves are silent, and a successful reattach just redraws.
         if (!s.down) {
             s.down = true;
             s.term.writeln(`\r\n\x1b[90m[disconnected (${event.code}${event.reason === `` ? `` : `: ${event.reason}`})]\x1b[0m`);
             s.term.writeln(`\x1b[90m[reconnecting…]\x1b[0m`);
         }
-        scheduleRetry(s);
+        // Uptime-keyed: a stable connection's drop retries at 1s; one that never opened or died young keeps
+        // the escalated delay.
+        scheduleRetry(s, openedAt === 0 ? 0 : Date.now() - openedAt);
     });
 };
 
@@ -580,7 +578,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         host,
         mountedDocument: document,
         onExit,
-        retryDelay: RETRY_MS,
+        backoff: createBackoff({ floorMs: RETRY_MS, capMs: MAX_RETRY_MS, stableMs: STABLE_MS }),
         closing: false,
         down: false,
     };

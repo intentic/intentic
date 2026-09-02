@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { parseWebextPairingCode } from "@intentic/sandbox-contract";
 import { closeLink, ensureLink, linkState } from "./link.js";
 import type { PopupCommand, PopupState } from "./messages.js";
@@ -135,7 +136,7 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
 chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     void handle(message as PopupCommand)
         .then(respond)
-        .catch((error: unknown) => respond({ ok: false, message: error instanceof Error ? error.message : String(error) }));
+        .catch((error: unknown) => respond({ ok: false, message: errorMessage(error) }));
     // Chrome closes the channel when this listener returns unless it is told to wait for `respond`.
     return true;
 });

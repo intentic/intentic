@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { sleep } from "@intentic/base/async";
 import type { Logger } from "pino";
 import { processIdentity, type ProcessIdentity, sameProcess } from "./proc-stat.js";
 
@@ -92,8 +93,6 @@ export const claimHolder = (home: string = homedir()): ContainerClaim | undefine
 
 const sameRoots = (a: DaemonRoots, b: DaemonRoots): boolean => a.workspaceRoot === b.workspaceRoot && a.historyRoot === b.historyRoot;
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 /* The live holder of the container, waited out when it is standing on THESE roots, the shape of a restart,
  * where the predecessor is already dying and the successor must not lock itself out of its own volumes. A
  * holder on other roots is a co-tenant on the spot: it is not going anywhere on this boot's account. */
@@ -107,7 +106,7 @@ const liveOwner = async (home: string, roots: DaemonRoots, graceMs: number): Pro
         if (!sameRoots(claim, roots) || Date.now() >= deadline) {
             return claim;
         }
-        await delay(100);
+        await sleep(100);
     }
 };
 

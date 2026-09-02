@@ -2,6 +2,7 @@
 // here is nested INSIDE the function that uses it because these functions are serialized and re-parsed inside a
 // page, where nothing else in this module exists. Hoisting one to the outer scope is how this file acquires a
 // ReferenceError that only appears on somebody else's website. See the header below.
+import { sleep } from "@intentic/base/async";
 import type { PageElement } from "@intentic/browser/page";
 
 /* WHAT RUNS INSIDE SOMEBODY'S PAGE.
@@ -365,7 +366,7 @@ export const waitForText = async (needle: string, gone: boolean, deadlineMs: num
                     : `"${needle}" never appeared (waited ${Math.round(deadlineMs / 1000)}s).`,
             };
         }
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await sleep(200);
     }
 };
 

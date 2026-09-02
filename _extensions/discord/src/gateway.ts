@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
 import type { Client } from "discord.js";
 import { whisperCliMissing } from "./audio.js";
@@ -55,7 +56,7 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
             },
             // Every login failure is fatal, a bad token or missing intent can only be fixed portal-side, and
             // client.ts has already mapped it onto a sentence the owner can act on.
-            fatal: (error) => (error instanceof Error ? error.message : String(error)),
+            fatal: (error) => errorMessage(error),
             phase: (connector) => discordGatewayState(connector.config.botToken),
             statusExtras: () => {
                 const voice = activeVoiceSession();

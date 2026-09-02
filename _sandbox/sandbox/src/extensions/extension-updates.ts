@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
@@ -489,7 +490,7 @@ const autoUpdate = async (services: Services, target: InstalledTarget, update: E
             }
         }
     } catch (error) {
-        needsReview = `auto-update failed: ${error instanceof Error ? error.message : String(error)}`;
+        needsReview = `auto-update failed: ${errorMessage(error)}`;
     }
     const reason = needsReview;
     await patchRecord(services.workspace.root, target.identity, (record) =>

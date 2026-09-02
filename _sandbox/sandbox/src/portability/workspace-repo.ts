@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import {
     AutomationSchema,
@@ -56,7 +57,7 @@ export class WorkspaceRemoteError extends Error {}
  * is right for "the push was rejected" and useless for this one. */
 const gitRefusal = (error: unknown, fallback: string): string => {
     const stderr = (error as { stderr?: unknown }).stderr;
-    const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : error instanceof Error ? error.message : String(error);
+    const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : errorMessage(error);
     const lines = text
         .split("\n")
         .map((line) => line.trim())
@@ -200,7 +201,7 @@ const parsedJsonFile = async <T>(path: string, schema: z.ZodType<T>, label: stri
     try {
         return schema.parse(JSON.parse(bytes.toString("utf8")));
     } catch (error) {
-        throw new WorkspaceRemoteError(`${label} cannot arrive safely: ${error instanceof Error ? error.message : String(error)}`);
+        throw new WorkspaceRemoteError(`${label} cannot arrive safely: ${errorMessage(error)}`);
     }
 };
 

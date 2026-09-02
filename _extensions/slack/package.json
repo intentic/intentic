@@ -11,6 +11,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/connector-runtime": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@slack/socket-mode": "catalog:",

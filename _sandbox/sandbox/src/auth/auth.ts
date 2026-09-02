@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { z } from "zod";
+import { jsonFile } from "../store/json-file.js";
 
 // The sandbox authenticates the END USER directly against Google, the platform never holds or signs this
 // credential, so a platform compromise can't command the sandbox. The browser obtains a Google ID token via
@@ -55,20 +55,22 @@ export interface OwnerStore {
     write(email: string): Promise<void>;
 }
 
-export const fileOwnerStore = (path: string): OwnerStore => ({
-    read: async () => {
-        try {
-            const parsed = JSON.parse(await readFile(path, "utf8")) as { email?: unknown };
-            return typeof parsed.email === "string" ? parsed.email : undefined;
-        } catch {
-            return undefined;
-        }
-    },
-    write: async (email) => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify({ email }), "utf8");
-    },
-});
+const OwnerFileSchema = z.object({ email: z.string() });
+
+/* On the daemon's JSON substrate (store/json-file.ts) like every other manifest, and for the sharpest reason
+ * any of them has: this file decides who may drive the sandbox. A bare `writeFile` truncates before it fills,
+ * so a read landing mid-bind saw an empty owner and treated the next verified identity as the first; the
+ * atomic rename closes that window, and the schema read keeps a half-written or foreign-build file from
+ * binding nobody in silence. */
+export const fileOwnerStore = (path: string): OwnerStore => {
+    const file = jsonFile<{ readonly email?: string }>(path, { parse: (raw) => OwnerFileSchema.safeParse(raw).data, fallback: () => ({}) });
+    return {
+        read: async () => (await file.read()).email,
+        write: async (email) => {
+            await file.update(() => ({ email }));
+        },
+    };
+};
 
 // The additional authorized identities (shared access beyond the owner) and the role each was granted, stored
 // as { members: [{ email, role }] } in the same .intentic/ dir. The owner is NOT listed here, ownership stays
@@ -86,42 +88,34 @@ export interface MembersStore {
     remove(email: string): Promise<void>;
 }
 
-const readMembers = async (path: string): Promise<Member[]> => {
-    try {
-        const parsed = JSON.parse(await readFile(path, "utf8")) as { members?: unknown };
-        if (!Array.isArray(parsed.members)) {
-            return [];
-        }
-        return parsed.members.filter(
-            (member): member is Member =>
-                typeof member === "object" &&
-                member !== null &&
-                typeof (member as { email?: unknown }).email === "string" &&
-                GrantedRoleSchema.safeParse((member as { role?: unknown }).role).success,
-        );
-    } catch {
-        return [];
-    }
-};
+const MemberSchema = z.object({ email: z.string(), role: GrantedRoleSchema });
+const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
-const writeMembers = async (path: string, members: Member[]): Promise<void> => {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify({ members }), "utf8");
+// Same substrate as the owner store, and the per-file update queue is what makes two grants landing together
+// (an invite accepted while the owner re-grades another member) both survive instead of the second erasing
+// the first. One malformed entry is skipped so the rest keep their access; a file that is not a members file
+// at all reads as nobody.
+export const fileMembersStore = (path: string): MembersStore => {
+    const file = jsonFile<{ readonly members: readonly Member[] }>(path, {
+        parse: (raw) => {
+            const parsed = MembersFileSchema.safeParse(raw);
+            return parsed.success ? { members: parsed.data.members.flatMap((entry) => MemberSchema.safeParse(entry).data ?? []) } : undefined;
+        },
+        fallback: () => ({ members: [] }),
+    });
+    return {
+        list: async () => [...(await file.read()).members],
+        add: async (email, role) => {
+            await file.update((current) => ({ members: [...current.members.filter((member) => member.email !== email), { email, role }] }));
+        },
+        remove: async (email) => {
+            await file.update((current) => {
+                const kept = current.members.filter((member) => member.email !== email);
+                return kept.length === current.members.length ? current : { members: kept };
+            });
+        },
+    };
 };
-
-export const fileMembersStore = (path: string): MembersStore => ({
-    list: () => readMembers(path),
-    add: async (email, role) => {
-        const members = await readMembers(path);
-        await writeMembers(path, [...members.filter((member) => member.email !== email), { email, role }]);
-    },
-    remove: async (email) => {
-        await writeMembers(
-            path,
-            (await readMembers(path)).filter((member) => member.email !== email),
-        );
-    },
-});
 
 // Identity verified but not allowed for this sandbox, mapped to 403 (vs 401 for every authentication
 // failure), so the browser can tell "wrong Google account" apart from "daemon down / bad token".

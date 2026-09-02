@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 /* guard(), the one decision function every gated action consults.
  *
  * Two families pass through it today: session admission (may this wake start a session?, consulted by
@@ -74,6 +75,6 @@ export function guard<I>(action: GuardedAction<I>, input: I): GuardVerdict {
     try {
         return action.decide(input);
     } catch (error) {
-        return DENY(`guard failure (failing closed): ${error instanceof Error ? error.message : String(error)}`);
+        return DENY(`guard failure (failing closed): ${errorMessage(error)}`);
     }
 }

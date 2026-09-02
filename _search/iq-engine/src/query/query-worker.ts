@@ -1,4 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
+import { errorMessage } from "@intentic/base/errors";
 import { loadEmbedder } from "../embed/embedder.js";
 import { loadReranker } from "../embed/reranker.js";
 import { semanticSearch } from "../engines/semantic.js";
@@ -80,7 +81,7 @@ port.on("message", (request: QueryWorkerRequest) => {
         (error: unknown) => {
             // Per-request failure, reported per-request: a query that hits a bad passage or a broken model call
             // degrades that one answer, and the thread stays up for the next one.
-            port.postMessage({ type: "failed", id: request.id, error: error instanceof Error ? error.message : String(error) });
+            port.postMessage({ type: "failed", id: request.id, error: errorMessage(error) });
         },
     );
 });

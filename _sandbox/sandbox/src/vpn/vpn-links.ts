@@ -1,4 +1,5 @@
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { errorMessage } from "@intentic/base/errors";
 import type { Capability, IntenticLine, VpnConfig, VpnLink } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { vpnDrivers } from "./vpn-drivers.js";
@@ -98,7 +99,7 @@ export const reconnectVpns = async (
             }
             logger.info(`vpn ${entry.id}: reconnected`);
         } catch (error) {
-            logger.warn(`vpn ${entry.id}: could not reconnect: ${error instanceof Error ? error.message : String(error)}`);
+            logger.warn(`vpn ${entry.id}: could not reconnect: ${errorMessage(error)}`);
         }
     }
 };

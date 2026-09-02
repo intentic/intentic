@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@intentic-app/prisma";
+import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import type { StripeGateway } from "./pool-stripe.js";
@@ -38,7 +39,7 @@ export interface PayoutDeps {
     readonly now?: () => Date;
 }
 
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const messageOf = (error: unknown): string => errorMessage(error);
 
 /* Steps 2 and 3 for one reserved payout. Shared by the resume path and the fresh path precisely so they cannot
  * drift: a resumed payment must be sent exactly the way the original attempt would have been, or the
@@ -119,7 +120,10 @@ export const retryPayout = async (deps: PayoutDeps, payoutId: string): Promise<{
     }
     const destination = await destinationOf(deps.prisma, payout.userId);
     if (destination === undefined) {
-        return { paid: false, message: `The creator's payout account is not accepting transfers; the payout stays pending until Stripe will take it.` };
+        return {
+            paid: false,
+            message: `The creator's payout account is not accepting transfers; the payout stays pending until Stripe will take it.`,
+        };
     }
     const outcome = await settle(deps, payout, destination, (deps.now ?? (() => new Date()))());
     return outcome.paid

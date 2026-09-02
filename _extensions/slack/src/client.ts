@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 
@@ -64,7 +65,7 @@ export const closeSlackConnection = async (appToken: string): Promise<void> => {
 const FATAL_CODES = ["invalid_auth", "not_authed", "account_inactive", "token_revoked", "token_expired", "team_disabled"];
 
 const authFailure = (error: unknown, field: string, prefix: string): Error => {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     const code = FATAL_CODES.find((candidate) => message.includes(candidate));
     if (code !== undefined) {
         return new FatalSlackError(`Slack rejected the ${field} (${code}): paste a fresh ${prefix} token on the Slack capability`);

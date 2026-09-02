@@ -6,6 +6,7 @@ import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { downloadFile } from "@huggingface/hub";
+import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
 import { packFragment } from "../../environment/packs.js";
 import {
@@ -439,7 +440,7 @@ const syncWhenServing = (ctx: CapabilityCtx, id: string): void => {
             }
         })
         .catch((error: unknown) => {
-            ctx.logger.warn(`localmodel ${id}: ${error instanceof Error ? error.message : String(error)}`);
+            ctx.logger.warn(`localmodel ${id}: ${errorMessage(error)}`);
         })
         .finally(() => {
             if (servings.get(id) === abort) {
@@ -505,7 +506,7 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
             if (abort.signal.aborted) {
                 return;
             }
-            const message = error instanceof Error ? error.message : String(error);
+            const message = errorMessage(error);
             failures.set(id, message);
             ctx.logger.warn(`localmodel ${id}: ${message}`);
         })

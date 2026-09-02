@@ -37,6 +37,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/engine": "workspace:*",
         "@intentic/graph": "workspace:*",

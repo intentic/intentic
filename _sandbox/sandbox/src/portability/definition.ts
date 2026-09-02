@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import {
     type Capability,
     CapabilitySchema,
@@ -438,7 +439,7 @@ export const parseDefinitionToml = (text: string): SandboxDefinition => {
     try {
         raw = parse(text);
     } catch (error) {
-        throw new DefinitionFormatError(`this is not readable as TOML: ${error instanceof Error ? error.message : String(error)}`);
+        throw new DefinitionFormatError(`this is not readable as TOML: ${errorMessage(error)}`);
     }
     const parsed = SandboxDefinitionSchema.safeParse(raw);
     if (!parsed.success) {

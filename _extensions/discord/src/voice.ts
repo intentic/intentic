@@ -4,6 +4,7 @@ import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { errorMessage } from "@intentic/base/errors";
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, VoiceConnectionStatus } from "@discordjs/voice";
 import { downloadFile } from "@huggingface/hub";
@@ -208,7 +209,7 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
         client = await ensureDiscordClient(config.botToken, "voice");
     } catch (error) {
         releaseDiscordClient(config.botToken, "voice");
-        return `Discord login failed: ${error instanceof Error ? error.message : String(error)}`;
+        return `Discord login failed: ${errorMessage(error)}`;
     }
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (channel === null || !channel.isVoiceBased()) {

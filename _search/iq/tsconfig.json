@@ -8,6 +8,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
-    "references": [{ "path": "../../_search/iq-engine" }, { "path": "../../_search/iq-recall" }],
+    "references": [{ "path": "../../_tools/base" }, { "path": "../../_search/iq-engine" }, { "path": "../../_search/iq-recall" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

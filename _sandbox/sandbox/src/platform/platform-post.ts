@@ -1,4 +1,5 @@
 import { request } from "node:https";
+import { errorMessage } from "@intentic/base/errors";
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "./local-tls.js";
 
@@ -34,7 +35,7 @@ export const postToPlatform = async (config: Config, path: string, body: unknown
                 resolve({ status: response.statusCode ?? 0 });
             },
         );
-        post.on("error", (error: unknown) => resolve({ error: error instanceof Error ? error.message : String(error) }));
+        post.on("error", (error: unknown) => resolve({ error: errorMessage(error) }));
         post.end(payload);
     });
 };

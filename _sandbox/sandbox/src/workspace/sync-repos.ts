@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import type { GitSyncResult } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import { discoverRepos } from "./repo-discovery.js";
@@ -39,7 +40,7 @@ export const syncWorkspaceRepos = async (services: Services, throttleMs: number)
                 lastSync.set(dir, now);
                 return { repo, outcome };
             } catch (error) {
-                return { repo, outcome: { status: "error", message: error instanceof Error ? error.message : String(error) } };
+                return { repo, outcome: { status: "error", message: errorMessage(error) } };
             } finally {
                 inFlight.delete(dir);
             }

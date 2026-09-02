@@ -1,19 +1,15 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
+import { discoveredCatalog } from "../agent/model-catalog.js";
 import type { Config } from "../env.config.js";
+import { jsonFile } from "../store/json-file.js";
 import { discoverCodexModels, discoverTranslatorCodexModels, humanizeModelId, isCodexModel, SEED_CODEX_MODELS } from "./codex-models.js";
 
-/* The Codex model catalog service, the Codex twin of opencode.ts's xaiModels(). Resolves the ids a Codex turn
- * can actually drive, ALWAYS non-empty so the picker is never blank and a turn always resolves a concrete model
- * (never the CLI's rejected gpt-5-codex fallback). Source, in order:
+/* The Codex model catalog service, on the shared ladder (agent/model-catalog.ts): live, then the persisted
+ * last-known-good (recorded by a turn's self-heal, refresh-independent), then the SEED_CODEX_MODELS floor, so
+ * a turn always resolves a concrete model (never the CLI's rejected gpt-5-codex fallback). The live source is
  *   1. the bundled translator's OpenAI-compatible /v1/models, it holds the Codex SUBSCRIPTION credential and
  *      reports exactly the subscription's usable ids (the authoritative source once the translator is up);
- *   2. OpenAI's REST /v1/models with the container OPENAI_API_KEY (best-effort dev fallback with no translator);
- *   3. the persisted last-known-good catalog (recorded by a turn's self-heal, refresh-independent);
- *   4. the compile-time SEED_CODEX_MODELS floor.
- * Cached briefly, and only real (discovered/recorded) results are cached, the seed stays uncached so a usable
- * source is retried on the next read. */
+ *   2. OpenAI's REST /v1/models with the container OPENAI_API_KEY (best-effort dev fallback with no translator). */
 export interface CodexCatalog {
     // The Codex models (+ default id), never empty.
     readonly models: () => Promise<{ models: { id: string; label: string }[]; default: string }>;
@@ -35,26 +31,9 @@ const toCatalog = (ids: readonly string[]): { models: { id: string; label: strin
 };
 
 export const createCodexCatalog = (config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): CodexCatalog => {
-    let cache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
-
-    const readPersisted = async (): Promise<string[]> => {
-        try {
-            const parsed = JSON.parse(await readFile(persistPath, "utf8")) as unknown;
-            return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-        } catch {
-            return [];
-        }
-    };
-    const writePersisted = async (ids: string[]): Promise<void> => {
-        await mkdir(dirname(persistPath), { recursive: true });
-        await writeFile(persistPath, JSON.stringify(ids));
-    };
-
-    return {
-        models: async () => {
-            if (cache !== undefined && Date.now() < cache.expiresAt) {
-                return cache.value;
-            }
+    const catalog = discoveredCatalog({
+        ttlMs: MODELS_TTL_MS,
+        discover: async () => {
             // The translator holds the Codex subscription, so its /v1/models is the subscription's real usable list.
             const fromTranslator =
                 config.translator.url !== ""
@@ -65,24 +44,25 @@ export const createCodexCatalog = (config: Config, persistPath: string, fetchImp
                 fromTranslator.length === 0 && config.openaiApiKey !== ""
                     ? await discoverCodexModels(config.openaiApiKey, fetchImpl).catch(() => [])
                     : [];
-            const discovered = (fromTranslator.length > 0 ? fromTranslator : fromOpenAI).map((model) => model.id);
-            if (discovered.length > 0) {
-                await writePersisted(discovered);
-                const value = toCatalog(discovered);
-                cache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
-                return value;
-            }
-            // No live catalog: serve the last-known-good, else the seed floor. Uncached so a usable source retries.
-            const persisted = await readPersisted();
-            return toCatalog(persisted.length > 0 ? persisted : [...SEED_CODEX_MODELS]);
+            return (fromTranslator.length > 0 ? fromTranslator : fromOpenAI).map((model) => model.id);
         },
+        store: jsonFile<string[]>(persistPath, {
+            parse: (raw) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : undefined),
+            fallback: () => [],
+        }),
+        toStored: (ids) => [...ids],
+        seed: SEED_CODEX_MODELS,
+        fromLive: toCatalog,
+        fromStored: toCatalog,
+    });
+    return {
+        models: catalog.models,
         record: async (ids) => {
             const valid = [...new Set(ids.filter(isCodexModel))];
             if (valid.length === 0) {
                 return;
             }
-            await writePersisted(valid);
-            cache = { value: toCatalog(valid), expiresAt: Date.now() + MODELS_TTL_MS };
+            await catalog.record(valid);
         },
     };
 };

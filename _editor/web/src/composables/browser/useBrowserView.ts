@@ -1,3 +1,4 @@
+import { createBackoff } from "@intentic/base/async";
 import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
 import { FRAME_H264_DELTA, FRAME_H264_KEY, frameUrls } from "./frameUrls";
 import { keyIntent, type KeyFrame } from "./keyIntent";
@@ -136,7 +137,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     // The page the user picked, re-sent on every reconnect so a dropped socket doesn't silently hand them back
     // whichever tab the agent happens to be on.
     let pinned: string | undefined;
-    let retryDelay = RETRY_MS;
+    const ladder = createBackoff({ floorMs: RETRY_MS, capMs: MAX_RETRY_MS, stableMs: STABLE_MS });
     let reconnect: number | undefined;
     let closing = false;
     // The Ctrl+C in flight, waiting on the page's answer. One at a time: a second press before the first came
@@ -299,8 +300,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         }
         if (url === undefined) {
             status.value = `The sandbox isn't reachable, or you're not signed in.`;
-            reconnect = window.setTimeout(() => void connect(), retryDelay);
-            retryDelay = Math.min(retryDelay * 2, MAX_RETRY_MS);
+            reconnect = window.setTimeout(() => void connect(), ladder.next());
             return;
         }
         const ws = new WebSocket(url);
@@ -348,12 +348,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             if (socket.value !== ws || closing) {
                 return;
             }
-            if (openedAt !== 0 && Date.now() - openedAt > STABLE_MS) {
-                retryDelay = RETRY_MS;
-            }
             status.value = `Reconnecting…`;
-            reconnect = window.setTimeout(() => void connect(), retryDelay);
-            retryDelay = Math.min(retryDelay * 2, MAX_RETRY_MS);
+            reconnect = window.setTimeout(() => void connect(), ladder.next(openedAt === 0 ? 0 : Date.now() - openedAt));
         });
     };
 
@@ -372,7 +368,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             teardown();
             closing = false;
             pinned = undefined;
-            retryDelay = RETRY_MS;
+            ladder.reset();
             frame.value = undefined;
             driving.value = false;
             // A decoder holds the state of the stream it was built for, and the next browser is a different

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { extensionIdOf, type ProcessContribution } from "@intentic/extension-manifest";
 import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
@@ -243,7 +244,7 @@ export const createExtensionsRoutes = (services: Services) => {
             try {
                 return await previewExtensionUpdate(services, input.id, input.ref);
             } catch (error) {
-                throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
+                throw new ORPCError("BAD_REQUEST", { message: errorMessage(error) });
             }
         }),
         // Updating and reverting change the code that runs against the owner's repos and credentials, so like
@@ -255,7 +256,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 const applied = await applyExtensionUpdate(services, input.id, input.ref);
                 return { ok: true, ref: applied.ref, ...(applied.rebuildNeeded ? { rebuildNeeded: true } : {}) } as const;
             } catch (error) {
-                throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
+                throw new ORPCError("BAD_REQUEST", { message: errorMessage(error) });
             }
         }),
         revert: i.revert.handler(async ({ input, context }) => {
@@ -264,7 +265,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 const reverted = await revertExtensionUpdate(services, input.id);
                 return { ok: true, ref: reverted.ref } as const;
             } catch (error) {
-                throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
+                throw new ORPCError("BAD_REQUEST", { message: errorMessage(error) });
             }
         }),
         // The policy decides what may happen UNATTENDED, operating-tier gated for the same reason the verbs above are.

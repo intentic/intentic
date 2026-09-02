@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import * as baked from "@anthropic-ai/claude-agent-sdk";
+import { errorMessage } from "@intentic/base/errors";
 import { CLAUDE_SDK_EXPORTS } from "../engines/engine-descriptors.js";
 import { resolveEngine } from "../engines/engine-resolve.js";
 import { quarantineVersion } from "../engines/engine-store.js";
@@ -90,7 +91,7 @@ export const refreshClaudeSdk = async (): Promise<ClaudeSdkStatus> => {
         /* A copy that cannot be imported can never serve a turn, so it is refused permanently rather than
          * retried at the top of every turn: without the quarantine this failure would be paid, and logged,
          * once per turn forever. */
-        await quarantineVersion("claude", resolved.version, error instanceof Error ? error.message : String(error), new Date().toISOString());
+        await quarantineVersion("claude", resolved.version, errorMessage(error), new Date().toISOString());
         return useBaked();
     }
 };

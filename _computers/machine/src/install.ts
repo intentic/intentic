@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdir, realpath, rename, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { pollUntil } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { type Log, WINDOWS_LAUNCH_STUB } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
 import { readResidentPid, reconcileResidency, stopResident } from "./resident.js";
@@ -32,21 +34,13 @@ export const SELF_UPDATE_GUARD_ENV = "INTENTIC_MACHINE_NO_SELF_UPDATE";
 const RESIDENT_START_TIMEOUT_MS = 10_000;
 const RESIDENT_START_POLL_MS = 200;
 
-export const residentCameUp = async (): Promise<boolean> => {
-    for (let waited = 0; waited < RESIDENT_START_TIMEOUT_MS; waited += RESIDENT_START_POLL_MS) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait on one pidfile, by definition serial
-        if ((await readResidentPid()) !== undefined) {
-            return true;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- same
-        await new Promise((resolvePromise) => setTimeout(resolvePromise, RESIDENT_START_POLL_MS));
-    }
-    return false;
-};
+export const residentCameUp = (): Promise<boolean> =>
+    pollUntil(async () => (await readResidentPid()) !== undefined, { intervalMs: RESIDENT_START_POLL_MS, timeoutMs: RESIDENT_START_TIMEOUT_MS });
 
 // The one wiring of the upgrade machinery to this machine's resident loop, shared by `upgrade` and the
 // self-update below so the two cannot drift apart.
-export const machineUpgradeExec = (out: Log): UpgradeExec => realUpgradeExec(stopResident, async () => await reconcileResidency(() => undefined), residentCameUp, out);
+export const machineUpgradeExec = (out: Log): UpgradeExec =>
+    realUpgradeExec(stopResident, async () => await reconcileResidency(() => undefined), residentCameUp, out);
 
 // Whether this process IS the installed agent — as opposed to a dev run (`node dist/cli.js`, AGENT_BIN) or a
 // binary somebody is trying out from Downloads. Only the installed agent self-updates or edits the machine.
@@ -71,7 +65,12 @@ export interface SelfUpdateIo {
  * `upgrade` runs, and then THE NEW AGENT re-runs this very command — so the setup that follows is always the
  * newest agent's. A failed update is a note, never a refusal: the pairing token in the argv expires in
  * minutes, and enrolling on a slightly older agent beats not enrolling at all. */
-export const selfUpdateBeforeSetup = async (io: SelfUpdateIo, env: Record<string, string | undefined>, args: readonly string[], out: Log): Promise<void> => {
+export const selfUpdateBeforeSetup = async (
+    io: SelfUpdateIo,
+    env: Record<string, string | undefined>,
+    args: readonly string[],
+    out: Log,
+): Promise<void> => {
     if (env[SELF_UPDATE_GUARD_ENV] !== undefined) {
         return;
     }
@@ -117,7 +116,7 @@ const posixPathRepair = async (out: Log): Promise<void> => {
         await rm(link, { force: true });
         await symlink(agentPath, link);
     } catch (error) {
-        out(`note: couldn't link ${link} (${error instanceof Error ? error.message : String(error)}) — run ${agentPath} directly.`);
+        out(`note: couldn't link ${link} (${errorMessage(error)}) — run ${agentPath} directly.`);
         return;
     }
     if (!(process.env["PATH"] ?? "").split(":").includes(linkDir)) {
@@ -181,7 +180,7 @@ const windowsPathRepair = (out: Log): void => {
     } catch (error) {
         // Best-effort: PATH is the convenience, connecting is the job.
         out(
-            `note: couldn't put ${binDir} on your PATH (${error instanceof Error ? error.message : String(error)}). Run intentic-machine from that folder, or add it to your PATH yourself.`,
+            `note: couldn't put ${binDir} on your PATH (${errorMessage(error)}). Run intentic-machine from that folder, or add it to your PATH yourself.`,
         );
     }
 };
@@ -208,7 +207,7 @@ export const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     } catch (error) {
         await rm(staged, { force: true }).catch(() => undefined);
         out(
-            `note: couldn't download the windowless launcher (${error instanceof Error ? error.message : String(error)}). Everything still works; a console window will flash on your desktop when this machine starts the agent at login.`,
+            `note: couldn't download the windowless launcher (${errorMessage(error)}). Everything still works; a console window will flash on your desktop when this machine starts the agent at login.`,
         );
     }
 };

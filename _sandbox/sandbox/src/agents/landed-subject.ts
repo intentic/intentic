@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { LandedMessageDraft, LandedMessageStep } from "@intentic/sandbox-contract";
 import { type QuickAnswer, sentenceReason } from "../agent/quick-answer.js";
 import { askQuickModel, type QuickModelAttempt } from "../agent/quick-model.js";
@@ -187,7 +188,8 @@ export const describeLanding = async (services: Services, id: string): Promise<v
          * The breaking sentence rides the note's gate ONLY while nothing was detected: a detected shrink keeps
          * its sentence on every repo, changelog or not, because the declaration is what the push gate reads from
          * the range (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none. */
-        const breaking = removed.length > 0 ? (value.breaking === `` ? fallbackBreakingNote(removed) : value.breaking) : wantsNote ? value.breaking : ``;
+        const breaking =
+            removed.length > 0 ? (value.breaking === `` ? fallbackBreakingNote(removed) : value.breaking) : wantsNote ? value.breaking : ``;
         // Broadcasts as it writes, which is what puts the sentence in the commit box of a panel that is already
         // open with this agent's chip lit, no request, no rescan, no second thing that has to go right.
         await services.agents.setLandedSubject(id, {
@@ -208,7 +210,7 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     } catch (error) {
         // The chain ran dry, or nothing was connected to ask. The steps already carry each model's own words;
         // this line is for the surfaces with one line to spend.
-        ended(`failed`, error instanceof Error ? error.message : String(error));
+        ended(`failed`, errorMessage(error));
         throw error;
     }
 };

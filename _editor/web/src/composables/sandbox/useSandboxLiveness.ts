@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { watch } from "vue";
 import { desyncAgents } from "../agents/useAgents";
 import { queryClient } from "../queryPersistence";
@@ -46,19 +47,18 @@ let watchdog: ReturnType<typeof setTimeout> | undefined;
 // instead of being sniffed out of `error.name === "AbortError"` after the fact, the two are identical at the
 // error object, because the watchdog aborts the very same request.
 let watchdogTripped = false;
-// Resolver of the in-flight sleep, so a sandbox switch cuts a backoff short instead of stalling the reconnect
+// The in-flight backoff's controller, so a sandbox switch cuts it short instead of stalling the reconnect
 // against the new daemon for up to the ceiling.
-let wake: (() => void) | undefined;
+let napping: AbortController | undefined;
 // Last observed reachability per sandbox id: switching back to a recently-healthy sandbox renders the
 // workspace immediately (stale-while-revalidate) while the stream re-establishes; a wrong guess self-corrects
 // on the first failed connect or watchdog trip.
 const lastKnown = new Map<string, boolean>();
 
-const sleep = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-        wake = resolve;
-        setTimeout(resolve, ms);
-    });
+const nap = (ms: number): Promise<void> => {
+    napping = new AbortController();
+    return sleep(ms, { signal: napping.signal });
+};
 
 const clearWatchdog = (): void => {
     if (watchdog !== undefined) {
@@ -271,7 +271,7 @@ const loop = async (): Promise<void> => {
             return;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: the backoff IS the loop
-        await sleep(connection.value.retryDelayMs);
+        await nap(connection.value.retryDelayMs);
         if (!running) {
             return;
         }
@@ -312,7 +312,7 @@ watch(activeSandboxId, (id, previous) => {
     resetDaemonRoutes();
     resetDaemonBoot();
     controller?.abort();
-    wake?.();
+    napping?.abort();
 });
 
 // The address changed under the open stream, the loopback shortcut qualified (promotion), the daemon
@@ -321,7 +321,7 @@ watch(activeSandboxId, (id, previous) => {
 // as it happens to stay healthy. The attempt itself tells this abort from a real break (retargetedDuring).
 watch(daemonBase, () => {
     controller?.abort();
-    wake?.();
+    napping?.abort();
 });
 
 export function useSandboxLiveness() {

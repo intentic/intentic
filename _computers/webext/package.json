@@ -21,6 +21,7 @@
         "preview": "node scripts/preview.mjs"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/browser": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@orpc/server": "catalog:",

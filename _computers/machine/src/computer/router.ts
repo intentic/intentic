@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type HostScopes, type MachineFlowLine, type MachineSandboxFlow, hostContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
@@ -44,7 +45,7 @@ async function* streamFlow(run: (onLine: (line: string) => void) => Promise<stri
         nudge();
     })
         .then((message) => ({ ok: true, message }))
-        .catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }))
+        .catch((error: unknown) => ({ ok: false, message: errorMessage(error) }))
         .then((outcome) => {
             settled = outcome;
             nudge();
@@ -73,7 +74,10 @@ async function* streamFlow(run: (onLine: (line: string) => void) => Promise<stri
 // Which function each op is. Start/stop/restart are a docker call and say one sentence, `logs` is a read whose
 // lines ARE the answer, and the rest run `ic` and narrate themselves for minutes. One switch so the machine has a
 // single answer to "what does this op mean".
-const flowFor = ({ op, slug, hash, parentUrl, pair, definition, overlay, overlayHash }: MachineSandboxFlow, scopes: HostScopes): ((onLine: (line: string) => void) => Promise<string>) => {
+const flowFor = (
+    { op, slug, hash, parentUrl, pair, definition, overlay, overlayHash }: MachineSandboxFlow,
+    scopes: HostScopes,
+): ((onLine: (line: string) => void) => Promise<string>) => {
     switch (op) {
         case "remove":
             return (onLine) => removeSandbox(slug, scopes, onLine);

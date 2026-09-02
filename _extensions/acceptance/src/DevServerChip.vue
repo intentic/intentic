@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { ui, Icon, Popover, vAction } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { host } from "./host";
@@ -50,7 +51,7 @@ const start = async (): Promise<void> => {
     try {
         await targets.startPanel(repo);
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
     } finally {
         starting.value = false;
     }

@@ -1,6 +1,7 @@
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { mintCertificate } from "./certs.js";
 import { createNetwork, IPS, isRunning, logsOf, removeContainer, removeNetwork, startContainer, sweepStrays } from "./containers.js";
 import { dockerAvailable, freePort, HOST, plainUrlFor, requireLoopback, urlFor } from "./docker.js";
@@ -99,7 +100,7 @@ export const waitForHttp = async (url: string, what: string, timeoutMs: number, 
             }
             last = `HTTP ${response.status}`;
         } catch (error) {
-            last = error instanceof Error ? error.message : String(error);
+            last = errorMessage(error);
         }
         if (container !== undefined && !(await isRunning(container))) {
             throw new Error(`${what} exited before it answered at ${url}, last attempt: ${last}${await tail()}`);

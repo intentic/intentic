@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { checkProject, findTsconfig } from "./checker.js";
 import { diagnose } from "./client.js";
 import { rename } from "./rename.js";
@@ -94,6 +95,6 @@ const main = async (argv: readonly string[]): Promise<number> => {
 try {
     process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
-    process.stderr.write(`lsp: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`lsp: ${errorMessage(error)}\n`);
     process.exitCode = 2;
 }

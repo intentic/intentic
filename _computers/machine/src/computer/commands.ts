@@ -1,4 +1,5 @@
 import { rm } from "node:fs/promises";
+import { sleep } from "@intentic/base/async";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { prepareSetup } from "../install.js";
@@ -34,7 +35,7 @@ const enroll = async (
                 throw error;
             }
             process.stderr.write(`connecting: the sandbox isn't reachable yet, retrying (${attempt}/${attempts})…\n`);
-            await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs));
+            await sleep(delayMs);
             continue;
         }
         if (response.status === 401) {
@@ -42,7 +43,7 @@ const enroll = async (
         }
         if (response.status >= 500 && attempt < attempts) {
             process.stderr.write(`connecting: the sandbox is warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`);
-            await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs));
+            await sleep(delayMs);
             continue;
         }
         if (!response.ok) {
@@ -224,7 +225,11 @@ const updates = buildCommand<UpdatesFlags>({
          * connection means NOW, and the fresh loop re-reads the switch before it touches anything. The same
          * reconcile every setup runs, so it also repairs a stale login entry while it is at it. */
         await reconcileResidency(out);
-        out(flags.on ? "Background update downloads are on for this machine's sandboxes." : "Background update downloads are off. The update card in your sandbox still downloads and applies on demand.");
+        out(
+            flags.on
+                ? "Background update downloads are on for this machine's sandboxes."
+                : "Background update downloads are off. The update card in your sandbox still downloads and applies on demand.",
+        );
     },
 });
 

@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { errorMessage } from "@intentic/base/errors";
 import { sdk } from "../claude/claude-sdk.js";
 import { z } from "zod";
 import { resolveWithin } from "../workspace/workspace-files.js";
@@ -36,7 +37,7 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
                     try {
                         return ok(renderForRead(await readFile(abs, "utf8")));
                     } catch (error) {
-                        return fail(`cannot read ${path}: ${error instanceof Error ? error.message : String(error)}`);
+                        return fail(`cannot read ${path}: ${errorMessage(error)}`);
                     }
                 },
             ),
@@ -57,13 +58,13 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
                     try {
                         content = await readFile(abs, "utf8");
                     } catch (error) {
-                        return fail(`cannot read ${path}: ${error instanceof Error ? error.message : String(error)}`);
+                        return fail(`cannot read ${path}: ${errorMessage(error)}`);
                     }
                     let next: string;
                     try {
                         next = applyEdit(content, anchor, ops as HashlineOp[]);
                     } catch (error) {
-                        return fail(error instanceof Error ? error.message : String(error));
+                        return fail(errorMessage(error));
                     }
                     await writeFile(abs, next);
                     return ok(renderForRead(next));

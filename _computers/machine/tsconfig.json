@@ -9,6 +9,7 @@
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts", "./src/computer/testing.ts"],
     "references": [
+        { "path": "../../_tools/base" },
         { "path": "../../_computers/browser" },
         { "path": "../../_computers/desktop" },
         { "path": "../../_computers/local-agent" },

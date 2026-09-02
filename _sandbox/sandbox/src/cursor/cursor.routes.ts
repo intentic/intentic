@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { cursorContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -29,7 +30,7 @@ export const createCursorRoutes = (services: Services) => {
                     connected: () => composeEnvironment(services),
                 });
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = errorMessage(error);
                 throw new ORPCError("PRECONDITION_FAILED", { message });
             }
         }),

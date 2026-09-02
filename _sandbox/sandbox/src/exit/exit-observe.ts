@@ -1,5 +1,6 @@
 import { connect as netConnect, type Socket } from "node:net";
 import { connect as tlsConnect } from "node:tls";
+import { errorMessage } from "@intentic/base/errors";
 import type { ExitObservation } from "@intentic/sandbox-contract";
 import { countryName } from "./exit-countries.js";
 import { type ExitResolver, resolveThroughExit } from "./exit-dns.js";
@@ -132,7 +133,7 @@ export const observeThrough = async (dial: ExitDialer): Promise<ExitObservation>
             }
             failures.push(`${probe.host}: answered with no address`);
         } catch (error) {
-            failures.push(`${probe.host}: ${error instanceof Error ? error.message : String(error)}`);
+            failures.push(`${probe.host}: ${errorMessage(error)}`);
         }
     }
     throw new Error(`could not read this exit's public address. Tried:\n${failures.map((line) => `  ${line}`).join("\n")}`);

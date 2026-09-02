@@ -1,3 +1,5 @@
+import { sleep } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { renderPage, toPageState } from "@intentic/browser/page";
 import {
     askConfirm,
@@ -99,13 +101,13 @@ export const openUrl = async (url: string, where: "current" | "new"): Promise<st
         return `Opened ${target}.`;
     }
     // Give the navigation a moment to commit: reading the old page back would be worse than a short wait.
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await sleep(600);
     try {
         const permitted = await targetTab("read", tab.id);
         announce(permitted.id, `The agent opened this page`);
         return await pageText(permitted.id);
     } catch (error) {
-        return `Opened ${target}. ${error instanceof Error ? error.message : String(error)}`;
+        return `Opened ${target}. ${errorMessage(error)}`;
     }
 };
 

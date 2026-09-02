@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 
 /* Containers driven through the docker CLI, rather than through a library.
  *
@@ -25,7 +26,7 @@ const docker = async (args: string[], what: string, timeoutMs = 120_000): Promis
         const { stdout } = await run(`docker`, args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 });
         return stdout.trim();
     } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
+        const message = errorMessage(cause);
         throw new Error(`${what} failed: ${message}`, { cause });
     }
 };

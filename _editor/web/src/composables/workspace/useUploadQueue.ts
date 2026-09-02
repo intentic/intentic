@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, markRaw, reactive, ref } from "vue";
@@ -213,24 +214,6 @@ const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[
     }
 };
 
-// A cancelable delay (retry backoff). Resolves early if the signal aborts, so a cancel never waits out the backoff.
-const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
-    new Promise((resolve) => {
-        if (signal.aborted) {
-            resolve();
-            return;
-        }
-        const timer = setTimeout(resolve, ms);
-        signal.addEventListener(
-            `abort`,
-            () => {
-                clearTimeout(timer);
-                resolve();
-            },
-            { once: true },
-        );
-    });
-
 // Upload one file via XHR with a plain File body, works on HTTP/1.1 and HTTP/2, streams from disk, real progress.
 // onProgress reports the file's CUMULATIVE bytes, so we add only the delta since the last event to the aggregate.
 const uploadOneXhr = (item: QueueFile, signal: AbortSignal): Promise<void> => {
@@ -367,7 +350,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
                 }
             }
             recomputeBytesDone();
-            await sleep(RETRY_BASE_MS * 2 ** (attempt - 1), signal);
+            await sleep(RETRY_BASE_MS * 2 ** (attempt - 1), { signal });
             if (signal.aborted) {
                 return;
             }

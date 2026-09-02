@@ -1,10 +1,10 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "./claude-sdk.js";
 import { CLAUDE_SEED_MODELS, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { discoveredCatalog } from "../agent/model-catalog.js";
 import type { Config } from "../env.config.js";
+import { jsonFile } from "../store/json-file.js";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 
 /* Claude's model catalog for the picker, built from the TWO catalogs Anthropic publishes, because neither is
@@ -27,12 +27,11 @@ import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
  * they hand their effort levels and badges to the versioned rows of their own tier (withTierCapabilities), but
  * they never become rows themselves, and neither does the nameless "Default (recommended)" the CLI lists first.
  *
- * Fallback order, matching codex-catalog.ts and kimi-catalog.ts: the live merge; the persisted last-known-good
- * catalog, rewritten on every successful discovery; the compile-time seed floor. Only real (discovered) results
- * are cached, so an unreachable source is retried on the next read rather than pinning a degraded list for the
- * daemon's lifetime. Persisting whole model records rather than bare ids (codex/kimi persist ids, having nothing
- * else) keeps the display name and capabilities too, so a version that postdates this build survives a restart
- * with its presentation intact and the seed floor is genuinely last-resort.
+ * The ladder is the shared one (agent/model-catalog.ts): the live merge; the persisted last-known-good catalog,
+ * rewritten on every successful discovery; the compile-time seed floor. Persisting whole model records rather
+ * than bare ids (codex/cursor persist ids, having nothing else) keeps the display name and capabilities too, so
+ * a version that postdates this build survives a restart with its presentation intact and the seed floor is
+ * genuinely last-resort.
  *
  * Everything either catalog reports is forwarded verbatim, the repo curates nothing about any model, so a
  * release or a rename needs no edit here. The OpenAI-compatible providers report ids only and render label-only;
@@ -179,7 +178,7 @@ const MODELS_TTL_MS = 60 * 60_000;
 // a tier here (the old /opus/i preference) would silently fall through to models[0] the moment Anthropic renamed
 // its flagship, so the ordering the REST catalog already reports is both simpler and the one thing that stays
 // correct.
-const withDefault = (models: Model[]): { models: Model[]; default: string } => ({ models, default: models[0]!.id });
+const withDefault = (models: readonly Model[]): { models: Model[]; default: string } => ({ models: [...models], default: models[0]!.id });
 
 // `discover` and `fetchImpl` are injectable for the same reason codex/kimi inject `fetchImpl`: the real discovery
 // spawns the Claude Code CLI, which inherits the ambient environment, so a test that merely withholds a token
@@ -193,23 +192,6 @@ export const createClaudeCatalog = (
     discover: (oauthToken: string | undefined, cwd: string) => Promise<Model[]> = discoverClaudeModels,
     fetchImpl: typeof fetch = fetch,
 ): ClaudeCatalog => {
-    let cache: { value: { models: Model[]; default: string }; expiresAt: number } | undefined;
-
-    // Parsed through the wire schema rather than trusted: the file is on disk across upgrades, so a record written
-    // by an older build (or a truncated write) must degrade to the alias floor, never reach the picker half-formed.
-    const readPersisted = async (): Promise<Model[]> => {
-        try {
-            const parsed = z.array(ModelSchema).safeParse(JSON.parse(await readFile(persistPath, "utf8")));
-            return parsed.success ? parsed.data : [];
-        } catch {
-            return [];
-        }
-    };
-    const writePersisted = async (models: Model[]): Promise<void> => {
-        await mkdir(dirname(persistPath), { recursive: true });
-        await writeFile(persistPath, JSON.stringify(models));
-    };
-
     const oauthToken = async (accountId?: string): Promise<string | undefined> => {
         const id = accountId ?? (await claudeStore.list())[0]?.id;
         if (id !== undefined) {
@@ -221,28 +203,24 @@ export const createClaudeCatalog = (
         return config.claudeCodeOauthToken !== "" ? config.claudeCodeOauthToken : undefined;
     };
 
-    return {
-        models: async (accountId) => {
-            if (cache !== undefined && Date.now() < cache.expiresAt) {
-                return cache.value;
-            }
+    const catalog = discoveredCatalog({
+        ttlMs: MODELS_TTL_MS,
+        // Both catalogs answer for the same account and neither gates the other: one is a process spawn, the
+        // other a fetch, so they run concurrently and either alone still yields a usable list.
+        discover: async (accountId?: string) => {
             const token = await oauthToken(accountId);
-            // Both catalogs answer for the same account and neither gates the other: one is a process spawn, the
-            // other a fetch, so they run concurrently and either alone still yields a usable list.
             const [aliases, versioned] = await Promise.all([discover(token, cwd).catch(() => []), discoverApiModels(token, fetchImpl)]);
-            const merged = mergeCatalogs(aliases, versioned);
-            if (merged.length > 0) {
-                await writePersisted(merged);
-                const value = withDefault(merged);
-                cache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
-                return value;
-            }
-            // No live catalog: serve the last-known-good, else the seed floor. Uncached either way, so both
-            // sources are re-probed on the next read instead of pinning a degraded list for the daemon's lifetime.
-            // The versioned test runs here too, the file is untrusted disk state (that is why it is schema-parsed
-            // at all), so a record written by any other build can't put an unnameable row back in the picker.
-            const persisted = (await readPersisted()).filter(namesVersion);
-            return withDefault(persisted.length > 0 ? persisted : [...CLAUDE_SEED_MODELS]);
+            return mergeCatalogs(aliases, versioned);
         },
-    };
+        // Parsed through the wire schema rather than trusted: the file is on disk across upgrades, so a record
+        // written by an older build (or a truncated write) must degrade to the floor, never reach the picker
+        // half-formed. The versioned test runs on the way out too, so a record written by any other build can't
+        // put an unnameable alias row back in the picker.
+        store: jsonFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] }),
+        toStored: (models) => [...models],
+        seed: CLAUDE_SEED_MODELS,
+        fromLive: withDefault,
+        fromStored: withDefault,
+    });
+    return { models: catalog.models };
 };

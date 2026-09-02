@@ -7,6 +7,9 @@
         "typecheck": "tsc --noEmit",
         "e2e:onboarding": "INTENTIC_E2E_ONBOARDING=1 playwright test"
     },
+    "dependencies": {
+        "@intentic/base": "workspace:*"
+    },
     "devDependencies": {
         "@intentic-app/prisma": "workspace:*",
         "@intentic/constants": "workspace:*",

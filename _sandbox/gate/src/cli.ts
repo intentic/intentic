@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { errorMessage } from "@intentic/base/errors";
 import { clientTimeoutMs, exitOf, parseArgs, readVerdict, targetOf, USAGE } from "./gate.js";
 
 /* The process around gate.ts: stdin, one fetch, stdout, an exit code. No CLI framework, two options and a
@@ -42,7 +43,7 @@ try {
         signal: AbortSignal.timeout(clientTimeoutMs(call.waitS)),
     });
 } catch (error) {
-    console.error(`the gate could not be reached: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`the gate could not be reached: ${errorMessage(error)}`);
     process.exit(2);
 }
 

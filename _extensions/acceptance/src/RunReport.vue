@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import {
     appLink,
     Button,
@@ -134,7 +135,7 @@ const halt = async (slug: string): Promise<void> => {
     try {
         await stop(id);
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
     }
 };
 
@@ -144,7 +145,7 @@ const relaunch = async (slug: string): Promise<void> => {
     try {
         await retry(run.manifest.runId, slug);
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
     } finally {
         const next = new Set(retrying.value);
         next.delete(slug);

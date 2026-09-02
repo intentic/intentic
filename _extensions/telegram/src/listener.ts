@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import {
     createStreamingPainter,
     failureNotice,
@@ -213,7 +214,7 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
                 if (wait === undefined) {
                     throw error;
                 }
-                await new Promise((resolve) => setTimeout(resolve, wait));
+                await sleep(wait);
                 return await call();
             }
         };

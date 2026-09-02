@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { SingleFlight } from "@intentic/base/async";
+import { SingleFlight, sleep } from "@intentic/base/async";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -119,8 +119,6 @@ const LOCK_WAIT_MS = 15_000;
 const LOCK_POLL_MS = 100;
 
 const base64url = (buffer: Buffer): string => buffer.toString("base64url");
-
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface AuthorizeChallenge {
     readonly authorizeUrl: string;
@@ -358,7 +356,7 @@ export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
                     logger.error({ account: id }, "claude refresh lock not obtained within the wait, refreshing unlocked");
                     return false;
                 }
-                await delay(LOCK_POLL_MS);
+                await sleep(LOCK_POLL_MS);
             }
         }
     };

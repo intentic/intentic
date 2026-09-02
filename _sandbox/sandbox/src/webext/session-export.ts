@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { errorMessage } from "@intentic/base/errors";
 import type { Capability, WebExtCookie } from "@intentic/sandbox-contract";
 import { acquireProfileLock, isProfileOpen, profileOwner, releaseProfileLock, sessionDir } from "../browser/session-store.js";
 
@@ -143,7 +144,7 @@ export const exportBrowserSession = async (
         // session.
         return {
             ok: false,
-            message: `Could not read the session out of "${request.account}": ${error instanceof Error ? error.message : String(error)}`,
+            message: `Could not read the session out of "${request.account}": ${errorMessage(error)}`,
         };
     } finally {
         releaseProfileLock(owner);

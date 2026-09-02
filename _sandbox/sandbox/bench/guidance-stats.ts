@@ -33,6 +33,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { guidanceStats } from "./guidance-corpus.js";
 
 const args = process.argv.slice(2);
@@ -43,7 +44,7 @@ let stats: ReturnType<typeof guidanceStats>;
 try {
     stats = guidanceStats(root);
 } catch (error) {
-    process.stderr.write(`cannot read a corpus at ${root}: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`cannot read a corpus at ${root}: ${errorMessage(error)}\n`);
     process.exit(1);
 }
 
@@ -56,7 +57,9 @@ if (asJson) {
     process.stdout.write(`${JSON.stringify(stats, null, 2)}\n`);
 } else {
     const { root: from, corpus, ...blocks } = stats;
-    process.stdout.write(`corpus: ${corpus.sessions} sessions, ${corpus.calls.toLocaleString()} calls in ${corpus.responses.toLocaleString()} responses, `);
+    process.stdout.write(
+        `corpus: ${corpus.sessions} sessions, ${corpus.calls.toLocaleString()} calls in ${corpus.responses.toLocaleString()} responses, `,
+    );
     process.stdout.write(`${corpus.errorRate} errored, ${corpus.toolTime} of tool time\n`);
     process.stdout.write(`  from ${from}\n`);
     const byUse = Object.entries(corpus.models).toSorted((a, b) => b[1] - a[1]);

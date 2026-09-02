@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER, sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -147,5 +148,5 @@ export const daemonErrorMessage = (error: unknown): string => {
         }
         return error.message;
     }
-    return error instanceof Error ? error.message : String(error);
+    return errorMessage(error);
 };

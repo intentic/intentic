@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { pollUntil } from "@intentic/base/async";
 import { interfaceAddress } from "../vpn/net-probe.js";
 import { exitRouteTable } from "./exit-paths.js";
 
@@ -29,17 +30,18 @@ export const bareAddress = (address: string): string => address.split("/")[0] ??
 // The tunnel's own address, waited for. An interface exists before its address does (that is the whole
 // "connecting" window), so a dial that returns before the address lands is normal and this is the wait.
 export const awaitInterfaceAddress = async (name: string, timeoutMs: number): Promise<string> => {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-        const address = await interfaceAddress(name);
-        if (address !== undefined) {
-            return bareAddress(address);
-        }
-        if (Date.now() >= deadline) {
-            throw new Error(`${name} came up but was never assigned an address, so there is nothing to route through it`);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
+    let address: string | undefined;
+    await pollUntil(
+        async () => {
+            address = await interfaceAddress(name);
+            return address !== undefined;
+        },
+        { intervalMs: 250, timeoutMs },
+    );
+    if (address === undefined) {
+        throw new Error(`${name} came up but was never assigned an address, so there is nothing to route through it`);
     }
+    return bareAddress(address);
 };
 
 /* Point the exit's private table at its interface and route that interface's own source address into it.

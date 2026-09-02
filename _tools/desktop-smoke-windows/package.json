@@ -15,6 +15,7 @@
         "smoke:agents": "node dist/main.js agents"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/desktop": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",

@@ -18,6 +18,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/gate": "workspace:*",
         "tslib": "catalog:"
     },

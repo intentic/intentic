@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import {
     type CliLauncher,
@@ -659,9 +660,7 @@ export const registerMutagenAutostart = (mutagen: string, launcher: CliLauncher,
         spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore", windowsHide: true });
         setWindowsRunValue(MUTAGEN_RUN_VALUE, quotedCommandLine(stubCommand(stub, mutagenDaemonLogPath, [mutagen, "daemon", "start"])));
     } catch (error) {
-        log(
-            `note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`,
-        );
+        log(`note: could not register the Mutagen daemon for autostart (${errorMessage(error)}); it still runs while you're logged in.`);
     }
 };
 

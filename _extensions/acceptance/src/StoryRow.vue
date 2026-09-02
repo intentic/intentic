@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { Button, Checkbox, DisclosureRow, ui, Icon, Notice, noticeOf, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
@@ -162,7 +163,7 @@ const flush = async (): Promise<void> => {
         failure.value = undefined;
         state.value = markdown.value === written ? `saved` : `dirty`;
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
         state.value = `dirty`;
     }
 };
@@ -172,7 +173,7 @@ const discard = async (): Promise<void> => {
     try {
         await remove(story.path);
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
         confirmRemove.value = false;
     }
 };

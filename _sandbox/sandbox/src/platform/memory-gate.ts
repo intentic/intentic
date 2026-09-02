@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import { readMemoryHeadroom, waitForMemoryHeadroom } from "./memory-admission.js";
 
 /* THE ADMISSION GATE, ON A COMMAND INSTEAD OF A TURN, as one small binary bin/queue-run can call.
@@ -66,6 +67,6 @@ try {
         );
     }
 } catch (error) {
-    process.stderr.write(`[memory-gate] skipped: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`[memory-gate] skipped: ${errorMessage(error)}\n`);
 }
 process.exit(0);

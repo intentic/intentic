@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { errorMessage } from "@intentic/base/errors";
 import type { BackendRouteHandler, ExtensionServerApi, ExtensionServerModule } from "@intentic/extension-api";
 import {
     BACKEND_HOST_HEADER,
@@ -75,7 +76,7 @@ const loadOne = async (config: BackendHostConfig, extension: BackendHostExtensio
         };
         await resolveModule(imported).activateServer(api, { extensionId: extension.id });
     } catch (error) {
-        return { status: { id: extension.id, state: "error", detail: error instanceof Error ? error.message : String(error) } };
+        return { status: { id: extension.id, state: "error", detail: errorMessage(error) } };
     }
     return {
         status: { id: extension.id, state: "running" },
@@ -146,7 +147,7 @@ export const createBackendHostApp = async (config: BackendHostConfig): Promise<B
                 return (await extension.handler(rebased)) ?? json({ error: "not found" }, 404);
             } catch (error) {
                 // Contained like an activation failure: one throwing route answers 500, the host lives on.
-                return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+                return json({ error: errorMessage(error) }, 500);
             }
         },
     };

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CiStore } from "./ci-store.js";
@@ -82,7 +83,7 @@ export const createCiHookReconciler = (
             try {
                 await ciClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
             } catch (error) {
-                const reason = error instanceof Error ? error.message : String(error);
+                const reason = errorMessage(error);
                 warnings.set(
                     project.repo,
                     `Pipeline webhook registration failed: ${reason}. ${scopeHint(project)}. ${manualRecipe(project, url, secret)}`,

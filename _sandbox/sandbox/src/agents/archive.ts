@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { ResourceReaper } from "../platform/reaper.js";
@@ -97,8 +98,13 @@ export interface AgentArchiveResult {
 // The failing teardown's own sentence, for the strip the board raises. Trimmed to one line: git's stderr
 // arrives as a paragraph, and the strip is a sentence wide.
 const reasonOf = (error: unknown): string => {
-    const text = error instanceof Error ? error.message : String(error);
-    return text.split(`\n`).find((line) => line.trim() !== ``)?.trim() ?? `the checkout could not be released`;
+    const text = errorMessage(error);
+    return (
+        text
+            .split(`\n`)
+            .find((line) => line.trim() !== ``)
+            ?.trim() ?? `the checkout could not be released`
+    );
 };
 
 // Retire the checkouts, then stamp the marker, in that order, so a failure mid-way leaves an agent that is

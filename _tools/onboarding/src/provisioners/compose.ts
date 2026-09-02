@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import { expect } from "@playwright/test";
 import { PrismaClient } from "@intentic-app/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -79,7 +80,7 @@ const sh = async (command: string, cwd: string, what: string, timeoutMs = 300_00
         });
         return `${stdout}${stderr}`;
     } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
+        const message = errorMessage(cause);
         throw new Error(`${what} failed: ${message}`, { cause });
     }
 };

@@ -19,6 +19,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",

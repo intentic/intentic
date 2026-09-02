@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import {
     capabilitiesOf,
     endpointProvider,
@@ -116,7 +117,7 @@ export type QuickModelProgress = (attempts: readonly QuickModelAttempt[]) => voi
 // user-facing message (one-shot.ts turns a spent allowance and a dead credential into prose deliberately), so
 // there is nothing to classify here, this is the seam that keeps a stray non-Error from becoming "[object
 // Object]" in the panel's readout.
-const refusalText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const refusalText = (error: unknown): string => errorMessage(error);
 
 /* WHAT A RUNG THAT JUST REFUSED COSTS THE NEXT CALLER, nothing, for hours.
  *

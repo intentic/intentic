@@ -1,3 +1,4 @@
+import { createBackoff } from "@intentic/base/async";
 import { webextConnectUrl } from "@intentic/sandbox-contract";
 import { RPCHandler } from "@orpc/server/websocket";
 import { createWebExtRouter } from "./router.js";
@@ -23,14 +24,18 @@ import { store } from "./store.js";
  *     worker is gone. */
 
 // Backoff bounds. The first retry is fast because the overwhelmingly common cause is a sandbox restart, which
-// takes seconds; the ceiling is low because the alarm will re-drive this anyway.
+// takes seconds; the ceiling is low because the alarm will re-drive this anyway. The ladder is the shared one
+// (@intentic/base's createBackoff): a link that held for a minute redials at the floor, one that opened and
+// died at once keeps climbing.
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
+const STABLE_MS = 60_000;
 // The daemon closes with this when the token is not enrolled: a decision, not a fault, and one that never heals.
 const UNAUTHORIZED = 1008;
 
 let socket: WebSocket | undefined;
-let attempt = 0;
+let openedAt: number | undefined;
+const ladder = createBackoff({ floorMs: RETRY_MIN_MS, capMs: RETRY_MAX_MS, stableMs: STABLE_MS });
 let dialling = false;
 
 export const linkState = (): "open" | "connecting" | "closed" =>
@@ -55,7 +60,7 @@ export const ensureLink = async (): Promise<void> => {
     socket = ws;
 
     ws.addEventListener("open", () => {
-        attempt = 0;
+        openedAt = Date.now();
         dialling = false;
         /* The handler is attached BEFORE the hello goes out: the sandbox may call the moment it has verified
          * the token, and a race there would drop the first `setScopes` — the one call whose loss would leave
@@ -75,8 +80,8 @@ export const ensureLink = async (): Promise<void> => {
             void store.forgetSandbox();
             return;
         }
-        attempt += 1;
-        const delay = Math.min(RETRY_MIN_MS * 2 ** (attempt - 1), RETRY_MAX_MS);
+        const delay = ladder.next(openedAt === undefined ? 0 : Date.now() - openedAt);
+        openedAt = undefined;
         // A timer in a service worker is not reliable — the worker may be gone before it fires — so this is
         // the fast path and the alarm in main.ts is the one that actually guarantees a retry.
         setTimeout(() => void ensureLink(), delay);

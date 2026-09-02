@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import {
     type DefinitionAction,
     type DefinitionApply,
@@ -213,7 +214,7 @@ export const applyDefinitionItems = async (
             }
             applied.push({ id: item.id, label: item.label });
         } catch (error) {
-            failed.push({ id: item.id, label: item.label, error: error instanceof Error ? error.message : String(error) });
+            failed.push({ id: item.id, label: item.label, error: errorMessage(error) });
         }
     }
     if (touchedCapabilities) {

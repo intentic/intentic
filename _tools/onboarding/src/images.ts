@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import { repoRoot } from "@intentic/constants/node";
 
 /* THE IMAGES THIS TIER RUNS, BUILT FROM THE BRANCH, not pulled as `:latest`.
@@ -34,7 +35,7 @@ const exec = async (command: string, args: string[], cwd: string, what: string):
         // rather than to measure a build. maxBuffer because vite is chatty and the default 1 MB truncates.
         await run(command, args, { cwd, timeout: 20 * 60_000, maxBuffer: 64 * 1024 * 1024 });
     } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
+        const message = errorMessage(cause);
         throw new Error(`${what} failed: ${message}`, { cause });
     }
 };

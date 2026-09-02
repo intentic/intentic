@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { ref, type Ref } from "vue";
 import { SandboxHttpError, sandboxJson } from "../sandbox/sandboxClient";
 import { createSegmenter, resampleTo16k, wavOf16k } from "./voiceAudio";
@@ -164,7 +165,7 @@ export function useVoiceInput(): {
                     if (status.model === `ready`) {
                         break;
                     }
-                    await new Promise((resolve) => setTimeout(resolve, STATUS_POLL_MS));
+                    await sleep(STATUS_POLL_MS);
                     if (!alive()) {
                         return;
                     }

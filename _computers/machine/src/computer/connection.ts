@@ -1,3 +1,4 @@
+import { createBackoff } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import { hostConnectUrl, type HostScopes } from "@intentic/sandbox-contract";
 import { RPCHandler } from "@orpc/server/websocket";
@@ -17,15 +18,18 @@ import { createHostRouter } from "./router.js";
  * that point on, which is why there is no message plumbing left in this file.
  *
  * RECONNECTION IS THE NORMAL CASE, not the failure case. Lids close, wifi changes, tunnels idle out, the sandbox
- * restarts. So the loop treats a dropped socket as routine and comes back with exponential backoff, and the
- * sandbox's card reads "offline" in the meantime rather than pretending. The one thing that is NOT retried is a
- * refused enrollment (close code 1008): the owner revoked this machine, that never heals on its own, and
- * hammering a door that has been locked is how an agent turns a revocation into a support ticket. */
+ * restarts. So the loop treats a dropped socket as routine and comes back on the shared exponential ladder
+ * (@intentic/base's createBackoff), and the sandbox's card reads "offline" in the meantime rather than
+ * pretending. A link that held for a minute was working and its drop redials at the floor; one that opened and
+ * died at once keeps climbing. The one thing that is NOT retried is a refused enrollment (close code 1008): the
+ * owner revoked this machine, that never heals on its own, and hammering a door that has been locked is how an
+ * agent turns a revocation into a support ticket. */
 
 // Backoff bounds. The first retry is fast because the overwhelmingly common cause is a sandbox restart, which
 // takes seconds; the ceiling is low enough that a laptop opened after a night asleep is back within a minute.
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
+const STABLE_MS = 60_000;
 // The daemon closes with this when the token is not enrolled, a decision, not a fault.
 const UNAUTHORIZED = 1008;
 
@@ -58,7 +62,8 @@ export const connect = (config: HostLink, version: string, log: Log): HostConnec
 
     let stopped = false;
     let socket: WebSocket | undefined;
-    let attempt = 0;
+    let openedAt: number | undefined;
+    const ladder = createBackoff({ floorMs: RETRY_MIN_MS, capMs: RETRY_MAX_MS, stableMs: STABLE_MS });
     let resolveDone: () => void;
     const done = new Promise<void>((resolvePromise) => {
         resolveDone = resolvePromise;
@@ -69,7 +74,7 @@ export const connect = (config: HostLink, version: string, log: Log): HostConnec
         socket = ws;
 
         ws.addEventListener("open", () => {
-            attempt = 0;
+            openedAt = Date.now();
             // The handler is attached BEFORE the hello goes out: the sandbox may call the moment it has verified
             // the token, and a race there would drop the first `setScopes`, the one call whose loss would leave
             // this machine enforcing a stale grant.
@@ -92,8 +97,8 @@ export const connect = (config: HostLink, version: string, log: Log): HostConnec
                 resolveDone();
                 return;
             }
-            attempt += 1;
-            const delay = Math.min(RETRY_MIN_MS * 2 ** (attempt - 1), RETRY_MAX_MS);
+            const delay = ladder.next(openedAt === undefined ? 0 : Date.now() - openedAt);
+            openedAt = undefined;
             log(`disconnected (${event.code}); reconnecting in ${Math.round(delay / 1000)}s`);
             setTimeout(open, delay);
         });

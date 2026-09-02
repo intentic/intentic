@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { GatewayCtx, ListenerMessage } from "@intentic/connector-runtime";
 import type { Connection } from "../google/accounts.js";
 import { mapLimit } from "../google/batch.js";
@@ -113,7 +114,7 @@ export const startWatcher = (
         try {
             await work();
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = errorMessage(error);
             if (error instanceof GoogleApiError && (error.status === 401 || error.status === 403)) {
                 onFatal(message);
                 running = false;

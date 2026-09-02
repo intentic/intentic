@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { formatFrontmatter } from "../notes/frontmatter.js";
 import { buildIndex, type BrokenLink, overviewOf, type NoteEdge, type KnowledgeIndex } from "../notes/index-notes.js";
 import { factsOf, type ParsedNote } from "../notes/note.js";
@@ -390,7 +391,7 @@ main().then(
         process.exitCode = code;
     },
     (error: unknown) => {
-        process.stderr.write(`kb: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`kb: ${errorMessage(error)}\n`);
         process.exitCode = 2;
     },
 );

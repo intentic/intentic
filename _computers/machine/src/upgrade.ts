@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { chmod, readdir, rename, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
 import { binDir } from "./sync/config.js";
@@ -184,7 +185,7 @@ export const runUpgrade = async (
     try {
         await exec.fetchTo(asset(published), staged);
     } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = errorMessage(error);
         if (published === undefined) {
             await exec.discard(staged);
             return { kind: "failed", reason: `the download failed (${reason}), nothing was changed.` };

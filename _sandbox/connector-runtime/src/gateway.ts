@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { sleep } from "@intentic/base/async";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract";
 import { type DaemonClient, createDaemonClient } from "./daemon.js";
@@ -341,7 +342,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
             }
             wired.clear();
         };
-        void Promise.race([wind(), new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))]).finally(() => {
+        void Promise.race([wind(), sleep(SHUTDOWN_TIMEOUT_MS)]).finally(() => {
             server.close();
             process.exit(0);
         });

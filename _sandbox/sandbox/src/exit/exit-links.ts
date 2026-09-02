@@ -1,3 +1,5 @@
+import { sleep } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import type { Capability, ExitConfig, ExitLink, ExitObservation, IntenticLine } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { countryName } from "./exit-countries.js";
@@ -43,7 +45,7 @@ const observeWithRetry = async (entry: ExitEntry): Promise<ExitObservation> => {
             return seen;
         } catch (error) {
             last = error instanceof Error ? error : new Error(String(error));
-            await new Promise((resolve) => setTimeout(resolve, OBSERVE_BACKOFF_MS * (attempt + 1)));
+            await sleep(OBSERVE_BACKOFF_MS * (attempt + 1));
         }
     }
     throw last ?? new Error("could not read this exit's public address");
@@ -112,7 +114,7 @@ export async function* startExit(entry: ExitEntry, country: string | undefined):
     } catch (error) {
         await stopExit(entry);
         throw new Error(
-            `${entry.id} came up but its public address could not be read, so there is no way to say where it comes out. Stopped it rather than leave it running unverified.\n${error instanceof Error ? error.message : String(error)}`,
+            `${entry.id} came up but its public address could not be read, so there is no way to say where it comes out. Stopped it rather than leave it running unverified.\n${errorMessage(error)}`,
             { cause: error },
         );
     }
@@ -224,8 +226,7 @@ export const restoreExits = async (
         if ((probe.state === "up" || probe.state === "starting") && probe.interface !== undefined && !proxyBound(entry.id)) {
             await ensureProxy(entry.id).then(
                 () => logger.info(`exit ${entry.id}: re-published its proxy over a tunnel that outlived the daemon`),
-                (error: unknown) =>
-                    logger.warn(`exit ${entry.id}: could not re-publish its proxy: ${error instanceof Error ? error.message : String(error)}`),
+                (error: unknown) => logger.warn(`exit ${entry.id}: could not re-publish its proxy: ${errorMessage(error)}`),
             );
             continue;
         }
@@ -241,7 +242,7 @@ export const restoreExits = async (
             }
             logger.info(`exit ${entry.id}: started`);
         } catch (error) {
-            logger.warn(`exit ${entry.id}: could not start: ${error instanceof Error ? error.message : String(error)}`);
+            logger.warn(`exit ${entry.id}: could not start: ${errorMessage(error)}`);
         }
     }
 };

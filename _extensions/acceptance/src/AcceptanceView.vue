@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import type { PickedModel } from "@intentic/extension-api";
 import {
     Checkbox,
@@ -340,7 +341,7 @@ const attempt = async (action: () => Promise<void>): Promise<void> => {
     try {
         await action();
     } catch (error) {
-        actionError.value = error instanceof Error ? error.message : String(error);
+        actionError.value = errorMessage(error);
     }
 };
 

@@ -1,4 +1,5 @@
 import { upgradeWebSocket } from "@hono/node-server";
+import { errorMessage } from "@intentic/base/errors";
 import {
     type Capability,
     MCP_PROTOCOL_VERSION,
@@ -204,7 +205,7 @@ export const createWebExtMcpRoute =
             return c.json({
                 jsonrpc: "2.0",
                 id: request.id,
-                error: { code: -32000, message: error instanceof Error ? error.message : String(error) },
+                error: { code: -32000, message: errorMessage(error) },
             });
         }
     };

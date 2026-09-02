@@ -1,11 +1,13 @@
 import { compareUnrankedModelIds, type Model } from "@intentic/sandbox-contract";
+import { discoveredCatalog } from "../agent/model-catalog.js";
 import type { CliProxyClient } from "../agent/translator.js";
 
 /* Kimi Code's picker catalog. CLIProxyAPI owns both the subscription credential and the executor, so its
  * provider-scoped model definitions are the only catalog that can honestly describe what this pinned runtime
  * knows how to route. The endpoint is local and requires no inference from the multiplexed /v1/models owner.
- * A compile-time floor keeps the picker useful while the proxy is still booting; only a real answer is cached,
- * so the next read replaces that floor as soon as CLIProxyAPI is reachable. */
+ * A compile-time floor keeps the picker useful while the proxy is still booting, on the shared ladder
+ * (agent/model-catalog.ts) with nothing persisted between: the proxy is local and answers within seconds of
+ * boot, so a last-known-good file would only ever be a stale copy of it. */
 export interface KimiCatalog {
     readonly models: () => Promise<{ models: Model[]; default: string }>;
 }
@@ -29,20 +31,13 @@ const toCatalog = (models: readonly Model[]): { models: Model[]; default: string
 };
 
 export const createKimiCatalog = (cliProxy: Pick<CliProxyClient, "models">): KimiCatalog => {
-    let cache: { value: { models: Model[]; default: string }; expiresAt: number } | undefined;
-
-    return {
-        models: async () => {
-            if (cache !== undefined && Date.now() < cache.expiresAt) {
-                return cache.value;
-            }
-            const discovered = (await cliProxy.models("kimi").catch(() => [])).filter(isChatModel);
-            if (discovered.length > 0) {
-                const value = toCatalog(discovered);
-                cache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
-                return value;
-            }
-            return toCatalog(SEED_KIMI_MODELS);
-        },
-    };
+    const catalog = discoveredCatalog({
+        ttlMs: MODELS_TTL_MS,
+        discover: async () => (await cliProxy.models("kimi").catch((): Model[] => [])).filter(isChatModel),
+        toStored: (models: readonly Model[]) => [...models],
+        seed: SEED_KIMI_MODELS,
+        fromLive: toCatalog,
+        fromStored: toCatalog,
+    });
+    return { models: catalog.models };
 };

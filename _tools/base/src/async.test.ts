@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Coalescer, Delayer, retry, SingleFlight } from "./async.js";
+import { Coalescer, createBackoff, Delayer, pollUntil, retry, sleep, SingleFlight } from "./async.js";
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -214,5 +214,105 @@ describe(`retry`, () => {
 
         await settled;
         expect(task).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe(`sleep`, () => {
+    it(`resolves after the delay`, async () => {
+        let done = false;
+        void sleep(100).then(() => {
+            done = true;
+        });
+        await vi.advanceTimersByTimeAsync(99);
+        expect(done).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(done).toBe(true);
+    });
+
+    /* Early, and RESOLVED rather than rejected: the loops that wait this way re-read their own stop flag on the
+     * next line, so an aborted wait is an ordinary end, not a catch block at every site. */
+    it(`resolves early when the signal aborts, and at once for a signal already aborted`, async () => {
+        const controller = new AbortController();
+        let done = false;
+        void sleep(10_000, { signal: controller.signal }).then(() => {
+            done = true;
+        });
+        await vi.advanceTimersByTimeAsync(5);
+        controller.abort();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(done).toBe(true);
+
+        const aborted = new AbortController();
+        aborted.abort();
+        await expect(sleep(10_000, { signal: aborted.signal })).resolves.toBeUndefined();
+    });
+});
+
+describe(`pollUntil`, () => {
+    it(`probes before consulting the clock, then every interval until the check passes`, async () => {
+        let answers = 0;
+        const check = vi.fn(() => ++answers >= 3);
+        const outcome = pollUntil(check, { intervalMs: 50, timeoutMs: 10_000 });
+        expect(check).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(100);
+        await expect(outcome).resolves.toBe(true);
+        expect(check).toHaveBeenCalledTimes(3);
+    });
+
+    it(`answers false at the deadline and on abort, and propagates a throwing check`, async () => {
+        const missed = pollUntil(() => false, { intervalMs: 50, timeoutMs: 120 });
+        await vi.advanceTimersByTimeAsync(200);
+        await expect(missed).resolves.toBe(false);
+
+        const controller = new AbortController();
+        const aborted = pollUntil(() => false, { intervalMs: 50, timeoutMs: 10_000, signal: controller.signal });
+        await vi.advanceTimersByTimeAsync(10);
+        controller.abort();
+        await vi.advanceTimersByTimeAsync(0);
+        await expect(aborted).resolves.toBe(false);
+
+        await expect(
+            pollUntil(
+                () => {
+                    throw new Error(`gone`);
+                },
+                { intervalMs: 50, timeoutMs: 10_000 },
+            ),
+        ).rejects.toThrow(`gone`);
+    });
+
+    it(`a deadline already past still gets its one probe`, async () => {
+        await expect(pollUntil(() => true, { intervalMs: 50, timeoutMs: 0 })).resolves.toBe(true);
+        await expect(pollUntil(() => false, { intervalMs: 50, timeoutMs: 0 })).resolves.toBe(false);
+    });
+});
+
+describe(`createBackoff`, () => {
+    it(`climbs from the floor by doubling and holds at the cap`, () => {
+        const ladder = createBackoff({ floorMs: 1_000, capMs: 5_000 });
+        expect([ladder.next(), ladder.next(), ladder.next(), ladder.next(), ladder.next()]).toEqual([1_000, 2_000, 4_000, 5_000, 5_000]);
+        ladder.reset();
+        expect(ladder.next()).toBe(1_000);
+    });
+
+    /* The rule the copies disagreed on: a run that lasted is a working link, and its failure starts over from the
+     * floor. A short run (refused on arrival, died young) keeps climbing. */
+    it(`a run that stayed up past stableMs earns the floor back; a short one keeps climbing`, () => {
+        const ladder = createBackoff({ floorMs: 1_000, capMs: 30_000, stableMs: 60_000 });
+        expect([ladder.next(100), ladder.next(100), ladder.next(100)]).toEqual([1_000, 2_000, 4_000]);
+        expect(ladder.next(60_000)).toBe(1_000);
+        expect(ladder.next(59_999)).toBe(2_000);
+        expect(ladder.next()).toBe(4_000);
+    });
+
+    /* Full jitter reads off the NEXT rung: random() === 1 lands on it, random() === 0 on the floor, so every
+     * wait, the first included, is spread across the whole interval a fixed schedule would collapse to a point. */
+    it(`jitters each wait between the floor and the next rung`, () => {
+        const ceilings = createBackoff({ floorMs: 1_000, capMs: 30_000, random: () => 1 });
+        expect([ceilings.next(), ceilings.next(), ceilings.next()]).toEqual([2_000, 4_000, 8_000]);
+        const floors = createBackoff({ floorMs: 1_000, capMs: 30_000, random: () => 0 });
+        expect([floors.next(), floors.next(), floors.next()]).toEqual([1_000, 1_000, 1_000]);
+        const halfway = createBackoff({ floorMs: 1_000, capMs: 30_000, random: () => 0.5 });
+        expect(halfway.next()).toBe(1_500);
     });
 });

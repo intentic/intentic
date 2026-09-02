@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pollUntil } from "@intentic/base/async";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { ActivityStore } from "../activity/activity-store.js";
@@ -81,19 +82,9 @@ interface PendingVerify {
 const pending: PendingVerify[] = [];
 let running = false;
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 // Wait until `key` stops running, or the watch window closes. True when it stopped.
-const watchPanel = async (deps: VerifyDeps, key: string): Promise<boolean> => {
-    const deadline = Date.now() + (deps.watchMaxMs ?? WATCH_MAX_MS);
-    while (Date.now() < deadline) {
-        if (!deps.processes.running(key)) {
-            return true;
-        }
-        await sleep(deps.pollMs ?? POLL_MS);
-    }
-    return false;
-};
+const watchPanel = (deps: VerifyDeps, key: string): Promise<boolean> =>
+    pollUntil(() => !deps.processes.running(key), { intervalMs: deps.pollMs ?? POLL_MS, timeoutMs: deps.watchMaxMs ?? WATCH_MAX_MS });
 
 // A causeless run files under no conversation, which the feed already has a shape for, both fields are
 // optional on an activity row, and a row with neither reads as the daemon acting on its own, which is what

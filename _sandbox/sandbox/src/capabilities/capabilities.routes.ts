@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import { type Capability, capabilitiesContract, CapabilitySchema, isVaulted } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
@@ -57,7 +58,7 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
              * connection the user actually asked about half-moved to punish them for an unrelated fault. The
              * reference itself is already saved, which is the part that would otherwise dangle. */
             services.logger.warn(
-                `capabilities: renamed "${from}" but could not refresh "${next.id}" (${error instanceof Error ? error.message : String(error)}), re-add it from its card`,
+                `capabilities: renamed "${from}" but could not refresh "${next.id}" (${errorMessage(error)}), re-add it from its card`,
             );
         }
     };
@@ -207,7 +208,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 }
                 yield { kind: "result", ok: true };
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = errorMessage(error);
                 yield { kind: "error", message };
                 throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
             } finally {
@@ -429,7 +430,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             try {
                 return totpCode(seed, Date.now());
             } catch (error) {
-                const reason = error instanceof Error ? error.message : String(error);
+                const reason = errorMessage(error);
                 throw new ORPCError("CONFLICT", { message: `the stored TOTP secret is unusable (${reason}), re-add it on the capability card` });
             }
         }),

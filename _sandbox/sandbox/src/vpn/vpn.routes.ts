@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { vpnContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -41,7 +42,7 @@ export const createVpnRoutes = (services: VpnRoutesDeps) => {
                 yield { kind: "log", message: `${link.id}: ${link.state}${link.address === undefined ? "" : ` · ${link.address}`}` };
                 yield { kind: "result", ok: true };
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = errorMessage(error);
                 yield { kind: "error", message };
                 throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
             } finally {

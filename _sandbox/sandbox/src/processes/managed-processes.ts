@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import net from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { SHELL } from "../terminal/pane-state.js";
+import { freePort } from "./free-port.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -44,19 +44,6 @@ export interface ProcessRunner {
 // How often the manager sweeps pane liveness while anything is tracked. The `-d` tmux client exits the moment
 // the session is created, so there is no child "exit" event, session state is only observable by asking tmux.
 const POLL_MS = 2000;
-
-// An OS-assigned free port for a panel's dev server. ponytail: a tiny TOCTOU window before the child binds it;
-// fine for a handful of panels, the child owns the port a millisecond later.
-const freePort = (): Promise<number> =>
-    new Promise((resolve, reject) => {
-        const server = net.createServer();
-        server.on("error", reject);
-        server.listen(0, "127.0.0.1", () => {
-            const address = server.address();
-            const port = typeof address === "object" && address !== null ? address.port : 0;
-            server.close(() => resolve(port));
-        });
-    });
 
 const defaultRunner: ProcessRunner = {
     launch: async (session, spec) => {

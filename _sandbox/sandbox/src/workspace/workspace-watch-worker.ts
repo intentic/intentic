@@ -1,4 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
+import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { createWorkspaceWatch } from "./workspace-watch.js";
 
@@ -14,7 +15,7 @@ const { root } = workerData as { root: string };
 const logger = {
     warn: (value: { err: unknown }) => {
         const error = value.err;
-        port.postMessage({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+        port.postMessage({ kind: "error", message: errorMessage(error) });
     },
 } as unknown as Logger;
 const watcher = createWorkspaceWatch(root, logger);
