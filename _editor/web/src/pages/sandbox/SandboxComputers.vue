@@ -7,6 +7,7 @@ import {
     groupNeedsAttention,
     InfoHint,
     MachineDetail,
+    type MachineFolderRow,
     MachineRunLog,
     type MachineSandboxGroup,
     mirroringOff,
@@ -601,19 +602,22 @@ const COMMAND_UNREACHED: Record<MachineCommand, string> = {
 
 /* No confirmation for the reversible four, deliberately: each takes something off a machine and puts it back,
  * destroys nothing, and the button that undoes it is the one that appears in its place. `sync-unpair` ends a
- * pairing that only a fresh one-liner re-makes, so the template routes that one through the dialog first. */
-const runSync = async (computer: Computer, group: MachineSandboxGroup, command: MachineCommand): Promise<void> => {
+ * pairing that only a fresh one-liner re-makes, so the template routes that one through the dialog first.
+ *
+ * `sandboxId` is what makes this both switches at once. With one, it is the pairing's own button and the CLI acts
+ * on that pairing alone — a button on one row must never reach across to a colleague's pairing on the same
+ * laptop. WITHOUT one it is the MACHINE's button, and the bare CLI form does exactly what it does in a terminal:
+ * every sandbox this computer pairs. That is the "turn it off on this machine" the row is for, and the reason the
+ * two are one function is that they are one command with one argument's difference. */
+const runSync = async (computer: Computer, key: string, sandboxId: string | undefined, command: MachineCommand): Promise<void> => {
     if (computer.hostId === undefined || working.value) {
         return;
     }
-    const key = rowKey(computer, group);
     syncBusy.value = { key, command };
     actionError.value = undefined;
     actionDone.value = undefined;
     try {
-        // Scoped to the row that was clicked. Bare, the machine's CLI acts on every sandbox it pairs, which is a
-        // reasonable thing to want from a terminal and never what a button on one row should do to a colleague's.
-        const result = await runMachineCommand(computer.hostId, command, group.sandboxId);
+        const result = await runMachineCommand(computer.hostId, command, sandboxId);
         /* THE MACHINE'S OWN SENTENCE, either way. It names the ports it actually took off localhost, or the
          * sessions it paused, which is more than this side knows, and a refusal names the switch to flip.
          * `ok: false` is a real answer rather than a throw (see runMachineCommand), so it is shown as the machine
@@ -631,6 +635,128 @@ const runSync = async (computer: Computer, group: MachineSandboxGroup, command: 
     }
 };
 
+/* --- THE TWO HALVES, SWITCHED FOR THE WHOLE COMPUTER ------------------------------------------------------
+ *
+ * The same two commands as the per-pairing buttons below, run bare: `intentic-machine sync pause` and
+ * `… sync mirror off` with no `--sandbox` act on every sandbox that computer pairs, which is precisely what
+ * they mean in a terminal and precisely what "turn this off on this machine" should mean here.
+ *
+ * WHY BOTH SCOPES EXIST. A pairing's own switch answers "not this project on my localhost today". A machine's
+ * answers "I'm working on something else on this laptop" — and it is the one somebody actually reaches for,
+ * because a computer running four sandboxes otherwise costs four clicks in four unfolded rows to say one thing.
+ * The pairing buttons stay for the times the finer answer is the right one.
+ *
+ * A MACHINE CAN BE IN NEITHER STATE, which is not a wrinkle to hide: those per-pairing switches are exactly what
+ * produces a laptop mirroring one sandbox and not another. So the switch is three-valued, the row says which
+ * pairings disagree, and in that state it offers BOTH directions rather than guessing which way "the" switch
+ * was meant to point. */
+type HalfState = `on` | `off` | `mixed`;
+interface MachineHalf {
+    readonly state: HalfState;
+    /** How many of this machine's pairings are in the minority, for the sentence that explains a mixed row. */
+    readonly off: number;
+    readonly total: number;
+}
+
+// Absent `mirroring` reads as ON, which is what mirroring has always been and what every agent older than the
+// switch reports (the same rule mirroringOff states from the kit's side).
+const halfOf = (pairings: readonly (MachineFolderRow | undefined)[], isOff: (folder: MachineFolderRow) => boolean): MachineHalf => {
+    const held = pairings.filter((folder): folder is MachineFolderRow => folder !== undefined);
+    const off = held.filter((folder) => isOff(folder)).length;
+    const state: HalfState = off === 0 ? `on` : off === held.length ? `off` : `mixed`;
+    return { state, off, total: held.length };
+};
+
+// File syncing is only a question where there IS one: a mirror enrollment has no Mutagen session to pause, so
+// its pairings are not counted either way. A machine holding only mirrors draws no file-sync switch at all.
+const syncHalf = (row: ComputerRow): MachineHalf =>
+    halfOf(
+        row.groups.map((group) => group.folder).filter((folder) => folder?.mode === `sync`),
+        (folder) => folder.paused === true,
+    );
+const mirrorHalf = (row: ComputerRow): MachineHalf => halfOf(
+    row.groups.map((group) => group.folder),
+    mirroringOff,
+);
+
+/* WHERE THE MACHINE'S OWN SWITCHES CAN BE OFFERED: the same three conditions the per-pairing ones take (the
+ * computer door, the machine awake, no `gap`), plus at least one pairing for the half in question. A computer
+ * with nothing paired has nothing to switch, and a row that drew the control anyway would be asking the machine
+ * a question about a sandbox it has never heard of. */
+const switchable = (row: ComputerRow, half: MachineHalf): boolean =>
+    row.computer.hostId !== undefined && row.computer.online === true && row.computer.gap === undefined && half.total > 0;
+
+// The machine's own busy key. `rowKey` is `${computer.key}:${sandboxId}`, so a bare computer key cannot collide
+// with any pairing's, and the two scopes' spinners stay apart.
+const machineKey = (computer: Computer): string => computer.key;
+
+/* WHAT A MIXED HALF SAYS, in the machine's own units. "2 of 3 paused" is the whole explanation for why this row
+ * offers two buttons where every other switch in this view offers one. */
+const halfNote = (half: MachineHalf, offWord: string): string | undefined =>
+    half.state === `mixed` ? `${half.off} of ${half.total} ${offWord}` : undefined;
+
+/* THE ROW'S TWO SWITCHES, DERIVED ONCE. Both halves are the same shape of thing — a state, a word for it, and
+ * the one or two commands that would change it — so they are one table rather than two near-identical blocks of
+ * template, and the words each half uses live beside the state they describe.
+ *
+ * WHICH BUTTONS: one, pointing wherever the machine currently is not, except in the mixed state, where the
+ * honest answer is both. A single button there would have to pick a direction for a reader who has deliberately
+ * set two pairings differently, and whichever it picked would silently undo half of what they had arranged. */
+interface HalfAction {
+    readonly command: MachineCommand;
+    readonly label: string;
+    readonly hint: string;
+}
+interface MachineSwitch {
+    readonly label: string;
+    /** The state in one word, for the settled positions. */
+    readonly word: string;
+    /** What disagrees, when the pairings do. Replaces the word rather than joining it. */
+    readonly note: string | undefined;
+    readonly actions: readonly HalfAction[];
+}
+
+const PAUSE: HalfAction = {
+    command: `sync-pause`,
+    label: `Pause all`,
+    hint: `Stop moving files either way, for every sandbox this computer syncs. Their ports keep being mirrored.`,
+};
+const RESUME: HalfAction = { command: `sync-resume`, label: `Resume all`, hint: `Start moving files again for every sandbox this computer syncs.` };
+const MIRROR_OFF: HalfAction = {
+    command: `mirror-off`,
+    label: `Stop all`,
+    hint: `Take every paired sandbox's ports off this computer's localhost. Files keep syncing.`,
+};
+const MIRROR_ON: HalfAction = { command: `mirror-on`, label: `Start all`, hint: `Put every paired sandbox's ports back on this computer's localhost.` };
+
+// The one/one/both rule, stated once for both halves: a settled switch offers the way out of where it is, and a
+// mixed one offers both ways rather than choosing for somebody who has already chosen per pairing.
+const actionsFor = (state: HalfState, off: HalfAction, on: HalfAction): HalfAction[] =>
+    state === `on` ? [off] : state === `off` ? [on] : [on, off];
+
+const machineSwitches = (row: ComputerRow): MachineSwitch[] => {
+    const switches: MachineSwitch[] = [];
+    const sync = syncHalf(row);
+    if (switchable(row, sync)) {
+        switches.push({
+            label: `File syncing`,
+            word: sync.state === `off` ? `paused` : `on`,
+            note: halfNote(sync, `paused`),
+            actions: actionsFor(sync.state, PAUSE, RESUME),
+        });
+    }
+    const mirror = mirrorHalf(row);
+    if (switchable(row, mirror)) {
+        switches.push({
+            label: `Port mirroring`,
+            word: mirror.state === `off` ? `off` : `on`,
+            note: halfNote(mirror, `off`),
+            actions: actionsFor(mirror.state, MIRROR_OFF, MIRROR_ON),
+        });
+    }
+    return switches;
+};
+
 /* UNPAIRING IS THE ONE THAT DOES NOT UNDO ITSELF: the machine terminates its sessions, drops its pairing and
  * self-revokes, and turning it back on means a fresh one-liner over there. So it parks in the app's own dialog
  * rather than the browser's confirm(), like the container verbs above it. */
@@ -639,7 +765,7 @@ const confirmUnpair = (): void => {
     const pending = confirmingUnpair.value;
     confirmingUnpair.value = undefined;
     if (pending !== undefined) {
-        void runSync(pending.computer, pending.group, `sync-unpair`);
+        void runSync(pending.computer, rowKey(pending.computer, pending.group), pending.group.sandboxId, `sync-unpair`);
     }
 };
 
@@ -844,6 +970,41 @@ const runRevoke = async (): Promise<void> => {
                             {{ syncNote(row.computer, now) }}
                         </p>
 
+                        <!-- THE TWO HALVES, SWITCHED FOR THE WHOLE COMPUTER. The same two commands the pairing
+                             rows below carry, run bare, which is what they mean in a terminal: every sandbox
+                             this machine pairs. It is the switch somebody actually reaches for — "I'm working
+                             on something else on this laptop" — where the per-pairing ones answer the finer
+                             question, and a computer running four sandboxes should not cost four clicks in four
+                             unfolded rows to say one thing.
+                             Aligned in one label column, like every other block of small facts in this view. -->
+                        <div v-if="switchable(row, syncHalf(row)) || switchable(row, mirrorHalf(row))" class="flex flex-col gap-1.5">
+                            <div v-for="half in machineSwitches(row)" :key="half.label" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <span class="w-[6.5rem] shrink-0 text-2xs text-subtle">{{ half.label }}</span>
+                                <!-- The STATE, in the machine's own terms and uncoloured: somebody threw these
+                                     switches on purpose, so neither position is a fault. A mixed one says which
+                                     pairings disagree, because that is the only reason two buttons appear. -->
+                                <span class="shrink-0 text-xs text-muted">{{ half.note ?? half.word }}</span>
+                                <span class="-ml-1 flex flex-wrap items-center gap-x-1 gap-y-1">
+                                    <Button
+                                        v-for="action in half.actions"
+                                        :key="action.command"
+                                        size="small"
+                                        severity="secondary"
+                                        :text="true"
+                                        :label="action.label"
+                                        :loading="syncBusy?.key === machineKey(row.computer) && syncBusy.command === action.command"
+                                        :disabled="working"
+                                        v-tooltip.top="action.hint"
+                                        @click="void runSync(row.computer, machineKey(row.computer), undefined, action.command)"
+                                    />
+                                </span>
+                            </div>
+                            <!-- The machine's own answer to a machine-level click, where the click was. The
+                                 pairing rows below have their own footer for theirs. -->
+                            <Notice v-if="actionError?.key === machineKey(row.computer)" :of="actionError.notice" />
+                            <p v-else-if="actionDone?.key === machineKey(row.computer)" class="text-xs text-muted">{{ actionDone.message }}</p>
+                        </div>
+
                         <!-- WHAT THE ROW WANTS FROM YOU, if anything: each on its own line, in the tone it earns. -->
                         <div
                             v-if="
@@ -941,7 +1102,14 @@ const runRevoke = async (): Promise<void> => {
                                                 ? `Start moving files between this computer and the sandbox again`
                                                 : `Stop moving files either way. The sandbox keeps running and its ports keep being mirrored.`
                                         "
-                                        @click="void runSync(row.computer, group, group.folder?.paused === true ? `sync-resume` : `sync-pause`)"
+                                        @click="
+                                            void runSync(
+                                                row.computer,
+                                                rowKey(row.computer, group),
+                                                group.sandboxId,
+                                                group.folder?.paused === true ? `sync-resume` : `sync-pause`,
+                                            )
+                                        "
                                     />
                                     <!-- THE END OF THE PAIRING, and the one control here that nothing undoes in
                                      a click: turning it back on means a fresh one-liner on that computer. It
@@ -979,7 +1147,14 @@ const runRevoke = async (): Promise<void> => {
                                                 ? `Put this sandbox's ports back on this computer's localhost`
                                                 : `Take this sandbox's ports off this computer's localhost. Files keep syncing.`
                                         "
-                                        @click="void runSync(row.computer, group, mirroringOff(group.folder) ? `mirror-on` : `mirror-off`)"
+                                        @click="
+                                            void runSync(
+                                                row.computer,
+                                                rowKey(row.computer, group),
+                                                group.sandboxId,
+                                                mirroringOff(group.folder) ? `mirror-on` : `mirror-off`,
+                                            )
+                                        "
                                     />
                                 </template>
                                 <!-- The machine's own output: while a row works, and afterwards for as long as a log

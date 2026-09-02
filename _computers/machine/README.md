@@ -42,11 +42,16 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   is read every tick. File sync, the state backup and the git bridge are untouched by it — the point is to stop
   the ports without unpairing the sandbox. The sandbox's Computers tab has a button for it, and that button runs
   this very command over the `host` capability, so the two can never disagree. The same is true of the other
-  three per-pairing verbs — `sync pause`, `sync resume` and `sync uninstall --sandbox <id>` — each of which is a
-  button on the row that describes what it changes: pause and unpair under the folder, mirroring under the ports.
-  Every one of them is scoped by `--sandbox` from the row, because bare they act on every sandbox this machine
-  pairs, which is a reasonable thing to mean in a terminal and never what a button on one row should do to a
-  colleague's pairing on the same computer.
+  three verbs — `sync pause`, `sync resume` and `sync uninstall --sandbox <id>`.
+
+  **Both scopes are buttons, because both scopes are commands.** With `--sandbox` these act on one pairing, and
+  that is the switch under that pairing's own folder and ports in the tab. Run BARE they act on every sandbox
+  this machine pairs, which is what they mean in a terminal and what "turn this off on this laptop" should mean
+  on screen, so the machine's own row carries a **File syncing** and a **Port mirroring** switch that omit the
+  flag. The tab never sends a bare `sync uninstall`: unpairing is the one verb here that a fresh one-liner is the
+  only way back from, so the button always names the pairing it ends. A machine whose pairings disagree (one
+  mirroring, one not — which the per-pairing switches exist to allow) is drawn as such rather than collapsed to
+  one position, and offered both directions.
 - Register Mutagen's daemon for login autostart — on Windows through the launcher stub, because Mutagen's own
   registration flashes a console window at every boot.
 

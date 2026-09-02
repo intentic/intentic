@@ -48,9 +48,14 @@ interface MachineCommandSpec {
     readonly scoped?: boolean;
 }
 
-// Bare, the agent's `sync mirror` acts on every sandbox that computer pairs, which is the "turn it off entirely"
-// case; with an id it acts on one. The browser sends the id it is looking at, so a button on one sandbox's row
-// never reaches across to a colleague's pairing on the same machine.
+/* THE ONE ARGUMENT, AND IT IS BOTH OF THE VIEW'S SCOPES. With an id the agent acts on one pairing: a button on
+ * one sandbox's row must never reach across to a colleague's pairing on the same machine, so the browser sends
+ * the id it is looking at. Bare, it acts on every sandbox that computer pairs — which is what these commands
+ * mean in a terminal, and what the MACHINE's own switches on the Computers tab send, because "stop syncing on
+ * this laptop" is a real thing to want and four unfolded rows is a silly way to say it.
+ *
+ * Only the reversible verbs have a bare form worth offering; `sync-unpair` is marked `scoped` below and refused
+ * without an id. */
 const forSandbox = (base: string, sandboxId: string | undefined): string => (sandboxId === undefined ? base : `${base} --sandbox ${sandboxId}`);
 
 export const MACHINE_COMMANDS: Readonly<Record<MachineCommand, MachineCommandSpec>> = {

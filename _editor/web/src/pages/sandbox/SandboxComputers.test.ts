@@ -946,3 +946,98 @@ it(`does not offer the revoke to a member`, () => {
 it(`says nothing about revoking a computer that is not enrolled for sync`, () => {
     expect(labels(mount([managed(true)]))).not.toContain(`Revoke access`);
 });
+
+/* ---- the two halves, switched for the WHOLE computer -----------------------------------------------------
+ *
+ * The pairing switches above answer "not this project on my localhost today". These answer "I'm working on
+ * something else on this laptop", which is the one somebody actually reaches for: a computer running four
+ * sandboxes otherwise costs four clicks in four unfolded rows to say one thing. Same two commands, run bare,
+ * which is exactly what they mean in a terminal. */
+
+// One computer, two paired sandboxes, so "every sandbox this machine pairs" is a claim with something in it.
+const twoPairings = (first: Partial<Record<string, unknown>> = {}, second: Partial<Record<string, unknown>> = {}): Computer => ({
+    key: `rog`,
+    label: `radarsu-rog`,
+    sync: paired(),
+    platform: `linux`,
+    hostId: `host-1`,
+    online: true,
+    report: {
+        hostname: `radarsu-rog`,
+        os: `linux`,
+        agents: { sync: `1.183.0` },
+        sandboxes: [],
+        pairings: [
+            { sandboxId: `work-a`, mode: `sync`, localDir: `/home/ada/a`, mutagenStatus: `watching`, ...first },
+            { sandboxId: `work-b`, mode: `sync`, localDir: `/home/ada/b`, mutagenStatus: `watching`, ...second },
+        ],
+        ports: [],
+        watcher: { running: true },
+        capturedAt: Date.now(),
+    },
+});
+
+// The bare CLI form is the whole mechanism: no `--sandbox`, so the machine acts on every pairing it holds.
+it(`pauses file syncing for every sandbox on the computer, with no sandbox named`, async () => {
+    const el = mount([twoPairings()]);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Pause all`)?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-pause`, sandboxId: undefined }]);
+});
+
+it(`stops port mirroring for every sandbox on the computer`, async () => {
+    const el = mount([twoPairings()]);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Stop all`)?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: undefined }]);
+});
+
+// A settled switch points the way out of where it is, so a machine the agent reports as fully paused offers the
+// resume and not the pause: the same rule the per-pairing buttons follow.
+it(`points each switch whichever way the machine currently says`, () => {
+    const el = mount([twoPairings({ paused: true, mirroring: `off` }, { paused: true, mirroring: `off` })]);
+    const found = labels(el);
+    expect(found).toContain(`Resume all`);
+    expect(found).toContain(`Start all`);
+    expect(found).not.toContain(`Pause all`);
+    expect(found).not.toContain(`Stop all`);
+    expect(el.textContent ?? ``).toContain(`paused`);
+});
+
+/* A MACHINE CAN BE IN NEITHER STATE, and that is not a wrinkle to hide: the per-pairing switches are exactly
+ * what produces a laptop mirroring one sandbox and not another. A single button would have to pick a direction
+ * for somebody who deliberately set two pairings differently, and whichever it picked would silently undo half
+ * of what they arranged. So the row says which disagree and offers both ways. */
+it(`says which pairings disagree and offers both directions`, () => {
+    const el = mount([twoPairings({ mirroring: `off` }, { mirroring: `on` })]);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`1 of 2 off`);
+    expect(labels(el)).toContain(`Start all`);
+    expect(labels(el)).toContain(`Stop all`);
+});
+
+// File syncing is only a question where there IS one: a mirror enrollment has no Mutagen session to pause, so
+// its pairings are not counted either way and a machine holding only mirrors draws no file-sync switch.
+it(`draws no file-sync switch on a computer that only mirrors ports`, () => {
+    const el = mount([{ ...mirrorOnly(), hostId: `host-1`, online: true }]);
+    const found = labels(el);
+    expect(found).not.toContain(`Pause all`);
+    expect(found).not.toContain(`Resume all`);
+    // Mirroring is still switchable for the whole machine: that half is exactly what a mirror enrollment does.
+    expect(found).toContain(`Stop all`);
+});
+
+/* NO DOOR, NO SWITCH — the same rule as the per-pairing buttons, and for the same reason: these run over the
+ * computer connection, and a button that fails when taken is worse than the CLI line it replaces. */
+it(`states the halves without offering the switches on a computer it cannot run commands on`, () => {
+    const row = twoPairings();
+    const found = labels(mount([{ ...row, hostId: undefined, online: undefined }]));
+    expect(found).not.toContain(`Pause all`);
+    expect(found).not.toContain(`Stop all`);
+});
+
+// And a computer with nothing paired has nothing to switch: drawing the control would ask the machine about a
+// sandbox it has never heard of.
+it(`draws no switches on a connected computer with no pairings`, () => {
+    expect(labels(mount([managed(true)]))).not.toContain(`Stop all`);
+});
