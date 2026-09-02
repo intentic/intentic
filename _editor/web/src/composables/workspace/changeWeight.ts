@@ -1,4 +1,4 @@
-import type { Ref } from "vue";
+import { ref, watch, watchEffect, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { useLayout } from "../useLayout";
 import type { CodeCount } from "./useCodeStats";
@@ -38,16 +38,36 @@ import type { CodeCount } from "./useCodeStats";
  * status letter that already says `D` — they are just not what the ranking is about. They do break ties, so a
  * list of pure deletions still reads biggest-first instead of falling back to nothing.
  *
- * BOTH READ WHAT IS ON SCREEN, never git's raw numbers, and that is the invariant this file exists to hold. The
- * diffs open on code alone unless comments are asked back (useLayout.showComments), so the counts do too
- * (useCodeStats, ReviewStat) — and a bar sized off git's count sitting beside a code-only number is two answers
- * to one question, forty pixels apart. `shownStat` is the single definition of which reading is showing; the
- * badge draws it, the rail scales to it, and the order sorts by it, so the three can never disagree.
+ * ALL THREE READ WHAT IS ON SCREEN, never git's raw numbers, and that is the invariant this file exists to hold.
+ * The diffs open on code alone unless comments are asked back (useLayout.showComments), so the counts do too
+ * (useCodeStats, ReviewStat) — and a bar sized off git's count sitting beside a code-only number is two answers to
+ * one question, forty pixels apart. `shownStat` is the single definition of which reading is showing; the badge
+ * draws it, the rail scales to it, and the order sorts by it, so the three can never disagree. A list ordered on
+ * one measure while its rails are drawn from another is the same defect the rail exists to fix: a column under a
+ * control that says "most added first", with the bars getting LONGER as you read down it.
  *
- * The corollary is that a list can reorder once, early: the code-only counts arrive per file as the background
- * reader settles them (see useCodeStats), and until a row's does, its reading is git's. That is the right trade.
- * The alternative — sorting by a number the panel is not showing — buys a still list at the price of a rail
- * column that isn't monotonic in the order it is sorted by, which is the kind of seam a reader can see. */
+ * WHEN THE ORDER TAKES THAT READING IS THE WHOLE PROBLEM, because the code-only counts ARRIVE. They are a
+ * by-product of having both sides of a file (useCodeStats), so they land per file: in the background as the reader
+ * walks the list, and on the click that opens one. An order that took each row's reading the moment it showed up
+ * therefore re-sorted the list as its files were read — and the click that selected a row was itself the thing
+ * that moved it, out from under the pointer that had just picked it. A key that changes when the list is touched
+ * is not a key.
+ *
+ * So the switch is made ONCE, FOR THE WHOLE LIST, and only while the reader is not using it (`orderReading`):
+ *
+ *   - until every row on screen has a settled reading, the order ranks on `orderStat`, git's own pair, which every
+ *     row has from the moment it arrives. One measure for the whole list, so the ranking means something;
+ *   - the first time the list IS counted whole, the order switches to the reading the rows are drawing, and stays
+ *     there. That is the one reorder a review gets, in the same breath as the numbers and rails settling, which is
+ *     motion the reader is already watching;
+ *   - a row that arrives after that (an agent still writing) ranks on git's pair until its own count lands, so the
+ *     new row settles into place rather than the whole list re-sorting around it;
+ *   - and the switch never happens once the reader has picked a row: a list that is being clicked through holds
+ *     the order it had, however late its counting finishes. On a big landing that never finishes, that is git's
+ *     order for good, which is stable, honest and the same order for every row.
+ *
+ * The cost is a review that has not been counted yet ranking a prose-heavy file above one the badges will later
+ * say added more. It is bounded, it is early, and it is nothing next to a list that moves when you click it. */
 
 /** The +/− a surface is showing for one change: either reading, whichever this one is drawing. */
 export interface ShownStat {
@@ -79,6 +99,14 @@ const MIN_FILL = 0.14;
 export const weightFill = (added: number, of: number): number =>
     added <= 0 || of <= 0 ? 0 : Math.min(1, Math.max(MIN_FILL, Math.sqrt(added / of)));
 
+/** Git's own +/−, which every row has from the moment it arrives and which never changes under the reader: what
+ *  a list is ranked on until it has been counted whole. Takes anything carrying the pair — a row's `change`, a
+ *  heading's totals — so a file, its package and its repo are all ranked on the same measure. */
+export const orderStat = (of: { readonly additions?: number; readonly deletions?: number }): ShownStat => ({
+    additions: of.additions,
+    deletions: of.deletions,
+});
+
 /** Biggest first: most added, and among rows that added the same (usually none at all) most removed. */
 export const bigger = (left: ShownStat, right: ShownStat): number =>
     addedIn(right) - addedIn(left) || (right.deletions ?? 0) - (left.deletions ?? 0);
@@ -107,14 +135,49 @@ const largestFirst: Ref<boolean> = definePreference<boolean>({
 
 export function useChangeWeight() {
     const { showComments } = useLayout();
+    const readingOf = (count: CodeCount | undefined, additions?: number, deletions?: number): ShownStat =>
+        shownStat(!showComments.value, count, additions, deletions);
     return {
         largestFirst,
         /** One row's +/− in the reading its own badge is drawing: the pair the rail, the order and the numbers
          *  all read, so none of the three can describe a different change from the other two. */
-        readingOf: (count: CodeCount | undefined, additions?: number, deletions?: number): ShownStat =>
-            shownStat(!showComments.value, count, additions, deletions),
+        readingOf,
+        /* THE KEY A LIST SORTS ON, and WHEN it is allowed to change — the note at the top of this file is about
+         * this function. Called once per list, in setup, with two questions only the panel can answer:
+         *
+         *   `counted`: does every row on screen have a settled reading? (its own rows, its own filter);
+         *   `touched`: has the reader picked a row in this list yet? (its own selection).
+         *
+         * Until the list has been counted whole it ranks on git's pair; at the first moment it IS, and only if
+         * the reader has not touched it, it switches to the reading the rows are drawing and stays there for
+         * good. One reorder, while the badges beside it are settling too, or none at all.
+         *
+         * The switch is a latch rather than a condition: a row arriving later (an agent still writing) leaves the
+         * list where it is and settles into it, instead of throwing every row back to git's order and then
+         * forward again — two reorders nobody asked for, per file the agent writes. */
+        orderReading(counted: () => boolean, touched: () => boolean) {
+            const onShown = ref(false);
+            watchEffect(() => {
+                if (!onShown.value && !touched() && counted()) {
+                    onShown.value = true;
+                }
+            });
+            /* Working the control itself is the reader ASKING to be re-ordered, which is the one reorder they
+             * cannot be surprised by — so it is also the way back for a list that froze on git's pair because
+             * they clicked a row before the counting caught up. Off and on again, and it ranks on what the
+             * badges are showing now. */
+            watch(largestFirst, () => {
+                if (counted()) {
+                    onShown.value = true;
+                }
+            });
+            return (count: CodeCount | undefined, additions?: number, deletions?: number): ShownStat =>
+                onShown.value ? readingOf(count, additions, deletions) : orderStat({ additions, deletions });
+        },
         /* Biggest first when that is the asked-for reading, and the identical array when it is not — so a panel
-         * calls this at every level of its hierarchy without branching, and path order costs nothing.
+         * calls this at every level of its hierarchy without branching, and path order costs nothing. The key is
+         * `orderReading`'s, at every one of those levels: a list that ranks its rows on one measure and its
+         * headings on another is a list whose top row is not in its top group.
          *
          * The sort is stable (guaranteed since ES2019), which is what makes it safe to apply to a list that is
          * already in path order: rows that added the same amount keep it, so the two files a package changed by

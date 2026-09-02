@@ -11,7 +11,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { REASON_COPY } from "../composables/agents/conflictResolution";
-import { useAgentChanges } from "../composables/agents/useAgentChanges";
+import { agentStatKey, useAgentChanges } from "../composables/agents/useAgentChanges";
 import { queryClient } from "../composables/queryPersistence";
 import { AGENTS, WORKSPACE_MODULES } from "../composables/queryKeys";
 import { router } from "../router";
@@ -34,6 +34,10 @@ const { default: AgentReviewPanel } = await import("./AgentReviewPanel.vue");
 // The reader's comment toggle, which decides WHICH reading every badge in the panel prints. Imported the same way
 // as the panel, after the globals its module chain reads at import time are in place.
 const { showComments, toggleShowComments } = (await import("../composables/useLayout")).useLayout();
+// The other two preferences the list reads: how it is ordered, and the store the code-only counts arrive in.
+const { largestFirst } = (await import("../composables/workspace/changeWeight")).useChangeWeight();
+const { record, noCode } = (await import("../composables/workspace/useCodeStats")).useCodeStats();
+const { resetCodeStats } = await import("../composables/workspace/useCodeStats");
 
 const AGENT = `a1`;
 /* A refused land as the daemon reports it: nothing landed (a check land is atomic), two of the five files
@@ -127,11 +131,14 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     queryClient.clear();
-    // The toggle is app-wide state that outlives a mount, so a test that flips it hands the next one a different
-    // panel than it asked for.
+    // The toggles are app-wide state that outlives a mount, so a test that flips one hands the next one a
+    // different panel than it asked for.
     if (showComments.value) {
         toggleShowComments();
     }
+    largestFirst.value = false;
+    // Counted readings are module state too, and which of them a list has decides which reading it orders by.
+    resetCodeStats();
 });
 
 // The file rows, by the class the row container carries. Substring-matched to sidestep escaping Tailwind's `/`.
@@ -260,6 +267,66 @@ it(`steps past a folded package instead of landing inside it`, async () => {
     await nextTick();
     // The next row DOWN the list, not the folded package's second file.
     expect(el.querySelector(`section > div`)?.textContent).toContain(`config.ts`);
+});
+
+/* THE LIST HOLDS STILL WHILE IT IS BEING READ. Most-added-first used to rank on the reading each row was
+ * SHOWING, and that reading arrives: the code-only counts are a by-product of having both sides of a file, so
+ * they land per file, in the background, and on the click that opens one. Reviewing a big landing therefore
+ * resorted the list every few clicks — the file just clicked walked off under the pointer, and the row that took
+ * its place was one the reader had not asked for. The switch to that reading is made once, for the whole list,
+ * and only while it is uncounted and untouched (changeWeight's orderReading); these two pin both halves. */
+it(`keeps the order put when a row's code-only reading arrives`, async () => {
+    largestFirst.value = true;
+    const el = await mount(MODULES);
+    const order = [`session.ts`, `session.test.ts`, `config.ts`, `logo.png`, `README.md`];
+    expect(rowNames(el)).toEqual(order);
+
+    // session.ts as its diff turns out to read: git calls it +12, and eleven of those twelve lines are comment.
+    // Under the old key that arrival dropped it below the row it is sitting above.
+    await record(
+        agentStatKey(AGENT, `root`, `src/auth/session.ts`, undefined),
+        `src/auth/session.ts`,
+        ``,
+        [...Array.from({ length: 11 }, (_, line) => `// what this does, line ${line}`), `const session = 1;`].join(`\n`),
+    );
+    await nextTick();
+
+    // The row took the new number, so the reading really did change under the list…
+    expect(rowFor(el, `src/auth/session.ts`).textContent).toContain(`+1`);
+    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(`+12`);
+    // …and nothing moved: the rest of the review is still uncounted, so the key is still git's for every row.
+    expect(rowNames(el)).toEqual(order);
+});
+
+/* THE OTHER HALF: a review that HAS been counted whole before the reader touched it is ordered on the reading its
+ * badges are drawing, which is the only way the rails can descend under a control that says "most added first".
+ * The switch is that list's one and only reorder — clicks after it move nothing, because there is nothing left to
+ * arrive. */
+it(`orders on the code-only reading once every row has been counted, and holds it from there`, async () => {
+    largestFirst.value = true;
+    /* Every row read before the panel opens, which is what the background loader normally does. session.ts is
+     * eleven-twelfths comment (git +12, code +1) and the test file is all code (git +8, code +9, an edit the
+     * agent has since grown), so the counted reading is a DIFFERENT order from git's: which is the point, since
+     * an order that agreed either way would pin nothing. */
+    const code = (lines: number): string => Array.from({ length: lines }, (_, line) => `const line${line} = ${line};`).join(`\n`);
+    const commented = [...Array.from({ length: 11 }, (_, line) => `// what this does, line ${line}`), `const session = 1;`].join(`\n`);
+    await Promise.all([
+        record(agentStatKey(AGENT, `root`, `src/auth/session.ts`, undefined), `src/auth/session.ts`, ``, commented),
+        record(agentStatKey(AGENT, `root`, `src/auth/session.test.ts`, undefined), `src/auth/session.test.ts`, ``, code(9)),
+        record(agentStatKey(AGENT, `root`, `src/config.ts`, undefined), `src/config.ts`, ``, code(2)),
+        record(agentStatKey(AGENT, `docs`, `README.md`, undefined), `README.md`, ``, `One line.`),
+    ]);
+    // Bytes: nothing to strip, and a row left counting would hold the whole list on git's numbers.
+    noCode(agentStatKey(AGENT, `root`, `assets/logo.png`, undefined));
+
+    const el = await mount();
+    // Git's order would be session.ts (+12), session.test.ts (+8), config.ts (+2): this is the other one.
+    const order = [`session.test.ts`, `config.ts`, `session.ts`, `logo.png`, `README.md`];
+    expect(rowNames(el)).toEqual(order);
+
+    rowFor(el, `src/config.ts`).querySelector(`button`)!.click();
+    await nextTick();
+    expect(rowNames(el)).toEqual(order);
 });
 
 it(`lands a path clicked in the report on its row, and says so in the diff header`, async () => {

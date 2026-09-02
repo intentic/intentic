@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 //
-// The rules the rail and the most-added-first order rest on. `useChangeWeight` itself is a thin binding of these
-// to the showComments preference and is exercised through the panels. jsdom for the module, not for these
-// assertions: the file also declares a stored preference and reaches useLayout, both of which read the document
-// as they load.
+// The rules the rail and the most-added-first order rest on. `readingOf` is a thin binding of `shownStat` to the
+// showComments preference and is exercised through the panels; the order half is here, since which pair a list
+// is sorted on is the whole of it. jsdom for the module, not for these assertions: the file also declares a
+// stored preference and reaches useLayout, both of which read the document as they load.
 import { describe, expect, it } from "vitest";
-import { addedIn, bigger, shownStat, sumShown, weightFill } from "./changeWeight";
+import { nextTick, ref } from "vue";
+import { addedIn, bigger, orderStat, shownStat, sumShown, useChangeWeight, weightFill } from "./changeWeight";
 
 describe(`shownStat`, () => {
     it(`shows the code-only counts while the surface is showing code alone`, () => {
@@ -61,6 +62,105 @@ describe(`bigger`, () => {
 
     it(`leaves equals alone, so a stable sort keeps them in path order`, () => {
         expect(bigger({ additions: 4, deletions: 1 }, { additions: 4, deletions: 1 })).toBe(0);
+    });
+});
+
+describe(`orderStat`, () => {
+    it(`takes git's pair off whatever carries it, a row's change or a heading's totals`, () => {
+        // A row as the panel holds it: git's pair, and the code-only reading that arrived for it later.
+        const row = { additions: 40, deletions: 2, code: { additions: 2, deletions: 0 } };
+        expect(orderStat(row)).toEqual({ additions: 40, deletions: 2 });
+        expect(orderStat(sumShown([{ additions: 40, deletions: 2 }, { additions: 8 }]))).toEqual({ additions: 48, deletions: 2 });
+    });
+
+    it(`carries "no counts at all" through rather than calling a binary file a change of zero`, () => {
+        expect(orderStat({})).toEqual({ additions: undefined, deletions: undefined });
+    });
+});
+
+/* THE JUMP THIS EXISTS TO STOP. The order used to take each row's shown reading the moment that reading arrived,
+ * and the readings arrive one file at a time — in the background, and on the click that opens one — so a review
+ * re-sorted itself as it was read, and the click that selected a row was the thing that moved it. The switch to
+ * the shown reading now happens once, for the whole list, and never once the reader has touched it. */
+describe(`orderReading`, () => {
+    const { orderReading, largestFirst } = useChangeWeight();
+    const COUNTED = { code: { additions: 2, deletions: 0 }, counting: false };
+
+    it(`ranks on git's pair until every row on screen has been counted`, async () => {
+        const counted = ref(false);
+        const key = orderReading(
+            () => counted.value,
+            () => false,
+        );
+        expect(key(COUNTED, 40, 2)).toEqual({ additions: 40, deletions: 2 });
+
+        // The list is counted whole: one switch, and from here the key is the reading the badges are drawing.
+        counted.value = true;
+        await nextTick();
+        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
+    });
+
+    /* A latch, not a condition. An agent writing into an open review adds rows that have not been counted, and a
+     * key that fell back to git's for the whole list every time would re-sort it twice per file the agent wrote:
+     * once on the way out, once on the way back. The new row ranks on git's pair until its own count lands. */
+    it(`stays on the shown reading when a later row arrives uncounted`, async () => {
+        const counted = ref(true);
+        const key = orderReading(
+            () => counted.value,
+            () => false,
+        );
+        await nextTick();
+        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
+
+        counted.value = false;
+        await nextTick();
+        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
+        // …and the row that has not been counted yet is the one holding git's numbers, which is where it sorts.
+        expect(key({ counting: true }, 8, 1)).toEqual({ additions: 8, deletions: 1 });
+    });
+
+    it(`never switches under a reader who has already picked a row`, async () => {
+        const counted = ref(false);
+        const touched = ref(false);
+        const key = orderReading(
+            () => counted.value,
+            () => touched.value,
+        );
+
+        // They clicked before the counting finished: this list keeps the order it had, however late it settles.
+        touched.value = true;
+        counted.value = true;
+        await nextTick();
+        expect(key(COUNTED, 40, 2)).toEqual({ additions: 40, deletions: 2 });
+
+        // Working the control is the reader asking to be re-ordered, and is the way back out of that freeze.
+        largestFirst.value = !largestFirst.value;
+        await nextTick();
+        expect(key(COUNTED, 40, 2)).toEqual({ additions: 2, deletions: 0 });
+        largestFirst.value = false;
+    });
+});
+
+describe(`bySize`, () => {
+    const { largestFirst, bySize } = useChangeWeight();
+    const rows = [
+        { path: `a/prose.ts`, additions: 40, deletions: 2 },
+        { path: `b/parse.ts`, additions: 30, deletions: 9 },
+        { path: `c/tweak.ts`, additions: 30, deletions: 1 },
+    ];
+
+    it(`hands back the very same list while path order is the reading, so it costs a panel nothing`, () => {
+        largestFirst.value = false;
+        expect(bySize(rows, orderStat)).toBe(rows);
+    });
+
+    it(`puts the most added first and breaks a tie on deletions, leaving path order under both`, () => {
+        largestFirst.value = true;
+        try {
+            expect(bySize(rows, orderStat).map((row) => row.path)).toEqual([`a/prose.ts`, `b/parse.ts`, `c/tweak.ts`]);
+        } finally {
+            largestFirst.value = false;
+        }
     });
 });
 

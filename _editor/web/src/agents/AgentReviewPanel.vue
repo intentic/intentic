@@ -191,10 +191,23 @@ const codeOf = (file: AgentReviewFile): CodeCount => countOf(agentStatKey(agentI
  * The rail's scale is the most-added row the list is currently SHOWING (`filtered`, not every file the agent
  * touched), because it is a comparison between the things on screen: narrowing to Blocked and being told those
  * four files are all tiny — against a 400-line file the filter is hiding — would be comparing them to something
- * the reader cannot see. */
-const { readingOf, bySize } = useChangeWeight();
+ * the reader cannot see.
+ *
+ * The ORDER's key is `orderReading`'s, at all three scopes below, and the two questions it asks are this panel's
+ * to answer: whether every row IN THE FILTER has been counted (a reading that arrives cannot be allowed to
+ * re-sort the list one row at a time), and whether the reader has picked a row yet — after which this list does
+ * not re-sort at all, whenever its counting happens to finish. */
+const { readingOf, orderReading, bySize } = useChangeWeight();
 const readingOfRow = (file: AgentReviewFile): ShownStat => readingOf(codeOf(file), file.change.additions, file.change.deletions);
 const heaviest = computed(() => filtered.value.reduce((most, file) => Math.max(most, addedIn(readingOfRow(file))), 0));
+// Set by `select` and `jumpTo` — the reader's own picks. NOT by the watcher that opens the first file on arrival,
+// which is the panel choosing for them and must not freeze anything.
+const touched = ref(false);
+const orderKey = orderReading(
+    () => filtered.value.every((file) => !codeOf(file).counting),
+    () => touched.value,
+);
+const orderOfRow = (file: AgentReviewFile): ShownStat => orderKey(codeOf(file), file.change.additions, file.change.deletions);
 
 // The box's name for the conflict report's crossing row, and the crossing itself. Read here rather than passed
 // down from the page: the panel already holds `at`, and a name threaded through two components is a name that
@@ -219,11 +232,11 @@ interface GroupStats {
      * reader clicked one of its rows. */
     readonly code: CodeCount;
     readonly blocked: number;
-    /* What most-added-first orders this heading by: the sum of what its rows are SHOWING, which is a pair of
-     * plain numbers whatever state they are in. Not read off `code` above, which is deliberately undefined for a
-     * heading with one unsettled row under it (a part-sum is not a sum) — an order is a total ordering or it is
-     * nothing, so this takes the reading each row is actually drawing and adds those up. */
-    readonly reading: ShownStat;
+    /* What most-added-first orders this heading by: its rows' own keys, added up. Not read off `code` above,
+     * which is deliberately undefined for a heading with one unsettled row under it (a part-sum is not a sum) —
+     * an order is a total ordering or it is nothing, so this sums the key each row is ranked on, whichever of the
+     * two readings that currently is. */
+    readonly order: ShownStat;
 }
 const codeSumOf = (files: readonly AgentReviewFile[]): CodeCount =>
     sumCounts(files.map((file) => ({ count: codeOf(file), additions: file.change.additions, deletions: file.change.deletions })));
@@ -232,7 +245,7 @@ const statsOf = (files: readonly AgentReviewFile[]): GroupStats => ({
     deletions: files.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
     code: codeSumOf(files),
     blocked: files.filter((file) => file.blocked !== undefined).length,
-    reading: sumShown(files.map(readingOfRow)),
+    order: sumShown(files.map(orderOfRow)),
 });
 // The whole review, for the list header: every file, not the filtered ones, exactly as its git totals are.
 const reviewCode = computed(() => codeSumOf(changes.files.value));
@@ -263,7 +276,7 @@ const groups = computed<readonly RepoGroup[]>(() => {
      * workspace's Changes panel deliberately does NOT do this to its repos — there a repo row is an operable
      * thing (its own sync pills, its own discard, its own failure) and shuffling those is a different kind of
      * surprise than reordering a list of files. */
-    return bySize(built, (group) => group.reading);
+    return bySize(built, (group) => group.order);
 });
 
 /* The same reading the workspace's Changes panel offers, from the same preference (useChangeGrouping) and
@@ -295,10 +308,10 @@ const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
         for (const bucket of view.buckets) {
             // Biggest first INSIDE a package before the packages themselves are ordered, so the ask is applied at
             // every scope the list has headings for rather than flattening the one thing a reader navigates by.
-            const rows = bySize(bucket.rows, readingOfRow);
+            const rows = bySize(bucket.rows, orderOfRow);
             buckets.push({ ...bucket, rows, ...statsOf(rows) });
         }
-        views.set(group.repo, { buckets: bySize(buckets, (bucket) => bucket.reading), named: view.named });
+        views.set(group.repo, { buckets: bySize(buckets, (bucket) => bucket.order), named: view.named });
     }
     return views;
 });
@@ -330,6 +343,7 @@ const setRowEl = (key: string, el: unknown): void => {
 };
 
 const select = (file: AgentReviewFile): void => {
+    touched.value = true;
     selectedKey.value = file.key;
     rowEls.get(file.key)?.scrollIntoView({ block: `nearest` });
 };
@@ -348,6 +362,7 @@ const jumpTo = async (blocker: Blocker): Promise<void> => {
     if (file === undefined) {
         return;
     }
+    touched.value = true;
     if (!filtered.value.some((row) => row.key === file.key)) {
         filter.value = `blocked`;
     }

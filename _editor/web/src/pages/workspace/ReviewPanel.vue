@@ -549,18 +549,19 @@ const sectionViews = computed<ReadonlyMap<string, SectionView>>(() => {
     for (const repo of scannable.value) {
         for (const section of sidesOf(repo)) {
             const view = moduleView(section.changes, (change) => change.path, modulesOf(repo.repo), repo.repo, groupByModule.value);
-            const reading = (change: GitChange): ShownStat => readingOfRow(repo.repo, section.side, change);
             /* Most added first, when that is the asked-for reading (changeWeight.ts): inside a package, and then
              * across the packages, so the ask reaches every scope this list has headings for without flattening
-             * the hierarchy that staging depends on.
+             * the hierarchy that staging depends on. On `orderOfRow`'s key at both scopes, which is what keeps a
+             * reading arriving for one file from re-sorting the whole panel around it.
              *
              * IT STOPS THERE. The SIDES keep git's order, because conflicts-then-staged-then-unstaged is a
              * sequence of meanings rather than a list of sizes, and the REPOS keep theirs, because a repo row
              * here is an operable thing — its own sync pills, its own discard, its own failure line — and
              * reordering controls under a pointer is a different act from reordering a list of files. */
+            const order = (change: GitChange): ShownStat => orderOfRow(repo.repo, section.side, change);
             const buckets = bySize(
-                view.buckets.map((bucket) => ({ ...bucket, rows: bySize(bucket.rows, reading) })),
-                (bucket) => sumShown(bucket.rows.map(reading)),
+                view.buckets.map((bucket) => ({ ...bucket, rows: bySize(bucket.rows, order) })),
+                (bucket) => sumShown(bucket.rows.map(order)),
             );
             views.set(JSON.stringify([repo.repo, section.side]), { buckets, named: view.named });
         }
@@ -627,9 +628,24 @@ const codeOf = (repo: string, side: GitDiffSide, path: string): CodeCount => cou
  * other agent's 400-line file is not on screen to be compared against. A folded repo still counts: folding is
  * "give me back some column", and rescaling every visible rail because a group was collapsed would be the fold
  * reaching somewhere it was never asked to. */
-const { readingOf, bySize } = useChangeWeight();
+const { readingOf, orderReading, bySize } = useChangeWeight();
 const readingOfRow = (repo: string, side: GitDiffSide, change: GitChange): ShownStat =>
     readingOf(codeOf(repo, side, change.path), change.additions, change.deletions);
+/* WHICH READING THE ORDER TAKES, and when it is allowed to change to the other one: the rule is changeWeight's
+ * `orderReading`, and the two answers it needs are this panel's. COUNTED is every row the panel is showing, over
+ * the same scope the rail scales against; TOUCHED is the reader having clicked a row, after which this list does
+ * not re-sort again — a Changes panel is clicked through while an agent writes into it, which is exactly when
+ * readings arrive. */
+const touched = ref(false);
+const orderKey = orderReading(
+    () =>
+        scannable.value.every((repo) =>
+            sidesOf(repo).every((section) => section.changes.every((change) => !codeOf(repo.repo, section.side, change.path).counting)),
+        ),
+    () => touched.value,
+);
+const orderOfRow = (repo: string, side: GitDiffSide, change: GitChange): ShownStat =>
+    orderKey(codeOf(repo, side, change.path), change.additions, change.deletions);
 const heaviest = computed(() => {
     let most = 0;
     for (const repo of scannable.value) {
@@ -677,6 +693,7 @@ const anchor = ref<string | undefined>(undefined);
 const isSelected = (row: Row): boolean => selected.value.has(rowKey(row));
 
 const clickRow = (row: Row, change: GitChange, event: MouseEvent): void => {
+    touched.value = true;
     const key = rowKey(row);
     const keys = visibleRows.value.map(rowKey);
     if (event.shiftKey && anchor.value !== undefined) {
