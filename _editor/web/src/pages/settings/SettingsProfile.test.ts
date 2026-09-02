@@ -3,6 +3,7 @@
 // jsdom because the subject is an AFFORDANCE. The profile row is one identity strip: the avatar is a live
 // control at rest (camera overlay on hover), and rename is a compact pencil attached to the name rather than
 // a separate form with a Save row.
+import { vAction } from "@intentic/ui";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
@@ -33,7 +34,8 @@ const mount = (): HTMLElement => {
         }),
     );
     app.directive(`tooltip`, {});
-    app.directive(`action`, {});
+    // The real directive, not a stub: v-action REPLACES @click, so a stub leaves every control inert.
+    app.directive(`action`, vAction);
     app.mount(el);
     return el;
 };
