@@ -13,6 +13,7 @@ import type { Services } from "../composition.js";
 import { endpointConfigOf } from "../endpoints/local-model.js";
 import { harnessReadyProviders, resolveHarnessCredentials } from "./harness-credentials.js";
 import { runOneShot } from "./one-shot.js";
+import { runCursorOneShot } from "./one-shot-cursor.js";
 import { runGeminiOneShot } from "./one-shot-gemini.js";
 import { type QuickAsk, readQuickAnswer, UnusableAnswerError } from "./quick-answer.js";
 import { spentRung } from "./quick-model-quota.js";
@@ -164,13 +165,18 @@ const cooling = (choice: QuickModelChoice, now: number): string | undefined => {
  * helper that named a provider of its own would be a second opinion on a question that already has one, and
  * the day the two disagreed, a turn and its commit message would run on different loops.
  *
- * What it settles today: Gemini answers `opencode-gemini` whatever harness is asked for, because the Claude
- * Code loop announces itself in every request and Google refuses on that announcement. Reading it rather than
- * hard-coding it means this walk needs no opinion about Google at all, and that when another provider ends up
- * native-only, this seam is already right. */
+ * What it settles today: Gemini answers `opencode-gemini` and Cursor answers `cursor`, whatever harness is
+ * asked for, because neither has a Claude Code road (Google refuses that loop outright; Cursor has no
+ * translator route at all). Reading runtime from the contract rather than hard-coding providers means this walk
+ * needs no opinion about either vendor, and that when another provider ends up native-only, this seam is
+ * already right. */
 const askRung = async (services: Services, choice: QuickModelChoice, prompt: string, signal: AbortSignal): Promise<string> => {
-    if (capabilitiesOf(choice.provider, `claude-code`).runtime === `opencode-gemini`) {
+    const runtime = capabilitiesOf(choice.provider, `claude-code`).runtime;
+    if (runtime === `opencode-gemini`) {
         return runGeminiOneShot({ services, prompt, cwd: services.workspace.root, model: choice.model, signal });
+    }
+    if (runtime === `cursor`) {
+        return runCursorOneShot({ services, prompt, cwd: services.workspace.root, model: choice.model, signal });
     }
     const resolved = await resolveHarnessCredentials(services, { agent: choice.provider, model: choice.model });
     if (!resolved.ok) {

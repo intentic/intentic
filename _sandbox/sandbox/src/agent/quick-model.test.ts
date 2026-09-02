@@ -19,6 +19,9 @@ vi.mock("./one-shot.js", () => ({ runOneShot: (params: { model: string }) => one
 const geminiOneShot = vi.fn<(params: { model: string }) => Promise<string>>();
 vi.mock("./one-shot-gemini.js", () => ({ runGeminiOneShot: (params: { model: string }) => geminiOneShot(params) }));
 
+const cursorOneShot = vi.fn<(params: { model: string }) => Promise<string>>();
+vi.mock("./one-shot-cursor.js", () => ({ runCursorOneShot: (params: { model: string }) => cursorOneShot(params) }));
+
 const { askQuickModel, REFUSED_FOR_MS } = await import("./quick-model.js");
 const { sentenceAnswer } = await import("./quick-answer.js");
 
@@ -38,6 +41,7 @@ const CATALOGS: Record<string, readonly string[]> = {
     claude: [`claude-opus-5`, `claude-haiku-4-5`],
     gemini: [`gemini-3-flash-lite`],
     codex: [`gpt-5.6`],
+    cursor: [`composer-2.5`],
 };
 
 /* WHICH PROVIDERS' ACCOUNTS THE RECORDED QUOTA SAYS ARE SPENT. The reading itself has its own suite next door
@@ -101,10 +105,11 @@ beforeEach(() => {
      * has its behaviour restored on the next two lines, so there is nothing for a reset to lose. */
     vi.resetAllMocks();
     timed.length = 0;
-    ready.mockResolvedValue({ claude: true, gemini: true, codex: true });
+    ready.mockResolvedValue({ claude: true, gemini: true, codex: true, cursor: true });
     credentials.mockResolvedValue({ ok: true });
     oneShot.mockResolvedValue(`fix: tree truncation`);
     geminiOneShot.mockResolvedValue(`fix: tree truncation`);
+    cursorOneShot.mockResolvedValue(`fix: tree truncation`);
 });
 
 afterEach(() => {
@@ -293,6 +298,14 @@ test("names what every rung wrote when none of them wrote an answer", async () =
  * taking that road is a rung that cannot answer, on any of the accounts, ever. The chat already runs Gemini on
  * its own runtime for this reason; these two tests are what stop the helper drifting back. */
 
+test("runs a Cursor rung on its own runtime, never through the Claude Code harness", async () => {
+    const answer = await askQuickModel(fakeServices([`cursor:composer-2.5`]), DRAFT, signal());
+
+    expect(answer.choice).toEqual({ provider: `cursor`, model: `composer-2.5` });
+    expect(cursorOneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `composer-2.5` }));
+    expect(oneShot).not.toHaveBeenCalled();
+});
+
 test("runs a Gemini rung on its own runtime, never through the Claude Code harness", async () => {
     const answer = await askQuickModel(fakeServices([`gemini:gemini-3-flash-lite`]), DRAFT, signal());
 
@@ -302,12 +315,13 @@ test("runs a Gemini rung on its own runtime, never through the Claude Code harne
 });
 
 test("keeps every other provider on the Claude Code harness", async () => {
-    // The fix is scoped to the provider that refuses that loop. Sending the rest down Gemini's road would swap
-    // one wrong runtime for another.
+    // The fix is scoped to the provider that refuses that loop. Sending the rest down Gemini's or Cursor's
+    // road would swap one wrong runtime for another.
     await askQuickModel(fakeServices([`codex:gpt-5.6`]), DRAFT, signal());
 
     expect(oneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `gpt-5.6` }));
     expect(geminiOneShot).not.toHaveBeenCalled();
+    expect(cursorOneShot).not.toHaveBeenCalled();
 });
 
 /* NOT DISCOVERING WHAT IS ALREADY WRITTEN DOWN. The memo above only learns by being refused: one wasted call

@@ -370,6 +370,12 @@ export const resolveHarnessCredentials = async (
             message: "Gemini doesn't run under the Claude Code harness, Google refuses that loop. It runs on its own runtime instead.",
         };
     }
+    if (input.agent === "cursor") {
+        return {
+            ok: false,
+            message: "Cursor doesn't run under the Claude Code harness. It runs on its own runtime instead.",
+        };
+    }
     if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi") {
         if (services.config.translator.url === "") {
             // Codex/Grok can fall back to their own runtime; Kimi has none, so for it this can only be an image
