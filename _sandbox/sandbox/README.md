@@ -174,15 +174,23 @@ reports the profile.
   speak in the owner's voice after it. Marker lookalikes (including fullwidth, CJK and zero-width spellings),
   the harness's own control tags, and foreign models' reserved tokens are neutralized inside the body. The
   system prompt states the language once rather than repeating a warning per wrap. Wrapping also sets the
-  turn's outside-content bit, and while it is set a credential read the owner has not explicitly ruled on stops
-  being auto-allowed: which is the middle link of the chain (outside text → read a credential → send it out)
-  and the only one a policy can stand in.
+  turn's outside-content bit, and while it is set a command that reads credential material AND reaches the
+  internet in the same breath stops being auto-allowed unless the owner ruled on the class: the last link of the
+  chain (outside text → read a credential → send it out). The middle link is where this floor used to stand, and
+  it moved because the reading no longer carries the value: results are masked before the model sees them (the
+  next point), so a tainted turn that opens a dotenv learns its key names, and a card over that is one an owner
+  learns to click through. The gap this accepts — two commands doing what one no longer can — is stated in
+  [src/guard/actions.ts](src/guard/actions.ts) rather than papered over.
 - Let the agent USE a stored secret without ever holding it (src/secrets). Every credential the sandbox stores
   (a connector's token, the DevOps `.env`, the deploy engine's generated values) is masked out of everything
   the agent reads as a stable `{{secret:name}}` reference rather than a blank, and the same token resolves back
   to the real value only at the exits: spliced into a shell command as it runs (a Komodo config payload, a curl
   body) or typed into a focused browser field (`type_secret`). Files at rest keep the reference; every
-  resolution lands on a use ledger the Secrets view shows as each entry's "last used".
+  resolution lands on a use ledger the Secrets view shows as each entry's "last used". A credential the sandbox
+  does NOT store — the project's own dotenv, a token minted an hour ago — has no name to be masked to, so it is
+  blanked instead, and only where the tool call itself named a credential file
+  ([src/agent/agent-redaction.ts](src/agent/agent-redaction.ts)): the same classifier the command gate consults
+  decides that, so the shape patterns that would mangle source code never run on any.
 - Run the agent's JavaScript, not only its shell (src/execution). The JS execution backend is the second way a
   turn runs work of its own: declared per runtime (`AgentCapabilities.execution`), granted per persona card
   beside the shell switch, planned into the one request every runtime builds on, and served on the Claude Code

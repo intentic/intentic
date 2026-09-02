@@ -414,6 +414,36 @@ const enclosingPath = (command: string, span: CommandSpan): string => {
         .replace(/^[@<>=]+/, "");
 };
 
+/* A WORD THAT IS A PATTERN RATHER THAN A PATH, dropped before the table's guess about a FILE is believed at all.
+ *
+ * The table reads shell text looking for filenames, and a search command carries something that looks exactly
+ * like one and is not: `rg 'process\.env\.(INTENTIC_[A-Z]+)' --type ts .` names no file and opens nothing, and
+ * it earned a card reading "this command would read credential material" over a grep of this workspace's own
+ * source. The `.env` in it survives the dotenv pattern's `process.env` exclusion for one reason: the lookbehind
+ * sees the REGEX'S BACKSLASH rather than the `s` of `process`, and a backslash is neither a word character nor a
+ * dot. Every credential-shaped name has the same hole — `rg '\.npmrc'`, `rg '\.ssh/id_ed25519'` — so it is fixed
+ * once here rather than seven times in the table.
+ *
+ * THE ESCAPED DOT IS THE TELL. `\.` is how a regex spells a literal dot, and a POSIX path never needs it. The
+ * one thing that spells `\.` and IS a path is Windows (`type C:\Users\me\.env`), which the machine agent's shell
+ * really does see — and there the other backslashes are SEPARATORS, each followed by a path segment rather than
+ * by the character it escapes. That is the whole discrimination.
+ *
+ * A CHARACTER CLASS and a CLASS ESCAPE are the other two tells, and both are nearly free: `[…]` is legal in a
+ * filename and never in one anybody writes, and `\w`, `\d`, `\b` mean nothing to a shell. The class escapes are
+ * matched only where a word character does NOT follow, which is what keeps `\dev` and `\swap` (Windows
+ * directories) out of them. The word edges (WORD_EDGE) already cut a word at the `(`, `|` and quotes carrying
+ * the rest of a regex's syntax, so these are what is left of it by the time a word reaches here.
+ *
+ * Judged on the ENCLOSING WORD, the same word the fact-check would have asked the filesystem about, so a
+ * pattern and a path are told apart once and both consults see the same answer. */
+const CHARACTER_CLASS = /\[[^\]]*\]/;
+const CLASS_ESCAPE = /\\[wdsbWDSB](?!\w)/;
+const ESCAPED_DOT = /\\\./;
+const PATH_SEPARATOR = /\\\w/;
+const namesAPattern = (word: string): boolean =>
+    CHARACTER_CLASS.test(word) || CLASS_ESCAPE.test(word) || (ESCAPED_DOT.test(word) && !PATH_SEPARATOR.test(word));
+
 /* WHERE A COMMAND READS CREDENTIAL MATERIAL: every secret reference in it, plus every credential-shaped path the
  * context did not positively clear.
  *
@@ -422,7 +452,10 @@ const enclosingPath = (command: string, span: CommandSpan): string => {
  * class would evaporate on every caller without a filesystem. */
 const credentialReads = (command: string, context: CommandContext | undefined): CommandSpan[] => [
     ...spansOf(SECRET_REFERENCES_G, command),
-    ...spansOf(CREDENTIAL_PATHS_G, command).filter((span) => context?.holdsSecret?.(enclosingPath(command, span)) !== false),
+    ...spansOf(CREDENTIAL_PATHS_G, command).filter((span) => {
+        const word = enclosingPath(command, span);
+        return !namesAPattern(word) && context?.holdsSecret?.(word) !== false;
+    }),
 ];
 
 // WHERE each class fires, one entry per class. Empty ⇒ the command is not in it, so membership and evidence are

@@ -198,6 +198,31 @@ describe("secrets.access", () => {
         }
     });
 
+    /* A SEARCH PATTERN IS NOT A PATH, and the escaped dot is why this needed saying: `process.env` is excluded
+     * by the dotenv pattern's own lookbehind, and `process\.env` — the same thing typed into a grep — walked
+     * straight past it, because the character before `.env` is then a backslash rather than the `s`. Grepping
+     * this workspace for its own env reads was one of the commonest cards the class raised. */
+    test("a credential-shaped name inside a regex is a pattern, not a file", () => {
+        for (const command of [
+            String.raw`rg -n 'process\.env\.(INTENTIC_[A-Z]+|GITHUB_[A-Z]+)\b' --type ts .`,
+            String.raw`rg -o 'process\.env\.\w+' . | sort -u`,
+            String.raw`grep -rn '\.npmrc' .`,
+            String.raw`rg '\.ssh/id_ed25519' -l`,
+            String.raw`rg -n '\.env\b' -g '!*.md' .`,
+        ]) {
+            expect(classifyCommand(command), command).not.toContain("secrets.access");
+        }
+    });
+
+    /* THE ONE PATH THAT SPELLS `\.` AND IS A PATH. The machine agent's shell runs on somebody's Windows laptop,
+     * where the backslash is the separator, so the rule above must not read a real credential read as a regex:
+     * a separator is followed by a path segment, an escape by the character it escapes. */
+    test("a windows path keeps the class", () => {
+        for (const command of [String.raw`type C:\Users\me\.env`, String.raw`copy %USERPROFILE%\.ssh\id_rsa \tmp`]) {
+            expect(classifyCommand(command), command).toContain("secrets.access");
+        }
+    });
+
     /* Carrying a reference IS reading the credential: it becomes the value on the way into the process, so a
      * command holding one belongs in this class however it is spelled. Otherwise the outside-content floor in
      * actions.ts is bypassed by the shorter route to the same place, writing `{{secret:X}}` into a curl rather

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { holdsCredentialMaterial } from "./credential-material.js";
+import { holdsCredentialMaterial, maskCredentialMaterial } from "./credential-material.js";
 
 /* The two directions are not symmetric and the tests are written to say so: a MISS here costs one permission
  * card that should not have been raised, and a WRONG CLEAR un-gates a real credential read. So the "no" cases
@@ -116,5 +116,73 @@ describe("files that do not", () => {
     // A URL with a port is not a URL with a password: `user:pass@` needs both halves and the `@`.
     test("an ordinary url is not userinfo", () => {
         expect(holdsCredentialMaterial("API=http://localhost:8080/v1\nSENTRY_DSN=https://abc123@o1.ingest.sentry.io/1\n")).toBe(false);
+    });
+});
+
+/* THE SAME TABLE APPLIED, and the property that matters is the one about what SURVIVES: this runs over the
+ * files an agent legitimately opens and edits, so a mask that takes the structure with it costs the work rather
+ * than protecting it. Every case below asserts both halves — the value is gone, the file is still readable. */
+describe("masking what a credential file holds", () => {
+    test("a dotenv keeps its keys, its shape and its comments", () => {
+        const masked = maskCredentialMaterial(
+            ["# staging", "PORT=3000", "NODE_ENV=production", 'STRIPE_SECRET="sk_live_51H8xQzRvKpLmNbTy"', "MAX_TOKENS=8192"].join("\n"),
+        );
+        expect(masked).toBe(["# staging", "PORT=3000", "NODE_ENV=production", 'STRIPE_SECRET="***"', "MAX_TOKENS=8192"].join("\n"));
+    });
+
+    /* THE ROUND TRIP THE WHOLE THING RESTS ON. A deferred value holds no credential and is the one thing a
+     * rewritten file must come back with intact: masking `{{secret:X}}` would have the model paste `***` over
+     * this workspace's own convention for a file that must not hold a credential. */
+    test("a placeholder and a secret reference come back untouched", () => {
+        const template = ["GITHUB_TOKEN=", "NPM_TOKEN=${NPM_TOKEN}", "API_KEY=<your-api-key>", "STRIPE_SECRET={{secret:STRIPE}}"].join("\n");
+        expect(maskCredentialMaterial(template)).toBe(template);
+    });
+
+    test("a private key keeps the lines that say what it is", () => {
+        const masked = maskCredentialMaterial("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n");
+        expect(masked).toBe("-----BEGIN OPENSSH PRIVATE KEY-----\n***\n-----END OPENSSH PRIVATE KEY-----\n");
+    });
+
+    // A connection string with the host blanked is one nobody can debug, and the host is not the secret.
+    test("a url keeps everything but the password", () => {
+        expect(maskCredentialMaterial("DATABASE_URL=postgres://app:Rk29fPqz@db.internal:5432/app\n")).toBe(
+            "DATABASE_URL=postgres://app:***@db.internal:5432/app\n",
+        );
+    });
+
+    // No key names these, and none is needed: the issuer is in the token.
+    test("an issued token goes wherever it appears", () => {
+        expect(maskCredentialMaterial("gh auth: ghp_16C7e42F292c6912E7710c838347Ae178B4a expired")).toBe("gh auth: *** expired");
+        expect(maskCredentialMaterial("//registry.npmjs.org/:_authToken=npm_wCq3nTvR8xLm2ZbKp7HdJyE4sUaF6gN0iQ1t")).toBe(
+            "//registry.npmjs.org/:_authToken=***",
+        );
+    });
+
+    /* WHAT IT MUST NOT TOUCH, the other half of the bargain: this pass only ever runs over a result whose input
+     * named a credential file, and such a file is still mostly configuration the model has to read. */
+    test("the ordinary contents of a config file survive", () => {
+        for (const text of [
+            "registry=https://registry.npmjs.org/\nengine-strict=true\n",
+            "TOKEN_EXPIRY=3600\nMAX_TOKENS=8192\nREFRESH_TOKEN_URL=https://auth.example.com/refresh\n",
+            "Host github.com\n  User git\n  IdentityFile ~/.ssh/id_ed25519\n",
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH1x radarsu@omen\n",
+            "POSTGRES_PASSWORD=dev\n",
+        ]) {
+            expect(maskCredentialMaterial(text), text.slice(0, 30)).toBe(text);
+        }
+    });
+
+    // The point of the pass, stated as the property the gate now depends on: what comes back holds nothing.
+    test("what comes back no longer holds credential material", () => {
+        for (const text of [
+            "//registry.npmjs.org/:_authToken=npm_wCq3nTvR8xLm2ZbKp7HdJyE4sUaF6gN0iQ1t\n",
+            "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG\n",
+            '{"accessToken":"ya29.a0AfB_bJq2Lm","expiresAt":1767000000}',
+            "PORT=3000\nSTRIPE_SECRET=sk_live_51H8xQzRvKpLmNbTy\n",
+            "https://radarsu:ghp_S8kQ2mVx@github.com\n",
+        ]) {
+            expect(holdsCredentialMaterial(text), `${text.slice(0, 30)} before`).toBe(true);
+            expect(holdsCredentialMaterial(maskCredentialMaterial(text)), `${text.slice(0, 30)} after`).toBe(false);
+        }
     });
 });

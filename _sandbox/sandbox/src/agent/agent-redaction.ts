@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { classifyCommand, maskCredentialMaterial } from "@intentic/sandbox-contract";
 import { type NamedSecret, secretReference, surfaceForms } from "../secrets/secret-registry.js";
 
 /* MASKING WHAT THE AGENT READS, not only what it runs.
@@ -19,13 +20,21 @@ import { type NamedSecret, secretReference, surfaceForms } from "../secrets/secr
  * pasted over the real value, a silent credential loss. With the reference, a read and a rewrite round-trip:
  * what the model copies is a token the exits reconstitute.
  *
- * ONLY THE VALUES THIS SANDBOX HOLDS, deliberately, not the name heuristics that also run in the terminal
- * lane. Those infer a credential from the identifier beside it, and their whole failure history is on source
- * code: `oauthToken === undefined` rewritten mid-comparison, a JSON body broken at `"cacheReadTokens":26170149`.
- * A Read of a source file is exactly the input they get wrong, and unlike a shell dump it is text the model has
- * to reason about precisely. Value masking cannot make that mistake, it replaces strings this sandbox actually
- * stores and nothing else, and it is the half that is COMPLETE for what is stored, under any field name a
- * connector invents. The name patterns stay where they were measured.
+ * THE VALUES THIS SANDBOX HOLDS, ON EVERY RESULT, and nothing else on an ordinary one. Value masking replaces
+ * strings this sandbox actually stores, so it cannot make the mistake the name heuristics make: those infer a
+ * credential from the identifier beside it, and their whole failure history is on source code, `oauthToken ===
+ * undefined` rewritten mid-comparison, a JSON body broken at `"cacheReadTokens":26170149`. A Read of a source
+ * file is exactly the input they get wrong, and unlike a shell dump it is text the model has to reason about
+ * precisely. So the floor is exact, and COMPLETE for what is stored, under any field name a connector invents.
+ *
+ * AND SHAPE MASKING WHERE THE CALL ITSELF NAMED A CREDENTIAL FILE (namesCredentialMaterial below), which is the
+ * half the vault cannot reach: the project's own `.env`, a token a deploy minted an hour ago, whatever the
+ * owner pasted into the repo this agent was pointed at. None of that is in the registry, so none of it was
+ * masked anywhere, and it is most of what a read actually leaks. It is safe to be blunt there for the reason it
+ * is not safe to be blunt everywhere: the pass runs on a file the command classifier already calls a credential
+ * store, where a `key = value` IS the credential and there is no source code to mangle. The measured patterns
+ * stay where they were measured; this is the other table (contract credential-material.ts), the one that
+ * already defines what a credential file holds, run as a replacement instead of a question.
  *
  * Bash is covered here too, though its own filter already masks it: with cleaning switched off (the raw
  * baseline) that filter does not run at all, and this is then the only thing between a credential and the
@@ -96,6 +105,42 @@ export const unmaskableSecrets = (secrets: readonly NamedSecret[]): readonly str
 const maskString = (text: string, targets: readonly MaskTarget[]): string =>
     targets.reduce((masked, { target, replacement }) => (masked.includes(target) ? masked.split(target).join(replacement) : masked), text);
 
+/* WAS THIS TOOL CALL AIMED AT A CREDENTIAL FILE? — the switch that turns on the second, shape-based pass
+ * (contract credential-material.ts maskCredentialMaterial), and the reason that pass can be blunt.
+ *
+ * The floor above is complete for what this sandbox STORES and blind to everything else, which is most of what
+ * a read actually leaks: the project's own `.env`, a token minted an hour ago, whatever the owner pasted into
+ * the repo. Masking those means inferring a credential from its shape, and shape inference on ORDINARY output
+ * is the thing this module's header refuses, with the measurements to back it (`oauthToken === undefined`
+ * rewritten mid-comparison, a JSON body broken at `"cacheReadTokens":26170149`).
+ *
+ * So it is not run on ordinary output. It runs where the CALL ITSELF named credential material, judged by the
+ * same classifier the command gate consults (sandbox-contract command-classes.ts), over the tool's own input:
+ * `Read { file_path: "/work/app/.env" }`, `Bash { command: "cat ~/.npmrc" }`, a Grep through `~/.aws`. One
+ * table decides what a credential file is, for the gate and for this, so a path the gate stops asking about is
+ * exactly a path whose contents this blanks — that trade is the whole point (guard/actions.ts taint floor).
+ *
+ * The input rather than the OUTPUT, deliberately: judging the output would be shape inference on arbitrary
+ * text by another name, and the input is small, structured, and says what was asked for.
+ *
+ * FIELD-CAPPED, because a Write's `content` is the whole file and a Read's `file_path` is forty characters:
+ * every field that says WHAT WAS ASKED FOR is short, and serializing the one that says what was written would
+ * put a megabyte through the classifier on every write. A field past the cap is dropped rather than truncated,
+ * and a call whose only credential mention was in it is judged ordinary — this module's safe direction, since
+ * the value floor still runs and nothing masked before stops being masked. */
+const FIELD_MAX = 4096;
+
+const namesCredentialMaterial = (toolInput: unknown): boolean => {
+    try {
+        const asked = JSON.stringify(toolInput, (_key, value: unknown) => (typeof value === "string" && value.length > FIELD_MAX ? "" : value));
+        return asked !== undefined && classifyCommand(asked).includes("secrets.access");
+    } catch {
+        // A tool input that will not serialize (a circular structure a runtime handed us) is one this cannot
+        // read, and an unreadable input is not evidence of a credential.
+        return false;
+    }
+};
+
 /* A tool result is JSON of a shape that belongs to the tool, a string for Bash, `{ file: { content } }` for
  * Read, a content array for an MCP server, so this walks it rather than knowing any of them. Keys are left
  * alone: a key is a field NAME, and blanking those would corrupt the structure without hiding a secret.
@@ -104,22 +149,24 @@ const maskString = (text: string, targets: readonly MaskTarget[]): string =>
  * without re-comparing a large result, and what keeps the overwhelmingly common case (no credential anywhere
  * in the output) from allocating a copy of it.
  */
-export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknown => {
+const mapStrings = (value: unknown, transform: (text: string) => string): unknown => {
     if (typeof value === "string") {
-        const masked = maskString(value, targets);
-        return masked === value ? value : masked;
+        const mapped = transform(value);
+        return mapped === value ? value : mapped;
     }
     if (Array.isArray(value)) {
-        const items = value.map((item) => maskDeep(item, targets));
+        const items = value.map((item) => mapStrings(item, transform));
         return items.some((item, index) => item !== value[index]) ? items : value;
     }
     if (value !== null && typeof value === "object") {
         const source = value as Record<string, unknown>;
-        const entries = Object.entries(source).map(([key, item]) => [key, maskDeep(item, targets)] as const);
+        const entries = Object.entries(source).map(([key, item]) => [key, mapStrings(item, transform)] as const);
         return entries.some(([key, item]) => item !== source[key]) ? Object.fromEntries(entries) : value;
     }
     return value;
 };
+
+export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknown => mapStrings(value, (text) => maskString(text, targets));
 
 export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     /* No matcher, so every tool, including the ones nobody has written yet. A tool list here would be a list
@@ -135,10 +182,19 @@ export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): 
                     // tool call that produced it.
                     try {
                         const targets = maskTargets(await secrets());
-                        if (targets.length === 0) {
+                        /* THE TWO PASSES, in this order and for a reason: the exact one first, so a stored
+                         * value becomes its `{{secret:name}}` reference, and the shape one second, which then
+                         * reads that reference as the deferred value it is and leaves it alone. Reversed, the
+                         * shape pass would blank a stored credential to `***` before the floor above could give
+                         * it back its name, and the round trip a reference exists for would be gone. */
+                        const aimed = namesCredentialMaterial(input.tool_input);
+                        if (targets.length === 0 && !aimed) {
                             return {};
                         }
-                        const masked = maskDeep(input.tool_response, targets);
+                        const masked = mapStrings(input.tool_response, (text) => {
+                            const valueMasked = maskString(text, targets);
+                            return aimed ? maskCredentialMaterial(valueMasked) : valueMasked;
+                        });
                         return masked === input.tool_response
                             ? {}
                             : { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: masked } };

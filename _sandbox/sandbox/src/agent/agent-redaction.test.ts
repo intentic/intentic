@@ -16,13 +16,19 @@ const PASSWORD = "Xk4!mQ2pRt7@wZ9aBc1_";
 
 const named = (name: string, value: string): NamedSecret => ({ name, value, source: "capability" });
 
-// Drive the hook the way the harness does, with a tool result of that tool's own shape.
-const fire = async (secrets: () => Promise<readonly NamedSecret[]>, toolName: string, toolResponse: unknown): Promise<HookJSONOutput> => {
+// Drive the hook the way the harness does, with a tool result of that tool's own shape. The INPUT matters as
+// well as the output now: it is what decides whether the shape pass runs (see the block at the end).
+const fire = async (
+    secrets: () => Promise<readonly NamedSecret[]>,
+    toolName: string,
+    toolResponse: unknown,
+    toolInput: unknown = {},
+): Promise<HookJSONOutput> => {
     const [matcher] = redactionHooks(secrets).PostToolUse!;
     const input = {
         hook_event_name: "PostToolUse",
         tool_name: toolName,
-        tool_input: {},
+        tool_input: toolInput,
         tool_response: toolResponse,
         tool_use_id: "t1",
     } as unknown as HookInput;
@@ -222,4 +228,49 @@ test("a value that clears the floor is not reported, and is genuinely masked", (
     // The two halves agree: nothing reported unprotected is left unmasked, which is what makes the report
     // worth reading rather than a second list to reconcile by hand.
     expect(maskTargets(secrets).length).toBeGreaterThan(0);
+});
+
+/* THE SECOND PASS, and the whole reason the command gate stopped asking about reads (guard/actions.ts): a
+ * credential this sandbox does NOT store — the project's own dotenv, a token minted an hour ago — used to reach
+ * the model in full through every lane, because value masking only knows the registry. It is masked now, but
+ * only where the CALL named a credential file, which is what keeps the same patterns off ordinary source. */
+const DOTENV = "PORT=3000\nSTRIPE_SECRET=sk_live_51H8xQzRvKpLmNbTy\n";
+
+test("a credential the sandbox has never stored is masked when the call named a credential file", async () => {
+    const result = { file: { filePath: "/work/app/.env", content: DOTENV } };
+    expect(shown(await fire(held(), "Read", result, { file_path: "/work/app/.env" }), result)).toEqual({
+        file: { filePath: "/work/app/.env", content: "PORT=3000\nSTRIPE_SECRET=***\n" },
+    });
+});
+
+test("the same file through the shell, by the same rule", async () => {
+    expect(shown(await fire(held(), "Bash", DOTENV, { command: "cat .env" }), DOTENV)).toBe("PORT=3000\nSTRIPE_SECRET=***\n");
+});
+
+/* THE INPUT THIS PASS MUST NOT FIRE ON, and the measurements are in the module header: matching on the key
+ * alone rewrote `oauthToken === undefined` mid-comparison and broke a JSON body at `"cacheReadTokens":26170149`.
+ * A Read of source code is exactly that input, and it stays untouched because the call named source code. */
+test("ordinary source is left alone: the pass keys on the call, not on the text", async () => {
+    const source = { file: { filePath: "/work/src/auth.ts", content: 'if (oauthToken === undefined) throw new Error("no token");\n' } };
+    expect(await fire(held(), "Read", source, { file_path: "/work/src/auth.ts" })).toEqual({});
+    const usage = { content: '{"cacheReadTokens":26170149,"outputTokens":94746}' };
+    expect(await fire(held(), "Read", usage, { file_path: "/work/src/usage.json" })).toEqual({});
+});
+
+/* A GREP FOR A CREDENTIAL-SHAPED NAME IS NOT A READ OF ONE. The classifier tells a pattern from a path
+ * (sandbox-contract command-classes.ts), so searching the workspace for `process\.env\.` neither raises a card nor
+ * turns this pass on and blanks the search results. */
+test("a search whose pattern merely looks like a credential path does not arm the pass", async () => {
+    const hits = { content: "src/config.ts:12: const token = process.env.GITHUB_TOKEN ?? throwMissing();" };
+    expect(await fire(held(), "Grep", hits, { pattern: String.raw`process\.env\.`, path: "/work" })).toEqual({});
+});
+
+test("the two passes compose: what is stored keeps its reference, what is not is blanked", async () => {
+    // A registry value masks to a token the exits resolve back; an unregistered one beside it can only be
+    // blanked, because a guess must not mint a reference that promises to resolve.
+    const content = `NPM_TOKEN=${TOKEN}\nSTRIPE_SECRET=sk_live_51H8xQzRvKpLmNbTy\n`;
+    const result = { file: { content } };
+    expect(shown(await fire(held(named("npm/token", TOKEN)), "Read", result, { file_path: "/work/.env" }), result)).toEqual({
+        file: { content: "NPM_TOKEN={{secret:npm/token}}\nSTRIPE_SECRET=***\n" },
+    });
 });

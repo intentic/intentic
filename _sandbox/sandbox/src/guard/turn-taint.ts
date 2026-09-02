@@ -17,11 +17,14 @@
  * reasoning may be that page's, and "the page was three tool calls ago" is not evidence of anything. It dies
  * with the turn, which is the correct lifetime, the next turn starts clean unless it too takes something in.
  *
- * WHAT IT DOES is deliberately narrow (guard/command-gate.ts): while set, commands that READ CREDENTIAL
- * MATERIAL stop being auto-allowed. Not a lockdown, the agent still edits, builds, runs tests, and answers
- * the stranger who woke it. The owner's own rule still wins in both directions: an explicit `allow` on that
- * class means they have said this workspace does not want the floor, and an explicit `deny` outranks it
- * anyway. */
+ * WHAT IT DOES is deliberately narrow (guard/command-gate.ts): while set, a command that SENDS CREDENTIAL
+ * MATERIAL OUT — one that reads it and reaches the internet in the same breath — stops being auto-allowed, as
+ * does a recursive delete. Reading alone does not, because the value no longer survives the read: every tool
+ * result is masked before the model sees it (agent/agent-redaction.ts), so the link this bit was built to break
+ * is the third one now rather than the middle one, and guard/actions.ts taintFloorHolds argues the move and the
+ * gap it accepts. Not a lockdown either way, the agent still edits, builds, runs tests, and answers the
+ * stranger who woke it. The owner's own rule still wins in both directions: an explicit `allow` on that class
+ * means they have said this workspace does not want the floor, and an explicit `deny` outranks it anyway. */
 
 export interface TurnTaint {
     // Whether outside content has entered this turn.

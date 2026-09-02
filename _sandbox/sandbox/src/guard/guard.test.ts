@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { AdmissionPolicy } from "@intentic/sandbox-contract";
+import { type AdmissionPolicy, COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract";
 import { childSpawn, commandRun, outboundSend, sessionStart, wakeSourceOf } from "./actions.js";
 import { defineGuardedAction, guard, type GuardedAction, HOLD, isGuardedAction, listGuardedActions } from "./guard.js";
 
@@ -147,13 +147,25 @@ describe("command.run", () => {
         });
     });
 
-    /* The taint floor: the other verdict here the owner did not write. It holds credential reads AND recursive
-     * deletes on a turn that has taken in somebody else's words, and it yields to any rule they DID write. */
+    /* The taint floor: the other verdict here the owner did not write. It holds recursive deletes on a turn that
+     * has taken in somebody else's words, and credential reads that LEAVE in the same command, and it yields to
+     * any rule they DID write. */
     describe("the outside-content floor", () => {
-        test("holds a credential read on a tainted turn, and names the source in the reason", () => {
-            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord" });
+        test("holds a credential read that leaves in the same command, and names the source in the reason", () => {
+            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord", egress: true });
             expect(verdict.effect).toBe("hold");
             expect(verdict.reason).toContain("discord");
+            // Both halves, because the sending is what is being asked about.
+            expect(verdict.reason).toContain(COMMAND_CLASS_LABELS["secrets.access"]);
+            expect(verdict.reason).toContain(COMMAND_CLASS_LABELS["network.outbound"]);
+        });
+
+        /* THE READ THAT GOES NOWHERE, which is most of them and used to be a card apiece. The value cannot reach
+         * the model — every result is masked on the way in (agent/agent-redaction.ts) — so a tainted turn reading
+         * a dotenv learns its key names, and holding that spent the owner's attention on nothing. */
+        test("a credential read that does not leave is allowed on a tainted turn", () => {
+            expect(guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord" }).effect).toBe("allow");
+            expect(guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord", egress: false }).effect).toBe("allow");
         });
 
         /* `rm -rf node_modules` is ordinary work and stays unasked all day; the same command in a turn that has
@@ -177,17 +189,14 @@ describe("command.run", () => {
         });
 
         test("the owner's own rule wins both ways: the floor applies only where they said nothing", () => {
-            expect(guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "allow" }, outsideSource: "web" }).effect).toBe(
-                "allow",
-            );
-            expect(guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "deny" }, outsideSource: "web" }).effect).toBe(
-                "deny",
-            );
+            const leaving = { commandClass: "secrets.access", outsideSource: "web", egress: true } as const;
+            expect(guard(commandRun, { ...leaving, rules: { "secrets.access": "allow" } }).effect).toBe("allow");
+            expect(guard(commandRun, { ...leaving, rules: { "secrets.access": "deny" } }).effect).toBe("deny");
         });
 
         // A hold is a real ask here too, so it must not carry the countdown that turns it into "unless I'm slow".
         test("the floor's hold carries no auto-run window", () => {
-            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "web" });
+            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "web", egress: true });
             expect(verdict).not.toHaveProperty("autoRunAfterS");
         });
     });

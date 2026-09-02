@@ -111,19 +111,43 @@ export interface CommandRunInput {
      * foreign MCP server, or undefined for a turn working only on the owner's own material. Present ⇒ the
      * turn has read text somebody else wrote, which is the condition the taint floor below keys on. */
     readonly outsideSource?: string;
+    /* Does this same command ALSO reach the internet (network.outbound)? Read only by the taint floor, and only
+     * for `secrets.access` — see taintFloorHolds. The gate computes it from the classes it already matched, so
+     * one walk of the command answers both "what is this" and "does it leave". */
+    readonly egress?: boolean;
 }
 
-/* THE CLASSES A TAINTED TURN DOES NOT GET FOR FREE. Both are things a turn carrying somebody else's words
- * should have to ask about, and neither is something an ordinary turn should have to ask about:
+/* WHAT A TAINTED TURN DOES NOT GET FOR FREE, and the shape of each answer.
  *
- *   secrets.access    a turn that has read a stranger's page does not get to read credential material unasked.
- *   files.destructive the same page's other obvious ask. `rm -rf node_modules` is ordinary work and stays
- *                     unasked all day; the same command in a turn that just read a bug report from a Front
- *                     Desk visitor is the injection everybody pictures, and one card is a cheap way to not
- *                     find out which it was afterwards.
+ *   files.destructive  every one of them. `rm -rf node_modules` is ordinary work and stays unasked all day; the
+ *                      same command in a turn that just read a bug report from a Front Desk visitor is the
+ *                      injection everybody pictures, and one card is a cheap way to not find out which it was
+ *                      afterwards. Nothing here brings the tree back, so the ask is worth its cost.
+ *
+ *   secrets.access     ONLY WHEN IT ALSO LEAVES. This used to hold every credential read, and the reasoning was
+ *                      sound as far as it went: outside text arrives, the agent is talked into reading a
+ *                      credential, the credential leaves, and the middle link is where a policy can stand. What
+ *                      it missed is that the middle link no longer carries the value. Every tool result is
+ *                      masked before the model sees it — stored values to their `{{secret:name}}` reference, and
+ *                      the rest of a credential file to `***` because the call named that file (agent/agent-
+ *                      redaction.ts) — so a tainted turn that reads a dotenv learns its key names. Holding that
+ *                      spent a card on nothing, and the cards it spent were mostly not even reads: a grep whose
+ *                      pattern contained a credential-shaped name, a config the agent had to open to do the work
+ *                      it was woken for. A card an owner answers without reading is worse than no card.
+ *
+ *                      What still leaks is the command that carries the file OUT — `curl -d @.env`, a
+ *                      `{{secret:X}}` resolved into a request body — and that is exactly a command in this class
+ *                      AND in `network.outbound`. So the floor moved from the read to the send.
+ *
+ *                      THE GAP IT ACCEPTS, stated plainly: two commands do what one no longer can (`cp .env
+ *                      /tmp/x`, then `curl -d @/tmp/x`), because the classifier judges one command at a time and
+ *                      the second names no credential. The gate has never claimed to be the boundary
+ *                      (sandbox-contract command-classes.ts says so at length), and a floor that fires on the work
+ *                      the agent was woken to do buys nothing to cover a hole this shape.
  *
  * Everything else is untouched, so a tainted turn goes on editing, building, committing and replying. */
-const TAINT_FLOOR_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["secrets.access", "files.destructive"]);
+const taintFloorHolds = (commandClass: CommandClass, egress: boolean): boolean =>
+    commandClass === "files.destructive" || (commandClass === "secrets.access" && egress);
 
 /* May the agent run this shell command? Consulted by the PreToolUse command gate before the command executes.
  *
@@ -134,7 +158,7 @@ const TAINT_FLOOR_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["s
  * whether anyone is watching is a property of the turn and not of the policy. */
 export const commandRun = defineGuardedAction<CommandRunInput>({
     action: "command.run",
-    decide: ({ commandClass, rules, outsideSource }) => {
+    decide: ({ commandClass, rules, outsideSource, egress = false }) => {
         const rule = rules[commandClass];
         if (rule === "deny") {
             return DENY(`commands that ${COMMAND_CLASS_LABELS[commandClass]} are refused by the command rules`);
@@ -160,11 +184,14 @@ export const commandRun = defineGuardedAction<CommandRunInput>({
             return HOLD(`this command would ${COMMAND_CLASS_LABELS[commandClass]}, and nothing here undoes that`);
         }
         /* THE TAINT FLOOR, the only place the outside-content envelope becomes enforcement rather than
-         * narration (guard/turn-taint.ts explains the bit; TAINT_FLOOR_CLASSES above argues the two classes). */
-        if (rule === undefined && outsideSource !== undefined && TAINT_FLOOR_CLASSES.has(commandClass)) {
-            return HOLD(
-                `this turn has taken in content from outside (${outsideSource}), and this command would ${COMMAND_CLASS_LABELS[commandClass]}`,
-            );
+         * narration (guard/turn-taint.ts explains the bit; taintFloorHolds above argues each class). */
+        if (rule === undefined && outsideSource !== undefined && taintFloorHolds(commandClass, egress)) {
+            // The sending is what is being asked about when a read is held, so the sentence says both halves;
+            // anything else would put a card in front of the owner that describes the harmless one.
+            const consequence = egress
+                ? `${COMMAND_CLASS_LABELS[commandClass]} and ${COMMAND_CLASS_LABELS["network.outbound"]}`
+                : COMMAND_CLASS_LABELS[commandClass];
+            return HOLD(`this turn has taken in content from outside (${outsideSource}), and this command would ${consequence}`);
         }
         return ALLOW(`no command rule restricts ${commandClass}`);
     },

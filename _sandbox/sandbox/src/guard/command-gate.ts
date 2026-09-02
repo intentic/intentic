@@ -195,16 +195,23 @@ export const consultWith = async (
     return step.value;
 };
 
-// The strictest verdict across the classes the command fell in, with the class that produced it, a deny beats
-// a hold beats nothing, matching the admission floor's own most-restrictive-wins. Undefined ⇒ every class allows.
+/* The strictest verdict across the classes the command fell in, with the class that produced it, a deny beats
+ * a hold beats nothing, matching the admission floor's own most-restrictive-wins. Undefined ⇒ every class allows.
+ *
+ * ONE CLASS PER CONSULT, still, which is what keeps "most restrictive wins" observable here rather than hidden
+ * inside a decide that was handed a list — but each consult is told whether the command ALSO reaches out, because
+ * one rule is about the pair rather than the class: a tainted turn's credential read is held when it leaves in
+ * the same command (guard/actions.ts taintFloorHolds argues why). Computed once from the classes already
+ * matched, so the pair costs no second walk of the command. */
 const decide = (
     classes: readonly CommandClass[],
     rules: CommandGateOptions["rules"],
     outsideSource: string | undefined,
+    egress: boolean,
 ): { commandClass: CommandClass; verdict: GuardVerdict } | undefined => {
     let held: { commandClass: CommandClass; verdict: GuardVerdict } | undefined;
     for (const commandClass of classes) {
-        const verdict = guard(commandRun, { commandClass, rules, ...(outsideSource !== undefined ? { outsideSource } : {}) });
+        const verdict = guard(commandRun, { commandClass, rules, egress, ...(outsideSource !== undefined ? { outsideSource } : {}) });
         if (verdict.effect === "deny") {
             return { commandClass, verdict };
         }
@@ -300,14 +307,20 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
         async *consult(program, subject) {
             // Matched rather than merely classified, so the fragments that fired are in hand if this ends on a
             // card. An allowed command drops them a line later and pays only the offsets the same walk collected.
-            const matches = matchCommand(program, context).filter((match) => !granted.has(match.commandClass));
+            const matches = matchCommand(program, context);
+            /* Read from EVERY class the command fell in, not from the ones still to be judged: a yes to
+             * reaching the internet earlier this turn answered that consequence, and it must not also answer
+             * the different question of whether a credential read leaves in the same command. */
+            const egress = matches.some((match) => match.commandClass === "network.outbound");
+            const pending = matches.filter((match) => !granted.has(match.commandClass));
             const held =
-                matches.length === 0
+                pending.length === 0
                     ? undefined
                     : decide(
-                          matches.map((match) => match.commandClass),
+                          pending.map((match) => match.commandClass),
                           options.rules,
                           options.taint.source(),
+                          egress,
                       );
             if (held === undefined) {
                 return ALLOWED;
