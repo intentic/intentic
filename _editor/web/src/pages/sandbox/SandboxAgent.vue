@@ -7,9 +7,12 @@ import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings
 import AiAccountSection from "./AiAccountSection.vue";
 import AgentChangelog from "./agent/AgentChangelog.vue";
 import AgentChecks from "./agent/AgentChecks.vue";
+import AgentChildAgents from "./agent/AgentChildAgents.vue";
 import AgentCodeSearch from "./agent/AgentCodeSearch.vue";
 import AgentCommandOutput from "./agent/AgentCommandOutput.vue";
+import AgentCommandRules from "./agent/AgentCommandRules.vue";
 import AgentDependencies from "./agent/AgentDependencies.vue";
+import AgentHeldCommands from "./agent/AgentHeldCommands.vue";
 import AgentFinishedWork from "./agent/AgentFinishedWork.vue";
 import AgentInstructions from "./agent/AgentInstructions.vue";
 import AgentMemory from "./agent/AgentMemory.vue";
@@ -46,6 +49,11 @@ const SECTIONS = [
     { label: `Accounts`, value: `accounts` },
     { label: `Instructions`, value: `instructions` },
     { label: `How it runs`, value: `running` },
+    /* …and "Safety" is what it may DO, which is a different question from how a turn works: these rules are
+     * consulted per command, they bind on every runtime, and they are the only settings here whose wrong value
+     * is unrecoverable rather than merely annoying. It sits between the two for that reason — after the turn
+     * mechanics, before what happens to finished work. */
+    { label: `Safety`, value: `safety` },
     { label: `Landing work`, value: `landing` },
 ] as const;
 type Section = (typeof SECTIONS)[number][`value`];
@@ -134,19 +142,23 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         </template>
 
         <!-- The mechanics of a turn: how it finds things, how much of what it runs comes back, how much of the
-             job it may hand to other agents, and who picks the turn up when it breaks.
-
-             WHAT A HELD COMMAND SHOWS YOU used to sit between the last two, and it moved to Sandbox ▸ Safety
-             with the rulebook that produces those cards. Its own comment had always said the rulebook "is set
-             elsewhere", and there was no elsewhere; now there is, and the two halves of one errand — which
-             commands stop, and what you see when one does — are on one page instead of either side of a nav
-             rail. -->
+             job it may hand to other agents, and who picks the turn up when it breaks. -->
         <template v-else-if="section === `running`">
             <AgentCodeSearch />
             <AgentDependencies />
             <AgentCommandOutput />
             <AgentSubagents />
             <AgentRecovery />
+        </template>
+
+        <!-- What it may do without stopping to ask: which commands are held, what the card that holds one
+             shows, and whether a turn may start agents of its own. `explainCommands` sits here rather than in
+             "How it runs" because it describes the card the rules above raise, and the two halves of that one
+             errand were previously in different categories. -->
+        <template v-else-if="section === `safety`">
+            <AgentCommandRules />
+            <AgentHeldCommands />
+            <AgentChildAgents />
         </template>
 
         <!-- What happens to work once it is done, in the order it happens to it: it gets proved, it gets

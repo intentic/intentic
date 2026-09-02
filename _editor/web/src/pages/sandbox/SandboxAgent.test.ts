@@ -38,11 +38,14 @@ vi.mock(`./agent/AgentDependencies.vue`, () => stub(`Dependencies`));
 vi.mock(`./agent/AgentCommandOutput.vue`, () => stub(`Command output`));
 vi.mock(`./agent/AgentSubagents.vue`, () => stub(`Subagents`));
 vi.mock(`./agent/AgentRecovery.vue`, () => stub(`When a turn breaks`));
+vi.mock(`./agent/AgentCommandRules.vue`, () => stub(`Command rules`));
+vi.mock(`./agent/AgentHeldCommands.vue`, () => stub(`Held commands`));
+vi.mock(`./agent/AgentChildAgents.vue`, () => stub(`Child agents`));
 vi.mock(`./agent/AgentChecks.vue`, () => stub(`Checks`));
 vi.mock(`./agent/AgentFinishedWork.vue`, () => stub(`Finished work`));
 vi.mock(`./agent/AgentChangelog.vue`, () => stub(`Changelog`));
 
-// The fourteen names above, for the test that every one of them lands in exactly one category.
+// The seventeen names above, for the test that every one of them lands in exactly one category.
 const EVERY_GROUP = [
     `AI account`,
     `Models`,
@@ -55,6 +58,9 @@ const EVERY_GROUP = [
     `Command output`,
     `Subagents`,
     `When a turn breaks`,
+    `Command rules`,
+    `Held commands`,
+    `Child agents`,
     `Checks`,
     `Finished work`,
     `Changelog`,
@@ -105,7 +111,7 @@ it(`opens on the accounts category alone`, async () => {
 
 it(`puts each group in exactly one category`, async () => {
     const seen: string[] = [];
-    for (const section of [`accounts`, `instructions`, `running`, `landing`]) {
+    for (const section of [`accounts`, `instructions`, `running`, `safety`, `landing`]) {
         const { el } = await mount({ section });
         seen.push(...shown(el));
         app?.unmount();
@@ -128,6 +134,15 @@ it(`opens the category a link named`, async () => {
 it(`falls back to accounts when the address names a category that does not exist`, async () => {
     const { el } = await mount({ section: `nonsense` });
     expect(shown(el)).toEqual([`AI account`, `Models`]);
+});
+
+/* Safety is the one category whose groups write the daemon's own gates rather than a preference, and it is
+ * reached by the same address the other four are. Pinned separately from the coverage test above because a
+ * `v-else-if` chain that fell through would put its three groups on the LANDING page (the chain's `v-else`)
+ * rather than nowhere, and a coverage assertion counting names cannot tell those two apart. */
+it(`opens the safety category with the gate rules alone`, async () => {
+    const { el } = await mount({ section: `safety` });
+    expect(shown(el)).toEqual([`Command rules`, `Held commands`, `Child agents`]);
 });
 
 // The composer's connect gate wins over whatever the address last remembered: it is a request to sign an account
