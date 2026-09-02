@@ -150,7 +150,7 @@ const sizeLabel = (bytes: number): string => {
              two states are not equally cheap to be wrong about: "Not published" carries a button that creates
              a repository, and drawing it for the beat before the daemon answers offers that to owners who
              published months ago. -->
-        <RowGroup v-if="workspace !== undefined" flat label="Workspace">
+        <RowGroup v-if="workspace !== undefined" flat>
             <Row v-if="published !== undefined" :icon="published.icon">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ published.project }}</span></template
@@ -228,12 +228,9 @@ const sizeLabel = (bytes: number): string => {
             >
                 <template #icon><Icon name="box" /></template>
             </Button>
-            <Button label="Compare against one" size="small" severity="secondary" text :loading="comparing" @click="chooseCompare?.click()" />
+            <Button label="Compare sandbox.toml" size="small" severity="secondary" text :loading="comparing" @click="chooseCompare?.click()" />
             <input ref="chooseCompare" type="file" accept=".toml,text/plain,application/toml" class="hidden" @change="compare" />
         </div>
-        <p class="text-2xs text-subtle">
-            <span class="font-mono">sandbox.toml</span> is references only. A bundle adds the state; never publish one.
-        </p>
 
         <ExportBundleDialog :open="exporting" :busy="starting" @cancel="exporting = false" @confirm="startExport" />
 

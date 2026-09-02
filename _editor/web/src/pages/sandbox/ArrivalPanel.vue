@@ -203,18 +203,16 @@ const cancel = (): Promise<void> =>
                     class="hidden"
                     @change="readFile"
                 />
-            </div>
-
-            <!-- The last reader: neither a connected machine nor a file yet. Which assistant, then one command. -->
-            <div v-if="picked === undefined" class="flex flex-wrap items-center gap-2">
-                <p class="text-2xs text-subtle">Pack from</p>
-                <Button label="Hermes" size="small" severity="secondary" text @click="picked = `hermes`" />
-                <Button label="OpenClaw" size="small" severity="secondary" text @click="picked = `openclaw`" />
+                <template v-if="picked === undefined">
+                    <p class="text-2xs text-subtle">Pack from</p>
+                    <Button label="Hermes" size="small" severity="secondary" text @click="picked = `hermes`" />
+                    <Button label="OpenClaw" size="small" severity="secondary" text @click="picked = `openclaw`" />
+                </template>
             </div>
 
             <!-- One command, what it prints, where the file lands. Never two commands: the reader has already
                  told us which one is theirs. -->
-            <div v-else-if="guide" class="flex flex-col gap-3">
+            <div v-if="guide" class="flex flex-col gap-3">
                 <div class="flex items-center justify-between gap-2">
                     <p class="text-xs text-content">Run on {{ guide.label }}:</p>
                     <button type="button" :class="ui.iconButton()" aria-label="Choose a different assistant" @click="picked = undefined">
