@@ -12,7 +12,7 @@ weighs against everything else in its context; a failing rule is a fact it has t
 |---|---|---|
 | `/.oxlintrc.json` | the whole standard — 264 rules, green on main | `pnpm lint`, editors, the stop gate |
 | `/.oxlintrc.agent.json` | the above plus rules main cannot meet yet | the edit hook, `pnpm lint:agent` |
-| `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — declared, awaiting first install |
+| `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — installed, not yet what the edit hook runs |
 | `_tools/oxlint/anti-slop/` | vendored rule sources | loaded by the config above |
 
 The root config is what main satisfies. The agent config is what code written from here on is held to: it
@@ -45,10 +45,18 @@ Three different things get called "complexity" and they do not agree:
   know this is real branching rather than flat `switch` dispatch being punished.
 - **Cognitive** — `complexity/complexity` in `.oxlintrc.plugins.json`, via `oxlint-plugin-complexity`. The best
   metric of the three: it charges nothing for flat structure, compounds for depth, and names the lines that
-  cost the most, which is what makes the diagnostic actionable rather than a number to argue with. The packages
-  are in the manifest; it runs as soon as the install behind it lands. **The 15 cognitive threshold is
-  SonarSource's default and has never been measured against this repo** — treat the first `pnpm lint:plugins`
-  run as the measurement, not the verdict, exactly as the cyclomatic numbers above were arrived at.
+  cost the most, which is what makes the diagnostic actionable rather than a number to argue with. Set to
+  `{ cyclomatic: 20, cognitive: 20 }`, and both numbers were measured rather than inherited. Over the ~6.5k
+  production functions of 10+ lines the rule examines: 657 exceed `[10, 15]`, 313 exceed `[15, 20]`, 276
+  exceed `[20, 20]`. The plugin's cyclomatic charges +1 per `??`, `||` and `case`, so at 10 it was the
+  binding constraint on 208 functions cognitive rated 5-9 — flat switches and nullish-default mappers, the code
+  the metric exists to leave alone; at 20 it binds alone on 16, all 21-44 flat dispatchers. Cognitive is 20
+  rather than SonarSource's 15 because this plugin also charges +1 per nested-function level and +1 for
+  recursion, which Sonar does not, so a loop over callbacks scores 3-6 higher here than the number 15 was
+  calibrated for; every sampled function in the 16-20 band was a self-contained algorithm (Kahn's sort, a fuzzy
+  matcher, a streaming line reader) and the first three-deep nesting appears at 21. The builtin `complexity`
+  is off in that config, because the two cyclomatic meters do not agree (`?.` counts in one and not the
+  other) and one function should get one number.
 
 **The first two pull against each other, and it matters.** Flattening `if (a) { if (b) {` into `if (a && b) {`
 removes a level of depth and ADDS a branch point, so satisfying `max-depth` by merging conditions makes
@@ -216,8 +224,8 @@ as the next ratchet entry.
 ## anti-slop
 
 `anti-slop/` is vendored from [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop) at `6d53855`, MIT.
-It is configured in `/.oxlintrc.anti-slop.json` but **not yet running** — it needs `@oxlint/plugins`, and that
-file carries the four steps to turn it on.
+It is configured in `/.oxlintrc.plugins.json`, installed, and **not yet what the edit hook runs** — that file's
+header says how to switch it over.
 
 These are the only rules here written against an author rather than a bug. They reject code that type-checks
 and runs but has thrown away the evidence that it is correct — `as unknown as T`, `unknown` in a signature,

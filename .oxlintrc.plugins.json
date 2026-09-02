@@ -2,17 +2,11 @@
     // THE STANDARD PLUS THE JS-PLUGIN RULES. Separate from .oxlintrc.agent.json for one reason only: these
     // rules are JavaScript plugins, and loading one needs `@oxlint/plugins` in the tree.
     //
-    // NOT YET LIVE. To turn it on:
-    //   1. pnpm-workspace.yaml catalog:  "@oxlint/plugins": 1.76.0   (must match the `oxlint` pin exactly —
-    //      the JS plugin ABI is explicitly not semver-stable, and a mismatched pair fails at config-load time)
-    //      and  oxlint-plugin-complexity: 2.1.8
-    //   2. root package.json devDependencies:  both of the above, as "catalog:"
-    //   3. pnpm install
-    //   4. point CONFIG in .claude/hooks/oxlint-edit.mjs at this file instead of .oxlintrc.agent.json
-    //
-    // Until step 4 the rules below are vendored, configured and unrun. Measure them before wiring the hook to
-    // them: `pnpm lint:slop` over the repo says how big the backlog is, and the answer decides whether these
-    // land as errors or as the next ratchet entry.
+    // INSTALLED AND RUNNABLE (`pnpm lint:plugins`), NOT YET WHAT THE EDIT HOOK HOLDS EDITS TO. `@oxlint/plugins`
+    // is pinned to the `oxlint` version exactly (the JS plugin ABI is explicitly not semver-stable, and a
+    // mismatched pair fails at config-load time). To turn it on, point CONFIG in .claude/hooks/oxlint-edit.mjs
+    // at this file instead of .oxlintrc.agent.json. `pnpm lint:plugins` over the repo says how big the backlog
+    // is, and the answer decides whether these land as errors or as the next ratchet entry.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "extends": ["./.oxlintrc.agent.json"],
     "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }, "oxlint-plugin-complexity"],
@@ -23,10 +17,28 @@
         // lines that cost the most, which is what makes the diagnostic something an agent can act on rather
         // than a number to argue with.
         //
-        // `cyclomatic` is set to the same 10 the root ratchet uses so the two cannot disagree. 15 for cognitive
-        // is the SonarSource default; it has NOT been measured against this repo yet, because the plugin has
-        // never run here — treat the first run as the measurement, not as a verdict.
-        "complexity/complexity": ["error", { "cyclomatic": 10, "cognitive": 15 }],
+        // MEASURED, oxlint 1.76 / plugin 2.1.8, production code, over the ~6.5k functions of 10+ lines the rule
+        // examines (it skips shorter ones):
+        //   [10, 15]  657 functions over, 208 of them on cyclomatic alone
+        //   [15, 20]  313 functions over,  53 on cyclomatic alone
+        //   [20, 20]  276 functions over,  16 on cyclomatic alone
+        //
+        // Cyclomatic is 20, the plugin's and oxlint's own default, because THIS meter charges +1 per `??`, `||`
+        // and `case`: at 10 it fired on 16-line flat switches and nullish-default mappers that cognitive scored
+        // 5-9, the exact code the paragraph above says should cost nothing. It is a backstop for the flat but
+        // enormous dispatcher (the 16 it still catches run 21-44), not the gate. Cognitive is 20 rather than
+        // SonarSource's 15 because this plugin adds +1 per nested-function level and +1 for recursion, which
+        // Sonar does not: a loop over `.map(...)` callbacks runs 3-6 hotter here than under Sonar, and the 16-20
+        // band sampled as textbook algorithms (Kahn's sort, a fuzzy matcher, a streaming line reader) whose only
+        // "fix" is fragmenting them into helpers that exist for the number. 21 and up is where three-deep
+        // nesting starts, which is what the metric is for.
+        //
+        // NOT the same meter as the builtin `complexity` in .oxlintrc.agent.json: that one also counts `?.`
+        // (describeAction in _computers/machine: 19 there, 14 here), so the two cannot be made to agree by
+        // sharing a number. The builtin is off here so a function is measured once, by the rule that also names
+        // the lines that cost the most.
+        "complexity/complexity": ["error", { "cyclomatic": 20, "cognitive": 20 }],
+        "complexity": "off",
         // Vendored from dmmulroy/anti-slop @ 6d53855. These are the only rules in this repo written for a
         // specific author rather than a specific bug: they reject code that TYPE-CHECKS AND RUNS but has
         // thrown away the evidence that it is correct — the shape a model reaches for when it does not know
