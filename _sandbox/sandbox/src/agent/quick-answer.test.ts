@@ -68,6 +68,10 @@ test("a provider's failure sentence is a refusal to remember, not a reply to ste
 test("a model that answered the asker instead of the ask has not answered", () => {
     expect(() => read(`I need more context to name this session. What feature does it touch?`)).toThrow(UnusableAnswerError);
     expect(() => read(`I need more context to name this session. What feature does it touch?`)).toThrow(/answered the asker/);
+    // Answering about itself instead of writing a session title
+    expect(() => read(`Claude Haiku`)).toThrow(UnusableAnswerError);
+    expect(() => read(`Claude Haiku`)).toThrow(/answered the asker/);
+    expect(() => read(`I am Claude`)).toThrow(UnusableAnswerError);
 });
 
 /* THE ANSWER-SHAPED REPLY, and the reason it is refused rather than cut down to size: a title is a few-word

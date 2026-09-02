@@ -61,9 +61,12 @@ test("returns empty for a reply with nothing in it", () => {
  * may become a name is settled at the ask now (quick-answer.ts); what stays this pass's business is whether a
  * STORED one counts as a name at all, which is what lets the cards already wearing these heal. */
 const STOLEN_TITLES = [
-    "You've hit your session limit · resets 11:50pm (UTC)",
-    "Failed to authenticate. API Error: 401 OAuth access token has been revoked",
-    "[tool_call: glob for pattern '**']",
+    \"You've hit your session limit · resets 11:50pm (UTC)\",
+    \"Failed to authenticate. API Error: 401 OAuth access token has been revoked\",
+    \"[tool_call: glob for pattern '**']\",
+    \"Claude Haiku\",
+    \"claude-haiku-4-5\",
+    \"I am Claude\",
 ];
 
 const servicesWith = (

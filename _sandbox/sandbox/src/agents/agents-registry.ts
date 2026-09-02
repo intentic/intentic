@@ -7,7 +7,7 @@ import {
     type LandedMessageDraft,
     planParts,
 } from "@intentic/sandbox-contract";
-import { isFailureSentence, isToolCallStandIn } from "../agent/failure-sentences.js";
+import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
 import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
 import { watchProjection } from "../agent/watch-state.js";
@@ -64,7 +64,7 @@ const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(promp
  * the same reason (title-namer's `poisoned`), which is what heals the four fleet cards that were named this way
  * before the ask-side guard existed. The family, never a member of it: guarding one member is what cost four
  * other cards their names, twice. */
-const cannotBeAName = (title: string): boolean => isFailureSentence(title) || isToolCallStandIn(title);
+const cannotBeAName = (title: string): boolean => isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
 
 /* The `Release-Note:` / `Breaking-Note:` sentences, on their own limit. Same one-line scrub, these are read as
  * one line in a changelog entry and in the update card, and emphatically NOT the title's ceiling: a title is

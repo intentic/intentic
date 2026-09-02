@@ -4,6 +4,7 @@ import {
     isDeclinedAnswer,
     isEntitlementRefusalText,
     isFailureSentence,
+    isSelfIdentityAnswer,
     isToolCallStandIn,
     isUnsentParameterRefusalText,
     isUsageLimitText,
@@ -153,6 +154,21 @@ test("reads a written-out tool call as the non-answer it is", () => {
     // The tail of a stand-in line is the model continuing its imagined transcript, so the line goes whole: this
     // one is a title this fleet actually wore.
     expect(isToolCallStandIn("[tool_call: grep for pattern 'gone quiet|offline'] Bluntly search th")).toBe(true);
+});
+
+test("reads a model self-identity reply as a non-answer", () => {
+    expect(isSelfIdentityAnswer("Claude Haiku")).toBe(true);
+    expect(isSelfIdentityAnswer("claude-haiku-4-5")).toBe(true);
+    expect(isSelfIdentityAnswer("I am Claude")).toBe(true);
+    expect(isSelfIdentityAnswer("I'm Claude Haiku")).toBe(true);
+    expect(isSelfIdentityAnswer("Gemini Flash")).toBe(true);
+    expect(isSelfIdentityAnswer("gpt-5.6")).toBe(true);
+    expect(isSelfIdentityAnswer("ChatGPT")).toBe(true);
+    // Functional names or titles that touch on models must remain valid
+    expect(isSelfIdentityAnswer("Model identity · inquire")).toBe(false);
+    expect(isSelfIdentityAnswer("Claude model list · update")).toBe(false);
+    expect(isSelfIdentityAnswer("Sandbox freezes · fix")).toBe(false);
+    expect(isSelfIdentityAnswer("")).toBe(false);
 });
 
 /* Anchored at the start of a line, which is where every runtime that writes these puts them, and that anchor is

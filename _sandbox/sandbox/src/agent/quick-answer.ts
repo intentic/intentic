@@ -1,4 +1,4 @@
-import { isDeclinedAnswer, isFailureSentence, withoutToolCallStandIns } from "./failure-sentences.js";
+import { isDeclinedAnswer, isFailureSentence, isSelfIdentityAnswer, withoutToolCallStandIns } from "./failure-sentences.js";
 
 /* WHAT A ONE-SHOT REPLY HAS TO BE BEFORE IT COUNTS AS AN ANSWER, stated once, for every helper that goes through
  * the quick model.
@@ -113,7 +113,7 @@ export const sentenceReason = (what: string, value: string, maxWords: number): s
     if (isFailureSentence(clean)) {
         return clean;
     }
-    if (isDeclinedAnswer(clean)) {
+    if (isDeclinedAnswer(clean) || isSelfIdentityAnswer(clean)) {
         return `answered the asker instead of writing ${what}`;
     }
     const words = clean.split(/\s+/u).length;

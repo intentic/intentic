@@ -540,6 +540,8 @@ describe("agents registry", () => {
     const FAILURE_SENTENCES = [
         "You've hit your session limit · resets 11:50pm (UTC)",
         "Failed to authenticate. API Error: 401 OAuth access token has been revoked",
+        "Claude Haiku",
+        "I am Claude",
     ];
 
     it.each(FAILURE_SENTENCES)("refuses %s as any automatic title: it names the failure, not the work", async (sentence) => {
