@@ -268,8 +268,17 @@
     border-collapse: collapse;
     font-size: var(--prose-size);
 }
+/* A CELL WRAPS ON WORDS, never mid-word, and that is a column-width rule rather than a typographic one.
+   The chat transcript sets `overflow-wrap: anywhere` on a whole turn (chat.css) so an unbreakable 64-char
+   digest cannot set the panel's width. `anywhere` counts its break opportunities toward MIN-CONTENT — which
+   for a cell is one character — and auto table layout distributes width from exactly those minimums, so a
+   "Priority" column collapsed to a letter per line while the prose columns took everything. `break-word`
+   wraps the same runaway token but keeps min-content at the longest word, which is the floor a column
+   actually needs. */
 .md-prose th,
 .md-prose td {
+    overflow-wrap: break-word;
+    word-break: normal;
     padding: 0.5em 0.7em;
     text-align: left;
     vertical-align: top;
