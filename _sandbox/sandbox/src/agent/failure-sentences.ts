@@ -126,13 +126,13 @@ export const isDeclinedAnswer = (text: string): boolean => {
 
 /* A MODEL ANSWERING THE ASKER ABOUT ITSELF rather than writing the requested short prose (session title,
  * commit subject, explanation). A small model (like Haiku) asked to name a session whose opening message is
- * an identity question (\"What model are you?\", \"Who are you?\") regularly confuses the prompt for being asked
- * about itself and answers with its own name (\"Claude Haiku\", \"I am Claude\"), which is an assistant reply,
+ * an identity question ("What model are you?", "Who are you?") regularly confuses the prompt for being asked
+ * about itself and answers with its own name ("Claude Haiku", "I am Claude"), which is an assistant reply,
  * not a name for the conversation.
  *
  * Catches bare model/vendor names without an action tag or context. */
 const SELF_IDENTITY_NAMES =
-    /^(?:(?:i(?:'m| am)|this is)\s+)?(?:claude|anthropic|haiku|sonnet|opus|gpt|chatgpt|openai|gemini|google|grok|xai|kimi|moonshot|cursor|qwen|deepseek)(?:\s+[\w.-]+)?$/i;
+    /^(?:(?:i(?:'m| am)|this is)\s+)?(?:claude|anthropic|haiku|sonnet|opus|gpt|chatgpt|openai|gemini|google|grok|xai|kimi|moonshot|cursor|qwen|deepseek)(?:[\s-][\w.-]*)?$/i;
 
 export const isSelfIdentityAnswer = (text: string): boolean => {
     const clean = text.trim();
