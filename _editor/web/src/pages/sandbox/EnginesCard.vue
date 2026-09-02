@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type EngineRow, EnginesViewSchema } from "@intentic-app/api-contract";
-import { Button, Card, Notice, type NoticeModel, Picker, type PickerOption, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
+import { BrandMark, Button, Card, Notice, type NoticeModel, Picker, type PickerOption, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -8,6 +8,7 @@ import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { ENGINES_KEY, useEngines } from "../../composables/sandbox/useEngines";
 import { useRole } from "../../composables/sandbox/useRole";
+import { engineVisual } from "./engineVisual";
 
 /* THE AGENT ENGINES this sandbox runs, and where each one's version comes from.
  *
@@ -96,21 +97,26 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
             </template>
         </Row>
 
-        <RowGroup flat undivided>
+        <RowGroup flat>
             <Row v-for="engine in engines" :key="engine.id">
-                <template #title>
-                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span>{{ engine.label }}</span>
-                        <span v-if="engine.running.version" class="font-mono text-xs font-normal text-muted">{{ engine.running.version }}</span>
-                        <span v-else class="text-xs font-normal text-muted">not installed here</span>
-                        <StatusBadge v-if="engine.running.source === `store`" variant="info" label="installed" />
-                        <StatusBadge v-else-if="engine.running.version" variant="neutral" label="from image" />
-                        <StatusBadge
-                            v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
-                            variant="warning"
-                            label="not recommended"
-                        />
-                    </span>
+                <template #lead="{ mark }">
+                    <BrandMark :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
+                </template>
+                <template #title
+                    ><span class="text-xs">{{ engine.label }}</span></template
+                >
+                <template #description>
+                    <span v-if="engine.running.version" class="font-mono">{{ engine.running.version }}</span>
+                    <span v-else>not installed here</span>
+                </template>
+                <template #meta>
+                    <StatusBadge v-if="engine.running.source === `store`" variant="info" label="installed" />
+                    <StatusBadge v-else-if="engine.running.version" variant="neutral" label="from image" />
+                    <StatusBadge
+                        v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
+                        variant="warning"
+                        label="not recommended"
+                    />
                 </template>
                 <template #control>
                     <Picker

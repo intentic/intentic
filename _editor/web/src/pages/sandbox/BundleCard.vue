@@ -85,7 +85,7 @@ const sizeLabel = (bytes: number): string => {
                  its own, so `-mx-5` widens it by the card's padding on both sides (`5`, like
                  `--ui-card-padding`), and the row inside is 100% of THAT. The row keeps the padding, so the
                  words stay lined up with everything else on the card while the tint runs edge to edge. -->
-            <div class="-mx-5 border-t border-line-subtle">
+            <div class="-mx-5">
                 <!-- `density="compact"`, which is what stops this reading as a SECOND card title. At the
                      comfortable tier a row's title is `font-semibold` at the body size, a hair off the
                      masthead's own `text-lg font-semibold`, so a lock, a bold phrase and a control sitting
