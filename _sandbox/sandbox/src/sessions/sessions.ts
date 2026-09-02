@@ -1,10 +1,11 @@
 import { basename } from "node:path";
 import { sdk } from "../claude/claude-sdk.js";
-import { AskQuestionSchema, type MatchSnippet, type RestoredMessage, type RestoredQuestion, type RestoredToolCall } from "@intentic/sandbox-contract";
+import { AskQuestionSchema, type MatchSnippet, type RestoredMessage, type RestoredQuestion, type RestoredToolCall, type TodoItem } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { ASK_TOOL_NAMES, parseAnswers } from "../agent/question-answers.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
+import { TaskChecklist } from "../agent/task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
 import type { SearchIndex } from "./search-index.js";
@@ -247,7 +248,7 @@ export const restoredSessionMessages = (
     // The bubble being written into, opened by the first thing that lands in it and closed by a prose block (or
     // by the next thing the user says). Kept OPEN across the tool_result messages between two calls: those are
     // the SDK's plumbing, and closing on one is what split a turn's run into a card apiece.
-    let bubble: { text: string; thinking: string; tools: RestoredToolCall[]; question?: RestoredQuestion } | undefined;
+    let bubble: { text: string; thinking: string; tools: RestoredToolCall[]; question?: RestoredQuestion; todos?: TodoItem[] } | undefined;
     const open = (): NonNullable<typeof bubble> => (bubble ??= { text: "", thinking: "", tools: [] });
     // Mirrors the daemon's own `flush`: a bubble that produced nothing at all is not a row.
     const flush = (): void => {
@@ -255,7 +256,7 @@ export const restoredSessionMessages = (
         bubble = undefined;
         if (
             current === undefined ||
-            (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0 && current.question === undefined)
+            (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0 && current.question === undefined && (current.todos === undefined || current.todos.length === 0))
         ) {
             return;
         }
@@ -264,9 +265,13 @@ export const restoredSessionMessages = (
             text: current.text,
             ...(current.thinking.length > 0 ? { thinking: current.thinking } : {}),
             ...(current.tools.length > 0 ? { tools: current.tools } : {}),
+            ...(current.todos !== undefined && current.todos.length > 0 ? { todos: current.todos } : {}),
             ...(current.question === undefined ? {} : { question: current.question }),
         });
     };
+    // The working checklist reassembled from the Task tool family, matching the live sdk-stream.
+    const checklist = new TaskChecklist();
+    const checklistToolIds = new Set<string>();
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
     // card is in the open bubble or already in `out`; either way it is mutated in place, so a result that lands
     // after its bubble closed needs no second pass.
@@ -298,6 +303,15 @@ export const restoredSessionMessages = (
                     continue;
                 }
                 if (block.type !== "tool_result" || block.tool_use_id === undefined) {
+                    continue;
+                }
+                if (checklistToolIds.has(block.tool_use_id)) {
+                    checklistToolIds.delete(block.tool_use_id);
+                    const content = resultText(block.content);
+                    const items = checklist.resolved(block.tool_use_id, content) ?? checklist.listed(content);
+                    if (items !== undefined) {
+                        open().todos = items;
+                    }
                     continue;
                 }
                 const tool = awaiting.get(block.tool_use_id);
@@ -373,6 +387,18 @@ export const restoredSessionMessages = (
             } else if (block.type === "thinking" && typeof block.thinking === "string") {
                 open().thinking += block.thinking;
             } else if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
+                if (block.name === "TaskCreate" || block.name === "TaskList" || block.name === "TaskUpdate") {
+                    checklistToolIds.add(block.id);
+                    if (block.name === "TaskCreate") {
+                        checklist.created(block.id, block.input);
+                    } else if (block.name === "TaskUpdate") {
+                        const items = checklist.updated(block.input);
+                        if (items !== undefined) {
+                            open().todos = items;
+                        }
+                    }
+                    continue;
+                }
                 /* The ask tool's call is where the live stream raised its `question` card, one frame ahead of the
                  * call itself, so the card goes down first and takes the open bubble with it, exactly as the fold
                  * of a recorded turn places it: the prose that led up to the ask stays above the card, and the

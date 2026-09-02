@@ -551,6 +551,7 @@ export const RestoredMessageSchema = z.object({
         ),
     thinking: z.string().optional().describe("What the agent was reasoning about."),
     tools: z.array(RestoredToolCallSchema).optional().describe("The tool calls this part of the turn made."),
+    todos: z.array(TodoItemSchema).optional().describe("The agent's task checklist, as of this bubble."),
     /* What the daemon added to this turn's message (user rows only), the same notes the live `preamble` frame
      * carries. A daemon-recorded turn takes them straight off that frame in its own log, typed end to end
      * (sessions/turn-transcript.ts); only a conversation adopted from a provider's session store recovers them

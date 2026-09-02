@@ -266,6 +266,37 @@ describe("restoredTurn", () => {
         expect(restoredTurn({ prompt: "think" }, events, "/work", SENT_AT).at(-1)).toEqual({ role: "assistant", text: "yes", thinking: "hm, maybe" });
     });
 
+    it("records the task checklist a turn maintained", () => {
+        const events: AgentEvent[] = [
+            { kind: "delta", text: "planning" },
+            { kind: "text_end" },
+            {
+                kind: "todos",
+                items: [
+                    { content: "step 1", status: "completed" },
+                    { content: "step 2", status: "in_progress", activeForm: "Running step 2" },
+                    { content: "step 3", status: "pending" },
+                ],
+            },
+            { kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "in_progress" },
+        ];
+        const messages = restoredTurn({ prompt: "run tasks" }, events, "/work", SENT_AT);
+        expect(messages).toEqual([
+            { role: "user", text: "run tasks", sentAt: SENT_AT },
+            { role: "assistant", text: "planning" },
+            {
+                role: "assistant",
+                text: "",
+                todos: [
+                    { content: "step 1", status: "completed" },
+                    { content: "step 2", status: "in_progress", activeForm: "Running step 2" },
+                    { content: "step 3", status: "pending" },
+                ],
+                tools: [{ id: "t1", name: "Bash", category: "execute", status: "in_progress" }],
+            },
+        ]);
+    });
+
     // Frames that are not transcript (usage, todos, the interactive cards, the settle) carry no bubble of
     // their own, so a turn that only emitted those restores as the prompt alone rather than an empty reply.
     it("yields nothing but the prompt for a turn that said nothing", () => {

@@ -2909,6 +2909,19 @@ describe(`Conversation`, () => {
         expect(recordedRows(conversation.messages.value)).toBe(4);
     });
 
+    it(`restoreMessages keeps the task checklist on an assistant bubble`, () => {
+        const conversation = new Conversation(`c1`);
+        const todos = [
+            { content: `step 1`, status: `completed` as const },
+            { content: `step 2`, status: `in_progress` as const, activeForm: `Running step 2` },
+        ];
+        conversation.restoreMessages([
+            { role: `user`, text: `run tasks` },
+            { role: `assistant`, text: `Working on it`, todos },
+        ]);
+        expect(conversation.messages.value[1]?.todos).toEqual(todos);
+    });
+
     /* The transcript-loss bug: reattach appends the running turn's prompt bubble to whatever the transcript
      * holds. A reload that lands mid-turn used to attach before the history was in place, so the chat came back
      * showing only the message being answered, and the settle then persisted that stub over the local mirror.

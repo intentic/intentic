@@ -1310,6 +1310,7 @@ export class Conversation {
                 ...restoredAttachmentFields(message),
                 ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
                 ...(message.tools !== undefined ? { tools: message.tools } : {}),
+                ...(message.todos !== undefined ? { todos: message.todos } : {}),
                 // The user's words in the agent's voice keep their quiet mark across a reopen, the mark's
                 // whole audience is the human re-reading this later.
                 ...(message.placed === true ? { placed: true } : {}),

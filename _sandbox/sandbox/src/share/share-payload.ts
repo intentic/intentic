@@ -138,6 +138,15 @@ export const shareTranscript = (messages: readonly RestoredMessage[], detail: Sh
             ...withAttachments,
             ...(message.thinking === undefined ? {} : { thinking: redact(message.thinking) }),
             ...(message.tools === undefined ? {} : { tools: message.tools.map((tool) => shareTool(tool, pictures)) }),
+            ...(message.todos === undefined
+                ? {}
+                : {
+                      todos: message.todos.map((todo) => ({
+                          ...todo,
+                          content: redact(todo.content),
+                          ...(todo.activeForm !== undefined ? { activeForm: redact(todo.activeForm) } : {}),
+                      })),
+                  }),
         };
     });
     return { messages: shared, pictures: pictures.all() };

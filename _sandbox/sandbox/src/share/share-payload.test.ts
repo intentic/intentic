@@ -81,6 +81,26 @@ describe("an everything share", () => {
         // The one claim that matters: no workspace path survives anywhere in what gets published.
         expect(JSON.stringify(messages)).not.toContain(".intentic/");
     });
+
+    it("carries and redacts the task checklist in everything mode", () => {
+        const withTodos: RestoredMessage[] = [
+            {
+                role: "assistant",
+                text: "Working",
+                todos: [
+                    { content: "check sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345", status: "completed" },
+                    { content: "deploy", status: "in_progress", activeForm: "Deploying sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345" },
+                ],
+            },
+        ];
+        const { messages: msgsOnly } = shareTranscript(withTodos, "messages");
+        expect(msgsOnly[0]?.todos).toBeUndefined();
+        const { messages: everything } = shareTranscript(withTodos, "everything");
+        expect(everything[0]?.todos).toEqual([
+            { content: `check ${REDACTED}`, status: "completed" },
+            { content: "deploy", status: "in_progress", activeForm: `Deploying ${REDACTED}` },
+        ]);
+    });
 });
 
 describe("both levels", () => {

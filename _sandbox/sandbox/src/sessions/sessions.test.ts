@@ -232,6 +232,52 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
     expect(messages[2]?.tools?.[1]?.content).toEqual([{ type: "text", text: "boom" }]);
 });
 
+test("rebuilds task checklist from TaskCreate and TaskUpdate tool calls rather than emitting tool cards", async () => {
+    mockSession("s0", [
+        { type: "user", message: { content: "refactor the code" } },
+        {
+            type: "assistant",
+            message: {
+                content: [
+                    { type: "text", text: "Planning work." },
+                    { type: "tool_use", id: "tc1", name: "TaskCreate", input: { subject: "Step 1", activeForm: "Doing step 1" } },
+                ],
+            },
+        },
+        {
+            type: "user",
+            message: {
+                content: [{ type: "tool_result", tool_use_id: "tc1", content: "Task #1 created successfully: Step 1" }],
+            },
+        },
+        {
+            type: "assistant",
+            message: {
+                content: [
+                    { type: "tool_use", id: "tu1", name: "TaskUpdate", input: { taskId: "1", status: "in_progress" } },
+                    { type: "tool_use", id: "t1", name: "Read", input: { file_path: "/work/config.ts" } },
+                ],
+            },
+        },
+        {
+            type: "user",
+            message: {
+                content: [{ type: "tool_result", tool_use_id: "t1", content: "export const ok = true;" }],
+            },
+        },
+    ]);
+
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(messages[1]).toEqual({
+        role: "assistant",
+        text: "Planning work.",
+        todos: [{ content: "Step 1", status: "pending", activeForm: "Doing step 1" }],
+    });
+    expect(messages[2]?.todos).toEqual([{ content: "Step 1", status: "in_progress", activeForm: "Doing step 1" }]);
+    expect(messages[2]?.tools?.map((tool) => tool.name)).toEqual(["Read"]);
+});
+
 /* THE QUESTION A TURN ASKED, rebuilt from the ask tool's own call and result. The store never saw the `question`
  * frame or the reply that released it; it has the call (the questions, as its input) and the result (the picks,
  * as the text the model read), and those redraw the card the user answered, the one part of a turn killed

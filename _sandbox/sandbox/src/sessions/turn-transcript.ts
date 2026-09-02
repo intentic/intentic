@@ -9,6 +9,7 @@ import {
     type RestoredMessage,
     type RestoredToolCall,
     resumeDisclosure,
+    type TodoItem,
     withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
@@ -118,6 +119,7 @@ interface Bubble {
     tools: RestoredToolCall[];
     // The card this bubble parked on, at most one: a card closes the bubble it lands in (see `park`).
     card: RestoredCards;
+    todos?: TodoItem[] | undefined;
 }
 
 // The one card a recorded row holds, whichever kind it is: what a `resolved` frame settles.
@@ -141,14 +143,14 @@ const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): Res
     const parked = new Map<string, RestoredMessage>();
     let bubble: Bubble | undefined;
     const open = (): Bubble => (bubble ??= { text: "", thinking: "", tools: [], card: {} });
-    // Mirrors the client's own row guard (recordedRows): text, thinking, tools or a card makes a row, and nothing
+    // Mirrors the client's own row guard (recordedRows): text, thinking, tools, todos or a card makes a row, and nothing
     // makes none. Returns the row it wrote, so a card can be found again by the frames that settle it.
     const flush = (): RestoredMessage | undefined => {
         const current = bubble;
         bubble = undefined;
         if (
             current === undefined ||
-            (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0 && !holdsCard(current.card))
+            (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0 && !holdsCard(current.card) && (current.todos === undefined || current.todos.length === 0))
         ) {
             return undefined;
         }
@@ -157,6 +159,7 @@ const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): Res
             text: current.text,
             ...(current.thinking.length > 0 ? { thinking: current.thinking } : {}),
             ...(current.tools.length > 0 ? { tools: current.tools } : {}),
+            ...(current.todos !== undefined && current.todos.length > 0 ? { todos: current.todos } : {}),
             ...current.card,
         };
         out.push(row);
@@ -259,6 +262,8 @@ const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): Res
             retire();
         } else if (event.kind === "thinking") {
             open().thinking += event.text;
+        } else if (event.kind === "todos") {
+            open().todos = [...event.items];
         } else if (event.kind === "tool_call") {
             const card = cardOf(event);
             open().tools.push(card);
