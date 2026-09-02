@@ -43,6 +43,11 @@ export interface DiscoveredCatalog<Item, Value, Args extends unknown[]> {
     readonly live: (...args: Args) => Promise<readonly Item[] | undefined>;
     // Persist items proved some other way (a turn's self-heal) as the last-known-good, and cache them.
     readonly record: (items: readonly Item[]) => Promise<void>;
+    /* Forget the cached answer, for the provider whose account can be DISCONNECTED while the daemon runs. The
+     * file is the caller's to remove (it owns the `store`), but the cache is in here, and a catalog that kept
+     * serving a signed-out account's models for the rest of the TTL is the one way this ladder can state
+     * something that is no longer true. */
+    readonly forget: () => void;
 }
 
 export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = []>(
@@ -83,6 +88,9 @@ export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = 
         record: async (items) => {
             await persist(items);
             adopt(items);
+        },
+        forget: () => {
+            cache = undefined;
         },
     };
 };

@@ -7,6 +7,7 @@
  * Codex subscription and reports exactly the ids the account can drive) first, then OpenAI's REST /v1/models with
  * the account's OAuth access token, else the persisted last-known-good catalog, else a compile-time seed floor.
  * A model the account rejects mid-turn surfaces `codex-model-invalid`, which reloads this catalog (codex-agent). */
+import { listModels, suggestedModels } from "../agent/model-discovery.js";
 
 const OPENAI_MODELS_URL = "https://api.openai.com/v1/models";
 
@@ -16,16 +17,6 @@ const OPENAI_MODELS_URL = "https://api.openai.com/v1/models";
 // seed costs at most one refresh, the picker reloads it. `gpt-5-codex` is intentionally NOT the first entry
 // (it's the id that fails on some accounts); the plain chat model is the safer default.
 export const SEED_CODEX_MODELS: readonly string[] = ["gpt-5.1", "gpt-5.1-codex"];
-
-const authHeader = (accessToken: string): Record<string, string> => ({ authorization: `Bearer ${accessToken}` });
-
-// A raw OpenAI/Codex model id → a display label matching the other providers' polish (gpt-5-codex → "GPT 5
-// Codex"). Uppercases the gpt/o acronyms; title-cases the rest; dotted/dated segments pass through.
-export const humanizeModelId = (id: string): string =>
-    id
-        .split("-")
-        .map((token) => (token === "" ? token : /^gpt$/i.test(token) ? "GPT" : token[0]!.toUpperCase() + token.slice(1)))
-        .join(" ");
 
 // OpenAI's /v1/models lists every model family (embeddings, audio/tts/whisper, image/dall-e, moderation, …)
 // alongside chat models. Keep only the chat/reasoning/codex families a Codex turn can drive (gpt-*, o-series,
@@ -46,26 +37,16 @@ export const isCodexModel = (id: string): boolean =>
  * since only the translator has a second vendor to name. */
 const isOpenAiOwned = (owner: string | undefined): boolean => owner === undefined || owner === "system" || owner.startsWith("openai");
 
-// GET an OpenAI-compatible model-list endpoint ({ data: [{id, owned_by}] }); [] on non-ok / parse error, so a
-// caller can fall through to the next source. Filtered to OpenAI-owned chat/codex ids.
-const getModelList = async (url: string, accessToken: string, fetchImpl: typeof fetch): Promise<{ id: string; label: string }[]> => {
-    const response = await fetchImpl(url, { headers: authHeader(accessToken) }).catch(() => undefined);
-    if (response === undefined || !response.ok) {
-        return [];
-    }
-    const json = (await response.json().catch(() => undefined)) as { data?: { id: string; owned_by?: string }[] } | undefined;
-    return (json?.data ?? [])
-        .filter((model) => isOpenAiOwned(model.owned_by))
-        .map((model) => model.id)
-        .filter(isCodexModel)
-        .map((id) => ({ id, label: humanizeModelId(id) }));
-};
+// The OpenAI-owned chat/codex ids an OpenAI-compatible model-list endpoint publishes; [] on any failure, so a
+// caller can fall through to the next source.
+const codexModelIds = async (url: string, accessToken: string, fetchImpl: typeof fetch): Promise<string[]> =>
+    (await listModels(url, accessToken, fetchImpl)).filter((model) => isOpenAiOwned(model.owner)).map((model) => model.id).filter(isCodexModel);
 
 // Resolve OpenAI/Codex's model catalog for this account's OAuth access token. Tries OpenAI's REST /v1/models
 // (best-effort, a ChatGPT-subscription token doesn't always enumerate there, in which case the caller serves
 // the persisted/seed catalog and a turn's self-heal records the real ids). [] when the endpoint names none.
-export const discoverCodexModels = async (accessToken: string, fetchImpl: typeof fetch = fetch): Promise<{ id: string; label: string }[]> =>
-    getModelList(OPENAI_MODELS_URL, accessToken, fetchImpl);
+export const discoverCodexModels = async (accessToken: string, fetchImpl: typeof fetch = fetch): Promise<string[]> =>
+    codexModelIds(OPENAI_MODELS_URL, accessToken, fetchImpl);
 
 // The translator (CLIProxyAPI) exposes an OpenAI-compatible /v1/models over its Codex subscription credential,
 // the authoritative list of ids the account can actually drive. Reads it with the translator's local bearer;
@@ -74,17 +55,12 @@ export const discoverTranslatorCodexModels = async (
     translatorUrl: string,
     translatorToken: string,
     fetchImpl: typeof fetch = fetch,
-): Promise<{ id: string; label: string }[]> => getModelList(`${translatorUrl.replace(/\/$/, "")}/v1/models`, translatorToken, fetchImpl);
+): Promise<string[]> => codexModelIds(`${translatorUrl.replace(/\/$/, "")}/v1/models`, translatorToken, fetchImpl);
 
-// The valid ids OpenAI names when it rejects a model (some errors carry a "Did you mean: a, b" hint, most don't).
-// Only the part after "Did you mean" is scanned, so the rejected id itself is never mistaken for a valid one.
-export const parseCodexModelSuggestions = (message: string): string[] => {
-    const hint = message.split(/did you mean:?/i)[1];
-    if (hint === undefined) {
-        return [];
-    }
-    return [...new Set(hint.match(/[a-z0-9][\w.-]+/gi) ?? [])].filter(isCodexModel);
-};
+// The valid ids OpenAI names when it rejects a model (some errors carry a "Did you mean: a, b" hint, most
+// don't). The pattern is deliberately broad, any bare token, because OpenAI's ids share no prefix; what keeps
+// the prose out of the result is isCodexModel rather than the match itself.
+export const parseCodexModelSuggestions = (message: string): string[] => suggestedModels(message, /[a-z0-9][\w.-]+/gi).filter(isCodexModel);
 
 /* Codex reports a non-fatal ADVISORY on the same `error` channel a real failure arrives on, and then runs the turn
  * to completion. This app provokes one by design: the catalog above comes from the translator's live /v1/models,

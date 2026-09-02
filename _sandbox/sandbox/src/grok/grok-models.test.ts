@@ -1,13 +1,7 @@
 import { expect, test } from "vitest";
-import { discoverXaiModels, humanizeModelId, parseModelSuggestions } from "./grok-models.js";
+import { discoverXaiModels, parseModelSuggestions } from "./grok-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
-
-test("humanizeModelId title-cases the hyphen-split tokens for a polished label", () => {
-    expect(humanizeModelId("grok-4")).toBe("Grok 4");
-    expect(humanizeModelId("grok-4-fast")).toBe("Grok 4 Fast");
-    expect(humanizeModelId("grok-4.20-0309-reasoning")).toBe("Grok 4.20 0309 Reasoning");
-});
 
 test("parseModelSuggestions extracts the ids after 'Did you mean', not the rejected id", () => {
     const message =
@@ -26,7 +20,7 @@ test("discoverXaiModels uses GET /v1/models when it returns data", async () => {
         }
         throw new Error(`unexpected call: ${String(url)}`);
     }) as unknown as typeof fetch;
-    expect(await discoverXaiModels("tok", fake)).toEqual([{ id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" }]);
+    expect(await discoverXaiModels("tok", fake)).toEqual(["grok-4.20-0309-reasoning"]);
 });
 
 test("discoverXaiModels excludes media-generation models (image/video) from the catalog", async () => {
@@ -39,10 +33,7 @@ test("discoverXaiModels excludes media-generation models (image/video) from the 
         throw new Error(`unexpected call: ${String(url)}`);
     }) as unknown as typeof fetch;
     // The video/image generators drop out; the text chat models (including image-INPUT "vision" chat) stay.
-    expect(await discoverXaiModels("tok", fake)).toEqual([
-        { id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" },
-        { id: "grok-2-vision-1212", label: "grok-2-vision-1212" },
-    ]);
+    expect(await discoverXaiModels("tok", fake)).toEqual(["grok-4.20-0309-reasoning", "grok-2-vision-1212"]);
 });
 
 test("discoverXaiModels falls back to /v1/language-models when /v1/models is empty", async () => {
@@ -55,7 +46,7 @@ test("discoverXaiModels falls back to /v1/language-models when /v1/models is emp
         }
         throw new Error(`unexpected call: ${String(url)}`);
     }) as unknown as typeof fetch;
-    expect(await discoverXaiModels("tok", fake)).toEqual([{ id: "grok-4.20-multi-agent-0309", label: "grok-4.20-multi-agent-0309" }]);
+    expect(await discoverXaiModels("tok", fake)).toEqual(["grok-4.20-multi-agent-0309"]);
 });
 
 test("discoverXaiModels probes the chat endpoint and parses 'Did you mean' when the catalogs are empty", async () => {
@@ -71,10 +62,7 @@ test("discoverXaiModels probes the chat endpoint and parses 'Did you mean' when 
             404,
         );
     }) as unknown as typeof fetch;
-    expect(await discoverXaiModels("tok", fake)).toEqual([
-        { id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" },
-        { id: "grok-4.20-0309-non-reasoning", label: "grok-4.20-0309-non-reasoning" },
-    ]);
+    expect(await discoverXaiModels("tok", fake)).toEqual(["grok-4.20-0309-reasoning", "grok-4.20-0309-non-reasoning"]);
     expect(seen.some((call) => call.url.endsWith("/v1/chat/completions") && call.method === "POST")).toBe(true);
 });
 

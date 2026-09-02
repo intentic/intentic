@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import type { ExitObservation } from "@intentic/sandbox-contract";
+import { writeJsonFile } from "../store/json-file.js";
 import type { ExitSelection } from "./exit-driver.js";
 import { exitStateDir, observationPath, selectionPath, upMarkerPath } from "./exit-paths.js";
 
@@ -14,16 +15,24 @@ import { exitStateDir, observationPath, selectionPath, upMarkerPath } from "./ex
  * Written per exit under its own state directory so erasing one capability erases exactly its own memory.
  */
 
+/* The state dir is created here rather than left to writeJsonFile, because its MODE matters: 0700, so an exit's
+ * remembered selection is readable only by the daemon's own user. writeJsonFile's mkdir is a no-op once it
+ * exists, so the mode survives, and the file it writes carries 0600 of its own.
+ *
+ * The write goes through writeJsonFile for the atomicity (temp file + rename): the reader below used to treat a
+ * torn file as "nothing remembered", which is the right answer for a file that was never written and the wrong
+ * one for a file being written right now. A poll landing in that window forgot which country the exit was
+ * asked for. */
 const writeJson = async (path: string, value: unknown, id: string): Promise<void> => {
     await mkdir(exitStateDir(id), { recursive: true, mode: 0o700 });
-    await writeFile(path, JSON.stringify(value), { mode: 0o600 });
+    await writeJsonFile(path, value, 0o600);
 };
 
 const readJson = async <T>(path: string): Promise<T | undefined> =>
     await readFile(path, "utf8")
         .then((raw) => JSON.parse(raw) as T)
-        // Absent is the normal case (never started) and corrupt is a half-written file from a killed daemon.
-        // Both mean "nothing remembered", which every caller already handles.
+        // Absent is the normal case (never started). Unreadable can now only mean damage from outside this
+        // daemon, since its own writes are atomic; both mean "nothing remembered", which every caller handles.
         .catch(() => undefined);
 
 export const readSelection = async (id: string): Promise<ExitSelection | undefined> => await readJson<ExitSelection>(selectionPath(id));

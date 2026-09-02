@@ -1,5 +1,5 @@
-import { sleep } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
+import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, markRaw, reactive, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";

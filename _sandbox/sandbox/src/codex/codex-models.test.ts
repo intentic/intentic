@@ -4,19 +4,11 @@ import {
     CODEX_MODEL_INVALID,
     discoverCodexModels,
     discoverTranslatorCodexModels,
-    humanizeModelId,
     isCodexModel,
     parseCodexModelSuggestions,
 } from "./codex-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
-
-test("humanizeModelId uppercases the gpt acronym and title-cases the rest", () => {
-    expect(humanizeModelId("gpt-5-codex")).toBe("GPT 5 Codex");
-    expect(humanizeModelId("gpt-5.1")).toBe("GPT 5.1");
-    expect(humanizeModelId("o3-mini")).toBe("O3 Mini");
-    expect(humanizeModelId("codex-mini-latest")).toBe("Codex Mini Latest");
-});
 
 test("isCodexModel keeps chat/reasoning/codex families and drops non-chat models", () => {
     expect(isCodexModel("gpt-5.6-sol")).toBe(true); // a future release is kept without a code change
@@ -48,20 +40,17 @@ test("keeps only OpenAI-owned rows, because the translator's catalog carries eve
             { status: 200 },
         )) as unknown as typeof fetch;
 
-    expect(await discoverTranslatorCodexModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual([{ id: "gpt-5.6-sol", label: "GPT 5.6 Sol" }]);
+    expect(await discoverTranslatorCodexModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual(["gpt-5.6-sol"]);
 });
 
-test("discoverCodexModels filters OpenAI's /v1/models to chat/codex ids with humanized labels", async () => {
+test("discoverCodexModels filters OpenAI's /v1/models to the chat/codex ids", async () => {
     const fake = (async (url: string | URL) => {
         if (String(url).endsWith("/v1/models")) {
             return jsonResponse({ data: [{ id: "gpt-5.1" }, { id: "gpt-5-codex" }, { id: "text-embedding-3-large" }, { id: "dall-e-3" }] });
         }
         throw new Error(`unexpected call: ${String(url)}`);
     }) as unknown as typeof fetch;
-    expect(await discoverCodexModels("tok", fake)).toEqual([
-        { id: "gpt-5.1", label: "GPT 5.1" },
-        { id: "gpt-5-codex", label: "GPT 5 Codex" },
-    ]);
+    expect(await discoverCodexModels("tok", fake)).toEqual(["gpt-5.1", "gpt-5-codex"]);
 });
 
 test("discoverCodexModels returns [] on a non-ok response so the caller falls through to seed", async () => {

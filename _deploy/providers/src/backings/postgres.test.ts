@@ -14,22 +14,20 @@ const fakeSsh = (opts: { ready?: boolean; upFails?: boolean; image?: string } = 
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
-            if (command.includes("pg_isready")) {
-                return res("", opts.ready ? 0 : 1);
-            }
-            if (command.includes("docker ps -q")) {
-                return res(opts.ready ? "cid123" : "");
-            }
-            if (command.includes(".Config.Labels")) {
-                return res("");
-            }
-            if (command.includes("docker inspect")) {
-                return res(opts.image ?? IMAGE);
-            }
-            if (command.includes("docker compose")) {
-                return res("up", opts.upFails ? 1 : 0);
-            }
-            return res("");
+            /* Ordered matchers, first hit answers. Two orderings are load-bearing: a file write is matched
+             * BEFORE the probe, because the compose template embeds `pg_isready` in its own healthcheck and
+             * the heredoc writing it would otherwise read as a failing readiness probe (and an apply whose
+             * config write fails now throws, as it should); and the labels inspect before the plain one,
+             * because the image read is the same command with a different --format. */
+            const answers: readonly (readonly [RegExp, () => SshResult])[] = [
+                [/^(?:mkdir -p|cat >|test -f)/u, () => res("")],
+                [/pg_isready/u, () => res("", opts.ready ? 0 : 1)],
+                [/docker ps -q/u, () => res(opts.ready ? "cid123" : "")],
+                [/\.Config\.Labels/u, () => res("")],
+                [/docker inspect/u, () => res(opts.image ?? IMAGE)],
+                [/docker compose/u, () => res("up", opts.upFails ? 1 : 0)],
+            ];
+            return answers.find(([pattern]) => pattern.test(command))?.[1]() ?? res("");
         },
         dispose: async () => {},
     };

@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { createTurnGate } from "../guard/turn-gate.js";
-import { humanizeModelId, SEED_XAI_MODELS } from "./grok-models.js";
+import { humanizeModelId } from "../agent/model-discovery.js";
+import { SEED_XAI_MODELS } from "./grok-models.js";
 import { createOpenCodeService, geminiProviderConfig, registerSessionGate, releaseSessionGate } from "./opencode.js";
 
 // Capture the server-spawn options instead of booting a real `opencode serve` (client() is otherwise untested).

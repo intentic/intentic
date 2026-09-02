@@ -1,16 +1,9 @@
-import { HOST_STATE_ROOT } from "@intentic/constants";
-import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
-import { HASH_KEY } from "@intentic/graph";
+import type { Provider } from "@intentic/engine";
 import { z } from "zod";
-import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
-import { containerLabel } from "../core/backing-ssh.js";
-import { listStampedContainers } from "../core/list-stamped.js";
-import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
-import { SERVICE_LOGGING } from "../services/compose-service.js";
+import { type SshExecutor, type SshSession, sshExecutor } from "../core/ssh.js";
+import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "../services/compose-service.js";
 
-const signozSchema = sshSchema.extend({
-    internalIp: z.string(),
-    domain: z.string(),
+const signozSchema = serviceSchema.extend({
     // The dashboard admin SignOz authenticates by email; intentic generates the password and reports it.
     adminUser: z.string(),
     adminPassword: z.string(),
@@ -23,58 +16,17 @@ const signozSchema = sshSchema.extend({
     zookeeperImage: z.string(),
 });
 type SignozInputs = z.infer<typeof signozSchema>;
-const parse = (inputs: ResolvedInputs): SignozInputs => parseInputs(signozSchema, inputs, "signoz");
 
 const UI_PORT = 8080;
 // OTLP ingest published on the host: gRPC 4317 + HTTP 4318. Apps reach the HTTP port through the service's
 // `otlpEndpoint` output (http://<internalIp>:4318); it is host-internal, never tunnel-routed.
 const OTLP_GRPC_PORT = 4317;
 const OTLP_HTTP_PORT = 4318;
-const STATE_DIR = `${HOST_STATE_ROOT}/signoz`;
-const READY_TIMEOUT_MS = 300_000;
-const READY_INTERVAL_MS = 4_000;
 // The histogram-quantile UDF release the init step fetches into ClickHouse's user_scripts (SigNoz needs it
 // for percentile queries); pinned to the version SigNoz's v0.129 reference uses.
 const HISTOGRAM_QUANTILE_VERSION = "v0.0.1";
 
 const internalUrl = (parsed: SignozInputs): string => `http://${parsed.internalIp}:${UI_PORT}`;
-const otlpEndpoint = (parsed: SignozInputs): string => `http://${parsed.internalIp}:${OTLP_HTTP_PORT}`;
-const outputsFor = (parsed: SignozInputs): Record<string, unknown> => ({
-    url: `https://${parsed.domain}`,
-    internalUrl: internalUrl(parsed),
-    otlpEndpoint: otlpEndpoint(parsed),
-});
-
-const running = async (session: SshSession, id: string): Promise<boolean> => {
-    const result = await session.exec(`docker ps --filter "label=intentic.id=${id}" --format '{{.Names}}'`);
-    return result.stdout.trim() !== "";
-};
-
-// The create-time image of each long-running compose service, keyed by compose service name. The one-shot
-// init-clickhouse + telemetrystore-migrator exit, so they never show here; the migrator's image tracks the
-// otel collector's (same image), so diffing the collector covers it. Returns {} when the stack is down.
-const PROJECT = "signoz";
-const runningImages = async (session: SshSession): Promise<Record<string, string>> => {
-    const result = await session.exec(
-        `ids=$(docker ps -q --filter "label=com.docker.compose.project=${PROJECT}"); ` +
-            `[ -n "$ids" ] && docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}={{.Config.Image}}' $ids || true`,
-    );
-    const images: Record<string, string> = {};
-    for (const line of result.stdout.trim().split("\n")) {
-        const eq = line.indexOf("=");
-        if (eq > 0) {
-            images[line.slice(0, eq)] = line.slice(eq + 1);
-        }
-    }
-    return images;
-};
-
-const desiredImages = (parsed: SignozInputs): Record<string, string> => ({
-    zookeeper: parsed.zookeeperImage,
-    clickhouse: parsed.clickhouseImage,
-    signoz: parsed.signozImage,
-    "otel-collector": parsed.otelImage,
-});
 
 // The SigNoz v0.129 reference stack, faithfully reproduced: a separate ZooKeeper for ClickHouse coordination,
 // an init step that fetches the histogram-quantile UDF, ClickHouse (stock image + a config.d cluster drop-in
@@ -350,35 +302,6 @@ const otelCollectorConfig = (): string =>
         "",
     ].join("\n");
 
-// Write the compose + the config files (always) and a once-written .env carrying the JWT signing secret (it
-// must survive restarts, re-keying would invalidate every session). The secret is generated host-side.
-const ensureFiles = async (session: SshSession, parsed: SignozInputs, id: string, hash: string): Promise<void> => {
-    await session.exec(`mkdir -p ${STATE_DIR}`);
-    await session.exec(`cat > ${STATE_DIR}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(parsed, id, hash)}COMPOSE_EOF`);
-    await session.exec(`cat > ${STATE_DIR}/init-clickhouse.sh <<'INIT_EOF'\n${initScript()}INIT_EOF`);
-    await session.exec(`cat > ${STATE_DIR}/cluster.xml <<'CLUSTER_EOF'\n${clusterXml()}CLUSTER_EOF`);
-    await session.exec(`cat > ${STATE_DIR}/custom-function.xml <<'FN_EOF'\n${customFunctionXml()}FN_EOF`);
-    await session.exec(`cat > ${STATE_DIR}/otel-collector-config.yaml <<'OTEL_EOF'\n${otelCollectorConfig()}OTEL_EOF`);
-    await session.exec(`cat > ${STATE_DIR}/otel-collector-opamp-config.yaml <<'OPAMP_EOF'\n${opampConfig()}OPAMP_EOF`);
-    await session.exec(
-        `test -f ${STATE_DIR}/.env || { printf 'SIGNOZ_TOKENIZER_JWT_SECRET=%s\\n' "$(openssl rand -hex 32)" > ${STATE_DIR}/.env && chmod 600 ${STATE_DIR}/.env; }`,
-    );
-};
-
-// Probe the UI FROM THE HOST over SSH (SigNoz publishes 8080 on the host), so the check works regardless of
-// whether the engine's own network can reach the host's internal ip. It answers 200 on /api/v1/health once up.
-const healthy = async (session: SshSession, parsed: SignozInputs): Promise<boolean> => {
-    const result = await session.exec(`wget -q -T 10 -O /dev/null ${internalUrl(parsed)}/api/v1/health`);
-    return result.code === 0;
-};
-
-const waitHealthy = async (session: SshSession, parsed: SignozInputs): Promise<void> => {
-    const up = await pollUntil(() => healthy(session, parsed), { timeoutMs: READY_TIMEOUT_MS, intervalMs: READY_INTERVAL_MS });
-    if (!up) {
-        throw new Error(`signoz did not become healthy within ${READY_TIMEOUT_MS}ms`);
-    }
-};
-
 // Seed the dashboard's first admin via SigNoz's register API, FROM THE HOST over SSH. Best-effort and
 // idempotent: once a user exists SigNoz rejects re-registration, which we log and ignore rather than fail.
 const seedAdmin = async (session: SshSession, parsed: SignozInputs, log: (message: string) => void): Promise<void> => {
@@ -391,73 +314,47 @@ const seedAdmin = async (session: SshSession, parsed: SignozInputs, log: (messag
     }
 };
 
-// SigNoz (observability) as a co-located ZooKeeper + ClickHouse + migrator + query/UI + OTLP-collector compose
-// stack on the host, mirroring SigNoz's v0.129 reference. read returns the resource only when the UI is up (so
-// a noop re-derives the deterministic url/internalUrl/otlpEndpoint) and surfaces the running images; diff
-// recreates a service on an image-pin bump. apply is idempotent: `docker compose up -d` reconciles the stack,
-// the named volumes persist, and the admin seed tolerates an existing account.
-export const createSignozProvider = (executor: SshExecutor = sshExecutor): Provider => ({
-    read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
-        // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
-        if (hasPendingRef(inputs, "internalIp")) {
-            return undefined;
-        }
-        const parsed = parse(inputs);
-        let session: SshSession;
-        try {
-            session = await executor.connect(sshTarget(parsed));
-        } catch (error) {
-            ctx.log(`signoz "${ctx.id}": host not reachable over SSH, treating as not-yet-created: ${String(error)}`);
-            return undefined;
-        }
-        try {
-            if (!(await running(session, ctx.id)) || !(await healthy(session, parsed))) {
-                return undefined;
-            }
-            const stampHash = await containerLabel(session, ctx.id, HASH_KEY);
-            return { outputs: outputsFor(parsed), detail: { images: await runningImages(session) }, ...(stampHash === "" ? {} : { stampHash }) };
-        } finally {
-            await session.dispose();
-        }
-    },
-    // `up -d` recreates only the services whose pinned image in compose.yaml changed; the named volumes
-    // (clickhouse/sqlite/zookeeper) survive, so a bump is a safe in-place update gated on health.
-    diff: (inputs, observed) => {
-        const parsed = parse(inputs);
-        const images = (observed.detail?.["images"] ?? {}) as Record<string, string>;
-        for (const [service, desired] of Object.entries(desiredImages(parsed))) {
-            if (images[service] !== desired) {
-                return { action: "update", reason: `signoz ${service} image differs (running ${String(images[service])}, want ${desired})` };
-            }
-        }
-        return { action: "noop" };
-    },
-    apply: async (inputs, _observed, ctx) => {
-        const parsed = parse(inputs);
-        const session = await executor.connect(sshTarget(parsed));
-        try {
-            await ensureFiles(session, parsed, ctx.id, ctx.inputsHash ?? "");
-            const up = await session.exec(`docker compose -p signoz --project-directory ${STATE_DIR} -f ${STATE_DIR}/compose.yaml up -d`);
-            if (up.code !== 0) {
-                throw new Error(`failed to bring up signoz stack: exited ${up.code}: ${up.stderr.trim()}`);
-            }
-            await waitHealthy(session, parsed);
-            await seedAdmin(session, parsed, ctx.log);
-            return outputsFor(parsed);
-        } finally {
-            await session.dispose();
-        }
-    },
-    // Parses only the SSH block, so it works from a removed node's inputs AND a ListedResource's (a host's).
-    delete: async (inputs) => {
-        const session = await executor.connect(sshTarget(parseInputs(sshSchema, inputs, "signoz")));
-        try {
-            await session.exec(`docker compose -p signoz --project-directory ${STATE_DIR} -f ${STATE_DIR}/compose.yaml down -v 2>/dev/null || true`);
-            await session.exec(`rm -rf ${STATE_DIR}`);
-        } finally {
-            await session.dispose();
-        }
-    },
-    list: (sources, ctx) => listStampedContainers(executor, "signoz", sources, ctx.log),
-});
+/* SigNoz (observability) as a co-located ZooKeeper + ClickHouse + migrator + query/UI + OTLP-collector compose
+ * stack on the host, mirroring SigNoz's v0.129 reference. read returns the resource only when the UI is up (so
+ * a noop re-derives the deterministic url/internalUrl/otlpEndpoint) and surfaces the running images; diff
+ * recreates a service on an image-pin bump. apply is idempotent: `docker compose up -d` reconciles the stack,
+ * the named volumes persist, and the admin seed tolerates an existing account.
+ *
+ * The skeleton is the catalog's own factory. This provider predated it and carried a hand-written copy, which
+ * is how it ended up the one stack whose config writes were unchecked (a failed `cat >` surfaced later as
+ * compose's "no such file") — the two things it needed that the factory lacked were a second output and a
+ * post-health hook, and both are now knobs the whole catalog can use.
+ */
+export const createSignozProvider = (executor: SshExecutor = sshExecutor): Provider =>
+    createComposeServiceProvider(
+        {
+            kind: "signoz",
+            schema: signozSchema,
+            port: UI_PORT,
+            // The UI answers 200 here once ClickHouse is migrated and the query service is serving.
+            healthPath: "/api/v1/health",
+            files: (parsed, id, hash) => ({
+                "compose.yaml": composeYaml(parsed, id, hash),
+                "init-clickhouse.sh": initScript(),
+                "cluster.xml": clusterXml(),
+                "custom-function.xml": customFunctionXml(),
+                "otel-collector-config.yaml": otelCollectorConfig(),
+                "otel-collector-opamp-config.yaml": opampConfig(),
+            }),
+            // Generated host-side and write-once: it signs the dashboard's sessions, so re-keying it would log
+            // every user out on each apply.
+            env: () => [{ key: "SIGNOZ_TOKENIZER_JWT_SECRET" }],
+            // Apps send telemetry straight to the host-internal OTLP port rather than through the tunnel.
+            extraOutputs: (parsed) => ({ otlpEndpoint: `http://${parsed.internalIp}:${OTLP_HTTP_PORT}` }),
+            // The one-shot init-clickhouse + telemetrystore-migrator exit, so they never show as running; the
+            // migrator's image tracks the otel collector's, so diffing the collector covers it.
+            images: (parsed) => ({
+                zookeeper: parsed.zookeeperImage,
+                clickhouse: parsed.clickhouseImage,
+                signoz: parsed.signozImage,
+                "otel-collector": parsed.otelImage,
+            }),
+            seed: seedAdmin,
+        },
+        executor,
+    );

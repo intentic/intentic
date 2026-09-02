@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { discoverGeminiModels, humanizeModelId, isChatModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
+import { humanizeModelId } from "../agent/model-discovery.js";
+import { discoverGeminiModels, isChatModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
@@ -95,9 +96,13 @@ test("carries each model's published input modalities, so the runtime is not lef
     expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual([
         { id: "claude-opus-4-6-thinking", label: "Claude Opus 4 6 Thinking", inputModalities: ["text", "image"] },
         { id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text", "image", "audio", "video"] },
-        // A text-only model on the channel stays text-only: the point is to publish the truth, not to turn
-        // everything on.
-        { id: "gpt-oss-120b-medium", label: "Gpt Oss 120b Medium", inputModalities: ["text"] },
+        /* A text-only model on the channel stays text-only: the point is to publish the truth, not to turn
+         * everything on.
+         *
+         * The label is also where this channel used to differ from Codex's over the same id: three copies of
+         * the humanizer, one of which knew `gpt` was an acronym. They are one function now (model-discovery),
+         * so the row reads the same wherever it is served from. */
+        { id: "gpt-oss-120b-medium", label: "GPT OSS 120b Medium", inputModalities: ["text"] },
     ]);
 });
 

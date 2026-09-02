@@ -1,13 +1,11 @@
-import type { Provider, ResolvedInputs } from "@intentic/engine";
+import type { Provider } from "@intentic/engine";
 import { shellQuote, sqlIdentifier, sqlLiteral } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
-import { containerId } from "../core/backing-ssh.js";
-import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
-import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
+import { bindingSchema, createInstanceBindingProvider } from "../core/instance-binding.js";
+import type { SshExecutor, SshSession } from "../core/ssh.js";
+import { sshExecutor } from "../core/ssh.js";
 
-const databaseSchema = sshSchema.extend({
-    // The id of the Postgres instance container to docker-exec into (stamped intentic.id=<instance>).
-    instance: z.string(),
+const databaseSchema = bindingSchema.extend({
     // The instance's host-internal coordinates, embedded in the produced connection URL.
     instanceHost: z.string(),
     instancePort: z.string(),
@@ -17,7 +15,6 @@ const databaseSchema = sshSchema.extend({
     password: z.string(),
 });
 type DatabaseInputs = z.infer<typeof databaseSchema>;
-const parse = (inputs: ResolvedInputs): DatabaseInputs => parseInputs(databaseSchema, inputs, "postgres-database");
 
 const url = (parsed: DatabaseInputs): string =>
     `postgres://${parsed.role}:${parsed.password}@${parsed.instanceHost}:${parsed.instancePort}/${parsed.database}`;
@@ -35,74 +32,35 @@ const psql = async (session: SshSession, cid: string, sql: string): Promise<stri
     return result.stdout.trim();
 };
 
+const databaseExists = async (session: SshSession, cid: string, parsed: DatabaseInputs): Promise<boolean> =>
+    (await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname=${sqlLiteral(parsed.database)}`)) === "1";
+
 // A per-app Postgres database + owning role on a shared instance (the binding for an app that uses a database
 // capability). read reports it present once the database exists (so the noop re-derives the URL); apply
 // create-or-updates the role (idempotent: CREATE if absent, always ALTER to match the generated password) and
 // CREATEs the database if absent; delete drops both. All identifiers are resolver-sanitized to [a-z0-9_].
-export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecutor): Provider => ({
-    read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
-        // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
-        if (hasPendingRef(inputs, "instanceHost", "instancePort")) {
-            return undefined;
-        }
-        const parsed = parse(inputs);
-        let session: SshSession;
-        try {
-            session = await executor.connect(sshTarget(parsed));
-        } catch (error) {
-            ctx.log(`postgres-database "${ctx.id}": host not reachable over SSH, treating as not-yet-created: ${String(error)}`);
-            return undefined;
-        }
-        try {
-            const cid = await containerId(session, parsed.instance);
-            if (cid === "") {
-                return undefined;
-            }
-            const exists = await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname=${sqlLiteral(parsed.database)}`);
-            return exists === "1" ? { outputs: { url: url(parsed) } } : undefined;
-        } finally {
-            await session.dispose();
-        }
-    },
-    // The database/role names + the (stable, generated) password never drift, so a present database is a noop.
-    diff: () => ({ action: "noop" }),
-    apply: async (inputs, _observed, ctx) => {
-        const parsed = parse(inputs);
-        const session = await executor.connect(sshTarget(parsed));
-        try {
-            const cid = await containerId(session, parsed.instance);
-            if (cid === "") {
-                throw new Error(`postgres-database "${ctx.id}": instance "${parsed.instance}" is not running`);
-            }
-            const roleExists = await psql(session, cid, `SELECT 1 FROM pg_roles WHERE rolname=${sqlLiteral(parsed.role)}`);
-            if (roleExists !== "1") {
-                await psql(session, cid, `CREATE ROLE ${sqlIdentifier(parsed.role)} LOGIN PASSWORD ${sqlLiteral(parsed.password)}`);
-            } else {
-                await psql(session, cid, `ALTER ROLE ${sqlIdentifier(parsed.role)} LOGIN PASSWORD ${sqlLiteral(parsed.password)}`);
-            }
-            const dbExists = await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname=${sqlLiteral(parsed.database)}`);
-            if (dbExists !== "1") {
-                await psql(session, cid, `CREATE DATABASE ${sqlIdentifier(parsed.database)} OWNER ${sqlIdentifier(parsed.role)}`);
-            }
-            return { url: url(parsed) };
-        } finally {
-            await session.dispose();
-        }
-    },
-    delete: async (inputs, ctx) => {
-        const parsed = parse(inputs);
-        const session = await executor.connect(sshTarget(parsed));
-        try {
-            const cid = await containerId(session, parsed.instance);
-            if (cid === "") {
-                ctx.log(`postgres-database "${ctx.id}": instance "${parsed.instance}" already gone; nothing to drop`);
-                return;
-            }
-            await psql(session, cid, `DROP DATABASE IF EXISTS ${sqlIdentifier(parsed.database)}`);
-            await psql(session, cid, `DROP ROLE IF EXISTS ${sqlIdentifier(parsed.role)}`);
-        } finally {
-            await session.dispose();
-        }
-    },
-});
+export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecutor): Provider =>
+    createInstanceBindingProvider(
+        {
+            kind: "postgres-database",
+            schema: databaseSchema,
+            pendingRefs: ["instanceHost", "instancePort"],
+            present: async (session, cid, parsed) => ((await databaseExists(session, cid, parsed)) ? { url: url(parsed) } : undefined),
+            create: async (session, cid, parsed) => {
+                const roleExists = await psql(session, cid, `SELECT 1 FROM pg_roles WHERE rolname=${sqlLiteral(parsed.role)}`);
+                // ALTER rather than skip on the already-there path: the password is generated and stored in the
+                // graph, so this is what keeps the instance agreeing with the URL the app was handed.
+                const verb = roleExists === "1" ? "ALTER" : "CREATE";
+                await psql(session, cid, `${verb} ROLE ${sqlIdentifier(parsed.role)} LOGIN PASSWORD ${sqlLiteral(parsed.password)}`);
+                if (!(await databaseExists(session, cid, parsed))) {
+                    await psql(session, cid, `CREATE DATABASE ${sqlIdentifier(parsed.database)} OWNER ${sqlIdentifier(parsed.role)}`);
+                }
+                return { url: url(parsed) };
+            },
+            drop: async (session, cid, parsed) => {
+                await psql(session, cid, `DROP DATABASE IF EXISTS ${sqlIdentifier(parsed.database)}`);
+                await psql(session, cid, `DROP ROLE IF EXISTS ${sqlIdentifier(parsed.role)}`);
+            },
+        },
+        executor,
+    );

@@ -27,22 +27,19 @@ const fakeSsh = (
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
-            if (command.includes("com.docker.compose.project")) {
-                return res(opts.running ? composeImages(opts.images ?? DEFAULT_IMAGES) : "");
-            }
-            if (command.includes("docker ps")) {
-                return res(opts.running ? "intentic-signoz" : "");
-            }
-            if (command.includes("wget")) {
-                return res("", opts.healthy ? 0 : 1);
-            }
-            if (command.includes("docker compose")) {
-                return res("up", opts.upFails ? 1 : 0);
-            }
-            if (command.includes("curl")) {
-                return res(opts.register ?? "200");
-            }
-            return res("");
+            /* Ordered matchers, first hit answers. A file write is matched BEFORE the probes: the templates
+             * this stack writes mention `wget` (the UDF fetch) and compose's own labels, so a heredoc carrying
+             * them would otherwise read as a failing health check — and an apply whose config write fails now
+             * throws, as it should. */
+            const answers: readonly (readonly [RegExp, () => SshResult])[] = [
+                [/^(?:mkdir -p|cat >|test -f)/u, () => res("")],
+                [/com\.docker\.compose\.project/u, () => res(opts.running ? composeImages(opts.images ?? DEFAULT_IMAGES) : "")],
+                [/docker ps/u, () => res(opts.running ? "intentic-signoz" : "")],
+                [/wget/u, () => res("", opts.healthy ? 0 : 1)],
+                [/docker compose/u, () => res("up", opts.upFails ? 1 : 0)],
+                [/curl/u, () => res(opts.register ?? "200")],
+            ];
+            return answers.find(([pattern]) => pattern.test(command))?.[1]() ?? res("");
         },
         dispose: async () => {},
     };

@@ -1,6 +1,6 @@
 import type { Provider } from "@intentic/engine";
-import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { expect, test } from "vitest";
+import { envArg } from "../core/host-files.js";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createInfisicalProvider } from "./infisical.js";
 import { createInvoiceninjaProvider } from "./invoiceninja.js";
@@ -252,10 +252,10 @@ test("invoiceninja: the .env carries a Laravel base64: APP_KEY and the admin see
     const ssh = fakeSsh({ healthy: true });
     await svc.make(ssh.executor).apply(svc.inputs, undefined, ctx());
     const env = ssh.commands.find((c) => c.includes("test -f /opt/intentic/invoiceninja/.env"));
-    // Derived from the quoters rather than transcribed: a known value's line is exactly what envLine renders,
-    // carried as one shell word. Pinning the emitted escapes instead is what made these assertions outlive the
-    // format they described.
-    expect(env).toContain(shellQuote(envLine("IN_PASSWORD", "pw")));
+    // Derived from the quoter rather than transcribed: a known value's line is exactly what envArg renders,
+    // one .env line as one shell word. Pinning the emitted escapes instead is what made these assertions
+    // outlive the format they described.
+    expect(env).toContain(envArg("IN_PASSWORD", "pw"));
     // APP_KEY's value is minted per apply, so only its shape is knowable here.
     expect(env).toContain("APP_KEY");
     expect(env).toMatch(/base64:[A-Za-z0-9+/=]+/);

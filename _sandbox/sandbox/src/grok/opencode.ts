@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import {
@@ -9,10 +9,13 @@ import {
     type OpencodeClient,
     type Permission as OpenCodePermission,
 } from "@opencode-ai/sdk";
+import { discoveredCatalog } from "../agent/model-catalog.js";
+import { humanizeModelId } from "../agent/model-discovery.js";
 import { engineBinary } from "../engines/engine-resolve.js";
 import type { InputModality } from "../gemini/gemini-models.js";
 import { type CommandGate, consultWith, vendorSubject } from "../guard/command-gate.js";
-import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
+import { jsonFile } from "../store/json-file.js";
+import { discoverXaiModels, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
 /* The shared OpenCode runtime: one warm `opencode serve` per container plus its client. Both the adapters that
  * run turns on it and the Grok auth routes (drive xAI's OAuth) need the same client, so ownership lives here
@@ -410,12 +413,6 @@ export const createOpenCodeService = (
     // directory (subscribeEvents), so "watch everything" is a set of streams rather than one, and this is what
     // keeps it one PER directory however many turns run there.
     const watched = new Set<string>();
-    // xAI's catalog rarely changes, so cache it briefly: each read is an api.x.ai round-trip. Only a real
-    // result (live discovery or recordModels) is cached,
-    // the seed/persisted fallbacks stay uncached so a freshened token is retried on the next read. Cleared on
-    // disconnect.
-    let modelsCache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
-    const MODELS_TTL_MS = 60_000;
     // Where the warm server listens, set by the boot that created it, so `url()` can answer after `ensure`.
     // The handle that can shut it down again, kept for `stop()` alone; every other caller wants the client.
     let serverHandle: { close(): void } | undefined;
@@ -429,7 +426,7 @@ export const createOpenCodeService = (
         // @ai-sdk/xai), opt every known model out via per-model options, the only seam OpenCode forwards to the
         // call. Config is fixed at server spawn, so a model first discovered later (the self-heal path) lacks the
         // flag until the next daemon restart; the persisted catalog covers it from then on.
-        const storeOptOut = [...new Set([...SEED_XAI_MODELS, ...(await readPersistedModels())])];
+        const storeOptOut = [...new Set([...SEED_XAI_MODELS, ...(await modelStore.read())])];
         /* The Gemini rows, read once here because OpenCode fixes provider config at spawn. A catalog read that
          * fails degrades to no Gemini provider rather than taking the whole server down with it. Grok would
          * otherwise lose its runtime over a translator that happened to be unreachable at boot. */
@@ -522,19 +519,31 @@ export const createOpenCodeService = (
         return entry.expires === undefined || Date.now() < entry.expires ? entry.access : undefined;
     };
 
-    // Read the persisted last-known-good catalog (an array of ids). [] when absent/unreadable.
-    const readPersistedModels = async (): Promise<string[]> => {
-        try {
-            const parsed = JSON.parse(await readFile(modelsPath, "utf8")) as unknown;
-            return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-        } catch {
-            return [];
-        }
-    };
-    const writePersistedModels = async (ids: string[]): Promise<void> => {
-        await mkdir(opencodeDir, { recursive: true });
-        await writeFile(modelsPath, JSON.stringify(ids));
-    };
+    /* xAI's catalog, on the ladder every provider shares (agent/model-catalog.ts): live discovery with the
+     * persisted OAuth token, else the last-known-good file beside auth.json, else the compile-time floor. An
+     * expired token skips discovery entirely rather than 401-ing every probe, and `record` is what a turn's
+     * "Did you mean" rejection teaches it, the only catalog some subscription accounts ever produce.
+     *
+     * The store is held by name as well as handed over, because BOOT needs the persisted ids without asking
+     * xAI: OpenCode fixes provider config at spawn (see storeOptOut), and a boot that waited on api.x.ai
+     * would be a boot that hangs whenever xAI is down. */
+    const modelStore = jsonFile<string[]>(modelsPath, {
+        parse: (raw) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : undefined),
+        fallback: () => [],
+    });
+    const models = discoveredCatalog({
+        // xAI's catalog rarely changes and each read is an api.x.ai round-trip.
+        ttlMs: 60_000,
+        discover: async () => {
+            const token = await usableXaiToken();
+            return token === undefined ? [] : await discoverXaiModels(token, fetchImpl);
+        },
+        store: modelStore,
+        toStored: (ids) => [...ids],
+        seed: SEED_XAI_MODELS,
+        fromLive: toCatalog,
+        fromStored: toCatalog,
+    });
 
     return {
         client: ensure,
@@ -579,37 +588,22 @@ export const createOpenCodeService = (
                 return false;
             }
         },
-        xaiModels: async () => {
-            if (modelsCache !== undefined && Date.now() < modelsCache.expiresAt) {
-                return modelsCache.value;
-            }
-            const token = await usableXaiToken();
-            if (token !== undefined) {
-                const ids = (await discoverXaiModels(token, fetchImpl)).map((model) => model.id);
-                if (ids.length > 0) {
-                    await writePersistedModels(ids);
-                    const value = toCatalog(ids);
-                    modelsCache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
-                    return value;
-                }
-            }
-            // No live catalog (no token, expired, or discovery came back empty): serve the last-known-good catalog,
-            // else the seed floor. Uncached so a usable token is retried next read.
-            const persisted = await readPersistedModels();
-            return toCatalog(persisted.length > 0 ? persisted : [...SEED_XAI_MODELS]);
-        },
+        xaiModels: models.models,
+        /* The ids xAI itself named while rejecting something else. Filtered and de-duplicated HERE rather than
+         * in the ladder: a vendor naming models in an error names whatever it likes, including the media
+         * endpoints a turn cannot drive, and an empty result must leave the known-good list alone rather than
+         * replace it with nothing. */
         recordModels: async (ids) => {
             const valid = [...new Set(ids.filter(isChatModel))];
-            if (valid.length === 0) {
-                return;
+            if (valid.length > 0) {
+                await models.record(valid);
             }
-            await writePersistedModels(valid);
-            modelsCache = { value: toCatalog(valid), expiresAt: Date.now() + MODELS_TTL_MS };
         },
         disconnect: async () => {
-            modelsCache = undefined;
-            await rm(authPath, { force: true });
+            // Both halves of the catalog, or a signed-out account keeps being offered for the rest of the TTL.
+            models.forget();
             await rm(modelsPath, { force: true });
+            await rm(authPath, { force: true });
         },
     };
 };

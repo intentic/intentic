@@ -1,9 +1,9 @@
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
-import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { containerLabel } from "../core/backing-ssh.js";
+import { type EnvEntry, type HostFile, writeEnvOnce, writeHostFiles } from "../core/host-files.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshSession, SshExecutor } from "../core/ssh.js";
@@ -15,18 +15,10 @@ export const serviceSchema = sshSchema.extend({
     domain: z.string(),
 });
 
-// One line of the write-once .env: a literal `value` (single-quoted into the shell AND in the file, so
-// compose never interpolates a `$` inside it), or omitted to generate a host-side `openssl rand -hex 32`,
-// the signoz JWT pattern, so secrets survive restarts and re-applies.
-export interface EnvEntry {
-    readonly key: string;
-    readonly value?: string;
-}
-
 // Everything that distinguishes one compose-stack service from another. The provider skeleton around it
 // (read = ssh + running + healthy, diff = image pins, apply = write files + `up -d` + wait, delete = down -v)
-// is identical across the catalog, signoz predates this factory and keeps its own copy for its extra
-// OTLP/seed-admin concerns.
+// is identical across the catalog, and its per-instance twin (a backing: one container, keyed by node id
+// rather than by kind) is backing-provider.ts. The two share their file writing and their stamp.
 export interface ComposeServiceSpec<S extends z.ZodType> {
     // Compose project + /opt/intentic/<kind> state dir; the dashboard container carries the node's
     // intentic.id stamp + intentic.type=<kind>.
@@ -39,8 +31,13 @@ export interface ComposeServiceSpec<S extends z.ZodType> {
     readonly readyTimeoutMs?: number;
     // filename -> content, written on every apply; must include compose.yaml (its dashboard service
     // stamped with `id` + the intentic.hash drift-stamp).
-    readonly files: (parsed: z.infer<S>, id: string, hash: string) => Record<string, string>;
+    readonly files: (parsed: z.infer<S>, id: string, hash: string) => Record<string, string | HostFile>;
     readonly env?: (parsed: z.infer<S>) => readonly EnvEntry[];
+    /* Outputs beyond the `url`/`internalUrl` every service publishes, merged over them. One service has any:
+     * signoz's `otlpEndpoint`, a second published port that apps send telemetry to directly rather than
+     * through the tunnel. Derived from the inputs alone, like the two it joins, so a noop reconcile
+     * re-derives them without touching the host. */
+    readonly extraOutputs?: (parsed: z.infer<S>) => Record<string, unknown>;
     // The long-running compose services' desired images by compose service name; diff drives an update on a
     // pin bump, which `up -d` turns into an in-place recreate of just the changed service.
     readonly images: (parsed: z.infer<S>) => Record<string, string>;
@@ -69,6 +66,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
     const outputsFor = (parsed: z.infer<S>): Record<string, unknown> => ({
         url: `https://${parsed.domain}`,
         internalUrl: internalUrl(parsed),
+        ...spec.extraOutputs?.(parsed),
     });
 
     const runningImages = async (session: SshSession): Promise<Record<string, string>> => {
@@ -102,41 +100,10 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
 
     // Config files are rewritten every apply; the .env is write-once (its secrets must survive restarts,
     // re-keying would invalidate sessions / database credentials). Randoms are generated host-side.
+    // Both halves are host-files.ts, shared with the per-instance backings.
     const ensureFiles = async (session: SshSession, parsed: z.infer<S>, id: string, hash: string): Promise<void> => {
-        // A write that MUST succeed, unlike read's probes, a failed mkdir/cat here leaves the stack unbootable.
-        // Surface the host's own error (permission on /opt/intentic, disk full) at its origin, rather than letting
-        // the later `docker compose up -d` report the confusing "compose.yaml: no such file" for the missing write.
-        const write = async (command: string, what: string): Promise<void> => {
-            const result = await session.exec(command);
-            if (result.code !== 0) {
-                throw new Error(`${spec.kind}: ${what} failed (exit ${result.code}): ${result.stderr.trim()}`);
-            }
-        };
-        await write(`mkdir -p ${stateDir}`, `create ${stateDir}`);
-        for (const [name, content] of Object.entries(spec.files(parsed, id, hash))) {
-            const marker = `${spec.kind.toUpperCase()}_FILE_EOF`;
-            await write(`cat > ${stateDir}/${name} <<'${marker}'\n${content}${marker}`, `write ${stateDir}/${name}`);
-        }
-        const entries = spec.env?.(parsed) ?? [];
-        if (entries.length === 0) {
-            return;
-        }
-        /* Two layers, one call each. The old format quoted the SHELL layer (shellQuote on the value) but wrote
-         * the .env layer itself as `KEY='%s'`, so a value containing a single quote closed the line early and
-         * the file read back as something other than what was stored, its own ponytail said as much. envLine
-         * now renders the whole line, picking a delimiter the value does not contain, and shellQuote carries
-         * that line to the host as one argv word.
-         *
-         * A value the catalog leaves undefined is generated ON THE HOST and never passes through here at all;
-         * `openssl rand -hex 32` yields hex, which contains no delimiter either layer cares about. */
-        const prints = entries
-            .map((entry) =>
-                entry.value === undefined
-                    ? `printf "${entry.key}='%s'\\n" "$(openssl rand -hex 32)"`
-                    : `printf '%s' ${shellQuote(envLine(entry.key, entry.value))}`,
-            )
-            .join("; ");
-        await write(`test -f ${stateDir}/.env || { { ${prints}; } > ${stateDir}/.env && chmod 600 ${stateDir}/.env; }`, `write ${stateDir}/.env`);
+        await writeHostFiles(session, spec.kind, stateDir, spec.files(parsed, id, hash));
+        await writeEnvOnce(session, spec.kind, stateDir, spec.env?.(parsed) ?? []);
     };
 
     return {

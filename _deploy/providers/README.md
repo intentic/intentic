@@ -15,6 +15,11 @@ The real **Provider SPI implementations** the engine reconciles against: the onl
 - `src/<kind>.ts`, one provider per kind: e.g. [src/cloudflare.ts](src/cloudflare.ts), [src/forgejo.ts](src/forgejo.ts), [src/komodo.ts](src/komodo.ts), [src/deployment.ts](src/deployment.ts), [src/cf-route.ts](src/cf-route.ts), [src/ci.ts](src/ci.ts).
 - `src/<system>-api.ts`, HTTP adapters: [src/forgejo-api.ts](src/forgejo-api.ts), [src/komodo-api.ts](src/komodo-api.ts), [src/cloudflare-api.ts](src/cloudflare-api.ts), [src/authentik-api.ts](src/authentik-api.ts); fakes like [src/forgejo-api.fake.ts](src/forgejo-api.fake.ts).
 - [src/backings](src/backings): `sshExecutor` (+ `SshExecutor`/`SshSession`); [src/api-validation.test.ts](src/api-validation.test.ts), input-validation coverage.
+- The three **skeletons** every Docker-deploying provider is built from, so a new one is a spec rather than another copy of `read`/`diff`/`apply`/`delete`/`list`:
+    - [src/core/backing-provider.ts](src/core/backing-provider.ts) — one container per node id (postgres, valkey, garage, authentik): a schema, a compose file, a readiness probe.
+    - [src/core/instance-binding.ts](src/core/instance-binding.ts) — an app's slice INSIDE a backing (a database, an ACL user, a bucket), reached with `docker exec`.
+    - [src/services/compose-service.ts](src/services/compose-service.ts) — one singleton stack per kind (the catalog services, signoz), diffed per compose service.
+    - [src/core/host-files.ts](src/core/host-files.ts) is the writing the three share: rewritten config files, and the write-once `.env` whose two quoting layers are the part that used to be got wrong.
 
 ## How it fits
 

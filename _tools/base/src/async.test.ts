@@ -246,6 +246,21 @@ describe(`sleep`, () => {
         aborted.abort();
         await expect(sleep(10_000, { signal: aborted.signal })).resolves.toBeUndefined();
     });
+
+    // A long-lived signal (a conversation's abort) outlives thousands of ticks of the loops that pause on it,
+    // so a listener left behind per tick is a leak with a slow fuse.
+    it(`leaves no listener behind on either path`, async () => {
+        const controller = new AbortController();
+        const added = vi.spyOn(controller.signal, `addEventListener`);
+        const removed = vi.spyOn(controller.signal, `removeEventListener`);
+
+        const pending = sleep(10, { signal: controller.signal });
+        await vi.advanceTimersByTimeAsync(10);
+        await pending;
+
+        expect(added).toHaveBeenCalledTimes(1);
+        expect(removed).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe(`pollUntil`, () => {

@@ -8,6 +8,7 @@
  * and GPT-OSS ride the same plain Google sign-in. So membership is decided by `owned_by`, the channel the
  * translator itself stamps on each model, rather than by an id prefix: a `/^gemini/` filter dropped the strongest
  * models a free Google account can reach, purely because of how they are named. */
+import { getJson, humanizeModelId } from "../agent/model-discovery.js";
 
 // A model the user could chat with, as opposed to the image/audio/embedding endpoints Google ships beside them
 // under the same channel. Named ids only, this is the one membership rule the seed floor can be checked against.
@@ -67,26 +68,7 @@ export const SEED_GEMINI_MODELS: readonly GeminiModel[] = [
     { id: "gpt-oss-120b-medium", label: "GPT-OSS 120B (Medium)", inputModalities: ["text"] },
 ];
 
-const authHeader = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
-
-// A raw model id → a display label, used only where the translator publishes no name of its own
-// (gemini-3.1-pro-low → "Gemini 3.1 Pro Low"). Title-cases the hyphen-split tokens; dotted version segments pass
-// through untouched.
-export const humanizeModelId = (id: string): string =>
-    id
-        .split("-")
-        .map((token) => (token === "" ? token : token[0]!.toUpperCase() + token.slice(1)))
-        .join(" ");
-
 const base = (translatorUrl: string): string => translatorUrl.replace(/\/$/, "");
-
-const getJson = async <T>(url: string, token: string, fetchImpl: typeof fetch): Promise<T | undefined> => {
-    const response = await fetchImpl(url, { headers: authHeader(token) }).catch(() => undefined);
-    if (response === undefined || !response.ok) {
-        return undefined;
-    }
-    return (await response.json().catch(() => undefined)) as T | undefined;
-};
 
 /* The vendor's own display names AND accepted input modalities, keyed by id. The OpenAI-compatible /v1/models
  * carries the channel but neither of these; the Gemini-shaped /v1beta/models carries both but not the channel,

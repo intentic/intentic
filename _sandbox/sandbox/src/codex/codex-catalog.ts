@@ -2,7 +2,8 @@ import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../agent/model-catalog.js";
 import type { Config } from "../env.config.js";
 import { jsonFile } from "../store/json-file.js";
-import { discoverCodexModels, discoverTranslatorCodexModels, humanizeModelId, isCodexModel, SEED_CODEX_MODELS } from "./codex-models.js";
+import { humanizeModelId } from "../agent/model-discovery.js";
+import { discoverCodexModels, discoverTranslatorCodexModels, isCodexModel, SEED_CODEX_MODELS } from "./codex-models.js";
 
 /* The Codex model catalog service, on the shared ladder (agent/model-catalog.ts): live, then the persisted
  * last-known-good (recorded by a turn's self-heal, refresh-independent), then the SEED_CODEX_MODELS floor, so
@@ -44,7 +45,7 @@ export const createCodexCatalog = (config: Config, persistPath: string, fetchImp
                 fromTranslator.length === 0 && config.openaiApiKey !== ""
                     ? await discoverCodexModels(config.openaiApiKey, fetchImpl).catch(() => [])
                     : [];
-            return (fromTranslator.length > 0 ? fromTranslator : fromOpenAI).map((model) => model.id);
+            return fromTranslator.length > 0 ? fromTranslator : fromOpenAI;
         },
         store: jsonFile<string[]>(persistPath, {
             parse: (raw) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : undefined),

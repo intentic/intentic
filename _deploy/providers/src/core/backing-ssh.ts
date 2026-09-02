@@ -30,6 +30,22 @@ const slug = (id: string): string => {
 export const stateDir = (kind: string, id: string): string => `${HOST_STATE_ROOT}/${kind}/${slug(id)}`;
 const projectName = (kind: string, id: string): string => `intentic-${kind}-${slug(id)}`;
 
+/* THE STAMP, WRITTEN. The compose `labels:` line that makes a container findable: by the node that owns it
+ * (intentic.id, how a binding docker-execs into its instance), by kind (intentic.type, how an orphan scan
+ * groups what it finds), by inputs hash (intentic.hash, how drift is detected without asking the resource),
+ * and by protection (intentic.protect, which keeps pruning off it).
+ *
+ * Rendered here rather than typed into each compose template because the readers below match these keys
+ * exactly: a stack whose YAML said `intentic.protect: true` in a different shape would scan as unprotected
+ * and be pruned. `protect` is omitted rather than written false, which is what the filter tests for. */
+export const stampLabels = (kind: string, id: string, hash: string, protect = false): string =>
+    `    labels: [ "intentic.id=${id}", "intentic.type=${kind}", "intentic.hash=${hash}"${protect ? ', "intentic.protect=true"' : ""} ]`;
+
+// A readiness probe that runs INSIDE the stamped container: resolve it by stamp, then exec. Exits non-zero
+// when the container is not running, which is the "not ready" the callers want, rather than an error.
+export const execProbe = (id: string, command: string): string =>
+    `cid=$(docker ps -q --filter "label=intentic.id=${id}"); [ -n "$cid" ] && docker exec "$cid" ${command}`;
+
 // The id of the container stamped intentic.id=<stamp>, or "" when it is not running. Both an instance (its own
 // id) and a binding (the instance id it targets) locate the container this way.
 export const containerId = async (session: SshSession, stamp: string): Promise<string> => {

@@ -28,7 +28,9 @@ and a package that offers them as one thing invites being treated as a junk draw
 - **`async`**: the four shapes of "don't do that again yet", named so the choice between them is visible:
   `Delayer` restarts its clock on every call, `Coalescer` opens a window on the first call and lets later ones
   join it, `SingleFlight` shares one run per key among concurrent callers, and `retry` is the loop with the
-  delay in it.
+  delay in it. Under them sit the three primitives every reconnect loop and readiness wait was hand-rolling
+  beside its own `setTimeout`-in-a-promise: `sleep` (interruptible, because a pause a teardown cannot cut
+  short is a teardown that waits for it), `pollUntil`, and `createBackoff`.
 
 ## Delayer or Coalescer
 
