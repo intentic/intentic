@@ -263,6 +263,10 @@ const applyFit = (store: VueFlowStore): void => {
      * clamp at all: anything that fits and can still be read is fitted. `min` so a caller asking for a lower
      * floor than this is never held to a higher one. */
     if (fitted >= Math.min(readableZoom, LEGIBLE_FIT)) {
+        if (typeof fitPadding === `object`) {
+            place(Math.min(fitted, 1));
+            return;
+        }
         void store.fitView(FIT.value);
         return;
     }
@@ -271,7 +275,11 @@ const applyFit = (store: VueFlowStore): void => {
 
 // The whole shape at a glance, floor and all: what a "fit" control is for, and why it ignores `readableZoom`:
 // asking to see everything is asking to trade legibility for it, deliberately and for as long as you look.
-const fitAll = (): void => void flow.value?.fitView({ padding: padOf(), maxZoom: 1 });
+const fitAll = (): void => {
+    const pad = padOf();
+    const padding = typeof pad === `number` ? pad : Math.max(pad.x, pad.y);
+    void flow.value?.fitView({ padding, maxZoom: 1 });
+};
 
 // The one door back to a fitted picture: everything that can invalidate a fit calls this, and it is the only
 // place the reader's own pan is protected from being fitted over.

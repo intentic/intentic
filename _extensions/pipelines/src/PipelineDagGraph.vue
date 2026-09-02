@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PipelineJob } from "@intentic/sandbox-contract";
 import { DagGraph, Icon, ui, type DagNode } from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
 import { formatDuration, STATUS_TONE, type StatusTone } from "./statusVisual";
 
@@ -66,18 +66,17 @@ const dag = computed(() => pipelineDag(stages, focus.value));
  * stop resolving; at a zoom that reads, two thirds of the run is off-frame. GitHub's own view of the same run
  * is a third narrower and reads fine, because a card holding a list of jobs is not the same object as a card
  * holding a paragraph, and it does not want the same air. */
-const NODE_WIDTH = 184;
+const NODE_WIDTH = 192;
 const JOB_ROW_HEIGHT = 28;
 // Split over the card's two ends, so a single-job card is not a bare strip with text jammed against its border.
-const CARD_PADDING_Y = 8;
+const CARD_PADDING_Y = 12;
 /* The layout's air: between two columns, and between two cards in one. dagre is told both (see dagLayout.ts) and
  * the band height below counts with them.
  *
- * Tighter than the default pair, which is measured for a graph of few large cards, but not as tight as the first
- * pass made it. At a 14px gap under 34px cards a column read as one striped block rather than as a stack of
- * cards, which is the cramped look; the gap has to stay a visible fraction of the card beside it. */
-const RANK_SEP = 64;
-const NODE_SEP = 20;
+ * Cards have breathing room between their stacked rows and surrounding cards; columns have room for
+ * turning edges. */
+const RANK_SEP = 72;
+const NODE_SEP = 24;
 
 // A card is its rows: dagre is told this per node rather than being handed one size for all of them.
 const cardHeight = (cluster: PipelineJobCluster): number => cluster.jobs.length * JOB_ROW_HEIGHT + CARD_PADDING_Y;
@@ -86,24 +85,64 @@ const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
     dag.value.nodes.map((node) => ({ ...node, width: NODE_WIDTH, height: cardHeight(node.data) })),
 );
 
-/* HOW TALL THE INLINE BAND IS, estimated from the picture rather than from the job count, because grouping
- * changed what a wide run costs vertically: a stage of twelve jobs used to be twelve cards stacked twelve gaps
- * apart, and is now ONE card twelve rows tall, well under half the height. Sizing to the old arithmetic left
- * the diagram sitting in the top third of a box of white space.
- *
- * So: the tallest COLUMN. Cards that share a stage are stacked by dagre with `nodesep` between them, and a
- * card's own height is its rows. Sized to the graph at the fitted zoom so vertical padding does not stack
- * on a band that is taller than the picture. */
-const FIT_PAD_Y = 0.015;
+/* HOW TALL THE INLINE BAND IS: sized to exactly match the diagram's rendered height at the fitted zoom plus
+ * vertical padding, rather than leaving a shallow run floating in excess whitespace. */
+const PAD_X = 0.04;
+const PAD_Y_PX = 16;
+
+const root = ref<HTMLElement>();
+const containerWidth = ref<number>(0);
+let resizeObserver: ResizeObserver | undefined;
+
+onMounted(() => {
+    if (root.value) {
+        containerWidth.value = root.value.clientWidth;
+        if (typeof ResizeObserver !== `undefined`) {
+            resizeObserver = new ResizeObserver(([entry]) => {
+                if (entry) {
+                    containerWidth.value = entry.contentRect.width;
+                }
+            });
+            resizeObserver.observe(root.value);
+        }
+    }
+});
+
+onBeforeUnmount(() => {
+    resizeObserver?.disconnect();
+});
 
 const bandHeight = computed(() => {
     const columns = new Map<number, number>();
     for (const node of dag.value.nodes) {
-        const stacked = columns.get(stageOfNode(node.id));
-        columns.set(stageOfNode(node.id), stacked === undefined ? cardHeight(node.data) : stacked + NODE_SEP + cardHeight(node.data));
+        const stage = stageOfNode(node.id);
+        const stacked = columns.get(stage);
+        columns.set(stage, stacked === undefined ? cardHeight(node.data) : stacked + NODE_SEP + cardHeight(node.data));
     }
     const contentHeight = Math.max(...columns.values(), 0);
-    return Math.min(520, Math.ceil(contentHeight / (1 - 2 * FIT_PAD_Y)));
+    if (contentHeight === 0) {
+        return 72;
+    }
+    const columnCount = Math.max(...columns.keys(), -1) + 1;
+    const contentWidth = columnCount * NODE_WIDTH + Math.max(0, columnCount - 1) * RANK_SEP;
+
+    const availableWidth = Math.max(100, (containerWidth.value || 1000) * (1 - 2 * PAD_X));
+    const fitZoom = contentWidth > 0 ? Math.min(1, availableWidth / contentWidth) : 1;
+
+    const LEGIBLE_FIT = 0.45;
+    const READABLE_ZOOM = 0.8;
+    const activeZoom = fitZoom >= LEGIBLE_FIT ? fitZoom : READABLE_ZOOM;
+
+    const renderedHeight = contentHeight * activeZoom;
+    return Math.min(520, Math.ceil(renderedHeight + 2 * PAD_Y_PX));
+});
+
+const fitPadding = computed(() => {
+    if (fill) {
+        return { x: PAD_X, y: 0.04 };
+    }
+    const padY = Math.max(0.01, PAD_Y_PX / bandHeight.value);
+    return { x: PAD_X, y: padY };
 });
 
 const toneOf = (job: PipelineJob): StatusTone => STATUS_TONE[job.status];
@@ -128,6 +167,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
 
 <template>
     <div
+        ref="root"
         class="relative overflow-hidden rounded-lg border border-line bg-canvas"
         :class="fill ? `h-full` : ``"
         :style="fill ? undefined : { height: `${bandHeight}px` }"
@@ -144,17 +184,17 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
             :magnify="false"
             :readable-zoom="0.8"
             :min-zoom="0.15"
-            :fit-padding="{ x: 0.04, y: FIT_PAD_Y }"
+            :fit-padding="fitPadding"
         >
             <template #node="{ node }">
                 <!-- The rows fill the card, so this is where the graph learns which job the pointer is on. -->
-                <div class="relative flex h-full w-full flex-col py-1">
+                <div class="relative flex h-full w-full flex-col justify-center py-1.5">
                     <!-- The trace's own card, ringed whole: see focusedCard. -->
                     <span v-if="node.id === focusedCard" class="pointer-events-none absolute inset-0 rounded-md ring-1 ring-inset ring-link"></span>
                     <div
                         v-for="member in node.data.jobs"
                         :key="member.id"
-                        class="relative flex items-center gap-1.5 pl-2.5 pr-2"
+                        class="relative flex items-center gap-2 pl-3 pr-2.5"
                         :class="toneOf(member.job).tint"
                         :style="{ height: `${JOB_ROW_HEIGHT}px` }"
                         @mouseenter="hovered = member.id"
