@@ -1,5 +1,5 @@
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
-import { openFailures } from "./ciStreaks";
+import { failureStreaks } from "./ciStreaks";
 
 /* WHICH REPOSITORY THE BOARD LEADS WITH, and which ones stop costing a card.
  *
@@ -23,8 +23,8 @@ import { openFailures } from "./ciStreaks";
 export interface RepoStanding {
     readonly repo: CiRepo;
     readonly runs: readonly PipelineRun[];
-    // Branches whose last word is red, NOT failed runs, the edge-not-level rule the whole extension runs on
-    // (ciStreaks.ts). Three failures inside one breakage are one thing to fix, and the rail says "1".
+    // Branches whose last commit is red, NOT failed runs (ciStreaks.ts). Three failures inside one breakage
+    // are one thing to fix, and so are two workflows failing on the same commit: the rail says "1".
     readonly failing: number;
     readonly running: number;
     // Nothing to show: no runs, and no warning explaining why there are none.
@@ -49,14 +49,14 @@ const rank = (standing: Omit<RepoStanding, `silent`>): number => {
 export const repoStandings = (repos: readonly CiRepo[], runs: readonly PipelineRun[]): RepoStanding[] => {
     // Across every repository, once: a streak is decided per branch, so scoping this to one repo first would
     // give the same answer at N times the cost.
-    const open = [...openFailures(runs)];
+    const broken = failureStreaks(runs);
     return repos
         .map((repo) => {
             const mine = runs.filter((run) => run.repo === repo.repo);
             const standing = {
                 repo,
                 runs: mine,
-                failing: open.filter((run) => run.repo === repo.repo).length,
+                failing: broken.filter((streak) => streak.repo === repo.repo).length,
                 running: mine.filter((run) => run.status === `running`).length,
                 latest: Math.max(0, ...mine.map((run) => run.createdAt)),
             };

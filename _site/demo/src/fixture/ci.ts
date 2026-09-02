@@ -216,10 +216,9 @@ export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] 
     return run.host === `gitlab` ? gitlabJobs(run.createdAt, failing) : githubJobs(run.createdAt, failing);
 };
 
-// When the owner last read the board. Older than the failure above, so the rail badge that brought them
-// here is telling the truth, and `POST /ci/seen` clears it, exactly as it does against a real daemon.
-export const ciRunsResponse = (now: number, seenAt: number | undefined): CiRunsResponse => ({
+// The failure above is the newest word on its branch, so the rail badge a visitor arrives to is telling the
+// truth, and it stays lit for as long as that is the state, exactly as against a real daemon.
+export const ciRunsResponse = (now: number): CiRunsResponse => ({
     repos: CI_REPOS,
     runs: ciRuns(now),
-    ...(seenAt === undefined ? {} : { seenAt }),
 });

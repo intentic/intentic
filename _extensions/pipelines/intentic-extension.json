@@ -13,8 +13,7 @@
             "POST /ci/runs/rerun",
             "POST /ci/runs/cancel",
             "POST /ci/runs/jobs",
-            "POST /ci/fix",
-            "POST /ci/seen"
+            "POST /ci/fix"
         ]
     },
     "contributes": {

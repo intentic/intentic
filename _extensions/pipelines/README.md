@@ -6,7 +6,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
 
 - List pipeline runs for the repos that map to CI projects, with their jobs.
 - Draw a run's job graph, so a failure's blast radius is visible rather than inferred.
-- Tell a one-off failure from a streak, and badge only what deserves it.
+- Say whether a branch is red RIGHT NOW, on its last commit rather than on its last run, and keep saying it
+  until a commit passes.
 - Lead with the repository that needs a person, and keep the quiet ones out of the way without losing them.
 
 ## Key files
@@ -19,7 +20,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
   identically-wired jobs into one card.
 - [src/PipelineDagGraph.vue](src/PipelineDagGraph.vue): that graph on a canvas, with the hover that traces one
   job's line through the run.
-- [src/ciStreaks.ts](src/ciStreaks.ts), the distinction the badge rests on: a flake versus a broken main.
+- [src/ciStreaks.ts](src/ciStreaks.ts), the rule the badge rests on: a branch's head COMMIT, red if any of its
+  runs failed.
 - [src/failureHistory.ts](src/failureHistory.ts): what has failed before, so a repeat reads as one.
 - [src/statusVisual.ts](src/statusVisual.ts): one mapping from status to appearance.
 
@@ -31,8 +33,14 @@ inside the view rather than gating the tile.
 
 ## Conventions & gotchas
 
-- A red run is not automatically news. `ciStreaks.ts` exists because badging every failure trains the eye to skip
-  the badge, which costs more than the missed signal it was meant to catch.
+- A branch is judged on its LAST COMMIT, not its last run. One push fires every workflow the repo has, they
+  start in the same second, and reading the branch off whichever run carried the newest timestamp let a green
+  sibling hide a red one: the rail's badge blinked out while main was broken. Any failure among a commit's runs
+  makes that commit red.
+- The badge is a STATE, not a piece of news: it stays lit for as long as a branch's last commit is red and
+  clears when a later commit passes. It used to clear when you opened the board, which meant the one surface
+  that could say "main is still broken" went dark after a glance. What keeps the number from becoming noise is
+  its shape, one per broken branch however many runs or commits deep the breakage is, not a read marker.
 - Which repository the board shows is a picker in the TOP BAR, the same control Documentation picks its
   repository with, and "All repositories" is where it opens: the first question a CI board answers is "is
   anything red anywhere". It was a 16rem rail of counts down the left, and the reason it is not any more is what
@@ -40,7 +48,7 @@ inside the view rather than gating the tile.
   made once a session was costing the diagram the width it needed to be read. Each row of the picker still
   carries its repository's whole standing (`standingNote`, failing branches first, so the clause worth reading is
   the one that survives truncation), the sections below are ordered worst-first whatever is picked, and the
-  sidebar badge still says when something went red while you were elsewhere.
+  sidebar badge still says that a branch is red wherever you are.
 - A repository with no runs is a picker row under "No runs yet", not a card in the body. A repository with a
   `hookWarning` is a card: the warning is usually the reason it looks silent, so hiding it would hide the answer
   along with the question.

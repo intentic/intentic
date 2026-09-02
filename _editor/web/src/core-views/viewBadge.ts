@@ -13,8 +13,8 @@ import type { ViewBadge } from "@intentic/extension-api";
  *
  * It matters for `danger` specifically because of WHAT SHAPE each tone arrives in. Almost every badge in the
  * rail is an `info` count. The one `warning` is a glyph (Deployments' "can't reach Komodo"), so it already reads
- * as different without any colour. `danger` is a bare COUNT, ext-pipelines' unacknowledged CI breakages, the
- * only claimant in the app, so it was a small number sitting exactly where every other small number sits.
+ * as different without any colour. `danger` is a bare COUNT, ext-pipelines' broken branches, the only claimant
+ * in the app, so it was a small number sitting exactly where every other small number sits.
  *
  * The old wash also FAILED WCAG AA outright in light mode: danger-600 text on a 15% danger wash measured
  * 3.67:1 against the 4.5:1 floor (dark scraped by at 4.95:1). So this is a contrast fix, not only a loudness one.

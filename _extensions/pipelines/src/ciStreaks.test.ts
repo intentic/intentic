@@ -1,18 +1,21 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { failureStreaks, openFailures, streakTooltip, supersededBy, unseenStreaks } from "./ciStreaks";
+import { failureStreaks, openFailures, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
-/* The rail badge's two derivations. Both exist to answer "is this news?", and both are worth pinning down
- * because the failure mode is silent: a badge that counts the wrong thing still renders a plausible number. */
+/* The rail badge's derivations. Both answer "is this branch red right now?", and both are worth pinning down
+ * because the failure mode is silent: a badge that counts the wrong thing still renders a plausible number.
+ *
+ * `sha` defaults to one per run, so a test spells out a stream of commits unless it says otherwise. Passing the
+ * SAME sha to several runs is the case this file exists for: one push firing several workflows. */
 
-const run = (runId: number, status: PipelineRun["status"], createdAt: number, branch = "main"): PipelineRun => ({
+const run = (runId: number, status: PipelineRun["status"], createdAt: number, branch = "main", sha = `sha${runId}`): PipelineRun => ({
     repo: "intentic",
     host: "gitlab",
     project: "radarsu/intentic",
     runId,
     branch,
-    sha: "abc1234",
+    sha,
     status,
     url: "u",
     createdAt,
@@ -21,13 +24,34 @@ const run = (runId: number, status: PipelineRun["status"], createdAt: number, br
 test("a streak starts when the branch went red, not at its newest failure", () => {
     const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40), run(3, "failed", 30), run(4, "success", 20)]);
     expect(streaks).toHaveLength(1);
-    // The whole anti-spam property: `since` is the OLDEST consecutive failure, so later failures inside the
-    // same breakage don't move it forward and can't re-badge.
-    expect(streaks[0]).toMatchObject({ repo: "intentic", branch: "main", since: 30, runs: 3 });
+    // `since` is the OLDEST failure still inside the breakage, so it names when the branch went red rather
+    // than when it last said so.
+    expect(streaks[0]).toMatchObject({ repo: "intentic", branch: "main", sha: "sha1", since: 30, commits: 3, runs: 3 });
 });
 
 test("green at the head ends the streak", () => {
     expect(failureStreaks([run(1, "success", 50), run(2, "failed", 40)])).toHaveLength(0);
+});
+
+/* THE BUG THIS RULE EXISTS FOR. One push fires every workflow the repo has, they start in the same second, and
+ * which of them carries the newest timestamp is a coin toss. Reading the branch off the newest RUN let a green
+ * sibling hide a red one and blinked the badge out while main was broken. */
+test("a commit with one failed run among green siblings is a red commit", () => {
+    const push = [run(1, "success", 51, "main", "head"), run(2, "failed", 50, "main", "head"), run(3, "success", 49, "main", "head")];
+    expect(failureStreaks(push)).toHaveLength(1);
+    // Whichever sibling the vendor happens to timestamp last.
+    expect(failureStreaks([run(1, "failed", 49, "main", "head"), run(2, "success", 50, "main", "head")])).toHaveLength(1);
+    // And the streak is one commit deep however many of its runs are red: the count is branches, not failures.
+    const both = failureStreaks([run(1, "failed", 51, "main", "head"), run(2, "failed", 50, "main", "head")]);
+    expect(both[0]).toMatchObject({ commits: 1, runs: 2 });
+});
+
+test("a later commit that passes clean is what ends it", () => {
+    const runs = [run(1, "success", 60, "main", "fixed"), run(2, "failed", 50, "main", "broke"), run(3, "success", 51, "main", "broke")];
+    expect(failureStreaks(runs)).toHaveLength(0);
+    // A newer commit that is itself mixed is not a recovery: the branch is still red, now at the new commit.
+    const mixed = failureStreaks([run(4, "failed", 60, "main", "next"), run(5, "success", 61, "main", "next"), ...runs.slice(1)]);
+    expect(mixed[0]).toMatchObject({ sha: "next", commits: 2, since: 50 });
 });
 
 test("canceled, skipped and running are not verdicts: they neither start nor break a streak", () => {
@@ -38,7 +62,7 @@ test("canceled, skipped and running are not verdicts: they neither start nor bre
         run(4, "failed", 40),
         run(5, "success", 30),
     ]);
-    expect(streaks[0]).toMatchObject({ since: 40, runs: 2 });
+    expect(streaks[0]).toMatchObject({ since: 40, commits: 2, runs: 2 });
     // A push that supersedes a running pipeline must not read as a recovery.
     expect(failureStreaks([run(1, "running", 60), run(2, "failed", 50)])).toHaveLength(1);
 });
@@ -47,13 +71,14 @@ test("streaks are per branch", () => {
     expect(failureStreaks([run(1, "failed", 50, "main"), run(2, "failed", 40, "feat"), run(3, "success", 30, "feat")])).toHaveLength(2);
 });
 
-test("a breakage badges once and then stays quiet however many more runs fail", () => {
-    const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40), run(3, "failed", 30), run(4, "success", 20)]);
-    expect(unseenStreaks(streaks, undefined)).toHaveLength(1); // never opened the view
-    expect(unseenStreaks(streaks, 25)).toHaveLength(1); // last looked before it broke
-    // Looked after it broke: two further runs have failed since, and the rail stays silent. This is the rule
-    // that keeps the badge usable on a repo where most runs fail.
-    expect(unseenStreaks(streaks, 35)).toHaveLength(0);
+test("a breakage keeps badging for as long as it is broken", () => {
+    // No read marker anywhere in the derivation: the same runs give the same answer however often the board
+    // has been opened. Looking at a broken branch is not fixing it.
+    const runs = [run(1, "failed", 50), run(2, "failed", 40), run(3, "failed", 30), run(4, "success", 20)];
+    expect(failureStreaks(runs)).toHaveLength(1);
+    expect(failureStreaks(runs)).toEqual(failureStreaks(runs));
+    // It clears the only way the condition does: a commit that passes.
+    expect(failureStreaks([run(5, "success", 60), ...runs])).toHaveLength(0);
 });
 
 test("the tooltip names the branch while there is only one", () => {
@@ -62,22 +87,33 @@ test("the tooltip names the branch while there is only one", () => {
     const single = streakTooltip(streaks);
     expect(single).toContain(only?.repo);
     expect(single).toContain(only?.branch);
-    expect(single).toContain(String(only?.runs));
+    expect(single).toContain(String(only?.commits));
+    // One commit is the ordinary breakage, and the tooltip names the commit rather than counting to one.
+    const oneCommit = streakTooltip(failureStreaks([run(1, "failed", 50, "main", "abcdef1234")]));
+    expect(oneCommit).toContain("abcdef1");
     const multi = streakTooltip([...streaks, ...failureStreaks([run(3, "failed", 50, "feat")])]);
     expect(multi).toContain(String(2));
     expect(multi).not.toBe(single);
 });
 
-/* The row tiering's two derivations. Same "green at the head" rule as the badge, read per run: which failure
- * still asks to be fixed, and which one a later green closed. */
+/* The row tiering's two derivations. Same head-commit rule as the badge, read per run: which failure still
+ * asks to be fixed, and which one a later green closed. */
 
-test("only the head of a red branch is an open failure: the ones behind it are the same breakage", () => {
+test("only the head commit's failures are open: the ones behind them are the same breakage", () => {
     const head = run(1, "failed", 50);
     const behind = run(2, "failed", 40);
     const open = openFailures([head, behind, run(3, "success", 30)]);
     expect(open.has(head)).toBe(true);
     // Unfixed, but not a second thing to fix: flagging it too is how one breakage becomes three demands.
     expect(open.has(behind)).toBe(false);
+});
+
+test("two workflows failing on the head commit are two open failures", () => {
+    // Two pipelines, two logs, two fix buttons: the thing this must not do is silently drop one of them.
+    const first = run(1, "failed", 50, "main", "head");
+    const second = run(2, "failed", 49, "main", "head");
+    const open = openFailures([first, second, run(3, "success", 48, "main", "head")]);
+    expect([...open]).toEqual([first, second]);
 });
 
 test("a branch that recovered has no open failure", () => {
@@ -94,6 +130,17 @@ test("a failure is superseded by the run that recovered the branch, not by the n
     expect(superseded.get(failure)).toBe(recovery);
     // A success supersedes nothing, and the green rows carry no chip.
     expect(superseded.get(recovery)).toBeUndefined();
+});
+
+test("a green run on the failure's OWN commit does not supersede it", () => {
+    // A different workflow passing on the same broken code is not a recovery, and saying "superseded by" of it
+    // would tell the reader their breakage is over while it is the branch's last word.
+    const failure = run(1, "failed", 50, "main", "head");
+    const sibling = run(2, "success", 51, "main", "head");
+    expect(supersededBy([sibling, failure]).size).toBe(0);
+    // The next commit passing clean is: that is the one that closed it.
+    const recovery = run(3, "success", 60, "main", "next");
+    expect(supersededBy([recovery, sibling, failure]).get(failure)).toBe(recovery);
 });
 
 test("a failure with nothing green after it is not superseded", () => {

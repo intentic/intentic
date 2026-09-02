@@ -124,22 +124,8 @@ export const CiRunsResponseSchema = z.object({
     repos: z.array(CiRepoSchema).describe("Which workspace repositories are wired to a forge, and how each one's notifications are set up."),
     // Newest first, across all mapped repos.
     runs: z.array(PipelineRunSchema).describe("Runs across all of them, newest first."),
-    // When the owner last opened the pipelines view. Rides the runs response so the rail can decide what is
-    // NEW without a second call, a breakage older than this has already been seen and must not badge again.
-    // Absent ⇒ never opened, so everything counts as unseen.
-    seenAt: z
-        .number()
-        .optional()
-        .describe(
-            "When this was last looked at, in milliseconds, so a badge can tell new breakages from ones already read without a second call. Absent means never, so everything counts as new.",
-        ),
 });
 export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
-// Stamping the view as read hands back the timestamp it wrote, so the client updates without a refetch.
-export const CiSeenResponseSchema = z.object({
-    seenAt: z.number().describe("The timestamp that was written, handed back so a caller can update without asking again."),
-});
-export type CiSeenResponse = z.infer<typeof CiSeenResponseSchema>;
 // rerun/cancel/fix address a run by repo + vendor id; the daemon re-resolves repo → project + token per call,
 // so a stale card can't act on a project the workspace no longer maps to.
 export const CiRunParamSchema = z.object({

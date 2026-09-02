@@ -8,6 +8,9 @@ import { objectParse } from "../store/unknown-keys.js";
 // a failure after a success as `pipeline_broken`, across daemon restarts, and the poller's memory of which
 // runs it has already announced. It carries a secret, so the file rides the CONTROL_PLANE_ENTRIES denylist
 // (workspace-files.ts) like capabilities.json.
+//
+// Nothing records that the owner has LOOKED at the board: the rail badge stands for the state of CI, not for
+// unread news, so the only thing that clears it is a commit that passes (ext-pipelines' ciStreaks.ts).
 
 // Branches come and go; without pruning a busy workspace's file grows forever. Oldest-touched entries drop
 // past this, a branch quiet for that long has no meaningful "was failing" memory anyway.
@@ -33,12 +36,6 @@ const CiStateSchema = z.object({
      * different fact, a repo polled when it had no finished runs, and stays empty rather than re-seeding.
      * Bounded by the workspace's repo count, so it needs no pruning of its own. */
     announced: z.record(z.string(), z.array(z.number())).optional(),
-    // When the owner last LOOKED at the pipelines view. Lives here rather than in a browser, on the same
-    // reasoning the agents registry records `seenAt` daemon-side: whether a breakage has been seen is a fact
-    // about the work, so clearing site data or picking up the phone must not resurrect a badge already dealt
-    // with. One timestamp for the whole surface, the view shows every repo at once, so looking at it is one
-    // act of reading, not one per run.
-    seenAt: z.number().optional(),
 });
 type CiState = z.infer<typeof CiStateSchema>;
 
@@ -53,10 +50,6 @@ export interface CiStore {
     readonly announcedRuns: (repo: string) => Promise<number[] | undefined>;
     // Newest-first; older ids past ANNOUNCED_KEPT are forgotten.
     readonly recordAnnounced: (repo: string, runIds: readonly number[]) => Promise<void>;
-    // Undefined until the view has been opened once, which reads as "everything is news", the right answer
-    // for a surface the owner has never looked at.
-    readonly seenAt: () => Promise<number | undefined>;
-    readonly markSeen: (at: number) => Promise<void>;
 }
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
@@ -96,10 +89,6 @@ export const fileCiStore = (path: string): CiStore => {
                 ...minted(state),
                 announced: { ...state.announced, [repo]: [...new Set(runIds)].slice(0, ANNOUNCED_KEPT) },
             }));
-        },
-        seenAt: async () => (await file.read()).seenAt,
-        markSeen: async (at) => {
-            await file.update((state) => ({ ...minted(state), seenAt: at }));
         },
     };
 };

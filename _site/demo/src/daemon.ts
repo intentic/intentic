@@ -7,7 +7,6 @@ import {
     type BrowsersList,
     ChoreLedgerWriteSchema,
     type CiJobsResponse,
-    type CiSeenResponse,
     type Info,
     type Model,
     type OauthAccount,
@@ -94,9 +93,6 @@ const STARTED_AT = Date.now();
  * How much of the cast it starts with is the demo mode's call (mode.ts), the fleet fixture stays the whole
  * roster, and a mode is a view onto it. */
 const roster = { agents: fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true), rev: 1 };
-// When the pipelines board was last read. Seeded just before the newest breakage, so the rail badge a visitor
-// arrives to is honest, and opening the view stamps it away, as it does against a real daemon.
-let ciSeenAt = STARTED_AT - 35 * 60_000;
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
 
@@ -423,13 +419,13 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/settings/rule-firings`, () => json({})],
     [`GET`, `/vpn`, () => json({ networks: [] })],
 
-    /* CI. The board is real data (fixture/ci.ts) and its read state is real state: opening the view stamps
-     * `/ci/seen`, which is what clears the rail's breakage badge. What a recording cannot do is act on someone
-     * else's pipeline, so rerun, cancel and Fix-with-agent refuse in the daemon's own error shape, the view
-     * renders that line above the board, which is the whole point of refusing rather than pretending. */
-    [`GET`, `/ci/runs`, () => json(ciRunsResponse(Date.now(), ciSeenAt))],
+    /* CI. The board is real data (fixture/ci.ts), and the rail's breakage badge is a fact about that data
+     * rather than about this visitor: the broken branch is broken for as long as the fixture says so, exactly
+     * as against a real daemon. What a recording cannot do is act on someone else's pipeline, so rerun, cancel
+     * and Fix-with-agent refuse in the daemon's own error shape, the view renders that line above the board,
+     * which is the whole point of refusing rather than pretending. */
+    [`GET`, `/ci/runs`, () => json(ciRunsResponse(Date.now()))],
     [`POST`, `/ci/runs/jobs`, ciJobsRoute],
-    [`POST`, `/ci/seen`, () => json({ seenAt: (ciSeenAt = Date.now()) } satisfies CiSeenResponse)],
     [`POST`, `/ci/runs/rerun`, () => refuse(`This is the demo workspace: rerunning would start a pipeline on a repo that isn't yours.`)],
     [`POST`, `/ci/runs/cancel`, () => refuse(`This is the demo workspace: there is no live pipeline to cancel.`)],
     [

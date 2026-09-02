@@ -28,7 +28,8 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                        * either lands or doesn't", which is the whole of what the tile reports. */
                       [{ key: `pipelines`, title: `Pipelines`, icon: `bolt` }]
                     : [],
-            // Unacknowledged breakages only, see ciStreaks.ts for why this counts streaks and not failures.
+            // Branches whose last commit is red, for as long as it is: see ciStreaks.ts for why this counts
+            // broken branches rather than failed runs, and why looking at the board does not clear it.
             badge: () => ciBadge(),
             /* The board's opening read, into the same entry observed by usePipelines and filled by the badge's
              * poll. The host schedules it at the rail band: a wish for spare time, never competition for work

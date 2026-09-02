@@ -16,8 +16,7 @@ import {
     type AgentRunChoice,
     type TallyItem,
 } from "@intentic/extension-ui";
-import { computed, onMounted, ref } from "vue";
-import { markPipelinesSeen } from "./ciAttention";
+import { computed, ref } from "vue";
 import { openFailures, supersededBy } from "./ciStreaks";
 import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
@@ -33,11 +32,6 @@ import { usePipelines } from "./usePipelines";
 
 const api = host();
 const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
-
-// Opening the view IS reading it: stamp read state so the rail stops flagging breakages now on screen. Only
-// on mount: re-stamping as runs stream in would swallow a failure that lands while the tab sits in the
-// background, which is exactly the one the badge exists for.
-onMounted(() => void markPipelinesSeen());
 
 /* WHICH REPOSITORY THE BOARD IS SCOPED TO LIVES IN THE URL, so "is intentic red" is a link somebody can be sent.
  * Derived from the query rather than mirrored into a ref: one direction of flow, and Back/Forward work for free.
@@ -74,11 +68,11 @@ const scopedRuns = computed<readonly PipelineRun[]>(() => (scope.value === undef
  * taking the width from had to be panned to be read. Documentation picks its repository from the top bar
  * already, so this is the app's one answer to "which repo am I looking at" rather than a second one.
  *
- * Nothing is lost with the column. ONE NUMBER PER ROW, still BROKEN BRANCHES (ciStreaks' edge-not-level rule, so
- * a repository three runs deep in one breakage says one and not three), now the picker row's own annotation, and
- * still absent in the silent group, where "0 failing" would be a claim about a repository nobody has heard from.
- * The sections below are ordered worst-first whatever is picked, and the sidebar badge still says when something
- * has gone red while you were elsewhere.
+ * Nothing is lost with the column. ONE NUMBER PER ROW, still BROKEN BRANCHES (ciStreaks' rule, so a repository
+ * three commits deep in one breakage says one and not three), now the picker row's own annotation, and still
+ * absent in the silent group, where "0 failing" would be a claim about a repository nobody has heard from.
+ * The sections below are ordered worst-first whatever is picked, and the sidebar badge still says a branch is
+ * red wherever you are.
  *
  * The repositories with no runs at all are a LABELLED GROUP at the bottom rather than rows mixed into the list:
  * an empty repository and a healthy one both show nothing, and the heading is what tells them apart. */

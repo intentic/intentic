@@ -1,7 +1,7 @@
-import { type CiRunsResponse, CiSeenResponseSchema } from "@intentic/sandbox-contract";
+import type { CiRunsResponse } from "@intentic/sandbox-contract";
 import type { ViewBadge } from "@intentic/extension-api";
 import { sandboxPoll } from "@intentic/extension-api";
-import { failureStreaks, streakTooltip, unseenStreaks } from "./ciStreaks";
+import { failureStreaks, streakTooltip } from "./ciStreaks";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
@@ -29,29 +29,18 @@ const { state: runs, start: startCiAttention } = sandboxPoll<CiRunsResponse>({
 // Started by activate() so the badge is live from login, and disposed with the extension.
 export { startCiAttention };
 
-// Read inside the host's render computed, touching `runs` here is what repaints the tile.
+/* Read inside the host's render computed, touching `runs` here is what repaints the tile.
+ *
+ * BROKEN BRANCHES, and it stays lit for as long as they are broken. There is no read marker: opening the view
+ * is not a fix, and a rail that goes quiet on a glance leaves the one surface that could say "main is still
+ * red" saying nothing for the rest of the day. It clears when CI does, a later commit that passes (ciStreaks
+ * has the full argument, and the shape that keeps the number from becoming noise). */
 export const ciBadge = (): ViewBadge | undefined => {
-    const unseen = unseenStreaks(failureStreaks(runs.value.runs), runs.value.seenAt);
-    if (unseen.length === 0) {
+    const streaks = failureStreaks(runs.value.runs);
+    if (streaks.length === 0) {
         return undefined;
     }
     // The rail's only `danger`: everything else there counts things waiting for you, this one says something
     // is broken. It is worth the distinct colour precisely because nothing else claims it.
-    return { count: unseen.length, tone: `danger`, tooltip: streakTooltip(unseen) };
-};
-
-// Called when the view is opened. Stamps read state daemon-side and folds the answer straight into the local
-// copy, so the badge clears on the spot instead of at the next poll.
-export const markPipelinesSeen = async (): Promise<void> => {
-    try {
-        const api = host();
-        if (!api.sandbox.reachable()) {
-            return;
-        }
-        const { seenAt } = CiSeenResponseSchema.parse(await api.sandbox.json(`/ci/seen`, { method: `POST` }));
-        runs.value = { ...runs.value, seenAt };
-    } catch {
-        // Best-effort, like the agents board's markSeen: a failed write only means the badge returns on the
-        // next poll, which is a far smaller harm than an error surfacing for a background bookkeeping call.
-    }
+    return { count: streaks.length, tone: `danger`, tooltip: streakTooltip(streaks) };
 };

@@ -5,7 +5,6 @@ import {
     CiJobsResponseSchema,
     CiRunParamSchema,
     CiRunsResponseSchema,
-    CiSeenResponseSchema,
 } from "../schemas/ci.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -61,16 +60,4 @@ export const ciContract = {
         })
         .input(CiFixParamSchema)
         .output(CiFixResponseSchema),
-    // "I have looked at the pipelines", what silences the rail badge for breakages already read. No input:
-    // the surface is read as a whole, and the daemon stamps its own clock so a skewed browser can't mark
-    // future failures as already seen.
-    seen: oc
-        .route({
-            method: "POST",
-            path: "/ci/seen",
-            summary: "Mark the pipelines as read",
-            description:
-                "Silences the badge for breakages already looked at. Takes nothing, because the view is read as a whole, and the daemon stamps its own clock so a browser with the wrong time cannot mark future failures as already seen.",
-        })
-        .output(CiSeenResponseSchema),
 };
