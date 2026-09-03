@@ -239,7 +239,7 @@ test("agents.search matches titles and later lines, across the archive", async (
      * store answers "default"), not what the request asked for — these turns name no account at all, which is
      * the shape every automation, channel mention and webchat turn arrives in.
      *
-     * `toEqual` and not `toMatchObject`, which is what makes the ABSENCE of `stoppedShort` an assertion: these
+     * `toEqual` and not `toMatchObject`, which is what makes the ABSENCE of `ending` an assertion: these
      * turns finished on their own, so there is nothing to pick up, and a chat that opened one wearing the
      * continue strip would be offering to carry on work that is done. */
     expect(await client.agents.transcript({ id: "conv1" })).toEqual({
@@ -302,6 +302,44 @@ test("agents.search matches titles and later lines, across the archive", async (
     expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2, indexing: false });
 
     expect(await client.agents.search({ query: "nothing here" })).toEqual({ matches: [], scanned: 2, indexing: false });
+});
+
+/* THE ENDING A REOPENED CHAT IS HANDED, for the ending that reliably outlives the window that met it.
+ *
+ * "Claude usage limit reached. Send again once it resets." is a wait measured in hours, so the person who comes
+ * back to that chat is almost never the window that watched it refuse. While this route answered with a boolean
+ * it could say "a Stop, or a daemon killed under the turn" and nothing else, which made the longest wait the one
+ * ending that reached a reopened tab as silence: no strip, no reset instant, no press, and the way on was the
+ * user typing "Continue" — the appended message the daemon's hold exists to make unnecessary.
+ *
+ * So the route reports the hold it is actually keeping (`pendingLimit`, the same map agent.resume fires from)
+ * rather than the summary's flag, which is what a press can act on: the two part company across a daemon
+ * restart, and promising a re-run that answers NOT_FOUND is how an offer stops being trusted.
+ *
+ * `ran: false` is the ordinary shape and the one worth pinning: an allowance already spent refuses the turn's
+ * FIRST request, so there is no "work so far" for the strip to promise. */
+test("the transcript reports a spent allowance as a held ending, so a window that never saw it can offer the re-run", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "session", sessionId: "sess-spent" };
+                    yield { kind: "error", code: "rate_limit", message: "Claude usage limit reached. Send again once it resets." };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "rewrite the reconcile engine", conversationId: "conv-spent" });
+
+    const transcript = await client.agents.transcript({ id: "conv-spent" });
+    expect(transcript.ending).toEqual({ reason: "limit", held: { ran: false } });
+    /* No `resetsAt` and no `scheduled`, and both absences are the honest answer rather than a gap in the
+     * fixture: this provider published no reopening hour (so a countdown would be a guess the reader plans
+     * around), and nothing armed a resend (so the strip offers the press instead of reporting somebody else's
+     * appointment). Keys, not values: the client branches on the field existing at all. */
+    expect(Object.keys(transcript.ending!)).toEqual(["reason", "held"]);
 });
 
 test("agents.search reads the daemon transcript for a provider with no SDK prompt store", async () => {

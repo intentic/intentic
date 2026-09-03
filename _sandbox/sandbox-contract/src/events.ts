@@ -637,6 +637,48 @@ export const SessionTranscriptSchema = z.object({
             "The conversation, in order. Each block of the agent's prose is its own message with the tools that block introduced, which is what reproduces the way it actually unfolded.",
         ),
 });
+/* HOW A TURN THAT LEFT WORK BEHIND ENDED, as the daemon has it, for whoever asks and however long after.
+ *
+ * One shape for every ending that leaves finished work behind a live session, because they are one situation
+ * with one answer (a press) and they differ only in what can honestly be said about WHEN and what the press
+ * DOES. The client folds this straight into its pick-up state (chat/pickUp.ts), which is why the field names
+ * line up: a second vocabulary between the two halves is how they came to disagree in the first place.
+ *
+ * IT USED TO BE A BOOLEAN, and the boolean is what left the longest wait uncovered. One flag could only say
+ * "a Stop, or a daemon killed under it", so a spent allowance, the one ending that reliably OUTLIVES the
+ * window that hit it, reached a reopened tab as nothing at all: no strip, no countdown, no press, and the user
+ * typing the word by hand hours later. It could not say more without these three facts, and each of them
+ * changes what the surface may promise:
+ *
+ *   · `resetsAt` is the only honest "not before this" any ending knows, and it is the whole of what a chat
+ *     reopened the next morning wants to be told;
+ *   · `held` is what makes the press cheap. The daemon keeps the refused turn whole, so continuing RE-RUNS it
+ *     and adds nothing to the conversation; without this the same press appends a message reading "Continue",
+ *     which is exactly the transcript pollution the press exists to prevent, and `ran` separates a turn that
+ *     got somewhere from one the allowance refused at the door (two different sentences);
+ *   · `scheduled` says somebody else is already bringing this turn back, so the surface REPORTS a wait instead
+ *     of offering one, and no local automation races the daemon's own pass for it. */
+export const TurnEndingSchema = z.object({
+    reason: z
+        .enum(["stopped", "limit", "outage"])
+        .describe(
+            "Which ending left the work here: a Stop or a daemon killed under the turn, a spent usage allowance, or a provider that refused it.",
+        ),
+    resetsAt: z
+        .number()
+        .optional()
+        .describe("When the spent allowance reopens, in epoch seconds. Absent for every ending that names no instant, and for a provider that publishes none."),
+    held: z
+        .object({ ran: z.boolean().describe("Whether the held turn got anywhere before it was refused, which is a different sentence from one refused at the door.") })
+        .optional()
+        .describe("Present when the daemon still holds the refused turn whole, so a press re-runs it rather than appending a message after it."),
+    scheduled: z
+        .boolean()
+        .optional()
+        .describe("Whether something other than the user is already booked to send this turn again, so the surface reports the wait instead of offering a press."),
+});
+export type TurnEnding = z.infer<typeof TurnEndingSchema>;
+
 /* THE RECORD A REOPENED TAB IS REBUILT FROM: the messages, plus what the session behind them is BOUND to.
  *
  * A provider session is minted on one runtime under one credential, and it resumes only there, so a client
@@ -655,7 +697,7 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
         .string()
         .optional()
         .describe("Which stored account it belongs to, as the daemon resolved it. Absent when no stored account paid for the turn."),
-    /* AND HOW THE LAST TURN ENDED, for the one ending that leaves the client something to OFFER rather than
+    /* AND HOW THE LAST TURN ENDED, for the endings that leave the client something to OFFER rather than
      * something to draw: work half done behind a session that is perfectly alive, where the only thing missing
      * is somebody saying carry on.
      *
@@ -665,12 +707,9 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
      * a reload that dropped the tab, and the same stopped session came back with no way on but typing the word
      * by hand, which is precisely what the press exists to spare. The daemon is the one party that knows this
      * about a conversation whoever asks and however long after, so it is the one that says it. */
-    stoppedShort: z
-        .boolean()
-        .optional()
-        .describe(
-            "Whether the last turn stopped before it finished, by a Stop or by the daemon dying under it, so the work is half done and continuing it is one press. Absent for a conversation whose last turn ended on its own.",
-        ),
+    ending: TurnEndingSchema.optional().describe(
+        "How the last turn ended, when it left work behind that one press finishes. Absent for a conversation whose last turn ended on its own, and for the failures that name something to repair first.",
+    ),
 });
 
 /* WHAT A PUBLISHED CONVERSATION'S PAGE IS HANDED, the whole of it, baked into the page as one JSON block.

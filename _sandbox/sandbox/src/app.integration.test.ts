@@ -1125,7 +1125,7 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
      * existed only where somebody had been looking: this same session opened tomorrow, or on another device, or
      * after the Stop was pressed on the board with the chat closed, came back offering nothing but the composer
      * and the word typed by hand. The daemon is the only party that still knows, so the daemon is asked. */
-    expect(await client.agents.transcript({ id: "conv1" })).toMatchObject({ stoppedShort: true });
+    expect(await client.agents.transcript({ id: "conv1" })).toMatchObject({ ending: { reason: "stopped" } });
 
     // A stop with nothing running is still NOT_FOUND: the client retires its own control on that answer.
     expect(await errorCode(client.agent.stop({ conversationId: "conv1" }))).toBe("NOT_FOUND");

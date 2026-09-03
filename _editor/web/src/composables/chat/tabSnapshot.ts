@@ -1,6 +1,5 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { Conversation } from "./conversation";
-import type { PickUp, PickUpReason } from "./pickUp";
 import type { TurnPick } from "./turnDefaults";
 import type { SessionRef } from "./turnRequest";
 import { forgetWindowState, readWindowState, writeWindowState } from "../windowStore";
@@ -58,13 +57,18 @@ export interface StoredTab {
     // like `fast`, and for a stronger reason than the picks above: it is armed precisely for the stops nobody is
     // sitting there for, so a reload dropping it would silently end the unattended run it was turned on for.
     readonly autoContinue?: boolean;
-    /* THE STOPPED TURN ITSELF (Conversation.pickUp), which used to die with the tab and take the offer with it.
+    /* THE STOPPED TURN ITSELF IS NOT HERE, and its absence is deliberate enough to be worth a note, because it
+     * used to be and the argument for persisting it looked sound: a spent allowance resets hours out, reliably
+     * outliving the window that hit it, so an offer kept only in memory was gone by the time it became pressable.
      *
-     * Persisting it matters most for the ending that waits longest: a spent allowance resets hours out, reliably
-     * outliving the window that hit it, so an offer held only in memory was guaranteed to be gone by the time it
-     * became pressable. The daemon holds the session either way; what a reload lost was the client's knowledge
-     * that there was anything to pick up. Absent on every chat whose last turn finished. */
-    readonly pickUp?: PickUp;
+     * What that copy could not carry is whether the daemon is STILL HOLDING the turn, which is the whole of what
+     * the press means. A restored `{ limit, readyAt }` re-offered a press that then appended a message reading
+     * "Continue" — the exact transcript pollution the hold exists to prevent — and disabled itself until a reset
+     * instant that the held turn makes irrelevant anyway (pickUp.ts's pickUpReady).
+     *
+     * The daemon says all of it now, whoever asks and however long after (AgentTranscriptSchema.ending), and a
+     * registered tab re-reads that on every hydrate. Two copies of one fact where only one of them can be right
+     * is worse than one copy that arrives a beat later. */
     // The automatic-tier veto (Conversation.tierHold), per TAB like `fast` and for its reason: a property of
     // this chat, never a remembered default. The daemon also persists it per conversation, so this only bridges
     // the reload gap for a chat that has not sent a turn since flipping it.
@@ -127,7 +131,6 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     thinking: conversation.thinking.value,
     fast: conversation.fast.value,
     autoContinue: conversation.autoContinue.value,
-    pickUp: conversation.pickUp.value,
     tierHold: conversation.tierHold.value,
     tier: conversation.lastTier.value,
     harness: conversation.harness.value,
@@ -198,25 +201,6 @@ const readMovedFrom = (raw: unknown): { movedFrom?: TurnPick } => {
 // one the user had switched off.
 const readFlag = <K extends string>(key: K, raw: unknown): { [P in K]?: boolean } =>
     typeof raw === `boolean` ? ({ [key]: raw } as { [P in K]?: boolean }) : {};
-
-const PICK_UP_REASONS: readonly PickUpReason[] = [`stopped`, `limit`, `outage`];
-
-/* The stopped turn, read back. `readyAt` survives because it is the whole value of persisting this: an
- * allowance reset is an absolute instant and stays true across a reload.
- *
- * `automatic` deliberately does NOT. It means "something outside this window is already bringing the turn
- * back", and the thing watching for that arrival was this window's own probe, which the reload ended. Restoring
- * it would count down to an instant already past and promise an arrival nobody is waiting for; dropped, the tab
- * comes back saying what is still true, that the turn is here and one press picks it up. */
-const readPickUp = (raw: unknown): { pickUp?: PickUp } => {
-    const entry = typeof raw === `object` && raw !== null ? (raw as Record<string, unknown>) : undefined;
-    const reason = PICK_UP_REASONS.find((candidate) => candidate === entry?.[`reason`]);
-    if (reason === undefined) {
-        return {};
-    }
-    const readyAt = entry?.[`readyAt`];
-    return { pickUp: { reason, ...(typeof readyAt === `number` && Number.isFinite(readyAt) ? { readyAt } : {}) } };
-};
 
 /* The session, read back WHOLE or not at all: what it is bound to is what it is read for, so an entry missing
  * its provider or its runtime names a session nothing can decide with, and completing it from the tab's own
@@ -297,7 +281,6 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readFlag(`fast`, raw[`fast`]),
         ...readFlag(`autoContinue`, raw[`autoContinue`]),
         ...readFlag(`tierHold`, raw[`tierHold`]),
-        ...readPickUp(raw[`pickUp`]),
         ...readTier(raw[`tier`]),
         ...readHarness(raw[`harness`]),
         ...readSession(raw[`session`]),

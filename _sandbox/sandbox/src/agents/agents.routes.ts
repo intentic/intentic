@@ -1,7 +1,9 @@
 import { errorMessage } from "@intentic/base/errors";
-import { agentsContract, type AgentChange, type AgentRepoChanges, capabilitiesOf } from "@intentic/sandbox-contract";
+import { agentsContract, type AgentChange, type AgentRepoChanges, capabilitiesOf, type TurnEnding } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
+import { opt } from "../agent/opt.js";
+import { pendingLimitFailure } from "../agent/turn-resume.js";
 import { cancelWatchersFor } from "../agent/watchers.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
@@ -76,23 +78,64 @@ export const createAgentsRoutes = (services: Services) => {
      * first turn, the one most likely to be opened, would otherwise have none. */
     const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): string | undefined =>
         capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? services.agents.sessionIdOf(agent.id) : undefined;
-    /* WHETHER THIS CONVERSATION'S LAST TURN STOPPED BEFORE IT FINISHED, the one fact a reopened tab needs to
-     * offer the press instead of asking for the word (AgentTranscriptSchema.stoppedShort).
+    /* HOW THIS CONVERSATION'S LAST TURN ENDED, when it left work behind: everything a reopened tab needs to
+     * offer the press instead of asking for the word (AgentTranscriptSchema.ending).
      *
      * Off the PROJECTED status, never `entry.status`: the entry carries `interrupted` for the whole of a running
      * turn, on purpose, so that a daemon dying under it leaves the right mark (agents-store.ts), and reading it
      * raw would tell every client opening a working agent that its turn had stopped. `get` is the same
      * projection the roster publishes, so the chat and the card cannot disagree about the same session.
      *
-     * TWO ENDINGS, and they are the two the daemon knows leave finished work behind a live session: a Stop
-     * somebody pressed, and a turn its daemon was killed under. Deliberately not the failures that name
-     * something to REPAIR (a dead credential, a model the provider does not serve) — continuing those re-fails
-     * by construction, and an offer that re-fails teaches people to stop trusting the offer. A spent allowance
-     * is left out for a narrower reason: the press it wants is a re-run of the held turn, and what the strip
-     * says about it turns on whether that turn got anywhere, which no record here keeps. */
-    const stoppedShort = (id: string): boolean => {
-        const status = services.agents.get(id)?.status;
-        return status === "stopped" || status === "interrupted";
+     * FOUR ENDINGS, and the two that had to be added are the two that outlive the window that met them.
+     *
+     * A STOP somebody pressed and a turn its DAEMON WAS KILLED UNDER were the whole of this answer while it was
+     * a boolean, and they are the two the record has always been able to state on its own.
+     *
+     * A SPENT ALLOWANCE is the one this was written for. It was left out on the grounds that the strip's
+     * sentence turns on whether the refused turn got anywhere, which the summary does not keep — true, and the
+     * wrong conclusion: `pendingLimit` keeps exactly that, one import away, and the ending that reliably lasts
+     * eight hours was therefore the ending most likely to be met by a window that had not been watching. So it
+     * reached a reopened chat as nothing at all, and the press it wants (a re-run of the held turn, adding
+     * nothing to the transcript) was replaced by a person typing "Continue" into the composer, which is the
+     * appended message the hold exists to avoid.
+     *
+     * A PROVIDER OUTAGE is the same offer with nothing to promise about timing: the daemon's breaker may have
+     * spent its attempts, so what the record can honestly say is that the turn is here and a press picks it up.
+     *
+     * Deliberately not the failures that name something to REPAIR (a dead credential, a seat nobody enabled, a
+     * model the provider does not serve). Continuing those re-fails by construction, and an offer that re-fails
+     * teaches people to stop trusting the offer. */
+    const endingOf = (id: string): TurnEnding | undefined => {
+        const summary = services.agents.get(id);
+        if (summary === undefined) {
+            return undefined;
+        }
+        if (summary.status === "stopped" || summary.status === "interrupted") {
+            return { reason: "stopped" };
+        }
+        // Every reading below describes the failure the card is CURRENTLY reporting, which is the only state
+        // that publishes `failureCode` at all (agents-registry's reportedFailure): a turn since resumed, landed
+        // or overtaken has had the whole account of its death dropped, and answering off a stale one would
+        // offer a press against a turn that is no longer the last word.
+        if (summary.status !== "error") {
+            return undefined;
+        }
+        if (summary.failureCode === "rate_limit") {
+            /* The LIVE hold, not the summary's `limitHeld` flag, and the difference is what the press means. The
+             * flag says the frame carried a hold when the turn died; the map says the daemon can still act on
+             * one now, and it alone carries `ran`. They part company exactly where it matters most — a daemon
+             * restarted overnight drops every held turn (agents-registry strips `limitHeld` on load, and this
+             * map goes with the process), so reading the flag would promise a re-run that answers NOT_FOUND and
+             * send the user back to typing the word. */
+            const held = pendingLimitFailure(id);
+            return {
+                reason: "limit",
+                ...(summary.limitResetsAt !== undefined ? { resetsAt: summary.limitResetsAt } : {}),
+                ...(held !== undefined ? { held: { ran: held.ran } } : {}),
+                ...(summary.limitScheduled === true ? { scheduled: true } : {}),
+            };
+        }
+        return summary.failureCode === "provider-outage" ? { reason: "outage" } : undefined;
     };
     // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
     // literal is structurally fine while missing a route, so a handler deleted in passing (which is how
@@ -205,8 +248,8 @@ export const createAgentsRoutes = (services: Services) => {
                       }
                     : {}),
                 // ...and how the last turn ENDED, which is what lets a tab opened anywhere offer the press the
-                // window that watched it stop used to keep to itself (see stoppedShort).
-                ...(stoppedShort(input.id) ? { stoppedShort: true } : {}),
+                // window that watched it stop used to keep to itself (see endingOf).
+                ...opt("ending", endingOf(input.id)),
                 messages,
             };
         }),

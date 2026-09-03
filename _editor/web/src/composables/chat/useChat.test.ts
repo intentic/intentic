@@ -1678,12 +1678,12 @@ describe(`hydrating a conversation whose turn is still running`, () => {
  * on the board with the chat closed (agentActions.stopAgent posts the cancel straight to the daemon), a session
  * stopped on another device, a tab closed and reopened from its card, a turn the daemon was killed under. All of
  * them left a chat whose only way on was typing "Continue" by hand, which is the one thing the press exists to
- * spare. The daemon says how the last turn ended now (AgentTranscriptSchema.stoppedShort), and hydration takes
- * it: the offer is a property of the conversation from here on, whoever opens it and whenever. */
+ * spare. The daemon says how the last turn ended now (AgentTranscriptSchema.ending), and hydration takes it:
+ * the offer is a property of the conversation from here on, whoever opens it and whenever. */
 describe(`opening a session whose last turn stopped short`, () => {
     const STOPPED = {
         sessionId: `sess-stopped`,
-        stoppedShort: true,
+        ending: { reason: `stopped` },
         messages: [
             { role: `user`, text: `rewrite the reconcile engine` },
             { role: `assistant`, text: `Started on the reducer.` },
@@ -1715,6 +1715,49 @@ describe(`opening a session whose last turn stopped short`, () => {
         // `stopped` and not one of the endings that know more: a record says the turn did not finish and nothing
         // else, which is exactly what the strip's plainest sentence and a live press are drawn from.
         await vi.waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `stopped` }));
+    });
+
+    /* THE ENDING THAT OUTLIVES ITS WINDOW BY HOURS, and therefore the one a reopened tab meets most often.
+     *
+     * "Claude usage limit reached. Send again once it resets." is a wait, not a crash: the daemon keeps the
+     * refused turn whole and the allowance comes back in the morning, by which time the window that hit it is
+     * long gone. While the record could only say a bare "it stopped short", every one of those chats reopened
+     * with no strip at all, and the way on was the user typing the word — which, for this ending above all, is
+     * the wrong way through: the daemon is HOLDING the turn, so a press re-runs it and adds nothing, where the
+     * typed word appends a message the model then reads back as a question it declined to answer.
+     *
+     * So all four facts are asserted, because each one drives a different thing the strip may say or do: the
+     * reason picks the sentence, the reset instant is the countdown, `held` is what makes the press a re-run,
+     * and the absence of `automatic` is what keeps it an OFFER rather than a report of somebody else's wait. */
+    it(`offers the held re-run on a chat reopened after a spent allowance`, async () => {
+        daemonReads({ ...STOPPED, ending: { reason: `limit`, resetsAt: 4_200, held: { ran: false } } });
+
+        const conversation = openAgentConversation({ id: `spent-overnight`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        // Seconds on the wire, milliseconds in the client: every instant the pick-up compares against Date.now().
+        await vi.waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: 4_200_000, held: { ran: false } }));
+    });
+
+    /* A FIRE ALREADY BOOKED reads as a report rather than an offer, and it needs the hour to be one: the daemon's
+     * limit pass fires once, at the instant the provider published, so `scheduled` without a `resetsAt` is a
+     * booking with nothing to aim at and must not become a countdown to nothing. */
+    it(`counts down instead of offering when the daemon has already booked the resend`, async () => {
+        daemonReads({ ...STOPPED, ending: { reason: `limit`, resetsAt: 9_000, held: { ran: true }, scheduled: true } });
+
+        const conversation = openAgentConversation({ id: `booked-for-the-reset`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await vi.waitFor(() =>
+            expect(conversation.pickUp.value).toEqual({
+                reason: `limit`,
+                readyAt: 9_000_000,
+                held: { ran: true },
+                automatic: { at: 9_000_000 },
+            }),
+        );
     });
 
     // The commonest ending by far, and the one this must stay silent about: a chat that offered to continue

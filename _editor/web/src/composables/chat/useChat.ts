@@ -29,6 +29,7 @@ import { claimClosedDrafts, forgetClosedDraft, keepClosedDraft } from "./closedD
 import { drawsChat, elsewhereStrip, publishStrip } from "./chatEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
+import type { PickUp } from "./pickUp";
 import {
     accountsLoaded,
     providerAccounts,
@@ -310,12 +311,9 @@ const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.autoContinue !== undefined) {
         conversation.autoContinue.value = tab.autoContinue;
     }
-    // ...and the stopped turn the switch would act on, for the same reason and one more: the ending that waits
-    // longest (a spent allowance) reliably outlives the window that hit it, so an offer kept only in memory was
-    // certain to be gone by the time it became pressable (see StoredTab.pickUp).
-    if (tab.pickUp !== undefined) {
-        conversation.pickUp.value = tab.pickUp;
-    }
+    // The stopped turn that switch would act on does NOT come back from here, and it used to: the daemon is the
+    // one party that knows whether the refused turn is still held, and only a held turn makes the press free
+    // (see StoredTab, and adoptEnding below, which takes the record's own account of the ending).
     if (tab.effort !== undefined) {
         conversation.effortPick.value = tab.effort;
     }
@@ -2094,8 +2092,8 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     // next turn resumes what the user is looking at. History-menu tabs still mean one exact runtime session.
     let restored: RestoredMessage[] | undefined;
     // How the last turn ENDED, as the daemon has it, applied once the transcript below is in place: an offer to
-    // carry on belongs under the work it is offering to carry on (see Conversation.adoptStoppedTurn).
-    let stoppedShort = false;
+    // carry on belongs under the work it is offering to carry on (see Conversation.adoptEnding).
+    let ending: PickUp | undefined;
     if (conversation.registered.value) {
         const transcript = await fetchAgentTranscript(conversation);
         if (transcript === undefined) {
@@ -2120,7 +2118,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
             setConversations(conversations.value, activeId.value, `unlatch-registered`);
         } else {
             restored = transcript.messages;
-            stoppedShort = transcript.stoppedShort === true;
+            ending = transcript.ending;
             /* THE SESSION AS THE DAEMON HAS IT, binding included, which is the only place the binding exists.
              *
              * This used to build the ref out of the TAB's own picks, and a tab's picks are what its NEXT turn
@@ -2172,7 +2170,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
      * pane a tab holds for the length of this read. Handed the verdict rather than gated on it: what a record
      * can and cannot settle about a chat in front of the user is the conversation's own judgement, and it
      * refuses this for a live turn, an empty transcript, or a pick-up its stream already armed (adoptEnding). */
-    conversation.adoptEnding(stoppedShort);
+    conversation.adoptEnding(ending);
     return true;
 };
 

@@ -1,3 +1,4 @@
+import type { TurnEnding } from "@intentic/sandbox-contract";
 import { formatReset, formatWait } from "./usageStatus";
 
 /* A TURN WORTH PICKING BACK UP, one state for every ending that leaves finished work behind a live session.
@@ -34,6 +35,28 @@ export interface PickUp {
      * that refused the turn's first request and left no work at all. */
     readonly held?: { readonly ran: boolean };
 }
+
+/* THE SAME STATE, AS THE DAEMON HAS IT (AgentTranscriptSchema.ending), for every window that did not watch the
+ * turn die: a reload, another device, a tab reopened from the board, a Stop pressed with the chat closed.
+ *
+ * The two halves are the same answer arrived at from either end, which is why this is a projection rather than
+ * a second reading: the stream builds a pick-up from the failure frame (turnFailures.ts) and the record builds
+ * the identical one from what the daemon kept. Only the units differ — the wire counts seconds like every other
+ * instant the daemon publishes, the client counts milliseconds like every other instant it compares to
+ * Date.now() — and folding that here is what keeps the conversion out of the four surfaces downstream.
+ *
+ * `scheduled` becomes `automatic` only WITH an instant to aim at, the same guard armLimitResume applies at the
+ * other end: a booking with no hour is not an appointment, and a countdown to nothing would replace a live press
+ * with a promise nobody can keep. */
+export const pickUpOf = (ending: TurnEnding): PickUp => {
+    const readyAt = ending.resetsAt === undefined ? undefined : ending.resetsAt * 1_000;
+    return {
+        reason: ending.reason,
+        ...(readyAt === undefined ? {} : { readyAt }),
+        ...(ending.held === undefined ? {} : { held: { ran: ending.held.ran } }),
+        ...(ending.scheduled === true && readyAt !== undefined ? { automatic: { at: readyAt } } : {}),
+    };
+};
 
 /* Past this far out a wall-clock time reads better than a countdown: a weekly allowance resets on Tuesday, and
  * "about 4300 min" is a number nobody can act on. Under it the relative wait wins, for the reason formatWait

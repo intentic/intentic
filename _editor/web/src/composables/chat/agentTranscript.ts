@@ -1,8 +1,9 @@
-import type { AgentHarness, AgentProvider, RestoredMessage } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, RestoredMessage, TurnEnding } from "@intentic/sandbox-contract";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxRequestVia } from "../sandbox/sandboxClient";
 import { supportsRoute } from "../sandbox/useDaemonRoutes";
 import { AGENTS } from "../queryKeys";
+import { type PickUp, pickUpOf } from "./pickUp";
 import type { SessionRef } from "./turnRequest";
 
 /* A REGISTERED AGENT'S TRANSCRIPT AS A CACHED READ, so the browser asks the daemon for it ONCE however many
@@ -36,9 +37,10 @@ import type { SessionRef } from "./turnRequest";
  * resumes or opens a fresh session, answered by the side that cannot know. Present only when the daemon named
  * all of it.
  *
- * `stoppedShort` is the daemon's account of how the last turn ENDED, and the reason a tab that never watched it
- * stop can still offer to pick it up (Conversation.adoptEnding). */
-export type AgentTranscript = { readonly session?: SessionRef; readonly stoppedShort?: boolean; readonly messages: RestoredMessage[] } | "gone";
+ * `ending` is the daemon's account of how the last turn ENDED, already folded into the pick-up state the chat
+ * decides with, and the reason a tab that never watched it stop can still offer to pick it up
+ * (Conversation.adoptEnding). */
+export type AgentTranscript = { readonly session?: SessionRef; readonly ending?: PickUp; readonly messages: RestoredMessage[] } | "gone";
 
 /* `at` is the box holding the conversation, undefined for the active one, and it belongs in the KEY as much as
  * in the request: two sandboxes can hold one conversation id (a workspace cloned onto a second machine, a
@@ -70,7 +72,7 @@ const read = async (conversationId: string, at: string | undefined): Promise<Age
         provider?: AgentProvider;
         harness?: AgentHarness;
         account?: string;
-        stoppedShort?: boolean;
+        ending?: TurnEnding;
         messages?: RestoredMessage[];
     };
     /* The id WITH the runtime that minted it, or nothing: a session that cannot say where it resumes cannot
@@ -84,12 +86,12 @@ const read = async (conversationId: string, at: string | undefined): Promise<Age
         body.sessionId !== undefined && body.provider !== undefined && body.harness !== undefined
             ? { id: body.sessionId, provider: body.provider, harness: body.harness, account: body.account }
             : undefined;
-    /* A daemon older than this browser sends nothing here, which reads as "not stopped" and is the right way for
-     * this to be missing: the offer is an ADDITION to a chat that works without it, so a box that cannot say
-     * leaves the tab exactly where it was before the field existed. */
+    /* A daemon older than this browser sends nothing here, which reads as "nothing to pick up" and is the right
+     * way for this to be missing: the offer is an ADDITION to a chat that works without it, so a box that cannot
+     * say leaves the tab exactly where it was before the field existed. */
     return {
         ...(bound !== undefined ? { session: bound } : {}),
-        ...(body.stoppedShort === true ? { stoppedShort: true } : {}),
+        ...(body.ending !== undefined ? { ending: pickUpOf(body.ending) } : {}),
         messages: body.messages ?? [],
     };
 };

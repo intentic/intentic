@@ -1327,9 +1327,10 @@ export class Conversation {
         this.persist(true);
     }
 
-    /* HOW THE LAST TURN ENDED, AS THE DAEMON HAS IT (AgentTranscriptSchema.stoppedShort), taken by a tab that
-     * never watched it happen. `stoppedShort` is the whole of the record's verdict: the turn stopped before its
-     * work did, so the offer to carry on is armed from that instead of from a stream nobody was watching.
+    /* HOW THE LAST TURN ENDED, AS THE DAEMON HAS IT (AgentTranscriptSchema.ending), taken by a tab that never
+     * watched it happen. The record's verdict arrives as the whole pick-up rather than a bare "it stopped", so
+     * the offer a reopened chat makes is the same offer the watching window made, down to the countdown and to
+     * what the press DOES.
      *
      * `pickUp` used to be arm-able ONLY by the stream that watched a turn die, which quietly made the press a
      * property of the WINDOW rather than of the conversation. Every other way of arriving at the same stopped
@@ -1338,26 +1339,40 @@ export class Conversation {
      * reopened from its card, a turn the daemon was killed under. All of them left a chat whose only way on was
      * typing the word by hand, which is the exact typing this state exists to do once.
      *
+     * AND THE ENDING THAT NEEDED IT MOST WAS THE ONE THE RECORD COULD NOT DESCRIBE. A spent allowance reopens
+     * hours later, so the window that met it is reliably gone by the time the press would work; while the wire
+     * carried a boolean it could not say "limit" at all, and the chat someone came back to in the morning
+     * offered nothing. Now it says which ending, when the allowance is due, whether the turn is still held, and
+     * whether a fire is already booked — the four facts that separate a live press from a countdown and a
+     * re-run from an appended "Continue".
+     *
      * FOUR REFUSALS, and each is a case where the record is not the last word:
-     *   · the record says the turn ENDED ON ITS OWN, which is most of them and the reason this is asked here
-     *     rather than at the call site: what a record can settle about the chat in front of the user is this
-     *     conversation's judgement to make;
+     *   · the record says the turn ENDED ON ITS OWN (no ending at all), which is most of them and the reason
+     *     this is asked here rather than at the call site: what a record can settle about the chat in front of
+     *     the user is this conversation's judgement to make;
      *   · a LIVE turn, where the record describes the turn BEFORE it and beginTurn has already cleared the
      *     pick-up for the one that is running;
-     *   · a pick-up ALREADY HELD, which came from the stream and knows strictly more than a record can (a held
-     *     turn, an allowance's reset instant, an automation already bringing it back), so flattening it to a
-     *     bare `stopped` would take the countdown off the strip and the re-run out of the press;
+     *   · a pick-up ALREADY HELD, which is this window's own live reading of the same turn and carries the
+     *     things only a window can know: an outage resume ARMED here, with a probe running and a countdown on
+     *     screen, is state no record has (the daemon's breaker is per-conversation but the arming is a press
+     *     made in this pane), and a hydrate that overwrote it would take the countdown off a chat that really
+     *     is waiting on one. Hydrates are frequent; this one costs nothing to refuse, because the case the
+     *     record is here for, a window that never saw the turn stop, has no pick-up to refuse;
      *   · an EMPTY transcript, an offer to continue nothing, whose press would open the conversation with the
      *     word "Continue".
+     *
+     * A HELD TURN THE DAEMON HAS SINCE FORGOTTEN is the one disagreement that survives those refusals, and it
+     * needs no guard here: the press asks the daemon, and a daemon no longer holding the turn answers NOT_FOUND,
+     * which resumeHeldTurn already reads as "say carry on instead".
      *
      * It arms the OFFER and never the automation, even on a chat with auto-continue switched on: that switch
      * takes the stop in front of it when it is PRESSED (see setAutoContinue), and opening a tab is not a press.
      * A turn started because somebody looked at a chat is the one thing an unattended continuation must not do. */
-    adoptEnding(stoppedShort: boolean): void {
-        if (!stoppedShort || this.streaming.value || this.pickUp.value !== undefined || this.messages.value.length === 0) {
+    adoptEnding(ending: PickUp | undefined): void {
+        if (ending === undefined || this.streaming.value || this.pickUp.value !== undefined || this.messages.value.length === 0) {
             return;
         }
-        this.pickUp.value = { reason: `stopped` };
+        this.pickUp.value = ending;
     }
 
     // Restore a past conversation pulled from the history menu: build bubbles from the stored transcript and
