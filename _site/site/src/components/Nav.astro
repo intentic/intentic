@@ -7,8 +7,14 @@
  *
  * OPENING A MENU IS BOTH HOVER AND CLICK. Hover alone strands anyone on a touch screen or a keyboard —
  * the trigger is a real <button> with `aria-expanded`, the script below toggles it, and CSS opens the
- * panel on hover or focus-within as well. Escape closes, a click outside closes, and with no JavaScript
+ * panel on hover or focus-within as well. Escape closes, a tap outside closes, and with no JavaScript
  * at all hover and keyboard focus still work.
+ *
+ * THE FOUR MENUS SHARE ONE PANEL. Server-rendered, each menu carries its own — that is the no-script
+ * fallback — and on load the script lifts every panel's body into a single carved surface hung under the
+ * bar, which travels and resizes from trigger to trigger while its contents cross-fade. Two panels can
+ * no longer be on screen at once, which is exactly what the old arrangement got wrong: a clicked panel
+ * stayed latched open while hover opened its neighbour, and the pair overlapped into a mess.
  *
  * THE PANEL DROPS THE SCREENSHOT RAIL the old bar carried. A lit photograph is the one thing that cannot
  * be dressed as carved stone, and what the rail was decorating — eight labelled destinations with a line
@@ -72,62 +78,78 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                 </svg>
                             </button>
 
-                            <div class="menu-panel" id={`bar-menu-${index}`}>
-                                <div class="menu-rows" style={`--menu-cols:${entry.sections.length}`}>
-                                    {entry.sections.map((section) => (
-                                        <div class="menu-section">
-                                            {section.label && <div class="eyebrow eyebrow-bare menu-section-label">{section.label}</div>}
-                                            <ul>
-                                                {section.items.map((item) => (
-                                                    <li>
-                                                        <a
-                                                            href={item.href}
-                                                            class:list={["menu-item", { current: isCurrentPage(item.href), "menu-item--flat": !item.description }]}
-                                                            target={item.external ? "_blank" : undefined}
-                                                            rel={item.external ? "noopener" : undefined}
-                                                        >
-                                                            {item.icon && NAV_ICONS[item.icon] && (
-                                                                <svg
-                                                                    class="menu-item-icon"
-                                                                    viewBox="0 0 24 24"
-                                                                    fill="none"
-                                                                    stroke="currentColor"
-                                                                    stroke-width="1.6"
-                                                                    stroke-linecap="round"
-                                                                    stroke-linejoin="round"
-                                                                    aria-hidden="true"
-                                                                    set:html={NAV_ICONS[item.icon]}
-                                                                />
-                                                            )}
-                                                            <span class="menu-item-text">
-                                                                <span class="menu-item-label">{item.label}</span>
-                                                                {item.description && <span class="menu-item-blurb">{item.description}</span>}
-                                                            </span>
-                                                        </a>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    ))}
-                                </div>
+                            {/* THE PANEL IS CHROME AND A BODY, and the split is what lets the script share one
+                                chrome between all four menus: it moves the BODY into the flyout below the bar and
+                                drops the empty frame. The `id` rides on the body so the trigger's `aria-controls`
+                                survives the move. */}
+                            <div class="menu-panel">
+                                <div class="menu-panel-body" id={`bar-menu-${index}`}>
+                                    <div class="menu-rows" style={`--menu-cols:${entry.sections.length}`}>
+                                        {entry.sections.map((section) => (
+                                            <div class="menu-section">
+                                                {section.label && <div class="eyebrow eyebrow-bare menu-section-label">{section.label}</div>}
+                                                <ul>
+                                                    {section.items.map((item) => (
+                                                        <li>
+                                                            <a
+                                                                href={item.href}
+                                                                class:list={["menu-item", { current: isCurrentPage(item.href), "menu-item--flat": !item.description }]}
+                                                                target={item.external ? "_blank" : undefined}
+                                                                rel={item.external ? "noopener" : undefined}
+                                                            >
+                                                                {item.icon && NAV_ICONS[item.icon] && (
+                                                                    <svg
+                                                                        class="menu-item-icon"
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        stroke-width="1.6"
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        aria-hidden="true"
+                                                                        set:html={NAV_ICONS[item.icon]}
+                                                                    />
+                                                                )}
+                                                                <span class="menu-item-text">
+                                                                    <span class="menu-item-label">{item.label}</span>
+                                                                    {item.description && <span class="menu-item-blurb">{item.description}</span>}
+                                                                </span>
+                                                            </a>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ))}
+                                    </div>
 
-                                {entry.action && (
-                                    <a
-                                        href={entry.action.href}
-                                        class="menu-action"
-                                        target={entry.action.external ? "_blank" : undefined}
-                                        rel={entry.action.external ? "noopener" : undefined}
-                                    >
-                                        <Lotus />
-                                        {entry.action.label}
-                                        <span aria-hidden="true">→</span>
-                                    </a>
-                                )}
+                                    {entry.action && (
+                                        <a
+                                            href={entry.action.href}
+                                            class="menu-action"
+                                            target={entry.action.external ? "_blank" : undefined}
+                                            rel={entry.action.external ? "noopener" : undefined}
+                                        >
+                                            <Lotus />
+                                            {entry.action.label}
+                                            <span aria-hidden="true">→</span>
+                                        </a>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ),
                 )
             }
+
+            {/* THE DOCK THE FOUR PANELS SHARE, rendered here rather than built by the script because Astro
+                scopes this file's styles to the elements this file renders — a div created at runtime would
+                come out of the script naked. Empty and inert until the script fills it, which is also what
+                it stays if the script never runs. */}
+            <div class="flyout">
+                <div class="flyout-shift">
+                    <div class="flyout-surface"></div>
+                </div>
+            </div>
         </nav>
 
         <div class="bar-end">
@@ -150,35 +172,253 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
 <script>
     /* Three behaviours, and none of them is load-bearing: the bar is correct with the script removed, only
-       flat rather than lifted. Hover and keyboard focus open a panel through CSS (`.menu:hover` /
-       `:focus-within`), so a browser with this blocked still navigates. */
+       flat rather than lifted, and with four separate panels opened by CSS (`.menu:hover` /
+       `:focus-within`) instead of the one that travels. A browser with this blocked still navigates. */
+
+    /* ── ONE PANEL FOR ALL FOUR MENUS ───────────────────────────────────────────────────────────────
+     *
+     * Every panel body is lifted out of its menu into a single surface docked under the bar. Opening a
+     * menu no longer paints and unpaints a slab: it MOVES the one that is already there — the surface
+     * slides to the new trigger and resizes to the new body while the bodies cross-fade through each
+     * other. Nothing about the panel's own look changes; the frame is the same carved cloth, it is just
+     * shared, so the state where two of them overlap cannot be reached.
+     *
+     * The whole dock lives INSIDE `.bar-links`, which is what makes the pointer bookkeeping small: any
+     * pointer inside a trigger or inside the open panel is inside the same subtree, so one `pointerleave`
+     * on the nav is the only place the menu closes on its own. */
+    const links = document.querySelector<HTMLElement>(".bar-links");
     const menus = [...document.querySelectorAll<HTMLElement>("[data-menu]")];
 
-    const close = (menu: HTMLElement) => {
-        menu.removeAttribute("data-open");
-        menu.querySelector("[aria-expanded]")?.setAttribute("aria-expanded", "false");
-    };
-
+    type Menu = { menu: HTMLElement; trigger: HTMLElement; page: HTMLElement };
+    const items: Menu[] = [];
     for (const menu of menus) {
-        const trigger = menu.querySelector<HTMLButtonElement>(".menu-trigger");
-        trigger?.addEventListener("click", (event) => {
-            event.preventDefault();
-            const open = menu.hasAttribute("data-open");
-            // One panel at a time: two open menus overlap, and the second to open wins the pointer.
-            menus.forEach(close);
-            if (!open) {
-                menu.setAttribute("data-open", "");
-                trigger.setAttribute("aria-expanded", "true");
-            }
-        });
+        const trigger = menu.querySelector<HTMLElement>(".menu-trigger");
+        const page = menu.querySelector<HTMLElement>(".menu-panel-body");
+        if (trigger && page) {items.push({ menu, trigger, page });}
     }
 
-    document.addEventListener("click", (event) => {
-        if (!(event.target as Element | null)?.closest("[data-menu]")) {menus.forEach(close);}
-    });
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {menus.forEach(close);}
-    });
+    const flyout = document.querySelector<HTMLElement>(".flyout");
+    const surface = document.querySelector<HTMLElement>(".flyout-surface");
+
+    if (links && flyout && surface && items.length > 0) {
+        /* Travel is instant between two open menus and deliberate from cold: a pointer crossing the bar on
+           its way somewhere else should not flash a panel, but once one is up, following the cursor is the
+           whole point. The grace on the way out covers the trip down into the panel and back. */
+        const OPEN_DELAY = 90;
+        const CLOSE_GRACE = 140;
+        const DRIFT_MS = 340;
+
+        // Tells the stylesheet the four per-menu panels are gone, so their hover rules stop applying.
+        links.setAttribute("data-enhanced", "");
+
+        for (const item of items) {
+            item.page.classList.add("flyout-page");
+            surface.append(item.page);
+            item.menu.querySelector(".menu-panel")?.remove();
+        }
+
+        // The open menu is held as the menu itself rather than as an index: there is no such thing as a
+        // half-valid one, and the index is only ever wanted for the direction of travel.
+        let open: Menu | null = null;
+        let leaving: HTMLElement | null = null;
+        let openTimer = 0;
+        let closeTimer = 0;
+        let driftTimer = 0;
+        const idle = () => {
+            window.clearTimeout(openTimer);
+            window.clearTimeout(closeTimer);
+        };
+
+        /* Where the surface goes and how big it is. The pages are `width: max-content` and out of flow, so
+           each one measures its own natural size whatever size the surface currently is — no probing, no
+           cloning. `--fx` is measured from the nav's left edge because that is the box the dock hangs in,
+           and it is clamped to the viewport so a menu near the edge cannot push the panel off screen. */
+        const place = (item: Menu) => {
+            const nav = links.getBoundingClientRect();
+            const label = item.trigger.getBoundingClientRect();
+            const size = item.page.getBoundingClientRect();
+            const edge = 12;
+            const room = Math.max(edge, window.innerWidth - edge - size.width);
+            const x = Math.min(Math.max(label.left + label.width / 2 - size.width / 2, edge), room);
+            flyout.style.setProperty("--fx", `${Math.round(x - nav.left)}px`);
+            surface.style.setProperty("--fw", `${Math.round(size.width)}px`);
+            surface.style.setProperty("--fh", `${Math.round(size.height)}px`);
+        };
+
+        const light = (i: number) => {
+            for (const [n, item] of items.entries()) {
+                item.menu.toggleAttribute("data-open", n === i);
+                item.trigger.setAttribute("aria-expanded", String(n === i));
+                item.page.toggleAttribute("data-active", n === i);
+            }
+        };
+
+        const show = (i: number) => {
+            idle();
+            const next = items[i];
+            if (!next || next === open) {return;}
+            // Which way the content drifts: with the cursor. A cold open has no direction, so it only rises.
+            flyout.style.setProperty("--dir", String(open ? Math.sign(i - items.indexOf(open)) : 0));
+
+            window.clearTimeout(driftTimer);
+            leaving?.removeAttribute("data-leaving");
+            leaving = null;
+            if (open) {
+                leaving = open.page;
+                leaving.setAttribute("data-leaving", "");
+                driftTimer = window.setTimeout(() => {
+                    leaving?.removeAttribute("data-leaving");
+                    leaving = null;
+                }, DRIFT_MS);
+                place(next);
+                light(i);
+            } else {
+                /* From closed, the panel must APPEAR where it belongs rather than slide in from whichever
+                   menu was open last. `data-instant` kills the transitions, the reflow commits the new
+                   position and body with them off, and only then does the reveal get its transitions back. */
+                flyout.setAttribute("data-instant", "");
+                place(next);
+                light(i);
+                void flyout.offsetWidth;
+                flyout.removeAttribute("data-instant");
+            }
+            open = next;
+            flyout.setAttribute("data-open", "");
+        };
+
+        /* HANDING FOCUS BACK TO A TRIGGER IS NOT ARRIVING AT ONE. Focus lands on a trigger for two very
+           different reasons — a reader tabbing onto it, which opens the menu, and this menu closing and
+           putting focus back where it started, which must not. The keyboard cannot tell them apart from
+           the event alone (both are `:focus-visible`), so the closing side says so. */
+        let restoring = false;
+        const restore = (el: HTMLElement) => {
+            restoring = true;
+            el.focus();
+            restoring = false;
+        };
+
+        /* Closing leaves the last body marked active on purpose: it fades out WITH the surface, instead of
+           blanking a beat before the frame it sits in. Focus inside the body being closed comes back to the
+           trigger it belongs to, because a hidden element cannot hold it and the browser would drop it. */
+        const hide = () => {
+            idle();
+            if (!open) {return;}
+            const home = open.trigger;
+            const holding = open.page.contains(document.activeElement);
+            open = null;
+            flyout.removeAttribute("data-open");
+            for (const item of items) {
+                item.menu.removeAttribute("data-open");
+                item.trigger.setAttribute("aria-expanded", "false");
+            }
+            if (holding) {restore(home);}
+        };
+
+        for (const link of links.querySelectorAll<HTMLElement>(".bar-link")) {
+            const i = items.findIndex((item) => item.trigger === link);
+            link.addEventListener("pointerenter", (event) => {
+                if (event.pointerType !== "mouse") {return;}
+                idle();
+                // A plain destination is not a menu: hovering one is the reader leaving, so the panel goes.
+                if (i === -1) {
+                    hide();
+                } else if (!open) {
+                    openTimer = window.setTimeout(() => show(i), OPEN_DELAY);
+                } else {
+                    show(i);
+                }
+            });
+        }
+        flyout.addEventListener("pointerenter", (event) => {
+            if (event.pointerType === "mouse") {idle();}
+        });
+        links.addEventListener("pointerleave", (event) => {
+            if (event.pointerType !== "mouse") {return;}
+            idle();
+            // A keyboard is reading the open panel: a pointer wandering off the bar is not that reader leaving.
+            if (items.some((item) => item.page.contains(document.activeElement))) {return;}
+            closeTimer = window.setTimeout(hide, CLOSE_GRACE);
+        });
+
+        // The press. It is what a touch screen has instead of hover, and it is also how a keyboard opens.
+        for (const [i, item] of items.entries()) {
+            item.trigger.addEventListener("click", (event) => {
+                event.preventDefault();
+                if (open === item) {
+                    hide();
+                } else {
+                    show(i);
+                }
+            });
+        }
+
+        links.addEventListener("focusin", (event) => {
+            const target = event.target as HTMLElement | null;
+            if (!target || restoring) {return;}
+            const i = items.findIndex((item) => item.trigger === target);
+            if (i !== -1) {
+                /* A press focuses the button too, and that press is the click handler's business — opening
+                   here as well would toggle the panel straight back shut. Only a keyboard arrival opens. */
+                if (target.matches(":focus-visible")) {show(i);}
+                return;
+            }
+            // Tabbing through the open panel keeps it; reaching any other bar link closes it.
+            if (!items.some((item) => item.page.contains(target))) {hide();}
+        });
+        links.addEventListener("focusout", (event) => {
+            const next = event.relatedTarget as Node | null;
+            if (!next || !links.contains(next)) {hide();}
+        });
+
+        /* TAB HAS TO BE STEERED, and that is the one price of sharing a panel: the dock is the last thing in
+           the bar's markup, so document order would march a keyboard past every remaining label before it
+           reached the open panel's rows — and each label opens its own menu on the way past, so the panel
+           the reader was walking into is gone before they arrive. Three redirects fix it: into the panel
+           from its trigger, back out to the trigger from the first row, and on to the next label from the
+           last one. ArrowDown does the first as well, which is what a menu is expected to answer to. */
+        links.addEventListener("keydown", (event) => {
+            if (!open) {return;}
+            if (event.key !== "Tab" && event.key !== "ArrowDown") {return;}
+            const { trigger, page } = open;
+            const rows = [...page.querySelectorAll<HTMLElement>("a[href]")];
+            const target = event.target as HTMLElement | null;
+            const first = rows[0];
+            if (!target || !first) {return;}
+
+            const into = event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey);
+            if (target === trigger && into) {
+                event.preventDefault();
+                first.focus();
+                return;
+            }
+            if (event.key !== "Tab" || !page.contains(target)) {return;}
+            const at = rows.indexOf(target);
+            if (event.shiftKey && at === 0) {
+                event.preventDefault();
+                trigger.focus();
+                return;
+            }
+            if (!event.shiftKey && at === rows.length - 1) {
+                const bar = [...links.querySelectorAll<HTMLElement>(".bar-link")];
+                const next = bar[bar.indexOf(trigger) + 1];
+                if (!next) {return;}
+                // Landing on it is what closes or switches the panel — that is the focus handler's job above.
+                event.preventDefault();
+                next.focus();
+            }
+        });
+        document.addEventListener("pointerdown", (event) => {
+            if (!links.contains(event.target as Node | null)) {hide();}
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape" || !open) {return;}
+            const trigger = open.trigger;
+            hide();
+            restore(trigger);
+        });
+        // The dock is measured from live layout, so a resize invalidates it. Cheaper to close than to chase.
+        window.addEventListener("resize", hide);
+    }
 
     /* The lift. Every page opens with the plate behind the bar, so the bar starts with no ground of its
        own and lets the carved band show through; once the page has scrolled the plate has moved out from
@@ -275,7 +515,10 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         text-shadow: 0 0 22px rgba(224, 123, 39, 0.35);
     }
 
+    /* `position: relative` because the shared flyout hangs in this box: every offset the script writes is
+       measured from the nav's left edge, so the dock cannot drift when the bar's ends change width. */
     .bar-links {
+        position: relative;
         display: flex;
         align-items: center;
         gap: 0.35rem;
@@ -312,8 +555,11 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
     .chev {
         transition: transform 0.2s ease;
     }
+    /* The chevron follows the OPEN menu, not the hovered one — with the script running, hover opens the
+       panel a beat later, and a chevron flicking over as the pointer crosses the bar reads as a twitch.
+       Without the script there is nothing to mark the state but hover, so there it turns on hover. */
     .menu[data-open] .chev,
-    .menu:hover .chev {
+    .bar-links:not([data-enhanced]) .menu:hover .chev {
         transform: rotate(180deg);
     }
 
@@ -329,16 +575,13 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
        that lets the double rule survive — see the note on the border below.
        The shadow is a `filter` rather than a `box-shadow`: `clip-path` clips everything the element paints,
        a box-shadow included, so the only way to cast one from a notched panel is to cast it from the
-       clipped result. It follows the octagon exactly, corners and all. */
-    .menu-panel {
+       clipped result. It follows the octagon exactly, corners and all.
+       ONE FACE, TWO FRAMES: the no-script panel and the shared flyout surface are the same object as far
+       as the eye is concerned, so they are the same rule. Only where they sit and how they move differs. */
+    .menu-panel,
+    .flyout-surface {
         --cut: 9px;
 
-        position: absolute;
-        top: calc(100% + 0.55rem);
-        left: 50%;
-        z-index: 10;
-        min-width: 22rem;
-        padding: 1.1rem 1.15rem 0.9rem;
         /* THE CLOTH THE PANEL IS FACED IN. A dark warm linen rather than a fill: a woven ground reads as a
            hanging stretched over the opening, and it is the one material this vocabulary did not already
            own — the walls are stone, the frames are gold, the primary control is timber.
@@ -377,6 +620,24 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             0 var(--cut)
         );
         filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 24px 34px rgba(0, 0, 0, 0.5));
+    }
+
+    /* The rows and the action, and the room around them. It is its own element because the script MOVES it:
+       this is what travels between menus, so the padding and the floor width belong to it rather than to
+       the frame it happens to be sitting in. */
+    .menu-panel-body {
+        min-width: 22rem;
+        padding: 1.1rem 1.15rem 0.9rem;
+    }
+
+    /* WITHOUT THE SCRIPT each menu keeps its own panel, hung from its own trigger and held open by hover or
+       by focus inside it. `top` leaves no dead space the pointer has to cross on its way in. The script
+       deletes these frames on load and the flyout below takes over. */
+    .menu-panel {
+        position: absolute;
+        top: calc(100% + 0.55rem);
+        left: 50%;
+        z-index: 10;
         opacity: 0;
         visibility: hidden;
         transform: translate(-50%, -0.4rem);
@@ -386,12 +647,103 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             visibility 0s linear 0.18s;
     }
     .menu:hover .menu-panel,
-    .menu:focus-within .menu-panel,
-    .menu[data-open] .menu-panel {
+    .menu:focus-within .menu-panel {
         opacity: 1;
         visibility: visible;
         transform: translate(-50%, 0);
         transition-delay: 0s;
+    }
+
+    /* ── THE FLYOUT: ONE PANEL THAT FOLLOWS THE CURSOR ───────────────────────────────────────────────
+     *
+     * Opening a second menu should not be a slab blinking out and another blinking in three inches over —
+     * that is the same reader looking at the same object, so the object MOVES. The frame slides to the new
+     * trigger and grows or shrinks to the new body's measurements; the bodies cross-fade through each
+     * other while it travels. The script writes three numbers (`--fx`, `--fw`, `--fh`) and the transitions
+     * here do the rest.
+     *
+     * The move is split across two elements on purpose: `.flyout-shift` carries the horizontal travel as a
+     * transform (composited, so the trip across the bar is free) and `.flyout-surface` carries the size,
+     * which cannot be. */
+    .flyout {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        z-index: 10;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition:
+            opacity 0.2s ease,
+            visibility 0s linear 0.2s;
+    }
+    .flyout[data-open] {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transition-delay: 0s;
+    }
+    /* The gap under the bar is PADDING ON THE MOVING PART rather than an offset, because it has to be
+       hoverable: as an offset it is a strip of live page between the trigger and the panel, and a pointer
+       travelling down through it leaves the nav and closes the thing it was reaching for. */
+    .flyout-shift {
+        padding-top: 0.55rem;
+        transform: translateX(var(--fx, 0));
+        transition: transform 0.42s cubic-bezier(0.22, 0.68, 0.24, 1);
+    }
+    /* `content-box`, so the width and height the script measured off a body land on that body exactly and
+       the carved 1px border sits outside them. */
+    .flyout-surface {
+        position: relative;
+        box-sizing: content-box;
+        width: var(--fw, 22rem);
+        height: var(--fh, 10rem);
+        transform: translateY(-0.4rem);
+        transition:
+            width 0.42s cubic-bezier(0.22, 0.68, 0.24, 1),
+            height 0.42s cubic-bezier(0.22, 0.68, 0.24, 1),
+            transform 0.2s ease;
+    }
+    .flyout[data-open] .flyout-surface {
+        transform: none;
+    }
+    /* The one frame where the panel is allowed to teleport: a cold open, which must appear at its trigger
+       instead of sliding in from whichever menu was last open. */
+    .flyout[data-instant],
+    .flyout[data-instant] .flyout-shift,
+    .flyout[data-instant] .flyout-surface,
+    .flyout[data-instant] .flyout-page {
+        transition: none;
+    }
+    /* All four bodies are stacked at the surface's origin, each sized to itself and out of flow — so the one
+       on screen never reflows while the frame around it is still moving, and every one of them can be
+       measured at any time without being shown. `--dir` is the direction the cursor travelled: the arriving
+       body drifts in from that side and the leaving body drifts out the other way, which is what makes the
+       swap read as a turn of the page rather than a dissolve. */
+    .flyout-page {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: max-content;
+        max-width: min(92vw, 46rem);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateX(calc(var(--dir, 0) * 12px));
+        transition:
+            opacity 0.16s ease,
+            transform 0.3s cubic-bezier(0.22, 0.68, 0.24, 1),
+            visibility 0s linear 0.3s;
+    }
+    .flyout-page[data-leaving] {
+        transform: translateX(calc(var(--dir, 0) * -12px));
+    }
+    .flyout-page[data-active] {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        transition:
+            opacity 0.22s ease 0.04s,
+            transform 0.34s cubic-bezier(0.22, 0.68, 0.24, 1);
     }
 
     .menu-rows {
@@ -606,7 +958,12 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .menu-panel {
+        /* The panel still opens, closes and changes contents; it just stops travelling to do it. */
+        .menu-panel,
+        .flyout,
+        .flyout-shift,
+        .flyout-surface,
+        .flyout-page {
             transition: none;
         }
         /* The icon still warms with its row; it just stops springing when it does. */
