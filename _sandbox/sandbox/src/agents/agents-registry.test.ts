@@ -1247,6 +1247,32 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.toolUses).toBe(3);
     });
 
+    /* THE TURN THE WINDOW WAS THROWN AWAY IN, which is the counter above read one turn later: a compaction
+     * summarizes away the preamble notes the turn was opened with, so the NEXT turn's plan has to say them
+     * again (turn-plan.ts). Written under the index of the turn it happened in, once however many times the
+     * loop compacts inside that turn, and persisted, because the window is regularly compacted in a turn's
+     * last minutes and the daemon is regularly restarted before the next one begins. */
+    it("files a compaction under the turn it happened in, once per turn, and persists it", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "compact", trigger: "auto" });
+        // Filed against the count as it stands DURING the turn: `turns` advances at the finish below, so the
+        // conversation's first turn is turn 0, and it is turn 1 that has to be told again.
+        expect(registry.entry("c1")?.compactedTurn).toBe(0);
+        await registry.finish("c1", 2_000);
+        expect(registry.entry("c1")?.turns).toBe(1);
+
+        await registry.begin(turn({ prompt: "again" }), 3_000);
+        registry.observe("c1", { kind: "compact", trigger: "auto" });
+        registry.observe("c1", { kind: "compact", trigger: "manual" });
+        expect(registry.entry("c1")?.compactedTurn).toBe(1);
+        await registry.finish("c1", 4_000);
+
+        expect(store.saved().find((entry) => entry.id === "c1")?.compactedTurn).toBe(1);
+    });
+
     it("liveSessionIds reports the in-flight turns' sdk sessions, the terminals list's 'still working' signal", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();

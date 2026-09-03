@@ -228,6 +228,39 @@ test("re-ensure converts pre-namespace symlinks into mount points once isolation
     expect(lstatSync(join(worktree, "pkg", "a", "node_modules")).isDirectory()).toBe(true);
 });
 
+/* AND THE FORM FOLLOWS THE TURN, not only the container, which is the half the two cases above missed.
+ *
+ * A container with CAP_SYS_ADMIN can build a namespace; only the Claude Code loop ENTERS one. A native Codex,
+ * ACP or Pi turn is cwd'd into its worktree and reaches it by working directory alone, so the empty mount
+ * point left for an overlay is never filled for it: nothing in that checkout resolves an import, and a
+ * daemon-side command in it (a `turn.ending` check) cannot find one workspace binary. It needs the symlink,
+ * in a container perfectly able to build the namespace it will not use. */
+test("a turn that enters no namespace gets the symlink even where the container could build one", async () => {
+    const { work, historyRoot } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules");
+    const capable = createAgentWorktrees({
+        workspace: workspacePaths(work),
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: { ...noIsolation(work, historyRoot), available: async () => true },
+        logger,
+        perf,
+    });
+
+    // The turn about to run enters no namespace: the mirror has to resolve on its own.
+    const created = await capable.ensure("c1", [], undefined, false);
+    const worktree = join(created.cwd, "intent");
+    expect(lstatSync(join(worktree, "node_modules")).isSymbolicLink()).toBe(true);
+    expect(await readFile(join(worktree, "node_modules", "dep", "index.js"), "utf8")).toBe("dep of root\n");
+
+    // The next turn in the same conversation is on the Claude Code loop: back to a mount point for its overlay.
+    await capable.ensure("c1", created.repos, undefined, true);
+    const entry = lstatSync(join(worktree, "node_modules"));
+    expect(entry.isSymbolicLink()).toBe(false);
+    expect(await readdir(join(worktree, "node_modules"))).toEqual([]);
+});
+
 test("re-ensure restores the symlink when isolation is lost, but never over a real install", async () => {
     const { work, historyRoot, worktrees } = await setup();
     const intent = join(work, "intent");

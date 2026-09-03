@@ -249,14 +249,36 @@ const ANCHOR_TRAILER = `echo ${ANCHOR_READY}\nexec sleep infinity`;
  * reading of "/work" that means the conversation's worktree. Verified both ways in the container: `--wd`
  * lands in the shared checkout and kills app-server, `--wdns` lands in the worktree and starts clean.
  */
+/* AND THE LOGICAL CWD IS TAKEN AWAY FROM THE ENTRANT, which is the half `--wdns` cannot do.
+ *
+ * `--wdns` sets the KERNEL's cwd after setns, and the process it execs inherits the caller's environment with
+ * it, `PWD` included. Every entrant here is launched by the daemon, whose cwd is the worktree's own path
+ * (`/history/worktrees/<id>`), so that stale `PWD` rides in. Bash validates `$PWD` at startup by comparing it
+ * with `.` and REPLACES it only when they differ, and here they cannot differ: the namespace binds the
+ * worktree over /work, so both names are the same inode and the check passes. The shell then keeps
+ * `/history/worktrees/<id>` as its logical directory, and a relative `cd` resolves against THAT.
+ *
+ * Which is a path where none of the mirrors exist. `cd intentic && pnpm verify`, the exact shape a `turn.ending`
+ * rule has, ran in a tree whose every dependency directory is an empty mount point, and reported a red tree
+ * over `prisma: not found` in a workspace whose dependencies were fully installed, twice, with `nsenter` right
+ * there in the command line. Nothing about the namespace was wrong; the shell was told where it stood by an
+ * environment variable that had outlived its truth.
+ *
+ * Unset rather than reassigned: with no `PWD` to trust, bash and every other shell take it from `getcwd()`,
+ * which is the one answer `--wdns` already made correct. `OLDPWD` goes with it, a `cd -` back into the
+ * daemon's path would be the same bug one keystroke later. */
+const NO_INHERITED_CWD = ["env", "-u", "PWD", "-u", "OLDPWD"] as const;
+
 export const nsenterArgv = (anchorPid: number, cwd: string, command: string, args: readonly string[]): { command: string; args: string[] } => ({
     command: "nsenter",
-    args: [`--mount=/proc/${anchorPid}/ns/mnt`, `--wdns=${cwd}`, "--", command, ...args],
+    args: [`--mount=/proc/${anchorPid}/ns/mnt`, `--wdns=${cwd}`, "--", ...NO_INHERITED_CWD, command, ...args],
 });
 
 // The same thing as ONE shell word, for the callers that compose a command STRING rather than an argv, the
-// Bash tool's tmux rewrite, whose pane runs a shell line. Quoted so a path with a space can't split it.
-export const nsenterPrefix = (anchorPid: number, cwd: string): string => `nsenter --mount=/proc/${anchorPid}/ns/mnt --wdns=${shellQuote(cwd)} -- `;
+// Bash tool's tmux rewrite and a rule's command, both of which run a shell line, which is exactly where an
+// inherited `PWD` decides what a relative path means. Quoted so a path with a space can't split it.
+export const nsenterPrefix = (anchorPid: number, cwd: string): string =>
+    `nsenter --mount=/proc/${anchorPid}/ns/mnt --wdns=${shellQuote(cwd)} -- ${NO_INHERITED_CWD.join(" ")} `;
 
 /* THE ONE PROCESS THAT MUST NOT BE BORN INSIDE A TURN'S NAMESPACE, the tmux server.
  *

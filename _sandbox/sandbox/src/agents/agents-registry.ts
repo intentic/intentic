@@ -1314,6 +1314,22 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 case "subagent":
                     state.pendingSubagents += 1;
                     break;
+                /* THE WINDOW WAS THROWN AWAY, filed on the entry so the next turn can be told again what this one
+                 * can no longer see (turn-plan.ts, and PersistedAgent.compactedTurn for why it is a turn index
+                 * rather than a timestamp). Written at most once per turn: the value is the turn's own index, so a
+                 * loop that compacts repeatedly inside one turn writes the same number and the guard drops it.
+                 *
+                 * Fire-and-forget, exactly like the session id above, and no broadcast: no card draws this, and a
+                 * compaction lands mid-turn where the board is already saying the only thing it can say. */
+                case "compact": {
+                    const compacted = entryOf(id);
+                    const at = compacted?.turns ?? 0;
+                    if (compacted !== undefined && compacted.compactedTurn !== at) {
+                        replace({ ...compacted, compactedTurn: at });
+                        void persist();
+                    }
+                    return;
+                }
                 case "subagent_update":
                     if (event.status === undefined) {
                         return;

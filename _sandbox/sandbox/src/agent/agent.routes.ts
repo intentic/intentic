@@ -186,6 +186,17 @@ const silentEnding = (turn: TurnSilence): string | undefined => {
     return `The turn ended with nothing to show for it: ${did}, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.`;
 };
 
+/* WILL THIS TURN ACTUALLY ENTER A NAMESPACE, in one place because three callers ask it and a fourth answer
+ * would be a way for them to disagree: the checkout's mirror form (agents/worktrees.ts linkMirrors, reached
+ * through `ensure`) and the anchor itself have to be ONE decision, or a turn is handed an empty mount point
+ * nothing will ever fill and resolves no import in its own tree.
+ *
+ * A property of the RUNTIME rather than of the container: only the Claude Code loop enters the namespace
+ * (AgentCapabilities.isolation "namespace"), while a native Codex, ACP or Pi turn is cwd'd into its worktree
+ * and reaches it by working directory alone. The defaults are the ones the turn resolves for itself. */
+const entersNamespace = (input: AgentTurn): boolean =>
+    capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").isolation === "namespace";
+
 /* …and where the frame for it goes: injected ahead of `done`, so it runs the same path a provider's own failure
  * does, the activity record, the daemon log line, the ledger's outcome, the registry's `errored`, and with it
  * the Attention lane. A second way of ending a turn badly is a second thing for each of those readers to learn,
@@ -427,7 +438,7 @@ async function* runConversationTurn(
         let remoteFailed = false;
         try {
             const entry = services.agents.entry(conversationId);
-            const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], input.worktreeBase);
+            const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], input.worktreeBase, entersNamespace(input));
             if ((entry?.repos.length ?? 0) === 0) {
                 await services.agents.recordWorktree(conversationId, worktree.repos);
             }
@@ -502,7 +513,7 @@ async function* runConversationTurn(
          * A workflow's own pinned base still wins: it pins every candidate to ONE snapshot on purpose, and a
          * fork inside one must not quietly step off it. */
         const worktreeBase = input.worktreeBase ?? (await forkWorktreeBase(services.turnAnchors, input.forkOf));
-        const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], worktreeBase);
+        const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], worktreeBase, entersNamespace(input));
         if ((entry?.repos.length ?? 0) === 0) {
             await services.agents.recordWorktree(conversationId, worktree.repos);
         }
@@ -1104,7 +1115,7 @@ async function* runTurn(
      * (agents/worktree-redirect.ts). That fallback used to be nothing at all, which is how three agents spent
      * a morning writing into the shared tree while their worktrees stayed empty. */
     const isolation: TurnPlacement | undefined =
-        worktree === undefined || capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").isolation !== "namespace"
+        worktree === undefined || !entersNamespace(input)
             ? undefined
             : await services.turnIsolation.planFor(localCwd).then(async (plan) => {
                   if (!(await services.turnIsolation.available())) {

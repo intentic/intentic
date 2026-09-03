@@ -232,7 +232,12 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const provider = input.agent ?? "claude";
     const harness = input.harness ?? "native";
     const capabilities = capabilitiesOf(provider, harness);
-    const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
+    /* WHAT THIS CONVERSATION HAS ALREADY BEEN TOLD, as the two facts the preamble's gates read: how many turns
+     * have run in it, and whether one of them threw the model's context window away (PersistedAgent.compactedTurn).
+     * Read together off one entry lookup, because every note that is said ONCE has to answer both, "is it already
+     * in the history" and "is that history still there". */
+    const entry = input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId);
+    const conversationTurns = entry?.turns ?? 0;
     // SETTINGS FIRST AND ALONE, one small local JSON read, resolved before the arms are dispatched to because
     // the composition of this turn's instructions reads it (honoured, below).
     const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
@@ -375,9 +380,32 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
      * standing in it, and an unattended wake is precisely the run with nobody around to answer it. A schedule
      * mints a fresh conversation on every fire, so this is its only turn. */
     const workspaceMapEligible = settings.workspaceMap && input.forkOf === undefined && conversationTurns === 0;
+    /* WHO GETS TOLD THAT THE CHECKS AT THE END OF A TURN RUN THEMSELVES: the opening message, and the turn after
+     * a compaction. Not every turn, which is what this used to be.
+     *
+     * ONCE, for the reason the map above is once: by the second message the note stands in the session's own
+     * history, the model can read it there, and sending it again bought nothing while costing a fraction of a
+     * turn's context per turn, forever. That is the same repetition the dependency notice and the rebase note
+     * were both walked back from, and a conversation pays for it in proportion to its own length.
+     *
+     * AND AGAIN AFTER A COMPACTION, which is the one event that makes "it is already in the history" false: the
+     * messages this note rode in on are summarized away, and what is lost is an instruction the model has to
+     * ACT on, don't run `pnpm verify` yourself, the daemon runs it when you stop. A turn that has forgotten it
+     * spends minutes re-running the suite the Stop hook is about to run anyway. `>=` rather than `===` because
+     * the read is one turn behind the write: a compaction is filed under the turn it happened in
+     * (agents-registry's `compact` case), and it is the NEXT turn that has to say the note again, so a turn
+     * whose count did not advance (an ending that ran no turn at all) errs toward telling the model twice
+     * rather than never.
+     *
+     * NOT A FORK's opening message, for the map's reason: it continues a transcript that already carries this. */
+    const turnEndingEligible =
+        (conversationTurns === 0 && input.forkOf === undefined) || (entry?.compactedTurn !== undefined && entry.compactedTurn >= conversationTurns - 1);
     const planned: TurnContext = {
         ...shared,
-        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed, terseArm, prompt, workspaceMapEligible),
+        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed, terseArm, prompt, {
+            map: workspaceMapEligible,
+            turnEnding: turnEndingEligible,
+        }),
         persona,
     };
     /* CAN THE MODEL HOLD THIS TURN AT ALL, the last gate before an arm is asked to build a request, and the only
@@ -472,12 +500,13 @@ const honoured = (
     // Which system prompt this turn runs on, with the persona's answer already resolved against the sandbox's
     // (personas.ts personaPrompt).
     prompt: { readonly mode: SystemPromptMode; readonly systemPrompt: string },
-    /* Whether this turn is the one that gets the project map (settings.workspaceMap, and the opening message of
-     * a conversation a person or a wake actually started). Decided by the caller because the gates read `input`,
-     * and spent HERE because this is the only place that knows where the run starts, the card's own folder is
-     * resolved a few lines down, and mapping /work for a run that begins inside one project is the failure the
-     * whole feature is written against. */
-    workspaceMapEligible: boolean,
+    /* WHICH SAY-IT-ONCE NOTES THIS TURN IS THE ONE TO SEND. Decided by the caller because the gates read `input`
+     * and the conversation's entry (a fork's opening message, the turn count, the last compaction); spent HERE
+     * because this is the only place that knows where the run starts, the card's own folder is resolved a few
+     * lines down, and mapping /work for a run that begins inside one project is the failure the map is written
+     * against. One record rather than a row of booleans: two positional flags of the same type, side by side,
+     * is a swap that would typecheck. */
+    send: { readonly map: boolean; readonly turnEnding: boolean },
 ): AgentRequest => {
     const { permissionMode, effort, fast, cliEnv, disallowedTools, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
@@ -526,7 +555,7 @@ const honoured = (
      * with it (the dependency notice), general to specific, each note answering a question the one before it
      * raises. `mapCwd` outside the root is dropped by the escape guard, and a dropped start folder maps the root
      * exactly as it opens the session there. */
-    const mapNote = workspaceMapEligible && mapCwd !== undefined ? workspaceMapNote({ root: mapRoot, cwd: mapCwd }) : undefined;
+    const mapNote = send.map && mapCwd !== undefined ? workspaceMapNote({ root: mapRoot, cwd: mapCwd }) : undefined;
     const notes: TurnNote[] = [
         // First of the preamble, when there is one at all: a note that says who the turn is acting as belongs
         // ahead of anything about the files or the tools it is about to use.
@@ -556,8 +585,9 @@ const honoured = (
         ...(context.iqSearchNote !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: context.iqSearchNote }] : []),
         ...(context.spawnNote !== undefined ? [{ title: SPAWN_NOTE_TITLE, text: context.spawnNote }] : []),
         /* Only the Claude Code loop executes command rules at Stop. Native runtimes must not be promised a
-         * check their fallback path does not run. */
-        ...(capabilities.runtime === "claude-code" ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
+         * check their fallback path does not run. Said on the turns that cannot already read it in their own
+         * history, which is the opening message and the first turn past a compaction (see `send.turnEnding`). */
+        ...(capabilities.runtime === "claude-code" && send.turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
     ];
     // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
     // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered
@@ -1061,15 +1091,41 @@ export const planHarnessTurn = async (
                               })
                               .catch((error: unknown) => services.logger.warn({ err: error, rule: rule.id }, "rule activity append failed"));
                       },
-                      runRuleCommand: (command: string, timeoutMs: number) =>
-                          runRuleCommand(services, {
-                              command: ruleCommandIn(command, context.base.isolation?.anchor),
+                      /* LOGGED LIKE THE PRE-PUSH CHECK IS, because the one thing this run could not answer for
+                       * itself was WHERE it ran. A `turn.ending` command that reports a red tree has two very
+                       * different causes, the work is broken, or the check never saw the workspace's installed
+                       * dependencies at all, and they are told apart by exactly one bit: whether the command
+                       * went through the turn's namespace (`anchored`). Without these lines a check that
+                       * exited 127 over a missing workspace binary left nothing in the log to name its own
+                       * cause, and the only record of it anywhere was a sentence in a model's transcript. */
+                      runRuleCommand: async (command: string, timeoutMs: number) => {
+                          const anchor = context.base.isolation?.anchor;
+                          const from = Date.now();
+                          services.logger.info(
+                              { command, anchored: anchor !== undefined, cwd: context.localCwd, session: CHECKS_SESSION },
+                              "checks: check started",
+                          );
+                          const run = await runRuleCommand(services, {
+                              command: ruleCommandIn(command, anchor),
                               timeoutMs,
                               cwd: context.localCwd,
                               session: CHECKS_SESSION,
                               window: "checks",
                               outputBytes: TURN_RULE_OUTPUT_BYTES,
-                          }),
+                          });
+                          services.logger.info(
+                              {
+                                  command,
+                                  anchored: anchor !== undefined,
+                                  status: run.status,
+                                  ...(run.exitCode !== undefined ? { exitCode: run.exitCode } : {}),
+                                  ...(run.timedOut === true ? { timedOut: true } : {}),
+                                  durationMs: Date.now() - from,
+                              },
+                              "checks: check settled",
+                          );
+                          return run;
+                      },
                       // Asked only after such a command has failed, so this costs a healthy turn nothing: a
                       // check measured while its dependency tree is being rewritten is not a verdict on the
                       // work (rules/turn-ending.ts).

@@ -118,7 +118,9 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
     expect(command).toBe(
         wrap(
             "sed -i s/a/b/ x.ts",
-            born(`nsenter --mount=/proc/4321/ns/mnt --wdns=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`),
+            // `env -u PWD -u OLDPWD`: the daemon's own logical cwd names the worktree by its /history path, and
+            // a shell that keeps it resolves every relative path outside the mirrors (agents/isolation.ts).
+            born(`nsenter --mount=/proc/4321/ns/mnt --wdns=${shellQuote("/work")} -- env -u PWD -u OLDPWD ${demoted("sed -i s/a/b/ x.ts")}`),
             "edit",
         ),
     );

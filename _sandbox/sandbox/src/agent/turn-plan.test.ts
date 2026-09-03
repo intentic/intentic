@@ -5,6 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
+import { TURN_ENDING_NOTE_HEADER } from "../rules/turn-ending-note.js";
 import type { AgentRequest } from "./agent.js";
 import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
@@ -244,6 +245,62 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
     expect(wire(grok)).toContain("## iq workspace search");
     expect(wire(grok)).toContain(".agents/skills/iq/SKILL.md");
     expect(wire(grok)).not.toContain("iq def createIgnoreScope");
+});
+
+/* WHO IS TOLD THAT THE CHECKS AT THE END OF A TURN RUN THEMSELVES, which is a question about REPETITION rather
+ * than about the note: its text has its own suite (rules/turn-ending-note.test.ts).
+ *
+ * The note is a standing instruction the model has to act on, don't run the verify yourself, the daemon runs it
+ * when you stop, and for most of its life it rode EVERY turn in a conversation. That is the repetition the
+ * dependency notice and the rebase note were each walked back from: invisible in any single message, and paid
+ * again on every message forever. By the second turn the note is above the follow-up in the session's own
+ * history, where the model can read it.
+ *
+ * Compaction is the one event that makes that false, so it is the one event that earns the note again. These
+ * four cases are the whole gate: said once, not said twice, said again after the window was thrown away, and
+ * not said forever after because a compaction happened at some point. */
+const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+    get: async () =>
+        SandboxSettingsSchema.parse({
+            rules: [{ id: "pre-land", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command: "pnpm verify" } }],
+        }),
+});
+// A conversation as the registry has it: how many turns have run, and the turn a compaction happened under
+// (PersistedAgent.compactedTurn). Every other field of the entry is unread by these gates.
+const conversationAt = (fields: { readonly turns: number; readonly compactedTurn?: number }): Services["agents"] =>
+    unstubbed<Services["agents"]>("agents", { entry: () => fields as ReturnType<Services["agents"]["entry"]> });
+
+test("the automatic checks are named on a conversation's opening message", async () => {
+    const plan = await planTurn(harnessServices({ sandboxSettings: CHECKED_SETTINGS }), turn(), context);
+
+    expect(wire(plan)).toContain(TURN_ENDING_NOTE_HEADER);
+    expect(wire(plan)).toContain("pnpm verify");
+});
+
+test("a follow-up is not charged for them again: the note stands in the session's own history", async () => {
+    const services = harnessServices({ sandboxSettings: CHECKED_SETTINGS, agents: conversationAt({ turns: 3 }) });
+
+    const plan = await planTurn(services, turn({ conversationId: "conv-1" }), context);
+
+    // Nothing in front of the user's words at all, which is what a turn that has already been told everything
+    // should cost.
+    expect(wire(plan)).toBe("do the thing");
+});
+
+test("a turn whose conversation was just compacted is told again: its history no longer holds the note", async () => {
+    const services = harnessServices({ sandboxSettings: CHECKED_SETTINGS, agents: conversationAt({ turns: 4, compactedTurn: 3 }) });
+
+    const plan = await planTurn(services, turn({ conversationId: "conv-2" }), context);
+
+    expect(wire(plan)).toContain(TURN_ENDING_NOTE_HEADER);
+});
+
+test("a compaction three turns back does not earn the note on every turn since", async () => {
+    const services = harnessServices({ sandboxSettings: CHECKED_SETTINGS, agents: conversationAt({ turns: 6, compactedTurn: 3 }) });
+
+    const plan = await planTurn(services, turn({ conversationId: "conv-3" }), context);
+
+    expect(wire(plan)).not.toContain(TURN_ENDING_NOTE_HEADER);
 });
 
 test("iq search holdout assigns one balanced arm deterministically per conversation", () => {
@@ -526,6 +583,11 @@ test("a rule's command enters the turn's namespace, and only when there is one",
     const anchored = ruleCommandIn(`cd intentic && pnpm lint`, { pid: 4242, cwd: `/work`, plan: {} as never, dispose: () => undefined });
     expect(anchored).toContain(`nsenter --mount=/proc/4242/ns/mnt`);
     expect(anchored).toContain(`--wdns=/work`);
+    /* And it does not carry the daemon's own `PWD` in with it, which is what decides where this very command's
+     * relative `cd intentic` lands: with the stale one inherited it resolved under the worktree's own path,
+     * outside every mirror mount, and the check reported a red tree over a missing workspace binary
+     * (agents/isolation.ts explains why bash keeps that value). */
+    expect(anchored).toContain(`env -u PWD -u OLDPWD`);
     // The whole line is one argument, so the `&&` is the inner shell's rather than the outer one's.
     expect(anchored).toMatch(/bash -c '.*pnpm lint.*'/u);
 

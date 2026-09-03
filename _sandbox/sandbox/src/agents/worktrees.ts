@@ -47,6 +47,10 @@ export interface AgentWorktrees {
         id: string,
         recorded: readonly { repo: string; base: string }[],
         base?: readonly { repo: string; base: string }[],
+        /* Whether the turn about to run will ENTER a namespace, which is what the mirror's form follows (see
+         * linkMirrors). Absent ⇒ the container's own answer, for the callers that are not about to run a turn
+         * (a sweep, a repair, a test). */
+        namespaced?: boolean,
     ) => Promise<ConversationWorktree>;
     // Tear down: worktree remove (before the ref goes, git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
@@ -318,15 +322,25 @@ export const createAgentWorktrees = (
     // Idempotent, an existing link, and a package the agent's branch doesn't carry, are both left alone, so
     // it re-runs on every ensure and picks up dirs an install or build produced after the checkout did.
     // Best-effort by design: a link that fails costs that package's tooling, never the turn.
-    const linkMirrors = async (id: string, repo: string): Promise<void> => {
+    const linkMirrors = async (id: string, repo: string, namespaced?: boolean): Promise<void> => {
         const main = mainDir(repo);
         const worktree = worktreeDir(id, repo);
         const mirrors = await mirroredDirs(main, worktree, { intoNestedRepos: false });
         const ignored = await ignoredLinks(worktree, mirrors);
-        // An isolated turn gets these as overlay mounts inside its namespace, so all this has to leave behind
-        // is something to mount ONTO. The gitignore check still gates it: an empty dir git would commit is
-        // just as unwelcome on the branch as a machine-local symlink.
-        const isolated = await isolation.available();
+        /* WHICH FORM THIS CHECKOUT NEEDS, which is the TURN's answer and not only the container's.
+         *
+         * A turn that enters the namespace gets these as overlay mounts inside it, so all this has to leave
+         * behind is something to mount ONTO. A turn that reaches its worktree by WORKING DIRECTORY alone
+         * (native Codex, ACP, Pi: AgentCapabilities.isolation "cwd") enters no namespace, so nothing ever fills
+         * that mount point, and an empty directory resolves nothing: its tooling cannot follow a single import,
+         * and a daemon-side command in that worktree cannot find one workspace binary. That is how a
+         * `turn.ending` check (rules/rule-command.ts) came to report a red tree over a `prisma: not found` in a
+         * workspace whose dependencies were fully installed. Those turns need the symlink, in a container
+         * perfectly able to build a namespace that nothing serving them will use.
+         *
+         * The gitignore check still gates it: an empty dir git would commit is just as unwelcome on the branch
+         * as a machine-local symlink. */
+        const isolated = (namespaced ?? true) && (await isolation.available());
         await Promise.all(
             mirrors.map(async (rel) => {
                 const target = join(worktree, rel);
@@ -369,8 +383,8 @@ export const createAgentWorktrees = (
     // Runs once the WHOLE composition is on disk: a nested repo's worktree dir must exist before links can be
     // planted in it. No repo lock, this reads the main checkout and writes only inside this conversation's own
     // worktree, so taking one would serialize the fleet behind a queue it has no reason to join.
-    const linkComposition = async (id: string, repos: readonly { readonly repo: string }[]): Promise<void> => {
-        await Promise.all(repos.map(({ repo }) => linkMirrors(id, repo)));
+    const linkComposition = async (id: string, repos: readonly { readonly repo: string }[], namespaced?: boolean): Promise<void> => {
+        await Promise.all(repos.map(({ repo }) => linkMirrors(id, repo, namespaced)));
     };
 
     return {
@@ -386,11 +400,11 @@ export const createAgentWorktrees = (
                 .filter((entry): entry is { repo: string; base: string } => entry.base !== undefined)
                 .map(({ repo, base }) => ({ repo, base }));
         },
-        ensure: async (id, recorded, base) => {
+        ensure: async (id, recorded, base, namespaced) => {
             const branch = `agent/${id}`;
             if (recorded.length > 0) {
                 await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
-                await linkComposition(id, recorded);
+                await linkComposition(id, recorded, namespaced);
                 return { cwd: conversationDir(id), branch, repos: recorded };
             }
             // Root first: its checkout creates the conversation dir the nested worktrees mount into (the root
@@ -409,7 +423,7 @@ export const createAgentWorktrees = (
             // a composition (the worktree frame takes its base from that, and the record is written down for
             // every later turn to repair against), and completion order is whatever the disk felt like.
             const repos = live.map(({ repo }) => created.get(repo)).filter((entry): entry is { repo: string; base: string } => entry !== undefined);
-            await linkComposition(id, repos);
+            await linkComposition(id, repos, namespaced);
             return { cwd: conversationDir(id), branch, repos };
         },
         remove: async (id, recorded) => {

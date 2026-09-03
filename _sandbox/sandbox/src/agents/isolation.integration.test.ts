@@ -141,12 +141,23 @@ test("the anchor announces readiness only after the mounts, then becomes the nam
 test("entrants join the anchor's namespace by pid and start at the workspace root AS THE NAMESPACE SEES IT", () => {
     const { command, args } = nsenterArgv(4321, WORKSPACE_ROOT, "/usr/bin/claude", ["--flag", "value"]);
     expect(command).toBe("nsenter");
-    expect(args).toEqual(["--mount=/proc/4321/ns/mnt", "--wdns=/work", "--", "/usr/bin/claude", "--flag", "value"]);
+    expect(args).toEqual(["--mount=/proc/4321/ns/mnt", "--wdns=/work", "--", "env", "-u", "PWD", "-u", "OLDPWD", "/usr/bin/claude", "--flag", "value"]);
     expect(args).not.toContain(`--wd=${WORKSPACE_ROOT}`);
 });
 
+/* THE OTHER HALF OF THE SAME GUARANTEE, and the one that cost two turns' checks to find: `--wdns` moves the
+ * kernel's cwd, and `PWD` rides in from the daemon naming the worktree's own path. Bash keeps a stale `$PWD`
+ * whenever it still names the current directory, which a bind mount of that worktree over /work guarantees, so
+ * `cd intentic` resolved under `/history/worktrees/<id>` where no mirror is mounted and `pnpm verify` died on
+ * `prisma: not found` in a fully installed workspace. Unset, every shell falls back to `getcwd()`. */
+test("an entrant cannot bring the daemon's own PWD in with it", () => {
+    const { args } = nsenterArgv(4321, WORKSPACE_ROOT, "node", []);
+    expect(args.slice(args.indexOf("--") + 1)).toEqual(["env", "-u", "PWD", "-u", "OLDPWD", "node"]);
+    expect(nsenterPrefix(7, "/work")).toContain("env -u PWD -u OLDPWD");
+});
+
 test("the shell-string form quotes its working dir so a path with a space cannot split the command", () => {
-    expect(nsenterPrefix(7, "/work dir")).toBe(`nsenter --mount=/proc/7/ns/mnt --wdns='/work dir' -- `);
+    expect(nsenterPrefix(7, "/work dir")).toBe(`nsenter --mount=/proc/7/ns/mnt --wdns='/work dir' -- env -u PWD -u OLDPWD `);
 });
 
 test("a path the agent reports is translated back to the worktree for the daemon", () => {

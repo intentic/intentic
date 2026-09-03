@@ -110,6 +110,20 @@ export const PersistedAgentSchema = z.object({
     tierHold: z.boolean().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
+    /* WHICH TURN THIS CONVERSATION'S CONTEXT WINDOW WAS LAST THROWN AWAY IN, as the turn index the compaction
+     * happened under (the value `turns` held while that turn was running). Absent ⇒ never compacted, which is
+     * every conversation that has stayed inside one window.
+     *
+     * What it is FOR: the standing notes a turn preamble carries are said once and then stand in the session's
+     * own history (turn-plan.ts). Compaction is the one event that takes them back out, it summarizes the
+     * messages they rode in on, so the turn AFTER one has to say them again, and no other turn does. Recorded
+     * per turn rather than per event: a loop that compacts three times inside one turn has thrown the window
+     * away once as far as the next turn's preamble is concerned.
+     *
+     * Persisted rather than kept in the runtime state beside the turn's other counters, because the window is
+     * regularly compacted in a turn's last minutes and the daemon is regularly restarted between turns; an
+     * in-memory latch would drop exactly the compaction whose re-telling matters most. */
+    compactedTurn: z.number().optional(),
     // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat
     // visitor, a webhook) instead of the user starting it. Absent ⇒ a user-started agent.
     origin: AgentOriginSchema.optional(),

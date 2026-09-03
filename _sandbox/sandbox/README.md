@@ -807,7 +807,33 @@ conversation's worktree instead of a path that still reaches the shared checkout
 - **Claude Code turns are told about automatic Stop commands before they run**
   (`src/rules/turn-ending-note.ts`). The note lists enabled `turn.ending` command rules and tells the model not
   to duplicate them. Built-ins add no prompt text. Native runtimes are omitted because their fallback does not
-  execute command rules.
+  execute command rules. Said on a conversation's opening message and on the first turn after a compaction, not
+  on every turn (`src/agent/turn-plan.ts`, the `send.turnEnding` gate): from the second message the note stands
+  in the session's own history where the model can read it, and repeating it there is the per-turn cost the
+  dependency notice and the rebase note were each walked back from. A compaction is the one event that takes it
+  back out of that history, so it is the one event that earns it again — recorded per conversation as the turn
+  it happened under (`PersistedAgent.compactedTurn`, written from the registry's `compact` case) and read one
+  turn later by the plan.
+- **An entrant is not allowed to bring the daemon's logical working directory in with it**
+  (`src/agents/isolation.ts`, `NO_INHERITED_CWD`, on both `nsenterArgv` and `nsenterPrefix`). `--wdns` moves
+  the KERNEL's cwd after `setns`; `PWD` still rides in from the daemon, naming the worktree by its
+  `/history/worktrees/<id>` path. A shell replaces a stale `$PWD` only when it no longer names the current
+  directory, and here it always does — the namespace binds that worktree over `/work`, so both names are one
+  inode — so the shell keeps the daemon's path and every RELATIVE path resolves outside every mirror mount.
+  `cd intentic && pnpm verify`, the exact shape a `turn.ending` rule has, therefore ran in a tree whose
+  dependency directories are bare mount points and reported a red tree over `prisma: not found` in a fully
+  installed workspace, with `nsenter` right there in its own command line. Unset rather than reassigned: with
+  nothing to trust, every shell takes it from `getcwd()`, which `--wdns` already made correct.
+- **A `turn.ending` check says in the log where it ran** (`src/agent/turn-plan.ts`): `checks: check started`
+  and `checks: check settled` carry the command, `anchored`, the status, the exit code and the duration, the
+  same shape `prepush` has. Without them a check that exited 127 over a missing workspace binary left the only
+  record of itself in a model's transcript.
+- **A worktree's dependency mirrors take their form from the TURN's runtime, not the container's capability**
+  (`entersNamespace` in `src/agent/agent.routes.ts` → `ensure` → `linkMirrors` in `src/agents/worktrees.ts`).
+  A container able to build a namespace left empty mount points for turns that never enter one (native Codex,
+  ACP, Pi: `AgentCapabilities.isolation` `"cwd"`), so nothing in those checkouts resolved an import and no
+  daemon-side command in them could find a workspace binary. Those turns get the symlink instead, and
+  `linkMirrors` converges the form back on the next namespaced turn in the same conversation.
 - **The branch is rebased again at the last moment before it lands, not only before the turn starts**
   (`src/agents/sync.ts` `syncBeforeLand`, called from the auto-land in `src/agent/agent.routes.ts` and the
   manual land route). Turn-start is the right moment for the MODEL, which then reads today's code, and the
@@ -952,7 +978,7 @@ conversation's worktree instead of a path that still reaches the shared checkout
   here. Anything new that is large or forks often belongs on the far side of one of those boundaries.
 - Built on Hono, zod, and provider-native runtimes. Claude uses the Agent SDK; Codex uses app-server, whose
   runner seam is injectable so co-located tests run without a provider process or network.
-- There is more than one workspace, and a path alone does not say which. Every isolated conversation has its own checkout, so the same path names a different file in each, which is why the workspace read routes take an optional conversation and resolve the root in one place (`src/workspace/workspace-scope.ts`). A checkout is **not** a superset of `/work` (the mirrored dirs are bare mount points from outside the turn's namespace, and untracked workspace content was never in it), so a scoped read falls back to the shared tree and reports which one answered. Search is the stated exception: the iq index is built over `/work` and stays there.
+- There is more than one workspace, and a path alone does not say which. Every isolated conversation has its own checkout, so the same path names a different file in each, which is why the workspace read routes take an optional conversation and resolve the root in one place (`src/workspace/workspace-scope.ts`). A checkout is **not** a superset of `/work` (a mirrored dir is a bare mount point from outside the namespace of a turn that enters one, a symlink into the main tree for a conversation whose runtime does not, and untracked workspace content was never in it either way), so a scoped read falls back to the shared tree and reports which one answered. Search is the stated exception: the iq index is built over `/work` and stays there.
 - A conversation's repo **composition is frozen** at its first turn: repos cloned later never join it, so its review, its land and its standing always mean the same set of repos. Deletion is the one change that freeze cannot absorb, so it is reconciled rather than absorbed: a repo whose directory has gone leaves every composition that named it, live and archived, and its stranded checkouts are moved aside (`src/agents/vanished-repos.ts`, riding the same repo-set watch the browser's repo list rides). Two costs of leaving the row in, both paid in this workspace: every per-repo pass keeps running git in a directory that is not there, and the checkout stops being excluded from the root repo the moment the repo stops being discovered, so root's own `add -A` would sweep a deleted repo's whole tree onto the agent's branch.
 - A land's product is **uncommitted and composition-atomic**: it holds every repository lock while it preflights every patch, then writes all main working trees or none of them, and moves no commit. So every reading taken between two shas (`standing.ts`) is blind to what the user does with it afterwards, and the two readings that must not be blind ask the tree instead: `landed-presence.ts` for the card ("is the work still there?"), and `agent-changes.ts` `presentInMain` for the review, which measures the branch **against main as it stands** rather than against the fork point it left. That is what decides a row's fate: content your history has taken is no longer a difference and leaves the list (counted as `absorbed`), content sitting uncommitted in `/work` stays and is flagged landed, and content you discarded goes back to outstanding — none of which moves a sha anywhere.
 - Workflow run artifacts are shared state under `.intentic/workflow-runs/`. The JSON ledger retains every active
