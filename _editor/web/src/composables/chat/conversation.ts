@@ -1785,12 +1785,14 @@ export class Conversation {
      * (PickUp.held, and AgentEvent's error `held` for the argument). Reports whether it started; false sends the
      * caller back to the ordinary continuation, which is still right for every ending with nothing held.
      *
-     * NOTHING IS APPENDED HERE, and that absence is the entire feature. A press is the same request again, so
-     * there is no new message to draw: the daemon re-runs the turn with a resume note on its prompt, and the
-     * attach below recognises the note, strips it, and REUSES the bubble the user's words are already in
-     * (reattach → reuseUserBubble). One press, one run, no rows. The alternative is what this replaces: a bubble
-     * reading "Continue" per press, in the record and in the provider session both, and the model reading four of
-     * them back as things it had been asked and had not answered.
+     * NO MESSAGE IS APPENDED HERE, and that absence is the entire feature. A press is the same request again, so
+     * there is nothing new for the user to have said: the daemon re-runs the turn with a resume note on its
+     * prompt, and opens that run on what the note DISCLOSES rather than on the words a second time
+     * (sessions/turn-transcript.ts openingRows, sandbox-contract's resumeDisclosure), so the muted line about the
+     * interruption goes down where the repeat would have, and the bubble holding their words stays where it is,
+     * one turn up. One press, one run, one line saying what happened. The alternative is what this replaces: a
+     * bubble reading "Continue" per press, in the record and in the provider session both, and the model reading
+     * four of them back as things it had been asked and had not answered.
      *
      * The request only starts the run; watching it is reattach's job, which is also what makes the press safe to
      * spam. A second press while the first one's turn is running finds `streaming` true and stops at the guard;

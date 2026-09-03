@@ -86,6 +86,7 @@ const accountPicks = { ...selectedAccountId.value };
 
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
 beforeEach(() => {
+    runsMinted = 0;
     seedTurnDefaults();
     vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
         callback(0);
@@ -104,6 +105,11 @@ afterEach(() => {
 // One `data:` SSE frame, as the daemon's attach stream emits envelopes.
 const encoder = new TextEncoder();
 const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+
+// Run ids, handed out across every fake daemon in one test (see sseResponse's `startTurn`), so a turn served by
+// the second fake a test installs is still a different RUN from the one the first served. Reset per test, so a
+// test that names an id names the same one however many ran before it.
+let runsMinted = 0;
 
 /* Serve the detached-run protocol the way the daemon does: POST /agent acks `{ run }` (the turn executes
  * daemon-side), POST /agent/attach streams the head (the run's rows so far), then the given events folded into
@@ -143,7 +149,24 @@ const sseResponse = (
     // A stop that landed after the ack and before the attach: the run is over by the time its head goes out.
     let stopRequested = false;
     let live: LiveRun | undefined;
-    const ok = (): Promise<Response> => Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+    /* ONE RUN PER TURN STARTED, each under its own id, because the id is what a window keys a run's rows by
+     * (transcriptState.attachRun): a second turn served under the first one's id RE-BASES onto its rows and
+     * replaces them, so a conversation that says two things would lose the first. A turn is started by a POST
+     * /agent or by the /agent/resume a press sends, which is exactly where the daemon opens a TurnRun of its
+     * own (turn-runs.ts, `crypto.randomUUID()` per run). Minted from a counter shared by every fake in the
+     * test, since the turns of one conversation are commonly served by more than one of them. */
+    let runId = `r1`;
+    /* The run's fold, once an attach has served it. A SECOND attach to the SAME run (a reload, a dropped stream
+     * coming back) is handed the rows it has accumulated, which is what the daemon's head carries, rather than
+     * a replay of its events into a second copy of the answer. */
+    let served: TranscriptFold | undefined;
+    const startTurn = (): void => {
+        runsMinted += 1;
+        runId = `r${runsMinted}`;
+        served = undefined;
+        stopRequested = false;
+    };
+    const ok = (): Promise<Response> => Promise.resolve({ ok: true, json: () => Promise.resolve({ run: runId }) } as Response);
     const emit = (state: LiveRun, patches: ReturnType<TranscriptFold[`apply`]>): void => {
         for (const patch of patches) {
             state.controller.enqueue(sseFrame({ kind: `patch`, seq: (state.seq += 1), patch }));
@@ -177,8 +200,15 @@ const sseResponse = (
     return (path, init) => {
         const body = typeof init?.body === `string` ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
         if (path === `/agent`) {
-            requested = { prompt: String(body?.prompt ?? ``), attachments: (body?.attachments as string[] | undefined) ?? [] };
-            stopRequested = false;
+            startTurn();
+            requested = { prompt: String(body?.[`prompt`] ?? ``), attachments: (body?.[`attachments`] as string[] | undefined) ?? [] };
+            return ok();
+        }
+        /* The press re-runs the held turn, and the daemon runs it as a NEW turn on its own copy of the prompt
+         * (agent.routes `resume` → fireLimitResume). So the head that follows opens a run of its own, under the
+         * resume note the prompt now carries, rather than replacing the rows of the attempt that was refused. */
+        if (path === `/agent/resume`) {
+            startTurn();
             return ok();
         }
         if (path === `/agent/stop`) {
@@ -216,7 +246,7 @@ const sseResponse = (
             return ok();
         }
         const overrides = options?.head?.() ?? {};
-        const run = overrides.run ?? `r1`;
+        const run = overrides.run ?? runId;
         const startedAt = overrides.startedAt ?? Date.now();
         const opening =
             overrides.rows ??
@@ -225,9 +255,13 @@ const sseResponse = (
                 : openingOf(overrides.prompt, startedAt));
         const stream = new ReadableStream<Uint8Array>({
             start(controller) {
-                const fold = new TranscriptFold(opening);
+                // Already served once: this attach is a re-attach to the same run, so its head carries the rows
+                // the run has reached and there is nothing left to fold in.
+                const replay = served === undefined;
+                const fold = served ?? new TranscriptFold(opening);
+                served = fold;
                 controller.enqueue(sseFrame({ kind: `attached`, run, startedAt, seq: 0, rows: structuredClone(fold.rows) }));
-                const state: LiveRun = { controller, fold, seq: 0, queue: [...events] };
+                const state: LiveRun = { controller, fold, seq: 0, queue: replay ? [...events] : [] };
                 live = state;
                 init?.signal?.addEventListener(`abort`, () => {
                     if (live === state) {
@@ -266,19 +300,26 @@ const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: numb
 /* A run served a frame at a time, for the tests that hold the stream open and feed it by hand: the daemon's own
  * fold turns each provider event into the patches and facts a window receives, and `head()` is the run's rows
  * at that moment, which is what a re-attach is handed. */
-const liveRun = (overrides?: Parameters<typeof head>[0]): { head: () => AttachHead; frames: (event: AgentEvent) => AttachFrame[] } => {
+const liveRun = (
+    overrides?: Parameters<typeof head>[0],
+): { head: () => AttachHead; frames: (event: AgentEvent) => AttachFrame[]; ending: (ending: `settled` | `stopped`) => AttachFrame[] } => {
     const opening = head(overrides);
     const fold = new TranscriptFold(opening.rows);
     let seq = opening.seq;
+    const patches = (changed: ReturnType<TranscriptFold[`apply`]>): AttachFrame[] =>
+        changed.map((patch) => ({ kind: `patch`, seq: (seq += 1), patch }));
     return {
         head: () => ({ ...opening, seq, rows: [...structuredClone(fold.rows)] }),
         frames: (event) => {
-            const frames: AttachFrame[] = fold.apply(event).map((patch) => ({ kind: `patch`, seq: (seq += 1), patch }));
+            const frames = patches(fold.apply(event));
             if (isTurnFact(event)) {
                 frames.push({ kind: `fact`, seq: (seq += 1), fact: event });
             }
             return frames;
         },
+        // How the daemon unwinds the run: the open bubble closed and every card it left pending frozen as
+        // nobody's decision, said as rows, which is what a window that pressed Stop is waiting for.
+        ending: (ending) => patches(fold.finish(ending)),
     };
 };
 
@@ -1060,7 +1101,7 @@ describe(`Conversation`, () => {
      * it and printed over the words it was answering. */
     it(`steers mid-turn: the message lands where the turn took it and the answer opens below it`, async () => {
         const conversation = new Conversation(`c1`);
-        const run = liveRun();
+        const run = liveRun({ prompt: `2+3?` });
         let controller!: ReadableStreamDefaultController<Uint8Array>;
         const body = new ReadableStream<Uint8Array>({
             start(c) {
@@ -1255,17 +1296,18 @@ describe(`Conversation`, () => {
     it(`holds the queue when the user stops the turn, then sends it with their next message`, async () => {
         const conversation = new Conversation(`c1`);
         const followUp = sseResponse([{ kind: `done` }]);
-        let attaches = 0;
         const parked = sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true });
+        // One fake per turn, and the whole turn goes to its own: the stop has to reach the run it is stopping,
+        // because a stop the daemon takes ends the run's stream and that ending is what the window waits for.
+        let turns = 0;
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent/attach`) {
-                attaches += 1;
-                return attaches === 1 ? parked(path, init) : followUp(path, init);
-            }
             if (path === `/agent/steer`) {
                 return Promise.resolve({ ok: false, status: 404 } as Response);
             }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            if (path === `/agent`) {
+                turns += 1;
+            }
+            return turns <= 1 ? parked(path, init) : followUp(path, init);
         });
 
         const turn = conversation.send(`start`, settings);
@@ -1295,14 +1337,18 @@ describe(`Conversation`, () => {
             releaseStop = resolve;
         });
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent/attach`) {
-                attaches += 1;
-                return attaches === 1 ? parked(path, init) : completed(path, init);
-            }
             if (path === `/agent/stop`) {
+                /* The two halves of a stop, held apart, which is the whole of what this test is about: the
+                 * daemon cancels the run at once, so its stream ends and the window's attach is over, and only
+                 * CONFIRMS the release when the test lets it. */
+                void parked(path, init);
                 return stopped;
             }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r${attaches + 1}` }) } as Response);
+            const serving = attaches === 0 ? parked : completed;
+            if (path === `/agent/attach`) {
+                attaches += 1;
+            }
+            return serving(path, init);
         });
 
         const first = conversation.send(`start`, settings);
@@ -1489,13 +1535,14 @@ describe(`Conversation`, () => {
 
         // Re-read per assertion: deciding a card replaces its message rather than mutating it.
         const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
-        const [allowed, denied] = cards();
         // An allow is the turn carrying on with the user's blessing: nothing to stop.
-        await conversation.decidePermission(allowed!, `once`);
+        await conversation.decidePermission(cards()[0]!, `once`);
         expect(conversation.streaming.value).toBe(true);
         expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
 
-        await conversation.decidePermission(denied!, `deny`);
+        // The turn was parked on the first card and only asks the second once that answer un-parks it.
+        await vi.waitFor(() => expect(cards()).toHaveLength(2));
+        await conversation.decidePermission(cards()[1]!, `deny`);
         await turn;
 
         expect(sandboxRequestMock.mock.calls.map(([path]) => path)).toContain(`/agent/stop`);
@@ -1566,10 +1613,11 @@ describe(`Conversation`, () => {
         const turn = conversation.send(`run it`, settings);
         await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
-        const [first, second] = cards();
 
-        await conversation.decidePermission(first!, `once`);
-        await conversation.decidePermission(second!, `once`);
+        await conversation.decidePermission(cards()[0]!, `once`);
+        // The second card is the turn carrying on past the first answer, so it only exists once that one landed.
+        await vi.waitFor(() => expect(cards()).toHaveLength(2));
+        await conversation.decidePermission(cards()[1]!, `once`);
 
         expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/reply`)).toHaveLength(2);
         expect(cards().map((card) => card.permission!.status)).toEqual([`allowed`, `allowed`]);
@@ -2548,15 +2596,18 @@ describe(`Conversation`, () => {
         conversation.provider.value = `endpoint/free-trial`;
         const trialSettings = { ...settings, agent: `endpoint/free-trial` } as const;
         let turns = 0;
+        // Built once, not per call: a fake is a daemon holding a run, and one minted inside the implementation
+        // would never see the POST that started the turn it is about to serve the head of.
+        const refused = sseResponse([
+            { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable, failed messages aren't counted.` },
+            { kind: `done` },
+        ]);
+        const landed = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
             if (path === `/agent`) {
                 turns += 1;
             }
-            const refused = sseResponse([
-                { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable, failed messages aren't counted.` },
-                { kind: `done` },
-            ]);
-            return turns <= 2 ? refused(path, init) : sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }])(path, init);
+            return turns <= 2 ? refused(path, init) : landed(path, init);
         });
 
         await conversation.send(`Continue`, trialSettings);
@@ -2582,7 +2633,7 @@ describe(`Conversation`, () => {
      * is refused here (the trial has no queue-and-steer), which is exactly when the two end up side by side. */
     it(`hands back a refused nudge as the one already pressed, not as a second copy in front of it`, async () => {
         const conversation = new Conversation(`c1`);
-        const run = liveRun();
+        const run = liveRun({ prompt: `Continue` });
         let controller!: ReadableStreamDefaultController<Uint8Array>;
         const body = new ReadableStream<Uint8Array>({
             start(c) {
@@ -2620,15 +2671,13 @@ describe(`Conversation`, () => {
     it(`keeps a nudge written behind a real message that never left`, async () => {
         const conversation = new Conversation(`c1`);
         let turns = 0;
+        const refused = sseResponse([{ kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` }, { kind: `done` }]);
+        const landed = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
             if (path === `/agent`) {
                 turns += 1;
             }
-            const refused = sseResponse([
-                { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` },
-                { kind: `done` },
-            ]);
-            return turns <= 1 ? refused(path, init) : sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }])(path, init);
+            return turns <= 1 ? refused(path, init) : landed(path, init);
         });
 
         await conversation.send(`fix the tests`, settings);
@@ -2771,18 +2820,43 @@ describe(`Conversation`, () => {
     it(`stop() cancels the cards a parked turn was waiting on, so the composer isn't wedged on a dead run`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        sandboxRequestMock.mockImplementation(
-            sseResponse(
-                [
-                    { kind: `plan`, requestId: `d1`, text: `the plan` },
-                    { kind: `question`, requestId: `q1`, questions },
-                    { kind: `permission`, requestId: `p1`, toolName: `Bash` },
-                ],
-                { stayOpen: true },
-            ),
-        );
+        /* Fed frame by frame rather than through sseResponse, which parks its stream on the first card the way
+         * the daemon parks a turn: what this is about is a run that left SEVERAL cards open, and what a stop
+         * does to all of them at once. The stop ends the stream through the run's own fold, as the daemon's
+         * does, so the cancellations arrive as the rows every window and the record read. */
+        const run = liveRun({ prompt: `go` });
+        let controller!: ReadableStreamDefaultController<Uint8Array>;
+        const body = new ReadableStream<Uint8Array>({
+            start(c) {
+                controller = c;
+                c.enqueue(sseFrame(run.head()));
+            },
+        });
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path === `/agent/attach`) {
+                return Promise.resolve({ ok: true, body } as Response);
+            }
+            if (path === `/agent/stop`) {
+                for (const frame of run.ending(`stopped`)) {
+                    controller.enqueue(sseFrame(frame));
+                }
+                controller.enqueue(sseFrame({ kind: `end` }));
+                controller.close();
+                return Promise.resolve({ ok: true } as Response);
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        });
 
         const turn = conversation.send(`go`, settings);
+        for (const event of [
+            { kind: `plan`, requestId: `d1`, text: `the plan` },
+            { kind: `question`, requestId: `q1`, questions },
+            { kind: `permission`, requestId: `p1`, toolName: `Bash` },
+        ] satisfies AgentEvent[]) {
+            for (const frame of run.frames(event)) {
+                controller.enqueue(sseFrame(frame));
+            }
+        }
         await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         conversation.stop();
         await turn;
@@ -3401,6 +3475,11 @@ describe(`Conversation`, () => {
     it(`stands the continue offer down when the stopped send never became a turn`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation((path, init) => {
+            // No run to cancel, because the send never became one: the daemon says so, and that refusal is what
+            // sends the stop back to this window to draw and to hand the words over.
+            if (path === `/agent/stop`) {
+                return Promise.resolve({ ok: false, status: 404 } as Response);
+            }
             if (path !== `/agent`) {
                 return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
             }
