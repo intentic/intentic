@@ -555,7 +555,24 @@ const grab = (event: PointerEvent): void => {
                 class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link"
                 >{{ unread.label }}</span
             >
-            <Icon v-else :name="meta.icon" :spin="meta.spin" class="shrink-0 text-xs" :class="meta.class" />
+            <!-- THE STANDING, for a card with no reason and nothing unread to say: the last of four things
+                 that can hold this one slot, and until now the only one that held it WORDLESSLY. `meta` has
+                 carried a label all along (agentStatus.STATUS_META: "Landed", "Ready to land", "Needs you")
+                 and this drew the glyph alone, so the states that fell through to it were a coloured mark with
+                 no word on the card, none on its hover, and none for a screen reader either.
+                 The three chips above it are words; so is this now. The chip form is deliberately NOT copied
+                 here: those name the exception a card is, and this names the resting standing of an ordinary
+                 one — a board of forty cards each wearing a pill that says "Idle" is a board that has spent
+                 its whole attention budget on nothing happening. Glyph at rest, word on demand. -->
+            <Icon
+                v-else
+                :name="meta.icon"
+                :spin="meta.spin"
+                :aria-label="meta.label"
+                v-tooltip.top="meta.label"
+                class="shrink-0 text-xs"
+                :class="meta.class"
+            />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 

@@ -37,7 +37,7 @@ import { RouterLink } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { activityIcon, activityLine, agentStatusMeta, blocked, type FleetLane, turnInFlight } from "../composables/agents/agentStatus";
 import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
-import { relativeTime, statusIcon } from "../composables/chat/catalog";
+import { relativeTime, statusIcon, statusLabel } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import type { Conversation } from "../composables/chat/conversation";
 import { laneOfTab, tabLabel } from "../composables/chat/tabs";
@@ -90,14 +90,21 @@ type PersonaChat = { conversation: Conversation; agent: FleetAgent | undefined }
  * that is what makes a working card SAY so rather than sitting under a still dot: the persona rail passed no
  * status at all until now, so a person mid-turn and a person idle wore the same nothing.
  * Shared with the chats drawn under an expanded row (`sessionsOf`), which is the point: those are the very
- * conversations the persona's own glyph is read off, and two readings of one turn is one too many. */
-const statusOf = (entry: PersonaChat): { name: IconName; spin?: boolean; class: string } => {
+ * conversations the persona's own glyph is read off, and two readings of one turn is one too many.
+ *
+ * AND IT CARRIES THE WORD, not only the glyph. `meta` has held a label all along and this returned everything
+ * BUT it, so the state reached the screen as a coloured mark and nothing else — no name for a screen reader,
+ * and nothing at all for anyone who cannot tell two amber glyphs apart. The chat rail's own copy of this
+ * function has always passed it (ChatTabList.statusOf, same shape, same slot), which is precisely how the gap
+ * survived: the two rails looked identical and one of them was mute. */
+const statusOf = (entry: PersonaChat): { name: IconName; spin?: boolean; class: string; "aria-label": string } => {
     if (entry.agent !== undefined) {
         const meta = agentStatusMeta(entry.agent.status);
-        return { name: meta.icon, spin: meta.spin, class: `text-xs ${meta.class}` };
+        return { name: meta.icon, spin: meta.spin, class: `text-xs ${meta.class}`, "aria-label": meta.label };
     }
-    const icon = statusIcon(entry.conversation.status.value);
-    return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}` };
+    const status = entry.conversation.status.value;
+    const icon = statusIcon(status);
+    return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
 
 /* WHICH OF A PERSONA'S CHATS THE CARD SPEAKS FOR. A row stands for a PERSON, and a person has one answer to

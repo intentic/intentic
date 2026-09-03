@@ -289,6 +289,92 @@ describe("unfinishedMark", () => {
     });
 });
 
+/* EVERY WAY A CARD CAN BE PARKED ON A PERSON HAS TO SAY SO IN WORDS, which is the property this suite exists
+ * for and the one the board did not have.
+ *
+ * `permission` — an agent asking to run a tool, the commonest park there is — had a verb in one ranked list and
+ * no chip word in the other, so `attentionReason` returned nothing for it and the card fell through to its raw
+ * status glyph: a bare amber `(!)` in the corner, no word beside it, none on its hover, none for a screen
+ * reader. The one card on the board whose entire purpose is to say what it wants was the only one that didn't.
+ *
+ * So these assert the CLASS rather than the case that was reported. Anything that puts a card in the Attention
+ * lane owes the reader a noun and a verb, and both are pinned per flag, because the fix for one missing word is
+ * a word, and the fix for a shape that loses words is a test that counts them. */
+describe("attentionReason · every park names itself", () => {
+    const FLAGS = [`plan`, `question`, `permission`, `service`, `capability`, `conflict`] as const;
+
+    // The reported bug, pinned as itself: not "some chip appears" but the word, because the whole complaint was
+    // that a glyph is not a word.
+    it("names a tool permission instead of drawing a bare glyph", () => {
+        const parked: AgentStanding = { status: `awaiting`, attention: { ...none, permission: true } };
+        expect(attentionReason(parked)).toBe(`Permission`);
+        expect(laneOf(parked)).toBe(`attention`);
+    });
+
+    /* AND IT IS HELD TO A MEASURED WIDTH, the same bound the limit chip is pinned at one suite below and for
+     * the same reason: this chip is `shrink-0` beside a title that is not, so its characters come off the
+     * agent's own name. Measured in the running app on this very card, at the 280px lane width and against a
+     * 29-character title: 10 characters of chip leave 19 characters of title, 15 leave 14, and the
+     * "Permission needed" that reads best in isolation leaves 12.
+     *
+     * Only the NEW label is bound. Its older siblings ("Question for you", "Approval needed") are the board's
+     * established vocabulary; capping them here would quietly reword the product to satisfy a test. A label
+     * added after the measurement has no such excuse. */
+    it("keeps the new word inside the width the card was measured at", () => {
+        expect(attentionReason({ status: `awaiting`, attention: { ...none, permission: true } })?.length).toBeLessThanOrEqual(12);
+    });
+
+    /* AND IT IS NOT THE PLAN'S WORD. Two chips reading "Approval needed" over two different asks — a plan to
+     * read through versus one command to allow — is the same failure one lane deeper: the reader learns the
+     * chip does not repay a glance, which is how a board full of them stops being read at all. */
+    it("tells a permission apart from a plan", () => {
+        const words = {
+            permission: attentionReason({ status: `awaiting`, attention: { ...none, permission: true } }),
+            plan: attentionReason({ status: `awaiting`, attention: { ...none, plan: true } }),
+        };
+        expect(words).toEqual({ permission: `Permission`, plan: `Approval needed` });
+    });
+
+    /* THE GUARD AGAINST THE NEXT ONE. Asserted over the whole flag set rather than the five that happened to
+     * work, so a flag added to the wire schema and wired into `blocked` — which is all it takes to put cards in
+     * this lane — cannot ship with nothing to say. `satisfies` in the source makes a missing KEY a build error;
+     * this is what says why, and what catches a key that is there with no words behind it. */
+    it("gives every attention flag both a word and a verb", () => {
+        const said = FLAGS.map((flag) => {
+            const agent = { status: `awaiting` as const, attention: { ...none, [flag]: true }, branch: `agent/x` };
+            return { flag, chip: attentionReason(agent), verb: reviewAction(agent) };
+        });
+        expect(said).toEqual(FLAGS.map((flag) => ({ flag, chip: expect.stringMatching(/\S/u), verb: expect.stringMatching(/\S/u) })));
+    });
+
+    /* THE CHIP AND THE PRESS ARE ABOUT ONE PARK. They were two hand-kept lists that had to rank the same flags
+     * the same way and nothing made them: the chip words put money above a plain question and the verbs put it
+     * below, under a comment on the verb list claiming the two agreed. A card carrying both — the registry
+     * parks each card independently, so a question raised beside a spend offer is a real card — wore
+     * "Spend approval" over a press reading "Answer": two instructions, one card, and the reader left to guess
+     * which one the click honours. */
+    it("leads the chip and the press with the same park", () => {
+        const both = { status: `awaiting` as const, attention: { ...none, question: true, service: true }, branch: `agent/x` };
+        expect({ chip: attentionReason(both), verb: reviewAction(both) }).toEqual({ chip: `Spend approval`, verb: `Approve spend` });
+    });
+
+    /* A PARK THE WIRE CANNOT NAME, which is the other half of the bare glyph. `awaiting` means the daemon is
+     * holding an unanswered card, and two of the kinds it holds — a browser hand-off and a terminal one — raise
+     * no flag in the attention schema at all, so they arrive as a status and nothing else. Counted in the
+     * lane's badge, sat in the lane, and silent. "Waiting on you" is the floor, and it beats a glyph every time.
+     *
+     * BOUNDED ON BOTH SIDES IN ONE TEST, because a floor is only as good as what it does not swallow: it may
+     * never shadow a word that knows what the park actually is (the `capability` line), and it may never leak
+     * onto the cards that need nobody — an unconditional `?? "Waiting on you"` would have hung it on every idle
+     * and landed agent on the board, which is the failure this whole suite is about, inverted. */
+    it("says the plainest true thing for a park that raises no flag, and nothing at all for no park", () => {
+        expect(attentionReason({ status: `awaiting`, attention: none })).toBe(`Waiting on you`);
+        expect(attentionReason({ status: `awaiting`, attention: { ...none, capability: true } })).toBe(`Setup needed`);
+        const settled: readonly (AgentStatus | ClientAgentStatus)[] = [`running`, `idle`, `landed`, `ready`];
+        expect(settled.map((status) => attentionReason({ status, attention: none }))).toEqual(settled.map(() => undefined));
+    });
+});
+
 /* The card's compact readout for an armed watch: glyph, phrase and clock, the same grammar the running card's
  * tool line uses, because a board is scanned down one column. */
 describe("watchLine", () => {

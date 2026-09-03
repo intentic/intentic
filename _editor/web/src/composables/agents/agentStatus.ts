@@ -315,6 +315,78 @@ export const awaitingUser = (agent: AgentStanding): boolean =>
     agent.attention.capability ||
     agent.status === `awaiting`;
 
+/* WHY THIS CARD IS PARKED ON A PERSON, and what to do about it: one entry per attention flag, in the order the
+ * card should lead with, carrying BOTH words the surfaces need — the noun the chip wears and the verb its
+ * drill-in press names.
+ *
+ * ONE TABLE BECAUSE TWO LISTS DRIFTED, and the drift is what this file is being edited for. The chip words were
+ * an if-chain here and the verbs a list below (ATTENTION_ACTIONS), the two had to rank the same flags the same
+ * way, and nothing made them: `permission` was in the verb list and MISSING from the chain, so an agent parked
+ * on a tool permission — the commonest park there is — got no chip at all and the card fell through to the raw
+ * status glyph: a bare `(!)` in the corner, with no word beside it and none on its hover, on the one card whose
+ * whole purpose is to say what it wants. The orders had drifted too, the chain ranked money above a question
+ * and the verb list ranked it below, under a comment on the verb list claiming the two agreed.
+ *
+ * So the rank is one value you can read, the two words sit on the same line where a mismatch is visible, and
+ * `satisfies Record<keyof AgentAttention, …>` makes a flag added to the wire schema a BUILD error until both of
+ * its words exist. That is the actual repair: the hole is filled below, and this is what stops the next one.
+ *
+ * SHORT, all of them, because the chip is `shrink-0` beside a title that is not: every character it grows is
+ * taken off the agent's own name at lane width (see the length test, and `Usage limit`'s note on it). */
+const ATTENTION_WORDS = {
+    plan: { chip: `Approval needed`, verb: `Review plan` },
+    // Money outranks a generic question: the agent is parked on a priced run only your click can release, and
+    // the verb carries the spend, unlike the plain approval above it.
+    service: { chip: `Spend approval`, verb: `Approve spend` },
+    // Same rank as spend, same reason: the agent is parked on a setup only you can do. The verb carries the
+    // work, because this click leads into a flow rather than settling a one-press approval.
+    capability: { chip: `Setup needed`, verb: `Set up` },
+    question: { chip: `Question for you`, verb: `Answer` },
+    /* A TOOL WAITING FOR A YES, and the entry whose absence was the whole bug. It ranks LAST of the parks
+     * because it is the most routine of them and the cheapest to clear: a plan, a spend and a setup each want
+     * reading before you answer, and a question is a person's, while this is one press over one command.
+     * Ranking it last is also what makes a card carrying two parks lead with the one worth the trip.
+     *
+     * NOT "Approval needed", the word a plan already wears: the two are different asks, and two chips reading
+     * alike would be this table's own failure one lane deeper — a chip that does not repay a glance teaches
+     * the reader to stop spending one.
+     *
+     * AND NOT "Permission needed" either, which is the phrasing that reads best in isolation and would have
+     * been the longest label on the board at 17 characters. Measured on this card at the 280px lane width,
+     * against a 29-character title: this label leaves 19 characters of the agent's NAME on screen ("Fix the
+     * flaky sign…"), "Approval needed" leaves 14, and "Permission needed" leaves 12 ("Fix the fla…"). So the
+     * long form buys the word by spending the name, and a lane of cards that cannot say which agent they are
+     * is this same complaint — a card you cannot read at a glance — arrived at from the other side.
+     *
+     * The noun alone carries it, in the form "Usage limit" already uses. It has to: the drill-in verb beside
+     * it ("Approve", from this same line) is DESKTOP ONLY — on a phone the detail is the chat, so `review` is
+     * undefined and this chip is the only thing on the card naming the state. Which is the argument for
+     * short and self-contained rather than for short alone. */
+    permission: { chip: `Permission`, verb: `Approve` },
+    /* Its chip is here and its verb NAMES THE REPORT rather than the fix, because on a conflicted card the fix
+     * is a button of its own sitting one line above the drill-in (AgentCard). While this link WAS the only
+     * conflict affordance on the board it read "Resolve conflict", which was the closest a navigation could get
+     * to the verb the user wanted; two controls a few pixels apart both promising to resolve the conflict, only
+     * one of which does anything to it, is worse than either alone. So the action keeps the verb and the link
+     * says what it opens: the report — which paths refused, why, and whose move each one is. */
+    conflict: { chip: `Land conflict`, verb: `See what blocked it` },
+} as const satisfies Record<keyof AgentAttention, { chip: string; verb: string }>;
+
+// The rank, once, for both readings. `Object.keys` over a literal-typed object rather than a hand-kept second
+// list of the same names: the table above IS the order, and a list repeating it is a list that can disagree.
+const ATTENTION_RANK = Object.keys(ATTENTION_WORDS) as readonly (keyof AgentAttention)[];
+
+/* THE FLAG THIS CARD LEADS WITH, or nothing when it is parked on none: read once, so the chip and the verb can
+ * never be about two different parks.
+ *
+ * The raised FLAGS are asked first and the `conflict` status only after them, which keeps the rank the chain
+ * this replaced had. It costs nothing today — the daemon files any unanswered card as `awaiting`, and the
+ * landing standings that produce `conflict` are only read once nothing is running (agents-registry's statusOf),
+ * so the two cannot both be true — and it is the honest order regardless: a raised flag is a live park with
+ * somebody waiting on the other end, and a conflict status is a fact about where the work came to rest. */
+const leadingPark = (agent: AgentStanding): keyof AgentAttention | undefined =>
+    ATTENTION_RANK.find((flag) => agent.attention[flag]) ?? (agent.status === `conflict` ? `conflict` : undefined);
+
 // The one-line "why this card is in the Attention lane" label, shared by the card chip, the Changes legend's
 // hover card, and any future toast.
 export const attentionReason = (agent: AgentStanding): string | undefined => {
@@ -333,24 +405,19 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (limited(agent)) {
         return `Usage limit`;
     }
-    if (agent.attention.plan) {
-        return `Approval needed`;
+    const park = leadingPark(agent);
+    if (park !== undefined) {
+        return ATTENTION_WORDS[park].chip;
     }
-    // Money outranks a generic question: the agent is parked on a priced run only your click can release.
-    if (agent.attention.service) {
-        return `Spend approval`;
-    }
-    // Same rank as spend, same reason: the agent is parked on a setup only you can do.
-    if (agent.attention.capability) {
-        return `Setup needed`;
-    }
-    if (agent.attention.question) {
-        return `Question for you`;
-    }
-    if (agent.attention.conflict || agent.status === `conflict`) {
-        return `Land conflict`;
-    }
-    return ENDING_REASONS[agent.status];
+    /* A PARK THE ATTENTION BLOCK CANNOT NAME, said in the plainest words there are rather than not said at all.
+     * `awaiting` means the daemon is holding an unanswered card (agents-registry's `pauses`), and two of the
+     * kinds it holds — a browser hand-off and a terminal one — raise no flag in the wire schema, so they arrive
+     * here as a status and nothing else. They were the other half of the bare `(!)`: in the Attention lane,
+     * counted in its badge, with no word anywhere on the card saying which of them it was.
+     *
+     * Under the endings on purpose. Every word above this one is more specific than "waiting", and this is the
+     * floor: reached only once nothing better can be said, and it is still infinitely better than a glyph. */
+    return ENDING_REASONS[agent.status] ?? (agent.status === `awaiting` ? `Waiting on you` : undefined);
 };
 
 /* THE ENDINGS, as a table, once every flag above has had its say. A table rather than the if-chain this used to
@@ -528,8 +595,13 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
     }
     return lane === `active`
         ? { dot: `bg-link ring-2 ring-link/30`, label: activeLabel(agent) }
-        : // Named by the same reason the board's chip wears. The fallback covers a bare `awaiting`, a turn
-          // parked with no flag yet raised, which has nothing more specific to say than that it stopped.
+        : /* Named by the same reason the board's chip wears — including the bare `awaiting` this used to name
+           * for itself. That fallback was the only place in the app that said something for a turn parked with
+           * no flag raised, which is why it read as this mark's own quirk rather than as the hole it was; it
+           * belongs to `attentionReason`, where every surface gets it. Kept here as a runtime floor for the
+           * same reason STATUS_META keeps its `??`: a lane is decided by a status off an untyped wire, so a
+           * build one version behind can be handed a standing it has no word for, and a chip reading
+           * `undefined` in a legend is worse than one reading the plainest true thing. */
           { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };
 };
 
@@ -553,18 +625,12 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     if (unregistered(agent.status) || agent.branch === undefined) {
         return undefined;
     }
-    const flagged = ATTENTION_ACTIONS.find(([flag]) => agent.attention[flag]);
-    if (flagged !== undefined) {
-        return flagged[1];
-    }
-    /* NAMES THE REPORT, not the fix, because on a conflicted card the fix is now a button of its own, sitting
-     * one line above this link (AgentCard). While this link WAS the only conflict affordance on the board it
-     * read "Resolve conflict", which was the closest a navigation could get to the verb the user wanted; two
-     * controls a few pixels apart both promising to resolve the conflict, only one of which does anything to
-     * it, is worse than either alone. So the action keeps the verb and the link says what it opens: the report
-     *, which paths refused, why, and whose move each one is. */
-    if (agent.attention.conflict || agent.status === `conflict`) {
-        return `See what blocked it`;
+    /* THE SAME FLAG THE CHIP LED WITH, so the noun in the corner and the verb at the foot of the card are
+     * always about one park. They were two ranked lists (see ATTENTION_WORDS) and could disagree: a card
+     * carrying both a question and a spend offer wore "Spend approval" over a press reading "Answer". */
+    const park = leadingPark(agent);
+    if (park !== undefined) {
+        return ATTENTION_WORDS[park].verb;
     }
     /* A SPENT ALLOWANCE IS NOT AN ERROR TO VIEW, and "View error" was the promise that made the old card worse
      * than useless: it points at a transcript whose last line is a provider saying no, over a condition with
@@ -576,23 +642,6 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     }
     return ENDING_ACTIONS[agent.status] ?? (agent.diff !== undefined && agent.diff.files > 0 ? `Review changes` : `Review`);
 };
-
-/* The cards PARKED ON THE USER, in the order the verb should lead with, which is the same order attentionReason
- * ranks the same flags in and for the same reasons: money outranks a generic question, because the agent is
- * held on a priced run only a click can release; a setup ranks with it, because it leads into a flow rather
- * than a one-press approval.
- *
- * A list rather than five branches so the ORDER is a value you can read, and so a condition arriving above them
- * (see `limited`) does not have to be threaded past five near-identical ifs to get there. */
-const ATTENTION_ACTIONS: readonly (readonly [flag: keyof AgentAttention, verb: string])[] = [
-    [`plan`, `Review plan`],
-    [`question`, `Answer`],
-    [`permission`, `Approve`],
-    // The verb carries the money: this click spends, unlike Approve one line up.
-    [`service`, `Approve spend`],
-    // The verb carries the work: this click leads into a setup flow, not a one-press approval.
-    [`capability`, `Set up`],
-];
 
 /* The endings whose destination is named by the ENDING rather than by what is in the diff, tabled for the same
  * reason ENDING_REASONS above is: they were a run of one-line branches that a new condition had to be threaded
