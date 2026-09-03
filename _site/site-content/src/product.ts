@@ -123,11 +123,7 @@ export const productPages: ProductPage[] = [
             frame: "browser",
             label: "acme-shop · /agents",
         },
-        facts: [
-            { value: "3 lanes", label: "Attention, Active, Finished. The board sorts itself" },
-            { value: "1 branch each", label: "every agent gets an isolated checkout" },
-            { value: "6 agents", label: "Claude Code, Codex, Grok, Kimi Code, Google, Cursor" },
-        ],
+        facts: [],
         blocks: [
             {
                 title: "See what needs your attention first",
