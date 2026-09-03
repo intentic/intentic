@@ -1,7 +1,7 @@
 # Mobile shells — the store releases. mobile.yml proves the shells build; this ships them.
 #
 # `workflow_dispatch` ONLY, and deliberately so twice over: a tag trigger is a trigger this repository can
-# never fire (prepass invariant 10 — semantic-release pushes tags with GITHUB_TOKEN, which starts no
+# never fire (the workflow-policy check — semantic-release pushes tags with GITHUB_TOKEN, which starts no
 # workflows), and a store release is a human decision anyway — review timelines, phased rollouts and version
 # naming belong to whoever presses the button, not to whatever landed on main last. The button asks for the
 # marketing version; the BUILD number is this workflow's run number, so every upload is monotonic without

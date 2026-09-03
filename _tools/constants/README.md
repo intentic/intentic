@@ -13,10 +13,17 @@ The ports, paths and image references the daemon, the CLIs and the desktop app a
   values, and the install-script table. Isomorphic, imported by browser code, so nothing here may touch `node:fs`.
 - [src/node.mjs](src/node.mjs): `repoRoot()` and `packageRoot()`, behind the `@intentic/constants/node`
   subpath. Node-only, and hand-written JavaScript rather than compiled TypeScript.
+- [src/assertion-measure.mjs](src/assertion-measure.mjs), [src/contract-shrink.mjs](src/contract-shrink.mjs) and
+  [src/control-bytes.mjs](src/control-bytes.mjs): the three judgments the repository's checkout gates
+  (`_tools/checks/`) and the daemon both make, kept as one copy each. Hand-written JavaScript for the same
+  reason `node.mjs` is: a gate that runs before `pnpm install` imports them by relative path, and the daemon
+  imports them as subpaths of this package.
 
 ## How it fits
 
-The bottom of the dependency graph: it imports nothing and almost everything imports it. A port number that lives
+The bottom of the dependency graph: it imports nothing and almost everything imports it. That is also what
+makes it the home of the few pure judgments a pre-install script and the daemon have to share: anything else
+they could both import would need an install to resolve. A port number that lives
 in two files is a port number that will eventually be two different numbers, which is the entire argument for
 this package existing. The same argument covers the directory layouts: `/work`, `/history`, `.intentic`,
 `/opt/intentic`: which were previously typed out by hand across dozens of files with nothing linking the copies.
@@ -41,7 +48,7 @@ by nothing. Walking up to a marker has no such coupling, so a file can move anyw
   gets written. It is also why the root `package.json` depends on this package: without that link, scripts under
   `_tools/scripts/` cannot resolve it by name.
 - **The name only resolves once `pnpm install` has run**, because a bare specifier is looked up through
-  `node_modules`. The two callers that run before any install: `prepass.mjs --checks-only`, which the `pre-push`
+  `node_modules`. The two callers that run before any install: `_tools/checks/run.mjs`, which the `pre-push`
   hook and the CI `preflight` job invoke on a bare checkout: therefore import `../constants/src/node.mjs` by
   path. Same file, same single copy of the walk, no install required. Everything that runs after the install
   imports it by name.

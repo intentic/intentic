@@ -29,7 +29,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # That matters because an overlay is `FROM` this image: publishing a new sandbox image changes this image's
 # digest, which invalidates EVERY overlay layer above it, so a sandbox re-installs its whole environment on
 # every update. The layer miss is unavoidable (the parent chain really did change); paying for the bytes twice
-# is not. _tools/scripts/build-cache-mounts.mjs enforces the mounts, and enforcement is what makes removing
+# is not. _tools/checks/build-cache-mounts.mjs enforces the mounts, and enforcement is what makes removing
 # docker-clean safe: Debian's drop-in deletes the archives after each install, which would empty the very cache
 # mount it is meant to fill, but with it gone an UNMOUNTED apt block would commit its .debs into the image.
 RUN rm -f /etc/apt/apt.conf.d/docker-clean \

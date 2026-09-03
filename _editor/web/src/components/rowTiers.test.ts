@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // A LIST IS ONE SIZE, and this pins the mechanism that makes it so, on the real components, because none of it
-// is visible from any other angle. `_tools/scripts/row-tiers.mjs` guards the call sites — that nobody re-answers
+// is visible from any other angle. `_tools/checks/row-tiers.mjs` guards the call sites — that nobody re-answers
 // the tier locally — and a passing gate says nothing about whether the answer given once actually REACHES the
 // rows, the loading outline and the notes between them. A tier that resolves and is never read looks identical
 // from the gate's side to one that works, which is the same argument brandMarkTiers.test.ts makes about its own

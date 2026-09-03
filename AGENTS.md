@@ -35,63 +35,60 @@ that invalidated it.** There is no second place to remember: the repository-leve
 What does *not* need a documentation edit: renaming a local, adding a test, fixing a bug the page never
 described, changing an implementation detail it deliberately does not mention.
 
-## Before you finish a turn
+## What reads your edit, and when
 
-On Claude Code turns, the sandbox automatically runs `pnpm lint && pnpm verify` after edits under
-`intentic/**`. Do not run or announce that gate yourself; failures return to the turn.
+Four moments, each the cheapest one that can see the defect it is for. Every one of them is a rule in
+`.intentic/config/settings.json` (the Rules screen lists them), so none is a convention.
 
-Use targeted checks only when you need an earlier result. `pnpm format` is not part of any gate.
+**After every file you write** (`file.edited` rules, every runtime, edit tools and shell commands alike: the
+daemon reads the edit off the tree, so `sed`, a heredoc and a script count like Edit): the linter with
+`.oxlintrc.agent.json` (`.intentic/config/hooks/lint-edit.mjs`, autofixes silently and reports only what the
+edit introduced) and the byte scan (`bytes-edit.mjs`). On Claude Code turns the same moment also type-checks
+the file. What a failing one prints rides back with the edit's own result. Fix it there: that is one edit,
+and nothing has been built on it yet.
 
-Neither half goes through `pnpm build`, which dies EXDEV under worktree isolation: a prepass emits every
-package's dist with `tsgo -b` (`_tools/scripts/prepass.mjs`) and the tests then run with `--only`, off turbo's
-`^build` edge. Nothing about that is a shortcut: the dist each suite imports was compiled from the tree you
-are looking at, seconds ago.
+**When the turn tries to end** (`Verify before you finish`, `cd intentic && pnpm verify:turn`, after edits
+under `intentic/**`): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter, the declarations emit,
+and `turbo run typecheck test --only` over the AFFECTED CLOSURE, the packages holding a changed file plus
+every package that depends on one. That is exactly the set whose fixtures can name a shape you just changed;
+nothing outside it can have been broken by this turn, and nothing inside it is somebody else's red. Do not
+run or announce that gate yourself; failures return to the turn, and the check's last run decides whether
+the work lands: a red first run with a green second is a turn that passed, a turn still red when it ends is
+held on its branch as "Ready to land".
 
-What this catches is almost never an error in the code you changed. It is another package's fixture naming a
-shape the interface just stopped having, or a golden anchor pinned to a line you moved: change
-`_search/iq-engine`, break `_sandbox/sandbox` and `_search/iq-bench`, and the suite you ran next to your edit says
-nothing about it. Verifying only the package you touched is exactly how main spent 1h48m red across ten landed
-commits, then went green for four minutes before the next one: and how, across three days, 67 of 100 main
-pipelines failed with the `test` job.
+Neither this nor the land check goes through `pnpm build`, which dies EXDEV under worktree isolation: the
+emit (`_tools/scripts/emit-declarations.mjs`, `tsgo -b`) writes every package's dist, and the tests run with
+`--only`, off turbo's `^build` edge. The dist each suite imports was compiled from the tree you are looking
+at, seconds ago.
 
-The fleet lands in parallel, so this is also the only moment the check means anything: main moves under you
-while you work, and a red main is a red main for whoever lands next, whatever they changed.
-
-The rule's path condition is read from the tree as well as from the edit tools, so an edit made with `sed`, a
-heredoc or a script counts like one made with Edit. There is no way to change code under `intentic/**` that
-the check does not see. The same goes for the per-edit type diagnostics: the tree is read before and after
-every Bash command, and every TypeScript file the command changed is checked exactly as an Edit would be, test
-files included (they are checked against their package's `tsconfig.test.json`, the program that compiles them).
-
-The check's last run decides whether the work lands. A repair is re-measured: the check runs again on the
-Stop that follows it (two rounds per turn), and a red first run with a green second is a turn that passed. A turn
-whose check is still red when it ends is held on its branch as "Ready to land", whatever the landing rule or the
-card's override says, and the feed names the check that held it.
+**After the land, on the main tree, off your clock:** the whole repository (`pnpm verify`, one prepass, one
+typecheck, one test run), serialized through the heavy-command pool, for every landed repo and every runtime.
+This is the one moment that legitimately needs the whole suite against a tree nobody else is moving: it
+answers for another package's fixture, for main having moved under you, and for a runtime with no Stop hook.
+A red verdict wakes the fix chore with your land as the named cause; a green one is recorded against the
+tree so the push gate replays it.
 
 The test files a turn touched get one more reader at the Stop, the `verify-tests` rule: each is compared with
 the same file at HEAD for assertions that got weaker, and a new test is re-run against the pre-turn source for
-one that passes without the change. The first test file a turn edits is also told the two rules that apply at
-that moment, once. Both findings are reports, not refusals; the push is where a weakening is refused.
+one that passes without the change. Both findings are reports, not refusals; the push is where a weakening is
+refused.
 
 ## Before it leaves the machine
 
 The push is the one gate nothing routes around, and it runs `_tools/scripts/verify-push.mjs`: from the app's
 "Check before you push" rule (`pnpm verify:push`), in a terminal the owner can watch, and again from
-`.githooks/pre-push` for any push git makes from the checkout. The script runs the checkout-only gates first (the prepass
-invariants, the byte scan, the invariant registry, the daemon boundaries, the linter), then `cargo fmt --check`
-on any Rust crate the push touches, then the three steps CI's verify groups run (`prepass`, `turbo run
-typecheck`, `turbo run build test`), unfiltered, with turbo's cache standing in for a filter. A tree the app's check has already
-measured is not measured twice: the verdict is keyed to a hash of the working tree.
+`.githooks/pre-push` for any push git makes from the checkout. Cheapest first: every check the manifest lists
+(`_tools/checks/run.mjs`, under two seconds, needing nothing installed), the assertion ratchet over the
+range's test files (`_tools/scripts/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
+only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the
+linter; then `cargo fmt --check` on any Rust crate the push touches; then the three steps CI's verify groups
+run. A tree that `pnpm verify` already measured, which after a land is the ordinary case, replays that verdict
+and runs only the build it could not (`_tools/scripts/lib/tree-verdict.mjs`).
 
-The first tier also runs the assertion ratchet over the range's test files (`_tools/scripts/assertion-ratchet.mjs`):
-a test file may get stronger by itself and weaker only with a `test!:` subject or a `Test-Note:` trailer on a
-commit in the range saying why.
-
-It measures the working tree; CI measures the commit. Landed work not yet committed, or a lockfile an install
-left beside a committed manifest, is in the first and not the second, and the script says how many such paths
-it saw. The one shape of that gap it knows is refused by name: a push that commits any of `package.json`,
-`pnpm-workspace.yaml` or `pnpm-lock.yaml` while another of them is changed and uncommitted. Commit what
-belongs together before pushing.
+It measures the working tree; CI measures the commit. The land now regenerates `pnpm-lock.yaml` in the
+worktree whenever the delta changed a manifest without it (`agents/lockfile-reconcile.ts`), so the pair
+arrives in one patch; the push still refuses by name a push that commits any of `package.json`,
+`pnpm-workspace.yaml` or `pnpm-lock.yaml` while another of them is changed and uncommitted.
 
 ## Tests
 
@@ -125,9 +122,9 @@ rules are about what a test stands the code up with, not about how it asserts.
   test resets (`vi.resetModules`).
 - A suite that reaches for the machine says so in its NAME – `*.integration.test.ts` (temp trees,
   subprocesses, real git, docker) runs under the integration budget, everything else under a 5s hang detector;
-  both come from `@intentic/testing/vitest`, and the prepass both gates run fails a machine-touching suite that
-  is misnamed: including one that reaches the machine only through a fixture module it imports. Nothing to
-  tune per file: the ceiling follows the kind of suite.
+  both come from `@intentic/testing/vitest`, and the `test-programs` check every gate runs fails a
+  machine-touching suite that is misnamed: including one that reaches the machine only through a fixture
+  module it imports. Nothing to tune per file: the ceiling follows the kind of suite.
 - A timeout is a hang bound, never a latency measurement – if a suite needs more than its budget, set it far
   above the slow case and say so in a comment. A budget tuned close to observed timings fails on contention
   instead of on regressions, and a timed-out test keeps running: its in-flight work lands on the next test's
@@ -148,13 +145,13 @@ rules are about what a test stands the code up with, not about how it asserts.
   than reaching past it.
 - A test file gets stronger by itself and weaker only on purpose – a failing test is fixed by updating the value
   it expects to the new truth, never by widening the matcher. The push gate measures every test file a range
-  changed against its earlier self (`_tools/scripts/assertion-measure.mjs`: exact matchers, loose matchers, the
+  changed against its earlier self (`@intentic/constants/assertion-measure`: exact matchers, loose matchers, the
   literal text the assertions pin) and refuses a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
   asserted text cut past a quarter with no test removed) unless a commit in the range carries a `test!:` subject
   or a `Test-Note:` trailer saying why. The same measure reaches the agent at the Stop (`verify-tests`), where it
   is a report. On 2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is
   what this reads for.
-- Mock a workspace package with what the code under test imports, or with the original – prepass invariant 14
-  reads every `vi.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands
+- Mock a workspace package with what the code under test imports, or with the original – the `test-programs`
+  check reads every `vi.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands
   up import from that package, and refuses a missing one. Spread `await importOriginal()` into the factory rather
   than listing exports: the list is right the day it is written and wrong the day the package grows.

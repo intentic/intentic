@@ -104,7 +104,7 @@ const present = new Set(directories);
 for (const entry of UNAUDITED) {
     if (!present.has(entry)) {
         failures.push(
-            `UNAUDITED names '${entry}', which is not a directory under _sandbox/sandbox/src: renamed or removed? update the list in ${"_tools/scripts/verify-invariants.mjs"} in the same change`,
+            `UNAUDITED names '${entry}', which is not a directory under _sandbox/sandbox/src: renamed or removed? update the list in ${"_tools/checks/invariant-registry.mjs"} in the same change`,
         );
     }
 }

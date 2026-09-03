@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { type AssertionMeasure, measure, type Weakening, weakened } from "@intentic/constants/assertion-measure";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 /* THE `verify-tests` BUILT-IN: what a turn did to its tests, read when the turn tries to end.
@@ -18,10 +19,10 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
  *   THE RATCHET compares the file's assertions with the same file at HEAD, three numbers each way, exact
  *   matchers, loose matchers, and the characters of literal text the matchers pin down, and reports a file that
  *   got weaker in either of two shapes: a DOWNGRADE (fewer exact, more loose) or a NARROWING (the asserted text
- *   shrank by more than a quarter with no test removed). The same measure the push gate applies to a commit range
- *   (_tools/scripts/assertion-measure.mjs, which says why the vocabulary is what it is); there it refuses an
- *   undeclared weakening, here it tells the model while the model can still act, which is the cheaper moment
- *   by a whole push. The two implementations are held to each other by agent-tests.test.ts.
+ *   shrank by more than a quarter with no test removed). The measure is @intentic/constants/assertion-measure,
+ *   the one copy the push gate applies to a commit range (_tools/scripts/assertion-ratchet.mjs, which says why
+ *   the vocabulary is what it is); there it refuses an undeclared weakening, here it tells the model while the
+ *   model can still act, which is the cheaper moment by a whole push.
  *
  *   THE FAULT CHECK re-runs the test with the turn's own source changes served from HEAD and reports a test that
  *   still passes (agent-test-strength.ts). It used to fire on the first edit of each test file, on the first
@@ -46,157 +47,6 @@ export const TEST_WRITING_NOTE =
     "matcher. The test files this turn touches are re-read when it ends: an assertion weaker than at HEAD, and a new test that " +
     "passes against the pre-turn code, both come back as a follow-up.";
 
-/* ── the measure, mirrored from _tools/scripts/assertion-measure.mjs ───────────────────────────────────────── */
-
-export interface AssertionMeasure {
-    readonly exact: number;
-    readonly loose: number;
-    readonly chars: number;
-    readonly tests: number;
-}
-
-export type Weakening = "downgrade" | "narrowing";
-
-// Asserted text that shrinks past this fraction of what it was, with no test removed, is a narrowing.
-const NARROWING = 0.75;
-
-const EXACT = new Set([
-    "toBe",
-    "toEqual",
-    "toStrictEqual",
-    "toHaveLength",
-    "toHaveBeenCalledWith",
-    "toHaveBeenLastCalledWith",
-    "toHaveBeenNthCalledWith",
-    "toHaveBeenCalledTimes",
-    "toHaveBeenCalledOnce",
-    "toHaveReturnedWith",
-    "toHaveLastReturnedWith",
-    "toMatchInlineSnapshot",
-    "toMatchSnapshot",
-    "toMatchFileSnapshot",
-    "toThrowErrorMatchingInlineSnapshot",
-    "toThrowErrorMatchingSnapshot",
-    "toBeNull",
-    "toBeUndefined",
-    "toBeNaN",
-    "toBeCloseTo",
-]);
-const LOOSE = new Set([
-    "toContain",
-    "toContainEqual",
-    "toMatch",
-    "toMatchObject",
-    "toBeTruthy",
-    "toBeFalsy",
-    "toBeDefined",
-    "toBeGreaterThan",
-    "toBeGreaterThanOrEqual",
-    "toBeLessThan",
-    "toBeLessThanOrEqual",
-    "toBeInstanceOf",
-    "toBeTypeOf",
-    "toSatisfy",
-    "toHaveBeenCalled",
-    "toHaveReturned",
-    "toBeOneOf",
-]);
-const ASYMMETRIC = /\bexpect\.(any|anything|stringContaining|stringMatching|objectContaining|arrayContaining|closeTo)\s*\(/g;
-const MATCHER = /\.(to[A-Z][A-Za-z]*)\s*\(/g;
-const TEST_CASE = /^\s*(?:test|it)(?:\.(?:each|skip|only|concurrent|todo|fails|skipIf|runIf))?\s*\(/gm;
-const QUOTES = new Set(['"', "'", "`"]);
-
-interface Span {
-    // The index the scan resumes from: the closing delimiter, or the end of the source.
-    readonly end: number;
-    readonly chars: number;
-}
-
-// A quoted literal opening at `from`. A template literal is cut at its first `${`: what follows is computed, not
-// asserted, and the scan resumes at the template's closing quote.
-const literalSpan = (source: string, from: number): Span => {
-    const quote = source[from];
-    let j = from + 1;
-    for (; j < source.length && source[j] !== quote; j += 1) {
-        if (source[j] === "\\") {
-            j += 1;
-        } else if (quote === "`" && source[j] === "$" && source[j + 1] === "{") {
-            break;
-        }
-    }
-    const end = quote === "`" && source[j] === "$" ? source.indexOf("`", j) : j;
-    return { end: end === -1 ? source.length : end, chars: j - from - 1 };
-};
-
-// A regex literal opening at `from`: its source is asserted text like a string's.
-const regexSpan = (source: string, from: number): Span => {
-    let j = from + 1;
-    for (; j < source.length && source[j] !== "/" && source[j] !== "\n"; j += 1) {
-        if (source[j] === "\\") {
-            j += 1;
-        }
-    }
-    return { end: j, chars: j - from - 1 };
-};
-
-// A `/` in argument position opens a regex; after an operand it is division, and `//` or `/*` is a comment.
-const opensRegex = (source: string, at: number): boolean =>
-    source[at] === "/" && /[(,\s=]/.test(source[at - 1] ?? "(") && source[at + 1] !== "/" && source[at + 1] !== "*";
-
-// The literal text a matcher's argument list pins down, from its `(` to the matching `)`. Walked by hand because
-// a matcher's argument is routinely a multi-line object with nested calls, which no single regex can bound.
-const assertedChars = (source: string, from: number): number => {
-    let depth = 0;
-    let chars = 0;
-    for (let i = from; i < source.length; i += 1) {
-        const ch = source[i] ?? "";
-        if (ch === "(") {
-            depth += 1;
-        } else if (ch === ")") {
-            depth -= 1;
-            if (depth === 0) {
-                return chars;
-            }
-        } else if (QUOTES.has(ch) || opensRegex(source, i)) {
-            const span = ch === "/" ? regexSpan(source, i) : literalSpan(source, i);
-            chars += span.chars;
-            i = span.end;
-        }
-    }
-    return chars;
-};
-
-export const measureAssertions = (source: string): AssertionMeasure => {
-    let exact = 0;
-    let loose = 0;
-    let chars = 0;
-    for (const match of source.matchAll(MATCHER)) {
-        const name = match[1] ?? "";
-        if (EXACT.has(name)) {
-            exact += 1;
-        } else if (LOOSE.has(name)) {
-            loose += 1;
-        }
-        chars += assertedChars(source, match.index + match[0].length - 1);
-    }
-    loose += [...source.matchAll(ASYMMETRIC)].length;
-    const tests = [...source.matchAll(TEST_CASE)].length;
-    return { exact, loose, chars, tests };
-};
-
-// Weaker, in either of the two shapes the header names. `before` absent (a new file) can only be stronger.
-export const weakened = (before: AssertionMeasure | undefined, after: AssertionMeasure): Weakening | undefined => {
-    if (before === undefined) {
-        return undefined;
-    }
-    if (after.exact < before.exact && after.loose > before.loose) {
-        return "downgrade";
-    }
-    if (before.chars > 0 && after.chars < before.chars * NARROWING && after.tests >= before.tests) {
-        return "narrowing";
-    }
-    return undefined;
-};
 
 /* ── the built-in ─────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -244,9 +94,9 @@ const ratchetFindings = async (deps: VerifyTestsDeps, files: readonly string[]):
         }
         // No HEAD version means the file is new this turn, which can only be stronger.
         const before = await git(deps.root, ["show", `HEAD:${path}`])
-            .then((result) => measureAssertions(result.stdout))
+            .then((result) => measure(result.stdout))
             .catch(() => undefined);
-        const now = measureAssertions(after);
+        const now = measure(after);
         const shape = weakened(before, now);
         if (shape !== undefined && before !== undefined) {
             findings.push(describeWeakening(path, shape, before, now));

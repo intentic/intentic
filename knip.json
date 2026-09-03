@@ -9,7 +9,7 @@
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
     "workspaces": {
         ".": {
-            "entry": ["_tools/scripts/*.sh"],
+            "entry": ["_tools/scripts/*.sh", "_tools/checks/*.mjs", "_tools/scripts/*.mjs"],
             "ignore": ["desired-state/**", "intent/**", "_tools/extension-example/seed/**", "_editor/ios-app/**", "_editor/android-app/**"]
         },
         "_editor/web": {

@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GitRunner } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
-import { claimedContractShrink, lockShrinkage, shrunkSurfaces } from "./contract-shrink.js";
+import { lockShrinkage, shrunkSurfaces } from "@intentic/constants/contract-shrink";
+import { claimedContractShrink } from "./contract-shrink.js";
 
-/* Mirrors of the gate's own judgments (_tools/scripts/prepass.mjs, invariant 6): the drafter and the gate must
+/* The gate's own judgments (_tools/checks/contract-shrink.mjs reads the same module): the drafter and the gate must
  * call the same shapes shrunk, or a draft this module declared clean is a push that gate still refuses. */
 
 test("a property removed is named by its dotted path", () => {

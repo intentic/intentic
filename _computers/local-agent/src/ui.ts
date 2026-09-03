@@ -106,7 +106,7 @@ const UNICODE: Glyphs = { ok: "✓", fail: "✗", warn: "!", skip: "·", spinner
 const ASCII: Glyphs = { ok: "+", fail: "x", warn: "!", skip: "-", spinner: ["|", "/", "-", "\\"] };
 
 // Written as \u001b escapes, never the literal byte: a control character in a source file makes git, grep
-// and every diff viewer treat it as binary (_tools/scripts/control-chars.mjs enforces this repo-wide).
+// and every diff viewer treat it as binary (_tools/checks/control-chars.mjs enforces this repo-wide).
 const DIM = "\u001b[2m";
 const BOLD = "\u001b[1m";
 const GREEN = "\u001b[32m";

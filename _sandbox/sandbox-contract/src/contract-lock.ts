@@ -4,7 +4,7 @@
  *
  * Two readers depend on that answer. contract-lock.test.ts fails whenever the committed file is out of step
  * with the code, so a contract change always lands WITH its lock diff, visible in review, attributable to a
- * commit. And prepass.mjs (invariant 6) compares the committed lock against its merge-base to insist that a
+ * commit. And the contract-shrink check (_tools/checks/) compares the committed lock against its merge-base to insist that a
  * SHRUNK surface, a schema or field removed, a type changed, arrives as a `!` commit carrying a
  * `Breaking-Note:` trailer, which is what feeds the release's "Breaking changes" section and the update card's
  * warning. Additions pass freely; every persisted-manifest reader parses loosely, so growth breaks nobody.
@@ -58,7 +58,7 @@ export const currentLock = (): Record<string, unknown> => {
 /* ONE LINE PER SCHEMA, on purpose, not JSON.stringify(lock, null, 4). Pretty-printed, the lock is a 35k-line
  * wall nobody scrolls; a line per export keeps it ~500 lines and makes `git diff` read as the list of WHICH
  * surfaces moved, which is the level a reviewer reviews at. The path-level detail lives in the tooling: the
- * lock test diffs parsed objects and prepass invariant 6 names the exact removed paths, so nothing is lost by
+ * lock test diffs parsed objects and the contract-shrink check names the exact removed paths, so nothing is lost by
  * not laying the structure out vertically. */
 export const serializeLock = (lock: Record<string, unknown>): string =>
     `{\n${Object.entries(lock)

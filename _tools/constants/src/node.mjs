@@ -14,15 +14,15 @@ import { fileURLToPath } from "node:url";
  * packages, or be symlinked in, and still get the same answer.
  *
  * WHY THIS FILE IS HAND-WRITTEN JAVASCRIPT rather than TypeScript compiled to dist, in a package where
- * everything else is compiled: the earliest callers run BEFORE anything is built. `prepass.mjs` is the script
- * that performs the build, and the byte check and the path guard both run ahead of it in `pnpm check`. A
+ * everything else is compiled: the earliest callers run BEFORE anything is built. `emit-declarations.mjs` is the script
+ * that performs the build, and the byte check and the path guard both run ahead of it in `pnpm checks`. A
  * helper those three had to import from `dist/` would be a helper they could not import on a clean checkout,
  * which is exactly how the second copy of this walk gets written. Plain .mjs with a hand-written .d.mts beside
  * it is importable at every point in the build, so there only has to be one.
  *
  * A caller that runs before `pnpm install` has one more constraint: `@intentic/constants/node` is a BARE
  * specifier and bare specifiers resolve through node_modules, which a bare checkout has none of. Those callers
- * (`prepass.mjs`, run by the pre-push hook and by CI's preflight job) import THIS FILE by relative path
+ * (`_tools/checks/*.mjs`, run by the pre-push hook and by CI's preflight job) import THIS FILE by relative path
  * instead. Still one walk; only the way in differs.
  *
  * NOT EXPORTED FROM THE PACKAGE INDEX, and that is deliberate: the index is imported by browser code

@@ -4,10 +4,10 @@
  *   node _tools/scripts/assertion-ratchet.mjs <base> <head>      the test files a range changed, committed content
  *   node _tools/scripts/assertion-ratchet.mjs --worktree          the test files the working tree changed, vs HEAD
  *
- * The measure itself, and why it exists, is assertion-measure.mjs. This file is the gate around it: it pairs each
+ * The measure itself, and why it exists, is @intentic/constants/assertion-measure (the daemon reads the same copy). This file is the gate around it: it pairs each
  * changed test file with its earlier self and REFUSES ONLY AN UNDECLARED WEAKENING. A commit in the range whose
  * subject is `test!:` (any scope) or that carries a `Test-Note:` trailer says "I meant it, and here is why", the
- * same shape the wire-contract gate asks of a shrink (prepass.mjs invariant 6). In `--worktree` mode there are no
+ * same shape the wire-contract gate asks of a shrink (_tools/checks/contract-shrink.mjs). In `--worktree` mode there are no
  * commits to declare with, so a flag is a report rather than a refusal, and the exit code says which.
  *
  * Run from verify-push.mjs in its first tier, over the range the push carries. */
@@ -15,7 +15,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
-import { describeWeakening, measure, weakened } from "./assertion-measure.mjs";
+import { describeWeakening, measure, weakened } from "../constants/src/assertion-measure.mjs";
 
 const root = repoRoot(import.meta.url);
 const args = process.argv.slice(2);

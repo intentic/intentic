@@ -16,7 +16,7 @@
  */
 
 /* What an integration suite is called. The name is the whole convention: it is what the projects select on and
- * what `_tools/scripts/prepass.mjs` holds a machine-touching suite to. `*.e2e.test.ts` is in the set because
+ * what the `test-programs` check (`_tools/checks/`) holds a machine-touching suite to. `*.e2e.test.ts` is in the set because
  * it already says the same thing more strongly, those suites drive the shipped image against real services,
  * and renaming them would have spelled "integration" twice. */
 const INTEGRATION_TESTS = ["./**/*.integration.test.{ts,mjs}", "./**/*.e2e.test.{ts,mjs}"];

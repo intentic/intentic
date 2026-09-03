@@ -14,7 +14,7 @@ import {
     envSuffix,
 } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { fromWorktree, type IsolationAnchor, nsenterPrefix } from "../agents/isolation.js";
+import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix } from "../agents/isolation.js";
 import { admitTurn, readMemoryHeadroom } from "../platform/memory-admission.js";
 import { createFreshnessResolver } from "../dependencies/registry-freshness.js";
 import { createWorkspacePins } from "../dependencies/workspace-pins.js";
@@ -50,6 +50,7 @@ import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { createDiagnosticsServer } from "../logs/diagnostics-tools.js";
 import { type RuleCommandRun, runRuleCommand } from "../rules/rule-command.js";
+import { fileEditedReviewer, spawnEditCommand } from "../rules/file-edited.js";
 import { verifyTestsMessage } from "./agent-tests.js";
 import { passesAgainstHead } from "./agent-test-strength.js";
 import { recordCheckVerdict } from "./turn-checks.js";
@@ -712,6 +713,8 @@ export const planHarnessTurn = async (
     /* The rules armed where a turn ends. STANDING, not matching: their conditions are read at the Stop, when
      * the turn has actually edited something to narrow on (rules/turn-ending.ts). */
     const turnEndingRules = standing(rules, "turn.ending");
+    // The rules armed on every file the turn writes, run beside the type check (rules/file-edited.ts).
+    const fileEditedRules = standing(rules, "file.edited");
     /* THE SECOND ROUND, and the last of the planning I/O: an extension scan and the browser bring-up, which
      * had no business being more awaits in a row. */
     /* WHICH PERSONA THIS TURN WEARS, resolved by planTurn, above the provider split, and arriving here already
@@ -1010,6 +1013,29 @@ export const planHarnessTurn = async (
                     const onDisk = join(context.localCwd, path);
                     return { onDisk, path: fromWorktree(onDisk, context.base.isolation?.plan) };
                 }),
+            /* THE `file.edited` MOMENT, as one reviewer the diagnostics hook set runs on every written file. Its
+             * command runs where the Stop's would (ruleCommandIn: inside an anchored turn's namespace), and is
+             * handed the file's name as that place spells it: the agent's own under an anchor, the worktree's
+             * from the daemon (the same split agent-diagnostics.ts makes for the type check). Firings stamp the
+             * settings list only: a per-edit rule that wrote a feed row per save would be the feed's noise. */
+            ...(fileEditedRules.length > 0
+                ? {
+                      editReviewers: [
+                          fileEditedReviewer(fileEditedRules, {
+                              run: (command, timeoutMs) => spawnEditCommand(context.localCwd)(ruleCommandIn(command, context.base.isolation?.anchor), timeoutMs),
+                              roots: [context.localCwd, context.base.isolation?.plan?.root, services.workspace.root].filter(
+                                  (root): root is string => root !== undefined,
+                              ),
+                              place: (file) => (context.base.isolation?.anchor === undefined ? inWorktree(file, context.base.isolation?.plan) : file),
+                              onFired: (rule: Rule) => {
+                                  void services.ruleFirings
+                                      .stamp(rule.id, Date.now())
+                                      .catch((error: unknown) => services.logger.warn({ err: error, rule: rule.id }, "rule firing stamp failed"));
+                              },
+                          }),
+                      ].filter((reviewer) => reviewer !== undefined),
+                  }
+                : {}),
             ...(turnEndingRules.length > 0
                 ? {
                       turnEndingRules,

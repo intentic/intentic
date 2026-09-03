@@ -53,6 +53,7 @@
                 "**/scripts/**",
                 "**/*.config.*",
                 "_tools/scripts/**",
+                "_tools/checks/**",
                 "_tools/e2e/**",
                 "_tools/localhost-https/**",
                 "_tools/dev-public/**",

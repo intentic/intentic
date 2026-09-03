@@ -17,10 +17,11 @@ const DEP_BLOCKS: readonly (readonly [string, WorkspaceDepType])[] = [
 ];
 
 // Expand one pnpm packages glob into repo-relative package dirs. Only the common shapes are supported: a
-// literal dir and a single trailing `/*` segment (readdir of the prefix). `!negations` and `**` are skipped,
-// the monorepos this product manages use flat `_dir/*` globs.
+// literal dir and a single trailing `/*` segment (readdir of the prefix). `**` is skipped, the monorepos this
+// product manages use flat `_dir/*` globs. Negations are the caller's (readWorkspaceManifests), because a
+// `!dir` line takes a directory OUT of what an earlier line let in, and the two have to be read together.
 const expandGlob = (repoDir: string, glob: string): string[] => {
-    if (glob.startsWith("!") || glob.includes("**")) {
+    if (glob.includes("**")) {
         return [];
     }
     if (!glob.endsWith("/*")) {
@@ -35,6 +36,18 @@ const expandGlob = (repoDir: string, glob: string): string[] => {
         .filter((entry) => entry.isDirectory())
         .map((entry) => `${prefix}/${entry.name}`);
 };
+
+/* A `!dir` line in pnpm-workspace.yaml is pnpm's own way of saying a directory under a glob is NOT a
+ * workspace package. This repository's two store shells (`_editor/ios-app`, `_editor/android-app`) are
+ * exactly that: their dependencies are consumed by Xcode and by Bubblewrap's JDK on the machine that builds
+ * them, and `pnpm install` here never installs them, by design. Reading the globs without their negations
+ * therefore called those shells members, found their Capacitor dependencies "unresolved" after every install,
+ * and reported the whole workspace `stale` forever: 1,044 installs restarted over twenty days, each rewriting
+ * node_modules under running turns, for four packages that were never supposed to be there. Exact paths only,
+ * the way the negations are written; a glob negation is a shape this reader does not know and would be a
+ * package it wrongly keeps, which the drift detector then reports loudly rather than hides. */
+const negated = (globs: readonly string[]): Set<string> =>
+    new Set(globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1).replace(/\/+$/, "")));
 
 // One workspace package as its manifest declares it, with the dir it was found in. Exported because the graph is
 // not the only reader of these files, the maintenance surface's signals need each package's engines and
@@ -53,10 +66,11 @@ export const readWorkspaceManifests = (repoDir: string): WorkspaceManifest[] => 
         return [];
     }
     const globs = (parse(readFileSync(workspaceFile, "utf8")) as { packages?: string[] } | undefined)?.packages ?? [];
+    const excluded = negated(globs);
     const found: WorkspaceManifest[] = [];
     const seen = new Set<string>();
-    for (const glob of globs) {
-        for (const dir of expandGlob(repoDir, glob)) {
+    for (const glob of globs.filter((entry) => !entry.startsWith("!"))) {
+        for (const dir of expandGlob(repoDir, glob).filter((candidate) => !excluded.has(candidate))) {
             // A dir without a parseable, named package.json isn't a workspace package (matches pnpm's view).
             let pkg: PackageManifest;
             try {

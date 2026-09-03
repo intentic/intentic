@@ -23,7 +23,7 @@ import type { Logger } from "pino";
  *     recorded as a broken check, under its owner's name, so it cannot hide either.
  *
  * OWNERSHIP IS BY SUBSYSTEM, one `invariant.ts` per directory under src/, and it is EXHAUSTIVE: a subsystem
- * either registers a check or says in writing why it has none (verify-invariants.mjs, run by the pre-push hook
+ * either registers a check or says in writing why it has none (_tools/checks/invariant-registry.mjs, run by the pre-push hook
  * and the CI preflight job, before anything is installed).
  * Exhaustiveness is the whole mechanism. A registry anyone may contribute to and nobody must is a folder that
  * fills up for two months and is never opened again.

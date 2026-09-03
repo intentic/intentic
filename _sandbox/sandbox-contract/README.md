@@ -72,7 +72,7 @@ mismatch is a type error rather than a runtime surprise.
 - [src/contract-lock.ts](src/contract-lock.ts) and [contract.lock.json](contract.lock.json): every exported
   schema serialized to one committed, comparable document. Regenerate with `pnpm --filter
   @intentic/sandbox-contract lock` whenever a schema changes; the test beside it fails until you do, and the
-  repo-level prepass refuses a push whose lock *lost or changed* an existing surface without a declared
+  repo-level `contract-shrink` check refuses a push whose lock *lost or changed* an existing surface without a declared
   breaking change (COMPATIBILITY.md at the repo root has the whole story).
 
 ## How it fits

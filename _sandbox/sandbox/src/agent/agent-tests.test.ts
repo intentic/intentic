@@ -1,12 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { measure as measureScript, weakened as weakenedScript } from "../../../../_tools/scripts/assertion-measure.mjs";
-import { measureAssertions, TEST_FILE, verifyTestsMessage, weakened } from "./agent-tests.js";
+import { measure, weakened } from "@intentic/constants/assertion-measure";
+import { TEST_FILE, verifyTestsMessage } from "./agent-tests.js";
 
-/* THE TWO IMPLEMENTATIONS ARE HELD TO EACH OTHER HERE. The push gate measures with _tools/scripts/assertion-measure.mjs
- * (a repo script that must import nothing, because a pre-push hook runs it on a clone that may never have
- * installed) and the daemon measures with agent-tests.ts (which ships as a package and cannot reach the script).
- * Two copies of one rule drift; this suite runs both over the same sources and fails the moment they disagree. */
-
+/* The measure behind the ratchet (@intentic/constants/assertion-measure) is one copy, read by the push gate and by
+ * the built-in below; these are the judgments it has to make, on the shapes the 08-31 sweep produced. */
 const CORPUS = [
     // The shape the 08-31 sweep produced: exact object equality widened to a partial match plus a fragment.
     `test("a", () => {
@@ -32,27 +29,10 @@ const CORPUS = [
     ``,
 ];
 
-describe(`the daemon's measure agrees with the push gate's`, () => {
-    test.each(CORPUS.map((source, index) => [index, source] as const))(`sample %i`, (_index, source) => {
-        expect(measureAssertions(source)).toEqual(measureScript(source));
-    });
-
-    test(`and so does the verdict, in both shapes and the absence of one`, () => {
-        for (const before of CORPUS) {
-            for (const after of CORPUS) {
-                const ours = weakened(measureAssertions(before), measureAssertions(after));
-                const theirs = weakenedScript(measureScript(before), measureScript(after));
-                expect(ours).toBe(theirs);
-            }
-        }
-        expect(weakened(undefined, measureAssertions(CORPUS[0] ?? ""))).toBeUndefined();
-    });
-});
-
 describe(`what counts as weaker`, () => {
     test(`the toEqual → toMatchObject + toContain move is a downgrade`, () => {
-        const before = measureAssertions(CORPUS[0] ?? "");
-        const after = measureAssertions(CORPUS[1] ?? "");
+        const before = measure(CORPUS[0] ?? "");
+        const after = measure(CORPUS[1] ?? "");
         // 38 is the length of the one string the exact matcher pins; 3 is "ada".
         expect(before).toEqual({ exact: 1, loose: 0, chars: 38, tests: 1 });
         expect(after).toEqual({ exact: 0, loose: 2, chars: 3, tests: 1 });
@@ -60,22 +40,22 @@ describe(`what counts as weaker`, () => {
     });
 
     test(`asserted text cut past a quarter with the same tests is a narrowing`, () => {
-        const before = measureAssertions(`test("x", () => { expect(t).toBe("Start your first agent"); });`);
-        const after = measureAssertions(`test("x", () => { expect(t).toBe("first agent"); });`);
+        const before = measure(`test("x", () => { expect(t).toBe("Start your first agent"); });`);
+        const after = measure(`test("x", () => { expect(t).toBe("first agent"); });`);
         expect(weakened(before, after)).toBe("narrowing");
     });
 
     test(`text that leaves with its tests is a deletion, not a narrowing`, () => {
-        const before = measureAssertions(
+        const before = measure(
             `test("x", () => { expect(t).toBe("Start your first agent"); });\ntest("y", () => { expect(u).toBe("gone"); });`,
         );
-        const after = measureAssertions(`test("x", () => { expect(t).toBe("Start your first agent"); });`);
+        const after = measure(`test("x", () => { expect(t).toBe("Start your first agent"); });`);
         expect(weakened(before, after)).toBeUndefined();
     });
 
     test(`stronger, or unchanged, is never a finding`, () => {
-        const weak = measureAssertions(CORPUS[1] ?? "");
-        const strong = measureAssertions(CORPUS[0] ?? "");
+        const weak = measure(CORPUS[1] ?? "");
+        const strong = measure(CORPUS[0] ?? "");
         expect(weakened(weak, strong)).toBeUndefined();
         expect(weakened(strong, strong)).toBeUndefined();
     });

@@ -84,7 +84,7 @@
         "promise/always-return": "off",
         // Factory closures and per-call helpers are deliberate. 185 hits.
         "unicorn/consistent-function-scoping": "off",
-        // `"\x1f"` is a control character this repo handles on purpose — _tools/scripts/control-chars.mjs
+        // `"\x1f"` is a control character this repo handles on purpose — _tools/checks/control-chars.mjs
         // exists to police exactly these bytes. Rewriting them to the literal byte is churn against that check.
         "unicorn/no-hex-escape": "off",
         // The next three are cosmetic, and their autofixes were measured across this repo before being
@@ -487,6 +487,7 @@
                 "**/scripts/**",
                 "**/*.config.*",
                 "_tools/scripts/**",
+                "_tools/checks/**",
                 "_tools/e2e/**",
                 "_tools/localhost-https/**",
                 "_tools/dev-public/**",

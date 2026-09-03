@@ -33,7 +33,7 @@
 # `Unsupported GitHub Actions runner environment: "self-hosted"`. That is what v1.208.0 died of, on the first
 # of the 29, after a full install and build. Nothing about it is fixable job-side — the only choices
 # are a hosted runner or an unattested tarball, so: ubuntu-24.04, cold caches and all (publish-npm.sh asserts
-# the same fact before it packs anything, and prepass.mjs's invariant 9 keeps the pairing from drifting back).
+# the same fact before it packs anything, and the workflow-policy check keeps the pairing from drifting back).
 #
 # A release that half-published this way is repaired with _tools/scripts/publish-catchup.sh from an
 # authenticated maintainer machine, or by re-running this workflow: publish-npm.sh skips versions already up.

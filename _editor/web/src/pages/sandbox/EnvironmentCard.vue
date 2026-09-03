@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Button, Code, Notice, type NoticeModel, RowGroup, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
+import { Button, Code, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
@@ -97,7 +97,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             </div>
         </template>
 
-        <div class="flex flex-col gap-4 p-5">
+        <RowNote variant="block" class="flex flex-col gap-4">
         <!-- What the sandbox has, in plain language. Leads in every state: including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
         <EnvironmentContents v-if="shown === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
@@ -176,6 +176,6 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         </template>
 
         <Notice v-if="actionNotice" :of="actionNotice" />
-        </div>
+        </RowNote>
     </RowGroup>
 </template>

@@ -66,7 +66,7 @@ import { twMerge } from "tailwind-merge";
  * `check:buttons` enforces the two halves of that a machine can actually see — a button in a row's own control
  * cluster is `small`, and DIRECT SIBLINGS AGREE — and nothing subtler, because the version of this rule that
  * asks a reader to judge "is this dense?" is the version that drifted: <RowGroup>'s density taxonomy is the
- * same lesson one control over, and the note at the top of _tools/scripts/row-tiers.mjs is what it cost.
+ * same lesson one control over, and the note at the top of _tools/checks/row-tiers.mjs is what it cost.
  *
  * A COMPONENT THAT IS ALWAYS PUT ON A CARD IS ON A CARD, and no check can see that — <HostRecreate> draws the
  * sandbox's update/rollback button and its own template has no surface in it, so its size is a judgement its

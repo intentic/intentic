@@ -4,6 +4,7 @@ import type { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput } from "
 import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../agents/isolation.js";
 import { modulesNear, type NearbyModules } from "../workspace/dependency-drift.js";
 import type { ShellEditTracker } from "./agent-shell-edits.js";
+import { EDIT_TOOLS, editedPath } from "../rules/edit-tools.js";
 
 /* Post-edit diagnostics feedback, the VSCode Claude Code loop, reproduced daemon-side: after every native
  * Edit/Write the touched file is type-checked and any COMPILE ERRORS ride back to the model as additionalContext,
@@ -152,11 +153,18 @@ const staleNote = (missing: readonly string[]): string =>
  * dependency directories symlinked rather than mounted, reachable from here, and the translation IS the whole
  * of it. Only the reported names have to be mapped back for the agent to recognise its own files.
  */
+/* A second reader of the same edit, beside the type check: what a `file.edited` rule's command says about
+ * the file (rules/file-edited.ts). Same signature as `review` below, so the two are run the same way in both
+ * places an edit is heard, after an edit tool and after a shell command that changed the file, and a reader
+ * added later needs nothing but a place in the list. Undefined ⇒ nothing to say, the common answer. */
+export type EditReviewer = (file: string, how: string) => Promise<string | undefined>;
+
 export const editDiagnosticsHooks = (
     placement?: TurnPlacement,
     diag: DiagRunner = runNativeDiag,
     modules: ModulesProbe = modulesNear,
     shell?: ShellEditTracker,
+    reviewers: readonly EditReviewer[] = [],
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const plan = placement?.plan;
     const anchor = placement?.anchor;
@@ -239,6 +247,25 @@ export const editDiagnosticsHooks = (
     };
     const said = (context: string | undefined): HookJSONOutput =>
         context === undefined ? {} : { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } };
+    /* Everything there is to say about one file after one edit: the type check, where the file is one the
+     * checker reads, then every other reader. The type check is gated on the extension because the checker is
+     * TypeScript's; a reviewer is asked about every file and gates itself (a rule's `when.paths`). */
+    const everything = async (file: string, how: string): Promise<string | undefined> => {
+        const notes: string[] = [];
+        if (CHECKED_EXTENSIONS.has(extname(file))) {
+            const context = await review(file, how);
+            if (context !== undefined) {
+                notes.push(context);
+            }
+        }
+        for (const reviewer of reviewers) {
+            const context = await reviewer(file, how).catch(() => undefined);
+            if (context !== undefined) {
+                notes.push(context);
+            }
+        }
+        return notes.length === 0 ? undefined : notes.join("\n\n");
+    };
     return {
         ...(shell === undefined
             ? {}
@@ -259,17 +286,17 @@ export const editDiagnosticsHooks = (
               }),
         PostToolUse: [
             {
-                matcher: "Edit|Write",
+                matcher: EDIT_TOOLS,
                 hooks: [
                     async (input) => {
                         if (input.hook_event_name !== "PostToolUse") {
                             return {};
                         }
-                        const file = (input.tool_input as { file_path?: unknown }).file_path;
-                        if (typeof file !== "string" || !CHECKED_EXTENSIONS.has(extname(file))) {
+                        const file = editedPath(input.tool_input);
+                        if (file === undefined) {
                             return {};
                         }
-                        return said(await review(file, "this edit"));
+                        return said(await everything(file, "this edit"));
                     },
                 ],
             },
@@ -283,12 +310,10 @@ export const editDiagnosticsHooks = (
                                   if (input.hook_event_name !== "PostToolUse") {
                                       return {};
                                   }
-                                  const edits = (await shell.changed())
-                                      .filter((edit) => CHECKED_EXTENSIONS.has(extname(edit.path)))
-                                      .slice(0, SHELL_FILES);
+                                  const edits = (await shell.changed()).slice(0, SHELL_FILES);
                                   const notes: string[] = [];
                                   for (const edit of edits) {
-                                      const context = await review(edit.path, "this command");
+                                      const context = await everything(edit.path, "this command");
                                       if (context !== undefined) {
                                           notes.push(context);
                                       }

@@ -7,6 +7,7 @@ import { InfoDialog, InfoTable } from "@intentic/ui";
  * surprising. */
 
 const MOMENTS = [
+    [`After it edits a file`, `Run a command on that file; what it prints on failure goes back with the edit`, `Once per edited file`],
     [`Before the assistant finishes`, `Send it back to work, or run something it has to pass`, `Once per turn`],
     [`Before you push`, `Run a command; the push waits on it`, `Once per push`],
     [`When an agent finishes`, `Land its work, or hold it on its branch`, `Once per finished agent`],

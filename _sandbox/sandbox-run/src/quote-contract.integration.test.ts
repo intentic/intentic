@@ -23,7 +23,7 @@ import { expect, test } from "vitest";
  * `.integration.` because the discovery IS the machine: this reads every .ts file in the repo, and how long
  * several thousand file reads take is a fact about the runner's disk and how many other suites are on it, not
  * about the code under test. Under the 5s unit budget it passed in 233ms on a developer's box and timed out on
- * a CI runner building three verify jobs at once. prepass.mjs holds machine-touching suites to this name but
+ * a CI runner building three verify jobs at once. the test-programs check holds machine-touching suites to this name but
  * looks for mkdtemp/child_process/git/docker, and a plain `readdir` sweep is none of those. */
 
 const REPO_ROOT = repoRoot(import.meta.url);

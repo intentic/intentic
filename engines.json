@@ -7,7 +7,7 @@
         "An owner who would rather have upstream's newest without waiting for this list sets that engine's channel",
         "to `latest` on the Environment card; one debugging a regression pins a version there instead.",
         "`blessed` must be a version this repository's own suite has run against, which is what the CI check in",
-        "_tools/scripts/check-engines-blessed.mjs enforces against the pins in pnpm-workspace.yaml and the packs.",
+        "_tools/checks/engines-blessed.mjs enforces against the pins in pnpm-workspace.yaml and the packs.",
         "`minimum` is advisory and records a floor the provider itself enforces, so a card can explain a refusal."
     ],
     "engines": {

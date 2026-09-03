@@ -13,9 +13,9 @@
  * pre-push had been BORN 100644, every later update reached the working tree as a patch (which keeps the mode
  * the file already had on disk), and the index saying 100755 never once touched the file. Git's answer to a
  * hook it cannot execute is a HINT and a push that sails through every gate the hook carries, which is how an
- * undeclared contract break reached main past a prepass that had said no. So the repair is back, aimed at the
+ * undeclared contract break reached main past a check that had said no. So the repair is back, aimed at the
  * disk rather than the index: prepare is the one step that runs on every machine, and it re-arms rather than
- * trusts. prepass invariant 7 makes the same repair on every `pnpm test` and `pnpm typecheck`, which is what
+ * trusts. The hooks-armed check (_tools/checks/) makes the same repair on every `pnpm test` and `pnpm typecheck`, which is what
  * covers the clone that installed before the mode was fixed and has had no reason to install since.
  *
  * Two rules, both of which exist because this runs in front of everything else:

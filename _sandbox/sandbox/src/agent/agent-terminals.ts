@@ -8,7 +8,7 @@ import { WORKLOAD_ENV } from "../platform/leftovers.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
 import { resolveCommandSecrets, type SecretAccess } from "./agent-secrets.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { QUEUE_RUN_BIN, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
+import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
 import { type HeavyCommands, matchHeavyCommand } from "../platform/heavy-commands.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -120,6 +120,20 @@ const queuePrefix = (command: string, config: HeavyCommands | undefined): string
     ].join(" ");
     return `${QUEUE_RUN_BIN} ${flags} -- `;
 };
+
+/* A WHOLE COMMAND LINE BEHIND THE QUEUE, for a caller that runs one command rather than rewriting an agent's:
+ * the post-land check (workspace/verify-deps.ts). The same rules, the same prefix, and the same standing-down
+ * (`queueRunEnabled`: no wrapper on this image, or the operator opted out); a command the rules do not call
+ * heavy comes back as it was. The reader is called per command, for the reason bashTmuxHooks gives. */
+export const queueWhole =
+    (heavy: () => Promise<HeavyCommands>) =>
+    async (command: string): Promise<string> => {
+        if (!queueRunEnabled()) {
+            return command;
+        }
+        const prefix = queuePrefix(command, await heavy());
+        return prefix === "" ? command : `${prefix}bash -c ${shellQuote(command)}`;
+    };
 
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],

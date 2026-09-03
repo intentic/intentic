@@ -56,7 +56,7 @@
  * matches anything is reported as stale, so the list cannot outlive the code it excuses. */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { repoRoot } from "@intentic/constants/node";
+import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
 

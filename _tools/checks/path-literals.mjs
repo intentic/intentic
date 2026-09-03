@@ -27,17 +27,30 @@
  *   - `homedir()`-BASED `.intentic`. The user's home config directory shares a name with the workspace state
  *     directory and is a different place; coupling them would make renaming one rename the other. */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { repoRoot } from "@intentic/constants/node";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
+
+/* THE BASELINE, and why this check has one when the others refuse. The rule was written after the sweep that
+ * introduced the constants, and the sweep did not finish: 269 spellings across the tree were still there the
+ * day this check was first RUN by anything (it lived in `pnpm check`, which no hook and no job ran). Fixing them
+ * all at once is a repository-wide edit with its own risk; refusing every push until someone does is how a
+ * check gets switched off. So the standing findings are written down here, per file, as a number that may
+ * shrink and may not grow: a file with MORE spellings than its entry fails, a file that no longer has as many
+ * as its entry fails too (update the entry, or delete it once the file is clean), and a file not listed fails
+ * on its first. Shrink this file; never grow it. `--write-baseline` rewrites it from the current findings for
+ * the one occasion that is legitimate, adopting the rule. */
+const BASELINE = join(root, "_tools/checks/baselines/path-literals.json");
+const writeBaseline = process.argv.includes("--write-baseline");
 
 /* The files that are allowed to spell a root literally, each for a reason that is about reach, not taste:
  * two of them define the constants, and the rest cannot resolve a bare import at the moment they run. */
 const MAY_SPELL_A_ROOT = new Set([
     `_tools/constants/src/index.ts`, // where the names are defined
     `_tools/constants/src/node.mjs`, // the walker itself
-    `_tools/scripts/path-literals.mjs`, // this file: the patterns below are the check
+    `_tools/checks/path-literals.mjs`, // this file: the patterns below are the check
     `_tools/scripts/repo-root.sh`, // the shell walker
     `_site/site/public/scripts/connect.sh`, // downloaded and run standalone
     `_site/site/public/scripts/recreate.sh`, // downloaded and run standalone
@@ -184,14 +197,47 @@ for (const path of tracked) {
     }
 }
 
-if (findings.length > 0) {
-    for (const { at, why } of findings) {
-        console.error(`${at}  ${why}`);
+// Findings per file, which is the unit the baseline counts in: a line number moves with every edit above it.
+const perFile = new Map();
+for (const { at } of findings) {
+    const path = at.slice(0, at.lastIndexOf(":"));
+    perFile.set(path, (perFile.get(path) ?? 0) + 1);
+}
+if (writeBaseline) {
+    const sorted = Object.fromEntries([...perFile].sort(([a], [b]) => a.localeCompare(b)));
+    writeFileSync(BASELINE, `${JSON.stringify(sorted, null, 4)}\n`);
+    console.log(`path-literals: baseline written, ${findings.length} standing findings in ${perFile.size} files`);
+    process.exit(0);
+}
+const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : {};
+
+const grown = [];
+for (const [path, count] of perFile) {
+    const allowed = baseline[path] ?? 0;
+    if (count > allowed) {
+        grown.push(...findings.filter(({ at }) => at.startsWith(`${path}:`)).map(({ at, why }) => `${at}  ${why}`));
+        grown.push(`  ${path}: ${count} spelling(s), the baseline allows ${allowed}`);
     }
-    console.error(
-        `\n${findings.length} hardcoded path(s). A location spelled in two files becomes two locations; a counted root breaks silently when its file moves.`,
-    );
+}
+const stale = Object.entries(baseline)
+    .filter(([path, allowed]) => (perFile.get(path) ?? 0) < allowed)
+    .map(([path, allowed]) => `${path}: the baseline allows ${allowed}, the file now has ${perFile.get(path) ?? 0}: lower or remove its entry in _tools/checks/baselines/path-literals.json in the same change`);
+
+if (grown.length > 0 || stale.length > 0) {
+    for (const line of grown) {
+        console.error(line);
+    }
+    if (grown.length > 0) {
+        console.error(
+            `\nA new hardcoded path. A location spelled in two files becomes two locations; a counted root breaks silently when its file moves. Use the constants; the baseline only covers what predates the rule.`,
+        );
+    }
+    for (const line of stale) {
+        console.error(line);
+    }
     process.exit(1);
 }
 
-console.log(`${tracked.length} tracked files, no hand-spelled roots and no counted ones`);
+console.log(
+    `${tracked.length} tracked files, no new hand-spelled roots and no counted ones (${findings.length} standing in ${perFile.size} files, held by the baseline)`,
+);

@@ -42,7 +42,7 @@ import type { WorkspacePins } from "../dependencies/workspace-pins.js";
 import { freshnessHooks } from "./agent-freshness.js";
 import { searchNoticeHooks } from "./agent-search.js";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
-import { editDiagnosticsHooks } from "./agent-diagnostics.js";
+import { editDiagnosticsHooks, type EditReviewer } from "./agent-diagnostics.js";
 import { createShellEditTracker, type DirtyFiles } from "./agent-shell-edits.js";
 import type { RuleCommandRun } from "../rules/rule-command.js";
 import { installSteeringHooks } from "./agent-installs.js";
@@ -120,6 +120,10 @@ export interface AgentRequest {
      * Edit does (agent-shell-edits.ts, agent-diagnostics.ts). Bound while planning, which is where the worktree
      * layout that decides the two names is known. Absent ⇒ only the edit tools are reviewed. */
     readonly dirtyFiles?: DirtyFiles;
+    /* The owner's `file.edited` rules, bound to the turn's placement as one reviewer (rules/file-edited.ts): run
+     * on every file an edit tool or a shell command writes, beside the type check, answering into the edit's
+     * own result. Absent ⇒ no rule stands there and nothing runs. */
+    readonly editReviewers?: readonly EditReviewer[];
     // Every image-scoped install this turn attempts, classified, for the runtime-install ledger behind the
     // environment drift sweep (environment/runtime-installs.ts). Silent: nothing about it reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
@@ -763,6 +767,7 @@ const baseOptions = (
                 undefined,
                 undefined,
                 request.dirtyFiles === undefined ? undefined : createShellEditTracker(request.dirtyFiles),
+                request.editReviewers ?? [],
             ),
             // The same misreading the diagnostics hook heads off after an edit, headed off after a COMMAND: a test
             // or a build that failed on a package the tree is genuinely missing says so once, having checked first

@@ -13,7 +13,13 @@
     "files": [
         "dist",
         "src/node.mjs",
-        "src/node.d.mts"
+        "src/node.d.mts",
+        "src/assertion-measure.mjs",
+        "src/assertion-measure.d.mts",
+        "src/contract-shrink.mjs",
+        "src/contract-shrink.d.mts",
+        "src/control-bytes.mjs",
+        "src/control-bytes.d.mts"
     ],
     "exports": {
         ".": {
@@ -30,6 +36,18 @@
         "./node": {
             "types": "./src/node.d.mts",
             "default": "./src/node.mjs"
+        },
+        "./assertion-measure": {
+            "types": "./src/assertion-measure.d.mts",
+            "default": "./src/assertion-measure.mjs"
+        },
+        "./contract-shrink": {
+            "types": "./src/contract-shrink.d.mts",
+            "default": "./src/contract-shrink.mjs"
+        },
+        "./control-bytes": {
+            "types": "./src/control-bytes.d.mts",
+            "default": "./src/control-bytes.mjs"
         }
     },
     "scripts": {

@@ -1,3 +1,4 @@
+import { queueWhole } from "./agent-terminals.js";
 import { randomUUID } from "node:crypto";
 import {
     type ActivityEvent,
@@ -797,19 +798,28 @@ async function* runConversationTurn(
                     verifyStore: services.verifyStore,
                     activity: services.activity,
                     emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
+                    queue: queueWhole(services.heavyCommands.read),
                 };
                 const deps = landed.landed ? await services.dependencies.reconcileLand(verifyContext) : undefined;
-                /* THE CLOSURE RE-CHECK: while a project's checks are red, any land that touches it re-runs
-                 * them even with no dependency drift, a source-only fix can never turn the light green
-                 * otherwise. Skipped when the reconcile deferred: its retry will run the checks with the
-                 * installs it is still holding, and a check of the tree before them would misreport the
-                 * install's absence as the code's failure. */
+                /* THE WHOLE REPOSITORY, AFTER EVERY LAND, on the main tree, off every model's clock. This is the
+                 * one moment that legitimately needs the whole suite against a tree nobody else is moving: the
+                 * turn's own check measured its diff against the affected closure (verify-turn.mjs), and what it
+                 * could not answer for, another package's fixture naming a shape this turn just changed, main
+                 * having moved under it, a turn on a runtime with no Stop hook at all, is answered here, once,
+                 * serialized through the heavy-command pool (verify-deps.ts). A red verdict is an edge the fix
+                 * chore wakes on with THIS land as the named cause; a green one is recorded against the tree so
+                 * the push gate that follows replays it and runs only the build (_tools/scripts/verify.mjs).
+                 *
+                 * Every landed repo that carries a check, not only the ones already red: the closure re-check
+                 * this replaces ran only while a project's light was red, which is exactly the arrangement under
+                 * which the light goes red an hour late, at the push, or at CI. Skipped when the reconcile
+                 * deferred: its retry will run the checks with the installs it is still holding, and a check of
+                 * the tree before them would misreport the install's absence as the code's failure. */
                 if (landed.landed && deps?.deferred !== true) {
-                    const red = await services.verifyStore.red().catch(() => [] as string[]);
                     queueVerify(
                         verifier,
                         verifyContext,
-                        red.filter((dir) => dir === "" || span.some(({ repo }) => dir === repo || dir.startsWith(`${repo}/`))),
+                        span.map(({ repo }) => (repo === "root" ? "" : repo)),
                     );
                 }
                 yield {

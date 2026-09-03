@@ -8,6 +8,7 @@ import type { AgentQuery, QueryFn } from "./sdk-stream.js";
 import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "./subagents.js";
+import { EDIT_TOOLS } from "../rules/edit-tools.js";
 
 // Build a fake QueryFn yielding canned SDK messages (cast to SDKMessage: tests exercise only the fields
 // runAgent reads), so the agent loop is verified without the SDK, a binary, or network.
@@ -351,7 +352,7 @@ test("every turn registers the install steer and the post-edit diagnostics hook"
 
     await collect(request, capture);
     expect(captured.at(-1)?.hooks?.PreToolUse?.some((matcher) => matcher.matcher === "Bash")).toBe(true);
-    expect(captured.at(-1)?.hooks?.PostToolUse?.some((matcher) => matcher.matcher === "Edit|Write")).toBe(true);
+    expect(captured.at(-1)?.hooks?.PostToolUse?.some((matcher) => matcher.matcher === EDIT_TOOLS)).toBe(true);
 });
 
 test("every turn wires the ui ask server, the AskUserQuestion alias, and the permission gate", async () => {

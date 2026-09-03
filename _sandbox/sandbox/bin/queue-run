@@ -84,8 +84,15 @@ poll_seconds=$(number "$poll_seconds" 2)
 # The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
 # sitting in it. Skipped silently when the binary is absent (a dev daemon, a partial image) — see memory-gate.ts
 # for why every outcome of it is "run the command".
-if [ "$memory_gate" -gt 0 ] && command -v memory-gate >/dev/null 2>&1; then
-    memory-gate --deadline-seconds "$memory_gate" --label "$label" || true
+# Exec'd when it is executable, run through `node` when it is not: the symlink points at a file in dist/, and a
+# dist re-synced into a running sandbox arrives without its executable bit (measured: every heavy command printed
+# "memory-gate: Permission denied" and the memory half of this gate silently never ran).
+if [ "$memory_gate" -gt 0 ] && gate="$(command -v memory-gate 2>/dev/null)" && [ -n "$gate" ]; then
+    if [ -x "$gate" ]; then
+        "$gate" --deadline-seconds "$memory_gate" --label "$label" || true
+    else
+        node "$gate" --deadline-seconds "$memory_gate" --label "$label" || true
+    fi
 fi
 
 command -v flock >/dev/null 2>&1 || run "$@"

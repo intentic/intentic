@@ -32,7 +32,7 @@ cd "$(repo_root)"
 # Fail before anything publishes if PUB has drifted from the dependency graph — a listed package depending on
 # an unlisted one publishes an unresolvable specifier, and finding that out mid-publish is a half-shipped
 # release. (preflight runs the same check per pipeline; this copy is what guards a by-hand release.)
-node "$DIR/verify-publish-set.mjs" "${PUB[@]}"
+node "$DIR/../checks/publish-set.mjs" "${PUB[@]}"
 
 # The machine agents from linux-build's artifact: present and stamped at THIS version, checked by asking a
 # binary rather than trusting a directory listing — an artifact from a stale or differently-versioned run

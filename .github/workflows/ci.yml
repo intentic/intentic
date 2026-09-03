@@ -81,7 +81,7 @@ jobs:
     # copy is on `e2e-hermetic`, the one job whose condition names no `needs` output. Every remaining job is
     # already unreachable on a pull request — `images`, `images-platform` and `release` require
     # `github.event_name == 'push' && github.ref == 'refs/heads/main'`, and the rest derive from a `changes`
-    # output that is empty once this job is skipped. `prepass.mjs --checks-only` asserts that, so a job added
+    # output that is empty once this job is skipped. The workflow-policy check asserts that, so a job added
     # without a guard or without a root in its `needs` fails the check instead of silently opening this back up.
     #
     # To run CI on an outside contribution, push its branch to this repository and open the pull request from
@@ -210,13 +210,13 @@ jobs:
 
   # The checks that read the checkout and nothing else, ahead of the install every other job starts with.
   #
-  # `prepass.mjs --checks-only` is the first half of the prepass the fleet runs before landing: every test file
-  # sits in a type-check program, every machine-touching suite is named as one, and every package.json
-  # specifier is the one pnpm-lock.yaml recorded. No node_modules, ~70ms of actual work.
+  # `_tools/checks/run.mjs` is the checkout half of what the fleet runs before landing: every test file sits in
+  # a type-check program, every machine-touching suite is named as one, and every package.json specifier is the
+  # one pnpm-lock.yaml recorded, among nineteen others. No node_modules, seconds of actual work.
   #
   # The measurement that put it first: across 40 main pipelines, 22 verify jobs failed and 10 died on one of
-  # these three invariants — and every one of those failed AFTER a 0.6-2.0 minute frozen-lockfile install, in
-  # each of the six jobs that opens with one. ~70ms here replaces six of those.
+  # three of these invariants — and every one of those failed AFTER a 0.6-2.0 minute frozen-lockfile install, in
+  # each of the six jobs that opens with one. Seconds here replace six of those.
   #
   # THE WORKFLOW LINT RUNS HERE TOO, and it is the one thing in this job that touches the network — two pinned
   # binaries into /ci-cache, once per runner per version, ~1s warm. It sits in this job rather than in one of
@@ -246,32 +246,16 @@ jobs:
           # Same reason as the `changes` job: this one also runs in every pipeline, and a clean checkout here
           # is a cold install charged to whichever job lands on this workspace next.
           clean: false
-      - run: node _tools/scripts/prepass.mjs --checks-only
-      # NO LITERAL CONTROL CHARACTERS IN TRACKED TEXT, the cheapest invariant in the pipeline and the one that
-      # had no runner. A NUL typed into a string literal instead of written as an escape is invisible in an
-      # editor and decisive everywhere else: git, grep, `file` and every diff viewer call the whole file binary,
-      # so the change arrives for review as "Binary file: no preview for this type". The script that catches it
-      # has existed since the first five files did that; it lived only in `pnpm check`, which no hook and no job
-      # runs, and seven more files picked up the same byte behind it. 4,300 files read in ~120ms, same shape as
-      # the step above: checkout only, no node_modules, no network.
-      - run: node _tools/scripts/control-chars.mjs
-      # The daemon's structural gates, the same shape: checkout only, milliseconds. verify-invariants.mjs is the
-      # invariant registry's exhaustiveness (every subsystem under _sandbox/sandbox/src registers a check or says
-      # why it has none); verify-daemon-boundaries.mjs holds the module seams where they stand (no new module
-      # takes the whole of Services without handing it on, no new pair of subsystems imports each other's
-      # values). Both sat in `pnpm check` alone, and the first was red on main for nine subsystems with nothing
-      # running it. The pre-push hook runs the same two on the other side of the push.
-      - run: node _tools/scripts/verify-invariants.mjs
-      - run: node _tools/scripts/verify-daemon-boundaries.mjs
-      # The publish set is the same shape of invariant — package.json files and nothing else — and it was
-      # checked nowhere but release-prepare, which runs on main AFTER the release has already been decided.
-      # That is where the extension-manifest → base dependency surfaced: the release failed on a list that a
-      # pull request could have failed in milliseconds, and there was nothing to revert but the merge.
-      # `shell: bash` because the job's default is `sh`, where `source` and the array expansion are not syntax.
-      - shell: bash
-        run: source _tools/scripts/packages.sh && node _tools/scripts/verify-publish-set.mjs "${PUB[@]}"
+      # EVERY CHECK THE MANIFEST LISTS, side by side (_tools/checks/manifest.mjs says what each is for): the
+      # lockfile against the manifests, every test file in a type-check program and under a budget, the workflow
+      # policy (fork boundary, permission ceilings, provenance runners, tag triggers), the byte scan, the
+      # daemon's structural gates, the publish set, the UI tiers and the rest. One list, read by this job, by the
+      # pre-push hook and by the turn-ending check, so a check cannot again be right and unrun: five of these
+      # were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout only, no
+      # node_modules, no network, under two seconds.
+      - run: node _tools/checks/run.mjs
       # actionlint + zizmor over .github/ — the workflows checked by tools that parse them, rather than by the
-      # line scanners prepass.mjs was growing to approximate a fraction of the same ground. The script says what
+      # line scanners the checkout gate was growing to approximate a fraction of the same ground. The script says what
       # each tool is for, why they are pinned by sha256 rather than baked into ci-base, and which findings this
       # repository suppresses on purpose (.github/zizmor.yml, each with its reason and what would retire it).
       - shell: bash

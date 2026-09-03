@@ -10,7 +10,7 @@ import { remoteUrlsOf } from "./remote-urls.js";
  * stands in for the spawn, and what is asserted is how many times it was reached.
  *
  * Integration rather than unit despite the fake runner: they mkdtemp real trees, which is what the mtime rule
- * needs something to watch, and that is the line the unit budget draws (prepass.mjs). `parseRemote`'s own cases
+ * needs something to watch, and that is the line the unit budget draws (_tools/checks/test-programs.mjs). `parseRemote`'s own cases
  * are pure and stay next door in remote-urls.test.ts. */
 
 // A repo-shaped dir: just enough for the mtime rule to have something to watch. Each test gets its own, since

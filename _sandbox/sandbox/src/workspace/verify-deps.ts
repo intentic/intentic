@@ -68,6 +68,12 @@ export interface VerifyDeps {
      * Optional because a chain with no cause provably never reaches it (see verifyProject): the reconciler's own
      * installs have no land to name, so the caller that starts them has no wake to bind and is not asked for one. */
     readonly emit?: (event: WorkspaceEvent) => void;
+    /* How the check's command line is put behind bin/queue-run (agent/agent-terminals.ts queueWhole): the
+     * same `pnpm verify` an agent's turn would queue, in the same pool with the same limit, because a post-land
+     * suite that ran beside four agents' suites would be the fan-out the queue exists to prevent. Injected
+     * rather than imported so this module reaches neither the terminal nor the platform subsystem. Absent ⇒
+     * unqueued (a test, a daemon without the wrapper). */
+    readonly queue?: (command: string) => Promise<string>;
     // Test dials; the daemon takes the defaults.
     readonly pollMs?: number;
     readonly watchMaxMs?: number;
@@ -125,6 +131,10 @@ export const checkCommandFor = async (root: string, dir: string, manager: string
     return script === undefined ? undefined : `${manager} run ${script}`;
 };
 
+// The check's line as it will run: behind the queue where the caller gave one, as it is otherwise.
+const queuedCommand = async (command: string, deps: VerifyDeps): Promise<string> =>
+    deps.queue === undefined ? command : deps.queue(command).catch(() => command);
+
 /* Run one project's check to a verdict: panel up, exit code out, store updated, edge announced. The wrapped
  * command is one zsh line; `pipestatus[1]` is the check's own exit, not tee's. */
 const verifyProject = async (verify: PendingVerify, dir: string, command: string): Promise<void> => {
@@ -135,8 +145,9 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
     const artifacts = statePath(deps.workspace.root, ".intentic/local/verify/");
     const logPath = join(artifacts, `${key}.log`);
     const statusPath = join(artifacts, `${key}.status`);
+    const queued = await queuedCommand(command, deps);
     await deps.processes.start(key, {
-        command: `mkdir -p ${artifacts} && rm -f ${statusPath} && { ${command}; } 2>&1 | tee ${logPath}; echo $pipestatus[1] > ${statusPath}`,
+        command: `mkdir -p ${artifacts} && rm -f ${statusPath} && { ${queued}; } 2>&1 | tee ${logPath}; echo $pipestatus[1] > ${statusPath}`,
         cwd: join(deps.workspace.root, dir),
         oneShot: true,
     });
@@ -251,7 +262,18 @@ export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: re
     if (dirs.length === 0) {
         return;
     }
-    pending.push({ deps, origin, dirs: [...new Set(dirs)] });
+    const wanted = [...new Set(dirs)];
+    /* ONE CHECK PER TREE, NOT ONE PER LAND. Every land queues the whole repository's check (agent.routes.ts),
+     * and a fleet lands several times a minute, so a queue that kept each request would spend the afternoon
+     * measuring trees that were already superseded. A request still waiting for the same projects is replaced
+     * by the newer one: the check measures the tree as it stands when it starts, so the later land is the one
+     * it answers for, and its origin is the one a red verdict should name. The one already RUNNING is left
+     * alone; its verdict is about a tree that existed, and the request behind it lands the next. */
+    const same = pending.findIndex((entry) => entry.dirs.length === wanted.length && entry.dirs.every((dir) => wanted.includes(dir)));
+    if (same !== -1) {
+        pending.splice(same, 1);
+    }
+    pending.push({ deps, origin, dirs: wanted });
     if (running) {
         return;
     }

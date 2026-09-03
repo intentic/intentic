@@ -16,6 +16,7 @@ import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessag
 import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { conditionHolds, type RuleFacts } from "./rules.js";
+import { EDIT_TOOLS, editedPath } from "./edit-tools.js";
 
 /* THE MOMENT A TURN TRIES TO END, every rule standing there, driven by one hook set.
  *
@@ -57,21 +58,6 @@ const COMMAND_OUTPUT_BYTES = 4_000;
 const bashCommand = (input: unknown): string | undefined => {
     const command = (input as { command?: unknown }).command;
     return typeof command === "string" && command.trim() !== "" ? command : undefined;
-};
-
-/* Every tool that MUTATES a file, as one matcher.
- *
- * The hashline pair belongs here because turning `hashlineEdits` on DISABLES the native Edit and Write
- * (hashline/hashline-tools.ts): a matcher naming only those two goes quiet in exactly the configuration a user
- * chooses for heavy editing, so both ledgers below would have recorded nothing and said so confidently. */
-const EDIT_TOOLS = "Edit|Write|NotebookEdit|mcp__hashline__edit|mcp__hashline__write";
-
-// The native tools name it `file_path`, the hashline ones `path`. One reader over both, because which spelling
-// arrives is a setting the owner flipped and not a fact about the edit.
-const editedPath = (input: unknown): string | undefined => {
-    const named = input as { file_path?: unknown; path?: unknown };
-    const path = typeof named.file_path === "string" ? named.file_path : named.path;
-    return typeof path === "string" && path !== "" ? path : undefined;
 };
 
 /* The agent names files absolutely; a rule is written the way the owner reads their own tree. A path OUTSIDE

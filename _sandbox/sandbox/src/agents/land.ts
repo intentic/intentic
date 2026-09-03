@@ -7,6 +7,7 @@ import { changedFiles, headSha, parseNameStatusZ, parseNumstatZ } from "../git/c
 import { commitWorktreeRemainder } from "../git/root-repo.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "./agent-refs.js";
+import { reconcileLockfile } from "./lockfile-reconcile.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
@@ -493,6 +494,10 @@ export const landAgent = async (
                     // does. The nested repo lands its own work below; root's gitlink follows whenever someone
                     // commits there. (A retired checkout has nothing uncommitted to preserve, its retire did this.)
                     if (attached) {
+                        /* The lockfile first, so the manifest edit and the lockfile that records it are one
+                         * commit and one patch (lockfile-reconcile.ts). Best-effort: a resolution that fails
+                         * leaves the tree as it was, and the push gate's lockstep tier still names the gap. */
+                        await reconcileLockfile(worktree, composed.landedTip ?? base, git);
                         await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, git);
                     }
                     const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.branch, git);

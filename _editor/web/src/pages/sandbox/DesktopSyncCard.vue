@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Computer } from "@intentic/sandbox-contract";
-import { Button, ui, Code, RowGroup } from "@intentic/ui";
+import { Button, ui, Code, RowGroup, RowNote } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useComputers } from "../../composables/sandbox/useComputers";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
@@ -96,7 +96,7 @@ onUnmounted(stop);
         class="@container transition-shadow"
         :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''"
     >
-        <div class="flex flex-col gap-4 p-5">
+        <RowNote variant="block" class="flex flex-col gap-4">
             <template v-if="available">
                 <!-- WHAT THIS CARD IS FOR, in one line, because it no longer reports anything and a reader who
                      arrives expecting the old status card should be told where that went. -->
@@ -237,6 +237,6 @@ onUnmounted(stop);
             <div v-else :class="ui.emptyState()">
                 Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.
             </div>
-        </div>
+        </RowNote>
     </RowGroup>
 </template>

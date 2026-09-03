@@ -64,7 +64,7 @@ jobs:
       # take a filter. It is repo-wide and unfilterable either way (~45 packages of `tsgo -b`), so each of the
       # three groups pays it — the standing cost of the split, against a platform deploy that no longer waits
       # on the marketing site.
-      - run: node _tools/scripts/prepass.mjs
+      - run: pnpm prepass
       # THROUGH THE ENVIRONMENT, not interpolated into the script. `${{ }}` inside a `run:` block is textual
       # substitution BEFORE the shell sees the line, so the value becomes script rather than an argument to it
       # — the shape zizmor calls template-injection and the one every Actions exploit writeup starts from. The

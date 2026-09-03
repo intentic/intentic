@@ -208,7 +208,7 @@ optional): then `pnpm --filter @intentic/sandbox dev`.
   (Turbo) or per-package `vitest`.
 - **`pnpm verify` is the gate: run it before you finish, including from an agent worktree.** It is
   `pnpm typecheck` and then `pnpm test`, across every package in the workspace. Both emit every dependency's
-  dist with `tsgo -b` first (`_tools/scripts/prepass.mjs`), so neither needs `pnpm build`, which cannot run
+  dist with `tsgo -b` first (`_tools/scripts/emit-declarations.mjs`), so neither needs `pnpm build`, which cannot run
   under worktree isolation. It is also what CI decides main's health on, so a green run here is a green run
   there.
 - **Tests are type-checked too, by `pnpm typecheck`, not by `pnpm build`.** A package that emits to `dist`

@@ -10,11 +10,11 @@ import type { TurnContext } from "./turn-plan.js";
  *
  * It was the unit suite's alone, which is why the one case that needs a REAL tree (a skill catalogue is a
  * SKILL.md on disk or it is nothing) sat there rather than beside the other cases that build one. A test file
- * that opens a temp tree is held to the integration budget by name (_tools/scripts/prepass.mjs), so one such
+ * that opens a temp tree is held to the integration budget by name (_tools/checks/test-programs.mjs), so one such
  * case put the whole 600-line unit suite under it, and the suite's own header had already written down the rule
  * it was breaking: "asserted where a real tree can be built: turn-plan.integration.test.ts".
  *
- * A `*.testing.ts` module rather than a copy in each file, because prepass reads that name as a fixture and
+ * A `*.testing.ts` module rather than a copy in each file, because the test-programs check reads that name as a fixture and
  * follows the import: each suite is then judged on the helpers IT uses, so this stays honest as the fixture
  * grows. Nothing here mocks anything: `vi.mock` hoists per module, so the two suites keep their own, which is
  * also what lets them disagree about how much of the machine to stand up.

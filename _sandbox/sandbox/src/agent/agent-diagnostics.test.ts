@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import type { IsolationPlan, TurnPlacement } from "../agents/isolation.js";
 import { syncHookOutput } from "../testing.js";
 import { type DiagRequest, type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
+import { EDIT_TOOLS } from "../rules/edit-tools.js";
 import type { ShellEdit, ShellEditTracker } from "./agent-shell-edits.js";
 
 const PLAN: IsolationPlan = {
@@ -285,7 +286,7 @@ const bash = async (hooks: ReturnType<typeof editDiagnosticsHooks>, event: "PreT
 test("without a tracker no Bash hook is wired at all", () => {
     const hooks = editDiagnosticsHooks(undefined, checked(), RESOLVABLE);
     expect(hooks.PreToolUse).toBeUndefined();
-    expect(hooks.PostToolUse?.map((entry) => entry.matcher)).toEqual(["Edit|Write"]);
+    expect(hooks.PostToolUse?.map((entry) => entry.matcher)).toEqual([EDIT_TOOLS]);
 });
 
 test("a TypeScript file a command changed is reviewed like an edit, in the agent's name, and the sentence names the command", async () => {

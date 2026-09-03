@@ -56,7 +56,7 @@
  * no longer matches anything is reported as stale, so the list cannot outlive the code it excuses. */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { repoRoot } from "@intentic/constants/node";
+import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -105,6 +105,17 @@ const ALLOWED = new Map([
                 `inputClass`,
                 `THE RECIPE IS COMPUTED, not absent: \`inputClass\` is \`field-bare\` plus the right-hand room this bar actually needs, which depends on how many controls it has (none, a clear "x", or the \`Aa\` switch beside it). A gate that reads only the template cannot follow a computed, and the alternative — inlining three padding variants at the call site — is the thing this gate exists to prevent.`,
             ],
+        ]),
+    ],
+    [
+        `_editor/web/src/pages/settings/SettingsProfile.vue`,
+        new Map([
+            [
+                `h-8`,
+                `PINNED TO A HIDDEN SIZER TWIN, the same shape as SandboxOverview's title: the display name and the field that renames it share one grid cell with an invisible <span> carrying the same box, so the field is exactly as wide as the name it replaced and nothing beside it jumps when editing starts.`,
+            ],
+            [`px-2`, `The same sizer twin: the span it has to match writes this padding out too.`],
+            [`text-base`, `The same sizer twin: this is the heading's type size, and the field borrows it so the two boxes measure the same.`],
         ]),
     ],
     [

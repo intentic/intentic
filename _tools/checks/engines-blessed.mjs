@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* THE GATE BEHIND THE BLESSED ENGINE LIST.
  *
- *   node _tools/scripts/check-engines-blessed.mjs      # checks engines.json against this repo, exits 1 on a breach
+ *   node _tools/checks/engines-blessed.mjs      # checks engines.json against this repo, exits 1 on a breach
  *
  * WHY A GATE. engines.json is read by every sandbox on the `blessed` channel, hourly, straight off this
  * repository's main branch. That is what makes blessing a version a commit rather than a release — and it is
@@ -26,8 +26,9 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { repoRoot } from "../constants/src/node.mjs";
 
-const root = join(import.meta.dirname, "..", "..");
+const root = repoRoot(import.meta.url);
 const packs = join(root, "_sandbox", "sandbox", "packs");
 
 const read = (path) => readFileSync(path, "utf8");

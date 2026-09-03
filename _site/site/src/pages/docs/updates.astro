@@ -3,7 +3,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
 /* THE COMPATIBILITY CONTRACT, said to users. Every sentence on this page is a tested property, not an
  * aspiration: the promises are drilled nightly against real published images (verify-update-survival.sh),
- * the breaking-change flow is enforced in CI (prepass.mjs invariants 5 and 6, contract.lock.json), and the
+ * the breaking-change flow is enforced in CI (_tools/checks/release-headings.mjs and contract-shrink.mjs, contract.lock.json), and the
  * shipping story is how the release pipeline actually publishes (release-images.sh, ship-stable.sh) and
  * un-publishes (rollback-stable.sh). Change the mechanics and this page changes in the same commit, or it
  * becomes marketing. */

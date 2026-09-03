@@ -59,7 +59,7 @@
         // below is what lets each package's tests start the moment its own deps are built.
         //
         // The edge is also unrunnable in an agent worktree, for the same EXDEV reason as `typecheck` below: so
-        // the root `test` script runs the same prepass and then `turbo run test --only`, which drops the edge
+        // the root `test` script runs the same emit and then `turbo run test --only`, which drops the edge
         // and keeps the graph. That is the difference between a suite the fleet can run before landing and one
         // only CI ever sees: 67 of 100 main pipelines failed this job while the whole suite ran nowhere else.
         // VITEST_MAX_WORKERS is the ONLY thing bounding a repo-wide run's memory, and until this line it was
@@ -86,7 +86,7 @@
         // no type checker ever reads.
         //
         // The declarations these checks resolve their workspace imports through are emitted by the prepass that
-        // the root `typecheck` and `test` scripts both run FIRST (_tools/scripts/prepass.mjs). It is `tsgo -b` rather than a
+        // the root `typecheck` and `test` scripts both run FIRST (_tools/scripts/emit-declarations.mjs). It is `tsgo -b` rather than a
         // `^build` dependency because `build` goes through pnpm, and pnpm's `syncInjectedDepsAfterScripts`
         // hardlinks into `node_modules` after it: a different filesystem in an agent worktree, so a `^build`
         // dependency died EXDEV (exit 238) for every agent in the fleet, leaving the check that catches a fake

@@ -33,7 +33,7 @@
  * belongs to whoever is looking at the type, not to a script that cannot see it. */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { repoRoot } from "@intentic/constants/node";
+import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
 

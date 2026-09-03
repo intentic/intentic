@@ -27,9 +27,14 @@ export type DependencyFreshness = z.infer<typeof DependencyFreshnessSchema>;
  * chores already wake on those and folding them into this table later must not mean renaming what users wrote.
  */
 
-// WHERE a rule can stand. Three, and each is a place the daemon already stopped to make a decision, this
+// WHERE a rule can stand. Four, and each is a place the daemon already stopped to make a decision, this
 // names those decisions rather than inventing new ones.
 export const RuleMomentSchema = z.enum([
+    // The assistant has just written a file, with an edit tool or with a shell command; the tree says which. A
+    // command here runs on that one file (`{file}` in the command is its path) and what it prints on a non-zero
+    // exit rides back with the edit's own result, while the file is still in mind. The cheapest moment a defect
+    // can be caught at, and the one the per-edit linter and byte scan stand at.
+    "file.edited",
     // The assistant is about to stop. A rule here can send it back to work, which is the only moment that can.
     "turn.ending",
     // Code is about to leave the machine. A rule here gates the push on its own exit code.
@@ -100,8 +105,10 @@ export type RuleCondition = z.infer<typeof RuleConditionSchema>;
  * WHICH ACTIONS FIT WHICH MOMENT is checked here rather than left to the consumer, because the alternative is
  * a rule that saves cleanly and then quietly does nothing, the failure mode a settings screen can least
  * afford. A verdict at `turn.ending` has nothing to decide; a command at `agent.finished` has no defined place
- * in the landing pass and would be a promise this stage cannot keep. */
+ * in the landing pass and would be a promise this stage cannot keep; an instruction at `file.edited` would be
+ * repeated on every save, which is noise by the third one. */
 const MOMENT_ACTIONS: Record<RuleMoment, readonly RuleAction["kind"][]> = {
+    "file.edited": ["command"],
     "turn.ending": ["builtin", "instruct", "command"],
     "push.starting": ["command"],
     "agent.finished": ["verdict"],

@@ -4,7 +4,7 @@
 # DISPATCHED, NOT TAG-TRIGGERED, like its two siblings and for the same reason: semantic-release pushes the tag
 # with the built-in GITHUB_TOKEN, and GitHub starts no workflow from an event that token created. `on: push:
 # tags` here would be a trigger that cannot fire — the mistake npm-publish.yml and action-publish.yml each made
-# once, and the one prepass invariant 10 now refuses. dispatch-publish.sh names this file; that is what makes it
+# once, and the one the workflow-policy check now refuses. dispatch-publish.sh names this file; that is what makes it
 # reachable.
 #
 # THE TAG IS THE VERSION AND THE TREE IS NOT. Every first-party package.json stays at 0.0.0 in git, so the

@@ -35,7 +35,7 @@
  * that is what caught the six below being retired, rather than anyone remembering to come back here. */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { repoRoot } from "@intentic/constants/node";
+import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -216,7 +216,7 @@ if (findings.length > 0) {
         `\nIf the value has an exact token, use it. If it is CLOSE to one but not equal, do not round it —\n` +
             `that is a visual change, and it needs an owner rather than a refactor. If it genuinely has no token\n` +
             `and should, say the theme is missing an entry instead of spelling the value again. If it is none of\n` +
-            `those, add it to ALLOWED in _tools/scripts/tailwind-bypass.mjs with the reason, keyed by the class.`,
+            `those, add it to ALLOWED in _tools/checks/tailwind-bypass.mjs with the reason, keyed by the class.`,
     );
 }
 

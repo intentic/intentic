@@ -3,22 +3,12 @@
 # alongside commit-msg. It runs _tools/scripts/verify-push.mjs, the same script the app's "Check before you push"
 # rule runs (`pnpm verify:push`), with git's ref lines on stdin so the script knows which range is leaving.
 #
-# What that script does, cheapest first, stopping at the first refusal: the gates readable from the checkout in
-# well under a second (the prepass invariants, the byte scan, the invariant registry's exhaustiveness and the
-# daemon's module boundaries, then the linter); rustfmt on any Rust crate the push touches; and then, unless the
-# app's check has already measured this exact tree, the three steps CI's verify groups run: typecheck, build, test.
-# The header of that script says why each tier is there and what it costs.
-#
-# The two structural gates are in the first tier on the same terms as the byte scan. verify-invariants.mjs is the
-# invariant registry's exhaustiveness: every subsystem under _sandbox/sandbox/src registers a check or says why it
-# has none. verify-daemon-boundaries.mjs holds the module seams where they stand: no new module takes the whole of
-# Services without handing it on, no new pair of subsystems imports each other's values. Both read the checkout and
-# nothing else, in milliseconds; both lived in `pnpm check` alone, and the first was red on main for nine
-# subsystems with nothing running it.
-#
-# It used to stop at the first tier. Of the 100 pipelines before this was written, 55 were red, and the recent
-# reds were type errors that `pnpm test` (the app's check of the day) cannot see and this hook never looked for. A
-# gate that only checks what is cheap to check is a gate for the failures nobody was having.
+# What that script does, cheapest first, stopping at the first refusal: every check the manifest lists
+# (_tools/checks/run.mjs: the lockfile, the test programs, the workflow policy, the byte scan, the daemon's
+# structural gates and the rest, under two seconds and needing nothing installed), the assertion ratchet over
+# the range's test files, the manifest/lockfile lockstep, and the linter; rustfmt on any Rust crate the push
+# touches; and then, unless a `pnpm verify` or the app's check has already measured this exact tree, the three
+# steps CI's verify groups run: typecheck, build, test. The header of that script says why each tier is there.
 #
 # No dependency guard: this needs node, which is the thing running the repo; the heavy tier needs pnpm and says so
 # when it is missing. `git push --no-verify` when you genuinely mean to push a tree that does not pass.

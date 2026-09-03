@@ -20,7 +20,7 @@ the browser workspace), see **Develop locally** in the [README](README.md).
 
 - **`pnpm verify` is the gate.** It is `pnpm typecheck` and then `pnpm test`: under a minute for all 45
   packages from a cold cache. Both emit every dependency's dist with `tsgo -b` first
-  (`_tools/scripts/prepass.mjs`), so neither needs `pnpm build`. It is also what CI decides `main`'s health on,
+  (`_tools/scripts/emit-declarations.mjs`), so neither needs `pnpm build`. It is also what CI decides `main`'s health on,
   so a green run here is a green run there.
 - **Edit `src/` directly.** Workspace packages expose an `@intentic/src` export condition, so cross-package
   imports resolve to source: no build step sits between editing a lib and running a dependent test.

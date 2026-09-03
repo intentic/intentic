@@ -73,3 +73,17 @@ test("readPackageGraph skips negations, ** globs, and unparseable manifests", as
     expect(graph.edges).toEqual([]);
     await rm(dir, { recursive: true, force: true });
 });
+
+test("readPackageGraph honours a `!dir` negation: an excluded directory is not a workspace package", async () => {
+    const dir = await scaffold({
+        // The shape this repository's own file has: the store shells are globbed in by `_editor/*` and taken
+        // back out by name, because pnpm never installs them here.
+        "pnpm-workspace.yaml": `packages:\n  - "_editor/*"\n  - "!_editor/ios-app"\n`,
+        "_editor/web/package.json": pkg("@shop/web", { dependencies: { "@shop/ui": "workspace:*" } }),
+        "_editor/ui/package.json": pkg("@shop/ui"),
+        "_editor/ios-app/package.json": pkg("@shop/ios", { dependencies: { "@capacitor/core": "^8" } }),
+    });
+    const graph = readPackageGraph(dir);
+    expect(graph.packages.map((entry) => entry.name).toSorted()).toEqual(["@shop/ui", "@shop/web"]);
+    await rm(dir, { recursive: true, force: true });
+});

@@ -97,7 +97,7 @@ const fill = computed<number | undefined>(() => {
          placed before them would start at a different x on every row and there would be nothing to compare. At
          the row's right edge they share an edge and a width, and the eye reads down them. Decorative to a screen
          reader: the number it announces is the same fact, said exactly. -->
-    <span v-if="fill !== undefined" class="flex h-[3px] w-5 shrink-0 overflow-hidden rounded-full bg-overlay" aria-hidden="true">
+    <span v-if="fill !== undefined" class="flex h-0.75 w-5 shrink-0 overflow-hidden rounded-full bg-overlay" aria-hidden="true">
         <span class="h-full rounded-full bg-success" :style="{ width: `${fill * 100}%` }"></span>
     </span>
 </template>

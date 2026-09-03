@@ -11,7 +11,7 @@ import { describe, expect, test } from "vitest";
  * would put a semver promise on all of it instead of on the curated slice this kit IS).
  *
  * That arrangement has one failure mode, and it is silent: the package keeps working HERE, where `@intentic/ui`
- * is a directory away, and breaks only for whoever installs it. `verify-publish-set.mjs` catches the version of
+ * is a directory away, and breaks only for whoever installs it. `_tools/checks/publish-set.mjs` catches the version of
  * that which would 403 the release; these are the ones it cannot see.
  *
  * It lives in the web app rather than beside the kit for the same reason extensionUiNames.test.ts does: the kit

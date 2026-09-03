@@ -10,7 +10,7 @@
  * in one direction only: nobody adds a cycle on purpose, and nobody notices the one they added.
  *
  * Two shapes are recognized, each by reading the source, and each is held to a backlog that may shrink and
- * may not grow (the same mechanism as verify-invariants.mjs: the debt is a list in the open, a new entry fails
+ * may not grow (the same mechanism as invariant-registry.mjs: the debt is a list in the open, a new entry fails
  * by name, a stale entry fails too):
  *
  *   1. A NARROW TAKER OF `Services`. composition.ts states the rule in its own words: "Take the whole thing
@@ -28,7 +28,7 @@
  *      Files at the root of src/ (composition.ts, app.ts, main.ts, route-testing.ts) are the composition root
  *      and are left out of the graph: reaching everything is their job.
  *
- * Read with regular expressions over import statements rather than a parser, for the reason prepass.mjs
+ * Read with regular expressions over import statements rather than a parser, for the reason lib/lockfile.mjs
  * gives: this runs from the pre-push hook and the CI preflight job, before any install, so it cannot import
  * one. An import statement is the flattest region of a TypeScript file, and a shape the scanner stops
  * recognizing shows up here as a count that moved, not as silence.
@@ -112,7 +112,6 @@ const MUTUAL_PAIRS = new Set([
     "capabilities <-> hosts",
     "capabilities <-> settings",
     "claude <-> engines",
-    "claude <-> usage",
     "environment <-> extensions",
     "git <-> history",
     "history <-> workspace",

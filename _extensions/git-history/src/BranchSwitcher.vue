@@ -90,7 +90,7 @@ const confirmDelete = async (name: string): Promise<void> => {
         <button
             type="button"
             :disabled="busy"
-            class="touch-target ui-off inline-flex min-w-0 cursor-pointer select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-content transition-colors hover:bg-overlay focus:outline-none focus-visible:bg-overlay disabled:cursor-default"
+            :class="ui.textAction('touch-target inline-flex min-w-0 select-none gap-1 font-medium text-content')"
             v-tooltip.bottom="'Switch, create or delete a branch'"
             aria-label="Branch"
             @click="toggle"

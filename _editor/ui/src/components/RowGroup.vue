@@ -57,7 +57,7 @@ import { provideRowDensity, type RowDensity } from "./row.js";
  * settings than records" was not.
  *
  * Passing it here is still possible and still legitimate for the group that genuinely disagrees — but it is now
- * an argued exception rather than the thing you get by not looking, and `_tools/scripts/row-tiers.mjs` refuses a
+ * an argued exception rather than the thing you get by not looking, and `_tools/checks/row-tiers.mjs` refuses a
  * group that merely restates the default. */
 const { density = `compact` } = defineProps<{
     label?: string;

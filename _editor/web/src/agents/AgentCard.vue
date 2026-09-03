@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ProgressRing, useDevice } from "@intentic/ui";
+import { Button, ProgressRing, ui, useDevice } from "@intentic/ui";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -841,7 +841,7 @@ const grab = (event: PointerEvent): void => {
                     <button
                         v-if="limited(agent) && agent.limitHeld === true"
                         type="button"
-                        class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link hover:underline disabled:opacity-50"
+                        :class="ui.linkButton('inline-flex shrink-0 gap-1 font-medium')"
                         :disabled="resending"
                         v-tooltip.top="'Send this turn again. It is the same request as before, not a new message.'"
                         @click.stop="sendAgain"

@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { sleep } from "@intentic/base/async";
 import { isManifest } from "@intentic/workspace-setup";
@@ -116,6 +117,16 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
     // letting either become the fallback would attribute unrelated stale projects to whichever conversation
     // happened to wake the coordinator at the same time.
     let backgroundOrigin: Extract<DependencyOrigin, { kind: "external" | "startup" }> = { kind: "startup" };
+    /* AN INSTALL THAT RAN AND LEFT THE PROJECT BEHIND IS NOT RUN AGAIN ON THE SAME INPUTS. The pass below
+     * used to start an install for every `stale` project on every pass, and a project whose install cannot
+     * make it ready (a lockfile behind its manifest, a dependency pnpm will never install here) was therefore
+     * installed on every land, every pull and every watcher tick: measured, 1,044 failed installs in twenty
+     * days, 477 of them attributed to one conversation, each one rewriting node_modules underneath the turns
+     * reading it and each one an "install failed" row in the feed. What changes an install's outcome is its
+     * INPUTS, the manifests and the lockfile, so the coordinator remembers the inputs of the attempt that
+     * failed and stands down until one of them moves. Explicit requests are not held back: a person asking
+     * for a retry is a person who has read the panel. */
+    const failedOn = new Map<string, string>();
     let quietAfter = 0;
     let settlingWorkspaceBurst = false;
     let dirty = false;
@@ -132,6 +143,18 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
         }
     };
 
+    // The install's inputs, as one string: the size and mtime of every manifest and lockfile of the project.
+    const inputsOf = (dir: string): string =>
+        ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lock", "bun.lockb"]
+            .map((file) => {
+                try {
+                    const stat = statSync(join(deps.workspace.root, dir, file));
+                    return `${file}:${stat.size}:${Math.round(stat.mtimeMs)}`;
+                } catch {
+                    return `${file}:-`;
+                }
+            })
+            .join(" ");
     const waitForQuiet = async (): Promise<void> => {
         while (quietAfter > Date.now()) {
             await sleep(quietAfter - Date.now());
@@ -179,9 +202,19 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                 causes.delete(dir);
             }
         }
-        const due = projects.filter(
-            (project) => project.state === "stale" || (requested.projects[project.dir] !== undefined && INSTALLABLE.has(project.state)),
-        );
+        const due = projects.filter((project) => {
+            if (requested.projects[project.dir] !== undefined && INSTALLABLE.has(project.state)) {
+                return true;
+            }
+            if (project.state !== "stale") {
+                return false;
+            }
+            const failed = failedOn.get(project.dir);
+            if (failed !== undefined && failed === inputsOf(project.dir)) {
+                return false;
+            }
+            return true;
+        });
         const started: Array<{ dir: string; key: string; requested: boolean }> = [];
         for (const project of due) {
             const requestedOrigin = requested.projects[project.dir];
@@ -219,7 +252,14 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             for (const { dir } of started) {
                 if (settled.get(dir)?.state === "ready") {
                     causes.delete(dir);
+                    failedOn.delete(dir);
+                    continue;
                 }
+                failedOn.set(dir, inputsOf(dir));
+                deps.logger.warn(
+                    { dir: dir === "" ? "the workspace root" : dir },
+                    "dependency coordinator: the install finished but the project is still behind; not retrying until a manifest or lockfile changes",
+                );
             }
         }
     };

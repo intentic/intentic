@@ -380,7 +380,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         syncPairings,
         /* The ledger as an empty memory shell: /environment folds it into every payload, so an unstubbed member
          * would throw on the first ordinary read of any environment route. NOT the file store on a temp path —
-         * this module is a fixture prepass reads through, and opening a temp tree in this closure would
+         * this module is a fixture the test-programs check reads through, and opening a temp tree in this closure would
          * reclassify every route suite as machine-touching. The store's real semantics live in its own
          * integration suite. */
         runtimeInstalls: {

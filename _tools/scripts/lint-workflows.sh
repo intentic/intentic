@@ -5,9 +5,9 @@
 #
 # WHY THIS EXISTS. The workflows are the part of this repository with the most privilege and the least review,
 # and the failures they have produced all share one shape: something stopped happening and the pipeline said
-# nothing. A trigger that could never fire (three times — prepass invariant 10 now covers that one). An image
+# nothing. A trigger that could never fire (three times — the workflow-policy check now covers that one). An image
 # tag no pipeline had ever pushed. A `${{ }}` expanded into a shell line as script rather than data. Two
-# standard tools read all of that straight off the checkout, in about a second, and prepass.mjs was growing a
+# standard tools read all of that straight off the checkout, in about a second, and the checkout gate was growing a
 # hand-written YAML line scanner to approximate a fraction of it.
 #
 # WHAT EACH ONE IS FOR, because they do not overlap:

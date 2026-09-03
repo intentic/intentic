@@ -35,6 +35,7 @@ interface MomentWords {
 // Non-empty by type, so "the moment this rule stands at" never has to be answered with `undefined`, there is
 // always a first moment and always a first action, and every caller would otherwise re-prove it.
 export const MOMENTS: readonly [MomentWords, ...MomentWords[]] = [
+    { value: `file.edited`, label: `After it edits a file`, icon: `pencil`, cost: `Once per edited file` },
     { value: `turn.ending`, label: `Before the assistant finishes`, icon: `clock`, cost: `Once per turn` },
     { value: `push.starting`, label: `Before you push`, icon: `cloud-upload`, cost: `Once per push` },
     { value: `agent.finished`, label: `When an agent finishes`, icon: `robot`, cost: `Once per finished agent` },
@@ -52,6 +53,13 @@ interface ActionWords {
  * and the daemon's own schema refuses the pair. Offering only what will save keeps the refusal from arriving
  * after the user has typed. */
 export const ACTIONS: Record<RuleMoment, readonly [ActionWords, ...ActionWords[]]> = {
+    "file.edited": [
+        {
+            value: `command`,
+            label: `Run a command`,
+            outcome: `Runs on the file it just wrote, with {file} standing for the path. If it fails, its output goes back with the edit, while the file is still in mind.`,
+        },
+    ],
     "turn.ending": [
         {
             value: `instruct`,

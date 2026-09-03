@@ -5,7 +5,7 @@ import { currentLock } from "./contract-lock.js";
 /* The committed lock and the code must say the same thing: see contract-lock.ts for what the pair buys.
  *
  * This is the HALF that runs everywhere the tests run; the other half (a shrunk lock needs a declared break)
- * lives in prepass.mjs, which has git and this suite does not.
+ * lives in _tools/checks/contract-shrink.mjs, which has git and this suite does not.
  *
  * ITS OWN BUDGET, because the default one is a HANG DETECTOR and this test does real work: it serializes every
  * schema this package exports, ~500 of them, to JSON Schema. That is ~100ms with the machine to itself and it

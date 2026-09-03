@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* THE GATE BEHIND THE SANDBOX IMAGE'S BUILD-CACHE CONTRACT.
  *
- *   node _tools/scripts/build-cache-mounts.mjs      # checks every sandbox image fragment, exits 1 on a breach
+ *   node _tools/checks/build-cache-mounts.mjs      # checks every sandbox image fragment, exits 1 on a breach
  *
  * WHY A GATE AND NOT A CONVENTION. An environment overlay is `FROM` the sandbox image, so publishing a new
  * sandbox image changes that image's digest and invalidates EVERY overlay layer above it. A sandbox therefore
@@ -43,7 +43,7 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { repoRoot } from "@intentic/constants/node";
+import { repoRoot } from "../constants/src/node.mjs";
 
 // Resolved, not counted back from this file, so moving this script does not silently point the check at the
 // wrong tree — the same helper its sibling compose-image-dockerfile.mjs uses to find the packs it splices.

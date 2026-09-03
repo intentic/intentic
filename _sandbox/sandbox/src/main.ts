@@ -1,3 +1,4 @@
+import { queueWhole } from "./agent/agent-terminals.js";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
@@ -796,6 +797,7 @@ const main = async (): Promise<void> => {
         verifyStore: services.verifyStore,
         activity: services.activity,
         emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
+        queue: queueWhole(services.heavyCommands.read),
     };
     services.dependencies.subscribe(({ dir, origin }) => {
         const named = dir === "" ? `the workspace root` : dir;
