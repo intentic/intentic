@@ -1,6 +1,6 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { failureStreaks, openFailures, runningOnHead, streakTooltip, supersededBy } from "./ciStreaks";
+import { arrivesOpen, failureStreaks, openFailures, runningOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
 /* The rail badge's derivations. Both answer "is this branch red right now?", and both are worth pinning down
@@ -158,9 +158,9 @@ test("canceled and running runs after a failure do not supersede it", () => {
     expect(supersededBy([run(2, "canceled", 30), run(3, "running", 20), failure]).size).toBe(0);
 });
 
-/* Which rows the board opens for you. The rule is two facts about one run, still going AND on the newest commit
- * its branch has, and each half is load-bearing: the first is why the graph is worth the space, the second is
- * what stops a stale row taking it. */
+/* The live half of what the board opens for you. The rule is two facts about one run, still going AND on the
+ * newest commit its branch has, and each half is load-bearing: the first is why the graph is worth the space,
+ * the second is what stops a stale row taking it. */
 
 test("a run still going on the branch's newest commit is what the board opens", () => {
     const live = run(1, "running", 50, "main", "head");
@@ -193,6 +193,49 @@ test("every branch with something in flight gets its own row opened", () => {
     const mine = run(1, "running", 40, "feat", "mine");
     const theirs = run(2, "running", 50, "main", "theirs");
     expect(runningOnHead([theirs, mine, run(3, "success", 30, "feat", "older")])).toEqual(new Set([theirs, mine]));
+});
+
+/* …and the whole rule: everything the newest commit has to say that is not "fine". Both halves are head-commit
+ * rules, so what these pin is as much what STAYS SHUT as what opens: a board that expands every red row it has
+ * ever seen is the same unreadable page as one that expands nothing. */
+
+test("the head commit's failures arrive open, not just its live runs", () => {
+    const broke = run(1, "failed", 50, "main", "head");
+    // What a reader who arrives after the pipeline finished came for: which job broke, without a click.
+    expect(arrivesOpen([broke]).has(broke)).toBe(true);
+    // Still the live rule too: neither half swallows the other.
+    const live = run(2, "running", 60, "feat", "building");
+    expect(arrivesOpen([broke, live])).toEqual(new Set([broke, live]));
+});
+
+test("a commit still building with a failure of its own opens both rows", () => {
+    // One push, two workflows: one broke, the other is still going. Opening one of them would hide either the
+    // breakage or the run that may add to it, so this is a union and not a precedence.
+    const broke = run(1, "failed", 50, "main", "head");
+    const going = run(2, "running", 49, "main", "head");
+    expect(arrivesOpen([broke, going])).toEqual(new Set([broke, going]));
+});
+
+test("a fresh push shows its live graph beside the failure the last commit left open", () => {
+    // The two halves read `head` differently on purpose: the push has no verdict yet, so the branch's most
+    // recent word is still the failure behind it, and both are worth the height until this push speaks.
+    const pushed = run(1, "running", 60, "main", "pushed");
+    const broke = run(2, "failed", 50, "main", "before");
+    expect(arrivesOpen([pushed, broke])).toEqual(new Set([pushed, broke]));
+});
+
+test("a failure that is not the branch's current problem stays shut", () => {
+    const head = run(1, "failed", 50);
+    // Behind a newer failure: the same breakage, and the row above it is the one to read.
+    const behind = run(2, "failed", 40);
+    expect(arrivesOpen([head, behind])).toEqual(new Set([head]));
+    // Closed by a later commit passing: history, and history does not unroll itself on the way past.
+    expect(arrivesOpen([run(3, "success", 60), head, behind]).size).toBe(0);
+});
+
+test("a passing board opens nothing", () => {
+    // Green rows are a tally, not a diagram: every one of them opening would bury the board it is reporting on.
+    expect(arrivesOpen([run(1, "success", 50, "main", "head"), run(2, "success", 49, "main", "head")]).size).toBe(0);
 });
 
 const entry = (createdAt: number, failed: readonly string[] | undefined, branch = "main"): JobFailureRun => ({

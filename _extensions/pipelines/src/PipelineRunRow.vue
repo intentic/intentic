@@ -39,8 +39,9 @@ const props = defineProps<{
     // Both are cross-run facts too, and together they set how loudly the row asks to be fixed.
     open: boolean;
     superseded: PipelineRun | undefined;
-    // Whether this row's graph should be on screen without a click: this run is still going, on the newest
-    // commit its branch has (ciStreaks' `runningOnHead`). A third cross-run fact, and a DEFAULT, not a state.
+    // Whether this row's graph should be on screen without a click: this run is still going on the newest commit
+    // its branch has, or it is a failure that commit left open (ciStreaks' `arrivesOpen`, one head-commit rule
+    // per half). A third cross-run fact, and a DEFAULT, not a state.
     autoOpen: boolean;
     /* THE AGENT THIS ROW ALREADY SENT, if it did (ciFixes.ts): the fleet card for the conversation whose id is
      * derived from this very run. It is what turns the button into a report, and it is the reason the row can
@@ -62,14 +63,16 @@ const runRef = computed(() => props.run);
 const { jobs, isLoading: jobsLoading } = useRunJobs(runRef);
 const stages = computed(() => pipelineStages(jobs.value));
 
-/* A LIVE RUN OPENS ITSELF, and `autoOpen` is a seed rather than a binding on purpose.
+/* A LIVE RUN AND A FRESH BREAKAGE OPEN THEMSELVES, and `autoOpen` is a seed rather than a binding on purpose.
  *
  * A row is keyed by its run (PipelinesView's `actionKey`), so this instance is created once, when the run first
  * appears in the list, and the 30s poll behind the board re-renders it without touching this ref again. That is
- * the whole mechanism, and it is what makes the three cases come out right: a pipeline that starts while the
- * board is open arrives as a NEW row and opens on the same rule; a row the reader closed stays closed, because
- * nothing re-applies the default; and a run that FINISHES under the reader keeps its graph on screen, because a
- * bound `open` would collapse it at the exact moment it says whether it passed. */
+ * the whole mechanism, and it is what makes the cases come out right: a pipeline that starts while the board is
+ * open arrives as a NEW row and opens on the same rule, and so does one that is already failed when it lands
+ * (a backfill, or a run that began and broke between two polls); a row the reader closed stays closed, because
+ * nothing re-applies the default, and going red later does not re-open what they shut; and a run that FINISHES
+ * under the reader keeps its graph on screen, because a bound `open` would collapse it at the exact moment it
+ * says whether it passed. */
 const expanded = ref(props.autoOpen);
 const fullscreen = ref(false);
 
@@ -132,8 +135,9 @@ const demoted = computed<string | undefined>(() => {
 });
 // One flowing line rather than a list: the tooltip renders as text into a clamped strip, so a newline is a
 // space and a third sentence falls off the bottom. What happened leads; why the button is quiet follows.
-const startHint = computed<string | undefined>(() =>
-    [fixState.value?.retry === true ? fixState.value.hint : undefined, demoted.value].filter((part) => part !== undefined).join(` `) || undefined,
+const startHint = computed<string | undefined>(
+    () =>
+        [fixState.value?.retry === true ? fixState.value.hint : undefined, demoted.value].filter((part) => part !== undefined).join(` `) || undefined,
 );
 // Loud only on the branch's open failure, and only while nobody is already on it.
 const loud = computed(() => props.open && props.branchFix === undefined);

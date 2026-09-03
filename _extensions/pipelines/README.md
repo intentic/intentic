@@ -58,13 +58,24 @@ inside the view rather than gating the tile.
   carries its repository's whole standing (`standingNote`, failing branches first, so the clause worth reading is
   the one that survives truncation), the sections below are ordered worst-first whatever is picked, and the
   sidebar badge still says that a branch is red wherever you are.
-- A RUN STILL GOING ON ITS BRANCH'S NEWEST COMMIT ARRIVES EXPANDED, so the diagram this board exists to draw is
-  on screen before anyone clicks (`runningOnHead`). Both halves of the rule earn their place: "running" is why the
-  graph is worth the height, and "newest commit" is what keeps a re-run somebody left going on last week's code
-  from taking it. It is a DEFAULT, not a binding, seeded once when the row is created: a row the reader closed
-  stays closed, and a run that finishes under them keeps its graph rather than collapsing at the moment it says
-  whether it passed. The head commit here is read off every run, not just the ones with a verdict, because a
-  fresh push has nothing but running pipelines and that is exactly when this has to fire.
+- WHAT THE NEWEST COMMIT ON A BRANCH HAS TO SAY THAT IS NOT "FINE" ARRIVES EXPANDED, so the diagram this board
+  exists to draw is on screen before anyone clicks (`arrivesOpen`). Two halves, and they are one event either
+  side of its ending: the runs still going there (`runningOnHead`, where the graph is the answer arriving), and
+  the failures it left open (`openFailures`, where the same graph is which job broke, and is the evidence the
+  "Fix with agent" button beside it acts on). Opening a pipeline while it ran and shutting it the instant it went
+  red would close at the one moment there was something to read, and would leave everyone who arrived after the
+  run finished clicking to find out what a red row is red about. A union rather than a precedence: a commit whose
+  first workflow failed while its second is still going is two rows worth opening.
+- THE HEAD-COMMIT SHAPE IS WHAT KEEPS THAT READABLE. A re-run somebody left going on last week's code stays shut,
+  a failure behind a newer one stays shut, a failure a later commit closed stays shut, and a breakage six commits
+  deep opens one row on that branch rather than six, the same shape that keeps the fix demands to one per
+  breakage. The two halves read "head" differently on purpose: off every run for the live half, because a fresh
+  push has nothing but running pipelines and that is exactly when it has to fire, and off the runs with a verdict
+  for the failed half, so a push that is still building shows its live graph beside the failure the commit before
+  it left open, which is the branch's most recent word until this one has anything to say.
+- It is a DEFAULT, not a binding, seeded once when the row is created: a row the reader closed stays closed, going
+  red later does not re-open what they shut, and a run that finishes under them keeps its graph rather than
+  collapsing at the moment it says whether it passed.
 - The status tally rides the TITLE ROW rather than a line of its own above the list, because the ~40px it was
   costing is the scarcest thing on a page whose body is a job graph. It falls back to its own line under 44rem
   of board (`TALLY_AT_REM`), measured off the body with a ResizeObserver rather than off the window: this view

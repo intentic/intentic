@@ -113,7 +113,9 @@ export const failureStreaks = (runs: readonly PipelineRun[]): FailureStreak[] =>
  * failed run with nothing green after it": inside a three-commit breakage all of them are unfixed, but the
  * thing to fix is what the branch's current code does, and a view that flags all of them turns one breakage
  * into six identical demands. Two failed workflows on the SAME commit are two of them, because they are two
- * pipelines with two logs, and the fix button acts on a run. */
+ * pipelines with two logs, and the fix button acts on a run.
+ *
+ * THESE ROWS ALSO ARRIVE EXPANDED, half of `arrivesOpen` below, where the reasoning for that lives. */
 export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => {
     const open = new Set<PipelineRun>();
     for (const [head] of commitsByBranch(runs)) {
@@ -126,11 +128,11 @@ export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<Pipeline
 
 /* WHAT IS IN FLIGHT ON THE CODE AS IT STANDS: the still-running runs on the newest commit each branch has.
  *
- * These are the rows the board opens for you (PipelineRunRow's `autoOpen`). A run that is still going is the one
- * row whose job graph is worth the vertical space unasked, it is the answer arriving, and somebody who came to
- * watch it should not have to click for it. The freshness half is what keeps that from becoming noise: a re-run
- * somebody started on last week's commit is "running" too, and its diagram is not what anyone opened the board
- * for.
+ * Half of what the board opens for you (`arrivesOpen` below); `openFailures` above is the other half. A run that
+ * is still going has a job graph worth the vertical space unasked, it is the answer arriving, and somebody who
+ * came to watch it should not have to click for it. The freshness half is what keeps that from becoming noise: a
+ * re-run somebody started on last week's commit is "running" too, and its diagram is not what anyone opened the
+ * board for.
  *
  * DELIBERATELY NOT `commitsByBranch` ABOVE, which is why this is a second walk rather than another reader of
  * that one. That walk keeps only the runs that reached a VERDICT, which is right for judging a branch and wrong
@@ -155,6 +157,28 @@ export const runningOnHead = (runs: readonly PipelineRun[]): ReadonlySet<Pipelin
     }
     return new Set(runs.filter((run) => run.status === `running` && heads.get(branchKey(run))?.sha === run.sha));
 };
+
+/* WHAT THE BOARD OPENS FOR YOU (PipelineRunRow's `autoOpen`): everything the newest commit on a branch has to
+ * say that is not "fine". The runs still going on it, and the failures it left open.
+ *
+ * The two are ONE event either side of its ending. A live run's graph is on screen because the answer is
+ * arriving; when the answer turns out to be red, that same graph is WHICH JOB BROKE, which is the question
+ * anybody looking at a failed row is here to answer, and the evidence the "Fix with agent" button beside it acts
+ * on. A board that drew the diagram while the pipeline ran and hid it the moment it failed would be closing at
+ * the one moment there was something to read, and would leave a reader who arrived after the run finished, which
+ * is most of them, clicking to find out what a red row is red about.
+ *
+ * BOTH HALVES ARE HEAD-COMMIT RULES, and that is what stops this unrolling the whole list. A re-run somebody
+ * left going on last week's code is not opened, a failure behind a newer one is not opened, a failure a later
+ * commit closed is not opened, and a breakage six commits deep opens ONE row on that branch rather than six, the
+ * same shape that keeps `openFailures` to one demand per breakage.
+ *
+ * A UNION AND NOT A PRECEDENCE: a commit whose first workflow has already failed while its second is still
+ * running is two rows worth opening, and picking one of them would hide either the breakage or the run that
+ * might add to it. Note the two halves read `head` differently on purpose, off every run here and off the runs
+ * with a verdict there, so a push that is still building shows its live graph AND the failure the last commit
+ * left open, which is the branch's most recent word until this push has one of its own. */
+export const arrivesOpen = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => new Set([...runningOnHead(runs), ...openFailures(runs)]);
 
 /* For each failed run, the run that put its branch back to green, the EARLIEST one on a LATER COMMIT that
  * passed clean, which is the one that actually recovered the branch rather than whichever green happens to be

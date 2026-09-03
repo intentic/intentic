@@ -18,7 +18,7 @@ import {
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
-import { openFailures, runningOnHead, supersededBy } from "./ciStreaks";
+import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
@@ -31,8 +31,8 @@ import { usePipelines } from "./usePipelines";
 /* Pipelines: a DevOps-grade CI dashboard. A top-bar picker scopes the board to one repository or to all of them,
  * the summary counts ride the title row beside it, runs are grouped by repo, and each row auto-fetches its jobs
  * and renders an inline GitLab-style connected-circles pipeline graph. Clicking a stage circle pops over job
- * details; clicking the chevron expands a full horizontal job flow, which is where a run that is still going on
- * its branch's newest commit starts out. */
+ * details; clicking the chevron expands a full horizontal job flow, which is where the runs on a branch's newest
+ * commit start out: the ones still going, and the ones that failed there. */
 
 const api = host();
 const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
@@ -148,12 +148,13 @@ const fixByBranch = computed(() => branchFixes(fixByRun.value));
 // pointed at, so it never carries the pointer.
 const branchFixFor = (run: PipelineRun): CiFix | undefined => (fixByRun.value.has(run) ? undefined : fixByBranch.value.get(branchKey(run)));
 
-/* WHICH ROWS ARRIVE OPEN: the ones still running on their branch's newest commit (ciStreaks). Reading a board
- * whose live run is a strip of five circles means clicking it to see the graph that is the reason this view
- * exists, and the runs that are moving are the ones nobody has to be asked about. Off every run rather than the
+/* WHICH ROWS ARRIVE OPEN: what the branch's newest commit has to say that is not "fine", its runs still going
+ * and the failures it left open (ciStreaks' `arrivesOpen`, which has the reasoning). Reading a board whose live
+ * run is a strip of five circles means clicking it to see the graph that is the reason this view exists, and a
+ * red row is the same bargain one moment later: what broke is a job in that graph. Off every run rather than the
  * scoped ones, for the same reason `open` is: a branch's head commit is the same commit whichever repository the
  * reader happens to be scoped to. */
-const live = computed(() => runningOnHead(runs.value));
+const autoOpen = computed(() => arrivesOpen(runs.value));
 
 /* THE WAY OUT TO THE VENDOR, per repo, and pointed at PIPELINES rather than at the project.
  *
@@ -379,7 +380,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                                 :recurring="recurringFor(run)"
                                 :open="open.has(run)"
                                 :superseded="superseded.get(run)"
-                                :auto-open="live.has(run)"
+                                :auto-open="autoOpen.has(run)"
                                 :fix="fixByRun.get(run)"
                                 :branch-fix="branchFixFor(run)"
                                 @rerun="act($event, rerun)"
