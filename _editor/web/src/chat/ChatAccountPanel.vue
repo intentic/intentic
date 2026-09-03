@@ -94,7 +94,7 @@ const connect = async (): Promise<void> => {
 
     <!-- THE SIGN-IN, once one is running: it takes the whole strip, and Cancel is the only other control,
          because abandoning it is what puts the line below back. -->
-    <div v-else-if="live" class="flex flex-col gap-2 rounded-2xl border border-line bg-overlay/40 px-4 py-3">
+    <div v-else-if="live" class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3">
         <div class="flex items-center gap-2">
             <ProviderLogo :provider="live.provider" class="shrink-0 text-link" />
             <span class="min-w-0 flex-1 truncate text-left text-xs font-medium text-body">Connecting {{ providerDisplayLabel(live.provider) }}</span>
@@ -110,7 +110,7 @@ const connect = async (): Promise<void> => {
          provider's own sign-in follows it, for the user who pointed the chat here on purpose. -->
     <div
         v-else-if="!connected && !trialSpent"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-overlay/40 px-4 py-3 text-2xs text-muted"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
     >
         <Icon name="lock" class="shrink-0 text-subtle" />
         <span class="min-w-0 flex-1 text-left">{{ providerName }} isn't connected in this sandbox.</span>

@@ -121,7 +121,7 @@ const activeAccountReauth = computed(() => {
          anything. -->
     <div
         v-if="activeArchived !== undefined"
-        class="flex items-center gap-2 rounded-xl border border-line bg-overlay/60 px-3 py-2 text-2xs text-muted"
+        class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted"
     >
         <Icon name="box" class="shrink-0" />
         <span class="min-w-0 flex-1">Archived: off the board. Sending a message restores it.</span>
@@ -146,7 +146,7 @@ const activeAccountReauth = computed(() => {
          cannot send, so the row centres on its button rather than hanging everything off the first text line. -->
     <div
         v-if="trialNotice"
-        class="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
+        class="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-line bg-card px-3 py-2 text-left text-2xs text-muted"
         :class="trialSpent ? `items-center` : `items-start`"
     >
         <Icon name="sparkles" class="shrink-0 text-link" :class="trialSpent ? `` : `mt-0.5`" />
@@ -171,7 +171,7 @@ const activeAccountReauth = computed(() => {
     <RouterLink
         v-if="activeAccountReauth"
         :to="{ path: '/sandbox/agent', query: { connect: provider } }"
-        class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
+        class="flex items-start gap-2 rounded-xl border border-warning/40 bg-card px-3 py-2 text-left text-2xs text-warning"
     >
         <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
         <span

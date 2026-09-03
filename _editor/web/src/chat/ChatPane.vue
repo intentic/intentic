@@ -1420,7 +1420,7 @@ watch(
                                 <div
                                     v-for="message in queued"
                                     :key="message.id"
-                                    class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-overlay/60 px-3 py-2"
+                                    class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-card px-3 py-2"
                                 >
                                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                                     <div class="min-w-0 flex-1">
