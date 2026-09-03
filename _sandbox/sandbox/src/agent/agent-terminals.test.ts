@@ -166,10 +166,15 @@ test("without an anchor, an isolated turn's Bash has its main-tree paths rewritt
 test("the Bash rewrite leaves the shared subtrees and any path that merely starts with the root alone", async () => {
     const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: ["intentic/node_modules"], overlays: `${HISTORY_ROOT}/overlays/abc` };
     const rewrite = async (command: string): Promise<string | undefined> => rewritten({ command }, bashTmuxHooks([], { plan }));
-    // Dependency trees and daemon state resolve to the main checkout on both sides: redirecting them would
-    // aim at a path the worktree does not have.
+    // Dependency trees and the UNTRACKED state dir resolve to the main checkout on both sides: redirecting
+    // them would aim at a path the worktree does not have, and a transcript written per-worktree is lost.
     expect(await rewrite("/work/intentic/node_modules/.bin/tsgo")).toContain("/work/intentic/node_modules/.bin/tsgo");
-    expect(await rewrite("cat /work/.intentic/config/settings.json")).toContain("/work/.intentic/config/settings.json");
+    expect(await rewrite("cat /work/.intentic/records/sessions/claude/projects/x.jsonl")).toContain(
+        "/work/.intentic/records/sessions/claude/projects/x.jsonl",
+    );
+    // The TRACKED slice is not one of them: `.intentic/config` is checked out on the agent's branch, so a
+    // command naming it moves with the root like any other tracked file (sandbox-contract's workspace-state.ts).
+    expect(await rewrite("cat /work/.intentic/config/settings.json")).toContain("/wt/.intentic/config/settings.json");
     // The deliberate main-tree door, and a look-alike that is not the root at all.
     expect(await rewrite("diff /mnt/intentic-main/x /work/x")).toContain("/mnt/intentic-main/x /wt/x");
     expect(await rewrite("ls ./workspace")).toContain("./workspace");
