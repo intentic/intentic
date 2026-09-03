@@ -45,6 +45,16 @@ test.each<[string, ClassifiedInstall[]]>([
     ["pipx install ruff", [{ kind: "pipx", tool: "ruff" }]],
     ["curl -fsSL https://bun.sh/install | bash", [{ kind: "other", tool: "bun.sh" }]],
     ["dpkg -i /tmp/mytool_1.0_amd64.deb", [{ kind: "other", tool: "mytool" }]],
+    // A REAL install still classifies when it is spelled the way agents actually spell one: output redirected,
+    // piped into a pager, chained after a `cd`. Every one of these used to carry `2>&1` into the ledger beside
+    // the tool it names — as a playwright browser, as a Debian package, as `rustup-component-2>&1`, and (after
+    // pip's `>` specifier split ran over it) as a package called `2`.
+    ["npx playwright install chromium-headless-shell 2>&1 | tail -8", [{ kind: "playwright", tool: "chromium-headless-shell" }]],
+    ["apt-get install -y -qq xdotool 2>&1 | tail -3; which xdotool", [{ kind: "apt", tool: "xdotool" }]],
+    ["pip install --quiet zizmor 2>&1 | tail -3", [{ kind: "pip", tool: "zizmor" }]],
+    ["rustup component add clippy 2>&1 | tail -1", [{ kind: "other", tool: "rustup-component-clippy" }]],
+    ["apt-get install -y ffmpeg > /tmp/apt.log 2>/dev/null", [{ kind: "apt", tool: "ffmpeg" }]],
+    ["(uvx --from zizmor zizmor --version || pip install zizmor)", [{ kind: "pip", tool: "zizmor" }]],
 ])("an install command names its tools: %s", (command, expected) => {
     expect(classifyImageInstalls(command)).toEqual(expected);
 });
@@ -65,6 +75,14 @@ test.each([
     "npm uninstall -g typescript",
     // Inside another container: mutates that container's filesystem, not this one.
     "docker run --rm node:24 bash -c 'apt-get update && apt-get install -y tmux'",
+    /* A QUOTED ARGUMENT IS NOT A COMMAND, and these four are the commands that actually polluted this
+     * workspace's ledger. Splitting the raw string on `|` and `;` broke each of these search patterns into
+     * "invocations" that begin with a package manager, and the file being searched became the package. */
+    'rg -n "^FROM|^ARG NODE|apt-get install -y --no-install-recommends" _sandbox/sandbox/Dockerfile | head -20',
+    'rg -n "irm |iex|curl.*\\| sh|SANDBOX_URL=" src/inventory/enroll-host.ts | head -10',
+    "echo 'RUN apt-get update && apt-get install -y curl ca-certificates' > /tmp/frag",
+    // A heredoc carries a SCRIPT. Its lines are data to the shell, and one of them naming an install is not one.
+    "python3 - <<'PYEOF'\nsubprocess.run('apt-get install -y tmux')\nprint('pip install requests')\nPYEOF",
 ])("what is not an image install of this container classifies as nothing: %s", (command) => {
     expect(classifyImageInstalls(command)).toEqual([]);
 });

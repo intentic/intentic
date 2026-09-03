@@ -16,6 +16,7 @@ import {
     approveEnvironment,
     composeEnvironment,
     customPath,
+    decideRuntimeInstall,
     draftsDir,
     baseImageOf,
     hasValidBase,
@@ -385,6 +386,71 @@ test("a one-session install that is not live in this container stays off the car
     const services = stubServices();
     await services.runtimeInstalls.record([{ kind: "apt", tool: "jq" }], "apt-get install -y jq", "s1", 1_000);
     expect((await readEnvironment(services)).recurring).toBeUndefined();
+});
+
+/* ---- the owner answering ONE line of that list ----
+ *
+ * Until this existed, rejecting a whole PROPOSAL was the only route to a tombstone, and the ecosystems with no
+ * mechanical template had no route to a draft at all: their entries were reported, corroborated and unanswerable
+ * for as long as the ledger remembered them. */
+
+test("adopting writes the tool's overlay draft on the owner's say-so, without the sweep's gates", async () => {
+    const services = stubServices();
+    // ONE session and no corroboration: the sweep would refuse this, and refusing it is right when nobody asked.
+    await services.runtimeInstalls.record([{ kind: "cargo", tool: "cargo-xwin" }], "cargo install --locked cargo-xwin", "s1", 1_000);
+
+    expect(await decideRuntimeInstall(services, { tool: "cargo-xwin", decision: "adopt" })).toBeUndefined();
+    const draft = await readWorkspaceFile(join(draftsDir(services), "cargo-xwin.Dockerfile"));
+    expect(draft).toContain("RUN cargo install --locked cargo-xwin");
+    expect(draft?.split("\n")[0]).toBe(`${AUTO_MARKER} cargo-xwin`);
+    // And it reaches the owner as a proposal to approve, which is the only reason writing it is worth anything.
+    expect((await readEnvironment(services)).proposal?.content).toContain("cargo install --locked cargo-xwin");
+});
+
+test("a kind with no mechanical step cannot be adopted, and says so rather than writing nothing quietly", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ kind: "pip", tool: "zizmor" }], "pip install zizmor", "s1", 1_000);
+    expect(await decideRuntimeInstall(services, { tool: "zizmor", decision: "adopt" })).toBe("unavailable");
+});
+
+test("dismissing tombstones one tool and takes its auto-draft with it; undoing clears the tombstone", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ kind: "apt", tool: "nsis" }], "apt-get install -y nsis", "s1", 1_000);
+    await services.files.write(join(draftsDir(services), "nsis.Dockerfile"), `${AUTO_MARKER} nsis\nRUN apt-get install -y nsis\n`);
+    // An agent's own draft carries no marker and is not the machine repeating itself: dismissing a ledger line
+    // does not answer a question an agent asked in person.
+    await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+
+    await decideRuntimeInstall(services, { tool: "nsis", decision: "dismiss" });
+    expect((await services.runtimeInstalls.read()).installs.find((entry) => entry.tool === "nsis")?.declinedAt).toEqual(expect.any(Number));
+    expect(await readWorkspaceFile(join(draftsDir(services), "nsis.Dockerfile"))).toBeUndefined();
+    expect(await readWorkspaceFile(join(draftsDir(services), "ffmpeg.Dockerfile"))).toContain("ffmpeg");
+
+    await decideRuntimeInstall(services, { tool: "nsis", decision: "restore" });
+    expect((await services.runtimeInstalls.read()).installs.find((entry) => entry.tool === "nsis")?.declinedAt).toBeUndefined();
+});
+
+test("dismissing the last drafted tool leaves no proposal standing over a file that is gone", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ kind: "apt", tool: "nsis" }], "apt-get install -y nsis", "s1", 1_000);
+    await services.files.write(join(draftsDir(services), "nsis.Dockerfile"), `${AUTO_MARKER} nsis\nRUN apt-get install -y nsis\n`);
+    expect((await readEnvironment(services)).proposal?.content).toContain("nsis");
+
+    await decideRuntimeInstall(services, { tool: "nsis", decision: "dismiss" });
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+});
+
+test("the recurring row carries the step that would bake it, so the card can show what a press would add", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ kind: "playwright", tool: "chromium-headless-shell" }], "npx playwright install", "s1", 1_000);
+    await services.runtimeInstalls.record([{ kind: "playwright", tool: "chromium-headless-shell" }], "npx playwright install", "s2", 2_000);
+    await services.runtimeInstalls.record([{ kind: "pip", tool: "zizmor" }], "pip install zizmor", "s1", 1_000);
+    await services.runtimeInstalls.record([{ kind: "pip", tool: "zizmor" }], "pip install zizmor", "s2", 2_000);
+
+    const { recurring } = await readEnvironment(services);
+    expect(recurring?.find((entry) => entry.tool === "chromium-headless-shell")?.step).toContain("playwright install --with-deps");
+    // Absent is the honest answer for a kind whose fix is a judgement call, and the card reads it as one.
+    expect(recurring?.find((entry) => entry.tool === "zizmor")?.step).toBeUndefined();
 });
 
 test("a drift snapshot from a container that no longer exists is not reported", async () => {

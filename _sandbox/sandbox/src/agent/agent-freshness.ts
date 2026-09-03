@@ -3,7 +3,7 @@ import type { DependencyFreshness } from "@intentic/sandbox-contract";
 import type { Ecosystem, Freshness, FreshnessResolver, PinnedPackage, RangeOperator } from "../dependencies/registry-freshness.js";
 import { successorFor } from "../dependencies/successors.js";
 import type { WorkspacePins } from "../dependencies/workspace-pins.js";
-import { agentCommand, commandInvocations } from "./agent-installs.js";
+import { agentCommand, commandWords } from "./agent-installs.js";
 
 /* THE VERSION ABOUT TO BE WRITTEN, CHECKED AGAINST THE REGISTRY THAT PUBLISHES IT.
  *
@@ -195,8 +195,8 @@ const MANAGERS = new Map<string, { readonly ecosystem: Ecosystem; readonly verbs
 ]);
 
 const installTargets = (command: string): InstallTargets[] =>
-    commandInvocations(agentCommand(command)).flatMap<InstallTargets>((invocation) => {
-        const words = invocation.split(/\s+/).filter((word) => word !== "");
+    commandWords(agentCommand(command)).flatMap<InstallTargets>((invocation) => {
+        const words = [...invocation];
         const manager = MANAGERS.get(words.shift()?.split("/").at(-1) ?? "");
         if (manager === undefined) {
             return [];

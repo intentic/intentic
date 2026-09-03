@@ -63,6 +63,22 @@ export const stepFor = (entry: Pick<RuntimeInstall, "tool" | "kind">): string | 
             return `RUN rustup target add ${entry.tool}`;
         case "npm":
             return `RUN --mount=type=cache,target=/root/.npm \\\n    npm install -g ${entry.tool}`;
+        /* A PLAYWRIGHT BROWSER IS MECHANICAL, and leaving it out is what stranded `chromium-headless-shell` on
+         * the Environment card for a week: recorded in two sessions, present in the container, corroborated,
+         * and unfixable because nothing downstream could write its step. The gap is not incidental — the
+         * browser pack DELETES the headless shell (`rm -rf .../chromium_headless_shell-*`, browser.Dockerfile),
+         * because the daemon's own tools launch full headed Chromium, so a workspace whose e2e suite wants the
+         * shell reinstalls it every single container. That is precisely the loop the ledger exists to close.
+         *
+         * The ms-playwright cache is deliberately NOT mounted, for the reason the pack states: the browser is
+         * the payload, and a mounted cache is never committed to a layer. Only the npm side is cached. */
+        case "playwright":
+            return (
+                `# The browser cache is deliberately not mounted: the download IS the payload and has to land in\n` +
+                `# a layer. Pin the playwright version to whatever resolves this browser for your tests.\n` +
+                `RUN --mount=type=cache,target=/root/.npm \\\n` +
+                `    npx --yes playwright install --with-deps ${entry.tool}`
+            );
         default:
             return undefined;
     }

@@ -70,8 +70,22 @@ export const EnvironmentRecurringSchema = z.object({
     live: z.boolean(),
     drafted: z.boolean().optional(),
     declined: z.boolean().optional(),
+    /* The Dockerfile step that would bake this tool, when its ecosystem has one that follows from the name
+     * alone (auto-drafts.ts `stepFor`). Sent rather than re-derived in the browser because it is the SAME string
+     * the owner would approve, and because its presence is the honest answer to "can this be fixed by pressing a
+     * button?": absent means the fix is a judgement call (which pip package, replaying which installer) and the
+     * card offers an agent instead. */
+    step: z.string().optional(),
 });
 export type EnvironmentRecurring = z.infer<typeof EnvironmentRecurringSchema>;
+/* The owner's answer to ONE line of that list. `adopt` writes the tool's overlay draft now, without waiting for
+ * the sweep to re-earn it; `dismiss` tombstones it so nothing proposes it again; `restore` undoes a dismissal.
+ * One route rather than three because it is one decision surface about one ledger entry. */
+export const EnvironmentRuntimeDecisionSchema = z.object({
+    tool: z.string().min(1),
+    decision: z.enum(["adopt", "dismiss", "restore"]),
+});
+export type EnvironmentRuntimeDecision = z.infer<typeof EnvironmentRuntimeDecisionSchema>;
 export const EnvironmentSchema = z.object({
     proposal: environmentFileSchema.optional(),
     // The owner-approved agent-written custom section (.intentic/config/environment.custom.Dockerfile).

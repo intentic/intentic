@@ -58,6 +58,13 @@ vi.mock(`../../composables/sandbox/useSandbox`, () => ({
     sandboxKey: (name: string) => [name],
 }));
 vi.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {} }) }));
+/* Cut off at the door, because "Ask an agent" on a runtime-install row makes this card an importer of the whole
+ * CHAT stack: agentActions reaches the app's shared query client (constructed at module scope) and the chat
+ * broadcast channel (which registers a module-level watcher on the active sandbox). Neither is in this suite's
+ * subject, and both failed it at IMPORT — a card that renders perfectly reading as a broken one because a mock
+ * two layers away was a field short. Mocked as a module rather than propped up field by field: the alternative
+ * is this file growing a shim for every singleton anything downstream ever adds. */
+vi.mock(`../../composables/agents/agentActions`, () => ({ startAgent: () => `` }));
 // The diff viewer and the rebuild one-liner each reach the daemon on their own; this mounts the card.
 vi.mock(`../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));

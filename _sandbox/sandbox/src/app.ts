@@ -7,6 +7,7 @@ import {
     EngineUpdateInputSchema,
     type EnrollHostInput,
     EnrollHostInputSchema,
+    EnvironmentRuntimeDecisionSchema,
     type GrantedRole,
     GrantedRoleSchema,
     MachineReportSchema,
@@ -56,7 +57,7 @@ import { createChildrenRoutes } from "./children/children.routes.js";
 import { readEnvironmentContents } from "./environment/contents.js";
 import { opt } from "./agent/opt.js";
 import { enginesView, revertEngine, setChannel, updateEngine } from "./engines/engines.js";
-import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { approveEnvironment, decideRuntimeInstall, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
 import { createDefinitions } from "./portability/apply-definition.js";
@@ -1048,6 +1049,26 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return denied;
         }
         await rejectEnvironment(services);
+        return c.json(await readEnvironment(services));
+    });
+    /* The owner answering ONE line of the runtime-install list, which until now had no answer at all: rejecting
+     * a whole proposal was the only route to a tombstone, so a recurring install nobody wanted baked went on
+     * being reported forever. `adopt` writes the tool's overlay draft on the spot (the sweep's recurrence and
+     * corroboration gates exist to justify a draft nobody asked for; this owner asked), `dismiss` tombstones it
+     * and takes its auto-draft with it, `restore` undoes that. Owner-gated for the reason approve is: it decides
+     * what gets built into the image every turn then runs on. */
+    app.post("/environment/runtime-install", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const body = EnvironmentRuntimeDecisionSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!body.success) {
+            return c.json({ error: "tool and decision required" }, 400);
+        }
+        if ((await decideRuntimeInstall(services, body.data)) === "unavailable") {
+            return c.json({ error: "no runtime install by that name has a mechanical overlay step" }, 404);
+        }
         return c.json(await readEnvironment(services));
     });
 

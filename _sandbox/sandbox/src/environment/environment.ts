@@ -1,9 +1,9 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Environment, EnvironmentRecurring } from "@intentic/sandbox-contract";
+import type { Environment, EnvironmentRecurring, EnvironmentRuntimeDecision } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
-import { autoDraftedTools, named } from "./auto-drafts.js";
+import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, stepFor } from "./auto-drafts.js";
 import { containerBornAtMs, installLive } from "./drift.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { providerPackFragments } from "./provider-packs.js";
@@ -191,6 +191,7 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
         if (entry.sessions.length < 2 && !live) {
             continue;
         }
+        const step = stepFor(entry);
         recurring.push({
             tool: entry.tool,
             kind: entry.kind,
@@ -199,6 +200,7 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
             live,
             ...(drafted.has(entry.tool) ? { drafted: true } : {}),
             ...(entry.declinedAt !== undefined ? { declined: true } : {}),
+            ...(step === undefined ? {} : { step }),
         });
     }
     recurring.sort((left, right) => right.lastAt - left.lastAt);
@@ -265,4 +267,72 @@ export const rejectEnvironment = async (services: Services): Promise<void> => {
     }
     await services.files.remove(draftsDir(services));
     await services.files.remove(proposalPath(services));
+};
+
+/* ONE LINE OF THE RECURRING LIST, ANSWERED. Rejecting above is the owner answering a whole PROPOSAL, and until
+ * this existed it was the only route to a tombstone at all — so a recurring install the owner was content to
+ * keep making (a throwaway experiment, a tool that genuinely belongs in a venv) had no way to stop asking, and
+ * anything a classifier bug invented was unremovable short of editing the ledger file by hand. This workspace's
+ * own card carried `2>&1` for six days for exactly that reason.
+ *
+ * The tool's AUTO-DRAFT goes with it, because leaving it would put a step in front of the owner for a tool they
+ * just dismissed, and synthesis skips existing files, so it would never be rewritten or cleaned up. An agent's
+ * own hand-written draft is left alone: it means the agent asked, which dismissing a ledger line does not answer.
+ * Restoring (`dismissed: false`) clears the tombstone only — the sweep re-earns the draft on its own terms. */
+const dismissRuntimeInstall = async (services: Services, tool: string): Promise<void> => {
+    await services.runtimeInstalls.decline([tool], Date.now());
+    const file = draftFileName(tool);
+    if (file === undefined) {
+        return;
+    }
+    const path = join(draftsDir(services), file);
+    const content = await services.files.read(path);
+    if (content?.startsWith(`${AUTO_MARKER} ${tool}`) === true) {
+        await services.files.remove(path);
+        // The proposal is composed from the drafts that remain; with none left there is nothing to review, and a
+        // proposal left standing would ask the owner to approve a step whose file is gone.
+        if ((await readDrafts(services)) === "") {
+            await services.files.remove(proposalPath(services));
+        }
+    }
+};
+
+/* THE OTHER HALF: bake it, now, on the owner asking rather than on the sweep's terms.
+ *
+ * The auto-drafter's gates — a second session, and the live container corroborating — are what make it safe to
+ * write a draft NOBODY ASKED FOR. An owner pressing the button on the card has supplied both of those in person,
+ * so this writes the same draft from the same template without them. The freeze still holds: an existing draft
+ * (this module's from an earlier pass, or an agent's own) is left exactly as it is, because the proposal's hash
+ * must not move under a reader who is halfway through it. */
+const adoptRuntimeInstall = async (services: Services, tool: string): Promise<"unavailable" | undefined> => {
+    const ledger = await services.runtimeInstalls.read();
+    const entry = ledger.installs.find((install) => install.tool === tool);
+    const step = entry === undefined ? undefined : stepFor(entry);
+    const file = entry === undefined ? undefined : draftFileName(entry.tool);
+    if (entry === undefined || step === undefined || file === undefined) {
+        return "unavailable";
+    }
+    // Adopting a tool that was dismissed earlier is the owner changing their mind; leaving the tombstone would
+    // have the sweep fight the draft they just asked for.
+    await services.runtimeInstalls.decline([tool], undefined);
+    const path = join(draftsDir(services), file);
+    if ((await services.files.read(path)) === undefined) {
+        await services.files.write(path, draftContent(entry, step));
+    }
+    return undefined;
+};
+
+export const decideRuntimeInstall = async (
+    services: Services,
+    { tool, decision }: EnvironmentRuntimeDecision,
+): Promise<"unavailable" | undefined> => {
+    if (decision === "adopt") {
+        return adoptRuntimeInstall(services, tool);
+    }
+    if (decision === "dismiss") {
+        await dismissRuntimeInstall(services, tool);
+        return undefined;
+    }
+    await services.runtimeInstalls.decline([tool], undefined);
+    return undefined;
 };

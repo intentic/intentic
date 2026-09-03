@@ -46,9 +46,13 @@ export interface RuntimeInstallsStore {
     // conversation id) still counts the command and stamps the time, it just cannot add to recurrence.
     readonly record: (installs: readonly ClassifiedInstall[], command: string, session: string | undefined, at: number) => Promise<void>;
     readonly saveDrift: (drift: EnvironmentDrift) => Promise<void>;
-    // The owner rejected auto-drafted steps naming these tools: tombstone them so the sweep never proposes the
-    // same step again. Without this the auto-drafter would recreate a rejected draft on its next tick, forever.
-    readonly decline: (tools: readonly string[], at: number) => Promise<void>;
+    /* The owner rejected auto-drafted steps naming these tools, or dismissed them from the Environment card:
+     * tombstone them so the sweep never proposes the same step again. Without this the auto-drafter would
+     * recreate a rejected draft on its next tick, forever.
+     *
+     * `at: undefined` CLEARS the tombstone, because a dismiss that cannot be undone is a dismiss nobody presses:
+     * the card's control is one quiet button on an open row, a mis-click away from a tool the owner meant to keep. */
+    readonly decline: (tools: readonly string[], at: number | undefined) => Promise<void>;
 }
 
 const keyOf = (install: { readonly kind: RuntimeInstallKind; readonly tool: string }): string => `${install.kind}:${install.tool}`;
@@ -108,7 +112,16 @@ export const fileRuntimeInstallsStore = (path: string): RuntimeInstallsStore => 
             const names = new Set(tools);
             await file.update((current) => ({
                 ...current,
-                installs: current.installs.map((entry) => (names.has(entry.tool) ? { ...entry, declinedAt: at } : entry)),
+                installs: current.installs.map((entry) => {
+                    if (!names.has(entry.tool)) {
+                        return entry;
+                    }
+                    if (at === undefined) {
+                        const { declinedAt: _cleared, ...rest } = entry;
+                        return rest;
+                    }
+                    return { ...entry, declinedAt: at };
+                }),
             }));
         },
     };

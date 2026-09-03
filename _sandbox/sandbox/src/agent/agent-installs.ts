@@ -14,7 +14,15 @@ import type { ClassifiedInstall } from "../environment/runtime-installs.js";
  * What still speaks to the model is only what changes its behaviour IN THE MOMENT: a browser install is told
  * the browser is already baked (a 250s / 114 MiB detour otherwise), and a project dependency mutation is denied
  * outright — an isolated turn's install is discarded and a shared-tree install races every other mounted turn,
- * so that one is not advice. */
+ * so that one is not advice.
+ *
+ * SILENT RECORDING PUTS THE WHOLE WEIGHT ON THE PARSE. Nothing downstream asks the model to confirm what this
+ * file decided, and the recurrence gate is not the safety net it looks like: a misparse repeats across sessions
+ * exactly as reliably as a real install, because the command that produced it is the kind of command an agent
+ * runs every day. This workspace's own ledger is the evidence — `2>&1` as a playwright browser and as a Debian
+ * package, `_sandbox/sandbox/Dockerfile` as a Debian package, a shell installer read out of an `rg` pattern —
+ * all of it from reading raw text where a shell reads syntax. Hence one quote-aware tokenizer below, and a
+ * plausibility test on every name that leaves it. */
 
 // A venv is the sanctioned way to use pip here (Debian marks the system interpreter externally-managed), and
 // it lands wherever the agent puts it, so a pip install INSIDE one is project scope, not image scope.
@@ -25,15 +33,137 @@ const NODE_INSTALL_VERBS = new Set(["i", "install", "add", "ci", "update", "up",
 const NODE_ADD_VERBS = new Set(["i", "install", "add"]);
 const OPTION_WITH_VALUE = new Set(["--cwd", "--dir", "--filter", "--prefix", "-C"]);
 
-const shellWords = (command: string): string[] => {
-    const words: string[] = [];
+/* ---- READING A COMMAND LINE: one quote-aware tokenizer, and every question below asked of its output ----
+ *
+ * The splitter this replaces broke the RAW STRING on `&&`, `||`, `;`, `|` and newlines with no idea what was
+ * quoted, so a search PATTERN containing those characters became several invocations. Both of these are in this
+ * workspace's own ledger, recorded from commands that installed nothing:
+ *
+ *   rg -n "^FROM|^ARG NODE|apt-get install -y --no-install-recommends" _sandbox/sandbox/Dockerfile
+ *     → an apt install whose "package" was the file being searched
+ *   rg -n "irm |iex|curl.*\| sh|SANDBOX_URL=" src/inventory/enroll-host.ts
+ *     → a shell installer, off a pipe that only ever existed inside a regex
+ *
+ * The file already HAD a tokenizer that honours quotes. It was used for exactly one thing — unwrapping the tmux
+ * runner — while the classifier next to it went on reasoning about raw text. So there is now one reader, it
+ * produces WORDS rather than substrings (a caller that re-splits a joined invocation on whitespace has undone
+ * the quoting all over again), and it reports the operator each segment ended on, so `curl … | sh` is a question
+ * about adjacency instead of a pattern that a quoted pipe can answer. */
+
+/* A HEREDOC BODY IS NOT A COMMAND. `python3 - <<'PY' … PY`, `cat > f <<'EOF' … EOF`: the payload is a SCRIPT,
+ * and a tokenizer that treats newlines as separators reads every line of it as an invocation. A probe script
+ * whose string literals happened to contain `playwright install chromium-headless-shell` and `apt-get install`
+ * put both in the ledger while installing nothing at all. Stripped line-wise, because that is how a heredoc is
+ * defined; `<<<` is a here-STRING and stays an ordinary word. */
+const HEREDOC = /<<-?(?!<)\s*\\?(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/;
+
+const withoutHeredocs = (command: string): string => {
+    const kept: string[] = [];
+    let delimiter: string | undefined;
+    for (const line of command.split("\n")) {
+        if (delimiter !== undefined) {
+            if (line.trim() === delimiter) {
+                delimiter = undefined;
+            }
+            continue;
+        }
+        kept.push(line);
+        const opened = HEREDOC.exec(line);
+        if (opened !== null) {
+            delimiter = opened[1] ?? opened[2] ?? opened[3];
+        }
+    }
+    return kept.join("\n");
+};
+
+/* A REDIRECTION IS NOT AN ARGUMENT, and this is the single biggest source of nonsense in the ledger this fixes.
+ * `2>&1` is shell syntax that every ecosystem's package parser swallowed as a package name: it is recorded here
+ * as a playwright browser, as a Debian package, as `rustup-component-2>&1`, and — after pip's own `>` specifier
+ * split ran over it — as a package called `2`. An operator standing alone takes the NEXT word with it, which is
+ * its target; one carrying its own target (`2>&1`, `2>/dev/null`, `>out.log`) takes only itself. */
+const REDIRECTION = /^(?:\d+|&)?(?:>>?|<<?)/;
+
+const withoutRedirections = (words: readonly string[]): string[] => {
+    const kept: string[] = [];
+    for (let index = 0; index < words.length; index += 1) {
+        const word = words[index] as string;
+        if (!REDIRECTION.test(word)) {
+            kept.push(word);
+            continue;
+        }
+        if (word.replace(REDIRECTION, "") === "") {
+            index += 1;
+        }
+    }
+    return kept;
+};
+
+/* Ordinary prefixes that stand in front of the command that matters: env assignments, `env`/`sudo`/`nice`, the
+ * loop keywords a `for`/`while` body opens with, and `timeout <n>`, which transcript mining found wrapped
+ * around half the slow installs (`timeout 600 npx playwright install chromium`). */
+const PREFIX_WORDS = new Set(["env", "sudo", "nice", "then", "do"]);
+const DURATION = /^[\d.]+[smhd]?$/;
+
+const withoutPrefixes = (words: readonly string[]): string[] => {
+    let start = 0;
+    while (start < words.length) {
+        const word = words[start] as string;
+        if (PREFIX_WORDS.has(word) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+            start += 1;
+            continue;
+        }
+        if (word === "timeout") {
+            let ahead = start + 1;
+            while ((words[ahead] ?? "").startsWith("-")) {
+                ahead += 1;
+            }
+            if (DURATION.test(words[ahead] ?? "")) {
+                start = ahead + 1;
+                continue;
+            }
+        }
+        break;
+    }
+    return words.slice(start);
+};
+
+type Operator = "|" | "&&" | "||" | ";" | "&" | "\n";
+
+interface CommandSegment {
+    readonly words: readonly string[];
+    /** The operator this segment ENDED on, absent at the end of the command and around `(`…`)` grouping. */
+    readonly next?: Operator;
+}
+
+const tokenize = (command: string): CommandSegment[] => {
+    const segments: CommandSegment[] = [];
+    let words: string[] = [];
     let word = "";
     let quote: "'" | '"' | undefined;
     let escaped = false;
-    for (const character of command) {
+    const endWord = (): void => {
+        if (word !== "") {
+            words.push(word);
+            word = "";
+        }
+    };
+    const endSegment = (next?: Operator): void => {
+        endWord();
+        const kept = withoutPrefixes(withoutRedirections(words));
+        if (kept.length > 0) {
+            segments.push(next === undefined ? { words: kept } : { words: kept, next });
+        }
+        words = [];
+    };
+    const source = withoutHeredocs(command);
+    for (let index = 0; index < source.length; index += 1) {
+        const character = source[index] as string;
         if (escaped) {
-            word += character;
             escaped = false;
+            // A backslash-newline is a line continuation: it JOINS the two lines, it does not separate them.
+            if (character !== "\n") {
+                word += character;
+            }
         } else if (character === "\\" && quote !== "'") {
             escaped = true;
         } else if (quote !== undefined) {
@@ -44,20 +174,38 @@ const shellWords = (command: string): string[] => {
             }
         } else if (character === "'" || character === '"') {
             quote = character;
+        } else if (character === "&" && /[<>]$/.test(word)) {
+            // Mid-redirection: the `&` of `2>&1` binds to the operator before it rather than backgrounding.
+            word += character;
+        } else if (character === "|" || character === "&") {
+            const doubled = source[index + 1] === character;
+            endSegment((doubled ? `${character}${character}` : character) as Operator);
+            index += doubled ? 1 : 0;
+        } else if (character === ";" || character === "\n") {
+            endSegment(character);
+        } else if (character === "(" || character === ")") {
+            endSegment();
         } else if (/\s/.test(character)) {
-            if (word !== "") {
-                words.push(word);
-                word = "";
-            }
+            endWord();
         } else {
             word += character;
         }
     }
-    if (word !== "") {
-        words.push(word);
-    }
-    return words;
+    endSegment();
+    return segments;
 };
+
+// The words of each invocation in a command, quotes honoured. What every caller outside this file wants: a
+// joined string they re-split on whitespace is the raw-text reasoning this tokenizer exists to end.
+export const commandWords = (command: string): string[][] => tokenize(command).map((segment) => [...segment.words]);
+
+// The same, joined, for the handful of tests inside this file that are naturally written as patterns over a
+// whole invocation ("does this start with `poetry add`?") rather than as word arithmetic.
+const commandInvocations = (command: string): string[] => tokenize(command).map((segment) => segment.words.join(" "));
+
+const shellWords = (command: string): string[] => tokenize(command).flatMap((segment) => segment.words);
+
+const executableOf = (words: readonly string[]): string | undefined => words[0]?.split("/").at(-1);
 
 export const agentCommand = (command: string): string => {
     const words = shellWords(command);
@@ -73,21 +221,9 @@ export const agentCommand = (command: string): string => {
     return session !== -1 && words[session + 1] !== undefined ? (words[session + 1] as string) : command;
 };
 
-// Read command INVOCATIONS, not arbitrary substrings. The previous unanchored expressions denied harmless
-// commands such as `rg 'pnpm install' docs` merely because the words appeared in a quoted search. Splitting at
-// shell control operators is deliberately modest rather than pretending to be a shell parser; each candidate
-// still has to begin with the package manager after ordinary prefixes — env assignments, env/sudo/nice, and
-// `timeout <n>`, which transcript mining showed wrapped around half the slow installs (`timeout 600 npx
-// playwright install chromium`).
-export const commandInvocations = (command: string): string[] =>
-    command
-        .split(/(?:&&|\|\||[;|\n])/)
-        .map((part) => part.trim().replace(/^(?:(?:then|do)\s+)?(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S+|env|sudo|nice|timeout\s+[\d.]+[smhd]?)\s+)*/, ""))
-        .filter((part) => part !== "");
-
 const nodeInstall = (command: string): { project: boolean; global: boolean } => {
-    for (const invocation of commandInvocations(command)) {
-        const words = invocation.split(/\s+/);
+    for (const invocation of commandWords(command)) {
+        const words = [...invocation];
         if (words[0] === "corepack") {
             words.shift();
         }
@@ -116,6 +252,13 @@ const nodeInstall = (command: string): { project: boolean; global: boolean } => 
 
 /* ---- classification: which tools an image-scoped install would put on this container ---- */
 
+// A shell a piped installer would be handed to, and the fetchers that hand it over.
+const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+const FETCHERS = new Set(["curl", "wget"]);
+// Verbs of these that operate on a DIFFERENT container's filesystem than this one.
+const CONTAINER_RUNNERS = new Set(["docker", "podman", "nerdctl"]);
+const CONTAINER_VERBS = new Set(["run", "exec", "build", "buildx", "compose"]);
+
 // Flags whose NEXT word is a value, not a package. Shared across ecosystems because misreading `--version 1.2`
 // as a package named "1.2" pollutes the ledger the same way everywhere; a flag listed here that some tool does
 // not take merely skips a word that was not a package either.
@@ -142,7 +285,7 @@ const VALUE_FLAGS = new Set([
     "--python",
 ]);
 
-// Bare package words after a verb: flags skipped, value-flag values skipped, surrounding quotes shed.
+// Bare package words after a verb: flags skipped, value-flag values skipped.
 const packagesAfter = (words: readonly string[], start: number): string[] => {
     const packages: string[] = [];
     for (let index = start; index < words.length; index += 1) {
@@ -157,10 +300,26 @@ const packagesAfter = (words: readonly string[], start: number): string[] => {
         if (word.startsWith("-")) {
             continue;
         }
-        packages.push(word.replace(/^['"]|['"]$/g, ""));
+        packages.push(word);
     }
     return packages;
 };
+
+/* WHAT CAN BE A PACKAGE NAME AT ALL, checked once on the finished name rather than per ecosystem.
+ *
+ * Every registry here agrees on the shape — start on a letter or digit, then word characters, dots, plus,
+ * underscore and dash — and npm's scopes are the one exception, adding a leading `@` and a slash. A word that
+ * fails this is not a package the parse got slightly wrong: it is shell syntax, or a PATH the command was
+ * operating on. The ledger this replaces holds `2>&1` three times over and `_sandbox/sandbox/Dockerfile` as a
+ * Debian package, and the recurrence gate was no defence — a false entry crosses two sessions exactly as easily
+ * as a real one. A digit-only name is rejected with them: no ecosystem has a package called `2`, and pip's
+ * specifier split manufactured one out of a redirection.
+ *
+ * The one name here that is not a package is the shell installer's, which is why it is spelled `shell-installer`
+ * rather than as a phrase: it is a tool NAME, it becomes a draft's filename, and a value that cannot survive
+ * this test is a value the rest of the pipeline cannot handle either. */
+const TOOL_NAME = /^@?[A-Za-z0-9][A-Za-z0-9._+-]*(?:\/[A-Za-z0-9][A-Za-z0-9._+-]*)*$/;
+const named = (tool: string): boolean => TOOL_NAME.test(tool) && /[A-Za-z]/.test(tool);
 
 // `pkg@1.2` → pkg, `@scope/pkg@1.2` → @scope/pkg; a bare scope's own @ is position 0 and survives.
 const withoutVersion = (name: string): string => {
@@ -198,29 +357,41 @@ const unwrapped = (words: string[]): string[] => {
  * while a false entry costs the ledger its meaning. */
 export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
     const effective = agentCommand(command);
+    const segments = tokenize(effective);
     // Installs inside another container's filesystem are that container's business; skipping the whole command
-    // over one docker word can only lose entries the corroboration gate would have discarded later.
-    if (/\b(?:docker|podman|nerdctl)\s+(?:run|exec|build|buildx|compose)\b/.test(effective)) {
+    // over one docker word can only lose entries the corroboration gate would have discarded later. Asked of the
+    // parsed segments rather than of the raw string, so a `docker run` quoted inside a search pattern no longer
+    // silences a real install standing next to it.
+    if (segments.some((segment) => CONTAINER_RUNNERS.has(executableOf(segment.words) ?? "") && CONTAINER_VERBS.has(segment.words[1] ?? ""))) {
         return [];
     }
     const venv = VENV_SCOPED.test(effective);
     const found: ClassifiedInstall[] = [];
     const add = (kind: ClassifiedInstall["kind"], tool: string): void => {
-        if (tool !== "" && !found.some((entry) => entry.kind === kind && entry.tool === tool)) {
+        if (named(tool) && !found.some((entry) => entry.kind === kind && entry.tool === tool)) {
             found.push({ kind, tool });
         }
     };
 
-    // The pipe is a separator commandInvocations splits on, so installer pipes are read off the whole command.
-    const piped = /\b(?:curl|wget)\b[^|;&\n]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b/.exec(effective);
-    if (piped !== null) {
-        const url = /https?:\/\/([^/\s'"]+)/.exec(piped[0]);
-        add("other", url?.[1] ?? "shell installer");
+    /* `curl … | sh`, read as ADJACENCY between two segments rather than as a pattern over the raw command. The
+     * expression this replaces found its pipe inside a quoted `rg` argument (`rg -n "curl.*\| sh|…"`) and put a
+     * shell installer in this workspace's ledger for a command that searched a file. A pipe the tokenizer did
+     * not see is a pipe the shell never ran. */
+    for (const [index, segment] of segments.entries()) {
+        const next = segments[index + 1];
+        if (segment.next !== "|" || next === undefined) {
+            continue;
+        }
+        if (!FETCHERS.has(executableOf(segment.words) ?? "") || !SHELLS.has(executableOf(next.words) ?? "")) {
+            continue;
+        }
+        const url = /https?:\/\/([^/\s'"]+)/.exec(segment.words.join(" "));
+        add("other", url?.[1] ?? "shell-installer");
     }
 
-    for (const invocation of commandInvocations(effective)) {
-        const words = unwrapped(invocation.split(/\s+/).filter((word) => word !== ""));
-        const executable = words[0]?.split("/").at(-1);
+    for (const segment of segments) {
+        const words = unwrapped([...segment.words]);
+        const executable = executableOf(words);
         if (executable === undefined) {
             continue;
         }
@@ -354,28 +525,29 @@ const notFoundBinaries = (output: string): string[] => {
 // (`pnpm lint` → `oxlint`), so the command-position guard below would be wrong there and the raw probe is right.
 export const notFoundBinary = (output: string): string | undefined => notFoundBinaries(output)[0];
 
+// The script a shell wrapper carries, or nothing when this invocation is not one. A word off the tokenizer, so
+// the payload arrives already unquoted rather than needing its own quote-matching expression here.
+const nestedScript = (words: readonly string[]): string | undefined => {
+    if (!SHELLS.has(executableOf(words) ?? "")) {
+        return undefined;
+    }
+    const flag = words.indexOf("-c");
+    return flag === -1 ? undefined : words[flag + 1];
+};
+
 /* Every binary this command runs IN COMMAND POSITION, which is the only place a missing one can be missing
  * from. One level into `sh -c '…'` as well, because that wrapper is how the tmux runner and `timeout` carry a
  * real command and the tool that is actually absent is inside it. Depth-capped: the recursion only ever shrinks
  * the string, but a cap is cheaper than trusting that. */
-const executableOf = (invocation: string): string | undefined => {
-    const word = invocation.split(/\s+/)[0]?.split("/").at(-1);
-    return word === undefined || word === "" ? undefined : word;
-};
-
-// The script a shell wrapper carries, or nothing when this invocation is not one.
-const nestedScript = (invocation: string, executable: string): string | undefined =>
-    /^(?:ba|da|z|k)?sh$/.test(executable) ? /-c\s+(['"])([\s\S]*?)\1/.exec(invocation)?.[2] : undefined;
-
 const invokedBinaries = (command: string, depth = 0): Set<string> => {
     const names = new Set<string>();
-    for (const invocation of commandInvocations(command)) {
-        const executable = executableOf(invocation);
-        if (executable === undefined) {
+    for (const words of commandWords(command)) {
+        const executable = executableOf(words);
+        if (executable === undefined || executable === "") {
             continue;
         }
         names.add(executable);
-        const script = depth < 2 ? nestedScript(invocation, executable) : undefined;
+        const script = depth < 2 ? nestedScript(words) : undefined;
         for (const nested of script === undefined ? [] : invokedBinaries(script, depth + 1)) {
             names.add(nested);
         }

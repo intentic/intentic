@@ -200,6 +200,9 @@ export type EnginesView = z.infer<typeof EnginesViewSchema>;
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
 export type EnvironmentItem = EnvironmentContents["items"][number];
+// One line of the runtime-install list, derived from the payload that carries it rather than imported
+// separately, for the reason EnvironmentItem is: the row type cannot drift from the response it arrives in.
+export type EnvironmentRecurring = NonNullable<Environment["recurring"]>[number];
 export type DefinitionExport = z.infer<typeof DefinitionExportSchema>;
 export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
 export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;

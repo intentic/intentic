@@ -11,6 +11,7 @@ import { useEnvironmentContents } from "../../composables/sandbox/useEnvironment
 import { useRole } from "../../composables/sandbox/useRole";
 import HostRecreate from "../../components/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
+import RuntimeInstalls from "./RuntimeInstalls.vue";
 import DiffToolbar from "../workspace/viewers/DiffToolbar.vue";
 import DiffView from "../workspace/viewers/DiffView.vue";
 
@@ -97,7 +98,10 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             </div>
         </template>
 
-        <RowNote variant="block" class="flex flex-col gap-4">
+        <!-- `gap-5`: the runtime-install list is now a labelled section in the same language as the three
+             inside <EnvironmentContents>, and those are separated by gap-5. One rhythm down the whole card, or
+             the fourth section reads as an afterthought stapled under the third. -->
+        <RowNote variant="block" class="flex flex-col gap-5">
         <!-- What the sandbox has, in plain language. Leads in every state: including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
         <EnvironmentContents v-if="shown === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
@@ -134,21 +138,15 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 
         <!-- What sessions keep installing at RUNTIME — the daemon's cross-session memory, drift-corroborated.
              The mechanically fixable entries are usually already drafted into the proposal above ("proposed");
-             the rest wait for a person: a pip package that belongs in a venv or a Debian package, a shell
-             installer whose replay could carry anything. Lives under both views because it is a fact about the
-             environment's state, like the decision below. -->
-        <div v-if="recurring.length" class="flex flex-col gap-1">
-            <p class="text-xs font-medium text-content">Installed at runtime, not in the image</p>
-            <ul class="flex flex-col gap-0.5">
-                <li v-for="entry in recurring" :key="`${entry.kind}:${entry.tool}`" class="text-2xs text-subtle">
-                    <span class="font-mono text-content">{{ entry.tool }}</span>
-                    · {{ entry.sessions === 1 ? `1 session` : `${entry.sessions} sessions` }}
-                    <template v-if="entry.live"> · present now, lost on rebuild</template>
-                    <template v-if="entry.drafted"> · proposed</template>
-                    <template v-if="entry.declined"> · declined</template>
-                </li>
-            </ul>
-        </div>
+             the rest wait for a person, and <RuntimeInstalls> is where that person now has something to press.
+             Lives under both views because it is a fact about the environment's state, like the decision below. -->
+        <RuntimeInstalls
+            v-if="recurring.length"
+            :entries="recurring"
+            :can-operate="canOperate"
+            :busy="busy"
+            @decide="(tool, decision) => decide(`/environment/runtime-install`, { tool, decision })"
+        />
 
         <!-- THE DECISION, under both views: it is about the environment's state, not about how it is displayed. -->
         <template v-if="proposal">

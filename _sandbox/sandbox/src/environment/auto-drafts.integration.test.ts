@@ -101,10 +101,20 @@ test.each<[Parameters<typeof stepFor>[0], string]>([
     expect(stepFor(install)).toBe(expected);
 });
 
+/* The browser pack deletes the headless shell after installing chromium, so a workspace whose e2e suite wants
+ * the shell reinstalls it in every container — the exact loop that left `chromium-headless-shell` recorded,
+ * corroborated and unfixable on the Environment card because no template existed for its kind. */
+test("a playwright browser drafts a step, and does not mount the cache the download has to land in", () => {
+    const step = stepFor({ kind: "playwright", tool: "chromium-headless-shell" })!;
+    expect(step).toContain("npx --yes playwright install --with-deps chromium-headless-shell");
+    expect(step).toContain("--mount=type=cache,target=/root/.npm");
+    expect(step).not.toContain("target=/root/.cache/ms-playwright");
+});
+
 test.each<[Parameters<typeof stepFor>[0]]>([
     [{ kind: "pip", tool: "pillow" }],
     [{ kind: "other", tool: "bun.sh" }],
-    [{ kind: "playwright", tool: "chromium" }],
+    [{ kind: "go", tool: "gopls" }],
 ])("no mechanical step for %o — surfaced, not drafted", (install) => {
     expect(stepFor(install)).toBeUndefined();
 });

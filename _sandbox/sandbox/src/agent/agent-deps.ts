@@ -1,7 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { posix } from "node:path";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
-import { agentCommand, commandInvocations, toolResultText } from "./agent-installs.js";
+import { agentCommand, commandWords, toolResultText } from "./agent-installs.js";
 
 /* THE DEPENDENCY NOTICE, SAID WHEN IT IS NEEDED AND NOT BEFORE.
  *
@@ -42,8 +42,8 @@ const DIRECT_CHECK_RUNNERS = new Set(["node", "tsc", "vite", "vitest", "jest", "
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 
 const runsProjectCode = (command: string): boolean =>
-    commandInvocations(agentCommand(command)).some((invocation) => {
-        const words = invocation.split(/\s+/);
+    commandWords(agentCommand(command)).some((invocation) => {
+        const words = [...invocation];
         const executable = words.shift()?.split("/").at(-1);
         if (executable === undefined) {
             return false;

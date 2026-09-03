@@ -147,11 +147,12 @@ const keysOf = (item: EnvironmentItem): string[] => [
     ...item.tools.flatMap((tool) => [tool.name.toLowerCase(), ...wordsOf(tool.name)]),
 ];
 
-export const environmentVisual = (item: EnvironmentItem): EnvironmentVisual => {
-    // A glyph found early is remembered but does not stop the search: a brand further down the list still wins
-    // the top tier, and the glyph it passed becomes what sits under it.
+// The lookup itself, over whatever words a caller can offer. A glyph found early is remembered but does not
+// stop the search: a brand further down the list still wins the top tier, and the glyph it passed becomes what
+// sits under it.
+const visualFor = (keys: readonly string[]): EnvironmentVisual => {
     let icon: IconName | undefined;
-    for (const key of keysOf(item)) {
+    for (const key of keys) {
         icon ??= ICONS[key];
         const logo = LOGOS[key];
         if (logo !== undefined) {
@@ -160,3 +161,13 @@ export const environmentVisual = (item: EnvironmentItem): EnvironmentVisual => {
     }
     return { icon: icon ?? `box` };
 };
+
+export const environmentVisual = (item: EnvironmentItem): EnvironmentVisual => visualFor(keysOf(item));
+
+/* THE SAME MARK FOR A RUNTIME INSTALL, which has a tool name and an ecosystem rather than an item's name and
+ * commands. Its KIND is asked last and as a fallback: `pip`, `cargo` and `npm` are all in the brand table, so a
+ * tool with a brand of its own (`zizmor` → nothing, `chromium-headless-shell` → the browser) keeps it, and only
+ * a tool the table has never heard of borrows its package manager's. Without that a whole list of pip packages
+ * would draw the Python logo down the left edge and say nothing about which package each row is. */
+export const runtimeInstallVisual = (tool: string, kind: string): EnvironmentVisual =>
+    visualFor([tool.toLowerCase(), ...wordsOf(tool), kind.toLowerCase(), ...wordsOf(kind)]);
