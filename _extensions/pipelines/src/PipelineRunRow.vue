@@ -102,15 +102,17 @@ const agentLink = (id: string): { href: string; onClick: (event: MouseEvent) => 
     // away. A real anchor, so ⌘-click opens a tab like every other row on this board.
     appLink(api.href(`/agents/${id}`), () => api.navigate(`/agents/${id}`));
 
-/* WHAT BECAME OF THIS ROW'S OWN AGENT, read once and used three times: the chip that replaces the button, the
- * button's label when there is nothing left to report, and the strip inside the drawer. */
+/* WHAT BECAME OF THIS ROW'S OWN AGENT, read once and used twice: the chip that replaces the button, and the
+ * button's label when there is nothing left to report. */
 const fixState = computed(() => {
     const agent = props.fix;
-    return agent === undefined ? undefined : { ...fixStance(agent), agent, link: agentLink(agent.id) };
+    return agent === undefined ? undefined : { ...fixStance(agent), link: agentLink(agent.id) };
 });
+// The branch's agent for a row that has none of its own, drawn in the same slot: its stance, because "ongoing"
+// covers a turn that is running and one parked on a question, and a spinner over the second would be a lie.
 const branchState = computed(() => {
     const other = props.branchFix;
-    return other === undefined ? undefined : { run: other.run, link: agentLink(other.agent.id) };
+    return other === undefined ? undefined : { run: other.run, stance: fixStance(other.agent), link: agentLink(other.agent.id) };
 });
 // A landed fix hands the row's weight to Re-run: the fix is in the workspace, and what is left is proving it.
 const proven = computed(() => fixState.value?.kind === `landed`);
@@ -133,12 +135,6 @@ const demoted = computed<string | undefined>(() => {
         ? `${props.run.branch} has passed since: this failure is history, but you can still start an agent on it`
         : `Behind a newer failure on ${props.run.branch}, that one is the run to fix`;
 });
-// One flowing line rather than a list: the tooltip renders as text into a clamped strip, so a newline is a
-// space and a third sentence falls off the bottom. What happened leads; why the button is quiet follows.
-const startHint = computed<string | undefined>(
-    () =>
-        [fixState.value?.retry === true ? fixState.value.hint : undefined, demoted.value].filter((part) => part !== undefined).join(` `) || undefined,
-);
 // Loud only on the branch's open failure, and only while nobody is already on it.
 const loud = computed(() => props.open && props.branchFix === undefined);
 
@@ -146,6 +142,31 @@ const loud = computed(() => props.open && props.branchFix === undefined);
 const spend = computed<string | undefined>(() => {
     const usd = props.fix?.costUsd;
     return usd === undefined || usd === 0 ? undefined : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`;
+});
+// What it has written, when it has written anything: the size of the diff is the question "Fix ready" raises,
+// and the one a file count cannot answer.
+const fixDiff = computed(() => {
+    const diff = props.fix?.diff;
+    return diff === undefined || diff.files === 0 ? undefined : diff;
+});
+
+/* THE AGENT'S OWN CLOCK AT THE WIDTH A CHIP HAS FOR IT: a live turn timed from its start, a settled one from
+ * when it last did anything, either way one token beside the state's word. `timeAgo` is the same reading in the
+ * words a sentence wants — "12m ago", and an absolute timestamp past a day, three times this chip's whole
+ * width — so it stays in the tooltip, where there is room for it. */
+const compactAge = (at: number): string => {
+    const minutes = Math.floor((Date.now() - at) / 60_000);
+    if (minutes < 60) {
+        // `<1m` rather than `now`, which beside a state's word says the wrong thing twice over: "Agent working
+        // now" reads as a redundancy and "Fix ready now" as an invitation.
+        return minutes < 1 ? `<1m` : `${minutes}m`;
+    }
+    const hours = Math.floor(minutes / 60);
+    return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+};
+const fixAge = computed<string | undefined>(() => {
+    const agent = props.fix;
+    return agent === undefined ? undefined : compactAge(agent.startedAt ?? agent.updatedAt);
 });
 // A live turn is timed from its start; a settled one from when it last did anything.
 const fixSince = computed<string | undefined>(() => {
@@ -155,6 +176,45 @@ const fixSince = computed<string | undefined>(() => {
     }
     return agent.startedAt === undefined ? timeAgo(agent.updatedAt) : `started ${timeAgo(agent.startedAt)}`;
 });
+/* WHAT THE CHIP ABBREVIATES, SPELLED OUT, for the tooltip and for the screen reader that gets no width at all.
+ * The model's name and the file count live only here: naming them costs more of a scanned row than either is
+ * worth, while "$0.42" and "+40 −12" say the same things in a third of the pixels. */
+const fixFacts = computed<string | undefined>(() => {
+    const agent = props.fix;
+    if (agent === undefined) {
+        return undefined;
+    }
+    const files = agent.diff?.files ?? 0;
+    return (
+        [fixSince.value, agent.model, spend.value, files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`}`]
+            .filter((part) => part !== undefined)
+            .join(` · `) || undefined
+    );
+});
+// Why the chip says what it says and what pressing it does (fixStance's hint), then the facts behind the
+// numbers on it. Parenthesised rather than run on, because the hint is a sentence and this is a list.
+const fixDetail = computed<string | undefined>(() => {
+    const state = fixState.value;
+    if (state === undefined) {
+        return undefined;
+    }
+    return fixFacts.value === undefined ? state.hint : `${state.hint} (${fixFacts.value})`;
+});
+// The chip in words. An `aria-label` REPLACES what is read, so the abbreviations on it ("3m", "+40 −12") never
+// reach a screen reader: this is where that reader gets the same facts said out loud.
+const fixAria = computed<string | undefined>(() => {
+    const state = fixState.value;
+    if (state === undefined) {
+        return undefined;
+    }
+    return `Fix agent: ${state.label.toLowerCase()}${fixFacts.value === undefined ? `` : `, ${fixFacts.value}`} — open the conversation`;
+});
+
+// One flowing line rather than a list: the tooltip renders as text into a clamped strip, so a newline is a
+// space and a third sentence falls off the bottom. What happened leads; why the button is quiet follows.
+const startHint = computed<string | undefined>(
+    () => [fixState.value?.retry === true ? fixDetail.value : undefined, demoted.value].filter((part) => part !== undefined).join(` `) || undefined,
+);
 
 const startFix = (): void => {
     emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined);
@@ -171,7 +231,10 @@ const startFix = (): void => {
          disclosure would make "show me the jobs" and "leave the app" the same press. `wideControl` because the
          trailing cluster is a SET (a stage graph, a time, two buttons) that has to be allowed to take a second
          line rather than squeeze the commit subject to nothing — see <Row>'s own note on the prop. -->
-    <DisclosureRow class="border-l-4" :class="tone.rowBorder" hit="pair" body="drawer" wide-control v-model:open="expanded">
+    <!-- A @container, so what the agent chip can afford to say is measured against THIS ROW rather than the
+         window: this board renders into a pane the reader can halve with the chat panel, and the money and the
+         diff are the two facts that go first when it does. -->
+    <DisclosureRow class="@container border-l-4" :class="tone.rowBorder" hit="pair" body="drawer" wide-control v-model:open="expanded">
         <template #lead>
             <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0 text-base" :class="tone.text" />
             <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" />
@@ -258,23 +321,47 @@ const startFix = (): void => {
                         {{ timeAgo(run.createdAt) }}
                     </span>
                     <div class="flex items-center gap-1">
+                        <!-- THE BRANCH'S AGENT, for a row that has none of its own. The button beside it demotes
+                             and says why in a tooltip, which is an instruction nobody can act on: this is the
+                             press that carries it out. Neutral rather than the state's own colour — it is not
+                             this run's agent, and a row that lit up for somebody else's would read as its own. -->
+                        <a
+                            v-if="branchState"
+                            v-bind="branchState.link"
+                            class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2 py-1 text-xs font-medium text-subtle hover:bg-overlay hover:text-content"
+                            v-tooltip.top="demoted"
+                            :aria-label="`An agent is already working on ${run.branch}, started from run #${branchState.run.runId} — open it`"
+                        >
+                            <Icon :name="branchState.stance.icon" :spin="branchState.stance.spin" class="text-2xs" />
+                            Agent on branch
+                        </a>
                         <!-- ONE SLOT FOR THE AGENT, whichever half of its life the row is looking at. The board
                              could only ever say "Fix with agent", including to the reader whose agent was at that
                              moment parked on a question nobody would ever see; so the same slot reports instead as
                              soon as there is something to report (fixStance.ts owns the words).
 
                              It stays a state even on a run that has since gone green: a rerun keeps the vendor's
-                             run id, and an agent still working on the failure it USED to have is worth saying. -->
+                             run id, and an agent still working on the failure it USED to have is worth saying.
+
+                             IT CARRIES THE WHOLE REPORT NOW, and the reason is what sits underneath it: this row
+                             opens into a job graph, and the line of agent facts that used to run above that graph
+                             cost every open row a diagram's worth of height to say what fits here in three
+                             tokens. The age is always on (whether a fix is minutes or hours old is most of what
+                             "is this in hand" means); the money and the diff arrive with the width to hold them;
+                             the model's name and the file count are one hover away, where they cost nothing. -->
                         <a
                             v-if="fixState !== undefined && !fixState.retry"
                             v-bind="fixState.link"
-                            class="touch-target inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1 text-xs font-medium"
+                            class="touch-target inline-flex shrink-0 items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium"
                             :class="[fixState.ink, fixState.chip]"
-                            v-tooltip.top="fixState.hint"
-                            :aria-label="`Fix agent: ${fixState.label.toLowerCase()} — open the conversation`"
+                            v-tooltip.top="fixDetail"
+                            :aria-label="fixAria"
                         >
                             <Icon :name="fixState.icon" :spin="fixState.spin" class="text-2xs" />
                             {{ fixState.label }}
+                            <span v-if="fixAge" class="text-2xs font-normal tabular-nums text-subtle">{{ fixAge }}</span>
+                            <span v-if="spend" class="hidden text-2xs font-normal tabular-nums text-subtle @3xl:inline">{{ spend }}</span>
+                            <DiffStat v-if="fixDiff" class="hidden @3xl:inline" :additions="fixDiff.insertions" :deletions="fixDiff.deletions" />
                         </a>
                         <!-- Primary only on the branch's open failure, and only while no agent is already on that
                              branch. Every other red row keeps the same action at Re-run's weight: a log entry, not
@@ -327,36 +414,12 @@ const startFix = (): void => {
             </div>
         </template>
 
-        <!-- Expanded: the run's job graph -->
+        <!-- Expanded: the run's job graph, AND NOTHING ABOVE IT. There used to be a line of agent facts here —
+             the state again, its age, the model, the spend, the diff, a link into the conversation — and every
+             one of those now rides the chip on the header line or its tooltip. It was the same report twice, and
+             the copy that stood between an opened row and the diagram it was opened for was the one paying for
+             itself in the only currency this board is short of. -->
         <template #below>
-            <!-- THE AGENT, IN FULL, where a row has the width for it. The collapsed line gets one word about the
-                 fix because it is scanned; everything that answers "how is it going, what has it cost me, what
-                 did it write" is read deliberately, which is what opening a row IS. Same placement (and the same
-                 reasoning) as ext-maintenance's run line. -->
-            <div v-if="fixState" class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                <span class="inline-flex items-center gap-1 font-medium" :class="fixState.ink">
-                    <Icon :name="fixState.icon" :spin="fixState.spin" />
-                    {{ fixState.label }}
-                </span>
-                <span v-if="fixSince">{{ fixSince }}</span>
-                <span v-if="fixState.agent.model" class="font-mono">{{ fixState.agent.model }}</span>
-                <span v-if="spend">{{ spend }}</span>
-                <span v-if="fixState.agent.diff && fixState.agent.diff.files > 0" class="inline-flex items-center gap-1.5">
-                    {{ fixState.agent.diff.files }} file{{ fixState.agent.diff.files === 1 ? `` : `s` }}
-                    <DiffStat :additions="fixState.agent.diff.insertions" :deletions="fixState.agent.diff.deletions" />
-                </span>
-                <a v-bind="fixState.link" class="touch-target underline hover:text-content">open the conversation</a>
-            </div>
-
-            <!-- A row with no agent of its own, on a branch that has one. The collapsed line can only demote its
-                 button and say so in a tooltip; this is where the sentence gets a link, because "open that one
-                 instead" is not advice anybody can act on without one. -->
-            <p v-else-if="branchState" class="mb-3 text-2xs text-subtle">
-                An agent is already working on <span class="font-mono">{{ run.branch }}</span
-                >, started from run #{{ branchState.run.runId }} —
-                <a v-bind="branchState.link" class="touch-target underline hover:text-content">open it</a>
-            </p>
-
             <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
                 <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
                     <template v-for="i in 3" :key="i">
