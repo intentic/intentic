@@ -13,7 +13,8 @@ import { expect, test } from "vitest";
  * slot only if the kernel is the thing releasing it, and only a real process can show that.
  *
  * Timings are deliberately coarse (a 300ms body against a 1s poll) so a loaded runner cannot fail this on
- * latency: every assertion is about ORDER and COUNT, never about how long something took. */
+ * latency: every assertion is about ORDER and COUNT, never about how long something took. Where a test needs
+ * two bodies to be running AT ONCE, they rendezvous through the log rather than through a sleep — see `body`. */
 
 const QUEUE_RUN = join(import.meta.dirname, "../../bin/queue-run");
 
@@ -58,7 +59,25 @@ const peakConcurrency = async (log: string): Promise<number> => {
     return peak;
 };
 
-const body = (log: string, ms = 300): string => `echo + >> ${log}; sleep ${ms / 1000}; echo - >> ${log}`;
+/* A body that brackets itself in the log, and — where the test is about bodies overlapping — WAITS INSIDE THE
+ * BRACKET until `together` of them have started.
+ *
+ * That wait is what makes the peak a fact about the queue instead of a fact about the runner. With a plain
+ * sleep, two bodies overlap only if the second process reaches its first line before the first one's sleep is
+ * over, so "these two ran at once" is really an assertion that a fork+exec beat 300ms — the latency assertion
+ * this file's header says it does not make. Measured on this box: two children of the same Promise.all start
+ * within 9ms of each other on an idle machine, 84ms at load 69, and 313ms at load 180 — past the body, at which
+ * point the marks read +,-,+,- and the peak is 1 with nothing whatsoever contended. That is the shape that
+ * failed on CI, where this suite runs beside 490-odd other files.
+ *
+ * The wait is bounded, so it weakens nothing: a body kept out by a slot that should not have held it waits out
+ * the bound, leaves alone, and the peak stays at 1 — the failure the test is there to report. The `sleep` after
+ * the rendezvous is the other half, the window in which a limit that is NOT enforced shows up as a peak above
+ * what was asked for. */
+const body = (log: string, { together = 1, ms = 300 }: { together?: number; ms?: number } = {}): string =>
+    `echo + >> ${log}; ` +
+    `for _ in $(seq 1 100); do [ "$(grep -c '^+$' ${log})" -ge ${together} ] && break; sleep 0.05; done; ` +
+    `sleep ${ms / 1000}; echo - >> ${log}`;
 
 test("runs the command, passing through its output and its real exit code", async () => {
     const run = await queueRun(await dir(), ["--pool", "p", "--limit", "2"], "echo hello; exit 7");
@@ -70,8 +89,11 @@ test("holds the pool to its limit, and every queued command still runs", async (
     const queue = await dir();
     const log = join(queue, "marks");
     // Five at once against two slots: the assertion that matters is that the sixth thing the box is asked to
-    // do never becomes the third thing it is doing.
-    const runs = await Promise.all(Array.from({ length: 5 }, () => queueRun(queue, ["--pool", "p", "--limit", "2"], body(log))));
+    // do never becomes the third thing it is doing — and that two of them DO get to run together, which is the
+    // half a limit of one would also satisfy.
+    const runs = await Promise.all(
+        Array.from({ length: 5 }, () => queueRun(queue, ["--pool", "p", "--limit", "2"], body(log, { together: 2 }))),
+    );
     expect(runs.every((run) => run.code === 0)).toBe(true);
     expect(await peakConcurrency(log)).toBe(2);
 });
@@ -90,8 +112,8 @@ test("separate pools do not contend", async () => {
     // Two pools of one each must overlap; if they did not, the pool name would be decoration and a workspace
     // could not give its type checks a budget separate from its tests.
     const runs = await Promise.all([
-        queueRun(queue, ["--pool", "a", "--limit", "1"], body(log)),
-        queueRun(queue, ["--pool", "b", "--limit", "1"], body(log)),
+        queueRun(queue, ["--pool", "a", "--limit", "1"], body(log, { together: 2 })),
+        queueRun(queue, ["--pool", "b", "--limit", "1"], body(log, { together: 2 })),
     ]);
     expect(runs.every((run) => run.code === 0)).toBe(true);
     expect(await peakConcurrency(log)).toBe(2);
@@ -193,7 +215,7 @@ test("the slot survives exec, so the lock covers the command and not the wrapper
      * success while enforcing no limit at all. A limit of one with a body long enough to overlap is the
      * cheapest way to notice. */
     const log = join(queue, "marks");
-    const runs = await Promise.all(Array.from({ length: 4 }, () => queueRun(queue, ["--pool", "p", "--limit", "1"], body(log, 400))));
+    const runs = await Promise.all(Array.from({ length: 4 }, () => queueRun(queue, ["--pool", "p", "--limit", "1"], body(log, { ms: 400 }))));
     expect(runs.every((run) => run.code === 0)).toBe(true);
     expect(await peakConcurrency(log)).toBe(1);
 });
