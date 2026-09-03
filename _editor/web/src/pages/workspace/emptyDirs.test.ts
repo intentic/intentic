@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import { barrenChainOf, barrenChildren, barrenRoots, branchDirPaths, settleBarren, sweepableDirs } from "./emptyDirs";
 
@@ -18,7 +19,7 @@ describe(`sweepableDirs`, () => {
 
     it(`leaves the daemon's own folders alone: its state dir and the skill projections`, () => {
         // Each is remade on the daemon's next converge, so an offer to sweep one is a loop the owner cannot win.
-        const barren = [`.intentic`, `.intentic/local/cache`, `.agents/skills`, `.claude/skills`];
+        const barren = [STATE_DIR, `${STATE_DIR}/local/cache`, `.agents/skills`, `.claude/skills`];
         expect(sweepableDirs(barren)).toEqual([]);
     });
 

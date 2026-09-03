@@ -6,7 +6,6 @@
     "_editor/web/src/composables/sandbox/useManifestProblems.test.ts": 2,
     "_editor/web/src/pages/sandbox/SandboxPersonas.test.ts": 1,
     "_editor/web/src/pages/sandbox/SandboxSecrets.test.ts": 1,
-    "_editor/web/src/pages/workspace/emptyDirs.test.ts": 2,
     "_editor/web/src/pages/workspace/WorkspaceTree.test.ts": 6,
     "_editor/web/vite.shared.ts": 1,
     "_extensions/knowledge/src/cli/kb.ts": 1,
