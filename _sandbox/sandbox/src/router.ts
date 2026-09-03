@@ -30,6 +30,7 @@ import { createPrepushRoutes } from "./prepush/prepush.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
+import { createSafetyRoutes } from "./safety/safety.routes.js";
 import { createSettingsRoutes } from "./settings/settings.routes.js";
 import { createShareRoutes } from "./share/share.routes.js";
 import { createSkillsRoutes } from "./settings/skills.routes.js";
@@ -54,6 +55,7 @@ export const createRouter = (services: Services) => ({
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
     personas: createPersonasRoutes(services),
+    safety: createSafetyRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),
     share: createShareRoutes(services),

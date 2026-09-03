@@ -101,104 +101,37 @@ describe("outbound.send", () => {
 });
 
 describe("command.run", () => {
-    test("an unlisted class is allowed: the rulebook names what to stop", () => {
-        expect(guard(commandRun, { commandClass: "git.destructive", rules: {} }).effect).toBe("allow");
-        expect(guard(commandRun, { commandClass: "git.destructive", rules: { "package.publish": "deny" } }).effect).toBe("allow");
+    /* WHAT IS LEFT OF THIS DECIDE, and it is worth saying what left. It used to hold three layers: the owner's
+     * `commandRules` (a verdict per class), a standing floor under the classes nothing recovers, and a taint
+     * floor over deletes and leaving credential reads. All three decided from a REGEX MATCH, which is why they
+     * are gone: `echo "rm -rf /"` and an actual delete are the same input to a pattern, and no arrangement of
+     * verdicts tells them apart. Deciding is the judge's job now (agent/command-judge.ts), reading the owner's
+     * written policy; the taint bit is a FACT it is handed rather than a hold applied behind it.
+     *
+     * The hard rule stayed typed because a model can be argued into anything by text inside the command it is
+     * reading, and being wrong once about a block device costs the machine. */
+    test("the hard rule holds the classes where nothing recovers", () => {
+        const verdict = guard(commandRun, { commandClass: "system.destructive" });
+        expect(verdict.effect).toBe("hold");
+        expect(verdict.reason).toContain("nothing here undoes");
     });
 
-    test("hold and deny come back as themselves: the gate decides how to say them", () => {
-        expect(guard(commandRun, { commandClass: "files.destructive", rules: { "files.destructive": "hold" } }).effect).toBe("hold");
-        expect(guard(commandRun, { commandClass: "files.destructive", rules: { "files.destructive": "deny" } }).effect).toBe("deny");
+    /* Narrow on purpose, and this is the test that keeps it narrow. Every class below is left to the policy, so
+     * an owner who wants to be asked about force-pushes writes a sentence and one who does not writes nothing.
+     * A hard rule that reached any of these would be the old floor back under a new name. */
+    test("everything else is left to the policy", () => {
+        for (const commandClass of ["git.destructive", "files.destructive", "secrets.access", "package.publish", "network.outbound"] as const) {
+            expect(guard(commandRun, { commandClass }).effect, commandClass).toBe("allow");
+        }
+    });
+
+    test("the reason says what the command would do, not which class matched", () => {
+        expect(guard(commandRun, { commandClass: "system.destructive" }).reason).toContain(COMMAND_CLASS_LABELS["system.destructive"]);
     });
 
     // A hold here is a real ask, so it must never carry the countdown that would turn it into "unless I'm slow".
-    test("a hold carries no auto-run window", () => {
-        const verdict = guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "hold" } });
-        expect(verdict).not.toHaveProperty("autoRunAfterS");
-    });
-
-    test("the reason says what the command would do, not which settings key matched", () => {
-        expect(guard(commandRun, { commandClass: "network.outbound", rules: { "network.outbound": "deny" } }).reason).toContain(
-            "send a request out to the internet",
-        );
-    });
-
-    /* THE STANDING FLOOR: held where the owner wrote nothing, on every turn, tainted or not. It is what makes a
-     * fresh sandbox, whose rulebook is empty by default, not one mistyped path away from a formatted disk. */
-    describe("the standing floor under the classes nothing undoes", () => {
-        test("holds a disk or volume wipe on an ordinary turn with an empty rulebook", () => {
-            const verdict = guard(commandRun, { commandClass: "system.destructive", rules: {} });
-            expect(verdict.effect).toBe("hold");
-            expect(verdict.reason).toContain("nothing here undoes");
-        });
-
-        // Narrow on purpose. A floor that fires on ordinary work is one people learn to click through, so
-        // everything recoverable stays allowed on an empty rulebook exactly as it always was.
-        test("nothing else is held on an empty rulebook", () => {
-            for (const commandClass of ["git.destructive", "files.destructive", "secrets.access", "package.publish", "network.outbound"] as const) {
-                expect(guard(commandRun, { commandClass, rules: {} }).effect, commandClass).toBe("allow");
-            }
-        });
-
-        // The floor is a default, not an override: an owner who said `allow` about this exact class decided it.
-        test("the owner's explicit rule wins both ways", () => {
-            expect(guard(commandRun, { commandClass: "system.destructive", rules: { "system.destructive": "allow" } }).effect).toBe("allow");
-            expect(guard(commandRun, { commandClass: "system.destructive", rules: { "system.destructive": "deny" } }).effect).toBe("deny");
-        });
-    });
-
-    /* The taint floor: the other verdict here the owner did not write. It holds recursive deletes on a turn that
-     * has taken in somebody else's words, and credential reads that LEAVE in the same command, and it yields to
-     * any rule they DID write. */
-    describe("the outside-content floor", () => {
-        test("holds a credential read that leaves in the same command, and names the source in the reason", () => {
-            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord", egress: true });
-            expect(verdict.effect).toBe("hold");
-            expect(verdict.reason).toContain("discord");
-            // Both halves, because the sending is what is being asked about.
-            expect(verdict.reason).toContain(COMMAND_CLASS_LABELS["secrets.access"]);
-            expect(verdict.reason).toContain(COMMAND_CLASS_LABELS["network.outbound"]);
-        });
-
-        /* THE READ THAT GOES NOWHERE, which is most of them and used to be a card apiece. The value cannot reach
-         * the model — every result is masked on the way in (agent/agent-redaction.ts) — so a tainted turn reading
-         * a dotenv learns its key names, and holding that spent the owner's attention on nothing. */
-        test("a credential read that does not leave is allowed on a tainted turn", () => {
-            expect(guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord" }).effect).toBe("allow");
-            expect(guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord", egress: false }).effect).toBe("allow");
-        });
-
-        /* `rm -rf node_modules` is ordinary work and stays unasked all day; the same command in a turn that has
-         * just read a stranger's bug report is the injection everybody pictures, and one card is a cheap way to
-         * not find out afterwards which of the two it was. */
-        test("holds a recursive delete on a tainted turn too", () => {
-            const verdict = guard(commandRun, { commandClass: "files.destructive", rules: {}, outsideSource: "webchat" });
-            expect(verdict.effect).toBe("hold");
-            expect(verdict.reason).toContain("webchat");
-        });
-
-        test("an untainted turn is untouched", () => {
-            expect(guard(commandRun, { commandClass: "secrets.access", rules: {} }).effect).toBe("allow");
-            expect(guard(commandRun, { commandClass: "files.destructive", rules: {} }).effect).toBe("allow");
-        });
-
-        test("the rest of the catalog is untouched: a tainted turn still pushes and publishes as configured", () => {
-            for (const commandClass of ["git.destructive", "package.publish", "network.outbound"] as const) {
-                expect(guard(commandRun, { commandClass, rules: {}, outsideSource: "web" }).effect, commandClass).toBe("allow");
-            }
-        });
-
-        test("the owner's own rule wins both ways: the floor applies only where they said nothing", () => {
-            const leaving = { commandClass: "secrets.access", outsideSource: "web", egress: true } as const;
-            expect(guard(commandRun, { ...leaving, rules: { "secrets.access": "allow" } }).effect).toBe("allow");
-            expect(guard(commandRun, { ...leaving, rules: { "secrets.access": "deny" } }).effect).toBe("deny");
-        });
-
-        // A hold is a real ask here too, so it must not carry the countdown that turns it into "unless I'm slow".
-        test("the floor's hold carries no auto-run window", () => {
-            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "web", egress: true });
-            expect(verdict).not.toHaveProperty("autoRunAfterS");
-        });
+    test("the hold carries no auto-run window", () => {
+        expect(guard(commandRun, { commandClass: "system.destructive" })).not.toHaveProperty("autoRunAfterS");
     });
 });
 

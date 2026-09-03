@@ -1,4 +1,4 @@
-import type { AdmissionRule, AgentCapabilities, CommandClass } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
 import { type CommandGate, type CommandGateOptions, createCommandGate } from "./command-gate.js";
 import { clearTurnTaint, createTurnTaint, publishTurnTaint, type TurnTaint } from "./turn-taint.js";
 
@@ -18,9 +18,18 @@ import { clearTurnTaint, createTurnTaint, publishTurnTaint, type TurnTaint } fro
  */
 
 export interface TurnGateInput {
-    // SandboxSettings.commandRules as this turn was planned with. Absent ⇒ the owner wrote none.
-    readonly commandRules?: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
-    // Nobody is at a composer, so a hold refuses instead of parking on a card.
+    /* The owner's safety policy as this turn was planned with (.intentic/config/safety.md, resolved by
+     * turn-plan.ts). Absent ⇒ the shipped default, which is what a caller building a request by hand gets and
+     * what the bench runs under. */
+    readonly safetyPolicy?: string;
+    // Ask the judge. Absent ⇒ every triage hit takes the judge-unavailable path; see CommandGateOptions.judge.
+    readonly judge?: CommandGateOptions["judge"];
+    // Record and amend verdicts, and append an accepted line to the policy. All three absent for a turn with no
+    // workspace to write to.
+    readonly log?: CommandGateOptions["log"];
+    readonly answered?: CommandGateOptions["answered"];
+    readonly remember?: CommandGateOptions["remember"];
+    // Nobody is at a composer, so an ask refuses instead of parking on a card.
     readonly unattended?: boolean;
     // What caused this wake, when it was something the owner did not write (a listener message, a webchat
     // visitor). The birth half of the taint bit; see guard/turn-taint.ts.
@@ -34,10 +43,6 @@ export interface TurnGateInput {
      *
      * Absent ⇒ "hooks", the ceiling, which is the safe default for a caller that builds a request by hand. */
     readonly rulebook?: AgentCapabilities["rulebook"];
-    // Turn a held program into one plain sentence for its card (settings.explainCommands). Absent ⇒ cards carry
-    // the program alone. Passed through untouched: what it costs and whether it is worth it are turn-plan.ts's
-    // call, and a vendor runtime's card is the same card the Claude loop raises.
-    readonly explainCommand?: CommandGateOptions["explain"];
     // Where this turn's commands run, so the gate can check a credential-shaped path against the actual file
     // instead of asking about every one that merely looks the part. See CommandGateOptions.cwd.
     readonly cwd?: string;
@@ -97,18 +102,21 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
     const blind = blindFor(turn.rulebook);
     const taint = createTurnTaint(turn.outsideWake ?? (blind ? "a runtime with no command gate" : undefined));
     if (turn.conversationId !== undefined) {
-        publishTurnTaint(turn.conversationId, taint);
+        publishTurnTaint(turn.conversationId, taint, turn.unattended === true);
     }
     return {
         taint,
         gate: createCommandGate({
-            rules: turn.commandRules ?? {},
+            policy: turn.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
             unattended: turn.unattended === true,
             ...(canParkFor(turn.rulebook) ? {} : { canPark: false }),
             ...(turn.cwd === undefined ? {} : { cwd: turn.cwd }),
             signal: turn.signal,
             taint,
-            explain: turn.explainCommand,
+            judge: turn.judge,
+            log: turn.log,
+            answered: turn.answered,
+            remember: turn.remember,
         }),
         release: () => {
             if (turn.conversationId !== undefined) {

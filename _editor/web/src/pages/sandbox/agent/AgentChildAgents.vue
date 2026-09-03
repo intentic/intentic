@@ -3,15 +3,19 @@ import type { AdmissionRule } from "@intentic/sandbox-contract";
 import { Picker, type PickerOption, Row, RowGroup } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
-import type { Posture } from "./commandRules";
 
-/* Whether a turn may start agents of its own (the guard's `agents.spawn`). Same four postures as the command
- * rules and the same reason Default is one of them: unset holds a spawn from a turn that has taken in outside
- * content, so an explicit `allow` switches that off.
+/* Whether a turn may start agents of its own (the guard's `agents.spawn`), stored in `actionRules`.
  *
- * Stored in `actionRules`, which is why it is its own group rather than a seventh command row. One row for
- * every provider: the rulebook also takes `agents.spawn.<provider>` and wins with it, but that is not a
- * question whose answer changes between runtimes. */
+ * STILL A PICKER, on a page whose other half became a document, and the difference is worth stating because it
+ * looks like an oversight. The safety policy replaced the command rulebook because a REGEX was deciding there,
+ * and no arrangement of switches fixes a classifier that cannot tell `echo "rm -rf /"` from a delete. Nothing of
+ * the kind is happening here: "may this turn start a child agent" is a fact about the call, not a guess about
+ * what a string means, so a switch answers it exactly and a paragraph of prose would only add a way to be
+ * misread. When `actionRules` is folded into the policy later, it will be for a different reason.
+ *
+ * FOUR POSTURES, and Default is one of them because unset is not the same as allow: an unset key holds a spawn
+ * from a turn that has taken in outside content, so writing an explicit `allow` switches that off. */
+type Posture = "default" | AdmissionRule;
 
 const SPAWN_KEY = `agents.spawn`;
 

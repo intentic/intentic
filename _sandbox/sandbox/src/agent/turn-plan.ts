@@ -77,7 +77,7 @@ import { dependencyDirForCommand } from "./agent-deps.js";
 import { setupNoticeFor, setupNoticeTitle } from "../workspace/workspace-setup.js";
 import { loadedSkillCatalogNote, SKILL_CATALOG_NOTE_TITLE } from "../settings/loaded-skills.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE, iqSearchInstruction } from "./iq-search-instruction.js";
-import { explainCommand } from "./command-explainer.js";
+import { judgeCommand } from "./command-judge.js";
 import type { CommandGateOptions } from "../guard/command-gate.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED, the one question every turn has to answer before it can
@@ -180,16 +180,21 @@ export interface TurnContext {
  * turn names the step instead of the phase, and because they overlap, the turn pays the SLOWEST rather than
  * the total. Nothing here reads anything else here, with two exceptions the harness arm spells out.
  */
-/* THE PERMISSION CARD'S PLAIN-SENTENCE PASS, bound to this sandbox's accounts, or nothing at all.
+/* THE SAFETY JUDGE, BOUND TO THIS SANDBOX'S ACCOUNTS AND TO THIS TURN'S POLICY.
  *
- * `undefined` when the owner left the setting off, and that absence is the whole economy of the feature: the
- * gate calls what it was handed, so a workspace that never opened the switch never reaches a quick model and
- * never pays for one. Nothing downstream needs a flag to check.
+ * A closure over `services` and the policy text rather than either of them directly, because the seam it fills
+ * lives in guard/, which is deliberately ignorant of accounts, chains and quotas (see CommandGateOptions.judge),
+ * and because the policy must be the one snapshot this turn was planned with rather than whatever the file says
+ * at the moment a command happens to run.
  *
- * A closure over `services` rather than the services themselves, because the seam it fills lives in guard/,
- * which is deliberately ignorant of accounts, chains and quotas (see CommandGateOptions.explain). */
-const explainerFor = (services: Services, on: boolean): CommandGateOptions["explain"] =>
-    on ? (program, language, signal) => explainCommand(services, program, language, signal) : undefined;
+ * Always present, unlike the explainer it replaced — that was off unless the owner switched it on, because it
+ * was a nicety on a card. This is the decision itself, and a turn without it would be a turn where the hard rule
+ * is the only thing standing. What keeps it cheap is that the gate only calls it when triage fires, and memoises
+ * per program within the turn. */
+const judgeFor =
+    (services: Services, policy: string): CommandGateOptions["judge"] =>
+    (program, facts, signal) =>
+        judgeCommand(services, { policy, program, facts }, signal);
 
 export const conversationExperimentArm = (conversationId: string | undefined, holdout: number): boolean => {
     if (conversationId === undefined) {
@@ -701,7 +706,7 @@ export const planHarnessTurn = async (
      * settings read. They used to be awaits in a row in front of every gate, which meant every turn paid both
      * end to end before the first byte of planning happened. Doing the settings read on a turn that then refuses
      * for its credential costs a file read nobody will use, which is the trade. */
-    const [resolved, settings] = await Promise.all([
+    const [resolved, settings, safetyPolicy] = await Promise.all([
         services.perf.track("turn.plan.credentials", { provider: input.agent ?? "claude" }, () =>
             resolveHarnessCredentials(services, {
                 agent: input.agent,
@@ -714,6 +719,10 @@ export const planHarnessTurn = async (
         context.settings === undefined
             ? services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get())
             : Promise.resolve(context.settings),
+        /* The safety policy the judge will apply, read ONCE here and carried on the request for the whole turn.
+         * Snapshotted rather than read per command so a turn cannot be judged against three versions of a
+         * document somebody is editing, and so the log records verdicts against a policy that existed. */
+        services.safetyPolicy.text(),
     ]);
     if (!resolved.ok) {
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
@@ -724,7 +733,7 @@ export const planHarnessTurn = async (
     const tools = [
         ...services.tools,
         ...mcpToolsOf(granted),
-        ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken),
+        ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken, input.conversationId),
         ...webextToolsOf(granted, services.config.sandbox.port, services.webextBridgeToken),
     ];
     const {
@@ -737,8 +746,6 @@ export const planHarnessTurn = async (
         subagentsPerTurn,
         subagentDepth,
         actionRules,
-        commandRules,
-        explainCommands,
     } = settings;
     /* The rules armed where a turn ends. STANDING, not matching: their conditions are read at the Stop, when
      * the turn has actually edited something to narrow on (rules/turn-ending.ts). */
@@ -857,7 +864,6 @@ export const planHarnessTurn = async (
                       // The BASE's env, the persona-filtered one, for the same reason shellEnv below reads
                       // it: a check must not run with a credential the card withheld from the turn that arms it.
                       env: context.base.cliEnv ?? {},
-                      commandRules,
                       turn: {
                           ...(input.agent !== undefined ? { agent: input.agent } : {}),
                           ...(input.harness !== undefined ? { harness: input.harness } : {}),
@@ -1156,12 +1162,20 @@ export const planHarnessTurn = async (
                 : {}),
             // The sniffer's rulebook, forwarded only when the owner wrote a rule, same no-hook economy.
             ...(Object.keys(actionRules).length > 0 ? { actionRules } : {}),
-            /* The command gate's rulebook. Forwarded when non-empty, but unlike the sniffer's above, an empty
-             * one no longer means "no hook": the gate is wired on every turn because it also carries the taint
-             * floor, which is not the owner's rulebook but a fact about what this turn has read (agent.ts). */
-            ...(Object.keys(commandRules).length > 0 ? { commandRules } : {}),
-            // The card's plain-sentence pass, undefined unless the owner switched it on; see explainerFor.
-            explainCommand: explainerFor(services, explainCommands),
+            /* THE SAFETY POLICY AND ITS JUDGE, wired on every turn. Unlike the sniffer's rulebook above there is
+             * no no-hook economy to have: triage and the hard rule are facts about the command rather than the
+             * owner's configuration, and a turn that skipped them because nobody had written a policy would be a
+             * turn with nothing between it and a formatted disk. The economy is inside the gate instead — a
+             * command that matches no pattern costs one classify and no model at all. */
+            safetyPolicy,
+            judge: judgeFor(services, safetyPolicy),
+            logSafety: (entry) => {
+                void services.safetyLog.record(entry).catch(() => undefined);
+            },
+            safetyAnswered: (at, answer, outcome) => {
+                void services.safetyLog.answered(at, answer, outcome).catch(() => undefined);
+            },
+            rememberSafety: (line) => services.safetyPolicy.append(line),
             /* Whether outside content CAUSED this turn, and what to call it. A listener wake is a stranger's
              * message and a webchat wake is a stranger on a public widget, the same distinction the admission
              * floor draws (guard/actions.ts wakeSourceOf), read here for the taint the command gate consults.

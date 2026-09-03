@@ -12,10 +12,27 @@ import type { AgentTool } from "../agent/agent-tools.js";
  *
  * The tool NAME is the capability id, so the model sees mcp__laptop__run_command and mcp__desktop__run_command
  * as distinct tools on distinct machines, the `ssh` alias precedent, and what makes several connected computers
- * usable in one turn. */
-export const hostToolsOf = (capabilities: readonly Capability[], daemonPort: number, bridgeToken: string): AgentTool[] =>
-    capabilities.flatMap((capability) =>
+ * usable in one turn.
+ *
+ * WHY THE CONVERSATION RIDES IN THE URL. The bridge now judges a `run_command` against the owner's safety policy
+ * before forwarding it (hosts/host.routes.ts), and judging needs the turn: which conversation to draw the
+ * permission card in, whether that turn has taken in outside content, whether anybody is watching. None of that
+ * is derivable from a bearer token shared by every machine in the sandbox, so the caller states it.
+ *
+ * It is NOT a credential and it grants nothing. The bridge token is still the only thing that opens this route,
+ * and an agent that rewrote its own conversation id would only misaddress its own card — every scope on the far
+ * end is enforced on the machine regardless (machine/src/computer/policy.ts), which is the property that lets
+ * this be a routing hint rather than an authorisation one. */
+export const hostToolsOf = (
+    capabilities: readonly Capability[],
+    daemonPort: number,
+    bridgeToken: string,
+    conversationId?: string,
+): AgentTool[] => {
+    const forConversation = conversationId === undefined ? `` : `?conversation=${encodeURIComponent(conversationId)}`;
+    return capabilities.flatMap((capability) =>
         capability.kind === "host"
-            ? [{ name: capability.id, url: `http://127.0.0.1:${daemonPort}/mcp/hosts/${capability.id}`, token: bridgeToken }]
+            ? [{ name: capability.id, url: `http://127.0.0.1:${daemonPort}/mcp/hosts/${capability.id}${forConversation}`, token: bridgeToken }]
             : [],
     );
+};

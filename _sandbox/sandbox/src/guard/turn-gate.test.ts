@@ -13,6 +13,11 @@ const turn = (overrides: Partial<Parameters<typeof createTurnGate>[0]> = {}): Pa
     ...overrides,
 });
 
+/* Stub judges. This file is about the SHAPE a runtime's declaration produces — whether an ask can park, whether
+ * a refusal still binds — so the verdict is a constant and the model is not involved. */
+const ASKS: TurnGateInput["judge"] = async () => ({ decision: "ask", sentence: "Discards whatever commits origin has." });
+const REFUSES: TurnGateInput["judge"] = async () => ({ decision: "refuse", sentence: "Your policy forbids this." });
+
 /* THE WALLET'S BUG, AS A TEST. `conversationTainted` is read from the daemon's HTTP layer, outside any turn
  * generator, and it used to answer `false` for five of the six runtimes because only the Claude Code loop
  * published a bit. A turn a stranger woke therefore kept the owner's standing auto-approve band on Codex, Grok,
@@ -63,38 +68,38 @@ test("a turn with no conversation publishes nothing", () => {
  * approvals at all. It must agree with the gate's own `enforcing`, or a runtime would either ask for approvals
  * nothing will judge or judge nothing because it never asked.
  *
- * BOTH ARE NOW ALWAYS TRUE, including for the empty rulebook that used to answer false: the standing floor
- * (guard/actions.ts) holds the classes nothing undoes on every turn, so an unconfigured workspace is exactly
- * the one that would have gone unjudged. This test is the pair's agreement, not the value, so it still fails
- * if either side is changed alone. */
+ * BOTH ARE ALWAYS TRUE, including on a workspace whose owner has never written a policy: triage and the hard
+ * rule (guard/actions.ts) are facts about the command rather than the owner's configuration, so an unconfigured
+ * workspace is exactly the one that would otherwise have gone unjudged. This test is the pair's agreement, not
+ * the value, so it still fails if either side is changed alone. */
 test("turnIsGated agrees with the gate it predicts", () => {
     for (const input of [
         turn(),
-        turn({ commandRules: {} }),
-        turn({ commandRules: { "git.destructive": "hold" } }),
+        turn({ safetyPolicy: `` }),
+        turn({ safetyPolicy: `Ask before force-pushing.` }),
         turn({ outsideWake: "discord" }),
-        turn({ commandRules: { "files.destructive": "deny" }, outsideWake: "webchat" }),
+        turn({ safetyPolicy: `Never delete anything.`, outsideWake: "webchat" }),
     ]) {
         const { gate, release } = createTurnGate(input);
-        expect(turnIsGated(), JSON.stringify({ rules: input.commandRules, wake: input.outsideWake })).toBe(gate.enforcing);
+        expect(turnIsGated(), JSON.stringify({ policy: input.safetyPolicy, wake: input.outsideWake })).toBe(gate.enforcing);
         release();
     }
 });
 
-// The floor is what makes the unconfigured workspace the interesting case: nobody wrote a rule, nothing was
-// woken from outside, and a command that would format a disk still has something to answer to.
-test("a workspace with no rules at all is still gated", () => {
+// The hard rule is what makes the unconfigured workspace the interesting case: nobody wrote a policy, nothing
+// was woken from outside, and a command that would format a disk still has something to answer to.
+test("a workspace with no policy at all is still gated", () => {
     const { gate, release } = createTurnGate(turn());
     expect(gate.enforcing).toBe(true);
     release();
 });
 
-/* THE REFUSE-ONLY SHAPE (OpenCode). A hold cannot park there because the vendor aborts a turn that goes quiet
+/* THE REFUSE-ONLY SHAPE (OpenCode). An ask cannot park there because the vendor aborts a turn that goes quiet
  * for two minutes, so it arrives as a refusal, and the wording must name the real reason rather than borrowing
  * the unattended one: telling a user sitting in front of the composer that "there is nobody to approve it"
  * would be a lie about their own turn. */
-test('a runtime declaring "refuse-only" refuses a hold, without claiming nobody is watching', async () => {
-    const { gate, release } = createTurnGate(turn({ commandRules: { "git.destructive": "hold" }, rulebook: "refuse-only" }));
+test('a runtime declaring "refuse-only" refuses an ask, without claiming nobody is watching', async () => {
+    const { gate, release } = createTurnGate(turn({ judge: ASKS, rulebook: "refuse-only" }));
     const consulting = gate.consult("git push --force origin main", SUBJECT);
     const step = await consulting.next();
     // No card: it never yields one, which is the whole point of the shape.
@@ -106,9 +111,9 @@ test('a runtime declaring "refuse-only" refuses a hold, without claiming nobody 
     release();
 });
 
-// A deny is unaffected: it never wanted to ask, so refuse-only costs it nothing.
-test('a deny is enforced in full on a "refuse-only" runtime', async () => {
-    const { gate, release } = createTurnGate(turn({ commandRules: { "git.destructive": "deny" }, rulebook: "refuse-only" }));
+// A refusal is unaffected: it never wanted to ask, so refuse-only costs it nothing.
+test('a refusal is enforced in full on a "refuse-only" runtime', async () => {
+    const { gate, release } = createTurnGate(turn({ judge: REFUSES, rulebook: "refuse-only" }));
     const step = await gate.consult("git push --force origin main", SUBJECT).next();
     expect(step.done).toBe(true);
     expect((step.value as { allow: boolean }).allow).toBe(false);
@@ -122,9 +127,7 @@ test("every rulebook value produces its own shape, from the declaration alone", 
     const shapeOf = async (rulebook: TurnGateInput["rulebook"]) => {
         // Spread only when set: under exactOptionalPropertyTypes an explicit `undefined` is not the same as an
         // absent key, and "absent" is the case the last assertion below is about.
-        const { gate, taint, release } = createTurnGate(
-            turn({ commandRules: { "git.destructive": "hold" }, ...(rulebook === undefined ? {} : { rulebook }) }),
-        );
+        const { gate, taint, release } = createTurnGate(turn({ judge: ASKS, ...(rulebook === undefined ? {} : { rulebook }) }));
         const step = await gate.consult("git push --force origin main", SUBJECT).next();
         release();
         // A parked shape yields a card first; a refusing one returns straight away.

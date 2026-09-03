@@ -80,11 +80,16 @@ export const PermissionAskSchema = z.object({
     program: ProgramAskSchema.optional().describe(
         "The program this card is holding, when the card is about one. Present on a command gate's card and absent on every other permission ask.",
     ),
+    /* THE JUDGE'S OWN SENTENCE, and on a command card it is the reason the card exists rather than a note added
+     * to it: the judge read the owner's policy and the program and decided this needed asking, and this is what
+     * it decided. Written by the quick model from the program text and the policy, never by the agent being
+     * gated — a card whose persuasive half was authored by the thing it is stopping argues for its own approval,
+     * and the turns that raise cards are exactly the ones whose account of themselves may be a stranger's. */
     explain: z
         .string()
         .optional()
         .describe(
-            "One plain sentence saying what the program does and why the agent wants it. Written by the quick model, never by the agent being gated, and only when the owner switched the setting on.",
+            "One plain sentence saying what the program does and why it is being asked about. Written by the judge that read your safety policy, never by the agent being gated.",
         ),
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
@@ -436,7 +441,8 @@ export const TranscriptQuestionSchema = z.object({
         .describe("What was chosen, keyed by the question, with the chosen labels or the user's own words."),
 });
 export type TranscriptQuestion = z.infer<typeof TranscriptQuestionSchema>;
-// `explain`, the quick model's late sentence (the `permission_note` frame), lands here through PermissionAskSchema.
+// `explain`, the judge's sentence, lands here through PermissionAskSchema; it is on the card from the moment
+// it is raised, so nothing patches it in afterwards.
 export const TranscriptPermissionSchema = PermissionAskSchema.extend({ ...permissionCard, status: PermissionStatusSchema.describe("Where the decision stands.") });
 export type TranscriptPermission = z.infer<typeof TranscriptPermissionSchema>;
 export const TranscriptBrowserHelpSchema = z.object({ ...browserHelpCard, status: HelpStatusSchema.describe("How the hand-over ended.") });
@@ -802,9 +808,8 @@ export type SharePayload = z.infer<typeof SharePayloadSchema>;
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
 // (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/account_usage/context_usage/init/compact); any SDK message
 // without a UI mapping is dropped. `plan`/`question`/`permission` pause the turn until the user answers on the
-// `POST /agent/reply` side channel, and `resolved` releases the one it names; `permission_note` adds a sentence
-// to a permission card already on screen without settling it; `mode` reports the live permission posture as the
-// agent changes it.
+// `POST /agent/reply` side channel, and `resolved` releases the one it names; `mode` reports the live
+// permission posture as the agent changes it.
 // `parentToolUseId` tags frames produced inside a subagent (Task tool); `subagent`/`subagent_update` report the
 // subagent itself, keyed by the same tool_use id those tagged frames carry.
 export const AgentEventSchema = z.discriminatedUnion("kind", [
@@ -1174,19 +1179,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // already moved on. It rides verbatim, exactly as the client POSTed it; absent, nobody answered (the turn
     // was stopped, or died under the card), which is not a decision and must not replay as one.
     z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),
-    /* A LATE SENTENCE FOR A CARD ALREADY ON SCREEN: the quick model's plain-language reading of a held command,
-     * landing on the permission card named by `requestId` (see PermissionAsk.explain).
-     *
-     * A frame of its own rather than a field on the card, because the card MUST NOT WAIT FOR IT. This is a
-     * safety prompt and the turn is parked on it; a quick-model rung can take tens of seconds before the chain
-     * steps down (agent/quick-model.ts measured one at 58), and holding the card back for that reads exactly
-     * like the agent freezing, which is the failure the explanation was meant to prevent rather than cause. So
-     * the card goes out complete and unexplained, and this arrives if and when it does. Same shape and the same
-     * reason as `service_event`, which streams a running service's status onto an offer already rendered.
-     *
-     * Never arrives at all when the setting is off, when nothing is connected to answer, or when the user
-     * settles the card first, and none of those change what the card says. */
-    z.object({ kind: z.literal("permission_note"), requestId: z.string(), explain: z.string() }),
+    /* There was a `permission_note` frame here: a late sentence raced onto a command card that had already gone
+     * out, because the explanation was optional and the card must not wait for a quick-model rung that might
+     * take tens of seconds. It is gone with the setting that made it optional. The judge now decides the
+     * verdict, so the sentence is not a decoration arriving afterwards — it is the REASON THE CARD EXISTS, and
+     * a card cannot be raised before it is known. Nothing races, and `PermissionAsk.explain` is populated at
+     * raise time (guard/command-gate.ts). */
     // The turn's permission mode, whenever it changes, the user's pick at turn start, then every move the
     // AGENT makes on its own (EnterPlanMode on a request that needs thinking through, ExitPlanMode once the
     // user approves). The composer's mode selector follows this, so the UI never lies about the live posture.

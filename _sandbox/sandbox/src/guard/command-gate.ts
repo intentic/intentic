@@ -1,6 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import {
-    type AdmissionRule,
     type AgentEvent,
     COMMAND_CLASS_LABELS,
     type CommandClass,
@@ -9,12 +8,16 @@ import {
     type CommandSpan,
     matchCommand,
     type ProgramAsk,
+    type SafetyLogEntry,
+    type SafetyVerdict,
 } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
+import type { JudgeFacts } from "../agent/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
 import { createCredentialOracle } from "./credential-files.js";
-import { guard, type GuardVerdict } from "./guard.js";
+import { guard } from "./guard.js";
+import { excerptProgram } from "../safety/safety-log.js";
 import type { TurnTaint } from "./turn-taint.js";
 
 /* THE SECOND LAYER, under the admission floor. The floor (guard/actions.ts sessionStart) decides who may wake
@@ -25,12 +28,27 @@ import type { TurnTaint } from "./turn-taint.js";
  * isolation boundary, so `canUseTool` is never consulted, and an automation wake never had a person at a
  * composer to consult anyway.
  *
+ * FOUR TIERS, AND ONLY THE LAST ONE INTERRUPTS ANYBODY. The contract's safety-policy.ts argues the design; this
+ * is where tiers 1 to 3 actually happen, in `consult`, in this order:
+ *
+ *   1 TRIAGE      matchCommand, the regex catalog. Its verdict is no longer the card — it only decides that a
+ *                 judge should look. Nothing matched ⇒ the command runs and nothing was spent.
+ *   1½ HARD RULE  guard/actions.ts commandRun, applied BEFORE the judge and un-waivable by it. One class today.
+ *   2 JUDGE       a quick model reading the owner's written policy, the program as data, and the daemon's own
+ *                 facts about the turn (agent/command-judge.ts). Answers allow, ask or refuse.
+ *   3 PERSON      the card, raised only on `ask`, carrying the judge's sentence.
+ *
+ * WHAT THIS REPLACED, because the shape only makes sense against it: the classifier's match WAS the verdict, and
+ * the owner tuned six per-class switches over it. So `echo "rm -rf /"` into a README, `rg 'rm -rf'`, a heredoc
+ * writing a deploy script and a real recursive delete were one question with one answer, and the answer was an
+ * interruption. The cost of a triage false positive is now one model call rather than one interruption, which is
+ * what makes it affordable for triage to be over-inclusive and for the person to be asked rarely.
+ *
  * TWO LAYERS IN THIS FILE, and the split is the point.
  *
- * `createCommandGate` is the DECISION, and it knows nothing about how a runtime asks. Hand it a program about
- * to run and it answers allow-or-refuse: classify, consult the rulebook, apply the taint floor, raise a card
- * and park on it, or refuse where nobody can answer. Every runtime gets the same verdict from the same decide
- * fn for the same command, which is what makes a rule the owner wrote a rule rather than a Claude Code rule.
+ * `createCommandGate` is the DECISION, and it knows nothing about how a runtime asks. Every runtime gets the
+ * same verdict from the same judge against the same policy for the same command, which is what makes a line the
+ * owner wrote a rule rather than a Claude Code rule.
  *
  * `commandGateHooks` is one TRANSPORT over that decision: a PreToolUse hook, which fires even under
  * bypassPermissions and for subagents too, so it holds exactly where the cards never do. The other transports
@@ -38,26 +56,38 @@ import type { TurnTaint } from "./turn-taint.js";
  * business: Codex answers `item/commandExecution/requestApproval` (codex/codex-agent.ts, codexCommandApproval),
  * and an ACP agent answers `session/request_permission` (acp/acp-permissions.ts).
  * They differ in ONE stated way, and the capability record carries it (`rulebook: "approval"`): the vendor
- * decides which calls it asks about, so a class it never raises is a class no rule can reach. What it does
+ * decides which calls it asks about, so a command it never raises is one no policy can reach. What it does
  * raise is judged here.
  *
- * A HOLD PARKS THE TURN. That is the whole difference from the outbound gate next door, which translates a hold
+ * AN ASK PARKS THE TURN. That is the whole difference from the outbound gate next door, which translates a hold
  * into a refusal pointing at the approvals queue. A send has a held form, the approval IS the message, waiting,
- * and `git push --force` has none: there is the command or there is not the command. So a hold raises the same
+ * and `git push --force` has none: there is the command or there is not the command. So an ask raises the same
  * permission card the SDK's own prompts use (agent-requests.ts mints it, the client renders it, /agent/reply
  * answers it) and the caller simply waits, which every transport here is allowed to do.
  *
  * UNLESS NOBODY IS THERE. An unattended turn gets the refusal, for the reason permissionGate gives at its own
  * unattended branch: a card raised where no one can answer hangs the turn until its timeout and reads as the
- * agent freezing, which is worse than a clear no. The policy does not change, only how it is delivered.
+ * agent freezing, which is worse than a clear no. Note what changed, though: the JUDGE is told nobody is
+ * watching (JudgeFacts.unattended) and the policy has a section about it, so an automation that used to have
+ * every held command refused now gets most of them allowed on the owner's own written say-so, and only a
+ * genuine `ask` becomes a refusal.
  *
- * Read sandbox-contract's command-classes.ts for what this does and does not catch: the classifier is regex over shell text,
- * so the gate is friction for well-behaved work and an ask for the owner, never the boundary for a hostile one.
+ * Read sandbox-contract's command-classes.ts for what triage does and does not catch, and command-judge.ts for
+ * what the judge can be argued into: neither is the boundary, and this file has never claimed to be one. The
+ * boundaries are structural and elsewhere.
  */
 
 export interface CommandGateOptions {
-    readonly rules: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
-    // Nobody is at a composer: an automation wake, a loop iteration, a chore. Holds refuse instead of parking.
+    /* THE OWNER'S POLICY, as text, resolved once when the turn was planned. The judge's instructions, and the
+     * only thing in this module that decides anything the hard rule does not.
+     *
+     * Snapshotted per turn rather than read per command, deliberately: a turn judged against three different
+     * versions of the policy because the owner was editing it mid-turn is a turn nobody can account for
+     * afterwards, and the log would be recording verdicts against a document that no longer exists. An edit
+     * takes effect on the next turn, which is also when the agent's own edits to it take effect. */
+    readonly policy: string;
+    // Nobody is at a composer: an automation wake, a loop iteration, a chore. An ask refuses instead of parking,
+    // and the judge is told so before it decides (JudgeFacts.unattended).
     readonly unattended: boolean;
     /* Whether THIS TRANSPORT can hold a call open while a person answers. Default true.
      *
@@ -80,19 +110,43 @@ export interface CommandGateOptions {
     /* This turn's outside-content bit (guard/turn-taint.ts), READ per command rather than snapshotted: the
      * page that taints a turn usually arrives mid-turn, several tool calls before the command that matters. */
     readonly taint: TurnTaint;
-    /* TRANSLATE A HELD PROGRAM INTO ONE SENTENCE FOR THE CARD, when the owner switched that on
-     * (SandboxSettings.explainCommands). Absent ⇒ cards go out with the program alone, which is the default.
+    /* ASK THE JUDGE. Rejecting means no rung answered, and the caller decides what that means (see
+     * `unavailableOutcome` below), which is why this is allowed to throw rather than resolving to undefined.
      *
      * A CALLBACK RATHER THAN `Services`, so this module keeps knowing nothing about accounts, provider chains
      * or quotas: the wiring that owns those (agent/turn-plan.ts) hands down a function, and the gate's own test
-     * suite can hand down a stub without standing up a quick model. Resolving to undefined is the ordinary
-     * answer for "no sentence worth showing", and a rejection is treated the same way.
+     * suite can hand down a stub without standing up a quick model.
      *
      * Explicitly `| undefined` rather than bare-optional so a caller can forward its own maybe-absent field in
      * one assignment: under exactOptionalPropertyTypes the bare form makes every call site spread a
      * conditional, which is a branch apiece for a value that means the same thing present-and-undefined as
-     * absent. */
-    readonly explain?: ((program: string, language: ProgramAsk["language"], signal: AbortSignal) => Promise<string | undefined>) | undefined;
+     * absent. Absent ⇒ every triage hit takes the judge-unavailable path, which is what a bench turn and a
+     * sandbox with nothing connected both get. */
+    readonly judge?: ((program: string, facts: JudgeFacts, signal: AbortSignal) => Promise<SafetyVerdict>) | undefined;
+    /* WRITE THE VERDICT DOWN. Every judged command, including the allowed ones — those are the entries the owner
+     * cannot learn about any other way, and "why wasn't I asked about that" is the question the Safety page's
+     * log exists to answer. Absent ⇒ nothing is recorded, which is right for a bench turn and for tests.
+     *
+     * Fire-and-forget by contract: the returned promise is not awaited and a rejection is swallowed, because a
+     * full disk must not stop a command the owner's policy allows. */
+    readonly log?: ((entry: SafetyLogEntry) => void) | undefined;
+    /* AMEND A LOGGED `ask` ONCE THE PERSON ANSWERS IT, keyed by the moment the verdict was reached. The verdict
+     * is written when it is REACHED rather than when the card settles, because a turn can be stopped while a
+     * card is up and a verdict that was never written is one the owner cannot find out about; this fills in how
+     * it ended. Same fire-and-forget contract as `log`. */
+    readonly answered?: ((at: number, answer: SafetyLogEntry["answer"], outcome: SafetyLogEntry["outcome"]) => void) | undefined;
+    /* WHICH OF THE OWNER'S COMPUTERS this gate is judging for, absent for the sandbox's own shell. Selects the
+     * half of the policy that applies, and the two halves are deliberately very different: everything in the
+     * container is disposable and nothing on somebody's laptop is. Set by the host bridge (hosts/host.routes.ts),
+     * which judges a machine's `run_command` before it crosses the tunnel. */
+    readonly machine?: string | undefined;
+    /* ADD A LINE THE OWNER ACCEPTED ON A CARD to their policy. What the Always button does now: the judge
+     * proposes the line, the owner reads it before clicking, and it lands in a document they can edit later —
+     * rather than a hidden grant in a settings file, which is the thing the redesign set out to remove.
+     *
+     * Absent ⇒ no Always button is offered at all, which is the honest shape when nothing could remember an
+     * answer (the schema already says to send `alwaysLabel` only when there is something to remember). */
+    readonly remember?: ((line: string) => Promise<void>) | undefined;
 }
 
 // How much of the command the card shows. Long enough for a heredoc's first lines to identify what this is,
@@ -239,49 +293,27 @@ export const consultWith = async (
     return step.value;
 };
 
-/* The strictest verdict across the classes the command fell in, with the class that produced it, a deny beats
- * a hold beats nothing, matching the admission floor's own most-restrictive-wins. Undefined ⇒ every class allows.
+/* THE ONE CLASS THE HARD RULE COVERS, if the command is in it. Undefined ⇒ nothing here is un-waivable and the
+ * judge decides.
  *
- * ONE CLASS PER CONSULT, still, which is what keeps "most restrictive wins" observable here rather than hidden
- * inside a decide that was handed a list — but each consult is told whether the command ALSO reaches out, because
- * one rule is about the pair rather than the class: a tainted turn's credential read is held when it leaves in
- * the same command (guard/actions.ts taintFloorHolds argues why). Computed once from the classes already
- * matched, so the pair costs no second walk of the command. */
-const decide = (
-    classes: readonly CommandClass[],
-    rules: CommandGateOptions["rules"],
-    outsideSource: string | undefined,
-    egress: boolean,
-): { commandClass: CommandClass; verdict: GuardVerdict } | undefined => {
-    let held: { commandClass: CommandClass; verdict: GuardVerdict } | undefined;
-    for (const commandClass of classes) {
-        const verdict = guard(commandRun, { commandClass, rules, egress, ...(outsideSource !== undefined ? { outsideSource } : {}) });
-        if (verdict.effect === "deny") {
-            return { commandClass, verdict };
-        }
-        if (verdict.effect === "hold" && held === undefined) {
-            held = { commandClass, verdict };
-        }
-    }
-    return held;
-};
+ * Still one consult per class rather than a decide handed a list, which is what keeps "most restrictive wins"
+ * observable at the consult site rather than buried inside the action. */
+const hardRuled = (classes: readonly CommandClass[]): CommandClass | undefined =>
+    classes.find((commandClass) => guard(commandRun, { commandClass }).effect !== "allow");
 
-/* THE THREE WAYS A HELD COMMAND IS REFUSED WITHOUT EVER REACHING A CARD, in the words the model reads back.
- * Undefined ⇒ raise the card and wait, which is the ordinary path.
+/* WHY A COMMAND CANNOT BE ASKED ABOUT, in the words the model reads back, or undefined when a card can be
+ * raised. Both branches are properties of the TURN rather than of the policy, which is exactly why they are
+ * decided here and not by the judge — the judge is told about the first (JudgeFacts.unattended) so that the
+ * owner's policy can rule on an unattended turn directly, and only a verdict that still says `ask` reaches this.
  *
- * Lifted out of `consult` because they are one question ("can this be asked at all, and of whom") answered
- * before anything about cards, waiting or explaining begins, and leaving them inline put four unrelated
- * decisions in one function. Each refusal tells the model not to retry, for the reason each header gives: a
- * turn that works around a refusal it was just given is the failure these sentences exist to prevent. */
-const refusalFor = (verdict: GuardVerdict, options: CommandGateOptions): GateOutcome | undefined => {
-    if (verdict.effect === "deny") {
-        return { allow: false, reason: verdict.reason };
-    }
+ * Each refusal tells the model not to retry, for one reason: a turn that works around a refusal it was just
+ * given is the failure these sentences exist to prevent. */
+const cannotAsk = (reason: string, options: CommandGateOptions): GateOutcome | undefined => {
     if (options.unattended) {
         return {
             allow: false,
             reason:
-                `${verdict.reason}, and this turn is running unattended: there is nobody to approve it. ` +
+                `${reason} This turn is running unattended: there is nobody to approve it. ` +
                 `Do not retry: carry on with what you can do without this command, and say plainly what you left undone.`,
         };
     }
@@ -289,56 +321,50 @@ const refusalFor = (verdict: GuardVerdict, options: CommandGateOptions): GateOut
         return {
             allow: false,
             reason:
-                `${verdict.reason}, and this agent cannot pause to ask: it was refused instead. ` +
+                `${reason} This agent cannot pause to ask, so it was refused instead. ` +
                 `Do not retry: carry on with what you can do without this command, and say plainly what you left undone. ` +
-                `The owner can change the rule, or run this on an agent that can ask.`,
+                `The owner can change their safety policy, or run this on an agent that can ask.`,
         };
     }
     return undefined;
 };
 
-/* THE PLAIN SENTENCE FOR A CARD ALREADY ON SCREEN, or nothing at all. Yields at most one `permission_note`.
+/* WHAT HAPPENS WHEN THE JUDGE CANNOT RUN: nothing connected, every rung spent, every rung off-shape, the turn
+ * aborted. It is a real state and it needs a stated posture rather than an accident.
  *
- * A SECOND FRAME RACED AGAINST THE ANSWER, which is the whole design and the reason it is not a field on the
- * card. The card is up and the person may settle it in two seconds; the quick model may take considerably
- * longer, because its chain steps over spent accounts one refusal at a time. So `settling` — the waiter, already
- * started by the caller — is the other runner, and if the person wins there is nothing to say: a note for a card
- * that has already resolved is a frame arriving after `resolved`, which every client would then have to learn to
- * ignore.
+ * THE POSTURE: fall back to the hard rule, and allow everything else. That is deliberately the same answer the
+ * old rulebook gave a workspace whose owner had never opened the settings, minus the false positives — a
+ * sandbox whose quick-model chain is spent must not become a sandbox that refuses ordinary work, because the
+ * commands reaching this point are overwhelmingly triage false positives and the container is still the
+ * boundary. The hard rule keeps applying because it never depended on a model in the first place.
  *
- * A REJECTION IS SILENCE. Nothing connected, a chain spent to the bottom, a credential that failed resolution:
- * none of that is anything the person answering this card can act on, and none of it changes what the card
- * says. The card was complete when it went out. */
-async function* explanationFrames(
-    requestId: string,
-    program: string,
-    subject: GateSubject,
-    options: CommandGateOptions,
-    settling: Promise<unknown>,
-): AsyncGenerator<AgentEvent> {
-    if (options.explain === undefined) {
-        return;
-    }
-    const explained = await Promise.race([
-        options.explain(program, subject.language, options.signal).catch(() => undefined),
-        settling.then(() => undefined),
-    ]);
-    if (explained !== undefined && explained !== "") {
-        yield { kind: "permission_note", requestId, explain: explained };
-    }
-}
+ * The sentence says the judge did not run rather than inventing a reason, so a card raised on this path does not
+ * read as a verdict somebody reached. */
+const JUDGE_UNAVAILABLE = `The safety judge could not be reached, so this was decided by the standing rule alone.`;
 
 export const createCommandGate = (options: CommandGateOptions): CommandGate => {
-    /* WHAT "ALWAYS" REMEMBERS, the classes the user has already said yes to, for the rest of THIS TURN. The
-     * closure is built once per turn, and the button's label says so rather than promising a memory that is not
-     * kept: the alternative is writing `allow` into the owner's own commandRules from a card, which is a
-     * configuration change they did not come to the card to make. A turn that deletes twenty directories asks
-     * once; the next turn asks again, which is the honest reading of a rule that still says hold.
+    /* WHAT AN ANSWERED CARD REMEMBERS FOR THE REST OF THIS TURN, keyed by the program text itself.
      *
-     * SHARED ACROSS EVERY SUBJECT on purpose: the grant is about a CLASS of consequence ("delete files", "reach
-     * the network"), not about which backend or which runtime would produce it, a yes to force-pushing from Bash
-     * answered the consequence, and asking again because the next attempt is a script is the same card twice. */
-    const granted = new Set<CommandClass>();
+     * KEYED BY THE PROGRAM, not by the class, and that is the change the judge made possible. The old grant was
+     * per CommandClass, because a class was all the gate knew: saying yes to one recursive delete waved through
+     * every recursive delete for the turn, including ones aimed somewhere else entirely. That was the most
+     * generous thing a card could be made to mean, and it was generous because the alternative — asking again
+     * about a command the judge would rule on identically — was a second interruption. It no longer is: the
+     * judge is memoised below, so a repeated command is re-decided for free and only a genuinely different one
+     * costs anything. So a yes now means yes to THIS, which is what the person clicking it thought it meant.
+     *
+     * The durable half of "always" is not here at all: it is `options.remember`, which appends the judge's
+     * proposed line to the owner's policy, where they can read it, edit it and take it back. */
+    const granted = new Set<string>();
+    /* EVERY JUDGED PROGRAM'S VERDICT, for the life of the turn. What makes the per-call model cost bearable: a
+     * build loop that runs the same flagged command eleven times pays for one judgment, and the ten repeats are
+     * a map lookup. Keyed by program text alone because the policy is snapshotted per turn (see options.policy)
+     * and the other facts either do not change within a turn or only ever get stricter — the taint bit is
+     * one-way, so a command judged before a page was read is re-judged after it (see the key below).
+     *
+     * Promises rather than values, so two concurrent consults of the same program share one call rather than
+     * racing two. */
+    const judged = new Map<string, Promise<SafetyVerdict>>();
     /* The fact-check under `secrets.access`, bound once per turn. It reads the file a credential-shaped path
      * names and drops the class when there is demonstrably no credential in it — see guard/credential-files.ts
      * for what it will and will not answer, and the contract's CommandContext for why only a positive "no"
@@ -346,32 +372,86 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
      * back must be judged on the file as it is at each consult, not as it was at the first. */
     const context: CommandContext = { holdsSecret: createCredentialOracle(options.cwd) };
 
+    const record = (entry: Omit<SafetyLogEntry, "at">, at: number): void => {
+        options.log?.({ at, ...entry });
+    };
+
+    /* ASK THE JUDGE, ONCE PER (TAINT STATE, PROGRAM). The taint source is in the key because it is the one fact
+     * that changes mid-turn and only ever toward stricter: a command allowed before the turn fetched a page must
+     * be asked again afterwards, or the memo would be laundering a pre-taint verdict into a tainted turn. */
+    const askJudge = (program: string, facts: JudgeFacts): Promise<SafetyVerdict> => {
+        // NUL as the separator, written as an escape so the file stays text: it is the one character neither a
+        // taint source nor a shell command can contain, so no two distinct pairs can collide into one key.
+        const key = `${facts.outsideSource ?? ``}\u0000${program}`;
+        const existing = judged.get(key);
+        if (existing !== undefined) {
+            return existing;
+        }
+        // A rejection is not cached: a chain that was momentarily unreachable should be asked again rather than
+        // condemning every later command in the turn to the unavailable path.
+        const asking = (options.judge?.(program, facts, options.signal) ?? Promise.reject(new Error(`no judge`))).catch((error: unknown) => {
+            judged.delete(key);
+            throw error;
+        });
+        judged.set(key, asking);
+        return asking;
+    };
+
     return {
         enforcing: true,
         async *consult(program, subject) {
             // Matched rather than merely classified, so the fragments that fired are in hand if this ends on a
             // card. An allowed command drops them a line later and pays only the offsets the same walk collected.
             const matches = matchCommand(program, context);
-            /* Read from EVERY class the command fell in, not from the ones still to be judged: a yes to
-             * reaching the internet earlier this turn answered that consequence, and it must not also answer
-             * the different question of whether a credential read leaves in the same command. */
-            const egress = matches.some((match) => match.commandClass === "network.outbound");
-            const pending = matches.filter((match) => !granted.has(match.commandClass));
-            const held =
-                pending.length === 0
-                    ? undefined
-                    : decide(
-                          pending.map((match) => match.commandClass),
-                          options.rules,
-                          options.taint.source(),
-                          egress,
-                      );
-            if (held === undefined) {
+            // TIER 1. Nothing matched ⇒ nothing to judge, and no model was spent: this is the overwhelming
+            // majority of everything an agent runs, and it must stay free. Bound rather than length-checked so
+            // the first match is in hand below without a fallback that could only ever mislabel a card.
+            const first = matches[0];
+            if (first === undefined) {
                 return ALLOWED;
             }
-            const refused = refusalFor(held.verdict, options);
-            if (refused !== undefined) {
-                return refused;
+            const classes = matches.map((match) => match.commandClass);
+            const at = Date.now();
+            const outsideSource = options.taint.source();
+            /* TIER 1½, THE HARD RULE, applied before the judge is called and un-waivable by it. The class it
+             * names is also what the card's title says, so the person is told which consequence stopped this
+             * rather than being handed the judge's paraphrase of it. */
+            const hard = hardRuled(classes);
+            const facts: JudgeFacts = {
+                consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
+                unattended: options.unattended,
+                language: subject.language,
+                ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+                ...(outsideSource === undefined ? {} : { outsideSource }),
+                ...(options.machine === undefined ? {} : { machine: options.machine }),
+            };
+            /* TIER 2. A judge that cannot run leaves the hard rule standing and lets everything else through —
+             * see JUDGE_UNAVAILABLE for why that direction and not the other. */
+            const verdict: SafetyVerdict = await askJudge(program, facts).catch(
+                (): SafetyVerdict => ({ decision: hard === undefined ? "allow" : "ask", sentence: JUDGE_UNAVAILABLE }),
+            );
+            // The hard rule can only ever make a verdict stricter, never looser: an `allow` over a class nothing
+            // recovers becomes an ask, and a `refuse` stays a refusal.
+            const decision = hard !== undefined && verdict.decision === "allow" ? "ask" : verdict.decision;
+            const entry = { program: excerptProgram(program), classes, decision, sentence: verdict.sentence };
+            if (decision === "allow") {
+                record({ ...entry, outcome: "allowed" }, at);
+                return ALLOWED;
+            }
+            if (decision === "refuse") {
+                record({ ...entry, outcome: "refused" }, at);
+                return { allow: false, reason: `${verdict.sentence} Refused by your owner's safety policy. Do not retry.` };
+            }
+            // Already answered for this exact program earlier in the turn. Checked after the judge rather than
+            // before, so the log still records what would have happened and the memo stays honest about it.
+            if (granted.has(program)) {
+                record({ ...entry, outcome: "allowed", answer: "allowed" }, at);
+                return ALLOWED;
+            }
+            const unaskable = cannotAsk(verdict.sentence, options);
+            if (unaskable !== undefined) {
+                record({ ...entry, outcome: "refused" }, at);
+                return unaskable;
             }
             const { id, wait } = createRequest("permission", {
                 kind: "permission",
@@ -379,25 +459,41 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
                 decision: "deny",
                 feedback: "The turn ended before you answered.",
             });
-            // The card carries the program AS A PROGRAM, with the fragments its own held class fired on.
+            record({ ...entry, outcome: "asked" }, at);
+            /* The card carries the program AS A PROGRAM, with the fragments that fired marked. The class it
+             * marks is the hard-ruled one when there is one, and otherwise the first triage matched: the title
+             * names that same class, so the marks and the sentence above them are about one thing.
+             *
+             * `explain` is the judge's sentence and it is on the card from the moment it goes out. Nothing
+             * races it in afterwards any more; the verdict had to exist before there was a card at all. */
+            const marked = hard ?? first.commandClass;
             yield {
                 kind: "permission",
                 requestId: id,
                 toolName: subject.toolName,
-                title: `This ${subject.noun} would ${COMMAND_CLASS_LABELS[held.commandClass]}`,
+                title: `This ${subject.noun} would ${COMMAND_CLASS_LABELS[marked]}`,
                 displayName: subject.displayName,
-                program: programAsk(program, subject, matches, held.commandClass),
-                reason: held.verdict.reason,
-                alwaysLabel: `Allow everything that would ${COMMAND_CLASS_LABELS[held.commandClass]} this turn`,
+                program: programAsk(program, subject, matches, marked),
+                /* `explain` and NOT `reason`. They are one sentence now: the judge's account of the command IS
+                 * why the card exists, where the two used to be different things (a rule's name, plus an
+                 * optional translation of the shell). Sending both would print the same words twice on one
+                 * card, once as the lead and once as the muted subline. */
+                explain: verdict.sentence,
+                /* THE ALWAYS BUTTON IS AN EDIT TO THE POLICY, and its label is the line that would be written,
+                 * so nobody accepts a rule they have not read. Offered only when the judge proposed a line AND
+                 * there is somewhere to put it — the schema says to send `alwaysLabel` only when an always has
+                 * something to remember, and a button that silently meant "just this turn" would be the card
+                 * lying about what it did. */
+                ...(verdict.policyLine !== undefined && options.remember !== undefined
+                    ? { alwaysLabel: `Always: ${verdict.policyLine}` }
+                    : {}),
             };
-            // The waiter is started BEFORE the sentence is asked for, so the two race; see explanationFrames.
-            const settling = wait(options.signal);
-            yield* explanationFrames(id, program, subject, options, settling);
-            const { reply, resolved } = await settling;
+            const { reply, resolved } = await wait(options.signal);
             // Every parked card owes the stream its resolution frame: it is what freezes the card in a replayed
             // transcript, and the only honest account of how long the turn was parked.
             yield resolved;
             if (reply.decision === "deny") {
+                options.answered?.(at, "declined", "refused");
                 // A denial with feedback is a redirection and the turn takes it; a bare one is the user
                 // stopping this command, so say that rather than inviting a way around it.
                 return {
@@ -407,8 +503,12 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
                         `The user declined this. Do not run it, and do not look for another way to achieve the same thing: wait for them to say how to proceed.`,
                 };
             }
-            if (reply.decision === "always") {
-                granted.add(held.commandClass);
+            options.answered?.(at, "allowed", "allowed");
+            granted.add(program);
+            if (reply.decision === "always" && verdict.policyLine !== undefined) {
+                // The write is not awaited and its failure is swallowed: the owner has answered, the command
+                // should run, and a policy file that could not be written is not a reason to refuse it.
+                void options.remember?.(verdict.policyLine).catch(() => undefined);
             }
             return ALLOWED;
         },

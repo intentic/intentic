@@ -6,6 +6,7 @@ import { RPCLink } from "@orpc/client/websocket";
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { bearerFrom, tokenEquals } from "../auth/auth.js";
+import { commandInCall, judgeHostCommand } from "./host-command-gate.js";
 import type { HostClient } from "./host-hub.js";
 
 /* The three surfaces of a connected computer:
@@ -118,6 +119,28 @@ export const createHostMcpRoute =
         const payload = (await c.req.json().catch(() => undefined)) as unknown;
         if (payload === undefined) {
             return c.json({ error: "invalid json" }, 400);
+        }
+        /* THE OWNER'S SAFETY POLICY, BEFORE THE TUNNEL. This route is the last thing that sees a call while a
+         * person can still be asked about it, so a `run_command` headed for somebody's own computer is judged
+         * here (hosts/host-command-gate.ts argues the whole shape). The scopes on the machine remain the floor
+         * underneath and are untouched by any of this; a refusal here only ever stops a call the machine might
+         * otherwise have run. */
+        const command = commandInCall(payload);
+        if (command !== undefined) {
+            const stopped = await judgeHostCommand(services, {
+                machine: id,
+                command,
+                conversationId: c.req.query("conversation"),
+            });
+            if (stopped !== undefined) {
+                // An ordinary tool RESULT, not a JSON-RPC error: the model reads the sentence and tells the
+                // owner what happened, where a transport failure reads as a broken sandbox and invites a retry.
+                return c.json({
+                    jsonrpc: "2.0",
+                    id: (payload as { id?: unknown }).id,
+                    result: { content: [{ type: "text", text: stopped.refusal }], isError: true },
+                });
+            }
         }
         const request = payload as { id?: unknown; method?: unknown };
         if (request.id === undefined) {

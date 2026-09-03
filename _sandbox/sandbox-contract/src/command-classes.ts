@@ -20,6 +20,14 @@ import { type CommandClass, CommandClassSchema } from "./schemas/agent.js";
  * boundary, the boundaries are structural and elsewhere: the container, the isolated worktree, the land gate,
  * an automation's tool allowlist, and, on somebody's own computer, the scope switches enforced there.
  *
+ * WHICH IS WHY THIS NO LONGER DECIDES ANYTHING. A match used to BE the verdict: whatever fired here became the
+ * permission card, so `echo "rm -rf /"`, `rg 'rm -rf'` and an actual delete were one question with one answer.
+ * Now a match only means A JUDGE SHOULD LOOK (safety-policy.ts argues the move at length, guard/command-gate.ts
+ * implements it), and the judge reads the owner's written policy plus what the daemon knows about the turn.
+ * That changes what these patterns should optimise for: being OVER-inclusive is close to free, because a false
+ * positive now costs one model call rather than one interruption, and a miss still costs everything. Anyone
+ * tuning a pattern below should widen rather than narrow it.
+ *
  * Matching is deliberately UNANCHORED, substrings, not line starts. Another PreToolUse hook may have rewrapped
  * the command by the time this reads it (agent-terminals.ts wraps every Bash call in bin/tmux-run), and the
  * agent's own line survives verbatim inside that wrapper. Nothing the wrapper adds is in any class below.
@@ -495,7 +503,8 @@ export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {
     "network.outbound": "send a request out to the internet",
 };
 
-/* THE CLASSES THE DAEMON HOLDS WHERE THE OWNER WROTE NO RULE, and the machine agent refuses without its own
- * switch. Named here rather than at either consult, so "which commands are dangerous enough to stop by
- * default" has one answer that both enforcement points read. */
-export const FLOOR_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["system.destructive"]);
+/* No verdict set lives here any more. Which classes are worth stopping for is a POLICY question now, and it is
+ * answered in two places that are honest about being different: safety-policy.ts's HARD_RULE_CLASSES for the
+ * one thing nothing recovers, and the owner's own written policy for everything else. The machine agent keeps
+ * its own set beside its scope switches (machine/src/computer/tools/shell.ts), because "which commands need
+ * the destructive switch" is a question about that capability card rather than about this catalog. */

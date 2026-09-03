@@ -28,6 +28,7 @@ import { publicContract } from "./contracts/public.contract.js";
 import { prepushContract } from "./contracts/prepush.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
+import { safetyContract } from "./contracts/safety.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
@@ -77,6 +78,7 @@ export { publicContract } from "./contracts/public.contract.js";
 export { prepushContract } from "./contracts/prepush.contract.js";
 export { providersContract } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
+export { safetyContract } from "./contracts/safety.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
@@ -113,6 +115,7 @@ export * from "./agent-run-model.js";
 export * from "./capability-env.js";
 export * from "./command-classes.js";
 export * from "./command-run.js";
+export * from "./safety-policy.js";
 export * from "./credential-material.js";
 export * from "./capability-secrets.js";
 export * from "./conversation-ids.js";
@@ -213,6 +216,7 @@ export const sandboxContract = {
     endpoints: endpointsContract,
     extensions: extensionsContract,
     personas: personasContract,
+    safety: safetyContract,
     sessions: sessionsContract,
     settings: settingsContract,
     share: shareContract,

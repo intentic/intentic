@@ -412,12 +412,6 @@ export class TranscriptFold {
                 // own card the instant its reply was accepted (card-status.ts, the same derivation), so this is a
                 // no-op there and earns its keep on every other surface.
                 return this.patchParked(event.requestId, (row) => Object.assign(row, settledCards(row, event.reply)));
-            case "permission_note":
-                return this.patchParked(event.requestId, (row) => {
-                    if (row.permission !== undefined) {
-                        row.permission.explain = event.explain;
-                    }
-                });
             case "service_event":
                 return this.patchParked(event.requestId, (row) => {
                     if (row.serviceOffer !== undefined) {

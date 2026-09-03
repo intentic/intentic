@@ -3,7 +3,7 @@ import {
     type AdmissionRule,
     COMMAND_CLASS_LABELS,
     type CommandClass,
-    FLOOR_CLASSES,
+    HARD_RULE_CLASSES,
     type Trigger,
     type WakeSource,
 } from "@intentic/sandbox-contract";
@@ -105,96 +105,36 @@ export interface CommandRunInput {
     // consults, and the gate keeps the most restrictive answer, which is what makes "most restrictive wins"
     // observable at the consult site instead of hidden inside a decide that was handed a list.
     readonly commandClass: CommandClass;
-    // SandboxSettings.commandRules. Unlisted ⇒ allowed: the rulebook names what to stop, not what to permit.
-    readonly rules: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
-    /* What first brought outside content into this turn (guard/turn-taint.ts), a listener provider, "web", a
-     * foreign MCP server, or undefined for a turn working only on the owner's own material. Present ⇒ the
-     * turn has read text somebody else wrote, which is the condition the taint floor below keys on. */
-    readonly outsideSource?: string;
-    /* Does this same command ALSO reach the internet (network.outbound)? Read only by the taint floor, and only
-     * for `secrets.access` — see taintFloorHolds. The gate computes it from the classes it already matched, so
-     * one walk of the command answers both "what is this" and "does it leave". */
-    readonly egress?: boolean;
 }
 
-/* WHAT A TAINTED TURN DOES NOT GET FOR FREE, and the shape of each answer.
+/* MAY THE AGENT RUN THIS COMMAND WHATEVER ANYONE SAYS? The HARD RULE, and after the safety redesign it is all
+ * that is left in this decide.
  *
- *   files.destructive  every one of them. `rm -rf node_modules` is ordinary work and stays unasked all day; the
- *                      same command in a turn that just read a bug report from a Front Desk visitor is the
- *                      injection everybody pictures, and one card is a cheap way to not find out which it was
- *                      afterwards. Nothing here brings the tree back, so the ask is worth its cost.
+ * WHAT USED TO BE HERE, and why none of it survived. Three layers: the owner's `commandRules` (a verdict per
+ * class), a standing floor under the classes nothing recovers, and a taint floor that held recursive deletes and
+ * leaving credential reads in a turn that had read outside content. All three shared one flaw — they decided
+ * from a REGEX MATCH, so `echo "rm -rf /"` and an actual delete were the same input and got the same card. That
+ * is not a threshold problem, and the redesign replaced the deciding rather than the tuning: triage still fires
+ * (contract command-classes.ts), and what it wakes is a model reading the owner's written policy plus what the
+ * daemon knows about the turn (agent/command-judge.ts). The taint bit is now a FACT handed to that judge instead
+ * of a hard-coded hold, which is what lets "we read a stranger's page, so be careful about deletes" be a
+ * sentence the owner can write, narrow, or drop.
  *
- *   secrets.access     ONLY WHEN IT ALSO LEAVES. This used to hold every credential read, and the reasoning was
- *                      sound as far as it went: outside text arrives, the agent is talked into reading a
- *                      credential, the credential leaves, and the middle link is where a policy can stand. What
- *                      it missed is that the middle link no longer carries the value. Every tool result is
- *                      masked before the model sees it — stored values to their `{{secret:name}}` reference, and
- *                      the rest of a credential file to `***` because the call named that file (agent/agent-
- *                      redaction.ts) — so a tainted turn that reads a dotenv learns its key names. Holding that
- *                      spent a card on nothing, and the cards it spent were mostly not even reads: a grep whose
- *                      pattern contained a credential-shaped name, a config the agent had to open to do the work
- *                      it was woken for. A card an owner answers without reading is worse than no card.
+ * WHAT DID NOT MOVE INTO THE POLICY. The classes where nothing recovers — a wiped block device, a deleted
+ * volume, a delete aimed at a root rather than at something inside one. A model can be argued into anything by
+ * text in the command it is judging, and the cost of being wrong once here is the machine. So this stays typed,
+ * applies before the judge is ever called, and no verdict can waive it (contract safety-policy.ts
+ * HARD_RULE_CLASSES holds the set and argues for keeping it to one entry).
  *
- *                      What still leaks is the command that carries the file OUT — `curl -d @.env`, a
- *                      `{{secret:X}}` resolved into a request body — and that is exactly a command in this class
- *                      AND in `network.outbound`. So the floor moved from the read to the send.
- *
- *                      THE GAP IT ACCEPTS, stated plainly: two commands do what one no longer can (`cp .env
- *                      /tmp/x`, then `curl -d @/tmp/x`), because the classifier judges one command at a time and
- *                      the second names no credential. The gate has never claimed to be the boundary
- *                      (sandbox-contract command-classes.ts says so at length), and a floor that fires on the work
- *                      the agent was woken to do buys nothing to cover a hole this shape.
- *
- * Everything else is untouched, so a tainted turn goes on editing, building, committing and replying. */
-const taintFloorHolds = (commandClass: CommandClass, egress: boolean): boolean =>
-    commandClass === "files.destructive" || (commandClass === "secrets.access" && egress);
-
-/* May the agent run this shell command? Consulted by the PreToolUse command gate before the command executes.
- *
- * A "hold" here means the real thing, unlike outbound.send's: the gate raises a permission card and the command
- * waits for an answer. The difference is that a send has an approvable ARTIFACT to fall back on (the draft) and
- * a command does not, there is no held form of `git push --force`, only the command or not the command. So an
- * unattended turn, with nobody to raise the card to, gets the refusal instead; the gate words that, because
- * whether anyone is watching is a property of the turn and not of the policy. */
+ * A "hold" means the real thing: the gate raises a permission card and the command waits. An unattended turn has
+ * nobody to raise it to and gets a refusal instead; the gate words that, because whether anyone is watching is a
+ * property of the turn and not of the rule. */
 export const commandRun = defineGuardedAction<CommandRunInput>({
     action: "command.run",
-    decide: ({ commandClass, rules, outsideSource, egress = false }) => {
-        const rule = rules[commandClass];
-        if (rule === "deny") {
-            return DENY(`commands that ${COMMAND_CLASS_LABELS[commandClass]} are refused by the command rules`);
-        }
-        if (rule === "hold") {
-            return HOLD(`the command rules hold commands that ${COMMAND_CLASS_LABELS[commandClass]} for your approval`);
-        }
-        /* TWO FLOORS, the rules here that the owner did not write. Both apply ONLY where the owner has said
-         * NOTHING: an explicit `allow` is a decision about this exact class, a workspace whose work IS reading
-         * credentials or wiping volumes, say, and a floor that overrode it would be this module deciding it
-         * knows better than the person who configured it.
-         *
-         * THE STANDING FLOOR. `commandRules` is an empty rulebook until somebody opens the settings, and for
-         * everything recoverable that is the right default: the container is disposable and gating ordinary
-         * work is friction bought with nothing. It is the wrong default for the handful of commands that leave
-         * nothing to recover FROM (contract command-classes.ts FLOOR_CLASSES says which and argues the line).
-         * A fresh sandbox should not be one mistyped path away from a formatted disk, and "we assumed you had
-         * configured it" is not an answer anybody wants after the fact.
-         *
-         * The cost is stated where it is paid: `enforcing` in guard/turn-gate.ts is now true on every turn,
-         * so the vendor runtimes whose gate is their own approval channel ask per command rather than never. */
-        if (rule === undefined && FLOOR_CLASSES.has(commandClass)) {
-            return HOLD(`this command would ${COMMAND_CLASS_LABELS[commandClass]}, and nothing here undoes that`);
-        }
-        /* THE TAINT FLOOR, the only place the outside-content envelope becomes enforcement rather than
-         * narration (guard/turn-taint.ts explains the bit; taintFloorHolds above argues each class). */
-        if (rule === undefined && outsideSource !== undefined && taintFloorHolds(commandClass, egress)) {
-            // The sending is what is being asked about when a read is held, so the sentence says both halves;
-            // anything else would put a card in front of the owner that describes the harmless one.
-            const consequence = egress
-                ? `${COMMAND_CLASS_LABELS[commandClass]} and ${COMMAND_CLASS_LABELS["network.outbound"]}`
-                : COMMAND_CLASS_LABELS[commandClass];
-            return HOLD(`this turn has taken in content from outside (${outsideSource}), and this command would ${consequence}`);
-        }
-        return ALLOW(`no command rule restricts ${commandClass}`);
-    },
+    decide: ({ commandClass }) =>
+        HARD_RULE_CLASSES.has(commandClass)
+            ? HOLD(`this command would ${COMMAND_CLASS_LABELS[commandClass]}, and nothing here undoes that`)
+            : ALLOW(`the hard rule does not cover ${commandClass}`),
 });
 
 export interface ChildSpawnInput {

@@ -176,7 +176,9 @@ describe(`WORKSPACE_STATE_FILES`, () => {
         // `.intentic/config/approvals` without the slash would also prefix-match a future `.intentic/approvals-archive.json`.
         for (const file of WORKSPACE_STATE_FILES.filter((entry) => entry.invalidates.length > 0)) {
             const isFamilyPrefix = file.path.endsWith(`.`);
-            const isFile = file.path.endsWith(`.json`) || file.path.endsWith(`.Dockerfile`);
+            // `.md` is the safety policy: the one state file whose reader is a model rather than a parser, so
+            // it is prose on disk rather than JSON.
+            const isFile = file.path.endsWith(`.json`) || file.path.endsWith(`.Dockerfile`) || file.path.endsWith(`.md`);
             expect(isFile || isFamilyPrefix || file.path.endsWith(`/`), file.path).toBe(true);
         }
     });
@@ -321,15 +323,15 @@ describe(`VERSIONED_STATE_PATHS`, () => {
      * consequence of editing the table above: the review the flag itself exists to force. */
     it(`tracks exactly the configuration slice plus the agent's own authored output`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
-            `.intentic/config/approvals/`,
-            `.intentic/config/automations.json`,
+            `${STATE_DIR}/config/approvals/`,
+            `${STATE_DIR}/config/automations.json`,
             /* The connections themselves, and the entry that took the longest to earn its place: it was classed
              * `secret` on the strength of holding each capability's credential, which stopped being true when the
              * vault took the values out and left the shape behind. Connecting a deployment orchestrator, or
              * granting a connected computer shell and screen control, is the largest change made to what this
              * sandbox can DO, and it used to leave no diff. */
-            `.intentic/config/capabilities.json`,
-            `.intentic/config/capability-dismissals.json`,
+            `${STATE_DIR}/config/capabilities.json`,
+            `${STATE_DIR}/config/capability-dismissals.json`,
             /* The two entries the AGENT authors on its own initiative, and the reason `versioned` is not read as
              * config-only. Both are the sandbox acting outward: a draft publishes words under the owner's name,
              * a workspace extension is code that runs in the app and can serve HTTP with the workspace under
@@ -339,34 +341,39 @@ describe(`VERSIONED_STATE_PATHS`, () => {
              * it is a standing decision about what runs for everyone on this workspace — tracking upstream's
              * newest Claude Code, or pinning one while a regression is open — and `git log` is the only thing
              * that answers "since when". */
-            `.intentic/config/engines.json`,
-            `.intentic/config/environment.Dockerfile`,
-            `.intentic/config/environment.custom.Dockerfile`,
-            `.intentic/config/environment.d/`,
-            `.intentic/config/extension-enablement.json`,
+            `${STATE_DIR}/config/engines.json`,
+            `${STATE_DIR}/config/environment.Dockerfile`,
+            `${STATE_DIR}/config/environment.custom.Dockerfile`,
+            `${STATE_DIR}/config/environment.d/`,
+            `${STATE_DIR}/config/extension-enablement.json`,
             /* Its twin, and the pair is the argument: the SWITCH was already tracked while the configuration
              * behind it was not, so a commit could record turning an extension on and say nothing about what it
              * was told to do. Tracked once its declared-secret values moved to the vault. */
-            `.intentic/config/extension-settings.json`,
+            `${STATE_DIR}/config/extension-settings.json`,
             // The owner's per-extension update posture (notify / agent / auto): a standing decision about
             // what may run unattended, which is exactly the kind of edit worth a line in `git log`.
-            `.intentic/config/extension-update-policy.json`,
+            `${STATE_DIR}/config/extension-update-policy.json`,
             // Which commands are heavy enough to take turns, and how many may run at once. Tracked because
             // raising that limit is a decision about every session sharing the box, and `git log` is the only
             // thing that answers "since when have we been allowing four of these at a time".
-            `.intentic/config/heavy-commands.json`,
-            `.intentic/config/loop-designs.json`,
-            `.intentic/config/personas.json`,
+            `${STATE_DIR}/config/heavy-commands.json`,
+            `${STATE_DIR}/config/loop-designs.json`,
+            `${STATE_DIR}/config/personas.json`,
             // A persona's own kit: the prompt it runs on and the skills only its turns reach. Tracked for the
             // reason its card is, one step further: this is the text that decides how that persona behaves.
-            `.intentic/config/personas/`,
-            `.intentic/config/settings.json`,
+            `${STATE_DIR}/config/personas/`,
+            /* The safety policy: prose deciding when an agent stops to ask before running something. Tracked for
+             * the reason settings.json is, and more sharply — it is the standing answer to "how much may this
+             * thing do unasked", the agent may edit it on the owner's instruction, and `git log` is the only
+             * thing that answers "since when did we stop being asked about force-pushes". */
+            `${STATE_DIR}/config/safety.md`,
+            `${STATE_DIR}/config/settings.json`,
             // The skills the owner wrote. Tracked for the reason the rules in settings.json are: text that
             // changes how the agent behaves is worth a diff and a line in `git log`.
-            `.intentic/config/skills/`,
-            `.intentic/config/templates.json`,
-            `.intentic/config/workflows.json`,
-            `.intentic/config/workspace-extensions/`,
+            `${STATE_DIR}/config/skills/`,
+            `${STATE_DIR}/config/templates.json`,
+            `${STATE_DIR}/config/workflows.json`,
+            `${STATE_DIR}/config/workspace-extensions/`,
         ]);
     });
 

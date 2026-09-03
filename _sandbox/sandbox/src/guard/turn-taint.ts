@@ -17,14 +17,19 @@
  * reasoning may be that page's, and "the page was three tool calls ago" is not evidence of anything. It dies
  * with the turn, which is the correct lifetime, the next turn starts clean unless it too takes something in.
  *
- * WHAT IT DOES is deliberately narrow (guard/command-gate.ts): while set, a command that SENDS CREDENTIAL
- * MATERIAL OUT — one that reads it and reaches the internet in the same breath — stops being auto-allowed, as
- * does a recursive delete. Reading alone does not, because the value no longer survives the read: every tool
- * result is masked before the model sees it (agent/agent-redaction.ts), so the link this bit was built to break
- * is the third one now rather than the middle one, and guard/actions.ts taintFloorHolds argues the move and the
- * gap it accepts. Not a lockdown either way, the agent still edits, builds, runs tests, and answers the
- * stranger who woke it. The owner's own rule still wins in both directions: an explicit `allow` on that class
- * means they have said this workspace does not want the floor, and an explicit `deny` outranks it anyway. */
+ * WHAT IT DOES, and this is the part that changed with the safety redesign: it is EVIDENCE, not a verdict.
+ * The bit used to be a hard-coded floor — while set, a recursive delete was held, and so was a credential read
+ * that left in the same command. Both of those were fixed judgments about what a fetched page MEANS, made in
+ * code, with no way for an owner to narrow or widen them. Now the bit (and the source that set it) is handed to
+ * the command judge as one fact among several (agent/command-judge.ts JudgeFacts), and what to do about it is a
+ * sentence in the owner's own policy: the shipped default says to be stricter about deletes and outbound sends
+ * on a tainted turn, which is where those two floors went, and an owner who disagrees edits a paragraph instead
+ * of arguing with a switch.
+ *
+ * It is still narrow either way. The agent goes on editing, building, running tests and answering the stranger
+ * who woke it; nothing about this bit is a lockdown. And it is read by two consult sites OUTSIDE any turn
+ * generator, which is why it is published rather than merely held: the wallet's payment gate, and the host
+ * bridge judging a command headed for one of the owner's own computers. */
 
 export interface TurnTaint {
     // Whether outside content has entered this turn.
@@ -67,13 +72,34 @@ export const NO_TAINT: TurnTaint = { tainted: () => false, source: () => undefin
  * turn ask MORE often rather than less, the safe direction, deliberately. */
 const live = new Map<string, TurnTaint>();
 
-export const publishTurnTaint = (conversationId: string, taint: TurnTaint): void => {
+/* WHETHER ANYBODY IS WATCHING THE LIVE TURN, published beside the bit and for the same reason: a consult site
+ * outside the generator needs it and cannot derive it.
+ *
+ * There is exactly one such site, and it arrived with the host bridge (hosts/host.routes.ts): a `run_command`
+ * headed for the owner's own computer is judged in the daemon's HTTP layer, before it crosses the tunnel, while
+ * the turn that asked for it sits inside an MCP tool call. The judge is told whether anyone is watching because
+ * the owner's policy has a section about exactly that, and because a verdict of `ask` on an unattended turn
+ * becomes a refusal — deciding that from a guess would be deciding it wrong on every automation.
+ *
+ * Defaults to UNATTENDED for a conversation with no live turn. That is the safe direction and it is also the
+ * true one: no turn of ours is running there, so there is certainly nobody watching one. */
+const attended = new Set<string>();
+
+export const publishTurnTaint = (conversationId: string, taint: TurnTaint, unattended = false): void => {
     live.set(conversationId, taint);
+    if (unattended) {
+        attended.delete(conversationId);
+    } else {
+        attended.add(conversationId);
+    }
 };
 
 export const clearTurnTaint = (conversationId: string): void => {
     live.delete(conversationId);
+    attended.delete(conversationId);
 };
+
+export const conversationUnattended = (conversationId: string): boolean => !attended.has(conversationId);
 
 // Whether the live turn in this conversation has taken in outside content. Unknown conversation ⇒ false: no
 // turn of ours is running there, and the payment gate's own "is there a live run" check is what refuses that.

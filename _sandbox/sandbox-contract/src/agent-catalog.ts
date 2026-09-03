@@ -310,31 +310,32 @@ export interface AgentCapabilities {
      *               separate axis from `instructions`: Pi and ACP take no system prompt at all, while OpenCode
      *               and Cursor take an append, but all four still need skill discovery. */
     readonly skillDiscovery: "native" | "prompt";
-    /* WHETHER THE OWNER'S COMMAND RULEBOOK REACHES THIS RUNTIME (SandboxSettings.commandRules, decided by
-     * guard/actions.ts commandRun, delivered by guard/command-gate.ts).
+    /* WHETHER THE OWNER'S SAFETY POLICY REACHES THIS RUNTIME (the document at .intentic/config/safety.md, read
+     * by the judge in agent/command-judge.ts, delivered by guard/command-gate.ts).
      *
-     * It exists because the rulebook was silently a Claude Code rulebook. The gate is a PreToolUse hook, which
-     * is an Agent SDK seam, so an owner who set `files.destructive: hold` was asked on a Claude turn and never
-     * on a Codex, Grok, Gemini, Pi or ACP one, with nothing on screen saying so. Same failure mode as the
-     * `instructions` axis above, and the same fix: name it once, let every surface read it.
+     * It exists because the policy is silently a Claude Code policy without it. The gate is a PreToolUse hook,
+     * which is an Agent SDK seam, so an owner whose policy says "ask before force-pushing" was asked on a Claude
+     * turn and never on a Codex, Grok, Gemini, Pi or ACP one, with nothing on screen saying so. Same failure
+     * mode as the `instructions` axis above, and the same fix: name it once, let every surface read it.
      *
-     *   "hooks"      , the runtime's own pre-execution hook carries the verdict and a HOLD can park the call.
+     *   "hooks"      , the runtime's own pre-execution hook carries the verdict and an ASK can park the call.
      *                  The Claude Code loop, whose PreToolUse hook fires even under bypassPermissions.
      *   "approval"   , the vendor publishes a per-call approval channel the daemon answers from the same
-     *                  rulebook, and a hold parks on a card because the vendor is blocked on the answer
+     *                  policy, and an ask parks on a card because the vendor is blocked on the answer
      *                  (Codex's `item/commandExecution/requestApproval`, ACP's `session/request_permission`).
      *                  Weaker than "hooks" in one stated way: the vendor decides WHICH calls it asks about, so a
-     *                  class it never raises is a class the rulebook cannot see. What it does raise is judged by
-     *                  the same decide fn.
+     *                  command it never raises is one the policy cannot see. What it does raise is judged by
+     *                  the same judge.
      *   "refuse-only", the same channel, but the vendor puts a CLOCK on the wait, so a hold cannot park and
      *                  arrives as a refusal instead. OpenCode's turn has an inactivity watchdog that reads a
      *                  paused approval as a stalled turn; a card there would break the turn rather than gate it.
-     *                  `deny` rules work fully; `hold` rules stop the command and say they could not ask.
-     *   "none"       , the runtime publishes no seam before it runs a command, so no rule can apply. Pi runs its
-     *                  bash in-process with no approval channel at all.
+     *                  `refuse` verdicts work fully; an `ask` stops the command and says it could not ask.
+     *   "none"       , the runtime publishes no seam before it runs a command, so no policy can apply. Pi runs
+     *                  its bash in-process with no approval channel at all.
      *
-     * The taint floor rides this axis too: a runtime with no consult has no place to apply it, which is why
-     * `conversationTainted` must read a "none" runtime as tainted rather than as clean (guard/turn-taint.ts). */
+     * The taint bit rides this axis too: a runtime with no consult has no place to hand the judge its facts,
+     * which is why `conversationTainted` must read a "none" runtime as tainted rather than as clean
+     * (guard/turn-taint.ts). */
     readonly rulebook: "hooks" | "approval" | "refuse-only" | "none";
     /* WHETHER A STORED CREDENTIAL IS MASKED IN WHAT THIS RUNTIME'S MODEL READS (secrets/secret-registry.ts and
      * the two seams around it).

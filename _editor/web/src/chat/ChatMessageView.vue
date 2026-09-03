@@ -1299,10 +1299,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  than truncating a size up. -->
             <ChatCard v-if="message.permission" icon="shield" prose :title="permissionTitle" :status="permissionStatus(message.permission)">
                 <div class="chat-card-body flex flex-col gap-2">
-                    <!-- THE SENTENCE FIRST when there is one (settings.explainCommands): what the program does
-                         and what it is for, in the words the quick model wrote from the program text. It leads
-                         because it is the thing that can be read in the two seconds this card gets, and it is
-                         never the only account of the command, which sits under it either way. -->
+                    <!-- THE SENTENCE FIRST: what the program does and why it is being asked about, in the words
+                         the safety judge wrote from the program text and the owner's policy — never in the words
+                         of the agent being gated. It leads because it is the thing that can be read in the two
+                         seconds this card gets, and it is never the only account of the command, which sits
+                         under it either way. On a command card it is always present, because it is the reason
+                         the card exists rather than a translation added to it. -->
                     <span v-if="message.permission.explain" class="text-xs leading-relaxed text-content/85">{{ message.permission.explain }}</span>
                     <span v-else-if="message.permission.description" class="text-xs text-content/85">{{ message.permission.description }}</span>
 

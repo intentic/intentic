@@ -1,6 +1,6 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../claude/claude-sdk.js";
-import { type AdmissionRule, classifyCommand, type CommandClass } from "@intentic/sandbox-contract";
+import { classifyCommand } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { commandRun } from "../guard/actions.js";
 import { createCredentialOracle } from "../guard/credential-files.js";
@@ -26,8 +26,6 @@ export interface WatchServerDeps {
     // snapshotted into the watch, because the turn they belong to will be long gone at check time.
     readonly cwd: string;
     readonly env: Readonly<Record<string, string>>;
-    // The owner's command rulebook, applied at arm time as above. Empty ⇒ everything arms.
-    readonly commandRules: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
     // The turn identity the wake must reproduce, see WatcherTurnSeed.
     readonly turn: WatcherTurnSeed;
 }
@@ -36,13 +34,22 @@ const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; t
     content: [{ type: "text", text: JSON.stringify(payload) }],
 });
 
-// The strictest refusal across the check's classes, deny and hold refuse alike, because the check runs later
-// and repeatedly, where nobody can answer a hold.
-const ruleRefusal = (command: string, rules: WatchServerDeps["commandRules"], cwd: string): string | undefined => {
+/* THE HARD RULE, APPLIED AT ARM TIME, and deliberately nothing more than that.
+ *
+ * A watch check is not judged by the safety judge, and the reason is what a watch IS: a command the daemon runs
+ * later, repeatedly, on its own, long after the turn that armed it has ended. Every input the judge weighs is a
+ * property of a turn that will not exist when the check fires — whether anybody is watching, what the turn had
+ * read, what it was working on — so a verdict reached now would be a verdict about the wrong moment. And the one
+ * answer a judge might reach that this door cannot honour is `ask`: there is nobody to ask at 3 a.m., which is
+ * exactly when a watch fires.
+ *
+ * So the check is held to the rule that never depended on any of that. Everything else arms, and the refusal
+ * says what to do instead rather than merely saying no. */
+const ruleRefusal = (command: string, cwd: string): string | undefined => {
     // The same fact-check the command gate runs, for the same reason: a check that reads a `.env` of ports must
     // not be refused as a credential read, least of all with a message telling the agent to go and ask about it.
     for (const commandClass of classifyCommand(command, { holdsSecret: createCredentialOracle(cwd) })) {
-        const verdict = guard(commandRun, { commandClass, rules });
+        const verdict = guard(commandRun, { commandClass });
         if (verdict.effect !== "allow") {
             return `${verdict.reason}: a watch check runs unattended, so it cannot ask. Run the command through Bash instead, or watch with a narrower read-only check.`;
         }
@@ -95,7 +102,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                             reason: "This turn has no conversation, so a watch would have nowhere to deliver its wake.",
                         });
                     }
-                    const refusal = ruleRefusal(args.command, deps.commandRules, deps.cwd);
+                    const refusal = ruleRefusal(args.command, deps.cwd);
                     if (refusal !== undefined) {
                         return answer({ outcome: "refused", reason: refusal });
                     }

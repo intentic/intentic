@@ -1,6 +1,6 @@
 // settings: per-sandbox agent settings (.intentic/config/settings.json)
 import { z } from "zod";
-import { AdmissionPolicySchema, AdmissionRuleSchema, AgentRunPinSchema, CommandClassSchema } from "./agent.js";
+import { AdmissionPolicySchema, AdmissionRuleSchema, AgentRunPinSchema } from "./agent.js";
 // Which prompt the agent is, before this turn composes anything on top. Two built-in bases and an escape
 // hatch: Intentic's own (the default), Claude Code's preset, or the owner's text. Declared out here rather
 // than inline in the settings object because both sides of the wire branch on it, the daemon to build the
@@ -715,50 +715,17 @@ export const SandboxSettingsSchema = z.object({
         .record(z.string(), AdmissionRuleSchema)
         .default({})
         .describe("What an agent may do out in the world, per kind of action: go ahead, ask first, or never."),
-    /* THE COMMAND GATE'S RULEBOOK, a verdict per CommandClass, for shell commands the agent runs itself. This
-     * is the layer that still applies once a session is already running: the admission floor above decides who
-     * may wake the agent, and after that every command it types is inside one already-admitted session.
+    /* THE COMMAND GATE IS NOT CONFIGURED HERE. It used to be: `commandRules` was a verdict per CommandClass and
+     * `explainCommands` decided whether a card carried a sentence. Both are gone, and the reason is the whole
+     * safety redesign (safety-policy.ts argues it): a regex verdict per class asked about `echo "rm -rf /"` and
+     * an actual delete in the same words, and no setting of six switches fixes that, because telling the two
+     * apart is an act of understanding rather than a threshold. What replaced them is the owner's written
+     * policy at .intentic/config/safety.md, read by a judge that also sees what the daemon knows about the turn,
+     * plus one typed hard rule the judge cannot waive. The Safety page edits that document; nothing about the
+     * command gate belongs in this object.
      *
-     * "hold" means what it says here, unlike in actionRules: the gate raises a permission card and the command
-     * waits for a real answer, in EVERY posture, hooks fire under bypassPermissions, where the card machinery
-     * on its own never would. An UNATTENDED turn has nobody to answer, so a hold there refuses instead and says
-     * why; that is the honest form of "ask me" when there is no me.
-     *
-     * An unlisted class is allowed, WITH ONE FLOOR UNDER IT: the classes nothing brings back (FLOOR_CLASSES in
-     * command-classes.ts, `system.destructive` today) are held where the owner wrote nothing, so a workspace
-     * that has never opened this page is not one mistyped path away from a formatted disk. An explicit `allow`
-     * still wins, it is a decision about that exact class and the floor must not override the person who made
-     * it. Everything else stays as it was: unlisted is allowed and ordinary work is never asked about.
-     *
-     * Keys are the CommandClass enum, so a typo is a settings error rather than a rule that silently never
-     * matches. */
-    commandRules: z
-        .partialRecord(CommandClassSchema, AdmissionRuleSchema)
-        .default({})
-        .describe(
-            "What an agent may run inside the sandbox, for the six kinds of command that are hard to take back: rewriting git history, deleting recursively, wiping a disk or a container volume, reading credential files, publishing a package, reaching out to the network. Everything else is recoverable in a container that is itself disposable, and gating it would be friction bought with nothing. Leaving a kind unset is not the same as allowing it: wiping a disk is held for your approval until you say otherwise, because nothing here brings that back.",
-        ),
-    /* WHETHER A HELD COMMAND IS TRANSLATED BEFORE YOU ANSWER FOR IT. Off by default, and the default is the
-     * argument: the card is already complete without this, and switching it on spends one quick-model call per
-     * card raised, on the owner's own connected account.
-     *
-     * It buys the case the card is worst at. A held command is regularly a hundred-plus characters of pipeline
-     * the agent assembled, and the question the card actually asks, "do you want this to happen", is not
-     * answerable by reading shell quickly. The classifier already marks WHICH fragment held it (the card paints
-     * those); a sentence is what says what the rest of it does and why the agent wanted it.
-     *
-     * NEVER THE AGENT'S OWN WORDS. The sentence comes from the quick model reading the command text, not from
-     * the model being gated: a card that let the asking agent write its own justification would be a safety
-     * prompt whose persuasive half is authored by the thing it is meant to gate.
-     *
-     * The command itself is never replaced by it, only folded behind a disclosure the sentence sits above, and
-     * the marked fragments stay on the card either way, see ChatMessageView's permission card. */
-    explainCommands: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Have the quick model describe each held command in one plain sentence, above the command itself. Costs one quick-model call per card raised, on your own connected account. The command is always still there to read.",
-        ),
+     * The sentence on a card is no longer optional either: it is the judge's own reason for the verdict, so a
+     * card without one would be a card that could not say why it exists. */
     /* HOW MUCH AN AGENT MAY DELEGATE, the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
      *

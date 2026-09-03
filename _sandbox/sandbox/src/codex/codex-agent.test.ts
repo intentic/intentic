@@ -1,6 +1,7 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
+import type { AgentRequest } from "../agent/agent.js";
 import { resolveRequest } from "../agent/agent-requests.js";
 import { SteeringQueue } from "../agent/agent-steering.js";
 import { fakeCodexRunner } from "../testing.js";
@@ -680,8 +681,11 @@ test("each turn gets a steering channel, and one typed while the plan is read re
     expect(steered).toEqual([[], ["use fastify"]]);
 });
 
-/* THE OWNER'S COMMAND RULEBOOK ON CODEX, over `item/commandExecution/requestApproval`. Before this, `commandRules`
- * was silently a Claude Code setting: a turn on this runtime was never asked and never refused.
+/* THE OWNER'S SAFETY POLICY ON CODEX, over `item/commandExecution/requestApproval`. Before this, the policy was
+ * silently a Claude Code setting: a turn on this runtime was never asked and never refused.
+ *
+ * The judge is a stub in every test below. What is under test is that a Codex turn reaches the same pipeline
+ * and honours the same verdicts; whether a real model reads a policy correctly is command-judge.test.ts's.
  *
  * The approval event is built by hand rather than through fakeCodexRunner's list, because what is being checked
  * is the VERDICT that travels back on its `respond`. */
@@ -692,11 +696,14 @@ const approvalTurn = (command: string, respond: (allow: boolean) => void): Codex
         yield { type: "item.completed", item: { id: "m1", type: "agent_message", text: "done" } };
     };
 
-test("a denied class is refused, and the refusal declines rather than cancelling the turn", async () => {
+// A stub judge, as the request carries it: one constant verdict for whatever it is shown.
+const judging = (decision: "allow" | "ask" | "refuse"): AgentRequest["judge"] => async () => ({ decision, sentence: "It does the thing." });
+
+test("a refused command declines rather than cancelling the turn", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("git push --force origin main", (allow) => decisions.push(allow)));
 
-    const events = await collect(agent, { ...request, commandRules: { "git.destructive": "deny" } });
+    const events = await collect(agent, { ...request, judge: judging("refuse") });
 
     expect(decisions).toEqual([false]);
     // The turn carried on past the refusal: the agent hears no and picks something else.
@@ -707,16 +714,17 @@ test("an unclassified command is approved, so an ordinary turn is untouched", as
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("pnpm test", (allow) => decisions.push(allow)));
 
-    await collect(agent, { ...request, commandRules: { "git.destructive": "deny" } });
+    await collect(agent, { ...request, judge: judging("refuse") });
 
     expect(decisions).toEqual([true]);
 });
 
-/* Codex raises approvals whenever the gate has something it could refuse, which is now EVERY turn: the
- * standing floor holds the classes nothing undoes even on a workspace nobody configured. That is the cost this
- * change accepts and the reason it is written down twice (guard/turn-gate.ts states it too) — an approval
- * round-trip per command execution, in exchange for a default that binds on every runtime rather than only on
- * the one whose hook is always wired. The floor is narrow enough that the round-trip is nearly always a yes. */
+/* Codex raises approvals whenever the gate has something it could refuse, which is EVERY turn: triage and the
+ * hard rule are facts about the command rather than the owner's configuration, so there is no turn on which
+ * nothing could refuse. That is the cost this design accepts and the reason it is written down twice
+ * (guard/turn-gate.ts states it too) — an approval round-trip per command execution, in exchange for a policy
+ * that binds on every runtime rather than only on the one whose hook is always wired. Most of those round-trips
+ * end in a yes without a model being asked at all, because triage matches nothing. */
 test("approvals are requested on every turn, configured or not", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     const agent = createTestAgent(runner);
@@ -724,7 +732,7 @@ test("approvals are requested on every turn, configured or not", async () => {
     await collect(agent, request);
     expect(calls[0]!.options.approvalPolicy).toBe("untrusted");
 
-    await collect(agent, { ...request, commandRules: { "files.destructive": "hold" } });
+    await collect(agent, { ...request, judge: judging("ask") });
     expect(calls[1]!.options.approvalPolicy).toBe("untrusted");
 
     // A turn a stranger woke is gated too, which was already true: that is the taint floor's condition.
@@ -732,15 +740,15 @@ test("approvals are requested on every turn, configured or not", async () => {
     expect(calls[2]!.options.approvalPolicy).toBe("untrusted");
 });
 
-/* A HOLD PARKS THE CODEX TURN on the same permission card a Bash hook raises, which is the behaviour that could
+/* AN ASK PARKS THE CODEX TURN on the same permission card a Bash hook raises, which is the behaviour that could
  * not exist before: app-server is blocked on the approval request, so nothing of the turn's arrives while a
  * person reads it. */
-test("a held class raises a permission card and approves the command when the user allows it", async () => {
+test("an asked command raises a permission card and approves it when the user allows", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
     const events: AgentEvent[] = [];
 
-    for await (const event of agent({ ...request, commandRules: { "files.destructive": "hold" } })) {
+    for await (const event of agent({ ...request, judge: judging("ask") })) {
         events.push(event);
         if (event.kind === "permission") {
             setTimeout(() => resolveRequest({ kind: "permission", requestId: event.requestId, decision: "once" }), 0);
@@ -762,7 +770,7 @@ test("declining the card refuses the command", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
 
-    for await (const event of agent({ ...request, commandRules: { "files.destructive": "hold" } })) {
+    for await (const event of agent({ ...request, judge: judging("ask") })) {
         if (event.kind === "permission") {
             setTimeout(() => resolveRequest({ kind: "permission", requestId: event.requestId, decision: "deny" }), 0);
         }
@@ -771,12 +779,12 @@ test("declining the card refuses the command", async () => {
     expect(decisions).toEqual([false]);
 });
 
-// Nobody is at a composer, so the hold is delivered as a refusal instead of a card that would hang the turn.
-test("an unattended turn refuses a held class rather than raising a card", async () => {
+// Nobody is at a composer, so the ask is delivered as a refusal instead of a card that would hang the turn.
+test("an unattended turn refuses rather than raising a card", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
 
-    const events = await collect(agent, { ...request, unattended: true, commandRules: { "files.destructive": "hold" } });
+    const events = await collect(agent, { ...request, unattended: true, judge: judging("ask") });
 
     expect(decisions).toEqual([false]);
     expect(events.some((event) => event.kind === "permission")).toBe(false);

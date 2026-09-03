@@ -441,7 +441,7 @@ async function* codexQuestionCard(
     request.respond(codexAnswers(request.questions, reply));
 }
 
-/* ONE COMMAND CODEX ASKED ABOUT, PUT THROUGH THE OWNER'S RULEBOOK, and the reason `commandRules` now means
+/* ONE COMMAND CODEX ASKED ABOUT, PUT THROUGH THE OWNER'S SAFETY POLICY, and the reason that policy means
  * something on this runtime instead of silently nothing.
  *
  * Shaped exactly like codexQuestionCard above, because it is the same trick and it is the only one available:

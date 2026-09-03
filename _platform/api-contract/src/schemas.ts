@@ -44,6 +44,8 @@ import type {
     RuleFiringsSchema,
     RuleMomentSchema,
     RuleSchema,
+    SafetyLogEntrySchema,
+    SafetyPolicySchema,
     SandboxSettingsSchema,
     ServiceKindSchema,
     AgentChangeSchema,
@@ -165,6 +167,8 @@ export {
     RuleFiringsSchema,
     RuleMomentSchema,
     RuleSchema,
+    SafetyLogEntrySchema,
+    SafetyPolicySchema,
     SandboxSettingsSchema,
     ServiceEntrySchema,
     ServiceKindSchema,
@@ -233,6 +237,8 @@ export type SkillBody = z.infer<typeof SkillBodySchema>;
 export type SkillDraft = z.infer<typeof SkillDraftSchema>;
 export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
+export type SafetyPolicy = z.infer<typeof SafetyPolicySchema>;
+export type SafetyLogEntry = z.infer<typeof SafetyLogEntrySchema>;
 export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 export type PanelSummary = z.infer<typeof PanelSummarySchema>;
 export type TemplateSummary = z.infer<typeof TemplateSummarySchema>;

@@ -18,7 +18,7 @@ import {
     type AgentEvent,
     type AskQuestion,
     type CardDocument,
-    type CommandClass,
+    DEFAULT_SAFETY_POLICY,
     type DependencyFreshness,
     documentOf,
     type PermissionMode,
@@ -276,23 +276,23 @@ export interface AgentRequest {
     // The sniffer's rulebook (settings.actionRules), verdicts per classified outbound call, enforced by the
     // PreToolUse outbound gate. Absent/empty ⇒ the gate is not wired at all (guard/outbound-gate.ts).
     readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
-    /* The command gate's rulebook (settings.commandRules), a verdict per class of shell command, enforced
-     * before the command runs. A "hold" parks the turn on a permission card, in every posture, which is what
-     * makes it the layer that still applies once bypassPermissions has taken the cards away
-     * (guard/command-gate.ts). Absent/empty is no longer "no hook": the gate is wired on every turn because it
-     * also carries the taint floor, which is not the owner's rulebook but a property of what this turn has
-     * read. A turn with no rules and no outside content still reaches every decide and is allowed by all of
-     * them, which costs one classify per Bash call. */
-    readonly commandRules?: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
-    /* Turn a held program into one plain sentence for its card (settings.explainCommands, wired in
-     * turn-plan.ts). Absent ⇒ cards go out with the program alone, which is the default.
-     *
-     * A FUNCTION ON THE REQUEST rather than a flag, for the reason every service-shaped dependency here is:
-     * this module is handed what it needs to run a turn and does not reach for `Services`, so the account
-     * chain, the quota memo and the provider walk stay behind one seam (agent/command-explainer.ts) that a
-     * test can replace with a stub. */
-    readonly explainCommand?: CommandGateOptions["explain"];
-    /* What the serving runtime can DO about that rulebook, from the pair's capability record
+    /* The owner's safety policy (.intentic/config/safety.md, resolved in turn-plan.ts), the prose the judge
+     * applies to each flagged command before it runs. An `ask` parks the turn on a permission card, in every
+     * posture, which is what makes this the layer that still applies once bypassPermissions has taken the cards
+     * away (guard/command-gate.ts). Absent ⇒ the shipped default. The gate is wired on every turn regardless,
+     * because triage and the hard rule are not the owner's configuration but facts about the command, and a turn
+     * whose commands match nothing pays one classify per Bash call and no model. */
+    readonly safetyPolicy?: string;
+    /* THE JUDGE and the three writes around it, as functions on the request rather than as services, for the
+     * reason every service-shaped dependency here is: this module is handed what it needs to run a turn and does
+     * not reach for `Services`, so the account chain, the quota memo and the provider walk stay behind one seam
+     * (agent/command-judge.ts) that a test can replace with a stub. Absent ⇒ every triage hit takes the
+     * judge-unavailable path, which is what the bench and a sandbox with nothing connected both get. */
+    readonly judge?: CommandGateOptions["judge"];
+    readonly logSafety?: CommandGateOptions["log"];
+    readonly safetyAnswered?: CommandGateOptions["answered"];
+    readonly rememberSafety?: CommandGateOptions["remember"];
+    /* What the serving runtime can DO about that policy, from the pair's capability record
      * (capabilitiesOf().rulebook). The vendor adapters read it to shape their gate: "none" gets no consult and a
      * permanently-set taint bit, "refuse-only" cannot park on a card so holds refuse, "approval" and "hooks"
      * park. Absent ⇒ "hooks", the Claude Code loop, which is the only caller that builds its gate by hand
@@ -583,11 +583,12 @@ const baseOptions = (
      * below: the wrap hook SETS it (a page fetched, a foreign server answered) and the command gate READS it
      * per command. Born set when a stranger caused the wake at all (guard/turn-taint.ts). */
     const taint = createTurnTaint(request.outsideWake);
-    /* Published for the consult sites that live OUTSIDE this generator, today the wallet's payment gate,
-     * which runs in the daemon's HTTP layer and suspends the owner's auto-approve band while this is set
-     * (guard/turn-taint.ts). Cleared when the turn settles, wired in composition.ts. */
+    /* Published for the consult sites that live OUTSIDE this generator: the wallet's payment gate, which
+     * suspends the owner's auto-approve band while the bit is set, and the host bridge, which judges a command
+     * headed for one of the owner's own computers before it crosses the tunnel and needs both this bit and
+     * whether anybody is watching (guard/turn-taint.ts). Cleared when the turn settles, wired in composition.ts. */
     if (request.conversationId !== undefined) {
-        publishTurnTaint(request.conversationId, taint);
+        publishTurnTaint(request.conversationId, taint, request.unattended === true);
     }
     return {
         cwd: request.cwd,
@@ -682,13 +683,16 @@ const baseOptions = (
              * downstream is skipped by that order: a denied command never reaches the wrapper, and an approved one
              * is rewritten exactly as it would have been. */
             commandGateHooks({
-                rules: request.commandRules ?? {},
+                policy: request.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
                 unattended: request.unattended === true,
                 push,
                 signal: request.signal,
                 taint,
                 cwd: request.cwd,
-                explain: request.explainCommand,
+                judge: request.judge,
+                log: request.logSafety,
+                answered: request.safetyAnswered,
+                remember: request.rememberSafety,
             }),
             /* The outside-content envelope on everything the agent PULLS IN mid-turn, a fetched page, a foreign
              * MCP server's answer, the output of a curl that reached the internet (guard/outside-results.ts). Its

@@ -519,15 +519,24 @@ reports the profile.
   runner's summary, and the sync door pushes this sandbox's settings down the live link (replace semantics —
   the parent is a runner's whole authority). `docs/remote-runners-plan.md` at the workspace root says why
   every seam sits where it does.
-- [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card. WHAT a command is, as opposed to what may be done about it, lives one package out in
+- [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card. It runs four tiers and only the last interrupts anybody: TRIAGE (the classifier), the HARD RULE (`commandRun`, un-waivable, one class), the JUDGE (a model reading the owner's policy), and the PERSON. WHAT a command is, as opposed to what may be done about it, lives one package out in
   [sandbox-contract/src/command-classes.ts](../sandbox-contract/src/command-classes.ts): the same table the
   machine agent reads before running anything on somebody's own computer, so the two enforcement points cannot
   drift about what counts as a recursive delete. It is regex over shell text and says so: friction for
   well-behaved work, never the boundary for a hostile one, which stays structural (the container, the
-  worktree, the land gate, an automation's tool allowlist). The classifier reports WHERE as well as whether
+  worktree, the land gate, an automation's tool allowlist). It no longer DECIDES anything, which changes what
+  its patterns should optimise for — a false positive costs one model call rather than one interruption, so
+  anyone tuning one should widen rather than narrow it. The classifier reports WHERE as well as whether
   (`matchCommand` hands back the offsets each pattern fired at), and the gate carries those onto the card with
-  the program itself, so the browser marks the fragment the rule actually stopped rather than re-running the
+  the program itself, so the browser marks the fragment that actually stopped it rather than re-running the
   patterns and marking whatever a second copy of them finds.
+  `commandRun` in actions.ts is all that is left of the three layers that used to decide here (the owner's
+  `commandRules`, a standing floor, and a taint floor over deletes and leaving credential reads): all three
+  read a regex match, so none could tell a string being written to a file from a command about to run. The
+  taint bit is a FACT handed to the judge now, which is what lets "be strict about deletes after reading a web
+  page" be a sentence the owner can narrow or drop. What stayed typed is the handful of classes where nothing
+  recovers — a model can be argued into anything by text inside the command it is reading, and being wrong once
+  about a block device costs the machine.
 - [src/guard/credential-files.ts](src/guard/credential-files.ts): the fact under `secrets.access`. Patterns are
   the right instrument for a verb and the wrong one on their own for a FILE — `~/.npmrc` earned the class
   because that name usually holds a token, which meant cards over registry config, over dotenvs holding a port
@@ -552,14 +561,37 @@ reports the profile.
   a rung that answers unusably is a rung that refused and the next model down gets asked — where the old
   post-hoc checks ran after the chain was finished and left the helper with nothing however many working
   accounts sat below. It is the one refusal that earns no memo: wrong shape is a sample, not a condition.
-- [src/agent/command-explainer.ts](src/agent/command-explainer.ts): one plain sentence about a held command,
-  for the card a person is about to answer. Off unless the owner asks for it (`settings.explainCommands`), and
-  wired as a callback the gate is handed rather than as anything guard/ knows about, so the account chain stays
-  behind one seam. It reads the PROGRAM and never the turn's own account of it: a card whose persuasive half
-  was written by the model being gated would argue for its own approval, and the turn that raises most of these
-  cards is exactly the one that has read a stranger's words. The card never waits for it — the sentence rides a
-  later `permission_note` frame, raced against the user's answer, because the quick-model chain can spend tens
-  of seconds stepping over spent accounts and a safety prompt that appears after that reads as a freeze.
+- [src/agent/command-judge.ts](src/agent/command-judge.ts): whether a flagged command should run, asked of a
+  model that has read the owner's written policy. The layer that replaced a table of per-class regex verdicts,
+  and the reason it had to: the classifier's match used to BE the card, so `echo "rm -rf /"` written into a
+  README, `rg 'rm -rf'` over the tree, and an actual recursive delete all produced the same interruption. No
+  threshold separates those, because telling them apart is an act of understanding. So the classifier keeps its
+  job and loses its authority — it is TRIAGE now, deciding only that a judge should look, which is why being
+  over-inclusive costs one model call instead of one interruption. The judge is handed three things and the
+  boundary between them is the safety property: the POLICY and the DAEMON'S FACTS (which classes fired, the
+  cwd, whether this turn has taken in outside content and from where, whether anybody is watching) are trusted;
+  the PROGRAM is fenced and labelled as data. The gated model contributes nothing — not its reasoning, not its
+  stated intent — because a verdict whose persuasive half was written by the thing being judged argues for its
+  own approval, and the turn that raises most of these cards is exactly the one that has read a stranger's
+  words. Wired as a callback the gate is handed rather than as anything guard/ knows about, so the account
+  chain stays behind one seam. It can still be argued with, and two things bound that: the hard rule applied
+  before it is ever called, and tier 0.
+- [src/safety/safety-policy-store.ts](src/safety/safety-policy-store.ts): the policy itself
+  (`.intentic/config/safety.md`), the one state file whose reader is a model rather than a parser — so it is
+  prose, travels verbatim in both directions, and has no shape to be wrong in. Absent is a normal state, not an
+  unconfigured one: the shipped default describes the posture a fresh sandbox already has. The AGENT may edit
+  it when asked, and that is safe for a stated reason — the document governs FRICTION, never boundaries.
+  Nothing in it can widen a machine's scopes, unfence the JS runtime, reveal a secret or reach outside the
+  container. [src/safety/safety-log.ts](src/safety/safety-log.ts) is the other half of the Safety page and the
+  thing that makes the first half writable: nobody can author a policy for behaviour they cannot see. It
+  records the ALLOWS too, which are most of them and the ones that matter — a card you answered is something
+  you already know about, and "why wasn't I asked about that" is the question it exists to answer.
+- [src/hosts/host-command-gate.ts](src/hosts/host-command-gate.ts): the same pipeline over a command headed for
+  one of the owner's own computers, run on the daemon before it crosses the tunnel. Enforcement still lives on
+  the machine and does not move — but the machine has only two answers (`destructive` on or off) and cannot
+  park a card, so the owner's only choices used to be "always" and "never", and in practice the switch stayed
+  off. The daemon can ask. It only ever makes the machine stricter: an allow here is not permission, it just
+  means the daemon had no objection of its own.
 - [src/guard/outside-results.ts](src/guard/outside-results.ts): the mid-turn half of the envelope around
   anything the owner did not write — it wraps every MCP server except the daemon's own control servers (an
   exception list a conformance test pins, so a server added without a decision fails the suite); the other

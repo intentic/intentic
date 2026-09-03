@@ -38,8 +38,8 @@ vi.mock(`./agent/AgentDependencies.vue`, () => stub(`Dependencies`));
 vi.mock(`./agent/AgentCommandOutput.vue`, () => stub(`Command output`));
 vi.mock(`./agent/AgentSubagents.vue`, () => stub(`Subagents`));
 vi.mock(`./agent/AgentRecovery.vue`, () => stub(`When a turn breaks`));
-vi.mock(`./agent/AgentCommandRules.vue`, () => stub(`Command rules`));
-vi.mock(`./agent/AgentHeldCommands.vue`, () => stub(`Held commands`));
+vi.mock(`./agent/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
+vi.mock(`./agent/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
 vi.mock(`./agent/AgentChildAgents.vue`, () => stub(`Child agents`));
 vi.mock(`./agent/AgentChecks.vue`, () => stub(`Checks`));
 vi.mock(`./agent/AgentFinishedWork.vue`, () => stub(`Finished work`));
@@ -58,8 +58,8 @@ const EVERY_GROUP = [
     `Command output`,
     `Subagents`,
     `When a turn breaks`,
-    `Command rules`,
-    `Held commands`,
+    `Safety policy`,
+    `Recent decisions`,
     `Child agents`,
     `Checks`,
     `Finished work`,
@@ -142,7 +142,7 @@ it(`falls back to accounts when the address names a category that does not exist
  * rather than nowhere, and a coverage assertion counting names cannot tell those two apart. */
 it(`opens the safety category with the gate rules alone`, async () => {
     const { el } = await mount({ section: `safety` });
-    expect(shown(el)).toEqual([`Command rules`, `Held commands`, `Child agents`]);
+    expect(shown(el)).toEqual([`Safety policy`, `Recent decisions`, `Child agents`]);
 });
 
 // The composer's connect gate wins over whatever the address last remembered: it is a request to sign an account

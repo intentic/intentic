@@ -11,9 +11,9 @@ import { type CommandGate, consultWith, vendorSubject } from "../guard/command-g
  *
  *   · THE PLAN PHASE rejects mutating tool kinds so a planning turn stays read-only. Best-effort, an agent that
  *     never asks isn't constrained by an answer, which is why the plan-emulation preamble demands it in prose too.
- *   · THE COMMAND RULEBOOK (guard/command-gate.ts), when the owner wrote one. This is the channel that makes
- *     `commandRules` mean something on an ACP agent instead of silently nothing: the same classifier and the
- *     same decide fn the Claude Code hook uses, reached through the one seam ACP publishes.
+ *   · THE SAFETY POLICY (guard/command-gate.ts). This is the channel that makes the owner's written policy mean
+ *     something on an ACP agent instead of silently nothing: the same triage, the same judge and the same hard
+ *     rule the Claude Code hook uses, reached through the one seam ACP publishes.
  *
  * TWO LIMITS, both stated here because neither is visible from the call site.
  *

@@ -155,6 +155,11 @@ export const RUNNERS = family(`runners`);
 export const PUBLIC = family(`public`);
 export const REGISTRY = family(`registry`);
 export const RULE_FIRINGS = family(`rule-firings`);
+/* The safety policy and the log of what it decided, two keys rather than one, because the document changes at
+ * human speed and the log several times a turn: sharing a key would refetch the text somebody is editing every
+ * time a command was judged. The daemon's own state table declares the same split (workspace-state.ts). */
+export const SAFETY_POLICY = family(`safety-policy`);
+export const SAFETY_LOG = family(`safety-log`);
 export const SANDBOX_INFO = family(`info`);
 export const SANDBOX_SETTINGS = family(`settings`);
 export const SANDBOX_SAVINGS = family(`settings-savings`);

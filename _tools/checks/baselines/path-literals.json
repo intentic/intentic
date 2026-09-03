@@ -18,7 +18,7 @@
     "_sandbox/sandbox-contract/src/approvals-execution.ts": 1,
     "_sandbox/sandbox-contract/src/command-classes.test.ts": 2,
     "_sandbox/sandbox-contract/src/command-classes.ts": 2,
-    "_sandbox/sandbox-contract/src/workspace-state.test.ts": 27,
+    "_sandbox/sandbox-contract/src/workspace-state.test.ts": 11,
     "_sandbox/sandbox/bin/cleaners.mjs": 3,
     "_sandbox/sandbox/src/agent/agent-freshness.test.ts": 1,
     "_sandbox/sandbox/src/agent/agent-redaction.test.ts": 3,

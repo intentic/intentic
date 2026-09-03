@@ -10,15 +10,15 @@ import AgentChecks from "./agent/AgentChecks.vue";
 import AgentChildAgents from "./agent/AgentChildAgents.vue";
 import AgentCodeSearch from "./agent/AgentCodeSearch.vue";
 import AgentCommandOutput from "./agent/AgentCommandOutput.vue";
-import AgentCommandRules from "./agent/AgentCommandRules.vue";
 import AgentDependencies from "./agent/AgentDependencies.vue";
-import AgentHeldCommands from "./agent/AgentHeldCommands.vue";
 import AgentFinishedWork from "./agent/AgentFinishedWork.vue";
 import AgentInstructions from "./agent/AgentInstructions.vue";
 import AgentMemory from "./agent/AgentMemory.vue";
 import AgentModels from "./agent/AgentModels.vue";
 import AgentRecovery from "./agent/AgentRecovery.vue";
 import AgentRules from "./agent/AgentRules.vue";
+import AgentSafetyLog from "./agent/AgentSafetyLog.vue";
+import AgentSafetyPolicy from "./agent/AgentSafetyPolicy.vue";
 import AgentSkills from "./agent/AgentSkills.vue";
 import AgentSubagents from "./agent/AgentSubagents.vue";
 
@@ -151,13 +151,13 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentRecovery />
         </template>
 
-        <!-- What it may do without stopping to ask: which commands are held, what the card that holds one
-             shows, and whether a turn may start agents of its own. `explainCommands` sits here rather than in
-             "How it runs" because it describes the card the rules above raise, and the two halves of that one
-             errand were previously in different categories. -->
+        <!-- What it may do without stopping to ask. The policy first, then the evidence for it: nobody can
+             write a rule for behaviour they cannot see, so the log of recent decisions sits directly under the
+             document it is teaching them to edit. Helper agents last, because it is the one thing here still
+             answered by a switch rather than by the policy (AgentChildAgents says why). -->
         <template v-else-if="section === `safety`">
-            <AgentCommandRules />
-            <AgentHeldCommands />
+            <AgentSafetyPolicy />
+            <AgentSafetyLog />
             <AgentChildAgents />
         </template>
 

@@ -217,14 +217,15 @@ test("a permission ask on a watched directory is answered with a standing yes", 
     expect(permissionReplies).toEqual([{ id: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
 });
 
-/* THE OWNER'S RULEBOOK, ANSWERED OVER THIS CHANNEL. A registered session's permissions are judged by the same
- * decide fn every other runtime uses; an unregistered one keeps the standing yes above. This is the whole of
- * what `rulebook: "refuse-only"` claims for Grok and Gemini. */
-test("a registered session's permission is judged by the rulebook, and a refused command is rejected", async () => {
+/* THE OWNER'S SAFETY POLICY, ANSWERED OVER THIS CHANNEL. A registered session's permissions go through the same
+ * pipeline every other runtime uses; an unregistered one keeps the standing yes above. This is the whole of what
+ * `rulebook: "refuse-only"` claims for Grok and Gemini. The judge is a stub: what is under test is the channel,
+ * not the model. */
+test("a registered session's permission is judged by the policy, and a refused command is rejected", async () => {
     const xdg = await scratch();
     const { gate, release } = createTurnGate({
-        commandRules: { "git.destructive": "deny" },
-        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so a hold refuses.
+        judge: async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }),
+        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so an ask refuses too.
         rulebook: "refuse-only",
         signal: new AbortController().signal,
     });
@@ -242,13 +243,13 @@ test("a registered session's permission is judged by the rulebook, and a refused
 });
 
 /* An allowed-but-classified command replies `once`, never `always`: `always` would tell OpenCode to stop asking
- * about that pattern for the rest of the session, and the next command matching it could be one the rulebook
+ * about that pattern for the rest of the session, and the next command matching it could be one the policy
  * WOULD refuse. */
-test("a command the rulebook allows is approved for this call only", async () => {
+test("a command the policy allows is approved for this call only", async () => {
     const xdg = await scratch();
     const { gate, release } = createTurnGate({
-        commandRules: { "git.destructive": "deny" },
-        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so a hold refuses.
+        judge: async () => ({ decision: "allow", sentence: "Pushes a feature branch." }),
+        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so an ask refuses too.
         rulebook: "refuse-only",
         signal: new AbortController().signal,
     });

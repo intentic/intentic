@@ -221,6 +221,33 @@ const STATE_FILES = [
     },
 
     { path: ".intentic/config/settings.json", invalidates: ["settings", "manifests"], portability: "carry", versioned: true },
+    /* The safety policy the command judge reads before every flagged command (safety-policy.ts).
+     *
+     * `carry` and `versioned`, and both matter more here than for any other config file. It is a decision about
+     * how much an agent may do unasked in THIS workspace, so a fresh sandbox should arrive already governed by
+     * it rather than by the shipped default; and a change to it is exactly the kind a reviewer should see, since
+     * "since when did we stop asking about force-pushes" is a question only `git log` can answer. Being prose
+     * rather than JSON is what makes that diff worth reading.
+     *
+     * Absent is a normal state and not an unconfigured one: the daemon falls back to DEFAULT_SAFETY_POLICY,
+     * which describes the posture the product already had. */
+    { path: ".intentic/config/safety.md", invalidates: ["safety-policy"], portability: "carry", versioned: true },
+    /* What the policy above actually decided, newest first, written several times a turn by the command gate.
+     *
+     * `derived`, and therefore under `local/` rather than beside the session transcripts in `records/`: it is
+     * evidence about what ran on THIS machine, bounded and self-trimming, and an export that carried it would
+     * arrive claiming a fresh sandbox had already judged three hundred commands. The folder is the rule here,
+     * not a filing preference — the git exclude, the search allow-list and the export bundle all read the
+     * prefix (see the layout guard in workspace-state.test.ts).
+     *
+     * Its own query key rather than the policy's, because the two change at completely different rates and a
+     * verdict landing must not invalidate the document somebody is editing. */
+    {
+        path: ".intentic/local/safety-log.json",
+        invalidates: ["safety-log"],
+        portability: "derived",
+        note: "The target starts its own record of what it decided.",
+    },
     /* Which agent commands are heavy enough to take turns, and how many may run at once (the daemon reads it
      * per Bash command: platform/heavy-commands.ts).
      *

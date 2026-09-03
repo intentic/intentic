@@ -184,6 +184,8 @@ import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { fileShareStore, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
 import { purgeConversationState } from "./sessions/conversation-purge.js";
+import { type SafetyLog, fileSafetyLog } from "./safety/safety-log.js";
+import { type SafetyPolicyStore, fileSafetyPolicyStore } from "./safety/safety-policy-store.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
@@ -498,6 +500,13 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability) and it carries the
     // owner's rule table (rules/rules.ts).
     readonly sandboxSettings: SandboxSettingsStore;
+    /* The safety policy (.intentic/config/safety.md), the prose the command judge is handed before it decides
+     * about a flagged command, and the log of what it decided (.intentic/records/safety-log.json).
+     *
+     * Not fields on the settings above, for the reason the rule firings next door are not either, doubled: the
+     * policy is a DOCUMENT rather than a set of flags, and the log changes several times a turn on its own. */
+    readonly safetyPolicy: SafetyPolicyStore;
+    readonly safetyLog: SafetyLog;
     // When each rule last did something (.intentic/local/rule-firings.json). Beside the settings rather than in them:
     // a firing is not an edit, so it must not make every push a write of the owner's configuration.
     readonly ruleFirings: RuleFiringsStore;
@@ -1322,6 +1331,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/config/settings.json")),
+        safetyPolicy: fileSafetyPolicyStore(statePath(workspace.root, ".intentic/config/safety.md")),
+        safetyLog: fileSafetyLog(statePath(workspace.root, ".intentic/local/safety-log.json")),
         ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/local/rule-firings.json")),
         runtimeInstalls,
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, agents, logger }),

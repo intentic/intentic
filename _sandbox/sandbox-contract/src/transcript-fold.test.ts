@@ -343,13 +343,13 @@ describe("foldTurn", () => {
         ]);
     });
 
-    /* A card nobody answered is nobody's decision: when the turn ends under it, it freezes as `cancelled`. What
-     * DID land on the card before that stays: the quick model's late sentence is part of what the user was
-     * looking at. */
-    it("freezes a card nobody answered as cancelled when the turn ends, keeping what landed on it meanwhile", () => {
+    /* A card nobody answered is nobody's decision: when the turn ends under it, it freezes as `cancelled`, with
+     * everything it was raised with intact — including the judge's sentence, which is what the user was actually
+     * reading when the turn died. (The sentence arrives ON the card now rather than as a later frame patched
+     * into it: it is the reason the card exists, so there was no card before it existed.) */
+    it("freezes a card nobody answered as cancelled when the turn ends, keeping what it was raised with", () => {
         const events: AgentEvent[] = [
-            { kind: "permission", requestId: "perm1", toolName: "Bash", title: "Claude wants to run pnpm test" },
-            { kind: "permission_note", requestId: "perm1", explain: "Runs the test suite." },
+            { kind: "permission", requestId: "perm1", toolName: "Bash", title: "Claude wants to run pnpm test", explain: "Runs the test suite." },
         ];
         expect(foldOf("test", events).slice(1)).toEqual([
             {
