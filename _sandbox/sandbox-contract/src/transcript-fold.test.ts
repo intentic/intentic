@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent, TranscriptPatch, TranscriptRow } from "./events.js";
 import { applyTranscriptPatch, foldTurn, TranscriptFold, userRow } from "./transcript-fold.js";
@@ -35,7 +36,7 @@ describe("foldTurn", () => {
     it("writes a mid-turn steer down as a user row, with the answer to it beneath", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "on it" },
-            { kind: "steer", text: "and the tests", sentAt: SENT_AT + 1000, attachments: [".intentic/records/artifacts/attachments/u1/spec.md"] },
+            { kind: "steer", text: "and the tests", sentAt: SENT_AT + 1000, attachments: [`${STATE_DIR}/records/artifacts/attachments/u1/spec.md`] },
             { kind: "delta", text: "will do" },
         ];
         expect(foldOf("ship it", events).slice(1)).toEqual([

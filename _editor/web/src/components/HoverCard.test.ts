@@ -158,7 +158,7 @@ it(`draws a prompt's images at the card's full width, past its padding`, async (
     const { card, text } = await mount();
     card.show(anchorEvent(), {
         title: `Fix the tab strip`,
-        messages: [{ text: `Fix the tab strip`, attachments: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }] }],
+        messages: [{ text: `Fix the tab strip`, attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`] }],
     });
     await nextTick();
     const image = document.body.querySelector(`img`)!;
@@ -180,7 +180,7 @@ it(`draws a prompt's images at the card's full width, past its padding`, async (
 it(`draws a picture whole, sized by the room the card has left`, async () => {
     const { card, style } = await mount();
     const image = (): HTMLElement => document.body.querySelector(`img`) as HTMLElement;
-    const content = { title: `Fix the tab strip`, messages: [{ attachments: [{ name: `shot.png`, path: `a/shot.png` }] }] };
+    const content = { title: `Fix the tab strip`, messages: [{ attachments: [`a/shot.png`] }] };
 
     card.show(anchorEvent({ left: 40, top: 100, width: 120 }), content);
     await nextTick();
@@ -201,7 +201,7 @@ it(`draws an attachment's thumb from its path`, async () => {
     const { card } = await mount();
     card.show(anchorEvent(), {
         title: `Look at this`,
-        messages: [{ attachments: [{ name: `shot.png`, path: `a/shot.png` }] }],
+        messages: [{ attachments: [`a/shot.png`] }],
     });
     await nextTick();
     expect(document.body.querySelector(`img`)?.getAttribute(`src`)).toBe(`blob:a/shot.png`);

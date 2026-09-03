@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { AttachFrame, TranscriptTool } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { createTranslator, editorPath } from "./translate.js";
@@ -54,7 +55,7 @@ test("image content becomes a resource_link at the mirror copy of the file", () 
         name: "Screenshot",
         category: "other",
         status: "completed",
-        content: [{ type: "image", path: ".intentic/records/artifacts/browser/shot.png" }],
+        content: [{ type: "image", path: `${STATE_DIR}/records/artifacts/browser/shot.png` }],
     };
     expect(translate(patch({ op: "tool", index: 1, tool: shot }))).toEqual([
         {

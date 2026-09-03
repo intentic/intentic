@@ -103,15 +103,16 @@ const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaE
 const struck = (): number => document.querySelectorAll(`.chat-doomed`).length;
 
 /* A settled two-turn chat whose prompts the daemon still holds states for: the starting position an edit needs,
- * reached without going near the network. The checkpoint is what carries the anchor: restoreMessages stamps a
- * rewind index on every row the daemon gave one to, and a message with no anchor has nothing to put the files
- * back to, so no edit is offered on it at all. */
+ * reached without going near the network. The checkpoint is what carries the anchor, and it arrives already
+ * stamped: the daemon puts the saved point and the index a rewind addresses it by onto the row itself, on the
+ * live turn's `checkpoint` frame and on the read that serves a replayed one. A message with no anchor has
+ * nothing to put the files back to, so no edit is offered on it at all: the assistant rows below carry none. */
 const editableChat = (): Conversation => {
     const conversation = useChat().active.value;
     conversation.restoreMessages([
-        { role: `user`, text: `fix the bug`, checkpointId: `cp-0` },
+        { role: `user`, text: `fix the bug`, checkpointId: `cp-0`, rewindIndex: 0 },
         { role: `assistant`, text: `fixed it` },
-        { role: `user`, text: `now ship it`, checkpointId: `cp-2` },
+        { role: `user`, text: `now ship it`, checkpointId: `cp-2`, rewindIndex: 2 },
         { role: `assistant`, text: `shipped` },
     ]);
     return conversation;

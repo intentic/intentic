@@ -9,6 +9,7 @@ import {
     RESUME_NOTES,
     type SandboxSettings,
     SandboxSettingsSchema,
+    withResumeNote,
 } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { PersistedAgent } from "../agents/agents-store.js";
@@ -352,10 +353,12 @@ test("no resume when the credential is genuinely dead, the error frame's reconne
 test("a resume that is itself refused is not resumed again: a dead credential must not respawn forever", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
     const prompts: string[] = [];
-    // The prompt a fired resume carries. Recording it again is the loop this refuses to start.
+    // The prompt a fired resume carries, built the way the resume builds it: the note verbatim, ahead of the
+    // words it interrupted. Recording it again is the loop this refuses to start, and spelling a shortened copy
+    // of the note here would be a prompt no resume ever sends, which the guard is right not to recognise.
     recordAuthFailure({
         input: {
-            prompt: "The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. …",
+            prompt: withResumeNote("finish the report", RESUME_NOTES.auth),
             conversationId: "auth-3",
             isolated: true,
         },

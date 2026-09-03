@@ -102,9 +102,10 @@ export type ConversationStatus = "idle" | "streaming" | "awaiting" | "error";
  *
  * The pieces a turn is made of live beside this file, and each is one thing: turnStream.ts renders a run and
  * carries control messages to it, transcriptClock.ts holds the transcript and decides when a frame is shown,
- * turnReducer.ts says what a frame MEANS, turnFailures.ts says what a failed turn does to the conversation, and
- * turnRequest.ts states the turn on the wire. What is left here is the conversation itself: the selection, the
- * queue, the cards, and the effects a frame has on all three. */
+ * transcriptState.ts is that transcript as a value and every transition it can make, turnFailures.ts says what a
+ * failed turn does to the conversation, and turnRequest.ts states the turn on the wire. What a frame MEANS is
+ * settled before it reaches this window, by the daemon's fold (sandbox-contract/transcript-fold.ts). What is left
+ * here is the conversation itself: the selection, the queue, the cards, and the effects a frame has on all three. */
 export class Conversation {
     /* The transcript and its clock. The run's entries are buffered into it and applied on the next paint; what
      * each one means for the conversation beyond its rows comes back through `applied` below, because what a
