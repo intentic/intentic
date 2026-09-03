@@ -4,7 +4,7 @@ import { Conversation } from "./conversation";
 import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
 import { snapshotTab, type StoredTab } from "./tabSnapshot";
-import { closeTabs, type Reveal, reveal, type RevealEntry } from "./useChat";
+import { closeConversations, type Reveal, reveal, type RevealEntry } from "./useChat";
 
 /* SUMMONING THE CHAT, FOR EVERY WINDOW AT ONCE, the one way a surface outside the panel puts something on it.
  *
@@ -39,15 +39,15 @@ export type Summons =
     // A workflow run taken into the panel: every window's panel follows the run from its own ledger reads
     // (ChatPanel's follower), so the summons carries the run's id and nothing else.
     | { readonly kind: `run`; readonly runId: string }
-    /* THE OTHER HALF OF A BOARD CARD: closing the chat it stands for, everywhere, the same way opening it shows
-     * it everywhere. A card is not a tab of the window it is drawn in — it is the conversation, seen from the
-     * board — so its × closing only the pressed window's copy came out wrong exactly where the reveal did: with
-     * the chat POPPED OUT, the press on the board shut an invisible shadow of it while the floating window went
-     * on showing the chat, and the words that close set aside were the shadow's stale copy of a message still
-     * being typed one window away.
+    /* THE OTHER HALF OF A BOARD CARD: closing the CONVERSATION it stands for, everywhere, the same way opening
+     * it shows it everywhere. A card is not a tab of the window it is drawn in — it is the conversation, seen
+     * from the board — so its × closing only the pressed window's copy came out wrong exactly where the reveal
+     * did: with the chat POPPED OUT, the press on the board shut an invisible shadow of it while the floating
+     * window went on showing the chat. And because it is the conversation going rather than a surface's view of
+     * it, the words unsent in it go too (useChat.closeConversations): one press, on a card whose mark says so.
      *
-     * The panel's OWN × is untouched and still local (ChatTabList): a gesture on the strip acts on the strip it
-     * was made in, which is the rule this is the other side of, not an exception to. */
+     * The panel's OWN × is untouched and still local (ChatTabList): a gesture on the strip narrows the strip it
+     * was made in and sets the words aside, which is the rule this is the other side of, not an exception to. */
     | { readonly kind: `close`; readonly conversationIds: readonly string[] };
 
 const portable = (entry: RevealEntry): RevealEntry => (entry instanceof Conversation ? { ...snapshotTab(entry), queued: [] } : entry);
@@ -67,7 +67,7 @@ const apply = (summons: Summons): void => {
         return;
     }
     if (summons.kind === `close`) {
-        closeTabs(new Set(summons.conversationIds));
+        closeConversations(new Set(summons.conversationIds));
         return;
     }
     reveal(summons);

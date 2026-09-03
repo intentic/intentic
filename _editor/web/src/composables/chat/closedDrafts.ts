@@ -113,8 +113,8 @@ export const claimClosedDrafts = (conversationIds: readonly string[]): readonly 
     return found;
 };
 
-/** ...and let one go without reopening it: the board's × on a card that stands for nothing but these words,
- *  which is the user saying they are done with them. */
+/** ...and let one go without reopening it: the board's ×, which closes the conversation whole and these words
+ *  with it (useChat.closeConversations), the user saying they are done with them. */
 export const forgetClosedDraft = (conversationId: string): void => {
     if (kept.value.some((entry) => entry.conversationId === conversationId)) {
         publish(kept.value.filter((entry) => entry.conversationId !== conversationId));

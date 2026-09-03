@@ -25,7 +25,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { agentTranscript, type AgentTranscript } from "./agentTranscript";
-import { claimClosedDrafts, keepClosedDraft } from "./closedDrafts";
+import { claimClosedDrafts, forgetClosedDraft, keepClosedDraft } from "./closedDrafts";
 import { drawsChat, elsewhereStrip, publishStrip } from "./chatEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
@@ -1861,29 +1861,38 @@ const setPanes = (ids: readonly string[]): void => {
     }
 };
 
-/* Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
- * detach from each in-flight turn (Conversation.abort is soft, the daemon-side run keeps working and reopening
- * reattaches to it), drop each cached transcript, and keep at least one conversation, a fresh chat when
- * the set empties the strip. Closing the active tab moves focus to the last remaining one (VSCode behaviour, the
- * same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
+/* TWO CLOSES, and what they mean is decided by the surface the press was made on rather than by what the tab
+ * holds.
  *
- * ...and the ONE thing that would not survive is set aside instead (closedDrafts): a message standing in the
- * composer lives in this browser and nowhere else, so an unconfirmed × must not be able to destroy it. The
- * whole tab is kept, not merely its text, because what is unsent may be a staged attachment or a message
- * queued behind a running turn, and because the chat has to come back as itself (its picks, its session, its
- * persona) rather than as a fresh tab wearing somebody's words. The board goes on drawing a card for it, and
- * opening that card is what takes the entry back (resolveEntry).
+ *   · THE PANEL'S OWN × (a rail row, the strip menu's Close / Close Others / Close to the Right / Close All)
+ *     takes the chat OFF THIS SURFACE. The panel is an operating surface, the subset of conversations the reader
+ *     has chosen to look at, and its × narrows that subset; the conversation itself goes on existing, on the
+ *     board and in History. So the one thing a close would destroy is set aside instead (closedDrafts): a
+ *     message standing in the composer lives in this browser and nowhere else, and the board goes on drawing a
+ *     card for it, named by the message, which is how the words come back (resolveEntry claims them). The whole
+ *     tab is kept, not merely its text, because what is unsent may be a staged attachment or a message queued
+ *     behind a running turn, and because the chat has to come back as itself (its picks, its session, its
+ *     persona) rather than as a fresh tab wearing somebody's words.
+ *   · THE BOARD'S × CLOSES THE CONVERSATION (closeConversations, below): a card is the conversation seen from
+ *     the board, so its × is the thing itself going, the tab in every window and the words with it, in one press.
+ *     Setting the words aside here was tried and read as a close that did nothing: the tab left the popped-out
+ *     chat while the card stayed, now standing for the message, and only a second × on that same card took it.
  *
- * ONLY THE WINDOW DRAWING THE CHAT PUTS WORDS THERE (drawsChat, chatEcho.ts): a window that is not drawing it
+ * Both detach from each in-flight turn (Conversation.abort is soft, the daemon-side run keeps working and
+ * reopening reattaches to it), drop each cached transcript, and keep at least one conversation, a fresh chat
+ * when the set empties the strip. Closing the active tab moves focus to the tab it was on before. The
+ * daemon-side sessions survive: a closed chat is still in History.
+ *
+ * ONLY THE WINDOW DRAWING THE CHAT PUTS WORDS ASIDE (drawsChat, chatEcho.ts): a window that is not drawing it
  * holds a shadow of the strip, frozen at whatever was in its composers when the panel left, and a close that
  * stored one of those would set aside a message the user has since sent out in the floating window — offered
  * back, by a later card click, into the composer they sent it from. Such a window still closes its copy; it just
- * has nothing to say about what was in it. The floating window, applying the same close, says it. */
-export const closeTabs = (ids: ReadonlySet<string>): void => {
-    traceFocus(`close`, { ids: [...ids], active: activeId.value });
+ * has nothing to say about what was in it. */
+const closing = (ids: ReadonlySet<string>, unsent: `keep` | `drop`): void => {
+    traceFocus(`close`, { ids: [...ids], active: activeId.value, unsent });
     for (const conversation of conversations.value) {
         if (ids.has(conversation.conversationId)) {
-            if (conversation.unsent.value && drawsChat.value) {
+            if (unsent === `keep` && conversation.unsent.value && drawsChat.value) {
                 keepClosedDraft(snapshotTab(conversation));
             }
             conversation.abort();
@@ -1893,6 +1902,21 @@ export const closeTabs = (ids: ReadonlySet<string>): void => {
     const remaining = conversations.value.filter((conversation) => !ids.has(conversation.conversationId));
     const next = remaining.length > 0 ? remaining : [new Conversation()];
     setConversations(next, activeId.value, `close`);
+};
+
+/** The panel's close: these chats leave THIS surface, and whatever was unsent in them is set aside. */
+export const closeTabs = (ids: ReadonlySet<string>): void => {
+    closing(ids, `keep`);
+};
+
+/** The board's close: these CONVERSATIONS go, the tab in this window and the words set aside for them alike.
+ *  Applied by every window from the board's summons (summon.ts), so the forgetting is idempotent: the first
+ *  window to apply it empties the shared store, and the rest find nothing there. */
+export const closeConversations = (ids: ReadonlySet<string>): void => {
+    for (const id of ids) {
+        forgetClosedDraft(id);
+    }
+    closing(ids, `drop`);
 };
 
 /* THE SAME CLOSE, ASKED FOR BY THE DAEMON RATHER THAN BY THE USER, the tabs of agents that left the roster

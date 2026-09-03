@@ -162,11 +162,16 @@ const closable = computed(() => unregistered(props.agent.status));
 /* ...and what closing it COSTS, which is the one thing that differs across those standings. A `starting` card's
  * turn is already running daemon-side: the close only stops this window rendering it, and the agent takes its
  * own card the moment the daemon files it: so the draft's reassurance ("this never started") would be a lie
- * about work in flight, and the sentence has to say which of the two the reader is looking at. */
+ * about work in flight, and the sentence has to say which of the two the reader is looking at. A draft holding
+ * an unsent message is the one case where the close does destroy something, the board's × closes the
+ * conversation whole rather than setting the words aside the way the rail's does (AgentsView.closeAgent), so
+ * the hint says so on the card that already wears the mark. */
 const closeHint = computed(() =>
     props.agent.status === `starting`
         ? `Close: the turn keeps running, and its own card appears once the sandbox has filed it`
-        : `Close, this never started, so there is no branch or transcript to keep`,
+        : props.agent.unsent
+          ? `Close: this never started, and the unsent message goes with it`
+          : `Close, this never started, so there is no branch or transcript to keep`,
 );
 // The drill-in label, or undefined for a draft (nothing to review: a click only focuses the docked chat).
 // Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.

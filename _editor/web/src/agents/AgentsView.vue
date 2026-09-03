@@ -33,7 +33,6 @@ import { chatWide } from "../composables/chat/chatSurface";
 import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { summonChat } from "../composables/chat/summon";
-import { forgetClosedDraft } from "../composables/chat/closedDrafts";
 import { agentTabOf, chatStrip, useChat } from "../composables/chat/useChat";
 import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -936,27 +935,25 @@ const reviewAgent = (agent: FleetAgent): void => {
     open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
-/* The only exit a card with no registry entry has (AgentCard's `closable`): closing its TAB, which is the same
- * conversation this card is the other skin of, so the card leaves the board with it. Not `archive`: there is
- * nothing daemon-side to file, and deliberately the identical act the chat rail's × performs, down to asking
- * for no confirmation, so the two surfaces cannot come to mean different things by the same press.
+/* The only exit a card with no registry entry has (AgentCard's `closable`): closing the CONVERSATION, which this
+ * card is the board's skin of, so the card leaves with it. Not `archive`: there is nothing daemon-side to file.
+ *
+ * NOT THE SAME PRESS AS THE CHAT RAIL'S ×, and the difference is which thing each surface is a view of. The
+ * chat panel, popped out or docked, is an operating surface: the subset of conversations the reader has chosen
+ * to look at, so its × takes a chat off that surface and no more, the words unsent in it are set aside and this
+ * card stays, wearing them (useChat.closeTabs). The board is the conversations themselves, so its × is the
+ * conversation going: the tab in every window, the words with it, in one press (useChat.closeConversations).
+ * It used to set the words aside like the rail does, which read as a × that did nothing: the tab left the
+ * popped-out chat and the focus moved on, while the card sat there for a second press to take. The card's mark
+ * and its close hint say what goes (AgentCard.closeHint), and that is the whole of the asking.
  *
  * A SUMMONS, like every other gesture on this board: the chat it closes may be another window's floating one,
  * and a card is the conversation seen from here rather than a tab of this window. Pressed locally it shut the
- * board window's own invisible copy while the floating window went on showing the chat — and the words that
- * close set aside were that copy's, frozen at whatever it last heard, not the message actually being typed.
- *
- * TWO PRESSES WHEN THERE IS A MESSAGE IN IT, and that is the whole shape of it. The first closes the tab, which
- * sets the unsent words aside rather than destroying them (chat/closedDrafts), so the card stays, now standing
- * for the message alone. The second is the press that means the message too, and it is the only way this app
- * throws away something the user wrote: asked for twice, on a card wearing an unsent mark that says what is
- * about to go. */
+ * board window's own invisible copy while the floating window went on showing the chat. A card standing for
+ * set-aside words alone, with no tab anywhere, goes through the same summons: every window finds no tab and
+ * forgets the words, which is what closing that card means. */
 const closeAgent = (agent: FleetAgent): void => {
-    if (agent.open) {
-        summonChat({ kind: `close`, conversationIds: [agent.id] });
-        return;
-    }
-    forgetClosedDraft(agent.id);
+    summonChat({ kind: `close`, conversationIds: [agent.id] });
 };
 
 /* --- The card's right-click menu ------------------------------------------------------------------

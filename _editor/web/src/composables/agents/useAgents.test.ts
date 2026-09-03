@@ -489,10 +489,12 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
-    /* THE × ON THE BOARD, WITH THE CHAT POPPED OUT: the reported glitch. The press is a summons; the floating
-     * window applies it, sets the message aside (closedDrafts) and drops the tab, and the board over here hears
-     * those two facts in that order on the one channel. The card it draws is the SAME card throughout, live
-     * draft to set-aside draft: it never vanishes between the two, and it never starts dating itself. */
+    /* THE × ON THE POPPED-OUT CHAT'S RAIL, seen from the board: the reported glitch. The rail's × takes the chat
+     * off that surface and no more (useChat.closeTabs): the floating window sets the message aside (closedDrafts)
+     * and drops the tab, and the board over here hears those two facts in that order on the one channel. The
+     * card it draws is the SAME card throughout, live draft to set-aside draft: it never vanishes between the
+     * two, and it never starts dating itself. (The board's own × is the other close, the conversation's, and
+     * takes the card with it: summon.test.ts.) */
     it("turns a draft card into a set-aside card in one step when the popped-out chat closes it", async () => {
         const { receiveChatNote } = await import("../chat/chatChannel");
         const { receiveFloatingNote } = await import("../floating");

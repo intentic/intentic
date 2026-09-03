@@ -262,10 +262,36 @@ it(`closes a chat in a window that never saw the click`, () => {
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
 });
 
-/* ...and a window that is NOT drawing the chat has nothing to say about what was in its composer (draftEcho's
- * rule, which this is the second reader of). Its tab is frozen at whatever it last heard, so a close that set
- * THAT aside would keep a message the user has since sent out in the floating window, and hand it back into the
- * composer they sent it from at the next click on the card. */
+/* ...AND IT IS THE CONVERSATION THAT CLOSES, not a surface's view of it. The panel's own × narrows the panel and
+ * sets the words aside for the card to keep (useChat.closeTabs); the board's × is the card itself going, so the
+ * window drawing the chat drops the tab AND the words, in the one press. Setting them aside here read as a ×
+ * that did nothing: the tab left the popped-out chat while the card stayed for a second press to take. */
+it(`drops the words with the tab when the board closes a chat, in the window drawing it`, async () => {
+    const chat = useChat();
+    const clicked = new Conversation();
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
+    chat.active.value.draft.value = `half a thought`;
+    await nextTick();
+
+    deliver(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
+
+    expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
+    expect(closedDrafts.value).toEqual([]);
+});
+
+// The same press on a card that stands for set-aside words alone: no window has a tab for it, and every window
+// forgets the words, which is what closing that card means.
+it(`forgets words already set aside when the board closes the card standing for them`, () => {
+    keepClosedDraft(setAside(`cnv-parked`, `the half-written message`));
+
+    deliver(wireSummons({ kind: `close`, conversationIds: [`cnv-parked`] }));
+
+    expect(closedDrafts.value).toEqual([]);
+});
+
+/* ...and a window that is NOT drawing the chat has nothing to say about what was in its composer either way
+ * (useChat.closing's rule). Its tab is frozen at whatever it last heard, so a close that set THAT aside would
+ * keep a message the user has since sent out in the floating window. */
 it(`sets no words aside for a chat this window is only shadowing`, async () => {
     const chat = useChat();
     const clicked = new Conversation();
