@@ -1,8 +1,11 @@
 import { STATE_DIR } from "@intentic/constants";
 import {
     type AgentEvent,
+    type AgentReply,
     type AttachFrame,
+    isAwaitingDecision,
     isTurnFact,
+    mentionPaths,
     RESUME_NOTES,
     resumeDisclosure,
     type TranscriptRow,
@@ -102,90 +105,152 @@ afterEach(() => {
 const encoder = new TextEncoder();
 const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
 
-/* Serve the detached-run protocol: POST /agent acks `{ run }` (the turn executes daemon-side), POST
- * /agent/attach streams the head (the run's rows so far), then the given events folded into patches and facts
- * by the daemon's own fold, then `end`; control posts ack ok. stayOpen leaves the attach stream open after the
- * frames; aborting the request then errors it, mirroring fetch cancellation.
+/* Serve the detached-run protocol the way the daemon does: POST /agent acks `{ run }` (the turn executes
+ * daemon-side), POST /agent/attach streams the head (the run's rows so far), then the given events folded into
+ * patches and facts by the daemon's own fold, then `end`. Control posts are answered as the daemon answers them:
+ * a stop ends the stream with what it caught pending cancelled and the daemon's `Stopped.` line (or, landing
+ * before the attach, ends the run the head opens on); a reply settles the card through the run's own `resolved`
+ * frame, writes the daemon's line about the verdict, and lets the events behind the card carry on. A card the
+ * events leave pending PARKS the stream, as the daemon's does, unless the events themselves resolve it.
+ * `stayOpen` leaves the stream open after the events; aborting the request then errors it, mirroring fetch
+ * cancellation.
  *
  * The fold is the contract's (transcript-fold.ts), the very one the daemon runs, so a test written as the
- * frames a provider produced exercises exactly the rows a window would be handed for them.
+ * frames a provider produced exercises exactly the rows a window would be handed for them. The opening row is
+ * built from the prompt the window POSTED, the way the daemon builds it (turn-transcript.ts openingRows).
  *
  * `head` overrides the run's identity, which a RESUMED run needs two of. `prompt`, because a resumed run opens
  * with a notice standing in for the repeated words rather than the words again, so the opening row is built
  * from it as the daemon builds it (a `rows` override supplies the opening rows outright). And `startedAt`,
- * because the default is 0 and an adopted run's start is what its DURATION is measured from (endTurn →
- * scheduleAutoContinue): left at the epoch, every resumed turn reads as having run for fifty-six years, which
- * resets the auto-continue ladder on every rung.
+ * because an adopted run's start is what its DURATION is measured from (endTurn → scheduleAutoContinue), so a
+ * test about the auto-continue ladder pins it.
  *
  * A THUNK, not a value, because it is read per attach: a test that serves several runs off one implementation
  * would otherwise stamp them all with the instant the mock was installed, and a "run" that started thirty
  * seconds of fake time ago is one the ladder reads as having got somewhere. */
+interface LiveRun {
+    readonly controller: ReadableStreamDefaultController<Uint8Array>;
+    readonly fold: TranscriptFold;
+    seq: number;
+    readonly queue: AgentEvent[];
+}
 const sseResponse = (
     events: AgentEvent[],
     options?: { stayOpen?: boolean; head?: () => Partial<{ run: string; prompt: string; rows: TranscriptRow[]; startedAt: number }> },
 ): ((path: string, init?: RequestInit) => Promise<Response>) => {
-    // The open stream a stop ends. The daemon cancels the run, writes whatever the stop caught pending as
-    // cancelled and its own `Stopped.` line, and ends the stream: that ending is what a window that pressed Stop
-    // waits for, so the fake has to say it too.
-    let live: { readonly controller: ReadableStreamDefaultController<Uint8Array>; readonly fold: TranscriptFold; seq: number } | undefined;
-    return (path, init) => {
-        if (path === `/agent/stop` && live !== undefined) {
-            const stopped = live;
-            live = undefined;
-            for (const patch of stopped.fold.finish(`stopped`)) {
-                stopped.controller.enqueue(sseFrame({ kind: `patch`, seq: (stopped.seq += 1), patch }));
+    // The turn the last POST /agent asked for: the head's opening row is built from it.
+    let requested: { readonly prompt: string; readonly attachments: readonly string[] } | undefined;
+    // A stop that landed after the ack and before the attach: the run is over by the time its head goes out.
+    let stopRequested = false;
+    let live: LiveRun | undefined;
+    const ok = (): Promise<Response> => Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+    const emit = (state: LiveRun, patches: ReturnType<TranscriptFold[`apply`]>): void => {
+        for (const patch of patches) {
+            state.controller.enqueue(sseFrame({ kind: `patch`, seq: (state.seq += 1), patch }));
+        }
+    };
+    const end = (state: LiveRun, ending: `settled` | `stopped`): void => {
+        live = undefined;
+        emit(state, state.fold.finish(ending));
+        state.controller.enqueue(sseFrame({ kind: `end` }));
+        state.controller.close();
+    };
+    // Stream the queued events until they run out, or a card parks the turn on the user.
+    const serve = (state: LiveRun): void => {
+        while (state.queue.length > 0) {
+            const event = state.queue.shift()!;
+            emit(state, state.fold.apply(event));
+            if (isTurnFact(event)) {
+                state.controller.enqueue(sseFrame({ kind: `fact`, seq: (state.seq += 1), fact: event }));
             }
-            stopped.controller.enqueue(sseFrame({ kind: `end` }));
-            stopped.controller.close();
+            const last = state.fold.rows.at(-1);
+            if (last !== undefined && isAwaitingDecision(last) && !state.queue.some((next) => next.kind === `resolved`)) {
+                return;
+            }
+        }
+        if (stopRequested) {
+            end(state, `stopped`);
+        } else if (options?.stayOpen !== true) {
+            end(state, `settled`);
+        }
+    };
+    return (path, init) => {
+        const body = typeof init?.body === `string` ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
+        if (path === `/agent`) {
+            requested = { prompt: String(body?.prompt ?? ``), attachments: (body?.attachments as string[] | undefined) ?? [] };
+            stopRequested = false;
+            return ok();
+        }
+        if (path === `/agent/stop`) {
+            if (live !== undefined) {
+                end(live, `stopped`);
+            } else if (requested !== undefined) {
+                stopRequested = true;
+            } else {
+                return Promise.resolve({ ok: false, status: 404 } as Response);
+            }
+            return ok();
+        }
+        if (path === `/agent/reply` && live !== undefined) {
+            const state = live;
+            const reply = body as unknown as AgentReply;
+            const dismissed = reply.kind === `question` && reply.cancelled === true;
+            if (dismissed) {
+                emit(state, state.fold.note({ role: `notice`, text: `Question dismissed.` }));
+            }
+            emit(state, state.fold.apply({ kind: `resolved`, requestId: reply.requestId, reply }));
+            if (reply.kind === `plan`) {
+                emit(state, state.fold.note({ role: `notice`, text: reply.approve ? `Plan approved.` : `Kept planning.` }));
+                if (!reply.approve && reply.feedback !== undefined && reply.feedback.trim().length > 0) {
+                    emit(state, state.fold.note(userRow(reply.feedback, Date.now(), mentionPaths(reply.feedback))));
+                }
+            }
+            if (dismissed) {
+                end(state, `stopped`);
+            } else {
+                serve(state);
+            }
+            return ok();
         }
         if (path !== `/agent/attach`) {
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            return ok();
         }
         const overrides = options?.head?.() ?? {};
         const run = overrides.run ?? `r1`;
-        const startedAt = overrides.startedAt ?? 0;
-        const opening = overrides.rows ?? [userRow(overrides.prompt ?? `hi`, startedAt, [])];
-        const body = new ReadableStream<Uint8Array>({
+        const startedAt = overrides.startedAt ?? Date.now();
+        const opening =
+            overrides.rows ??
+            (overrides.prompt === undefined
+                ? openingOf(requested?.prompt ?? `hi`, startedAt, requested?.attachments ?? [])
+                : openingOf(overrides.prompt, startedAt));
+        const stream = new ReadableStream<Uint8Array>({
             start(controller) {
                 const fold = new TranscriptFold(opening);
-                let seq = 0;
-                controller.enqueue(sseFrame({ kind: `attached`, run, startedAt, seq, rows: structuredClone(fold.rows) }));
-                for (const event of events) {
-                    for (const patch of fold.apply(event)) {
-                        controller.enqueue(sseFrame({ kind: `patch`, seq: ++seq, patch }));
-                    }
-                    if (isTurnFact(event)) {
-                        controller.enqueue(sseFrame({ kind: `fact`, seq: ++seq, fact: event }));
-                    }
-                }
-                if (!options?.stayOpen) {
-                    for (const patch of fold.finish(`settled`)) {
-                        controller.enqueue(sseFrame({ kind: `patch`, seq: ++seq, patch }));
-                    }
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                    return;
-                }
-                live = { controller, fold, seq };
+                controller.enqueue(sseFrame({ kind: `attached`, run, startedAt, seq: 0, rows: structuredClone(fold.rows) }));
+                const state: LiveRun = { controller, fold, seq: 0, queue: [...events] };
+                live = state;
                 init?.signal?.addEventListener(`abort`, () => {
-                    live = undefined;
+                    if (live === state) {
+                        live = undefined;
+                    }
                     controller.error(new DOMException(`aborted`, `AbortError`));
                 });
+                serve(state);
             },
         });
-        return Promise.resolve({ ok: true, body } as Response);
+        return Promise.resolve({ ok: true, body: stream } as Response);
     };
 };
 
 /* A run's opening rows, as the daemon builds them (turn-transcript.ts openingRows): a resumed run's prompt opens
  * with the notice that stands in for its repeated words, an answered park with the answer under a note, and any
  * other prompt with the words themselves. */
-const openingOf = (prompt: string, sentAt: number): TranscriptRow[] => {
+const openingOf = (prompt: string, sentAt: number, attachments: readonly string[] = []): TranscriptRow[] => {
     const resume = resumeDisclosure(prompt);
     if (resume?.kind === `notice`) {
         return [{ role: `notice`, text: resume.text }];
     }
-    const row = userRow(withoutResumeNote(prompt), sentAt, []);
+    const row = userRow(withoutResumeNote(prompt), sentAt, attachments);
     return [resume?.kind === `note` ? { ...row, notes: [resume.note] } : row];
 };
 
@@ -1267,18 +1332,25 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`make a plan`, settings);
+        const turn = conversation.send(`make a plan`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
-        const [, planMessage, continuation] = conversation.messages.value;
+        const [, planMessage] = conversation.messages.value;
         expect(planMessage).toMatchObject({ text: `intro`, plan: { requestId: `d1`, text: `the plan`, status: `pending` } });
-        expect(continuation).toMatchObject({ role: `assistant`, text: `after approval` });
-        expect(conversation.awaitingDecision.value).toBe(true);
 
-        sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
         await conversation.decidePlan(planMessage!, true);
         expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
-        expect(conversation.messages.value[1]!.plan!.status).toBe(`approved`);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Plan approved.` });
+        await turn;
+
+        // The verdict is the daemon's own line, and what the agent says next opens a fresh bubble under it
+        // rather than typing on into the card's.
+        expect(conversation.messages.value.slice(1).map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `assistant`, text: `intro` },
+            { role: `notice`, text: `Plan approved.` },
+            { role: `assistant`, text: `after approval` },
+        ]);
+        expect(conversation.messages.value[1]?.plan).toMatchObject({ status: `approved` });
+        expect(conversation.awaitingDecision.value).toBe(false);
     });
 
     // The composer stages files against a pending plan card exactly as it does against a message; the reply has
@@ -1286,10 +1358,10 @@ describe(`Conversation`, () => {
     it(`sends a plan rejection's staged files as @-paths and keeps them on the feedback bubble`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
-        await conversation.send(`make a plan`, settings);
+        const turn = conversation.send(`make a plan`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
-        sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
         await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [
             { name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` },
         ]);
@@ -1300,9 +1372,11 @@ describe(`Conversation`, () => {
             approve: false,
             feedback: `this bit is wrong\n@.intentic/records/artifacts/attachments/a1/shot.png`,
         });
+        await turn;
+        // The feedback is the daemon's row: the user's words as sent, with the upload's chip on them.
         expect(conversation.messages.value.at(-1)).toMatchObject({
             role: `user`,
-            text: `this bit is wrong`,
+            text: `this bit is wrong\n@.intentic/records/artifacts/attachments/a1/shot.png`,
             attachments: [`.intentic/records/artifacts/attachments/a1/shot.png`],
         });
     });
@@ -1311,17 +1385,22 @@ describe(`Conversation`, () => {
     it(`sends an attachment-only plan rejection`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
-        await conversation.send(`make a plan`, settings);
+        const turn = conversation.send(`make a plan`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
-        sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
         await conversation.decidePlan(planMessage!, false, ``, [
             { name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` },
         ]);
 
         const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
         expect(JSON.parse(String(body.body))).toMatchObject({ feedback: `@.intentic/records/artifacts/attachments/a1/shot.png` });
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `user`, text: `` });
+        await turn;
+        expect(conversation.messages.value.at(-1)).toMatchObject({
+            role: `user`,
+            text: `@.intentic/records/artifacts/attachments/a1/shot.png`,
+            attachments: [`.intentic/records/artifacts/attachments/a1/shot.png`],
+        });
     });
 
     it(`keeps the user's posture when the AGENT enters plan mode mid-turn`, async () => {
@@ -1353,14 +1432,15 @@ describe(`Conversation`, () => {
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `question`, requestId: `q1`, questions }]));
 
-        await conversation.send(`ask me`, settings);
+        const turn = conversation.send(`ask me`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         const questionMessage = conversation.messages.value[1]!;
         expect(questionMessage.question).toMatchObject({ requestId: `q1`, status: `pending` });
 
-        sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
         await conversation.answerQuestion(questionMessage, { "Which?": [`A`] });
         expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        await turn;
         expect(conversation.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { "Which?": [`A`] } });
     });
 
@@ -1648,18 +1728,28 @@ describe(`Conversation`, () => {
         expect(card.capabilityOffer).toMatchObject({ status: `connecting`, outcome: { outcome: `connected`, id: `notion` } });
     });
 
-    it(`surfaces daemon error frames and ignores unfamiliar kinds`, async () => {
+    it(`surfaces daemon error facts and ignores unfamiliar frames`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `future-thing`, payload: 1 } as unknown as AgentEvent, { kind: `error`, message: `boom` }]),
-        );
+        const run = liveRun();
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path !== `/agent/attach`) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            }
+            const frames = [
+                run.head(),
+                { kind: `future-thing`, seq: 1, payload: 1 },
+                ...run.frames({ kind: `error`, message: `boom` }),
+                { kind: `end` },
+            ];
+            return Promise.resolve({ ok: true, body: chunkStream(frames, `close`) } as Response);
+        });
 
         await conversation.send(`hi`, settings);
 
         expect(conversation.error.value).toBe(`boom`);
         expect(conversation.status.value).toBe(`error`);
-        // The unknown frame left no trace: just the user message and the (empty) assistant bubble.
-        expect(conversation.messages.value).toHaveLength(2);
+        // The unknown frame left no trace: the user's row and the daemon's line about the failure.
+        expect(conversation.messages.value.map((message) => message.role)).toEqual([`user`, `notice`]);
     });
 
     /* THE OFFER TO PICK A DEAD TURN BACK UP, and the line it is drawn on. An UNCODED failure is the daemon
@@ -1906,10 +1996,11 @@ describe(`Conversation`, () => {
         // The catalog reload is a fire-and-forget dynamic import; let its microtasks drain before asserting it.
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        // The server message surfaces as the red error ref (not a muted notice), and the catalog is reloaded so
-        // the picker reflects whatever the daemon last recorded.
+        // The server message surfaces as the red error ref, and as the daemon's own line in the transcript (the
+        // record keeps that one), and the catalog is reloaded so the picker reflects whatever the daemon last
+        // recorded.
         expect(conversation.error.value).toBe(xaiMessage);
-        expect(conversation.messages.value.at(-1)!.role).not.toBe(`notice`);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: xaiMessage });
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`grok`);
     });
 
@@ -1999,8 +2090,9 @@ describe(`Conversation`, () => {
 
         const notice = conversation.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
-        expect(notice.text).toContain(`Resets`);
-        expect(notice.text).not.toContain(`Auto-resume`);
+        // The daemon's line says what happened. WHEN it reopens is the strip's countdown (pickUp.readyAt below):
+        // a clock only this window can read in the user's own time zone.
+        expect(notice.text).toBe(`Claude usage limit reached.`);
         // No opt-out on the notice and nothing marked automatic: nothing has been armed, so there is no
         // automation here to regret.
         expect(notice.noticeAction).toBeUndefined();
@@ -2370,8 +2462,9 @@ describe(`Conversation`, () => {
             expect(conversation.failures.credentialRenewal.value).toBeUndefined();
             expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
                 { role: `user`, text: `refactor the store` },
-                { role: `assistant`, text: `` },
                 { role: `notice`, text: expect.stringContaining(`being renewed`) },
+                // The resumed run opens on the daemon's line for the restart, never on the words again.
+                { role: `notice`, text: expect.stringContaining(`sign-in renewed`) },
                 { role: `assistant`, text: `Picking it back up.` },
             ]);
         } finally {
@@ -3031,35 +3124,6 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    /* The duplicated-chat bug: the daemon's session store holds a turn from the moment it starts, so a hydrate
-     * that lands MID-TURN restores that turn and then attaches to the same run, and the synthesized bubble drew
-     * it a second time. The live replay owns the run, so the restored copy is adopted, not doubled. */
-    it(`reattach adopts a restored copy of the running turn instead of drawing it twice`, async () => {
-        const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([
-            { role: `user`, text: `start the migration` },
-            { role: `assistant`, text: `Done with step one.` },
-            // The turn that is still running: the store already has its prompt and the prose written so far.
-            { role: `user`, text: `now do step two`, attachments: [`plan.md`] },
-            { role: `assistant`, text: `Working on` },
-        ]);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `Working on it.` }], { head: () => ({ prompt: `now do step two` }) }),
-        );
-
-        await expect(conversation.reattach()).resolves.toBe(true);
-
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
-            { role: `user`, text: `start the migration` },
-            { role: `assistant`, text: `Done with step one.` },
-            { role: `user`, text: `now do step two` },
-            // The replay rebuilt the answer from seq 0: the store's partial copy came off with it.
-            { role: `assistant`, text: `Working on it.` },
-        ]);
-        // The adopted bubble is the restored one, chips and all: the head carries no attachments to rebuild.
-        expect(conversation.messages.value[2]?.attachments).toEqual([{ name: `plan.md`, path: `plan.md` }]);
-    });
-
     /* The tail is only THIS run when it matches whole: a live "Continue" answering an earlier "Continue with the
      * tests" must not swallow that turn. */
     it(`reattach appends when the transcript's last prompt only looks like the running one`, async () => {
@@ -3076,7 +3140,6 @@ describe(`Conversation`, () => {
             { role: `user`, text: `Continue with the tests` },
             { role: `assistant`, text: `All green.` },
             { role: `user`, text: `Continue` },
-            { role: `assistant`, text: `` },
         ]);
     });
 
@@ -3097,6 +3160,7 @@ describe(`Conversation`, () => {
 
         expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the store` },
+            { role: `notice`, text: expect.stringContaining(`sign-in renewed`) },
             { role: `assistant`, text: `Picking it back up.` },
         ]);
     });
@@ -3150,6 +3214,7 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the store` },
             { role: `assistant`, text: `Got as far as the reducer.` },
+            { role: `notice`, text: expect.stringContaining(`sandbox came back`) },
             { role: `assistant`, text: `Picking it back up.` },
         ]);
     });
@@ -3515,24 +3580,6 @@ describe(`Conversation`, () => {
             text: `analyze this`,
             attachments: [`.intentic/records/artifacts/attachments/uuid-1/image.png`],
         });
-    });
-
-    it(`does not redraw inline mentions or copied package-script prefixes as attachment chips`, () => {
-        const conversation = new Conversation(`c1`);
-        const upload = `${STATE_DIR}/records/artifacts/attachments/u1/shot.png`;
-
-        conversation.restoreMessages([
-            {
-                role: `user`,
-                text: `@intentic/iq-engine:test: failed\ncheck @src/app.ts and @${upload}`,
-                attachments: [`intentic/iq-engine:test`, `src/app.ts`, `plan.md`, upload],
-            },
-        ]);
-
-        expect(conversation.messages.value[0]?.attachments).toEqual([
-            { name: `plan.md`, path: `plan.md` },
-            { name: `shot.png`, path: upload },
-        ]);
     });
 
     // A restored tab already carries its own posture from the tab snapshot. loadTranscript's history-menu

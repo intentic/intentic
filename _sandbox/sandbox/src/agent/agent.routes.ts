@@ -14,7 +14,9 @@ import {
     type TodoItem,
     type UsageWindow,
     type WorkspaceEvent,
+    mentionPaths,
 } from "@intentic/sandbox-contract";
+import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
@@ -181,9 +183,7 @@ const silentEnding = (turn: TurnSilence): string | undefined => {
     // The two halves of "it worked and told nobody", which send a reader to two different places: a turn with
     // tool calls behind it got somewhere, and one with none never got past its own first thought.
     const did =
-        turn.toolCalls === 0
-            ? "the model started and then stopped"
-            : `${turn.toolCalls} tool call${turn.toolCalls === 1 ? "" : "s"} and then a stop`;
+        turn.toolCalls === 0 ? "the model started and then stopped" : `${turn.toolCalls} tool call${turn.toolCalls === 1 ? "" : "s"} and then a stop`;
     return `The turn ended with nothing to show for it: ${did}, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.`;
 };
 
@@ -195,8 +195,7 @@ const silentEnding = (turn: TurnSilence): string | undefined => {
  * A property of the RUNTIME rather than of the container: only the Claude Code loop enters the namespace
  * (AgentCapabilities.isolation "namespace"), while a native Codex, ACP or Pi turn is cwd'd into its worktree
  * and reaches it by working directory alone. The defaults are the ones the turn resolves for itself. */
-const entersNamespace = (input: AgentTurn): boolean =>
-    capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").isolation === "namespace";
+const entersNamespace = (input: AgentTurn): boolean => capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").isolation === "namespace";
 
 /* …and where the frame for it goes: injected ahead of `done`, so it runs the same path a provider's own failure
  * does, the activity record, the daemon log line, the ledger's outcome, the registry's `errored`, and with it
@@ -2114,7 +2113,9 @@ export const createAgentRoutes = (services: Services) => {
                     // The rejection's feedback is the user's turn: kept visible, otherwise the typed text (and
                     // the files it went with) vanish from the transcript even though the agent has them.
                     if (!input.approve && input.feedback !== undefined && input.feedback.trim().length > 0) {
-                        run?.note({ role: "user", text: input.feedback, sentAt: Date.now() });
+                        // As the user's row, chips included: the files staged against the card travel as
+                        // @-paths inside the one text field, and the uploads among them are the thumbnails.
+                        run?.note(userRow(input.feedback, Date.now(), mentionPaths(input.feedback)));
                     }
                 }
                 return { ok: true } as const;
