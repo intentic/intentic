@@ -493,6 +493,55 @@ describe("the free-trial key pool", () => {
         expect(pool.status().health).toBe(`degraded`);
     });
 
+    /* THE STALE MAP THAT TOLD EVERY TRIAL USER THE TRIAL WAS UNWELL, and the bug people actually reported: a
+     * banner reading "Free trial degraded" over an answer the model had just written, perfectly, on the first
+     * attempt.
+     *
+     * Health was judged on the SIZE of the quarantine, and an expired entry was stepped over by the walk but
+     * never removed, so the map was a record of every refusal since boot rather than of what is wrong now. One
+     * 429 on one key, once, and the word stood for the life of the process — for every user of a shared
+     * platform, since the pool is one pool. Both halves of the repair are here: a walk that meets no live
+     * sideline reports healthy, and a degraded reading left behind by traffic that has stopped expires on its
+     * own rather than waiting for a message that may not come for hours. */
+    it("stops reporting degraded once the windows it was degraded for have closed", async () => {
+        let clock = 1_000;
+        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+            const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
+            // k1's credential is refused while the clock is early, and works once it has moved on.
+            return new Response(`{}`, { status: auth === `Bearer k1` && clock < 60_000 ? 401 : 200 });
+        });
+        const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch, () => clock);
+
+        await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
+        expect(pool.status().health).toBe(`degraded`);
+
+        // Past the auth quarantine, with nobody sending anything: the reading has outlived its cause.
+        clock += 5 * 60_000 + 1;
+        expect(pool.status()).toEqual({ health: `healthy` });
+
+        // And the next real message, answered by the first key it reaches for, says so too.
+        await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
+        expect(pool.status()).toEqual({ health: `healthy` });
+    });
+
+    /* THE OTHER HALF OF THAT BANNER: the ladder's capability listing rides this same pool, under no model at
+     * all, so a refusal there sidelines a key in the same map a chat walk reads. Health counted from the map
+     * therefore reported the CHAT path as unwell because a `models?pageSize=1000` GET had been rate-limited,
+     * on a different quota, for a request no user was waiting for. */
+    it("does not read a refused capability listing as the chat path being unwell", async () => {
+        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) =>
+            init?.method === `GET` ? new Response(`{}`, { status: 429 }) : new Response(`{"choices":[1]}`, { status: 200 }),
+        );
+        const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
+
+        // The listing, refused on every key, which observes no health of its own.
+        await pool.call(``, { method: `GET`, url: `https://upstream.test/v1beta/models`, auth: `goog` });
+        // A message, answered by the first key it reaches for.
+        await pool.call(`/chat/completions`, { method: `POST`, models: [`flash`], body: () => `{}`, observeHealth: true });
+
+        expect(pool.status().health).toBe(`healthy`);
+    });
+
     /* A QUOTA IS ABOUT A MODEL, NOT A KEY, and reading it as a key fact is what would break the ladder.
      *
      * Google meters each model separately per project. If a 429 on Flash sidelined the whole key, the fallback

@@ -67,7 +67,18 @@ const activeArchived = computed(() => {
  * they spend it. It also carries the one thing that surprises people about this meter: it counts MODEL CALLS,
  * and an agent turn makes several of them, so a first question can cost more than one. Saying so beside the
  * number is cheaper than letting somebody discover it by watching twelve become seven. */
-const trialHealthIssue = computed(() => trialStatus.value.health === `degraded` || trialStatus.value.health === `unavailable`);
+
+/* NOT ANSWERING IS AN INTERRUPTION; WORKING FOR IT IS NOT, and conflating the two is what put "Free trial
+ * degraded. Failed messages are not counted." over answers that had just been written perfectly.
+ *
+ * The platform publishes one word for the shared key pool (the api's trial-pool.ts). `unavailable` means no key
+ * on any model answered, so a turn sent now fails, the user's message is held below and refunded, and Retry is
+ * a real press. `degraded` means the pool DID answer, after failing over to another key or another rung, which
+ * is the trial working as designed: nothing failed, nothing is held, and there is nothing to retry. It rode the
+ * same alarming sentence and the same button anyway, so the strip read as a failure report about a message the
+ * user was looking at the answer to. It is a qualifier on the ordinary line now, and only this state gets the
+ * strip's attention. */
+const trialUnavailable = computed(() => trialStatus.value.health === `unavailable`);
 /* SPENT IS THIS STRIP'S ALONE TO SAY. The account gate above would otherwise be up at the same moment (a spent
  * trial cannot send, and that gate reports every provider that cannot send) announcing that the trial "isn't
  * connected in this sandbox", which is both false and an argument with the sentence directly under it. The gate
@@ -81,11 +92,8 @@ const trialNotice = computed(() => {
     if (trialSpent.value) {
         return `Free trial used up for today. Connect Google to keep going free.`;
     }
-    if (trialStatus.value.health === `unavailable`) {
-        return `Free trial unavailable. Failed messages are not counted.`;
-    }
-    if (trialStatus.value.health === `degraded`) {
-        return `Free trial degraded. Failed messages are not counted.`;
+    if (trialUnavailable.value) {
+        return `Free trial isn't answering right now. Failed messages are not counted.`;
     }
     const remaining = trialStatus.value.remaining;
     const left = `${remaining} free ${remaining === 1 ? `message` : `messages`} left today`;
@@ -95,7 +103,11 @@ const trialNotice = computed(() => {
      * that there is nothing true to say, and a placeholder would be a promise about a choice not yet made. */
     const served = trialStatus.value.servedModel;
     const answered = served === undefined ? `` : `Last answer: ${served}. `;
-    return `${answered}${left}. Each agent step costs one. ${TRIAL_NOTICE}`;
+    /* The pool having to work for its answers, said last and said mildly: it explains a slow or weaker turn to
+     * whoever is watching one, and it is the honest amount of attention a state nobody can act on deserves.
+     * The model that actually answered is already named above, which is the specific version of this fact. */
+    const strained = trialStatus.value.health === `degraded` ? ` Trial capacity is tight right now, so answers can be slower.` : ``;
+    return `${answered}${left}. Each agent step costs one. ${TRIAL_NOTICE}${strained}`;
 });
 const retryTrial = async (): Promise<void> => {
     if (!reachable.value) {
@@ -146,25 +158,49 @@ const activeAccountReauth = computed(() => {
          cannot send, so the row centres on its button rather than hanging everything off the first text line. -->
     <div
         v-if="trialNotice"
-        class="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-line bg-card px-3 py-2 text-left text-2xs text-muted"
-        :class="trialSpent ? `items-center` : `items-start`"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-card px-3 py-2 text-left text-2xs text-muted"
     >
-        <Icon name="sparkles" class="shrink-0 text-link" :class="trialSpent ? `` : `mt-0.5`" />
-        <span class="min-w-0 flex-1">{{ trialNotice }}</span>
-        <Button v-if="trialHealthIssue" size="small" :text="true" class="shrink-0" :disabled="!reachable || streaming" @click="retryTrial">
-            Retry
-        </Button>
-        <!-- The door the account gate used to hold, here for as long as this strip is standing in its place:
-             spent, the list is where every other way to send is, and it costs nothing to look at. -->
-        <ChatChooseModelButton v-if="trialSpent" />
-        <!-- A place, so a link: the sign-in has an address, and Ctrl/⌘-click starts it in another tab rather
-             than taking away the conversation this strip is sitting above. -->
-        <RouterLink
-            :to="{ path: '/sandbox/agent', query: { connect: 'gemini' } }"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-        >
-            Connect Google
-        </RouterLink>
+        <Icon name="sparkles" class="shrink-0 text-link" />
+        <!-- A FLOOR, not `min-w-0`, the lesson ChatContinueStrip's own row records: every control beside this
+             is `shrink-0`, so a sentence that may shrink to nothing means the line always "fits", `flex-wrap`
+             never engages, and flexbox takes the whole overflow out of the TEXT instead: one word per line
+             beside a row of buttons it cannot squeeze. Given a floor it wraps, and the actions drop to their
+             own row, which is what wrapping is for. -->
+        <span class="min-w-[14rem] flex-1">{{ trialNotice }}</span>
+        <!-- THE ACTIONS, ONE BOX, ONE BASELINE. They were siblings of the sentence: a PrimeVue button next to
+             a hand-rolled link chip, so the row carried two font sizes, two paddings and three baselines, and
+             `items-start` hung each of them from wherever its own box happened to begin. Nothing about them
+             lined up. One kit control each and one box to hold them fixes the alignment at the source rather
+             than by nudging margins, and it is also what keeps them together when the row wraps. -->
+        <div class="flex shrink-0 items-center gap-1">
+            <Button
+                v-if="trialUnavailable"
+                size="small"
+                severity="secondary"
+                :text="true"
+                :disabled="!reachable || streaming"
+                v-tooltip.top="'Ask the platform again, and pick this chat back up if the trial answers'"
+                @click="retryTrial"
+            >
+                Retry
+            </Button>
+            <!-- The door the account gate used to hold, here for as long as this strip is standing in its
+                 place: spent, the list is where every other way to send is, and it costs nothing to look at. -->
+            <ChatChooseModelButton v-if="trialSpent" />
+            <!-- A place, so a link, drawn as a button: the sign-in has an address, and Ctrl/⌘-click starts it
+                 in another tab rather than taking away the conversation this strip is sitting above. `as`
+                 keeps the anchor and the address while the kit owns every pixel, which is the whole reason
+                 this row lines up now. -->
+            <Button
+                :as="RouterLink"
+                :to="{ path: '/sandbox/agent', query: { connect: 'gemini' } }"
+                size="small"
+                :text="true"
+                v-tooltip.top="'Sign in with Google: no daily cap, still no subscription'"
+            >
+                Connect Google
+            </Button>
+        </div>
     </div>
     <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be refreshed,
          so surface it here (before a send fails opaquely) with a jump to reconnect. -->

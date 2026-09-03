@@ -215,11 +215,37 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
     // A rung still inside its cooldown is skipped entirely: no key on it is worth the wait (see MODEL_COOLDOWN_MS).
     const servable = (model: string | undefined, at: number): boolean => model === undefined || (cooling.get(model) ?? 0) <= at;
 
-    // Read off the live quarantine rather than recomputed per key, since a bucket is now a pair and the map is
-    // the only thing that knows which pairs exist. Cooling rungs count too: a pool whose every rung is sidelined
-    // is unavailable until the first of them comes back, and that is the moment worth naming.
+    /* WHAT IS SIDELINED RIGHT NOW: the windows still open, with the closed ones dropped as we pass them.
+     *
+     * A quarantine and a cooldown are both WINDOWS, and the walk reads them against the clock, so an entry whose
+     * window has closed is already stepped over. Nothing removed it, though, which turned both maps into a
+     * permanent record of every refusal the process had ever seen, and health was judged on `quarantine.size`.
+     * That made a sentence about this minute into a fact about the platform's whole uptime: one 429 on one key,
+     * once, and every trial user was told the trial was "degraded" for as long as the process lived, while their
+     * messages were being answered on the first attempt. Nothing could clear it but a restart.
+     *
+     * So expiry is a deletion, taken here because this is where every reader passes: health, the retry stamp and
+     * the status poll all ask the same question of the same present tense, and the maps stay the size of what is
+     * actually wrong rather than growing for the life of the deployment.
+     *
+     * Cooling rungs count as sidelined too: a pool whose every rung is cooling is unavailable until the first of
+     * them comes back, and that is the moment worth naming. */
+    const liveRetries = (at: number): readonly number[] => {
+        const times: number[] = [];
+        for (const sidelines of [quarantine, cooling]) {
+            for (const [entry, retry] of sidelines) {
+                if (retry <= at) {
+                    sidelines.delete(entry);
+                    continue;
+                }
+                times.push(retry);
+            }
+        }
+        return times;
+    };
+
     const nextRetry = (at: number): number | undefined => {
-        const times = [...quarantine.values(), ...cooling.values()].filter((retry) => retry > at);
+        const times = liveRetries(at);
         return times.length === 0 ? undefined : Math.min(...times);
     };
 
@@ -286,11 +312,25 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
          * that answers 502 instantly without asking anyone, which is the failure this whole file exists to
          * avoid. So the cooldowns are dropped for this walk and the ladder is tried as written. */
         const warm = candidates.filter((model) => servable(model, started));
+        /* WHETHER ANYTHING WAS IN THE WAY OF THIS WALK, which is the whole of what a health reading is about.
+         *
+         * Per walk, not per map. Both sideline maps also hold entries this request never needed, and one of them
+         * is not even about chat: the ladder's capability listing rides this pool under no model at all
+         * (trial-ladder.ts), so a rate-limited `models` GET sidelines a key that every chat walk then goes on
+         * using perfectly. Judging health by the map's contents read that back as the chat path being unwell,
+         * and the user was told the trial was degraded over an answer that had arrived on the first attempt,
+         * because of a request nobody was waiting for on a quota nobody spent.
+         *
+         * So what counts is only what this walk had to step over: a rung skipped for its cooldown, a key skipped
+         * for a quarantine on the model being tried, or an attempt that had to be repeated. */
+        let obstructed = warm.length !== candidates.length;
         for (const model of warm.length > 0 ? warm : candidates) {
             // `now()` rather than the walk's start: a rung sidelined a moment ago by the loop below is sidelined
             // for the rest of this walk too, and reading the clock the quarantine was written against is what
             // makes that true.
-            for (const key of healthyKeys(rotation, model, now())) {
+            const usable = healthyKeys(rotation, model, now());
+            obstructed = obstructed || usable.length !== rotation.length;
+            for (const key of usable) {
                 const remaining = deadline - now();
                 if (remaining <= 0) {
                     break;
@@ -323,8 +363,11 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
                     if (model !== undefined) {
                         cooling.delete(model);
                     }
+                    /* HEALTHY IS "NOTHING WAS IN THE WAY": the first attempt this walk made answered, and it
+                     * made that attempt without stepping over anything. Degraded is the other answer, and it
+                     * says only this: the pool answered, after working for it. */
                     if (init.observeHealth === true) {
-                        service = { health: tried === 1 && quarantine.size === 0 ? `healthy` : `degraded` };
+                        service = { health: tried === 1 && !obstructed ? `healthy` : `degraded` };
                     }
                     return { response, tried, ...(model === undefined ? {} : { model }) };
                 }
@@ -343,8 +386,17 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
         call,
         status: () => {
             const at = now();
+            const sidelined = liveRetries(at).length;
             if (service.health === `unavailable` && service.retryAt !== undefined && service.retryAt <= at) {
                 service = { health: `unknown` };
+            }
+            /* A DEGRADED READING EXPIRES WITH THE THING IT WAS ABOUT. It reports pairs sitting out a window;
+             * once the last window has closed there is nothing sitting out, and the last thing a walk did was
+             * answer, so the pool is as clean as it was before the refusal. Left standing, the word outlives
+             * its cause by however long it takes the next message to arrive, which on a quiet platform is
+             * hours of telling everyone the trial is unwell while it answers every request perfectly. */
+            if (service.health === `degraded` && sidelined === 0) {
+                service = { health: `healthy` };
             }
             return {
                 health: service.health,
