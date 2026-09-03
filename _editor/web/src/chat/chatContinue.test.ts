@@ -110,6 +110,23 @@ const button = (label: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll<HTMLButtonElement>(`button`)].find((element) => element.textContent?.trim().startsWith(label));
 // The offer, as the DOM has it: the button that carries the word, or nothing.
 const continueButton = (): HTMLButtonElement | undefined => button(`Continue`);
+/* The caret beside the press, and the panel it opens. The press's VARIANTS (another account's allowance, the
+ * standing version of the press) live behind it rather than in the row, so a test that wants one opens it the
+ * way a reader does. Its absence is an assertion in its own right: no caret means the menu would have been
+ * empty, which is the commonest ending of all. */
+const waysButton = (): HTMLButtonElement | undefined => document.querySelector<HTMLButtonElement>(`button[aria-label="Other ways on"]`) ?? undefined;
+/* jsdom measures every element as 0×0, and AnchoredOverlay reads a 0×0 anchor as one that has gone away and
+ * closes itself on the tick it opened (its own reposition guard, which is what keeps a panel from parking over
+ * a pill that has since been hidden). So the press's own row is given a box before the caret is pressed. Scoped
+ * to that one element rather than to the prototype: the pane around it measures for its own reasons, and a
+ * document where everything suddenly has a size is a different test than the one the rest of this file runs. */
+const ANCHOR_BOX = { x: 0, y: 0, top: 0, left: 0, bottom: 24, right: 160, width: 160, height: 24, toJSON: () => ({}) } as DOMRect;
+const openWays = async (): Promise<void> => {
+    const caret = waysButton()!;
+    caret.parentElement!.getBoundingClientRect = (): DOMRect => ANCHOR_BOX;
+    caret.click();
+    await settle();
+};
 // The one hint slot under the box: how anyone learns the key exists.
 const composerText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
@@ -157,8 +174,8 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
-    expect(composerText()).toContain(`stopped`);
-    expect(composerText()).toContain(`finish`);
+    // A status, not a paragraph: what happened, and what survived it.
+    expect(composerText()).toContain(`Turn stopped short · work kept`);
     // The key is named ON the button, so the reader who has already reached for the mouse learns it anyway.
     expect(continueButton()?.textContent).toContain(`Enter`);
 
@@ -209,14 +226,16 @@ it(`offers to keep continuing by itself, and says so once it is on`, async () =>
     const conversation = stoppedChat();
     await mountPanel();
 
-    const arm = button(`Auto-continue`);
-    arm!.click();
+    await openWays();
+    button(`Auto-continue`)!.click();
     await settle();
 
     expect(conversation.autoContinue.value).toBe(true);
     expect(composerText()).toContain(`Auto-continue is on`);
     // The offer is not repeated once taken: the armed strip is where the state and the way out of it live now.
+    // With nothing else behind it the caret goes too, rather than opening an empty panel.
     expect(button(`Auto-continue`)).toBeUndefined();
+    expect(waysButton()).toBeUndefined();
     expect(continueButton()).toEqual(expect.any(Object));
 
     button(`Turn off`)!.click();
@@ -253,7 +272,7 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
     await mountPanel();
 
-    expect(composerText()).toContain(`allowance`);
+    expect(composerText()).toContain(`Limit reached`);
     expect(composerText()).toContain(`about 60 min`);
     expect(continueButton()?.disabled).toBe(true);
     // The key stays what it was: a shortcut that fires into a refusal is worse than no shortcut.
@@ -280,9 +299,8 @@ it(`offers a held allowance the press straight away, and re-runs the turn instea
     await mountPanel();
 
     // No claim that work survives a turn that never started, and no wall in front of the press.
-    expect(composerText()).toContain(`allowance`);
-    expect(composerText()).toContain(`never ran`);
-    expect(composerText()).not.toContain(`work so far`);
+    expect(composerText()).toContain(`Limit reached · nothing ran · back`);
+    expect(composerText()).not.toContain(`work kept`);
     expect(continueButton()?.disabled).toBe(false);
     expect(composerText()).toContain(`Enter to continue`);
 
@@ -302,8 +320,7 @@ it(`tells a mid-turn allowance failure apart from one that refused the turn outr
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: true } };
     await mountPanel();
 
-    expect(composerText()).toContain(`allowance`);
-    expect(composerText()).toContain(`work so far`);
+    expect(composerText()).toContain(`Limit reached · work kept · back`);
     expect(continueButton()?.disabled).toBe(false);
 });
 
@@ -332,9 +349,11 @@ it(`carries the outage in the same strip, with the way out of its automatic retr
     conversation.pickUp.value = { reason: `outage`, automatic: { at: Date.now() + 120_000 } };
     await mountPanel();
 
-    expect(composerText()).toContain(`2 min`);
+    expect(composerText()).toContain(`Provider failed · retrying in about 2 min`);
     expect(composerText()).toContain(`Stop`);
-    // Nothing offers to arm a SECOND automation over a turn something is already bringing back.
+    // Nothing offers to arm a SECOND automation over a turn something is already bringing back, so the menu has
+    // nothing in it and does not appear.
+    expect(waysButton()).toBeUndefined();
     expect(button(`Auto-continue`)).toBeUndefined();
     expect(continueButton()?.disabled).toBe(false);
 });
@@ -452,10 +471,11 @@ it(`offers the other account by name on a spent allowance, and re-runs the held 
     const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
-    // Named, not just "another account": one line has to identify which subscription is about to be spent, and
+    // Named, not just "another account": one row has to identify which subscription is about to be spent, and
     // by the part of the address a person reads rather than the account id.
+    await openWays();
     const offer = button(`Continue on`);
-    expect(offer?.textContent?.trim()).toBe(`Continue on second`);
+    expect(offer?.textContent).toContain(`Continue on second`);
 
     offer?.click();
     await settle();
@@ -473,9 +493,34 @@ it(`offers no second account when the only other connection is spent too`, async
     await mountPanel();
 
     /* Read as the whole set of labels on offer, so this says what the strip DOES carry as well as what it does
-     * not: the wait's own controls survive, and only the second-account offer is gone. Asserted on the buttons
-     * rather than on the line's prose, which is worded from the live reading. */
+     * not: the wait's own control survives in the row, and only the second-account offer is gone. Asserted on
+     * the buttons rather than on the line, which is worded from the live reading. */
     const labels = [...document.querySelectorAll<HTMLButtonElement>(`button`)].map((element) => element.textContent?.trim() ?? ``);
-    expect(labels).not.toContainEqual(expect.stringContaining(`Continue on`));
     expect(labels).toContainEqual(expect.stringContaining(`Send it when it's back`));
+
+    // And opened, the menu carries only the standing version of the press: there is no other pool to name.
+    await openWays();
+    expect(button(`Continue on`)).toBeUndefined();
+    expect(button(`Auto-continue`)).toEqual(expect.any(Object));
+});
+
+/* THE ROW IS RANKED, NOT A PILE, which is this strip's own invariant and the thing another button would quietly
+ * undo. A spent allowance with somewhere else to go used to carry four controls of equal weight under two lines
+ * of prose, in front of someone who had just been refused mid-thought. What the row may hold is the state, this
+ * ending's wait, and the press; the press's VARIANTS sit behind the caret, one click away, where they read as
+ * what they are — the same verb with one thing changed. */
+it(`keeps the press's variants behind the caret rather than in the row`, async () => {
+    twoAccounts(99, 10);
+    limitChat();
+    await mountPanel();
+
+    expect(button(`Send it when it's back`)).toEqual(expect.any(Object));
+    expect(continueButton()).toEqual(expect.any(Object));
+    expect(button(`Continue on`)).toBeUndefined();
+    expect(button(`Auto-continue`)).toBeUndefined();
+
+    await openWays();
+
+    expect(button(`Continue on`)).toEqual(expect.any(Object));
+    expect(button(`Auto-continue`)).toEqual(expect.any(Object));
 });

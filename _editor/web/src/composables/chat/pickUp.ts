@@ -92,50 +92,62 @@ export interface PickUpAttempts {
     readonly maxAttempts: number;
 }
 
-/* WHAT THE STRIP SAYS, one sentence per situation, here rather than in the template so the wording is testable
- * without mounting a chat and so the four cases cannot drift apart the way three components did.
+/* WHAT THE STRIP SAYS, one short line per situation, here rather than in the template so the wording is
+ * testable without mounting a chat and so the four cases cannot drift apart the way three components did.
  *
- * Every one of them leads with the fact that decides whether to read on, the work so far is still here, and
- * only then says what is or isn't happening about it. */
-/* WHAT IS BRINGING THIS TURN BACK, AND WHY, when something other than the user is: two waits that look alike on
- * screen and are not the same promise.
+ * A STATUS, NOT A PARAGRAPH, and that is the whole of what changed. This used to be prose: what stopped the
+ * turn, that the work survived, when the allowance was due back, and a hedge about pressing sooner anyway,
+ * three clauses wrapping to two lines beside four buttons of equal weight. None of it is what someone refused
+ * mid-thought is reading for. They are looking for the way on, and every word in front of it is in the way.
  *
- * An OUTAGE retry is a guess at a provider nobody can predict, which is what the attempt count is apologising
- * for: the automation is spending the user's allowance while they watch, so it accounts for itself out loud or
- * the reasonable response is to switch it off.
+ * So the line carries the three facts that change what a person does, in the order they want them:
  *
- * A LIMIT's is an APPOINTMENT. The hour came from the provider, the fire happens once, and there is nothing to
- * keep trying, so there is no count to spend and no failure to report: opening this sentence with "the provider
- * failed this turn" would be wrong twice over about a provider that was working perfectly and said so. */
-const automaticLine = (reason: PickUpReason, at: number, attempts: PickUpAttempts | undefined, now: number): string => {
-    if (reason === `limit`) {
-        return `The allowance was spent, and this chat sends the turn again by itself when it comes back ${pickUpWhen(at, now)}. Sending it sooner works too.`;
-    }
-    const counted = attempts === undefined ? `` : ` Attempt ${attempts.attempt} of ${attempts.maxAttempts}.`;
-    return `The provider failed this turn and this chat picks it back up by itself ${pickUpWhen(at, now)}.${counted} Continuing it yourself works too.`;
-};
+ *   WHAT HAPPENED   Limit reached · Provider failed · Turn stopped short
+ *   WHAT SURVIVED   work kept, or nothing ran, the one thing a reader cannot check for themselves
+ *   WHEN            back at Fri 01:50 · retrying in about 2 min · sending again at Fri 01:50
+ *
+ * Nothing the prose knew has been dropped, the parts that are ABOUT A CONTROL moved onto that control, where
+ * they are read at the moment they matter rather than re-read on every failure: that the reset is a due date
+ * and not a wall now rides the press's own tooltip, and what arming buys rides the button that arms it. */
 
-export const pickUpLine = (pickUp: PickUp, attempts: PickUpAttempts | undefined, now: number = Date.now()): string => {
+// How many tries the thing bringing this turn back has left, spent out loud for the reason the outage's own
+// line gives: an automation spending the user's allowance while they watch has to account for itself.
+const attemptsSaid = (attempts: PickUpAttempts | undefined): string =>
+    attempts === undefined ? `` : ` · try ${attempts.attempt} of ${attempts.maxAttempts}`;
+
+/* WHAT IS BRINGING THIS TURN BACK, when something other than the user is: two waits that look alike on screen
+ * and are not the same promise.
+ *
+ * An OUTAGE retry is a guess at a provider nobody can predict, which is what the attempt count is for. A
+ * LIMIT's is an APPOINTMENT: the hour came from the provider, the fire happens once, there is nothing to keep
+ * trying, so there is no count to spend and no failure to report. Saying "provider failed" over that would be
+ * wrong twice over about a provider that was working perfectly and said so. */
+const automaticStatus = (reason: PickUpReason, at: number, attempts: PickUpAttempts | undefined, now: number): string =>
+    reason === `limit`
+        ? `Limit reached · sending again ${pickUpWhen(at, now)}`
+        : `Provider failed · retrying ${pickUpWhen(at, now)}${attemptsSaid(attempts)}`;
+
+export const pickUpStatus = (pickUp: PickUp, attempts: PickUpAttempts | undefined, now: number = Date.now()): string => {
     if (pickUp.automatic !== undefined) {
-        return automaticLine(pickUp.reason, pickUp.automatic.at, attempts, now);
+        return automaticStatus(pickUp.reason, pickUp.automatic.at, attempts, now);
     }
     if (pickUp.reason === `outage`) {
-        return `The provider failed this turn and nothing is retrying it: the work so far is still here.`;
+        return `Provider failed · work kept`;
     }
     if (pickUp.reason === `limit`) {
-        /* THE TWO SHAPES A SPENT ALLOWANCE COMES IN, which this said one sentence about for as long as it had
-         * one sentence to say. "The allowance ran out mid-turn: the work so far is still here" is true of a limit
-         * reached in flight and false twice over of the commoner one, the allowance that was already spent and
-         * refused the turn's first request: nothing ran, and there is no work so far to still be here. Saying it
-         * anyway is how a reader comes to distrust the line that is also telling them when to come back.
+        /* THE TWO SHAPES A SPENT ALLOWANCE COMES IN, which this said one thing about for as long as it had one
+         * thing to say. "Work kept" is true of a limit reached in flight and false of the commoner one, the
+         * allowance already spent when the turn's first request went out: nothing ran, and there is no work to
+         * keep. Claiming it anyway is how a reader comes to distrust the same line's answer about when to come
+         * back.
          *
-         * The reset instant is stated, never promised. It is the provider's own guess at when the window
-         * reopens and it is routinely wrong in the useful direction, so it rides as "not before", with the press
-         * live regardless (see pickUpReady) rather than held behind it. */
-        const opening = pickUp.held?.ran === false ? `The allowance was spent, so this never ran` : `The allowance ran out mid-turn: the work so far is still here`;
-        return pickUp.readyAt === undefined || pickUp.readyAt <= now
-            ? `${opening}. Sending it again is one press.`
-            : `${opening}. The allowance is due back ${pickUpWhen(pickUp.readyAt, now)}; sending it again before that may still get through.`;
+         * The reset instant is STATED, never promised, hence "back at" rather than "not before". It is the
+         * provider's own guess at when the window reopens and it is routinely wrong in the useful direction,
+         * which is why the press stays live in front of it (pickUpReady) and why the caveat lives on the press
+         * rather than here. */
+        const survived = pickUp.held?.ran === false ? `nothing ran` : `work kept`;
+        const due = pickUp.readyAt === undefined || pickUp.readyAt <= now ? `` : ` · back ${pickUpWhen(pickUp.readyAt, now)}`;
+        return `Limit reached · ${survived}${due}`;
     }
-    return `This turn stopped before it finished: the work so far is still here.`;
+    return `Turn stopped short · work kept`;
 };
