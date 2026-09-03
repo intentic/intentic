@@ -12,7 +12,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../composables/chat/conversation";
-import { providerAccounts } from "../composables/chat/providerAccounts";
+import { providerAccounts, setAccountUsage } from "../composables/chat/providerAccounts";
 import { CONTINUATIONS } from "../composables/chat/transcript";
 import { resetChat, useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
@@ -412,4 +412,70 @@ it(`names a wait that has outlasted the busy threshold`, async () => {
 
     expect(statusRow()).toContain(`busy, catching up · Manage`);
     expect(sendButton().disabled).toBe(true);
+});
+
+/* ---- the spent allowance that does not have to be waited out -------------------------------------------
+ * Every other control this strip carries answers "when": arm the appointment, count down, press once it opens.
+ * A sandbox with a second subscription connected has a better answer, and the two gestures that used to be it
+ * (pick another account in the switcher, then press Continue) had nothing on screen relating them. These pin
+ * the one press, and the case where it must not be offered at all.
+ *
+ * limitFallback.test.ts pins WHICH account may be offered; these are about the affordance existing and the
+ * press actually moving the held turn onto it. */
+
+// Two connections, the second measured with room: the state the offer exists for.
+const twoAccounts = (spentPercent: number, roomPercent: number): void => {
+    providerAccounts.value = {
+        ...providerAccounts.value,
+        claude: [
+            { id: `acc-1`, email: `first@b.c` },
+            { id: `acc-2`, email: `second@b.c` },
+        ] as never,
+    };
+    setAccountUsage(`claude`, `acc-1`, { windows: [{ kind: `five_hour`, utilization: spentPercent, gates: `all` }], measuredAt: Date.now() });
+    setAccountUsage(`claude`, `acc-2`, { windows: [{ kind: `five_hour`, utilization: roomPercent, gates: `all` }], measuredAt: Date.now() });
+};
+
+const limitChat = (): Conversation => {
+    const conversation = useChat().active.value;
+    conversation.restoreMessages([{ role: `user`, text: `clean the sandbox` }]);
+    conversation.account.value = `acc-1`;
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: false } };
+    return conversation;
+};
+
+it(`offers the other account by name on a spent allowance, and re-runs the held turn on it`, async () => {
+    twoAccounts(99, 10);
+    const conversation = limitChat();
+    // The daemon half is conversation.ts's to pin; here the only question is that the press reaches it, and
+    // reaches it with the switch already made.
+    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    await mountPanel();
+
+    // Named, not just "another account": one line has to identify which subscription is about to be spent, and
+    // by the part of the address a person reads rather than the account id.
+    const offer = button(`Continue on`);
+    expect(offer?.textContent?.trim()).toBe(`Continue on second`);
+
+    offer?.click();
+    await settle();
+
+    expect(conversation.account.value).toBe(`acc-2`);
+    // Once: the switch and the re-run are one press, not a press that also re-sends whatever it displaced.
+    expect(resume).toHaveBeenCalledTimes(1);
+});
+
+// The common sandbox has one subscription and no second pool to move to. An inert or absent-but-implied button
+// would be worse than the wait: the strip says what it can do and nothing more.
+it(`offers no second account when the only other connection is spent too`, async () => {
+    twoAccounts(99, 99);
+    limitChat();
+    await mountPanel();
+
+    /* Read as the whole set of labels on offer, so this says what the strip DOES carry as well as what it does
+     * not: the wait's own controls survive, and only the second-account offer is gone. Asserted on the buttons
+     * rather than on the line's prose, which is worded from the live reading. */
+    const labels = [...document.querySelectorAll<HTMLButtonElement>(`button`)].map((element) => element.textContent?.trim() ?? ``);
+    expect(labels).not.toContainEqual(expect.stringContaining(`Continue on`));
+    expect(labels).toContainEqual(expect.stringContaining(`Send it when it's back`));
 });

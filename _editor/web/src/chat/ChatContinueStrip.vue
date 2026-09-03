@@ -3,6 +3,7 @@ import { Button, Icon, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useAgents } from "../composables/agents/useAgents";
+import { fallbackAccount, fallbackLabel } from "../composables/chat/limitFallback";
 import { pickUpLine } from "../composables/chat/pickUp";
 import { formatWait } from "../composables/chat/usageStatus";
 import { usePaneView } from "../composables/chat/useChat";
@@ -30,7 +31,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ (event: "continue"): void }>();
 
-const { conversation, connected, pickUp, autoContinue, autoContinueAt, setAutoContinue } = usePaneView();
+const { conversation, connected, pickUp, autoContinue, autoContinueAt, setAutoContinue, provider, model, account, accounts, selectAccount } =
+    usePaneView();
 const { reachable } = useSandbox();
 const { mobile } = useDevice();
 const { setResumeAfterOutage, setResumeAfterLimit } = useAgents();
@@ -126,6 +128,41 @@ const setLimitResume = async (resume: boolean): Promise<void> => {
     }
 };
 
+/* THE WAY ON THAT DOES NOT INVOLVE WAITING, offered in the one place the wait is announced.
+ *
+ * Every other control on this strip is about WHEN: arm the appointment, count down to it, press when it opens.
+ * None of them is any use to someone with a second subscription connected and work in front of them, and the
+ * two gestures that were the answer — pick another account in the composer's switcher, then press Continue —
+ * had nothing on screen relating them. So the offer is made here, as one press.
+ *
+ * Read off the pick-up's REASON rather than off `limitWait` below, which additionally requires a reset instant:
+ * an appointment needs an hour to aim at, and this needs nothing but another pool. A limit whose reset the
+ * provider never published is precisely when a person is most stuck, and it was the case with no affordance
+ * at all.
+ *
+ * limitFallback.ts holds the judgement about which account may be offered, and why it is only ever one with a
+ * reading that has room in it. */
+const spentLimit = computed(() => (pickUp.value?.reason === `limit` ? pickUp.value : undefined));
+const fallback = computed(() =>
+    spentLimit.value === undefined
+        ? undefined
+        : fallbackAccount(provider.value, account.value, accounts.value, model.value === `` ? undefined : { id: model.value }),
+);
+
+/* Point the conversation at the other account and make the press the strip already owns. Two steps rather than
+ * a route of its own, because the daemon needs no new verb: `selectAccount` writes the credential the next turn
+ * names and `resumeHeldTurn` sends the HELD turn under it (its `routing.account` is read from the conversation),
+ * so the same work goes again on a pool that has room. The write is synchronous, so the emit below is already
+ * carrying the new account rather than racing it. */
+const continueOnFallback = (): void => {
+    const target = fallback.value;
+    if (target === undefined || !reachable.value) {
+        return;
+    }
+    selectAccount(target.id);
+    emit(`continue`);
+};
+
 const autoContinueStrip = computed(() => autoContinue.value && connected.value);
 const autoContinueLine = computed(() =>
     autoContinueAt.value === undefined
@@ -140,7 +177,14 @@ const autoContinueLine = computed(() =>
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
     >
         <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
-        <span class="min-w-0 flex-1">{{ line }}</span>
+        <!-- A FLOOR, not `min-w-0`, and the row does not survive without one. Every control beside this is
+             `shrink-0` and the sentence was the only thing that could yield, so flexbox took the whole overflow
+             out of the TEXT instead of wrapping the buttons it cannot shrink: at 520px the line broke over three
+             rows, at 340px it reached one word per line and a 274px-tall strip. `flex-wrap` was already on the
+             container and never engaged, because an item that can shrink to nothing means the line always
+             "fits". Given a floor it engages, and the buttons drop to their own row, which is what wrapping is
+             for. Sized so the longest of these sentences stays a readable paragraph rather than a column. -->
+        <span class="min-w-[14rem] flex-1">{{ line }}</span>
         <!-- The way back out of the automation, in the surface that armed it. -->
         <Button
             v-if="outage?.automatic !== undefined"
@@ -196,6 +240,23 @@ const autoContinueLine = computed(() =>
             @click="() => setLimitResume(true)"
         >
             Send it when it's back
+        </Button>
+        <!-- THE WAY ON THAT ISN'T WAITING. Ahead of Continue because on a spent allowance Continue is the
+             control that cannot work yet, and behind the appointment pair because arming is the answer for
+             someone who is leaving and this is the answer for someone who is staying. Names the account rather
+             than the act ("Continue on radarsu"), so it reads as the same press with the one thing that differs
+             appended — which is exactly what it is. -->
+        <Button
+            v-if="fallback !== undefined"
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
+            :disabled="!reachable"
+            v-tooltip.top="`Send this turn again now, on ${fallbackLabel(fallback)}'s allowance, instead of waiting for this one`"
+            @click="continueOnFallback"
+        >
+            Continue on {{ fallbackLabel(fallback) }}
         </Button>
         <!-- The standing version of the press, offered where the wish for it happens: reading this line for the
              third time in half an hour. Only while it is OFF; armed, the strip below carries both the state and
