@@ -17,6 +17,13 @@ packages:
 
 injectWorkspacePackages: true
 
+# EVERY `build` TASK IS ALSO A PNPM LINKING PASS, and turbo runs a dozen of them at once. After a script named
+# here, pnpm re-materializes the injected copies and re-links the .bin directories that hang off them — the
+# root's included — so parallel builds have several pnpm processes writing the same shims. pnpm 12.1.0 wrote a
+# shim as remove → write → chmod and reported another writer's remove as a failure, so a green tree died on
+# ERR_PNPM_CMD_SHIM_CHMOD for a shim that exists (`.bin/knip`, `.bin/tsserver`) — twice in one pipeline, in
+# builds that had nothing to do with the package whose shim it named. 12.2.0 treats the vanished path as the
+# concurrent writer it is (pnpm/pnpm#14353), which is the floor the packageManager pin has to stay above.
 syncInjectedDepsAfterScripts:
   - build
 
