@@ -93,7 +93,15 @@ const devStyleSource = async (
             index += 1;
         }
     }
-    statements.push(`export const installDevStyles = () => {};`);
+    /* AND THE OTHER HALF OF A STABLE DEV STYLESHEET: the sheets above must also stop being REPLACED by writes
+     * that change nothing. Tailwind registers every scanned source file as a watch dependency of styles.css, so
+     * saving any .ts or .vue re-pushes that sheet whole — ~900 KB, byte-identical, because a code edit rarely
+     * moves a utility — and Vite's client ends its `updateStyle` in a bare `style.textContent = content`. The
+     * browser tears the sheet down and rebuilds it for that, which repaints the document and rebuilds DevTools'
+     * Styles editor, closing an open colour picker mid-drag. Dropping the identical assignment costs one string
+     * comparison and leaves a real CSS change applying exactly as before (lib/styleStability.ts). */
+    statements.push(`import { stabilizeStyleWrites } from "@intentic/ui/style-stability";`);
+    statements.push(`export const installDevStyles = () => stabilizeStyleWrites("style[data-vite-dev-id]");`);
     return statements.join(`\n`);
 };
 

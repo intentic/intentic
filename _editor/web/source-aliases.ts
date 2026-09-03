@@ -124,6 +124,11 @@ export const sourceAliases = (): Record<string, string> => ({
     // rendering anything, so through the barrel a pure module's unit test would boot the component graph, whose
     // theme reader touches `document` at import time.
     "@intentic/ui/machine": fromRoot("_editor/ui/src/components/machineDetail.ts"),
+    // And again, for the guard that keeps a stylesheet from being replaced by a write that changes nothing. The
+    // dev-style manifest (vite.shared.ts) installs it on Vite's own `<style data-vite-dev-id>` nodes before the
+    // app mounts, from a generated module that holds imports and one call — nothing there can afford the
+    // component graph, and the guard itself is a property descriptor and a MutationObserver.
+    "@intentic/ui/style-stability": fromRoot("_editor/ui/src/lib/styleStability.ts"),
     "@intentic/ui": fromRoot("_editor/ui/src/index.ts"),
     /* THE EXTENSION KIT MUST RESOLVE TO SOURCE HERE, and unlike its neighbours above that is not a convenience
      *, it is the difference between an app and an infinite regress. `@intentic/extension-ui` is PUBLISHED, so

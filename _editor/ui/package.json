@@ -79,6 +79,10 @@
             "types": "./src/lib/pressLock.ts",
             "default": "./src/lib/pressLock.ts"
         },
+        "./style-stability": {
+            "types": "./src/lib/styleStability.ts",
+            "default": "./src/lib/styleStability.ts"
+        },
         "./loading-reveal": {
             "types": "./src/composables/loadingReveal.ts",
             "default": "./src/composables/loadingReveal.ts"
