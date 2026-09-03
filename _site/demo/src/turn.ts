@@ -1,13 +1,17 @@
-import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply, AttachFrame, TranscriptRow } from "@intentic/sandbox-contract";
+import { isTurnFact } from "@intentic/sandbox-contract";
+import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
 import type { StreamSink } from "./sse";
 
-/* THE TURN THE VISITOR WATCHES, a recorded `AgentEvent` sequence played back on a timer.
+/* THE TURN THE VISITOR WATCHES, a recorded `AgentEvent` sequence played back on a timer through the daemon's
+ * own fold.
  *
- * `/agent/attach` is an event iterator over AttachFrame, and every part of the streaming transcript is driven by
- * the frames inside it: thinking folds, text deltas type, tool cards appear pending and resolve, the todo list
- * ticks over, the context meter fills. So a script of those frames needs no cooperation from the UI at all,
- * this is the real chat panel reacting to the real protocol, and the only fiction is where the bytes came from.
+ * `/agent/attach` is an event iterator over AttachFrame: the run's rows on the head, then every change to them
+ * and every fact about the turn as each lands. The daemon makes those rows out of the frames its agents
+ * produce with one function (sandbox-contract's transcript-fold.ts), and this demo runs the same function
+ * over a script of those frames, so the streaming transcript is the real chat panel reacting to the real
+ * protocol, and the only fiction is where the frames came from.
  *
  * The two INTERACTIVE frames are why this is a demo rather than a video. A `plan` or `question` frame parks the
  * turn until `POST /agent/reply` resolves its requestId, exactly as the daemon parks a real one, so the script
@@ -235,12 +239,10 @@ const replyScript = (prompt: string): Beat[] => [
 
 /* One playing run.
  *
- * It keeps a LOG of the frames it has emitted, because that is the contract `/agent/attach` has with the client:
- * a frame carries the `seq` it was logged at, the head frame says how many were logged when the attach landed,
- * and everything up to that boundary is REPLAY (the app renders it without animating, then switches to live).
- * Any client can therefore join a turn already in progress, which in the demo is not an edge case but the
- * common one: a reload, a second tab, or the panel remounting when the visitor navigates. Without the log, each
- * attach restarted the script and the transcript began again mid-sentence.
+ * It holds ROWS, folded from the script's frames as they play, because that is the contract `/agent/attach` has
+ * with the client: the head carries the rows so far, and everything after it is a change to them or a fact about
+ * the turn. Any client can therefore join a turn already in progress, which in the demo is not an edge case but
+ * the common one: a reload, a second tab, or the panel remounting when the visitor navigates.
  *
  * Parks are promises the reply route resolves, so the script's own `await` is the same suspension the daemon's
  * turn goes through when a card is raised. */
@@ -250,7 +252,7 @@ export interface Run {
     readonly prompt: string;
     readonly startedAt: number;
     resolve: (requestId: string, reply: AgentReply) => void;
-    /** Attach one consumer: replay the log, then follow live until the run ends or the consumer goes away. */
+    /** Attach one consumer: the rows so far, then follow live until the run ends or the consumer goes away. */
     attach: (sink: StreamSink) => void;
     stop: () => void;
 }
@@ -264,28 +266,46 @@ const wait = (ms: number, signal: { stopped: boolean }): Promise<void> =>
         }
     });
 
-/** Build a run from a beat script. Frames are numbered as the daemon numbers them: 1-based `seq`. */
+type Entry = Extract<AttachFrame, { kind: "patch" | "fact" }>;
+
+/** Build a run from a beat script. Entries are numbered as the daemon numbers them: 1-based `seq`. */
 const createRun = (conversationId: string, prompt: string, beats: Beat[], now: number): Run => {
     const parks = new Map<string, (reply: AgentReply | undefined) => void>();
     const signal = { stopped: false };
-    const log: { seq: number; event: AgentEvent }[] = [];
+    const fold = new TranscriptFold(prompt.length > 0 ? [userRow(prompt, now, [])] : []);
+    // The facts so far, replayed to every attach, exactly as the daemon replays them: a window joining late still
+    // has to learn which model the turn runs on and what it has spent.
+    const facts: Entry[] = [];
+    let seq = 0;
     const sinks = new Set<StreamSink>();
     let ended = false;
     const id = `run_${conversationId}`;
 
-    const publish = (event: AgentEvent): void => {
-        const frame = { seq: log.length + 1, event };
-        log.push(frame);
+    const deliver = (entry: Entry): void => {
         for (const sink of sinks) {
             if (sink.closed) {
                 sinks.delete(sink);
                 continue;
             }
-            sink.emit({ kind: `frame`, ...frame });
+            sink.emit(entry);
         }
     };
 
-    const finish = (): void => {
+    const publish = (event: AgentEvent): void => {
+        for (const patch of fold.apply(event)) {
+            deliver({ kind: `patch`, seq: ++seq, patch });
+        }
+        if (isTurnFact(event)) {
+            const entry: Entry = { kind: `fact`, seq: ++seq, fact: event };
+            facts.push(entry);
+            deliver(entry);
+        }
+    };
+
+    const finish = (ending: `settled` | `stopped`): void => {
+        for (const patch of fold.finish(ending)) {
+            deliver({ kind: `patch`, seq: ++seq, patch });
+        }
         ended = true;
         for (const sink of sinks) {
             if (!sink.closed) {
@@ -317,7 +337,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
             }
             publish({ kind: `resolved`, requestId, ...(reply === undefined ? {} : { reply }) });
         }
-        finish();
+        finish(`settled`);
     })();
 
     return {
@@ -339,13 +359,14 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
                 parks.delete(requestId);
                 waiter(undefined);
             }
-            finish();
+            finish(`stopped`);
         },
         attach: (sink) => {
-            // The head's `seq` is the replay/live boundary: everything at or below it is this run's story so far.
-            sink.emit({ kind: `attached`, run: id, prompt, startedAt: now, seq: log.length });
-            for (const frame of log) {
-                sink.emit({ kind: `frame`, ...frame });
+            // The head's rows are the run's story so far; the facts replay behind it, then the live entries.
+            const rows: TranscriptRow[] = structuredClone(fold.rows);
+            sink.emit({ kind: `attached`, run: id, startedAt: now, seq, rows });
+            for (const fact of facts) {
+                sink.emit(fact);
             }
             if (ended) {
                 sink.emit({ kind: `end` });

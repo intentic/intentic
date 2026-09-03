@@ -1,6 +1,14 @@
 import { basename } from "node:path";
 import { sdk } from "../claude/claude-sdk.js";
-import { AskQuestionSchema, type MatchSnippet, type RestoredMessage, type RestoredQuestion, type RestoredToolCall, type TodoItem } from "@intentic/sandbox-contract";
+import {
+    AskQuestionSchema,
+    type MatchSnippet,
+    settledCards,
+    type TodoItem,
+    type TranscriptQuestion,
+    type TranscriptRow,
+    type TranscriptTool,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { ASK_TOOL_NAMES, parseAnswers } from "../agent/question-answers.js";
@@ -168,7 +176,7 @@ const blocksOf = (message: { message?: unknown }): StoredBlock[] => {
 // diff paths are relative to it, exactly as they were when streamed.
 //
 // The bubble boundary is the PROSE BLOCK, not the stored message, see restoredSessionMessages.
-export const readWorkspaceSession = async (dir: string, id: string): Promise<RestoredMessage[]> => {
+export const readWorkspaceSession = async (dir: string, id: string): Promise<TranscriptRow[]> => {
     // The dir-scoped read covers the workspace root and its LIVE worktrees, the SDK resolves worktree
     // project dirs through `git worktree list`. An ARCHIVED agent's transcript is keyed by its retired
     // worktree path, which that list no longer names, so the scoped search comes back empty with the file
@@ -219,7 +227,7 @@ const lastTurnStart = (messages: readonly { readonly type?: string; readonly mes
  * turns a prompt wearing one into the muted line that explains the gap (see restoredSessionMessages), which is
  * a turn boundary that is not a `user` row and the reason `lastTurnStart` reads the STORED messages instead of
  * the restored ones. */
-export const readWorkspaceSessionTail = async (dir: string, id: string): Promise<RestoredMessage[]> => {
+export const readWorkspaceSessionTail = async (dir: string, id: string): Promise<TranscriptRow[]> => {
     const scoped = await sdk().getSessionMessages(id, { dir });
     const messages = scoped.length > 0 ? scoped : await sdk().getSessionMessages(id);
     return restoredSessionMessages(messages.slice(lastTurnStart(messages)), dir);
@@ -243,12 +251,12 @@ export const readWorkspaceSessionTail = async (dir: string, id: string): Promise
 export const restoredSessionMessages = (
     messages: readonly { readonly type?: string; readonly message?: unknown }[],
     dir: string,
-): RestoredMessage[] => {
-    const out: RestoredMessage[] = [];
+): TranscriptRow[] => {
+    const out: TranscriptRow[] = [];
     // The bubble being written into, opened by the first thing that lands in it and closed by a prose block (or
     // by the next thing the user says). Kept OPEN across the tool_result messages between two calls: those are
     // the SDK's plumbing, and closing on one is what split a turn's run into a card apiece.
-    let bubble: { text: string; thinking: string; tools: RestoredToolCall[]; question?: RestoredQuestion; todos?: TodoItem[] } | undefined;
+    let bubble: { text: string; thinking: string; tools: TranscriptTool[]; question?: TranscriptQuestion; todos?: TodoItem[] } | undefined;
     const open = (): NonNullable<typeof bubble> => (bubble ??= { text: "", thinking: "", tools: [] });
     // Mirrors the daemon's own `flush`: a bubble that produced nothing at all is not a row.
     const flush = (): void => {
@@ -296,7 +304,7 @@ export const restoredSessionMessages = (
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
     // card is in the open bubble or already in `out`; either way it is mutated in place, so a result that lands
     // after its bubble closed needs no second pass.
-    const awaiting = new Map<string, RestoredToolCall>();
+    const awaiting = new Map<string, TranscriptTool>();
     /* tool_use id → THE QUESTION THAT CALL ASKED, to be answered by the same result. The store never saw the
      * `question` frame or the reply that released it, it has the ask tool's call (the questions, as its input)
      * and its result (the picks, as the text the model read), and those are enough to redraw the card the user
@@ -304,7 +312,7 @@ export const restoredSessionMessages = (
      * question is rebuilt here: a plan's text lives in prose the store does not mark, and a permission gate is
      * no tool call at all, so neither has a stored shape to read back. The record (turn-transcript.ts) keeps all
      * of them typed; this is the recovery for the turns that never reached it. */
-    const asked = new Map<string, RestoredQuestion>();
+    const asked = new Map<string, TranscriptQuestion>();
     // Which cards carry a call-time diff: a successful Edit/Write result is the redundant "file updated"
     // snippet, so the diff stays the card's content. Errors DO replace it (the text is the reason), the same
     // rule the live tool_call_update applies.
@@ -342,12 +350,13 @@ export const restoredSessionMessages = (
                 if (failed || !diffed.has(tool.id)) {
                     tool.content = [{ type: "text", text: resultText(block.content) }];
                 }
-                // The ask's result is the user's answer, read back as the reply the record would have kept. Text
-                // the formatter did not write leaves the card unanswered rather than wearing a decision.
+                // The ask's result is the user's answer, read back as the reply that released the card and
+                // settled the same way the fold settles one (card-status.ts). Text the formatter did not write
+                // leaves the card unanswered rather than wearing a decision.
                 const question = asked.get(block.tool_use_id);
                 const reply = question === undefined ? undefined : parseAnswers(question.questions, block.tool_use_id, resultText(block.content));
                 if (question !== undefined && reply !== undefined) {
-                    question.reply = reply;
+                    Object.assign(question, settledCards({ question }, reply).question);
                 }
             }
             // A user message carrying only tool_results is the SDK's plumbing, not something the user said.
@@ -415,7 +424,7 @@ export const restoredSessionMessages = (
                  * call lands in the row beneath. A call whose input is not the ask's shape is an ordinary card. */
                 const ask = ASK_TOOL_NAMES.has(block.name) ? AskInputSchema.safeParse(block.input) : undefined;
                 if (ask?.success === true) {
-                    const question: RestoredQuestion = { requestId: block.id, questions: ask.data.questions };
+                    const question: TranscriptQuestion = { requestId: block.id, questions: ask.data.questions, status: "pending" };
                     open().question = question;
                     flush();
                     asked.set(block.id, question);
@@ -426,7 +435,7 @@ export const restoredSessionMessages = (
                 if (diff !== undefined) {
                     diffed.add(block.id);
                 }
-                const tool: RestoredToolCall = {
+                const tool: TranscriptTool = {
                     id: block.id,
                     // The same normalization the live stream applies, so a restored card reads exactly like
                     // the one it replaces rather than reverting to the raw MCP tool id.

@@ -1,4 +1,4 @@
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { parseRuntimeHistory, withRuntimeHistory } from "./runtime-history.js";
 
@@ -21,7 +21,7 @@ test("leaves an ordinary prompt alone", () => {
  * it can read them itself; tool OUTPUT is deliberately absent, being the bulk of a transcript and re-derivable
  * from the workspace. */
 test("carries the files a turn touched and the files the user attached", () => {
-    const history: RestoredMessage[] = [
+    const history: TranscriptRow[] = [
         { role: "user", text: "fix the build", attachments: ["shot.png"] },
         {
             role: "assistant",
@@ -42,8 +42,8 @@ test("carries the files a turn touched and the files the user attached", () => {
  * the new runtime spelled exactly like a row the agent genuinely said: the flag is for human readers only, and
  * any rendering of it here would hand the agent the one fact the feature exists to withhold. */
 test("renders a placed assistant row identically to a spoken one: the mark never reaches the agent", () => {
-    const spoken: RestoredMessage[] = [{ role: "assistant", text: "I checked the tests." }];
-    const planted: RestoredMessage[] = [{ role: "assistant", text: "I checked the tests.", placed: true }];
+    const spoken: TranscriptRow[] = [{ role: "assistant", text: "I checked the tests." }];
+    const planted: TranscriptRow[] = [{ role: "assistant", text: "I checked the tests.", placed: true }];
 
     const envelope = withRuntimeHistory("carry on", planted);
     expect(envelope).toBe(withRuntimeHistory("carry on", spoken));
@@ -51,7 +51,7 @@ test("renders a placed assistant row identically to a spoken one: the mark never
 });
 
 test("spends its budget on the end of a long conversation, not its opening", () => {
-    const history: RestoredMessage[] = Array.from({ length: 40 }, (_, index) => ({
+    const history: TranscriptRow[] = Array.from({ length: 40 }, (_, index) => ({
         role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
         text: `message ${index}: ${"x".repeat(7_000)}`,
     }));
@@ -68,14 +68,14 @@ test("spends its budget on the end of a long conversation, not its opening", () 
  * the next runtime inherits the work and not the reason for it. A card nobody answered says nothing. */
 test("carries the answer to a question the turn asked, and nothing for one nobody answered", () => {
     const questions = [{ question: "Which store?", header: "Store", multiSelect: false, options: [{ label: "Postgres", description: "p" }] }];
-    const history: RestoredMessage[] = [
+    const history: TranscriptRow[] = [
         { role: "user", text: "choose" },
         {
             role: "assistant",
             text: "Two ways.",
-            question: { requestId: "q1", questions, reply: { kind: "question", requestId: "q1", answers: { "Which store?": ["Postgres"] } } },
+            question: { requestId: "q1", questions, status: "answered", answers: { "Which store?": ["Postgres"] } },
         },
-        { role: "assistant", text: "Again?", question: { requestId: "q2", questions } },
+        { role: "assistant", text: "Again?", question: { requestId: "q2", questions, status: "cancelled" } },
     ];
     const prompt = withRuntimeHistory("go on", history);
     expect(prompt).toContain("Assistant: Two ways.\n[asked: The user answered: - Store: Postgres]");

@@ -8,7 +8,6 @@ import HoverCard from "../../components/HoverCard.vue";
 import ReviewStat from "../../components/ReviewStat.vue";
 import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
-import type { ChatAttachment } from "../../composables/chat/transcript";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
 import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "../../composables/workspace/commitMessage";
@@ -363,7 +362,7 @@ const STEP_MARKS: Record<DraftReportRow[`status`], { icon: IconName; spin?: bool
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 // The prompt as the card takes it: its words and whatever pictures were attached to it, since a screenshot is
 // often the whole of what was asked and a card that dropped it would be quoting half a sentence.
-const firstPromptOf = (id: string): { text?: string; attachments?: readonly ChatAttachment[] } | undefined => {
+const firstPromptOf = (id: string): { text?: string; attachments?: readonly string[] } | undefined => {
     const conversation = conversations.value.find((c) => c.conversationId === id);
     const prompt = conversation?.messages.value.find((message) => message.role === `user`);
     return prompt === undefined ? undefined : { text: prompt.text, attachments: prompt.attachments };

@@ -4,7 +4,7 @@
 // is what it does NOT render. A shared conversation is the one surface of this product an outsider ever
 // touches, so "there is nothing on it that reaches back into the workspace" has to be checked against real
 // output rather than argued from the source.
-import type { RestoredMessage, SharePayload } from "@intentic/sandbox-contract";
+import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
 
@@ -54,7 +54,7 @@ const publish = (payload: SharePayload | null): HTMLElement => {
     return element;
 };
 
-const conversation = (messages: readonly RestoredMessage[], detail: SharePayload["detail"] = `everything`): SharePayload => ({
+const conversation = (messages: readonly TranscriptRow[], detail: SharePayload["detail"] = `everything`): SharePayload => ({
     title: `Login redirect fix`,
     sharedAt: 1786372320000,
     detail,

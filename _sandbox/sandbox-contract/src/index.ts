@@ -89,6 +89,8 @@ export { vpnContract } from "./contracts/vpn.contract.js";
 export { workflowsContract } from "./contracts/workflows.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./events.js";
+export * from "./card-status.js";
+export * from "./mentions.js";
 export * from "./sse.js";
 export * from "./routes.js";
 /* THE CONTAINER'S FIXED DIRECTORY LAYOUT, re-exported so extensions can reach it.

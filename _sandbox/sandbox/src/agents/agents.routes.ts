@@ -265,7 +265,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         /* SPEAK AS THE AGENT, the user's words appended to the record as an assistant row, no turn behind them,
          * no reply. Marked `placed` so a HUMAN re-reading the transcript can tell (the flag never reaches any
-         * agent-facing text, see RestoredMessageSchema).
+         * agent-facing text, see TranscriptRowSchema).
          *
          * The session drop is the half that makes it real. Appending alone would show the line to every reader
          * but the one that matters: a next turn that RESUMES its provider session never re-reads the record, so
@@ -321,7 +321,6 @@ export const createAgentsRoutes = (services: Services) => {
                             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
                     }
                 }
-                await services.transcripts.open(agent);
                 await services.transcripts.append(agent, [{ role: "assistant", text: input.text, placed: true }]);
                 await services.agents.clearSession(input.id);
                 return true;

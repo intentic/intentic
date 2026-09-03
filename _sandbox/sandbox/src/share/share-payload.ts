@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import type { RestoredMessage, RestoredToolCall, ShareDetail, ToolCallContent } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool, ShareDetail, ToolCallContent } from "@intentic/sandbox-contract";
 import { SHARE_FILES_DIR } from "@intentic/sandbox-contract/share-paths";
 import { SECRET_PATTERNS } from "../public/public-files.js";
 
@@ -21,7 +21,7 @@ import { SECRET_PATTERNS } from "../public/public-files.js";
  *   · `notes`, the context the daemon prepended to a turn (a rebase that moved the branch, dependencies that
  *     are behind, retrieved workspace context). The published page has no surface that draws them, so keeping
  *     them would publish text nobody can read, which is strictly worse than not keeping it.
- *   · The cards a turn parked on (`question`, `plan`, `permission`, …, RestoredMessageSchema's card fields),
+ *   · The cards a turn parked on (`question`, `plan`, `permission`, …, TranscriptRowSchema's card fields),
  *     for the same reason: the share view draws prose, thinking and tool cards and nothing interactive, so
  *     a card would leave as unreadable JSON. The day it draws them, the question and its picks belong at
  *     BOTH levels, they are the two speakers deciding something together. */
@@ -93,7 +93,7 @@ const shareContent = (content: readonly ToolCallContent[], pictures: Pictures): 
     });
 
 // One tool call, recursively, a delegation's nested calls are part of the work it did.
-const shareTool = (tool: RestoredToolCall, pictures: Pictures): RestoredToolCall => ({
+const shareTool = (tool: TranscriptTool, pictures: Pictures): TranscriptTool => ({
     id: tool.id,
     name: tool.name,
     category: tool.category,
@@ -106,21 +106,21 @@ const shareTool = (tool: RestoredToolCall, pictures: Pictures): RestoredToolCall
 });
 
 export interface SharedTranscript {
-    readonly messages: RestoredMessage[];
+    readonly messages: TranscriptRow[];
     readonly pictures: readonly SharePicture[];
 }
 
-export const shareTranscript = (messages: readonly RestoredMessage[], detail: ShareDetail): SharedTranscript => {
+export const shareTranscript = (messages: readonly TranscriptRow[], detail: ShareDetail): SharedTranscript => {
     const pictures = new Pictures();
-    const shared = messages.map((message): RestoredMessage => {
-        const base: RestoredMessage = {
+    const shared = messages.map((message): TranscriptRow => {
+        const base: TranscriptRow = {
             role: message.role,
             text: redact(message.text),
             ...(message.sentAt === undefined ? {} : { sentAt: message.sentAt }),
             // A row the user placed wearing the agent's voice keeps its mark. A share is a HUMAN-facing page,
             // the one audience the flag exists for, and a recipient reading planted words as the agent's own
             // is exactly the confusion the mark was added to prevent. (The agent-facing handoff stays blind to
-            // it; see RestoredMessageSchema.)
+            // it; see TranscriptRowSchema.)
             ...(message.placed === true ? { placed: true } : {}),
         };
         /* Attachments ride BOTH levels: a screenshot the user attached is part of what they said, not part of

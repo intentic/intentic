@@ -27,7 +27,7 @@ const fakeServices = (root: string): Services =>
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         agents: unstubbed<Services["agents"]>("agents", { sessionIdOf: () => undefined }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root }),
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { open: async () => {}, append: async () => {} }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
 

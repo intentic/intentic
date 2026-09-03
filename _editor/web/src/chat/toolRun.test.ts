@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { summarizeRun } from "./toolRun";
 
 let next = 0;
-const tool = (over: Partial<ChatTool> & Pick<ChatTool, "category">): ChatTool => ({
+const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "category">): TranscriptTool => ({
     id: `t${(next += 1)}`,
     name: `Tool`,
     status: `completed`,
     ...over,
 });
 
-const read = (): ChatTool => tool({ category: `read`, name: `Read`, target: `a.ts` });
-const search = (): ChatTool => tool({ category: `search`, name: `Grep`, target: `foo` });
-const run = (): ChatTool => tool({ category: `execute`, name: `Bash`, target: `pnpm test` });
-const edit = (): ChatTool => tool({ category: `edit`, name: `Edit`, target: `a.ts` });
+const read = (): TranscriptTool => tool({ category: `read`, name: `Read`, target: `a.ts` });
+const search = (): TranscriptTool => tool({ category: `search`, name: `Grep`, target: `foo` });
+const run = (): TranscriptTool => tool({ category: `execute`, name: `Bash`, target: `pnpm test` });
+const edit = (): TranscriptTool => tool({ category: `edit`, name: `Edit`, target: `a.ts` });
 
 describe(`summarizeRun`, () => {
     it(`counts the calls the mark stands in for`, () => {

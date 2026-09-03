@@ -61,7 +61,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         }),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });

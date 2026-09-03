@@ -1,6 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import { type CardDocument, documentOf, type ToolCallContent } from "@intentic/sandbox-contract";
-import type { ChatTool } from "../composables/chat/transcript";
+import { type CardDocument, documentOf, type ToolCallContent, type TranscriptTool } from "@intentic/sandbox-contract";
 import { codeLangForPath } from "@intentic/code-read";
 import { diffStat } from "./chatToolDiff";
 
@@ -10,7 +9,7 @@ import { diffStat } from "./chatToolDiff";
  * agent/tool-calls.ts); anything unknown falls back to its ACP category, so an MCP tool or a brand-new
  * provider tool still gets a sane icon and a plain-text body instead of nothing.
  *
- * Deliberately pure and synchronous: `present()` takes a ChatTool and returns everything the card renders, so
+ * Deliberately pure and synchronous: `present()` takes a TranscriptTool and returns everything the card renders, so
  * the whole taxonomy is unit-testable without mounting a component. */
 
 // A tool's textual output, shaped for the renderer that fits it. `text` is the fallback every tool can use;
@@ -58,7 +57,7 @@ export interface ToolPresentation {
 }
 
 // Category → icon. The floor every tool lands on when no per-name presenter claims it.
-const CATEGORY_ICONS: Record<ChatTool["category"], IconName> = {
+const CATEGORY_ICONS: Record<TranscriptTool["category"], IconName> = {
     read: `file`,
     edit: `file-edit`,
     delete: `trash`,
@@ -116,19 +115,19 @@ interface Presenter {
     readonly icon?: IconName;
     // Shapes the tool's joined text output. Absent ⇒ the plain text box; returning undefined ⇒ no body at all
     // (a bare header), same as a tool with no presenter and empty output.
-    readonly body?: (text: string, tool: ChatTool) => ToolBody | undefined;
+    readonly body?: (text: string, tool: TranscriptTool) => ToolBody | undefined;
     // The header's result phrase, from the joined text and the call itself. Absent ⇒ no summary.
-    readonly summary?: (text: string, tool: ChatTool) => string | undefined;
+    readonly summary?: (text: string, tool: TranscriptTool) => string | undefined;
 }
 
 // A Bash call's `target` IS the command, so the output box shouldn't repeat it, split them into a `$ cmd`
 // line plus the output beneath, the shape a terminal-shaped result actually wants.
-const commandBody = (text: string, tool: ChatTool): ToolBody => ({ kind: `command`, command: tool.target ?? ``, output: text });
+const commandBody = (text: string, tool: TranscriptTool): ToolBody => ({ kind: `command`, command: tool.target ?? ``, output: text });
 
 // Total +/− across a call's structured diffs; undefined when it carries none (so Edit-family tools whose
 // backend sent no diff simply have no summary rather than a misleading "+0 −0").
 // Signature matches Presenter["summary"] so it can be used as one directly; the joined text is irrelevant here.
-const diffSummary = (_text: string, tool: ChatTool): string | undefined => {
+const diffSummary = (_text: string, tool: TranscriptTool): string | undefined => {
     const diffs = (tool.content ?? []).filter((entry) => entry.type === `diff`);
     if (diffs.length === 0) {
         return undefined;
@@ -246,7 +245,7 @@ const presenterFor = (name: string): Presenter => {
     return PRESENTERS[lower] ?? (lower.startsWith(`browser `) ? BROWSER_PRESENTER : {});
 };
 
-export const present = (tool: ChatTool): ToolPresentation => {
+export const present = (tool: TranscriptTool): ToolPresentation => {
     const presenter = presenterFor(tool.name);
     const content = tool.content ?? [];
     /* A document is a diff the reader wants as PROSE, so it leaves the diff list and takes its own place in the

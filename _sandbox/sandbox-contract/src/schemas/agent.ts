@@ -434,22 +434,15 @@ export const StartedTurnSchema = z.object({
     run: z.string().describe("The id of the run that just started. Hand it back when you attach, so the stream resumes rather than replaying."),
 });
 export type StartedTurn = z.infer<typeof StartedTurnSchema>;
-// Attach to a conversation's turn run (live, or finished within the retention window). `run`+`after` is the
-// resume cursor of a client whose stream dropped: frames after `after` replay when `run` still names the
-// current run; a mismatch (a newer turn started meanwhile) replays that run from its first frame instead.
+// Attach to a conversation's turn run (live, or finished within the retention window). The head carries the
+// run's rows whole, so there is no cursor to resume from: a client that reconnects takes the rows again and
+// applies what follows. `run` names the run the client was watching, so the head's own id tells it whether a
+// newer turn has started meanwhile.
 export const AttachTurnSchema = z.object({
     conversationId: ConversationIdSchema.describe("Which conversation to watch."),
     run: z
         .string()
         .optional()
-        .describe("The run you were watching. If a newer turn has started since, the stream replays that one from its beginning instead."),
-    after: z
-        .number()
-        .int()
-        .min(0)
-        .optional()
-        .describe(
-            "The last frame you already have. Everything after it replays, then the stream goes live. Leave it out to start from the beginning.",
-        ),
+        .describe("The run you were watching. If a newer turn has started since, the head names that one instead, and its rows are that turn's."),
 });
 export type AttachTurn = z.infer<typeof AttachTurnSchema>;

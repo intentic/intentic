@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { usePaneView } from "../composables/chat/useChat";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import ChatToolCard from "./ChatToolCard.vue";
@@ -71,7 +71,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
             </span>
         </div>
         <div v-if="expanded" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
-            <ChatToolCard v-for="tool in group.tools" :key="tool.id" :tool="tool as ChatTool" :live="live" />
+            <ChatToolCard v-for="tool in group.tools" :key="tool.id" :tool="tool as TranscriptTool" :live="live" />
         </div>
     </div>
 </template>

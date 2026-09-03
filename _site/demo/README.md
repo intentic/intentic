@@ -38,7 +38,7 @@ blocked and unpinned rows remain non-admitted.
 | `src/transport.ts` | what the demo claims from `fetch`/`WebSocket`/`XMLHttpRequest`, and the socket shim |
 | `src/platform.ts` | the platform as a fetch handler: the session and the sandbox row the gates need |
 | `src/daemon.ts` | the daemon as a fetch handler: the route table and the `/events` stream |
-| `src/turn.ts` | the recorded `AgentEvent` run behind `/agent/attach`, with its frame log |
+| `src/turn.ts` | the recorded `AgentEvent` run behind `/agent/attach`, folded into the rows and patches the chat draws |
 | `src/sse.ts` | the event-iterator wire format |
 | `src/terminal.ts` | the recorded pty, as `TerminalServerMessage` frames |
 | `src/browser.ts` | the recorded stream of the agent's Chromium, drawn pages played down the real picture wire |

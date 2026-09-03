@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { type ToolGroup, groupConsecutiveTools, groupDiffSummary } from "./toolGrouping";
 
-const tool = (name: string, target?: string, id?: string): ChatTool => ({
+const tool = (name: string, target?: string, id?: string): TranscriptTool => ({
     id: id ?? `t-${name}-${target ?? "none"}-${Math.random().toString(36).slice(2, 6)}`,
     name,
     category: `edit`,
@@ -10,7 +10,7 @@ const tool = (name: string, target?: string, id?: string): ChatTool => ({
     target,
 });
 
-const editWithDiff = (target: string, additions: number, deletions: number, id?: string): ChatTool => ({
+const editWithDiff = (target: string, additions: number, deletions: number, id?: string): TranscriptTool => ({
     id: id ?? `t-${Math.random().toString(36).slice(2, 6)}`,
     name: `Edit`,
     category: `edit`,
@@ -62,7 +62,7 @@ describe(`groupConsecutiveTools`, () => {
         const result = groupConsecutiveTools(tools);
         expect(result).toHaveLength(2);
         expect((result[0] as ToolGroup).tools).toHaveLength(3);
-        expect((result[1] as ChatTool).name).toBe(`Read`);
+        expect((result[1] as TranscriptTool).name).toBe(`Read`);
     });
 
     it(`produces multiple groups in one tool list`, () => {
@@ -79,7 +79,7 @@ describe(`groupConsecutiveTools`, () => {
         const result = groupConsecutiveTools(tools);
         expect(result).toHaveLength(3);
         expect((result[0] as ToolGroup).tools).toHaveLength(3);
-        expect((result[1] as ChatTool).name).toBe(`Read`);
+        expect((result[1] as TranscriptTool).name).toBe(`Read`);
         expect((result[2] as ToolGroup).tools).toHaveLength(4);
     });
 

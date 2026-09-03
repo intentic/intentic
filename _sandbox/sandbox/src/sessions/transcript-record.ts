@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type RestoredMessage, RestoredMessageSchema } from "@intentic/sandbox-contract";
+import { type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
 
 /* THE TRANSCRIPT RECORD, what each conversation actually said, written down by the daemon that streamed it.
  *
@@ -26,35 +26,19 @@ import { type RestoredMessage, RestoredMessageSchema } from "@intentic/sandbox-c
 const FILE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 export interface TranscriptRecord {
-    /* Open the record BEFORE its next turn starts. `adopt` supplies history from before this record existed.
-     * This boundary matters: opening at settlement re-reads the provider store AFTER it has recorded
-     * the new turn, then appends the live frames for that same turn, duplicating every first turn and doing a
-     * provider-store parse on the daemon's hottest completion path.
+    /* Open a record as a COPY of another's first `keep` rows, how a branch begins: a branch is a new
+     * conversation, so nothing it should start with is anywhere in its own namespace, and the turns it inherits
+     * are sitting in the record it was cut from. Every other record is created by its first settled turn's
+     * append, so this is the one opening there is.
      *
-     * AN EMPTY ADOPTION LEAVES THE RECORD UNOPENED, rather than writing the empty file that would say "this
-     * conversation had no history". The two are indistinguishable on disk and only one of them is usually true:
-     * adoption comes back empty for a conversation that genuinely has nothing behind it AND for one whose
-     * provider store simply could not be read (an id the registry never learned, a session file swept, a
-     * runtime with no store to read at all). Writing the file made the second case permanent, every later open
-     * saw a file and returned early, and a conversation frozen that way carries nothing across a runtime
-     * handoff for the rest of its life, because the record is what seeds the replacement session
-     * (turn-transcript.ts → handoffHistory).
-     *
-     * The retry this buys is bounded: the first settled turn appends and creates the file, so a conversation
-     * re-adopts at most once more, and only while it has produced nothing recordable at all. */
-    readonly open: (conversationId: string, adopt: () => Promise<readonly RestoredMessage[]>) => Promise<void>;
-    /* Open a record as a COPY of another's first `keep` rows, how a branch begins. It is `open` with a
-     * different source of opening history: a branch is a new conversation, so nothing it should start with is
-     * anywhere in its own namespace, and the turns it inherits are sitting in the record it was cut from.
-     *
-     * Same `wx` write and the same no-op-if-opened rule as `open`, which is what makes a branch's later turns
-     * (which may still name their origin) leave the copy alone. */
+     * A `wx` write and a no-op when the file already exists, which is what makes a branch's later turns (which
+     * may still name their origin) leave the copy alone. */
     readonly fork: (conversationId: string, source: string, keep: number) => Promise<void>;
-    // Add one settled turn. Callers open first; append never consults a provider store.
-    readonly append: (conversationId: string, messages: readonly RestoredMessage[]) => Promise<void>;
+    // Add one settled turn, creating the record on the first.
+    readonly append: (conversationId: string, messages: readonly TranscriptRow[]) => Promise<void>;
     // The whole conversation, oldest first. Empty ⇒ this conversation has no record (never written, or written
     // under a daemon whose history volume is gone), the caller decides what that means.
-    readonly read: (conversationId: string) => Promise<RestoredMessage[]>;
+    readonly read: (conversationId: string) => Promise<TranscriptRow[]>;
     // The record's byte size, undefined when no record exists. Append-only plus rewind's truncate, so this is a
     // version key in both directions: any change moves it, which is what lets the search fan-out cache what it
     // extracted instead of re-reading the whole store per keystroke (see agent-transcript.ts).
@@ -81,19 +65,19 @@ export interface TranscriptRecord {
     readonly truncate: (conversationId: string, keep: number) => Promise<number>;
 }
 
-const lines = (messages: readonly RestoredMessage[]): string => messages.map((message) => `${JSON.stringify(message)}\n`).join("");
+const lines = (messages: readonly TranscriptRow[]): string => messages.map((message) => `${JSON.stringify(message)}\n`).join("");
 
 // One stored line. An append killed mid-write leaves a torn final line, and a schema the contract has since
 // moved on from leaves an unparseable row: either must cost that row and not the conversation it sits in, the
 // same argument agents-store.ts makes for the roster.
-const row = (line: string): RestoredMessage[] => {
+const row = (line: string): TranscriptRow[] => {
     let parsed: unknown;
     try {
         parsed = JSON.parse(line);
     } catch {
         return [];
     }
-    const message = RestoredMessageSchema.safeParse(parsed);
+    const message = TranscriptRowSchema.safeParse(parsed);
     return message.success ? [message.data] : [];
 };
 
@@ -107,34 +91,6 @@ const rawRows = async (path: string): Promise<string[]> => {
 };
 
 export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
-    open: async (conversationId, adopt) => {
-        if (!FILE_ID.test(conversationId)) {
-            return;
-        }
-        const path = join(dir, `${conversationId}.jsonl`);
-        const opened = await stat(path).then(
-            () => true,
-            () => false,
-        );
-        if (opened) {
-            return;
-        }
-        // Adoption finishes before the provider starts (startConversationTurn awaits this promise), so the
-        // provider store still contains only older turns. `wx` makes two accidental openers converge without
-        // either overwriting the other; the conversation mutex normally means there is only one.
-        const opening = await adopt();
-        // Nothing to open WITH is not the same as nothing to open, see the interface. Left unopened so the
-        // next turn asks again; the first settled turn's append is what finally creates the file.
-        if (opening.length === 0) {
-            return;
-        }
-        await mkdir(dir, { recursive: true });
-        await writeFile(path, lines(opening), { flag: "wx" }).catch((error: unknown) => {
-            if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-                throw error;
-            }
-        });
-    },
     fork: async (conversationId, source, keep) => {
         if (!FILE_ID.test(conversationId) || !FILE_ID.test(source) || keep <= 0) {
             return;

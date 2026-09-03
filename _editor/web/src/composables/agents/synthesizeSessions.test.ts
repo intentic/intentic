@@ -3,7 +3,7 @@ import { STATE_DIR } from "@intentic/constants";
 // tools, diffs, notices, not a summary), the preparation refuses WHOLE when any source can't be captured
 // completely, and the composed chat opens as a draft: prompt in the composer, transcripts as chips, nothing
 // sent until the user decides what to spend on it.
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn(), sandboxUpload: vi.fn() }));
@@ -90,7 +90,7 @@ const openTwoPanes = (): readonly [string, string] => {
 };
 
 // The daemon's record for each source, keyed by conversation id: what /agents/:id/transcript answers.
-const mockTranscripts = (byId: Record<string, RestoredMessage[]>): void => {
+const mockTranscripts = (byId: Record<string, TranscriptRow[]>): void => {
     sandboxRequestMock.mockImplementation((path: string) => {
         const match = /^\/agents\/([^/]+)\/transcript$/u.exec(path);
         const messages = match === null ? undefined : byId[decodeURIComponent(match[1] ?? ``)];

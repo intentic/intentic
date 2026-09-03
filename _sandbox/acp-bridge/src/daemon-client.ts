@@ -1,26 +1,20 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import {
-    type AgentEvent,
-    AgentEventSchema,
-    type AgentReply,
-    type AgentTurn,
-    type RestoredMessage,
-    sseData,
-    sseFrames,
-} from "@intentic/sandbox-contract";
+import { type AgentReply, type AgentTurn, type AttachFrame, AttachFrameSchema, sseData, sseFrames, type TranscriptRow } from "@intentic/sandbox-contract";
 
-/* The bridge's view of the sandbox daemon: the /agent SSE stream plus the decision/answer side channels and
- * the session store, every call carrying an `editor`-scoped control token (x-intentic-control, see the
- * daemon's auth/grants.ts). A 401 surfaces as ACP auth_required so the editor re-runs the auth flow; a 403
- * names the scope violation, which for this bridge means the daemon's editor scope and this client have
- * drifted apart. Unknown frame kinds are skipped (forward compatibility: a newer daemon must not break an
+/* The bridge's view of the sandbox daemon: a turn started with POST /agent and watched over /agent/attach (the
+ * run's rows on the head, then every change to them and every fact about the turn), plus the reply side
+ * channel and the session store, every call carrying an `editor`-scoped control token (x-intentic-control,
+ * see the daemon's auth/grants.ts). A 401 surfaces as ACP auth_required so the editor re-runs the auth flow; a
+ * 403 names the scope violation, which for this bridge means the daemon's editor scope and this client have
+ * drifted apart. Unknown frame shapes are skipped (forward compatibility: a newer daemon must not break an
  * older bridge). */
 
 export interface DaemonClient {
-    readonly streamTurn: (turn: AgentTurn, signal: AbortSignal) => AsyncGenerator<AgentEvent>;
+    // The whole attach stream of the turn just started: its head, its entries, its end.
+    readonly streamTurn: (turn: AgentTurn, signal: AbortSignal) => AsyncGenerator<AttachFrame>;
     // Un-parks a turn waiting on any interactive card (plan / question / permission), one route, one body.
     readonly postReply: (reply: AgentReply) => Promise<void>;
-    readonly getSession: (id: string) => Promise<RestoredMessage[]>;
+    readonly getSession: (id: string) => Promise<TranscriptRow[]>;
     // The auth probe (also `intentic-acp login`'s validation call).
     readonly listSessions: () => Promise<void>;
 }
@@ -41,35 +35,31 @@ export const createDaemonClient = (url: string, token: string): DaemonClient => 
         }
         return response;
     };
+    const post = (path: string, body: unknown, signal?: AbortSignal): Promise<Response> =>
+        request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), ...(signal === undefined ? {} : { signal }) });
 
     return {
         async *streamTurn(turn, signal) {
-            const response = await request("/agent", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(turn),
-                signal,
-            });
+            // The ack names the run; the attach is what carries it. Two requests because the turn runs detached
+            // on the daemon whether or not anybody watches, and the watcher is a separate connection by design.
+            const started = (await (await post("/agent", turn, signal)).json()) as { run?: string };
+            const response = await post("/agent/attach", { conversationId: turn.conversationId, ...(started.run === undefined ? {} : { run: started.run }) }, signal);
             if (response.body === null) {
                 throw RequestError.internalError({ details: "sandbox returned no stream" });
             }
             for await (const frame of sseFrames(response.body)) {
-                const parsed = AgentEventSchema.safeParse(sseData(frame));
+                const parsed = AttachFrameSchema.safeParse(sseData(frame));
                 if (parsed.success) {
                     yield parsed.data;
                 }
             }
         },
         postReply: async (reply) => {
-            await request("/agent/reply", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(reply),
-            });
+            await post("/agent/reply", reply);
         },
         getSession: async (id) => {
             const response = await request(`/sessions/${encodeURIComponent(id)}`);
-            const body = (await response.json()) as { messages?: RestoredMessage[] };
+            const body = (await response.json()) as { messages?: TranscriptRow[] };
             return body.messages ?? [];
         },
         listSessions: async () => {

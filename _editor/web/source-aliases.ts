@@ -151,6 +151,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // reason as the two above: it is derivation over the wire types rather than the wire itself, and a caller
     // that only wants to compose an ask must not resolve every schema in the contract to get there.
     "@intentic/sandbox-contract/chores": fromRoot("_sandbox/sandbox-contract/src/chores/index.ts"),
+    // The transcript fold, the one that turns a turn's frames into the rows every reader draws: the daemon runs
+    // it, and the chat applies its patches. Off the barrel for the same reason again, it is derivation over the
+    // wire types, and the chat's transcript state (and its unit tests) reach it without the wire behind it.
+    "@intentic/sandbox-contract/transcript-fold": fromRoot("_sandbox/sandbox-contract/src/transcript-fold.ts"),
     "@intentic/sandbox-contract": fromRoot("_sandbox/sandbox-contract/src/index.ts"),
     // The extension-registry file format, imported by the wire contract (schemas.ts), so without this line
     // the dev server resolves it to a dist/ that only exists once the lib has been built.

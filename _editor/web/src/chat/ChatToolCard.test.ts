@@ -6,7 +6,7 @@
 // draws nothing and throws nothing: only a mounted render catches it.
 import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatSurface";
 
 // ChatToolCard's import chain pulls in app-wide singletons that read browser/runtime globals at import time:
@@ -21,7 +21,7 @@ let app: App | undefined;
 // `surface` is what the card can reach beyond itself (chatSurface.ts). Left out, the card falls back to the
 // inert one, which is exactly the shape a conversation published to the public renders under, so the default
 // here is also the published case.
-const mount = (tool: ChatTool, live = true, surface?: ChatSurface): HTMLElement => {
+const mount = (tool: TranscriptTool, live = true, surface?: ChatSurface): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatToolCard, { tool, live }) });

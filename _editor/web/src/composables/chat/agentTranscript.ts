@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentProvider, RestoredMessage, TurnEnding } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, TranscriptRow, TurnEnding } from "@intentic/sandbox-contract";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxRequestVia } from "../sandbox/sandboxClient";
 import { supportsRoute } from "../sandbox/useDaemonRoutes";
@@ -40,7 +40,7 @@ import type { SessionRef } from "./turnRequest";
  * `ending` is the daemon's account of how the last turn ENDED, already folded into the pick-up state the chat
  * decides with, and the reason a tab that never watched it stop can still offer to pick it up
  * (Conversation.adoptEnding). */
-export type AgentTranscript = { readonly session?: SessionRef; readonly ending?: PickUp; readonly messages: RestoredMessage[] } | "gone";
+export type AgentTranscript = { readonly session?: SessionRef; readonly ending?: PickUp; readonly messages: TranscriptRow[] } | "gone";
 
 /* `at` is the box holding the conversation, undefined for the active one, and it belongs in the KEY as much as
  * in the request: two sandboxes can hold one conversation id (a workspace cloned onto a second machine, a
@@ -73,7 +73,7 @@ const read = async (conversationId: string, at: string | undefined): Promise<Age
         harness?: AgentHarness;
         account?: string;
         ending?: TurnEnding;
-        messages?: RestoredMessage[];
+        messages?: TranscriptRow[];
     };
     /* The id WITH the runtime that minted it, or nothing: a session that cannot say where it resumes cannot
      * answer the only question it is read for ("does my next message resume this?"), and half-answering it is

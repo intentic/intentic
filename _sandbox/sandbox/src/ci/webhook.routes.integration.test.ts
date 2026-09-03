@@ -50,7 +50,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
@@ -197,7 +197,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });

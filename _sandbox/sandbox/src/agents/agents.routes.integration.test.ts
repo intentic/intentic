@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 
 import { createApp } from "../app.js";
 
@@ -50,11 +50,11 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
-    // The worktree identity frame precedes every provider frame; the stub composition's root base is aaaa….
+    const { facts } = await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
+    // The worktree identity fact precedes every provider fact; the stub composition's root base is aaaa….
     // `unenforced` because this sandbox cannot build the namespace: the turn still works in its worktree, but
     // the guarantee comes from the path redirect rather than from mounts, and the operator is told so.
-    expect(events[0]).toEqual({ kind: "worktree", branch: "agent/conv1", base: "aaaaaaa", unenforced: true });
+    expect(facts[0]).toEqual({ kind: "worktree", branch: "agent/conv1", base: "aaaaaaa", unenforced: true });
     // The single binding point: the turn's cwd is the worktree, not /work.
     expect(seen?.cwd).toBe("/history/worktrees/conv1");
     // Both main-tree history snapshots (attribution fence + turn end) are skipped.
@@ -93,8 +93,8 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "fix tests in intentic", conversationId: "workspace-conv" });
-    expect(events.some((event) => event.kind === "worktree")).toBe(false);
+    const { facts } = await runAgentTurn(client, { prompt: "fix tests in intentic", conversationId: "workspace-conv" });
+    expect(facts.some((fact) => fact.kind === "worktree")).toBe(false);
     expect(cwd).toBe("/work");
     expect(snapshots).toEqual(["user", "turn"]);
     expect((await client.agents.list()).agents).toMatchObject([{ id: "workspace-conv", status: "idle", sessionId: "sess-workspace", costUsd: 0.25 }]);
@@ -125,11 +125,8 @@ test("a thrown workspace turn settles its surfaced card as an error", async () =
      * in the default mode (settings.autoTier "shadow"), so its frame rides ahead of everything a turn does,
      * including a turn that then dies. That it survives an adapter crash is the point of it being emitted at
      * plan time; what this test is about is what comes after. */
-    const frames = await runAgentTurn(client, { prompt: "do it", conversationId: "workspace-error" });
-    expect(frames.filter((frame) => frame.kind !== "preamble" && frame.kind !== "tier")).toEqual([
-        { kind: "error", message: "adapter crashed" },
-        { kind: "done" },
-    ]);
+    const { facts } = await runAgentTurn(client, { prompt: "do it", conversationId: "workspace-error" });
+    expect(facts.filter((fact) => fact.kind !== "tier")).toEqual([{ kind: "error", message: "adapter crashed" }]);
     // And the roster carries WHY, not just that: the sentence is the whole of what a card, a run row or a
     // notification can say about a turn that produced nothing else, and reaching it through the transcript is
     // the trip this field exists to spare the reader.
@@ -151,8 +148,8 @@ test("an existing conversation keeps its registered placement when a later clien
     );
 
     await runAgentTurn(client, { prompt: "first", conversationId: "placed" });
-    const second = await runAgentTurn(client, { prompt: "second", conversationId: "placed", isolated: true });
-    expect(second.some((event) => event.kind === "worktree")).toBe(false);
+    const { facts: second } = await runAgentTurn(client, { prompt: "second", conversationId: "placed", isolated: true });
+    expect(second.some((fact) => fact.kind === "worktree")).toBe(false);
     expect(cwds).toEqual(["/work", "/work"]);
     expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");
 });
@@ -166,11 +163,11 @@ test("an isolated turn that dies on a provider gate still releases the conversat
             }),
         ),
     );
-    const first = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
-    expect(first.some((event) => event.kind === "error" && event.message.includes("No Claude account"))).toBe(true);
+    const { facts: first } = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
+    expect(first.some((fact) => fact.kind === "error" && fact.message.includes("No Claude account"))).toBe(true);
     // The gate exit must not leave the agent stuck "running": the retry hits the same gate, NOT agent-busy.
-    const second = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
-    expect(second.some((event) => event.kind === "error" && event.code === "agent-busy")).toBe(false);
+    const { facts: second } = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
+    expect(second.some((fact) => fact.kind === "error" && fact.code === "agent-busy")).toBe(false);
     const { agents } = await client.agents.list();
     expect(agents[0]?.status).not.toBe("running");
 });
@@ -364,7 +361,6 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
             // exercise the extraction and the index's own query rather than a hand-picked list.
             transcripts: {
                 read: async (agent) => codexSearchTranscript(agent.id),
-                open: async () => {},
                 fork: async () => {},
                 append: async () => {},
                 // Derived from the same record `read` answers from, so the fake cannot contradict itself.
@@ -550,7 +546,7 @@ test("archive answers with what it refused and why, and leaves those agents on t
 test("agents.place appends the user's words as the agent's, retires the session, and the next turn reads them as its own", async () => {
     // A working in-memory record (the harness default is inert on append): place appends through the same door
     // a settled turn does, and the handoff reads back through the same `read`.
-    const records = new Map<string, RestoredMessage[]>();
+    const records = new Map<string, TranscriptRow[]>();
     const requests: { prompt: string; sessionId?: string }[] = [];
     const client = clientFor(
         createApp(
@@ -562,7 +558,6 @@ test("agents.place appends the user's words as the agent's, retires the session,
                 },
                 transcripts: {
                     read: async (agent) => records.get(agent.id) ?? [],
-                    open: async (agent) => void (records.has(agent.id) || records.set(agent.id, [])),
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     count: async (agent) => (records.get(agent.id) ?? []).length,
@@ -609,7 +604,7 @@ test("agents.place appends the user's words as the agent's, retires the session,
 // The in-memory record + one-frame turn the channel-place tests share; `ports` seeds the fake service
 // supervisor so a test decides whether the discord gateway "runs" (and where its /deliver door answers).
 const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]) => {
-    const records = new Map<string, RestoredMessage[]>();
+    const records = new Map<string, TranscriptRow[]>();
     const client = clientFor(
         createApp(
             services({
@@ -619,7 +614,6 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                 },
                 transcripts: {
                     read: async (agent) => records.get(agent.id) ?? [],
-                    open: async (agent) => void (records.has(agent.id) || records.set(agent.id, [])),
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     count: async (agent) => (records.get(agent.id) ?? []).length,

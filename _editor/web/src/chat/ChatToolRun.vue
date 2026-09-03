@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import ChatToolRows from "./ChatToolRows.vue";
 import { summarizeRun } from "./toolRun";
 
@@ -16,7 +16,7 @@ import { summarizeRun } from "./toolRun";
  * it is clicked shut. There is no third rendering of a tool call anywhere in the app. */
 
 const props = defineProps<{
-    tools: readonly ChatTool[];
+    tools: readonly TranscriptTool[];
     // Whether the turn this run belongs to is still streaming: the only state in which the mark may animate.
     live: boolean;
 }>();

@@ -6,7 +6,7 @@
 // the authoritative account of what was streamed, it holds tool calls and attachments the client's text mirror
 // drops, and it is keyed by conversationId, which is exactly the identity a retired session leaves behind.
 
-import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { formatAnswers } from "./question-answers.js";
 
 export interface RuntimeHistoryMessage {
@@ -30,24 +30,24 @@ const HISTORY_CHAR_CAP = 32_000;
 // output, which is the bulk of a transcript and is re-readable from the workspace itself.
 const TOOLS_PER_MESSAGE = 8;
 
-const toolLabel = (call: RestoredToolCall): string => (call.target !== undefined && call.target !== "" ? `${call.name} ${call.target}` : call.name);
+const toolLabel = (call: TranscriptTool): string => (call.target !== undefined && call.target !== "" ? `${call.name} ${call.target}` : call.name);
 
 /* WHAT THE USER DECIDED at a question this row asked, the one thing on a card the next runtime cannot do
  * without: the picks steered everything the agent did afterwards, and the ask tool's result that carried them
  * is tool output, which this preamble excludes. Worded by the same function the model read them through live
  * (formatAnswers), on one line. A card with no reply was stopped under, and says nothing here. */
-const decisionLabel = (message: RestoredMessage): string | undefined => {
+const decisionLabel = (message: TranscriptRow): string | undefined => {
     const question = message.question;
-    if (question === undefined || question.reply?.kind !== "question") {
+    if (question === undefined || question.status !== "answered") {
         return undefined;
     }
-    return formatAnswers(question.questions, question.reply).replaceAll("\n", " ");
+    return formatAnswers(question.questions, { kind: "question", requestId: question.requestId, answers: question.answers }).replaceAll("\n", " ");
 };
 
 // The trailer that says what a turn touched: tool calls and the answer to a question it asked for an assistant
 // message, attached files for a user's. Empty when there is nothing to say, so a plain text exchange renders
 // exactly as it always did.
-const trailerOf = (message: RestoredMessage): string => {
+const trailerOf = (message: TranscriptRow): string => {
     if (message.role === "user") {
         const attachments = message.attachments ?? [];
         return attachments.length > 0 ? `\n[attached: ${attachments.join(", ")}]` : "";
@@ -63,12 +63,12 @@ const trailerOf = (message: RestoredMessage): string => {
     return `${asked}\n[used: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}]`;
 };
 
-const rendered = (message: RestoredMessage): string => {
+const rendered = (message: TranscriptRow): string => {
     const body = message.text.length > MESSAGE_CHAR_CAP ? `${message.text.slice(0, MESSAGE_CHAR_CAP)}\n… (truncated)` : message.text;
     return `${body}${trailerOf(message)}`;
 };
 
-export const withRuntimeHistory = (prompt: string, history: readonly RestoredMessage[]): string => {
+export const withRuntimeHistory = (prompt: string, history: readonly TranscriptRow[]): string => {
     const lines: string[] = [];
     let used = 0;
     // Newest first, so a transcript over budget keeps the end of the conversation rather than its opening.

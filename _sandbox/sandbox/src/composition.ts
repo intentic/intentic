@@ -12,7 +12,7 @@ import type {
     GitRemoteState,
     IntenticLine,
     NativeProvider,
-    RestoredMessage,
+    TranscriptRow,
     StashEntry,
     WorkspaceChildren,
     WorkspaceTree,
@@ -179,7 +179,7 @@ import { readSessionLines, spokenLinesOf, transcriptSearchMetrics } from "./sess
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { openSearchIndex, type SearchIndex } from "./sessions/search-index.js";
 import { backfillSearchIndex, type BackfillSource } from "./sessions/search-backfill.js";
-import { agentTranscript, type AgentTranscriptDeps, spokenTranscript, storedTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
+import { agentTranscript, type AgentTranscriptDeps, spokenTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { fileShareStore, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
@@ -716,11 +716,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly iq: ResidentEngine;
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
-        readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
+        readonly read: (dir: string, id: string) => Promise<TranscriptRow[]>;
         // The LAST turn of one, which is what a turn the daemon died under reads back as: it never settled, so
         // the conversation's own record has nothing of it, and this is what the boot pass writes down in its
         // place (sessions/turn-transcript.ts → recordInterruptedTurn).
-        readonly readTail: (dir: string, id: string) => Promise<RestoredMessage[]>;
+        readonly readTail: (dir: string, id: string) => Promise<TranscriptRow[]>;
         // No `dir`, unlike its neighbours: a search reads the phrase index and a listing bound to this
         // workspace's root, both of which the daemon built once. A parameter the implementation is free to
         // ignore is a trap for the next caller who passes something else and is quietly obeyed.
@@ -732,14 +732,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
      * provider with no session store at all). Written by every settled turn, read by /agents/:id/transcript.
      * See sessions/transcript-record.ts for why this stopped being the provider's job. */
     readonly transcripts: {
-        readonly read: (agent: TranscriptAgent) => Promise<RestoredMessage[]>;
-        // Opens/adopts the durable record before the provider starts the next turn. Settlement must never be
-        // the first time a provider store is read (see transcript-record.ts).
-        readonly open: (agent: TranscriptAgent) => Promise<void>;
-        // Opens a BRANCH's record instead, as a copy of the first `keep` rows of the conversation it was cut
-        // from. Same no-op-if-already-opened rule as `open`.
+        readonly read: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
+        // Opens a BRANCH's record, as a copy of the first `keep` rows of the conversation it was cut from; a
+        // no-op once the record exists. Every other record is created by its first settled turn's append.
         readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
-        readonly append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => Promise<void>;
+        readonly append: (agent: TranscriptAgent, messages: readonly TranscriptRow[]) => Promise<void>;
         // How many messages are stored, the position the next turn starts at, which its checkpoint is filed
         // under so a rewind can address it (see transcript-record.ts).
         readonly count: (agent: TranscriptAgent) => Promise<number>;
@@ -1081,10 +1078,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const transcriptDeps: AgentTranscriptDeps = {
         record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
         turnAnchors,
-        root: workspace.root,
-        codexHome: codex.codexHome,
-        sessionIdOf: agents.sessionIdOf,
-        readClaudeSession: readWorkspaceSession,
     };
     /* THE PHRASE INDEX, on the history volume beside the records it is derived from, daemon-private and outside
      * the agent's reach like the journal and the activity ledger. A pure cache: it is deleted and rebuilt on a
@@ -1457,12 +1450,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         transcripts: {
             read: (agent) => agentTranscript(transcriptDeps, agent),
-            // storedTranscript, not agentTranscript, as the opening adoption: the record is empty by definition
-            // at the moment it opens, and what a conversation had before it is exactly what the provider store
-            // holds. This runs before the new turn, so that turn cannot be adopted and appended twice.
-            open: (agent) => transcriptDeps.record.open(agent.id, () => storedTranscript(transcriptDeps, agent)),
-            // No provider-store fallback here, unlike `open`: a branch's opening history is by definition the
-            // source conversation's record, and no provider knows this conversation exists yet.
+            // A branch's opening history is by definition the source conversation's record, copied once.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
             /* THE INDEX IS WRITTEN HERE, on the same call that records the turn, because this is the moment the
              * conversation's words become durable and every road a turn can be started down ends at it (see

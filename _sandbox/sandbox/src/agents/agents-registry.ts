@@ -1227,7 +1227,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                      * Which is the whole of a failure that cost seven conversations. `pendingSessionId` lives in
                      * the process, and the process is regularly killed mid-turn (a rebuild, an OOM), so a
                      * conversation whose FIRST turn was killed came back with no session id at all, which is the
-                     * only key into the provider store: `storedTranscript` had nothing to read, the record held
+                     * only key into the provider store: `recordInterruptedTurn` had nothing to read back, the record held
                      * nothing either (it is appended per SETTLED turn), and the chat opened permanently blank
                      * over a session file sitting on disk the whole time. A LATER turn's death is the same bug
                      * one step quieter: the entry keeps pointing at the previous turn's session, so the next

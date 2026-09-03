@@ -1,14 +1,14 @@
 import type { CardStatus } from "./ChatCard.vue";
 import type {
-    BrowserHelpRequest,
-    CapabilityOfferRequest,
-    PaymentOfferRequest,
-    PermissionRequest,
-    PlanRequest,
-    QuestionRequest,
-    ServiceOfferRequest,
-    TerminalHelpRequest,
-} from "../composables/chat/transcript.js";
+    TranscriptBrowserHelp,
+    TranscriptCapabilityOffer,
+    TranscriptPaymentOffer,
+    TranscriptPermission,
+    TranscriptPlan,
+    TranscriptQuestion,
+    TranscriptServiceOffer,
+    TranscriptTerminalHelp,
+} from "@intentic/sandbox-contract";
 
 /* HOW EACH DECISION CARD SAYS IT IS OVER, in one place instead of eight.
  *
@@ -24,7 +24,7 @@ import type {
  * `gone`: a turn that died under a card is not a decision anybody made.
  */
 
-export const planStatus = (plan: PlanRequest): CardStatus | undefined => {
+export const planStatus = (plan: TranscriptPlan): CardStatus | undefined => {
     switch (plan.status) {
         case "approved":
             return { label: "Approved", tone: "done" };
@@ -37,7 +37,7 @@ export const planStatus = (plan: PlanRequest): CardStatus | undefined => {
     }
 };
 
-export const questionStatus = (question: QuestionRequest): CardStatus | undefined => {
+export const questionStatus = (question: TranscriptQuestion): CardStatus | undefined => {
     switch (question.status) {
         case "answered":
             return { label: "Answered", tone: "done" };
@@ -48,7 +48,7 @@ export const questionStatus = (question: QuestionRequest): CardStatus | undefine
     }
 };
 
-export const permissionStatus = (permission: PermissionRequest): CardStatus | undefined => {
+export const permissionStatus = (permission: TranscriptPermission): CardStatus | undefined => {
     switch (permission.status) {
         case "allowed":
             return { label: "Allowed", tone: "done" };
@@ -67,7 +67,7 @@ export const permissionStatus = (permission: PermissionRequest): CardStatus | un
 
 // The two help asks are one card twice over, so they are one function: the browser's captcha and the
 // terminal's waiting prompt differ in where the user goes, not in how the ask ends.
-export const helpStatus = (help: BrowserHelpRequest | TerminalHelpRequest): CardStatus | undefined => {
+export const helpStatus = (help: TranscriptBrowserHelp | TranscriptTerminalHelp): CardStatus | undefined => {
     switch (help.status) {
         case "helped":
             return { label: "You helped", tone: "done" };
@@ -82,7 +82,7 @@ export const helpStatus = (help: BrowserHelpRequest | TerminalHelpRequest): Card
 
 // The two spend cards, likewise one shape: approved, skipped, or nobody answered. Whether the money actually
 // moved is the receipt's to say, in its own row, not the header chip's.
-export const offerStatus = (offer: ServiceOfferRequest | PaymentOfferRequest): CardStatus | undefined => {
+export const offerStatus = (offer: TranscriptServiceOffer | TranscriptPaymentOffer): CardStatus | undefined => {
     switch (offer.status) {
         case "approved":
             return { label: "Approved", tone: "done" };
@@ -99,7 +99,7 @@ export const offerStatus = (offer: ServiceOfferRequest | PaymentOfferRequest): C
  * which happens on another page and reports back through the outcome frame. So the OUTCOME is read first when
  * there is one, and `connecting` deliberately produces no chip — the card is not finished, it is waiting, and
  * its own body row says so with a spinner. */
-export const capabilityStatus = (offer: CapabilityOfferRequest): CardStatus | undefined => {
+export const capabilityStatus = (offer: TranscriptCapabilityOffer): CardStatus | undefined => {
     if (offer.outcome) {
         return offer.outcome.outcome === "connected" ? { label: "Connected", tone: "done" } : { label: "Setup didn't finish", tone: "gone" };
     }

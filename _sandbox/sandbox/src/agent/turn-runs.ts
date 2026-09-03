@@ -1,22 +1,35 @@
-import type { AgentEvent, AgentTurn, ParkedCard } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentTurn,
+    type AttachFrame,
+    isTurnFact,
+    type ParkedCard,
+    type TranscriptPatch,
+    type TranscriptRow,
+    type TurnFact,
+} from "@intentic/sandbox-contract";
+import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
 import { recordCommands } from "./agent-commands.js";
 import type { TurnJournal } from "./turn-journal.js";
 
 /* Detached turn runs, turn EXECUTION decoupled from any client connection. POST /agent starts a run: the
- * turn generator is pumped daemon-side into a seq-stamped frame log, and any number of clients render it by
- * attaching (replay from a cursor, then live). The initiating window holds no special stream, a reload, a
+ * turn generator is pumped daemon-side into the run's TRANSCRIPT, folded frame by frame as it arrives
+ * (sandbox-contract's transcript-fold.ts), and any number of clients render it by attaching: the rows so far
+ * on the head, then every change as it lands. The initiating window holds no special stream, a reload, a
  * second window, or another device attaches the same way, which is what makes a turn survive all of them.
  *
- * A finished run is retained briefly so a client that lost its stream near the end still replays the tail;
- * after that the transcript record is the copy and attach reports NOT_FOUND. Keyed by conversationId, the
- * daemon is single-tenant behind its authenticated tunnel (same bet as agent-steering).
+ * The run holds ROWS, not frames. What a frame means for the transcript is decided here, once, at the moment
+ * it arrives, and the same rows are what the record keeps when the turn settles: a reopened chat shows what
+ * every window saw because it is showing the same thing. The raw frames are handed on to whoever asked for
+ * them (a child's supervisor, a loop, `frames()`) and kept nowhere, which is also what stopped a long turn's
+ * log climbing towards a gigabyte: a Codex command's output arrived as whole snapshots, one per frame, and every
+ * one of them was retained.
  *
- * The frame log is in memory; what makes that safe is that the settled turn is written down on its way out. It
- * used to be the PROVIDER's session store that held the durable copy, which meant a conversation could only be
- * reopened if its provider kept one and the daemon still held the right key into it, the standing cause of
- * "the chat opens empty" (see sessions/transcript-record.ts). Two things now leave this pump: the TURN, one
- * journal entry naming what to run again while it is in flight (turn-journal.ts), and the TRANSCRIPT, the
- * frames it produced, once it is whole. */
+ * A finished run is retained briefly so a client that lost its stream near the end still finds it; after that
+ * the transcript record is the copy and attach reports NOT_FOUND. Keyed by conversationId, the daemon is
+ * single-tenant behind its authenticated tunnel (same bet as agent-steering). Two things leave this pump: the
+ * TURN, one journal entry naming what to run again while it is in flight (turn-journal.ts), and the
+ * TRANSCRIPT, the rows it produced, once it is whole. */
 
 // The turn generator a run pumps, streamAgent's shape, injected to keep this module cycle-free of
 // agent.routes (and swappable in tests).
@@ -36,18 +49,81 @@ export interface TurnObserver {
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
 }
 
-// A reconnect retries within seconds. A full five minutes retained several multi-megabyte raw frame logs at
-// once and let the daemon climb toward a gigabyte; one minute covers the reconnect ladder with ample margin.
+// A reconnect retries within seconds; one minute covers the reconnect ladder with ample margin.
 const RETAIN_MS = 60_000;
+
+// One entry of the attach stream past its head, what a follower is handed in order: a change to the rows, or
+// a fact about the turn.
+export type AttachEntry = Extract<AttachFrame, { kind: "patch" | "fact" }>;
+export type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
+
+/* One subscriber's queue. Each follower holds only what it has not yet read, so a reader that keeps up holds
+ * nothing and a stalled one holds its own backlog and nobody else's; the run itself keeps no log at all. */
+class Mailbox<T> {
+    private readonly items: T[];
+    private wake: (() => void) | undefined;
+    private closed = false;
+
+    constructor(replay: readonly T[] = []) {
+        this.items = [...replay];
+    }
+
+    push(item: T): void {
+        this.items.push(item);
+        this.wake?.();
+    }
+
+    close(): void {
+        this.closed = true;
+        this.wake?.();
+    }
+
+    // Everything pushed, in order, until closed and drained. `released` runs however the reader leaves,
+    // including a consumer that stops iterating, which is the one exit that would otherwise leak the queue.
+    async *drain(released: () => void): AsyncGenerator<T> {
+        try {
+            for (;;) {
+                while (this.items.length > 0) {
+                    yield this.items.shift()!;
+                }
+                if (this.closed) {
+                    return;
+                }
+                await new Promise<void>((resolve) => {
+                    this.wake = resolve;
+                });
+                this.wake = undefined;
+            }
+        } finally {
+            released();
+        }
+    }
+}
 
 export class TurnRun {
     readonly id = crypto.randomUUID();
-    readonly startedAt = Date.now();
     private finishedAt: number | undefined;
-    private readonly frames: AgentEvent[] = [];
+    private readonly fold: TranscriptFold;
+    /* THE HELPERS' OWN TRANSCRIPTS, one fold per subagent, tagged with the call that spawned it, folded from the
+     * same frames as they pass: a child's frames are already in the parent's stream, tagged, so the Subagents
+     * area reads a child's transcript as a projection of its parent's turn, nothing streamed separately and
+     * nothing stored twice. Every child fold sees every frame and keeps what carries its tag. */
+    private readonly children = new Map<string, TranscriptFold>();
+    // The facts so far, replayed to every attach: a window joining late still has to learn which session the
+    // turn runs and where its branch stands. Small by construction: a handful per turn.
+    private readonly facts: AttachEntry[] = [];
+    private seq = 0;
+    private readonly followers = new Set<Mailbox<AttachEntry>>();
+    private readonly listeners = new Set<Mailbox<AgentEvent>>();
     private waiters: (() => void)[] = [];
 
-    constructor(readonly prompt: string) {}
+    constructor(
+        // What the turn opens with: the user's message, or the notice standing in for a repeated one.
+        opening: readonly TranscriptRow[],
+        readonly startedAt = Date.now(),
+    ) {
+        this.fold = new TranscriptFold(opening);
+    }
 
     get done(): boolean {
         return this.finishedAt !== undefined;
@@ -58,28 +134,56 @@ export class TurnRun {
         return this.finishedAt !== undefined && now - this.finishedAt > RETAIN_MS;
     }
 
-    // The log length, a frame's seq is its 1-based position, so this is also the last stamped seq.
-    get seq(): number {
-        return this.frames.length;
+    // The turn's transcript as it stands: what the record keeps once the turn is whole, and what a reopened tab
+    // draws meanwhile. Live, so read it, never hold it.
+    get rows(): readonly TranscriptRow[] {
+        return this.fold.rows;
     }
 
-    // Everything this run pumped, for the transcript sink to write down once the turn is whole. The log stays
-    // the run's own, this hands it out to read, not to hold.
-    get events(): readonly AgentEvent[] {
-        return this.frames;
+    // Where the user's mid-turn messages landed, by row, for the anchors filed under them at settlement.
+    get steerRows(): readonly number[] {
+        return this.fold.steerRows;
     }
 
-    metrics(): { readonly frames: number; readonly waiters: number } {
-        return { frames: this.frames.length, waiters: this.waiters.length };
+    // One helper's transcript, by the id of the call that spawned it. Empty for a call that spawned nothing
+    // this run has heard from.
+    rowsOf(tag: string): readonly TranscriptRow[] {
+        return this.children.get(tag)?.rows ?? [];
+    }
+
+    metrics(): { readonly rows: number; readonly followers: number } {
+        return { rows: this.fold.rows.length, followers: this.followers.size };
     }
 
     push(event: AgentEvent): void {
-        this.frames.push(event);
-        this.wake();
+        const patches = this.fold.apply(event);
+        const parent = "parentToolUseId" in event ? event.parentToolUseId : undefined;
+        if (parent !== undefined && !this.children.has(parent)) {
+            this.children.set(parent, new TranscriptFold([], parent));
+        }
+        for (const child of this.children.values()) {
+            child.apply(event);
+        }
+        this.publish(patches, isTurnFact(event) ? event : undefined);
+        for (const listener of this.listeners) {
+            listener.push(event);
+        }
     }
 
-    finish(): void {
+    // A row the daemon writes on the turn's behalf (a decision's notice, the feedback that answered a card).
+    note(row: TranscriptRow): void {
+        this.publish(this.fold.note(row));
+    }
+
+    finish(ending: TurnEnding = "settled"): void {
+        this.publish(this.fold.finish(ending));
         this.finishedAt = Date.now();
+        for (const follower of this.followers) {
+            follower.close();
+        }
+        for (const listener of this.listeners) {
+            listener.close();
+        }
         this.wake();
     }
 
@@ -94,30 +198,55 @@ export class TurnRun {
         }
     }
 
+    /* Attach: the rows so far and the facts so far on the head, then everything that lands from this instant,
+     * until the run finishes. The head and the subscription are taken in one synchronous step, so nothing can
+     * land between the snapshot and the first live entry, and nothing in the snapshot is delivered again. */
+    attach(): { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> } {
+        const mailbox = new Mailbox<AttachEntry>(this.facts);
+        const head: AttachHead = { kind: "attached", run: this.id, startedAt: this.startedAt, seq: this.seq, rows: structuredClone(this.fold.rows) };
+        if (this.done) {
+            mailbox.close();
+        } else {
+            this.followers.add(mailbox);
+        }
+        return { head, entries: mailbox.drain(() => this.followers.delete(mailbox)) };
+    }
+
+    // The raw frames from this instant on, for the daemon's own readers of a turn (a child's supervisor, a loop),
+    // which want what the provider said rather than what the transcript made of it. Nothing before now: the
+    // pump starts on the next tick, so a reader that subscribes as it starts the run misses nothing.
+    frames(): AsyncGenerator<AgentEvent> {
+        const mailbox = new Mailbox<AgentEvent>();
+        if (this.done) {
+            mailbox.close();
+        } else {
+            this.listeners.add(mailbox);
+        }
+        return mailbox.drain(() => this.listeners.delete(mailbox));
+    }
+
+    private publish(patches: readonly TranscriptPatch[], fact?: TurnFact): void {
+        for (const patch of patches) {
+            this.deliver({ kind: "patch", seq: ++this.seq, patch });
+        }
+        if (fact !== undefined) {
+            const entry: AttachEntry = { kind: "fact", seq: ++this.seq, fact };
+            this.facts.push(entry);
+            this.deliver(entry);
+        }
+    }
+
+    private deliver(entry: AttachEntry): void {
+        for (const follower of this.followers) {
+            follower.push(entry);
+        }
+    }
+
     private wake(): void {
         const waiting = this.waiters;
         this.waiters = [];
         for (const resolve of waiting) {
             resolve();
-        }
-    }
-
-    // Replay frames after `after`, then follow live until the run finishes. Any number of followers may run
-    // concurrently. A follower whose consumer disconnects while parked here stays parked until the next
-    // push/finish wake, bounded by the turn's end, when every follower drains and returns.
-    async *follow(after: number): AsyncGenerator<{ readonly seq: number; readonly event: AgentEvent }> {
-        let cursor = Math.min(after, this.frames.length);
-        for (;;) {
-            while (cursor < this.frames.length) {
-                cursor += 1;
-                yield { seq: cursor, event: this.frames[cursor - 1]! };
-            }
-            if (this.done) {
-                return;
-            }
-            await new Promise<void>((resolve) => {
-                this.waiters.push(resolve);
-            });
         }
     }
 }
@@ -160,14 +289,15 @@ export interface RunOptions {
     // Where the in-flight turn is written down so a daemon death doesn't take it with it. Injected like TurnFn,
     // for the same reason: this module stays free of the composition (and swappable in tests).
     readonly journal?: TurnJournal;
+    // What the turn's transcript OPENS with, given the instant the run started: the user's message as a row,
+    // built by whoever holds the prompt and knows what the daemon layered onto it (sessions/turn-transcript.ts).
+    readonly opening?: (startedAt: number) => readonly TranscriptRow[];
     // Where the SETTLED turn is written down, the conversation's durable transcript, the copy every provider
-    // gets whether or not it keeps a session store of its own (sessions/transcript-record.ts). Handed the raw
-    // frame log: what a turn READS BACK as is the caller's shape to decide, not this pump's.
-    // `startedAt` rides along because this pump is the only thing that knows it by the time the turn settles,
-    // and the record stamps the user's message with when it was SENT rather than when its answer finished.
-    readonly transcript?: (events: readonly AgentEvent[], startedAt: number) => Promise<unknown>;
-    // Side-channel preparation that must precede the provider (the transcript record's legacy adoption). A
-    // caller passes a guarded promise: its failure may cost persistence, never the turn itself.
+    // gets whether or not it keeps a session store of its own (sessions/transcript-record.ts). Handed the rows
+    // the run folded and where the user's mid-turn messages sit among them.
+    readonly transcript?: (rows: readonly TranscriptRow[], steerRows: readonly number[]) => Promise<unknown>;
+    // Side-channel preparation that must precede the provider (a fork's record being copied). A caller passes a
+    // guarded promise: its failure may cost persistence, never the turn itself.
     readonly before?: Promise<unknown>;
     // How many boots have already re-run this turn, carried through so a resume that dies again is not resumed
     // a third time (see turn-resume's boot pass). A first-hand turn starts at 0.
@@ -176,19 +306,20 @@ export interface RunOptions {
 
 // Start a detached run for the conversation's turn, or undefined when one is already live (the route 409s,
 // the client serializes its own turns, so a live run means another window/device is mid-turn). The pump owns
-// the generator: a thrown turn is folded into the log as an error frame (an abort, /agent/stop, as a clean
-// done), so followers always see the run settle.
+// the generator: a thrown turn is folded into the transcript as an error (an abort, /agent/stop, as a stop),
+// so followers always see the run settle.
 export function startTurnRun(
     turnFn: TurnFn,
     input: AgentTurn & { conversationId: string },
-    { observer, journal, transcript, before, attempts = 0 }: RunOptions = {},
+    { observer, journal, opening, transcript, before, attempts = 0 }: RunOptions = {},
 ): TurnRun | undefined {
     sweep();
     const existing = runs.get(input.conversationId);
     if (existing !== undefined && !existing.done) {
         return undefined;
     }
-    const run = new TurnRun(input.prompt);
+    const startedAt = Date.now();
+    const run = new TurnRun(opening?.(startedAt) ?? [], startedAt);
     runs.set(input.conversationId, run);
     const provider = input.agent ?? "claude";
     /* THE JOURNAL ENTRY, opened here, updated when the session is known, closed in the pump's finally.
@@ -212,9 +343,9 @@ export function startTurnRun(
     /* The journal entry's live fields, held so every rewrite carries ALL of them, the session update and a
      * park update writing only what each knew would erase the other's half. `parked` is the cards the turn is
      * waiting on right now, written down because a daemon death under a park must restore the card, not the
-     * turn (turn-resume.ts), and the card's content exists nowhere else once the frame log dies with the
-     * process. The entry is SNAPSHOTTED synchronously, only the write is queued; a closure that read these
-     * fields when it finally ran would journal a later frame's state under this one's write. */
+     * turn (turn-resume.ts), and the card's content exists nowhere else once the run dies with the process.
+     * The entry is SNAPSHOTTED synchronously, only the write is queued; a closure that read these fields when
+     * it finally ran would journal a later frame's state under this one's write. */
     let sessionId: string | undefined;
     const parked: ParkedCard[] = [];
     const journalEntry = (): void => {
@@ -244,6 +375,7 @@ export function startTurnRun(
     void (async () => {
         // Set by the error frame below (or by a provider emitting one mid-stream), read once at settle.
         let failure: string | undefined;
+        let stopped = false;
         try {
             await before;
             for await (const event of turnFn(input, undefined)) {
@@ -290,18 +422,18 @@ export function startTurnRun(
                 run.push(event);
             }
         } catch (error) {
-            // An abort is /agent/stop doing its job, not a failure, settle with a clean done. Detected by
-            // name, not instanceof: Node's DOMException AbortError does not inherit from Error.
-            const aborted = typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError";
-            if (!aborted) {
+            // An abort is /agent/stop doing its job, not a failure, settle as a stop. Detected by name, not
+            // instanceof: Node's DOMException AbortError does not inherit from Error.
+            stopped = typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError";
+            if (!stopped) {
                 failure = error instanceof Error ? error.message : "agent turn failed";
                 run.push({ kind: "error", message: failure });
             }
             run.push({ kind: "done" });
         } finally {
-            run.finish();
+            run.finish(stopped ? "stopped" : "settled");
             // Expiry is proactive, not opportunistic on the next route call. Otherwise the last completed run
-            // in a quiet sandbox holds its entire raw frame log forever.
+            // in a quiet sandbox holds its rows forever.
             const expiry = setTimeout(() => {
                 if (runs.get(input.conversationId) === run) {
                     runs.delete(input.conversationId);
@@ -318,7 +450,7 @@ export function startTurnRun(
                     // Journal deletion is the commit point for a turn. Await the transcript before crossing it:
                     // fire-and-forget opened a window where a crash could lose both the still-running journal
                     // and the not-yet-appended transcript even though each file was durable on its own.
-                    await transcript(run.events, run.startedAt).catch(() => undefined);
+                    await transcript(run.rows, run.steerRows).catch(() => undefined);
                 } catch {
                     // Nothing to do and nowhere to report it, the turn is the thing that matters.
                 }
@@ -374,14 +506,14 @@ export const turnRunMetrics = (): Readonly<Record<string, number>> => {
     sweep();
     let live = 0;
     let retained = 0;
-    let frames = 0;
-    let waiters = 0;
+    let rows = 0;
+    let followers = 0;
     for (const run of runs.values()) {
         live += run.done ? 0 : 1;
         retained += run.done ? 1 : 0;
         const held = run.metrics();
-        frames += held.frames;
-        waiters += held.waiters;
+        rows += held.rows;
+        followers += held.followers;
     }
-    return { runs: runs.size, live, retained, frames, waiters };
+    return { runs: runs.size, live, retained, rows, followers };
 };

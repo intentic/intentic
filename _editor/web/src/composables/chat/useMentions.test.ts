@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insertMention, mentionPaths, mentionQueryAt } from "./useMentions";
+import { insertMention, mentionQueryAt } from "./useMentions";
 
 describe(`mentionQueryAt`, () => {
     it(`detects the token between a fresh @ and the caret`, () => {
@@ -20,19 +20,5 @@ describe(`insertMention`, () => {
         const result = insertMention(`fix @ap please`, { start: 4, query: `ap` }, 7, `src/app.ts`);
         expect(result.text).toBe(`fix @src/app.ts  please`);
         expect(result.caret).toBe(16);
-    });
-});
-
-describe(`mentionPaths`, () => {
-    it(`extracts path-looking tokens, deduped, with trailing punctuation stripped`, () => {
-        expect(mentionPaths(`see @src/app.ts and @readme.md, plus @src/app.ts again`)).toEqual([`src/app.ts`, `readme.md`]);
-    });
-
-    it(`skips prose handles and mid-word @`, () => {
-        expect(mentionPaths(`thanks @radarsu — mail me@example.com`)).toEqual([]);
-    });
-
-    it(`skips scoped package script prefixes in copied pnpm output`, () => {
-        expect(mentionPaths(`@intentic/iq-engine:test: failed\nsee @src/app.ts`)).toEqual([`src/app.ts`]);
     });
 });

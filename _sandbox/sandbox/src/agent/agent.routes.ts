@@ -50,6 +50,7 @@ import { createViewFrameLedger } from "./agent-viewing.js";
 import { nudgeUnverifiedWork } from "./verify-nudge.js";
 import { isFileWorkCall, isSearchCall, searchPrecedesFileWork } from "./tool-calls.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
+import { conversationOf } from "./agent-requests.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
 import {
@@ -2067,18 +2068,18 @@ export const createAgentRoutes = (services: Services) => {
             }
             return { run: run.id };
         }),
-        // Render the conversation's run: head (identity + replay/live boundary), frames from the client's
-        // cursor, `end` when the run settles. A cursor naming a superseded run replays the current one from
-        // its first frame, the head's run id tells the client which world it's in.
+        // Render the conversation's run: the head (its identity and its rows so far), then every change and
+        // every fact as it lands, `end` when the run settles. A client that named a superseded run gets the
+        // current one's head, whose run id tells it which world it's in.
         attach: i.attach.handler(async function* ({ input }) {
             const run = turnRunOf(input.conversationId);
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no live or recent turn for that conversation" });
             }
-            yield { kind: "attached" as const, run: run.id, prompt: run.prompt, startedAt: run.startedAt, seq: run.seq };
-            const after = input.run === run.id ? (input.after ?? 0) : 0;
-            for await (const frame of run.follow(after)) {
-                yield { kind: "frame" as const, ...frame };
+            const { head, entries } = run.attach();
+            yield head;
+            for await (const entry of entries) {
+                yield entry;
             }
             yield { kind: "end" as const };
         }),
@@ -2098,7 +2099,24 @@ export const createAgentRoutes = (services: Services) => {
          * Marked before it is resolved, and the whole handler down to the abort is synchronous, so the tool's
          * own continuation cannot run in between and re-publish the agent as running. */
         reply: i.reply.handler(async ({ input }) => {
+            /* WHAT THE DECISION SAYS IN THE TRANSCRIPT, written by the daemon into the run's own rows, so every
+             * window and the record read it the same: the dismissal's line goes down BEFORE the reply ends the
+             * turn (the stop that follows writes its own), a plan's verdict and the feedback that came with it
+             * go down once the reply has landed. A request nothing holds writes nothing. */
+            const held = conversationOf(input.requestId);
+            const run = held === undefined ? undefined : turnRunOf(held);
+            if (input.kind === "question" && input.cancelled === true) {
+                run?.note({ role: "notice", text: "Question dismissed." });
+            }
             if (await applyReply(services, input)) {
+                if (input.kind === "plan") {
+                    run?.note({ role: "notice", text: input.approve ? "Plan approved." : "Kept planning." });
+                    // The rejection's feedback is the user's turn: kept visible, otherwise the typed text (and
+                    // the files it went with) vanish from the transcript even though the agent has them.
+                    if (!input.approve && input.feedback !== undefined && input.feedback.trim().length > 0) {
+                        run?.note({ role: "user", text: input.feedback, sentAt: Date.now() });
+                    }
+                }
                 return { ok: true } as const;
             }
             /* NOTHING HELD THAT ID HERE, which for a REMOTE conversation is the ordinary case rather than a

@@ -3,7 +3,7 @@ import type { AgentEvent, AgentTurn, Loop, LoopDocument, LoopIteration, LoopReco
 import { startTurnRun } from "../agent/turn-runs.js";
 import { sumUsage, type UsageFrame } from "../agent/turn-usage.js";
 import type { Services } from "../composition.js";
-import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
+import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import { briefForIteration, loopDirIn } from "./loop-brief.js";
 import { treeDigest } from "./loop-progress.js";
 import { evaluateStop } from "./loop-stop.js";
@@ -88,7 +88,8 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
     const opened = openTurnTranscript(services, turn);
     const run = startTurnRun((input, signal) => fn(services, input, signal), turn, {
         before: opened,
-        transcript: (events, startedAt) => recordTurnTranscript(services, turn, events, startedAt),
+        opening: (startedAt) => openingRows(turn, services.workspace.root, startedAt),
+        transcript: (rows, steerRows) => recordTurnTranscript(services, turn, rows, steerRows),
     });
     if (run === undefined) {
         // Another turn is already live on this conversation, a hand-sent message, or a previous iteration
@@ -97,7 +98,7 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
         services.logger.warn({ conversationId: loop.conversationId }, "loop iteration: a turn is already running");
         return { report: "", usage: undefined, sessionId: undefined, failure: "A turn was already running on this conversation." };
     }
-    for await (const { event } of run.follow(0)) {
+    for await (const event of run.frames()) {
         if (event.kind === "delta") {
             report.push(event.text);
         }

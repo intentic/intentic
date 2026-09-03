@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { stateRelPath } from "./workspace/state-paths.js";
 
-import type { AgentEvent, Capability, Persona } from "@intentic/sandbox-contract";
+import type { AttachFrame, Capability, Persona, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
 import { capabilitiesOf, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
+import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { ControlScope } from "./auth/control-tokens.js";
 import { createMediaTickets } from "./auth/media-tickets.js";
@@ -761,15 +762,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                     capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? merged.agents.sessionIdOf(agent.id) : undefined;
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
-            // Inert: `read` above already synthesizes from the SDK session that production's adoption would have
-            // copied in, so there is nothing for an open to carry over here. Present all the same, because it is
-            // on the turn path, leaving it off this fake made every agent.run test in this file fail with a bare
-            // "Internal server error", and nothing catches that from the types: tsconfig excludes *.test.ts, so
-            // the fake rots in silence.
-            open: async () => {},
-            // Inert for the same reason as `open`, and present for the same one: a fork's first turn opens
-            // through THIS door instead (openTurnTranscript), so a fake without it fails every forkOf turn
-            // with a bare "Internal server error". There is no record behind the fake to copy a prefix out of.
+            // Inert, and present because it is on the turn path: a fork's first turn opens through THIS door
+            // (openTurnTranscript), so a fake without it fails every forkOf turn with a bare "Internal server
+            // error", and nothing catches that from the types: tsconfig excludes *.test.ts, so the fake rots in
+            // silence. There is no record behind the fake to copy a prefix out of.
             fork: async () => {},
             append: async () => {},
             // Both derived from `read`, so the fake's three answers cannot disagree with each other the way a
@@ -851,22 +847,45 @@ export const collect = async <T>(stream: AsyncIterable<T>): Promise<T[]> => {
     return events;
 };
 
+// What one turn said over the attach stream, in the shapes a test asks about.
+export interface TurnOutcome {
+    readonly head: Extract<AttachFrame, { kind: "attached" }>;
+    readonly entries: Extract<AttachFrame, { kind: "patch" | "fact" }>[];
+    // The facts the turn stated, in order: worktree, session, tier, error and the rest (TURN_FACT_KINDS).
+    readonly facts: TurnFact[];
+    // The run's rows once every patch has landed, which is what its record holds.
+    readonly rows: TranscriptRow[];
+}
+
 // Drive a chat turn over the detached-run protocol exactly as the browser does: start (acked with the run
-// id), attach, unwrap the envelope frames back to raw AgentEvents. Awaiting the attach to its `end` is also
-// the settle barrier the old in-request stream gave these tests. Ids are minted per turn unless the test
-// pins one (the run registry is keyed by conversationId across the whole test process).
+// id), attach, and keep what the stream said. Awaiting the attach to its `end` is also the settle barrier the
+// old in-request stream gave these tests. Ids are minted per turn unless the test pins one (the run registry
+// is keyed by conversationId across the whole test process).
 let turnCounter = 0;
 export const runAgentTurn = async (
     client: ContractRouterClient<typeof sandboxContract>,
     input: Record<string, unknown> & { prompt: string; conversationId?: string },
-): Promise<AgentEvent[]> => {
+): Promise<TurnOutcome> => {
     const conversationId = input.conversationId ?? `turn-${(turnCounter += 1)}`;
     const { run } = await client.agent.run({ ...input, conversationId });
     const frames = await collect(await client.agent.attach({ conversationId }));
-    expect(frames[0]).toMatchObject({ kind: "attached", run, prompt: input.prompt });
+    const head = frames[0];
+    if (head?.kind !== "attached" || head.run !== run) {
+        throw new Error(`attach did not open on run ${run}: ${JSON.stringify(head)}`);
+    }
     expect(frames.at(-1)).toEqual({ kind: "end" });
-    return frames.flatMap((frame) => (frame.kind === "frame" ? [frame.event] : []));
+    const entries = frames.flatMap((frame) => (frame.kind === "patch" || frame.kind === "fact" ? [frame] : []));
+    return { head, entries, facts: entries.flatMap((entry) => (entry.kind === "fact" ? [entry.fact] : [])), rows: attachedRows(frames) };
 };
+
+// The rows an attach stream leaves a reader holding: the head's, with every patch after it applied.
+export const attachedRows = (frames: readonly AttachFrame[]): TranscriptRow[] =>
+    frames.reduce<TranscriptRow[]>((rows, frame) => {
+        if (frame.kind === "attached") {
+            return frame.rows;
+        }
+        return frame.kind === "patch" ? applyTranscriptPatch(rows, frame.patch) : rows;
+    }, []);
 
 // A translator-backed config and a proxy with a connected Codex account, the pair every subscription-path
 // turn test stands on, in the daemon's own shape.

@@ -320,11 +320,7 @@ test("rebuilds the question a turn asked, and the picks that answered it, from t
         ["assistant", ""],
         ["assistant", "Both it is."],
     ]);
-    expect(messages[2]?.question).toEqual({
-        requestId: "ask-1",
-        questions,
-        reply: { kind: "question", requestId: "ask-1", answers: { "Which?": ["A", "B"] } },
-    });
+    expect(messages[2]?.question).toEqual({ requestId: "ask-1", questions, status: "answered", answers: { "Which?": ["A", "B"] } });
     expect(messages[3]?.tools?.map((tool) => [tool.name, tool.status])).toEqual([["mcp__ui__ask", "completed"]]);
 });
 
@@ -344,7 +340,7 @@ test("reads a dismissed question back as cancelled, and one with no result as un
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
 
     const asked = messages.flatMap((message) => (message.question === undefined ? [] : [message.question]));
-    expect(asked.map((question) => question.reply)).toEqual([{ kind: "question", requestId: "ask-1", cancelled: true }, undefined]);
+    expect(asked.map((question) => question.status)).toEqual(["cancelled", "pending"]);
     // The second call never got its result: its own card stays in progress, the honest state.
     expect(messages.at(-1)?.tools?.[0]?.status).toBe("in_progress");
 });

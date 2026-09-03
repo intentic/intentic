@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { present } from "./toolPresentation";
 
 /* A TURN'S RUN OF TOOL CALLS, reduced to the mark that stands in for it while they are hidden (see
@@ -27,7 +27,7 @@ export interface ToolRun {
  *
  * Deliberately about what a call DID rather than which tool it was: an Edit and a shell `>` redirection are the
  * same event to a reader, and both outrank a hundred greps. */
-const notability = (tool: ChatTool): number => {
+const notability = (tool: TranscriptTool): number => {
     if (tool.subagent !== undefined || (tool.children?.length ?? 0) > 0) {
         return 70;
     }
@@ -58,8 +58,8 @@ const notability = (tool: ChatTool): number => {
 
 /* The run's most notable call, the FIRST of the highest-scoring ones, so a mark doesn't change its face as
  * later calls of equal weight land while the turn is still going. */
-const mostNotable = (tools: readonly ChatTool[]): ChatTool | undefined => {
-    let best: ChatTool | undefined;
+const mostNotable = (tools: readonly TranscriptTool[]): TranscriptTool | undefined => {
+    let best: TranscriptTool | undefined;
     let bestScore = -1;
     for (const tool of tools) {
         const score = notability(tool);
@@ -71,7 +71,7 @@ const mostNotable = (tools: readonly ChatTool[]): ChatTool | undefined => {
     return best;
 };
 
-export const summarizeRun = (tools: readonly ChatTool[]): ToolRun | undefined => {
+export const summarizeRun = (tools: readonly TranscriptTool[]): ToolRun | undefined => {
     const notable = mostNotable(tools);
     if (notable === undefined) {
         return undefined;

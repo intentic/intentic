@@ -106,6 +106,17 @@
                 "default": "./dist/session-names.js"
             }
         },
+        "./transcript-fold": {
+            "types": "./dist/transcript-fold.d.ts",
+            "import": {
+                "@intentic/src": "./src/transcript-fold.ts",
+                "default": "./dist/transcript-fold.js"
+            },
+            "require": {
+                "@intentic/src": "./src/transcript-fold.ts",
+                "default": "./dist/transcript-fold.js"
+            }
+        },
         "./webext-links": {
             "types": "./dist/webext-links.d.ts",
             "import": {

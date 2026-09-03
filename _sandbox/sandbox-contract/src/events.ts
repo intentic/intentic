@@ -316,7 +316,7 @@ export type CardDocument = z.infer<typeof CardDocumentSchema>;
 
 /* ONE CARD'S OWN FIELDS, spelled once. Three readers carry the same card and must agree on what it is: the
  * frame that raises it (AgentEventSchema below), the journal entry that keeps a parked one across a restart
- * (ParkedCardSchema), and the record row that keeps it for good (RestoredMessageSchema's card fields). A shape
+ * (ParkedCardSchema), and the record row that keeps it for good (TranscriptRowSchema's card fields). A shape
  * declared inline in each was three shapes with one name. */
 const REQUEST_ID = z.string().describe("What to send back when you answer.");
 const planCard = {
@@ -399,72 +399,82 @@ const PermissionCardSchema = PermissionAskSchema.extend({
 export const ParkedCardSchema = z.discriminatedUnion("kind", [PlanCardSchema, QuestionCardSchema, PermissionCardSchema]);
 export type ParkedCard = z.infer<typeof ParkedCardSchema>;
 
-// ---- restored cards ----
-/* THE CARDS A TURN PARKED ON, as the record keeps them: the card exactly as it was raised, and the reply that
- * released it exactly as the client sent it (the `resolved` frame's own payload), plus whatever landed on the
- * card afterwards (a permission's late explanation, an offer's stream and receipt).
+// ---- transcript cards ----
+/* THE CARDS A TURN PARKED ON, as a transcript row carries them: the card exactly as it was raised, how it was
+ * settled, and whatever landed on it afterwards (a permission's late explanation, an offer's stream and
+ * receipt). One shape for the live row and the recorded one, because they are the same row: the daemon folds
+ * the turn's frames into these rows as they stream (transcript-fold.ts) and writes the same rows down when the
+ * turn settles, so a chat reopened tomorrow is the chat that was on screen.
  *
- * They exist because the record used to keep NONE of this. A question the user answered was on screen for as
- * long as the turn's frame log lived (minutes) and in the browser's local mirror for as long as that survived
- * (until the next web build), and then the record repainted the conversation without it: the card, the
- * questions, and the user's own picks, gone from the only durable copy. The rule the record follows is that a
- * reopened chat redraws what was on screen, and a decision the user made is the part of a conversation they
- * come back to re-read.
- *
- * The REPLY rides verbatim rather than as a derived status, for the same reason the `resolved` frame carries
- * it that way: the client already turns a reply into the card's frozen state for the live stream, and a
- * restored card goes through that one function too, so the two can never disagree about what "answered"
- * looks like. Absent, nobody answered (the turn was stopped, or died under the card), which is not a decision
- * and must not replay as one. */
-const settled = {
-    reply: AgentReplySchema.optional().describe(
-        "How it was answered, exactly as the client sent it. Absent when nobody did: the turn was stopped or died under the card, which is not a decision and does not read back as one.",
-    ),
-};
-export const RestoredPlanSchema = z.object({ ...planCard, ...settled });
-export type RestoredPlan = z.infer<typeof RestoredPlanSchema>;
-export const RestoredQuestionSchema = z.object({ ...questionCard, ...settled });
-export type RestoredQuestion = z.infer<typeof RestoredQuestionSchema>;
+ * The STATUS is settled by the fold, from the reply that released the card (card-status.ts), and rides the
+ * row rather than the reply it came from: every reader wants the verdict, and the one derivation lives beside
+ * the fold that applies it. `pending` is a card the turn is still parked on; `cancelled` is nobody answering,
+ * the turn stopped or died under the card, which is not a decision and does not read back as one. */
+export const PlanStatusSchema = z.enum(["pending", "approved", "rejected", "cancelled"]);
+export type PlanStatus = z.infer<typeof PlanStatusSchema>;
+export const QuestionStatusSchema = z.enum(["pending", "answered", "cancelled"]);
+export type QuestionStatus = z.infer<typeof QuestionStatusSchema>;
+export const PermissionStatusSchema = z.enum(["pending", "allowed", "always", "denied", "cancelled"]);
+export type PermissionStatus = z.infer<typeof PermissionStatusSchema>;
+export const HelpStatusSchema = z.enum(["pending", "helped", "declined", "cancelled"]);
+export type HelpStatus = z.infer<typeof HelpStatusSchema>;
+export const OfferStatusSchema = z.enum(["pending", "approved", "skipped", "cancelled"]);
+export type OfferStatus = z.infer<typeof OfferStatusSchema>;
+// A yes settles the DECISION, not the ask: the owner is now setting the capability up, so the card moves to
+// `connecting` and stays there until the capability_outcome frame says how the setup ended.
+export const CapabilityOfferStatusSchema = z.enum(["pending", "connecting", "skipped", "cancelled"]);
+export type CapabilityOfferStatus = z.infer<typeof CapabilityOfferStatusSchema>;
+
+export const TranscriptPlanSchema = z.object({ ...planCard, status: PlanStatusSchema.describe("Where the decision stands.") });
+export type TranscriptPlan = z.infer<typeof TranscriptPlanSchema>;
+export const TranscriptQuestionSchema = z.object({
+    ...questionCard,
+    status: QuestionStatusSchema.describe("Where the answer stands."),
+    answers: z
+        .record(z.string(), z.array(z.string()))
+        .optional()
+        .describe("What was chosen, keyed by the question, with the chosen labels or the user's own words."),
+});
+export type TranscriptQuestion = z.infer<typeof TranscriptQuestionSchema>;
 // `explain`, the quick model's late sentence (the `permission_note` frame), lands here through PermissionAskSchema.
-export const RestoredPermissionSchema = PermissionAskSchema.extend({ ...permissionCard, ...settled });
-export type RestoredPermission = z.infer<typeof RestoredPermissionSchema>;
-export const RestoredBrowserHelpSchema = z.object({ ...browserHelpCard, ...settled });
-export type RestoredBrowserHelp = z.infer<typeof RestoredBrowserHelpSchema>;
-export const RestoredTerminalHelpSchema = z.object({ ...terminalHelpCard, ...settled });
-export type RestoredTerminalHelp = z.infer<typeof RestoredTerminalHelpSchema>;
-export const RestoredServiceOfferSchema = z.object({
+export const TranscriptPermissionSchema = PermissionAskSchema.extend({ ...permissionCard, status: PermissionStatusSchema.describe("Where the decision stands.") });
+export type TranscriptPermission = z.infer<typeof TranscriptPermissionSchema>;
+export const TranscriptBrowserHelpSchema = z.object({ ...browserHelpCard, status: HelpStatusSchema.describe("How the hand-over ended.") });
+export type TranscriptBrowserHelp = z.infer<typeof TranscriptBrowserHelpSchema>;
+export const TranscriptTerminalHelpSchema = z.object({ ...terminalHelpCard, status: HelpStatusSchema.describe("How the hand-over ended.") });
+export type TranscriptTerminalHelp = z.infer<typeof TranscriptTerminalHelpSchema>;
+export const TranscriptServiceOfferSchema = z.object({
     ...serviceOfferCard,
-    ...settled,
+    status: OfferStatusSchema.describe("Where the decision stands."),
     events: z.array(ServiceStreamEventSchema).optional().describe("The approved run's stream, in order (the service_event frames)."),
     receipt: ServiceReceiptSchema.optional().describe("How the approved run ended (the service_receipt frame)."),
 });
-export type RestoredServiceOffer = z.infer<typeof RestoredServiceOfferSchema>;
-export const RestoredCapabilityOfferSchema = z.object({
+export type TranscriptServiceOffer = z.infer<typeof TranscriptServiceOfferSchema>;
+export const TranscriptCapabilityOfferSchema = z.object({
     ...capabilityOfferCard,
-    ...settled,
+    status: CapabilityOfferStatusSchema.describe("Where the decision stands."),
     outcome: CapabilityOutcomeSchema.optional().describe("How an accepted ask's setup ended (the capability_outcome frame)."),
 });
-export type RestoredCapabilityOffer = z.infer<typeof RestoredCapabilityOfferSchema>;
-export const RestoredPaymentOfferSchema = z.object({
+export type TranscriptCapabilityOffer = z.infer<typeof TranscriptCapabilityOfferSchema>;
+export const TranscriptPaymentOfferSchema = z.object({
     ...paymentOfferCard,
-    ...settled,
+    status: OfferStatusSchema.describe("Where the decision stands."),
     receipt: PaymentReceiptSchema.optional().describe("How the approved payment ended (the payment_receipt frame)."),
 });
-export type RestoredPaymentOffer = z.infer<typeof RestoredPaymentOfferSchema>;
+export type TranscriptPaymentOffer = z.infer<typeof TranscriptPaymentOfferSchema>;
 
-// ---- restored transcripts ----
-// What /sessions/{id} replays into a reopened tab, and what the daemon's own conversation record stores. It has
-// to REDRAW the transcript the user was looking at rather than merely paraphrase it, so it keeps the assistant's
-// thinking and the tool cards its turn ran, which is also what lets a runtime handoff carry more than bare
-// prose across to the replacement session (see runtime-history.ts). Reconstructed from the stored
-// tool_use/tool_result blocks, so a restored card carries everything the live `tool_call` frame did except
-// the streaming-only correlation fields.
+// ---- transcript rows ----
+// What a conversation is made of, on every surface: the rows the daemon folds a turn's frames into as they
+// stream (the live chat renders these, patched as they grow), the rows the record keeps once the turn settles,
+// and the rows /agents/{id}/transcript replays into a reopened tab. One shape because it is one thing: a
+// reopened chat REDRAWS the transcript the user was looking at rather than paraphrasing it, so a row keeps the
+// assistant's thinking and the tool cards its block ran, which is also what lets a runtime handoff carry more
+// than bare prose across to a replacement session (see runtime-history.ts).
 //
-// One restored tool card. A subagent's own calls and its thinking nest under the Agent card that spawned them,
-// the same two fields (and the same recursion) the live ChatTool carries, so a reopened chat redraws the
-// delegation it was showing instead of a leaf card with the whole child collapsed into its result text.
-// z.lazy because the shape refers to itself: a subagent that delegates nests one level deeper.
-export const RestoredToolCallSchema: z.ZodType<RestoredToolCall> = z.lazy(() =>
+// One tool card. A subagent's own calls and its thinking nest under the Agent card that spawned them, so a
+// delegation reads as one unit instead of a flat run of siblings. z.lazy because the shape refers to itself: a
+// subagent that delegates nests one level deeper.
+export const TranscriptToolSchema: z.ZodType<TranscriptTool> = z.lazy(() =>
     z.object({
         id: z.string().describe("The call's id."),
         name: z.string().describe("Which tool."),
@@ -476,17 +486,40 @@ export const RestoredToolCallSchema: z.ZodType<RestoredToolCall> = z.lazy(() =>
         locations: z.array(ToolCallLocationSchema).optional().describe("The files it touched."),
         content: z.array(ToolCallContentSchema).optional().describe("What it produced: text, a change to a file, or a picture."),
         children: z
-            .array(RestoredToolCallSchema)
+            .array(TranscriptToolSchema)
             .optional()
             .describe(
                 "Calls a delegated helper made, nested under the call that started it, so a reopened conversation redraws the delegation rather than collapsing it into one result.",
             ),
         thinking: z.string().optional().describe("What the agent was reasoning about around this call."),
+        subagent: TranscriptSubagentSchema.optional().describe(
+            "The helper this call started, as the daemon's registry sees it: what it is, how it is going, what it has spent. What a card can say about a backgrounded child whose result is minutes away.",
+        ),
     }),
 );
-// Mutable, unlike most of this file: both builders settle a card IN PLACE when its result arrives turns later
-// (restoredTurn's `cards` map, readWorkspaceSession's `awaiting`), which is what saves them a second pass.
-export interface RestoredToolCall {
+/* THE CHILD A CALL STARTED, on the card whose id the `subagent`/`subagent_update` frames name (that call's own),
+ * so no correlation is needed: an Agent card wears its subagent's live state, and a Bash card that turned out
+ * to be a `codex exec` wears its delegate's. The identifying fields arrive once (the `subagent` frame), the
+ * moving ones (status, spend, what it is doing) replace as each update lands. */
+export const TranscriptSubagentSchema = z.object({
+    kind: SubagentKindSchema,
+    agentType: z.string().optional(),
+    description: z.string().optional(),
+    model: z.string().optional(),
+    provider: z.string().optional(),
+    background: z.boolean().optional(),
+    status: SubagentStatusSchema,
+    tokens: z.number().optional(),
+    toolUses: z.number().optional(),
+    lastTool: z.string().optional(),
+    summary: z.string().optional(),
+    error: z.string().optional(),
+    verification: SubagentVerificationSchema.optional(),
+});
+export type TranscriptSubagent = z.infer<typeof TranscriptSubagentSchema>;
+// Mutable, unlike most of this file: the fold settles a card IN PLACE when its result arrives turns later
+// (transcript-fold.ts's `cards` map, readWorkspaceSession's `awaiting`), which is what saves it a second pass.
+export interface TranscriptTool {
     id: string;
     name: string;
     category: ToolKind;
@@ -494,8 +527,9 @@ export interface RestoredToolCall {
     target?: string | undefined;
     locations?: ToolCallLocation[] | undefined;
     content?: ToolCallContent[] | undefined;
-    children?: RestoredToolCall[] | undefined;
+    children?: TranscriptTool[] | undefined;
     thinking?: string | undefined;
+    subagent?: TranscriptSubagent | undefined;
 }
 
 /* ONE NOTE THE DAEMON PUT IN FRONT OF A USER'S MESSAGE, as both audiences see it: the model reads `text`, and
@@ -507,15 +541,26 @@ export const TurnNoteSchema = z.object({
 });
 export type TurnNote = z.infer<typeof TurnNoteSchema>;
 
-// One restored bubble. Each stored assistant message becomes its own, which is what reproduces the live
-// interleaving, prose, the tool cards that prose introduced, then the next block of prose, rather than
-// collapsing a turn's whole narration into a single bubble with its tools hanging off the end.
-export const RestoredMessageSchema = z.object({
-    /* `notice` is neither side of the conversation: it is something that HAPPENED to the turn, recorded so a
-     * reopened session can say it. The one that matters is a refused turn, a provider that answers "your
-     * organization has disabled Claude subscription access" produced no assistant text, so a transcript of the
-     * two speakers alone ends on the user's message and the session reads as broken. It is the same muted line
-     * the live client draws for the codes it does not turn red (ChatRole's `notice`). */
+// End-of-turn accounting (assistant rows only, the last bubble of a turn): what the turn cost, attached where
+// the answer ended so a reader can see what each exchange spent.
+export const TranscriptUsageSchema = z.object({
+    costUsd: z.number().optional(),
+    inputTokens: z.number().optional(),
+    outputTokens: z.number().optional(),
+    durationMs: z.number().optional(),
+    numTurns: z.number().optional(),
+});
+export type TranscriptUsage = z.infer<typeof TranscriptUsageSchema>;
+
+// One row. Each block of the agent's prose is its own, with the tool cards that block introduced, which is what
+// reproduces the way a turn actually unfolded rather than collapsing its whole narration into one bubble with
+// every tool hanging off the end.
+export const TranscriptRowSchema = z.object({
+    /* `notice` is neither side of the conversation: it is something that HAPPENED to the turn, a refusal, a
+     * landed delta, a compaction, a stop, written down so a reopened conversation says it too. The one that
+     * matters most is a refused turn: a provider that answers "your organization has disabled Claude
+     * subscription access" produced no assistant text, so a transcript of the two speakers alone ends on the
+     * user's message and reads as broken. */
     role: z
         .enum(["user", "assistant", "notice"])
         .describe(
@@ -537,29 +582,36 @@ export const RestoredMessageSchema = z.object({
         .describe(
             "When it was sent, in milliseconds. On the user's rows only, because that is the only moment actually known: a turn's own frames arrive with no clock, so stamping the agent's rows could only ever mean the whole turn's start or end.",
         ),
-    // Files the user attached to this turn (user bubbles only) as workspace-relative paths, recovered from
-    // the stored prompt's attachment note, so a reopened tab redraws chips, not the injected protocol text.
+    // Files the user attached to this turn (user rows only) as workspace-relative paths, the uploads alone:
+    // a path @-mentioned inline in the text is already visible there and is not drawn as a chip.
     attachments: z.array(z.string()).optional().describe("Files attached to this message, as workspace paths."),
-    /* The checkpoint this message can be rewound to (user bubbles only), filled in when the transcript is read
-     * back. Not stored in the record itself, it is looked up per read from the daemon's rewind points, which
-     * a rewind rewrites, so a reopened tab offers exactly the turns that are still there to go back to. */
+    /* The checkpoint this message can be rewound to (user rows only), and where this message sits in the
+     * conversation's record, which is what the rewind route addresses it by. Never stored: both are stamped
+     * onto the live row by the turn's own `checkpoint` frame and onto a replayed row by the read that serves
+     * it, looked up from the daemon's rewind points, which a rewind rewrites, so a reopened tab offers exactly
+     * the turns that are still there to go back to. */
     checkpointId: z
         .string()
         .optional()
         .describe(
             "The saved point this message can be rewound to. Looked up on each read rather than stored, so what is offered is exactly what is still there to go back to.",
         ),
+    rewindIndex: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe("This message's position in the conversation's record, which is how a rewind names it. Present only beside a checkpoint."),
     thinking: z.string().optional().describe("What the agent was reasoning about."),
-    tools: z.array(RestoredToolCallSchema).optional().describe("The tool calls this part of the turn made."),
+    tools: z.array(TranscriptToolSchema).optional().describe("The tool calls this part of the turn made."),
     todos: z.array(TodoItemSchema).optional().describe("The agent's task checklist, as of this bubble."),
+    usage: TranscriptUsageSchema.optional().describe("What the turn cost, on the bubble its answer ended in."),
     /* What the daemon added to this turn's message (user rows only), the same notes the live `preamble` frame
-     * carries. A daemon-recorded turn takes them straight off that frame in its own log, typed end to end
-     * (sessions/turn-transcript.ts); only a conversation adopted from a provider's session store recovers them
-     * by parsing the composed prompt kept there, the one store the daemon never wrote typed.
+     * carries, read off that frame by the fold.
      *
      * On the message rather than as a row of its own, and that matters twice: they ARE part of what was
      * sent, and a record row per turn preamble would break the one-row-per-bubble correspondence a branch counts
-     * with (see the client's recordedRows, notices are drawn locally and never recorded). */
+     * with. */
     notes: z
         .array(TurnNoteSchema)
         .optional()
@@ -581,58 +633,72 @@ export const RestoredMessageSchema = z.object({
         .describe(
             "A person wrote this in the agent's voice, with no turn behind it. Marked for the human re-reading the conversation months later, so their own words do not pass as the agent's. The agent itself never sees the mark.",
         ),
-    /* THE ONE-PRESS OFFER A RECORDED NOTICE CARRIES (notice rows only), named rather than inferred from its
-     * words. Only `tierHold` today: the line saying this turn ran on a cheaper model, whose offer is "keep this
-     * chat on my pick".
-     *
-     * It is on the wire because the offer has to survive a reopen, and a reopened tab has only the record. The
-     * chat's other one-press notices are drawn live and never recorded, so they never needed this; a routed turn
-     * is different precisely because the whole point of recording it is that somebody reads it LATER. A KIND, not
-     * a callback, exactly as the live ones are: the reader decides what the press does and whether the offer
-     * still stands (a chat already holding its pick shows a settled sentence, not a stale button). */
+    /* THE ONE-PRESS OFFER A NOTICE CARRIES (notice rows only), named rather than inferred from its words: the
+     * landed notice's "keep future work on the branch", the outage notice's "stop resuming these by itself",
+     * the terminal a dependency install the daemon just started is running in, and the routed turn's "keep
+     * this chat on my pick". A KIND, not a callback: the chat decides what the press does and whether the
+     * offer still stands (a chat already holding its pick shows a settled sentence, not a stale button). */
     noticeAction: z
-        .enum(["tierHold"])
+        .enum(["landHold", "outageOptOut", "depsInstall", "tierHold"])
         .optional()
-        .describe("A one-press follow-up this recorded notice offers, by name. The chat decides what it does and whether it still applies."),
+        .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
+    /* A WAIT THIS NOTICE DESCRIBES that had not finished when it was written (notice rows only): the chat draws
+     * a spinner over it while the wait is on, and the plain line once it is over. A KIND rather than a boolean
+     * because whether the wait is STILL running is a fact about the conversation now, not about a row in a
+     * record: the reader pairs the kind with the live state that answers it. */
+    noticeWait: z.enum(["credentialRenewal"]).optional().describe("The wait this notice describes, by name, so a reader can say whether it is still on."),
     /* THE CARD THIS BUBBLE PARKED ON (assistant rows only), at most one: a card closes the bubble it lands in,
-     * live (turnReducer nulls the turn's bubble) and in the fold alike (sessions/turn-transcript.ts), so the
-     * next thing the agent says opens a fresh row beneath it. One field per kind rather than one union field,
-     * because that is the shape the live ChatMessage has and a restored row is meant to be indistinguishable
-     * from the one it replaces. See the restored-cards section above for why these exist at all. */
-    plan: RestoredPlanSchema.optional().describe("The plan this row asked approval for, and the answer."),
-    question: RestoredQuestionSchema.optional().describe("The questions this row asked, and the picks that answered them."),
-    permission: RestoredPermissionSchema.optional().describe("The tool this row asked permission for, and the decision."),
-    browserHelp: RestoredBrowserHelpSchema.optional().describe("The browser hand-over this row asked for, and how it ended."),
-    terminalHelp: RestoredTerminalHelpSchema.optional().describe("The terminal hand-over this row asked for, and how it ended."),
-    serviceOffer: RestoredServiceOfferSchema.optional().describe("The priced service run this row offered, the decision, and the receipt."),
-    capabilityOffer: RestoredCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
-    paymentOffer: RestoredPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
+     * so the next thing the agent says opens a fresh row beneath it. One field per kind rather than one union
+     * field, so a reader reaches the card it draws by name. */
+    plan: TranscriptPlanSchema.optional().describe("The plan this row asked approval for, and the answer."),
+    question: TranscriptQuestionSchema.optional().describe("The questions this row asked, and the picks that answered them."),
+    permission: TranscriptPermissionSchema.optional().describe("The tool this row asked permission for, and the decision."),
+    browserHelp: TranscriptBrowserHelpSchema.optional().describe("The browser hand-over this row asked for, and how it ended."),
+    terminalHelp: TranscriptTerminalHelpSchema.optional().describe("The terminal hand-over this row asked for, and how it ended."),
+    serviceOffer: TranscriptServiceOfferSchema.optional().describe("The priced service run this row offered, the decision, and the receipt."),
+    capabilityOffer: TranscriptCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
+    paymentOffer: TranscriptPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
 });
-export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
+export type TranscriptRow = z.infer<typeof TranscriptRowSchema>;
 
 /* THE CARD FIELDS A ROW CAN CARRY, as one list, for every reader that has to ask "does this row hold a card":
- * the fold that counts a card-only bubble as a row (sessions/turn-transcript.ts), the client's own row count
- * (recordedRows), which must agree with it to the row or a branch is cut in the wrong place, and the client's
- * restore, which turns each into its live card. The live ChatMessage names its cards exactly this way, so the
- * list is the same list on both sides rather than two that have to be kept in step. */
-export const RESTORED_CARD_FIELDS = [
-    "plan",
-    "question",
-    "permission",
-    "browserHelp",
-    "terminalHelp",
-    "serviceOffer",
-    "capabilityOffer",
-    "paymentOffer",
-] as const;
-export type RestoredCardField = (typeof RESTORED_CARD_FIELDS)[number];
-export type RestoredCards = Pick<RestoredMessage, RestoredCardField>;
-// Whether a row holds a card at all, the question the row counts on both sides ask.
-export const holdsCard = (message: RestoredCards): boolean => RESTORED_CARD_FIELDS.some((field) => message[field] !== undefined);
+ * the fold that counts a card-only bubble as a row, the chat's row count (a branch is cut by it), and the
+ * surfaces that draw whichever card a bubble is waiting on. */
+export const CARD_FIELDS = ["plan", "question", "permission", "browserHelp", "terminalHelp", "serviceOffer", "capabilityOffer", "paymentOffer"] as const;
+export type CardField = (typeof CARD_FIELDS)[number];
+export type TranscriptCards = Pick<TranscriptRow, CardField>;
+// Whether a row holds a card at all, answered or not.
+export const holdsCard = (row: TranscriptCards): boolean => CARD_FIELDS.some((field) => row[field] !== undefined);
+// Whether a row is holding the turn open on a card nobody has answered.
+export const isAwaitingDecision = (row: TranscriptCards): boolean => CARD_FIELDS.some((field) => row[field]?.status === "pending");
+
+/* ONE CHANGE TO A RUN'S ROWS, what the attach stream carries while a turn runs. The daemon folds each frame
+ * into its rows (transcript-fold.ts) and says what moved, so a client keeps rows, never frames: it applies
+ * these to the list it holds and draws it. `index` counts from the run's first row, which the attach head
+ * places in the conversation.
+ *
+ * Prose and thinking arrive as APPENDS to a row rather than as the row again, so the chat can type them out at
+ * the pace they are written; a tool card arrives whole (`tool`, by id, replacing an earlier copy of the same
+ * id wherever it nests), because its updates are snapshots already; everything else replaces its row. `drop`
+ * is the one removal: an assistant row opened for a block that then wrote nothing. */
+export const TranscriptPatchSchema = z.discriminatedUnion("op", [
+    z.object({ op: z.literal("append").describe("A new row at the end."), row: TranscriptRowSchema }),
+    z.object({ op: z.literal("replace").describe("This row, whole, in place of the one at that index."), index: z.number().int().nonnegative(), row: TranscriptRowSchema }),
+    z.object({ op: z.literal("drop").describe("The row at that index is gone: it was opened and never written into."), index: z.number().int().nonnegative() }),
+    z.object({ op: z.literal("text").describe("More of the agent's prose, onto that row's text."), index: z.number().int().nonnegative(), text: z.string() }),
+    z.object({ op: z.literal("thinking").describe("More of the agent's reasoning, onto that row's thinking."), index: z.number().int().nonnegative(), text: z.string() }),
+    z.object({
+        op: z.literal("tool").describe("A tool card, whole: new, or the latest state of one already there, matched by id wherever it nests."),
+        index: z.number().int().nonnegative(),
+        tool: TranscriptToolSchema,
+        parent: z.string().optional().describe("The card this one nests under, when it is a delegated helper's own call."),
+    }),
+]);
+export type TranscriptPatch = z.infer<typeof TranscriptPatchSchema>;
 
 export const SessionTranscriptSchema = z.object({
     messages: z
-        .array(RestoredMessageSchema)
+        .array(TranscriptRowSchema)
         .describe(
             "The conversation, in order. Each block of the agent's prose is its own message with the tools that block introduced, which is what reproduces the way it actually unfolded.",
         ),
@@ -719,7 +785,7 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
  * it, which also settles the security question by construction, a page with nothing to ask has no way to ask
  * for something it was not given.
  *
- * The messages are the SAME RestoredMessage rows the app replays a reopened tab from, already filtered to the
+ * The messages are the SAME TranscriptRow rows the app replays a reopened tab from, already filtered to the
  * chosen detail level and with every picture path rewritten to the copy published beside the page. That
  * sameness is the point: the shared page renders them with the app's own components, so what a recipient sees
  * is what the owner saw. */
@@ -728,7 +794,7 @@ export const SharePayloadSchema = z.object({
     // When the snapshot was taken, not when the conversation happened, see SharedConversation.sharedAt.
     sharedAt: z.number(),
     detail: ShareDetailSchema,
-    messages: z.array(RestoredMessageSchema),
+    messages: z.array(TranscriptRowSchema),
 });
 export type SharePayload = z.infer<typeof SharePayloadSchema>;
 
@@ -1300,34 +1366,73 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
 ]);
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
 
-// The /agent/attach stream: a head frame identifying the run, then its AgentEvents stamped with their 1-based
-// seq (the client's resume cursor), then `end` when the run is over, every frame delivered, nothing more
-// coming. A stream that closes WITHOUT `end` was dropped mid-run; the client re-attaches with `after` = the
-// last seq it holds. The head's `prompt`/`startedAt` let a window that didn't initiate the turn (a reload, a
-// second window, another device) synthesize the user bubble and the elapsed readout; its `seq` is the log
-// length at attach time, the replay/live boundary.
+/* THE FRAMES THAT ARE FACTS ABOUT THE TURN rather than words in it: which session it runs, where it stands,
+ * what it costs, how it failed. Everything else an AgentEvent can say is transcript, and reaches a client as
+ * rows and patches (TranscriptPatchSchema) after the daemon has folded it; these reach it as themselves,
+ * because there is nothing to fold, a client keeps them as state beside the transcript. A frame can be both,
+ * a `worktree` that rebased writes a notice AND says where the branch is, so the two lists overlap, and the
+ * fold and this list each take the half that is theirs. */
+export const TURN_FACT_KINDS = [
+    "session",
+    "worktree",
+    "init",
+    "terminal",
+    "browser",
+    "commands",
+    "usage",
+    "rate_limit_info",
+    "fast_mode",
+    "tier",
+    "provider_retry",
+    "account_usage",
+    "context_usage",
+    "mode",
+    "error",
+] as const;
+export type TurnFact = Extract<AgentEvent, { kind: (typeof TURN_FACT_KINDS)[number] }>;
+export const isTurnFact = (event: AgentEvent): event is TurnFact => (TURN_FACT_KINDS as readonly string[]).includes(event.kind);
+// The same members AgentEventSchema declares, picked out rather than declared twice: a fact's shape is the
+// frame's shape, and a second spelling of it would be the drift the list above exists to prevent.
+type AgentEventMember = (typeof AgentEventSchema.options)[number];
+const factMembers = AgentEventSchema.options.filter((member) => (TURN_FACT_KINDS as readonly string[]).includes(member.shape.kind.value)) as unknown as [
+    AgentEventMember,
+    ...AgentEventMember[],
+];
+export const TurnFactSchema = z.discriminatedUnion("kind", factMembers) as unknown as z.ZodType<TurnFact>;
+
+/* The /agent/attach stream: a head carrying the run's rows so far, then every change to them and every fact
+ * about the turn as each lands, then `end` when the run is over, nothing more coming. A stream that closes
+ * WITHOUT `end` was dropped mid-run; the client re-attaches and takes the head's rows again, whole, which is
+ * what makes attaching idempotent: a window never re-folds what it has already drawn, it replaces it.
+ *
+ * Facts REPLAY on every attach (their seq is at or below the head's), because a window joining late still has
+ * to learn which session the turn runs and where its branch stands; patches are only ever live (their seq is
+ * above the head's), because the head already holds their result. */
 export const AttachFrameSchema = z.discriminatedUnion("kind", [
     z.object({
-        kind: z.literal("attached").describe("The first frame, identifying the run you have joined."),
+        kind: z.literal("attached").describe("The first frame, identifying the run you have joined and handing you its transcript so far."),
         run: z.string().describe("The run's id."),
-        prompt: z.string().describe("What was said to start it, so a window that did not start the turn can still draw the message."),
         startedAt: z.number().describe("When it started, in milliseconds, so a window joining late can show how long it has been going."),
-        seq: z.number().describe("How many frames already exist. Everything at or below this number is replay; everything above it is live."),
+        seq: z.number().describe("How many frames the run has produced so far. A fact at or below this number is being replayed; a patch is never."),
+        rows: z
+            .array(TranscriptRowSchema)
+            .describe("The turn's rows as they stand: what was asked, and everything the agent has said and done since. Draw these, then apply the patches that follow."),
     }),
     z.object({
-        kind: z.literal("frame").describe("One thing that happened."),
-        seq: z
-            .number()
-            .describe("Its position in the run, counting from one. Keep the last one you saw and hand it back to resume rather than replay."),
-        event: AgentEventSchema.describe(
-            "What happened, as one of about forty shapes: the agent's words arriving piece by piece, a tool being called and answering, a plan or a question it is waiting on, a mode change, the turn's cost. Each carries its own `kind`.",
-        ),
+        kind: z.literal("patch").describe("One change to the run's rows."),
+        seq: z.number().describe("Its position in the run, counting from one."),
+        patch: TranscriptPatchSchema,
+    }),
+    z.object({
+        kind: z.literal("fact").describe("One thing about the turn that is not a row: its session, its branch, its cost, a failure."),
+        seq: z.number().describe("Its position in the run, counting from one. At or below the head's number, it is being replayed."),
+        fact: TurnFactSchema,
     }),
     z.object({
         kind: z
             .literal("end")
             .describe(
-                "The run is over and every frame has been delivered. A stream that closes without this was dropped mid-run, so re-attach with the last position you hold rather than assuming the turn finished.",
+                "The run is over and every frame has been delivered. A stream that closes without this was dropped mid-run, so re-attach rather than assuming the turn finished.",
             ),
     }),
 ]);

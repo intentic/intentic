@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic/ui";
 import { computed, ref } from "vue";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { useChatSurface } from "./chatSurface";
 import ChatCodeBody from "./ChatCodeBody.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
@@ -20,7 +20,7 @@ import { present } from "./toolPresentation";
  * nothing to click rather than a second component. */
 
 const props = defineProps<{
-    tool: ChatTool;
+    tool: TranscriptTool;
     // Whether the turn this card belongs to is still streaming: the only state in which the card may animate.
     live: boolean;
 }>();
@@ -93,7 +93,7 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? surf
 const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? surface.commandBrowser?.() : undefined));
 
 /* THE AGENT THIS CALL STARTED: the third door of the same kind, onto the one thing a subagent has instead of a
- * process: its transcript. The card's own id IS the subagent's id in the registry (see ChatTool.subagent), so the
+ * process: its transcript. The card's own id IS the subagent's id in the registry (see TranscriptTool.subagent), so the
  * link needs nothing the card doesn't already hold.
  *
  * The line it wears is the answer to "is anything happening?", which for a BACKGROUNDED child is a question the

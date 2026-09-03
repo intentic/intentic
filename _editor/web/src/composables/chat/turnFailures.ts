@@ -1,27 +1,28 @@
-import type { AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentProvider, TurnFact } from "@intentic/sandbox-contract";
 import { ref, type Ref } from "vue";
 import type { PickUp } from "./pickUp";
 import { markAccountReauth } from "./providerAccounts";
 import type { TranscriptClock } from "./transcriptClock";
 import type { SessionRef } from "./turnRequest";
-import type { TurnEffect } from "./turnReducer";
 import type { TurnContext } from "./turnStream";
-import { bindingWindow, formatReset, formatWait, usageStatusFor } from "./usageStatus";
+import { bindingWindow, formatWait, usageStatusFor } from "./usageStatus";
 
 /* WHAT A FAILED TURN DOES TO THE CONVERSATION, one place, because the answer is a product decision rather than
  * a transcript rule and the codes only differ in that decision. Three things vary and nothing else does: whether
- * the user is NEEDED (the red error line) or merely informed (a muted notice), whether the words they typed
- * survived (a turn refused before it ran produced nothing, so the bubble comes back out and the queue holds it),
- * and whether the turn is COMING BACK on its own.
+ * the user is NEEDED (the red error line) or merely informed, whether the words they typed survived (a turn
+ * refused before it ran produced nothing, so the bubble comes back out and the queue holds it), and whether the
+ * turn is COMING BACK on its own.
  *
- * Split out of the reducer because most of these codes need state it has no business reaching for, the
- * account's usage windows, the provider's account list, to phrase themselves at all.
+ * WHAT HAPPENED is the daemon's to say: the failure's own line in the transcript is a row of the run
+ * (transcript-fold.ts writes it as the error frame lands), so every window and the record carry it. What is
+ * left here is what only this window can do about it: hold the words, offer the press, light the reconnect
+ * badge, and watch for the run the daemon brings back.
  *
  * The two codes that ARE coming back own state of their own here (the outage's countdown, the credential
  * renewal's spinner) plus the probe that hunts the resumed run down, which is why the recovery lives beside the
  * failure that armed it rather than in the conversation. */
 
-type TurnError = Extract<TurnEffect, { kind: "error" }>;
+type TurnError = Extract<TurnFact, { kind: "error" }>;
 
 /* A provider outage the daemon is working through, as this window sees it: when the next attempt is due, how
  * many are left, and whether it is armed or waiting on the setting. Drives the composer's outage banner, the
@@ -115,10 +116,9 @@ export class TurnFailures {
                  * delivered) and what makes reconnecting REPLAY it instead of asking the user to retype into every
                  * chat that bounced. The queue is held until then, so it can't immediately re-fail. */
                 this.host.requeue(turn.userMessageId);
+                // No red line: the condition has a one-click fix sitting right above the composer (ChatPanel's
+                // reauth banner, which this needsReauth flag raises), so the red line would overstate it.
                 this.markReauth(message);
-                // Muted, like session-not-found: the condition has a one-click fix sitting right above the composer
-                // (ChatPanel's reauth banner, which this needsReauth flag raises), so the red line would overstate it.
-                this.host.transcript.notice(`${message} Your message is held here and goes as soon as the account is back.`);
                 return;
             case `codex-reauth`:
                 // The daemon rejected this account's credential before the turn. Same badge as claude-reauth (the
@@ -142,7 +142,6 @@ export class TurnFailures {
                  * rather than a recovery. The turn did teach it the list, so the user's own next send is the one
                  * that goes through. */
                 this.host.requeue(turn.userMessageId);
-                this.host.transcript.notice(`${message} Your message is held below: send it again and it goes as written.`);
                 return;
             case `context-window-too-small`:
                 /* The model cannot hold a turn of this loop, and the daemon worked that out before sending, so
@@ -153,7 +152,6 @@ export class TurnFailures {
                  * daemon's sentence already names the three ways out. A red line here would report a broken
                  * workspace for what is a model too small for the job. */
                 this.host.requeue(turn.userMessageId);
-                this.host.transcript.notice(`${message} Your message is held below: pick a bigger model and send it again.`);
                 return;
             case `sandbox-memory-low`:
                 /* THE BOX, NOT THE REQUEST. The daemon refused before spawning anything because the sandbox had
@@ -169,26 +167,18 @@ export class TurnFailures {
                  * user's own next send is the one that goes through, and it is also the evidence that they
                  * freed something. */
                 this.host.requeue(turn.userMessageId);
-                this.host.transcript.notice(`${message} Your message is held below.`);
                 return;
             case `session-not-found`:
-                /* The runtime could not pick this chat's session back up mid-turn, drop the dead id so the next
-                 * send starts a fresh one instead of replaying the failure forever. A muted notice, not the error
-                 * ref: the condition is self-healed, so the red line + error tab status would overstate it.
-                 *
-                 * The runtime's OWN sentence, not one written here. This used to state a cause, "the sandbox was
-                 * rebuilt or the session was deleted", for a condition it cannot see the cause of, and the two it
-                 * named were usually both wrong: the daemon now seeds a fresh session from its record whenever it
-                 * can, so what still reaches this line is an agent that lost the session inside its own process. */
+                // The runtime could not pick this chat's session back up mid-turn, drop the dead id so the next
+                // send starts a fresh one instead of replaying the failure forever. No red line: the condition is
+                // self-healed, so the red line + error tab status would overstate it.
                 this.host.session.value = undefined;
-                this.host.transcript.notice(message);
                 return;
             case `codex-advisory`:
                 // Codex warned about the turn it then ran to completion (its pinned CLI has no metadata for a model
                 // the subscription already serves, so the turn runs on fallback context/compaction limits). The red
-                // line said the turn had failed, directly under the answer it had just produced. Muted, like the
-                // other codes that describe a turn rather than end one.
-                this.host.transcript.notice(message);
+                // line said the turn had failed, directly under the answer it had just produced; the daemon's own
+                // muted line is the whole of it.
                 return;
             case `rate_limit`:
                 this.applyLimitError(error);
@@ -202,7 +192,6 @@ export class TurnFailures {
                 // The platform did not deliver this message and has already refunded it. Hold the user's words
                 // for an explicit retry; trial failures never enter the generic outage auto-resume loop.
                 this.host.requeue(turn.userMessageId);
-                this.host.transcript.notice(`${message} Your message is held below.`);
                 void import(`./useChat`).then(async (chat) => {
                     await chat.loadTrialStatus();
                     if (code === `trial-model-unavailable`) {
@@ -307,7 +296,6 @@ export class TurnFailures {
      * The frame's own reset instant wins over the usage store's binding window (the frame names the pool that
      * actually refused). It rides the notice as information and gates nothing. */
     private applyLimitError(error: TurnError): void {
-        const { message } = error;
         const model = this.host.model.value === `` ? undefined : { id: this.host.model.value };
         const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.provider.value, this.host.account.value, model), model)?.resetsAt;
         /* ARMED, THE DAEMON KEEPS THE APPOINTMENT, and the strip says so rather than offering a press: same
@@ -326,15 +314,6 @@ export class TurnFailures {
             ...(error.held === undefined ? {} : { held: { ran: error.held.ran } }),
             ...(scheduled && error.resetsAt !== undefined ? { automatic: { at: error.resetsAt * 1_000 } } : {}),
         };
-        if (resetsAt === undefined) {
-            this.host.transcript.notice(message);
-            return;
-        }
-        this.host.transcript.notice(
-            scheduled
-                ? `${message} Resets ${formatReset(resetsAt)}, and this chat sends it again then.`
-                : `${message} Resets ${formatReset(resetsAt)}.`,
-        );
     }
 
     /* THE PROVIDER FAILED, AND SOMETHING IS ALREADY BEING DONE ABOUT IT.
@@ -367,12 +346,6 @@ export class TurnFailures {
          * so the strip reports the wait and the local automation keeps out of its way, while the manual press
          * stays live for anyone who won't wait for it. */
         this.host.pickUp.value = { reason: `outage`, ...(scheduled ? { automatic: { at: outage.retryAt * 1_000 } } : {}) };
-        this.host.transcript.notice(
-            scheduled
-                ? `${message} Retrying by itself in ${formatWait(outage.retryAt)}: attempt ${outage.attempt} of ${outage.maxAttempts}.`
-                : `${message} Nothing is retrying it, so the turn is waiting: keep this chat going and it continues from here.`,
-            scheduled ? { noticeAction: `outageOptOut` } : undefined,
-        );
         if (scheduled) {
             this.scheduleReattach(outage.retryAt * 1000, OUTAGE_PROBE);
         }
@@ -395,18 +368,15 @@ export class TurnFailures {
      * itself a resume that got refused again. That is the one case where the user really is needed, so it reads
      * as the reconnect condition rather than a spinner. */
     private applyAuthRefusedError(error: TurnError): void {
-        const { message } = error;
         if (error.autoResume !== `scheduled`) {
-            this.markReauth(message);
-            this.host.transcript.notice(`${message} Reconnect the account to pick this conversation back up.`);
+            this.markReauth(error.message);
             return;
         }
         this.host.hold();
         // The wait opens here; armRenewalProbe arms the hunt that closes it, once this turn's stream is done.
+        // The daemon's own line for this failure carries the wait (TranscriptRow.noticeWait), and the notice
+        // spins for as long as this stands.
         this.credentialRenewal.value = { since: Date.now() };
-        this.host.transcript.notice(`${message} The credential is being renewed and this turn continues automatically.`, {
-            noticeWait: `credentialRenewal`,
-        });
     }
 
     /* A credential wait opened by a turn's failure starts hunting for its replacement when that turn ENDS rather

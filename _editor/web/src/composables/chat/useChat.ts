@@ -16,7 +16,7 @@ import {
     type PermissionMode,
     providerLabel,
     type ProviderRefusals,
-    type RestoredMessage,
+    type TranscriptRow,
     TRIAL_LABEL,
     TRIAL_PROVIDER,
     type TranslatorAccounts,
@@ -2002,14 +2002,14 @@ const loadSessions = async (query?: string): Promise<void> => {
 // From the CONVERSATION's own box: a provider session is minted by the runtime that ran the turn and stored
 // beside it, so a tab homed in another sandbox has to ask that daemon (Conversation.box). Asking the active one
 // about a session id it never minted is a 404 dressed up as "could not open that conversation".
-const fetchTranscript = async (conversation: Conversation, id: string): Promise<RestoredMessage[] | undefined> => {
+const fetchTranscript = async (conversation: Conversation, id: string): Promise<TranscriptRow[] | undefined> => {
     try {
         const response = await sandboxRequestVia(conversation.box.value, `/sessions/${encodeURIComponent(id)}`);
         if (!response.ok) {
             conversation.error.value = `Could not open that conversation.`;
             return undefined;
         }
-        const body = (await response.json()) as { messages?: RestoredMessage[] };
+        const body = (await response.json()) as { messages?: TranscriptRow[] };
         return body.messages ?? [];
     } catch {
         conversation.error.value = `Could not open that conversation.`;
@@ -2090,7 +2090,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     // A fleet conversation is stable across runtime switches; its session id is not. Resolve registered agents
     // by conversation/worktree identity, then adopt the SDK session that actually supplied the transcript so the
     // next turn resumes what the user is looking at. History-menu tabs still mean one exact runtime session.
-    let restored: RestoredMessage[] | undefined;
+    let restored: TranscriptRow[] | undefined;
     // How the last turn ENDED, as the daemon has it, applied once the transcript below is in place: an offer to
     // carry on belongs under the work it is offering to carry on (see Conversation.adoptEnding).
     let ending: PickUp | undefined;

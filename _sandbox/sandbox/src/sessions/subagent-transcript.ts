@@ -1,19 +1,18 @@
 import { sdk } from "../claude/claude-sdk.js";
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { subagentAgentId, subagentSource } from "../agent/subagents.js";
 import { turnRunOf } from "../agent/turn-runs.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 import { restoredSessionMessages } from "./sessions.js";
-import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
 /* ONE SUBAGENT'S TRANSCRIPT, in the shape every other transcript route already answers in.
  *
  * The split here is the one the daemon already makes for a conversation, and it is why surfacing a subagent needed
- * no new streaming channel: a RUNNING child is served from a live frame log (the parent turn's for an SDK child,
- * its own pump's for a spawned one), and a FINISHED one is served from whatever store actually ran it:
+ * no new streaming channel: a RUNNING child is served from the live run (the parent turn's own fold for an SDK
+ * child, tagged with the call that spawned it; its own run's rows for a spawned one), and a FINISHED one is
+ * served from whatever store actually ran it:
  *   • subagent, the SDK writes a per-child JSONL beside its session's, and exposes getSubagentMessages over it.
- *     Reduced by the SAME function a parent conversation is (restoredSessionMessages), so a child's cards read
- *     identically to its parent's.
+ *     Reduced by restoredSessionMessages, so a child's cards read like its parent's.
  *   • spawned, a conversation of its own, so its settled record is the conversation's transcript record, read
  *     under the same (id, provider, harness) its turns were filed under.
  *
@@ -26,21 +25,24 @@ export interface SubagentTranscriptDeps {
     readonly root: string;
     // A spawned child is a conversation of its own, so its settled record is the conversation's transcript
     // record, read under the same (id, provider, harness) its turns were filed under.
-    readonly conversation: (agent: TranscriptAgent) => Promise<RestoredMessage[]>;
+    readonly conversation: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
 }
 
-export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: string): Promise<RestoredMessage[]> => {
+export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: string): Promise<TranscriptRow[]> => {
     const source = subagentSource(id);
     if (source === undefined) {
         return [];
     }
-    /* WHILE IT RUNS, the parent's frame log is the only complete account, and for a subagent it is a BETTER one
-     * than the file, because the frames were normalized on their way through (display names, call-time diffs) by
-     * the same helpers a card is built from. */
+    /* WHILE IT RUNS, the parent's run is the only complete account, and for a subagent it is a BETTER one than
+     * the file, because the frames were normalized on their way through (display names, call-time diffs) by the
+     * same helpers a card is built from. `prompt` is what it was asked to do (the registry's description), put
+     * first as the opening user bubble so the transcript reads like a conversation rather than starting
+     * mid-answer. */
     if (source.kind === "subagent" && source.running) {
         const run = turnRunOf(source.conversationId);
         if (run !== undefined) {
-            return subagentTurn(run.events, id, source.description);
+            const prompt = source.description;
+            return [...(prompt !== undefined && prompt.length > 0 ? [{ role: "user" as const, text: prompt }] : []), ...run.rowsOf(id)];
         }
     }
     if (source.kind === "subagent") {
@@ -55,13 +57,13 @@ export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: s
         return restoredSessionMessages(messages, deps.root);
     }
     /* A SPAWNED child is a conversation of its own, and the record's id IS that conversation's id, so both
-     * halves of the split read the stores a conversation already writes: live from its own detached pump (the
-     * pump holds the prompt too, so the transcript opens with what it was asked), settled from the
-     * conversation's transcript record, under the provider and harness key its turns were filed with. */
+     * halves of the split read the stores a conversation already writes: live from its own detached run (whose
+     * rows open with what it was asked), settled from the conversation's transcript record, under the provider
+     * and harness key its turns were filed with. */
     if (source.running) {
         const run = turnRunOf(id);
         if (run !== undefined) {
-            return restoredTurn({ prompt: run.prompt }, run.events, deps.root, source.startedAt);
+            return [...run.rows];
         }
     }
     if (source.provider === undefined || source.harness === undefined) {

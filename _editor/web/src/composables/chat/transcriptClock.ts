@@ -1,36 +1,26 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { TranscriptCards, TranscriptRow } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, ref, shallowRef } from "vue";
 import { recordPerf } from "../perf";
-import type { CardKind, ChatMessage } from "./transcript";
-import {
-    appendMessage,
-    appendNotice,
-    applyTurnFrame,
-    emptyTurnState,
-    flushPending,
-    revealPending,
-    type TurnEffect,
-    type TurnState,
-} from "./turnReducer";
-import type { TurnContext } from "./turnStream";
+import type { ChatMessage } from "./transcript";
+import { appendMessage, applyPatch, attachRun, emptyTranscriptState, flushPending, revealPending, type TranscriptState } from "./transcriptState";
+import type { AttachEntry, AttachHead, TurnContext } from "./turnStream";
 
-/* THE TRANSCRIPT AS IT IS BEING WRITTEN: the state every frame moves through, the clock that decides WHEN a
- * frame is shown, and every write anyone makes to it. One unit because the buffering is the reason the writes
- * cannot be independent, a Stop's notice appended without folding the frames that already arrived would read
+/* THE TRANSCRIPT AS IT IS BEING WRITTEN: the state every entry moves through, the clock that decides WHEN an
+ * entry is shown, and every write anyone makes to it. One unit because the buffering is the reason the writes
+ * cannot be independent, a Stop's notice appended without applying the patches that already arrived would read
  * as the agent working after being stopped.
  *
- * What a frame MEANS is the reducer's (turnReducer.ts) and what to DO about it is the Conversation's; this owns
- * only the state, the timing, and the ordering between them. */
+ * What a row IS was decided on the daemon (transcript-fold.ts); what to DO about a fact is the Conversation's;
+ * this owns only the state, the timing, and the ordering between them. */
 
 /* THE TRANSCRIPT RUNS ON ITS OWN WINDOW'S FRAMES, which is worth a note only because it used to be the hardest
  * thing in this file to get right. A floating chat was DOM teleported into a second window while its JS kept
  * running in the opener's realm, and rendering steps belong to a window: a browser gives none, no animation
  * frames, no observer deliveries, to one that is hidden, minimized or fully occluded, which is the normal state
- * of the app window while the user works in the chat window in front of it. So the clock stopped: frames piled
+ * of the app window while the user works in the chat window in front of it. So the clock stopped: entries piled
  * up in the inbox, the typewriter held its text, and the panel out there looked alive while nothing on it moved.
- * Every "the floating chat stopped reacting" report was this. A floating panel is rendered by its own window
- * now (composables/floating.ts), so the transcript, this clock and the frames it runs on are the same window's
- * by construction, and there is no view to announce or re-home. */
+ * A floating panel is rendered by its own window now (composables/floating.ts), so the transcript, this clock and
+ * the entries it runs on are the same window's by construction, and there is no view to announce or re-home. */
 
 // How long a tick waits on a frame that may never come. The clock's rate is the frame's, this only bounds the
 // lag when nothing is painting: a minimized window, which would otherwise leave the clock armed forever and the
@@ -38,36 +28,23 @@ import type { TurnContext } from "./turnStream";
 // is hidden, which is the right rate for a transcript nobody is looking at.
 const CLOCK_FALLBACK_MS = 120;
 
-// An assistant bubble a turn opened for an answer that never arrived. A turn the daemon refused before running
-// it leaves one behind, and a rewound turn must take it back too rather than leave a blank agent reply.
-const blank = (message: ChatMessage): boolean =>
-    message.role === `assistant` &&
-    message.text === `` &&
-    (message.thinking ?? ``) === `` &&
-    message.tools === undefined &&
-    message.plan === undefined &&
-    message.question === undefined &&
-    message.permission === undefined;
-
 export class TranscriptClock {
-    /* The transcript, the turn's current bubble, the id allocator, and the typewriter's undrained buffer, one
-     * value, moved through the pure reducer in turnReducer.ts. Holding them together is what makes the frame
-     * rules testable without a conversation: every question the reducer asks (does this bubble hold prose yet,
-     * which bubble does a card attach to) is answerable from this object alone.
+    /* The transcript, the id allocator, the attached run's place in it, and the typewriter's undrained buffer,
+     * one value, moved through the pure transitions in transcriptState.ts.
      *
      * shallowRef, NOT ref, and the difference is the single largest cost in a long chat. A deep `ref` hands its
      * value to Vue's reactive(), which lazily wraps every object REACHED THROUGH IT in a Proxy: the messages
-     * array, each message, each message's tool array, each tool, each tool's children. The reducer is pure, so
-     * it replaces that object graph on essentially every frame, which invalidates the proxy cache and makes the
-     * renderer re-wrap the reachable graph on the next read. At 60 typewriter ticks a second over a
+     * array, each message, each message's tool array, each tool, each tool's children. The transitions are pure,
+     * so they replace that object graph on essentially every entry, which invalidates the proxy cache and makes
+     * the renderer re-wrap the reachable graph on the next read. At 60 typewriter ticks a second over a
      * several-hundred-message transcript that is tens of thousands of proxy allocations per second, all of it
      * to observe mutations that CANNOT HAPPEN: nothing anywhere writes through `state.value`, every transition
-     * goes through the reducer and assigns a whole new object.
+     * assigns a whole new object.
      *
      * A shallowRef triggers on exactly the thing that does happen, the identity of `state.value` changing, and
      * hands the renderer the raw objects. Same reactivity, none of the proxying. (useChat's `conversations` is
      * shallow for a related reason; see its comment.) */
-    private readonly state = shallowRef<TurnState>(emptyTurnState);
+    private readonly state = shallowRef<TranscriptState>(emptyTranscriptState);
 
     readonly messages: ComputedRef<readonly ChatMessage[]> = computed(() => this.state.value.messages);
 
@@ -92,47 +69,35 @@ export class TranscriptClock {
      * transcript SETTLES each batch whole instead of revealing it a slice per paint: the same text, the same
      * order, arriving as it lands rather than at reading speed.
      *
-     * It is the cost answer too. The reveal is the per-paint work (`chat.type` below) and it re-runs the
-     * reducer to append a few characters to one bubble; settling pays that once per frame batch instead of once
-     * per paint, which is what keeps four live agents on screen affordable. Watched by default, so a
-     * conversation nobody has claimed, a test, a background tab's first frames, behaves exactly as it always
-     * has. */
+     * It is the cost answer too. The reveal is the per-paint work (`chat.type` below) and it rebuilds the list to
+     * append a few characters to one bubble; settling pays that once per batch instead of once per paint, which
+     * is what keeps four live agents on screen affordable. Watched by default, so a conversation nobody has
+     * claimed, a test, a background tab's first frames, behaves exactly as it always has. */
     readonly watched = ref(true);
 
-    /* Frames waiting for the next tick, with the turn each arrived under (a stream holds one turn, but the
+    /* Entries waiting for the next tick, with the turn each arrived under (a stream holds one turn, but the
      * buffer outlives any single `follow` call, so the pairing has to be explicit).
      *
-     * Buffering is what stops a burst from costing a render apiece. The daemon emits a frame per SDK message
-     *, hundreds over an answer, and a REPLAY delivers a whole run's log as fast as the socket can carry it,
-     * while the screen can only show 60 a second. Applied on arrival, every one of those paid a full
+     * Buffering is what stops a burst from costing a render apiece. The daemon sends a patch per delta, hundreds
+     * over an answer, while the screen can only show 60 a second. Applied on arrival, every one of those paid a
      * transcript rebuild plus a Vue render to draw a state nobody ever saw. */
-    private readonly inbox: { readonly event: AgentEvent; readonly turn: TurnContext; readonly replay: boolean }[] = [];
+    private readonly inbox: { readonly entry: AttachEntry; readonly turn: TurnContext; readonly replay: boolean }[] = [];
 
-    /* THE BATCH JUST FOLDED WAS HISTORY, not an answer being written, so its text is put on screen whole rather
-     * than typed (see `tick`). Held across ticks rather than passed through the fold, because the two are not
-     * the same span: a replay arrives as fast as the socket carries it and the reveal it would otherwise feed
-     * runs for as long as the text takes to type, several paints AFTER the last replayed frame folded.
-     * Cleared by the first live frame, which is the model writing again and the one thing the typewriter is
-     * for. */
-    private replaying = false;
+    /* `applied` runs the conversation's half of an entry, in arrival order: what a fact DOES is state this has
+     * no business reaching for, and even a patch has a consequence beyond the rows (a wait that ends, a write to
+     * record). Told whether the entry is a replay, so a fact delivered twice is applied once. */
+    constructor(private readonly applied: (entry: AttachEntry, turn: TurnContext, replay: boolean) => void) {}
 
-    /* `applied` runs the effects a folded frame raised, in arrival order, the conversation's half of a frame,
-     * and the reason the fold hands them back instead of applying them: what an effect DOES is state this has
-     * no business reaching for. */
-    constructor(private readonly applied: (event: AgentEvent, turn: TurnContext, effects: readonly TurnEffect[]) => void) {}
-
-    // One frame in: buffered for the next tick rather than applied on the spot, so a burst costs one render
-    // instead of one apiece (see `inbox`). Nothing is decided here, the ordering between a frame's transition
-    // and its effects is `tick`'s, and it has to stay exact. `replay` says which side of the attach's
-    // replay/live boundary the frame came from (turnStream), and is carried per frame because one batch
-    // routinely straddles it: the tail of a replay and the first live frame arrive in the same paint.
-    push(event: AgentEvent, turn: TurnContext, replay = false): void {
-        this.inbox.push({ event, turn, replay });
+    // One entry in: buffered for the next tick rather than applied on the spot, so a burst costs one render
+    // instead of one apiece (see `inbox`). Nothing is decided here, the ordering between an entry's transition
+    // and its consequence is `tick`'s, and it has to stay exact.
+    push(entry: AttachEntry, turn: TurnContext, replay = false): void {
+        this.inbox.push({ entry, turn, replay });
         this.schedule();
     }
 
     // Run a tick on this window's next paint, unless one is already owed. The clock only runs while there is
-    // something for it to do, buffered frames, or text still being revealed, so an idle conversation holds no
+    // something for it to do, buffered entries, or text still being revealed, so an idle conversation holds no
     // timer.
     private schedule(): void {
         if (this.clockArmed) {
@@ -143,63 +108,37 @@ export class TranscriptClock {
         globalThis.requestAnimationFrame(() => this.tick());
     }
 
-    /* Fold every buffered frame into `from`, returning the state they produce and the effects they raised in
-     * arrival order. Pure over the buffer, the caller owns the write and whatever else rides on it, because
-     * the two callers want different endings: a tick reveals text and keeps the clock, a settle drains it.
+    /* Apply every buffered entry to `from`, returning the state they produce and the entries applied, in arrival
+     * order. Pure over the buffer, the caller owns the write and whatever else rides on it, because the two
+     * callers want different endings: a tick reveals text and keeps the clock, a settle drains it.
      *
-     * The fold runs the reducer per frame; each frame's transition genuinely depends on the one before it, so
-     * they cannot be merged. What it does NOT do is write per frame, and that is the whole saving: the
-     * reducer's cost is a transcript rebuild, Vue's is a render of one, and only the latter was being paid N
-     * times over to display a single state.
-     *
-     * Effects come back rather than being applied here, and are never recomputed from the folded state, a
-     * frame's effects depend on the state it was applied TO, so a second pass against the batch's final state
-     * would raise a different (wrong) set, and pay for the whole fold again to do it. */
-    private foldInbox(from: TurnState): {
-        readonly state: TurnState;
-        readonly applied: readonly { readonly event: AgentEvent; readonly turn: TurnContext; readonly effects: readonly TurnEffect[] }[];
+     * Each patch's transition depends on the one before it, so they cannot be merged. What this does NOT do is
+     * write per entry, and that is the whole saving: a transition's cost is a list rebuild, Vue's is a render of
+     * one, and only the latter was being paid N times over to display a single state. */
+    private foldInbox(from: TranscriptState): {
+        readonly state: TranscriptState;
+        readonly applied: readonly { readonly entry: AttachEntry; readonly turn: TurnContext; readonly replay: boolean }[];
     } {
         const batch = this.inbox.splice(0, this.inbox.length);
-        const applied: { readonly event: AgentEvent; readonly turn: TurnContext; readonly effects: readonly TurnEffect[] }[] = [];
         let state = from;
-        // Whatever the last frame of this batch was, the transcript now IS: a batch that ended on history is
-        // being caught up, one that ended on a live frame is being written. A batch straddling the boundary
-        // therefore settles the replayed part and starts typing from the live one, which is the behaviour a
-        // reader wants at exactly the moment they open a running agent.
-        if (batch.length > 0) {
-            this.replaying = batch.at(-1)?.replay === true;
+        for (const { entry } of batch) {
+            if (entry.kind === `patch`) {
+                state = applyPatch(state, entry.patch, this.watched.value);
+            }
         }
-        for (const { event, turn } of batch) {
-            // Every row this frame draws is stamped with the run it came from (TurnState.run), so a later attach
-            // to the same run can take them back out rather than draw them twice. Cleared in runApplied, once
-            // the effects these frames raise have had their chance to write too.
-            const result = applyTurnFrame({ ...state, run: turn.run }, event, { userMessageId: turn.userMessageId });
-            state = result.state;
-            applied.push({ event, turn, effects: result.effects });
-        }
-        return { state, applied };
+        return { state, applied: batch };
     }
 
-    // Hand a fold's frames to the conversation, in arrival order. Kept in one place because that order is
-    // relied on for state the conversation holds ACROSS frames (a provider_retry and the frame that answers
+    // Hand a fold's entries to the conversation, in arrival order. Kept in one place because that order is
+    // relied on for state the conversation holds ACROSS entries (a provider_retry and the entry that answers
     // it are routinely in one batch), and a reshuffle here would settle it on whichever won.
     private runApplied(applied: ReturnType<TranscriptClock[`foldInbox`]>[`applied`]): void {
-        /* Nothing folded, nothing to run, and nothing to clear. An effect below may write a notice
-         * of its own, and a write folds the (empty) inbox on its way in; clearing unconditionally would strip
-         * the run mid-flight and leave that notice unstamped, which is precisely the row a replay redraws. */
-        if (applied.length === 0) {
-            return;
-        }
-        for (const { event, turn, effects } of applied) {
-            this.applied(event, turn, effects);
-        }
-        // The frames and their effects are all in. What the user does next is theirs, not the run's.
-        if (this.state.value.run !== undefined) {
-            this.state.value = { ...this.state.value, run: undefined };
+        for (const { entry, turn, replay } of applied) {
+            this.applied(entry, turn, replay);
         }
     }
 
-    // One paint's worth of transcript work: apply the frames that arrived since the last tick, then reveal the
+    // One paint's worth of transcript work: apply the entries that arrived since the last tick, then reveal the
     // typewriter's next slice, in ONE write to `state.value`.
     private tick(): void {
         this.clockArmed = false;
@@ -213,28 +152,16 @@ export class TranscriptClock {
          * streaming turn, so it cannot afford a closure and a promise per tick.
          *
          * Two spans, not one, because the tick's two jobs fail differently and the fix for each is elsewhere.
-         * `chat.frame` is the fold: the reducer rebuilds the message list on most frames, so its cost scales
-         * with TRANSCRIPT LENGTH while the frame rate is set by the model, which is why a chat feels fine for
-         * the first few exchanges and turns to treacle in a long one. `chat.type` is the typewriter's reveal,
-         * which pays that same rebuild to append a few characters to one bubble and runs on EVERY paint of an
-         * answer, buffered frames or not.
-         *
-         * `messages` rides along so that correlation is visible in one line instead of inferred, and `frames`
-         * says how many the fold carried: the same total work in fewer, fatter ticks is the buffer doing its
-         * job, and a fold that stays slow at `frames: 1` is a reducer problem rather than a clock one. */
+         * `chat.frame` is the fold: a patch rebuilds the message list, so its cost scales with TRANSCRIPT LENGTH
+         * while the rate is set by the model, which is why a chat feels fine for the first few exchanges and
+         * turns to treacle in a long one. `chat.type` is the typewriter's reveal, which pays that same rebuild
+         * to append a few characters to one bubble and runs on EVERY paint of an answer, buffered entries or not. */
         const from = performance.now();
         const { state, applied } = this.foldInbox(this.state.value);
         const folded = performance.now();
-        /* Reveal against the state the fold just produced, so the tick's single write carries both jobs, a
-         * slice at a time where someone is reading it, the whole buffer where nobody is (see `watched`).
-         *
-         * …and the whole buffer while REPLAYING, for a reason `watched` does not cover: the typewriter's job is
-         * to pace prose at the speed it is being written, and replayed prose was written minutes or hours ago.
-         * Typed out anyway, opening a long-running agent replayed its entire answer at reading speed before
-         * showing where it had actually got to, which is the "everything streams again instead of just being
-         * there" that made reopening a busy chat feel slower the longer it had been working. */
-        const settleWhole = !this.watched.value || this.replaying;
-        const next = state.pending === undefined ? state : settleWhole ? flushPending(state) : revealPending(state);
+        // Reveal against the state the fold just produced, so the tick's single write carries both jobs, a
+        // slice at a time where someone is reading it, the whole buffer where nobody is (see `watched`).
+        const next = state.pending === undefined ? state : this.watched.value ? revealPending(state) : flushPending(state);
         this.state.value = next;
         if (applied.length > 0) {
             recordPerf(`chat.frame`, folded - from, { frames: applied.length, messages: next.messages.length });
@@ -243,7 +170,7 @@ export class TranscriptClock {
             recordPerf(`chat.type`, performance.now() - folded, { messages: next.messages.length });
         }
         this.runApplied(applied);
-        // Text still buffered keeps the clock running; so do frames that landed during the tick itself.
+        // Text still buffered keeps the clock running; so do entries that landed during the tick itself.
         if (this.state.value.pending !== undefined || this.inbox.length > 0) {
             this.schedule();
         }
@@ -251,7 +178,7 @@ export class TranscriptClock {
 
     /* Bring the transcript up to date NOW, off the clock, without disturbing the typewriter: text still being
      * revealed goes on revealing (the clock is re-armed for it). User-clock writes call this before applying
-     * their own state so they cannot overtake frames that have already reached the tab. */
+     * their own state so they cannot overtake entries that have already reached the tab. */
     catchUp(): void {
         const { state, applied } = this.foldInbox(this.state.value);
         this.state.value = state;
@@ -261,17 +188,16 @@ export class TranscriptClock {
         }
     }
 
-    /* Leave the transcript FINISHED: every buffered frame applied, and the typewriter's buffer drained rather
+    /* Leave the transcript FINISHED: every buffered entry applied, and the typewriter's buffer drained rather
      * than animated, in one write. For a turn that is over, ended of its own accord, or stopped, where what
      * comes next (persist, the queue drain) must not read a torn transcript or a half-typed bubble.
      *
      * The clock is left to expire on its own; an armed tick finds the inbox empty and no pending text, and
      * returns.
      *
-     * Buffered frames are applied rather than dropped even on an abort: they arrived, so they are part of the
-     * run's story, and a Stop that swallowed the last frames before it would leave a transcript the daemon's
-     * own log disagrees with. (A card taking the bubble over flushes inside the reducer, where the rule
-     * belongs.) */
+     * Buffered entries are applied rather than dropped even on an abort: they arrived, so they are part of the
+     * run's story, and a Stop that swallowed the last patches before it would leave a transcript the daemon's
+     * own rows disagree with. */
     settle(): void {
         const { state, applied } = this.foldInbox(this.state.value);
         this.state.value = flushPending(state);
@@ -281,186 +207,82 @@ export class TranscriptClock {
     /* A transcript write made on the USER'S clock rather than the stream's, a control action's notice, a card
      * freezing into its answer, a Stop cancelling what was open.
      *
-     * Folds the buffered frames before applying `next`, and that ordering is the whole point: a Stop pressed
-     * mid-answer would otherwise append "Stopped." above frames that had already reached this tab, and the
-     * transcript would read as though the agent kept working after being stopped. Applying frames on arrival
-     * used to make this automatic; buffering them for the next paint (see `inbox`) made it something the
-     * writes on the other clock have to say out loud.
+     * Applies the buffered entries before applying `next`, and that ordering is the whole point: a Stop pressed
+     * mid-answer would otherwise append "Stopped." above patches that had already reached this tab, and the
+     * transcript would read as though the agent kept working after being stopped.
      *
-     * Free when the buffer is empty, which is every call from inside a fold's effects, where it already ran. */
-    write(next: (state: TurnState) => TurnState): void {
+     * Free when the buffer is empty, which is every call from inside a fold's consequences, where it already ran. */
+    write(next: (state: TranscriptState) => TranscriptState): void {
         this.catchUp();
         this.state.value = next(this.state.value);
     }
 
-    /* A user bubble is stamped with the moment it lands (ChatMessage.sentAt), which for every bubble this tab
-     * appends IS when it was sent, because the append is what sending does. A caller that knows better says so
-     * and is left alone: the reattach path takes the RUNNING turn's start, and a bubble reappearing after a
-     * reload was not sent at the moment the reload finished.
+    /* A row this window writes. A user bubble is stamped with the moment it lands (TranscriptRow.sentAt), which
+     * for every bubble this tab appends IS when it was sent, because the append is what sending does; a caller
+     * that knows better says so and is left alone.
      *
-     * Here rather than at the four call sites that append one, and deliberately not in the reducer: `rebuild`
-     * and `adopt` pour whole transcripts through that (a replayed record, a fork's inherited turns), and a
-     * clock in there would re-stamp every restored message with the moment the tab happened to open it. */
+     * Here rather than in the transitions: `rebuild` and `adopt` pour whole transcripts through those (a
+     * replayed record, a fork's inherited turns), and a clock in there would re-stamp every restored message
+     * with the moment the tab happened to open it. */
     append(message: Omit<ChatMessage, "id">): number {
         const id = this.state.value.nextId;
         const stamped = message.role === `user` && message.sentAt === undefined ? { ...message, sentAt: Date.now() } : message;
-        this.state.value = appendMessage(this.state.value, stamped);
+        this.write((state) => appendMessage(state, stamped));
         return id;
     }
 
-    // A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
-    // `extra` is the follow-up offer or unfinished wait a notice can carry, see turnReducer's appendNotice.
-    notice(text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): void {
-        this.write((state) => appendNotice(state, text, extra));
+    // A small muted line this window writes on the user's clock (a switch, a rewind, a press that armed
+    // something). LOCAL by construction: the daemon's own notices arrive as rows, and only a row this window
+    // drew is one a fork must count out.
+    notice(text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): number {
+        return this.append({ role: `notice`, text, local: true, ...extra });
     }
 
-    // Hang an interactive card (plan / question / permission) on a bubble, and, with the answered card, freeze
-    // that answer into the transcript. One writer for all three: they differ in what they ask, not in how they
-    // attach.
-    attachCard(id: number, card: Pick<ChatMessage, CardKind>): void {
+    // Freeze a card into its answer the instant the daemon accepted it: the `resolved` patch that follows says
+    // the same thing (card-status.ts is the one derivation), so this only closes the gap between the click and
+    // the round trip, where a card still reading `pending` would offer its buttons a second time.
+    attachCard(id: number, cards: TranscriptCards): void {
         this.write((state) => ({
             ...state,
-            messages: state.messages.map((message) => (message.id === id ? { ...message, ...card } : message)),
+            messages: state.messages.map((message) => (message.id === id ? { ...message, ...cards } : message)),
         }));
     }
 
-    /* Open the turn's first bubble: a fresh empty assistant message the frames stream into, so the typing
-     * indicator shows the moment the turn starts rather than on the first delta.
-     *
-     * `run` on the reattach path, where the head has already named it: this bubble holds the run's first prose
-     * but is opened OUTSIDE the fold that stamps the rest, so without it the one row a re-attach most needs to
-     * reclaim is the one row it cannot see. The SEND path has no run to give, the daemon names it in the ack,
-     * after the bubble the typing indicator needs is already on screen, so it takes the id back and stamps it
-     * the moment the ack lands (claimRun). Returned for exactly that. */
-    openBubble(run?: string): number {
-        const id = this.append({ role: `assistant`, text: ``, thinking: ``, ...(run === undefined ? {} : { run }) });
-        this.state.value = { ...this.state.value, bubbleId: id };
-        return id;
-    }
-
-    /* THE RUN A ROW BELONGS TO, LEARNED A BEAT LATE, which is the send path's whole relationship with run ids:
-     * it draws the bubble first, because the typing indicator is the point of drawing it, and the daemon names
-     * the run in the ack that comes back after.
-     *
-     * Without this that bubble stayed unstamped for its whole life, and `dropRun` is stamp-based: attaching to
-     * the same run again could not take it back, so it sat between the prompt and the replay as an empty
-     * "thinking" row belonging to nothing. Worse, it BLOCKED the drop, which walks back from the end and stops
-     * at the first row that is not this run's, so every stamped row above it survived the reclaim too. What
-     * caught the duplicate then was reuseUserBubble's text match, and a text match cannot be relied on: the
-     * moment the transcript's last user row is a mid-turn steer rather than the prompt, the match fails and the
-     * replay draws the prompt a SECOND time, under the orphaned bubble. That is the "same message twice with a
-     * spinner wedged between them" this fixes, and it is fixed by making the send leave the transcript in the
-     * exact shape a reattach does rather than by teaching the matcher another special case.
-     *
-     * Stamps the bubble ONLY, never the user's own row: that one is not redrawn by a replay (reuseUserBubble
-     * keeps it, with the attachment chips and checkpoint a replay has no way to rebuild), so a stamp there
-     * would invite dropRun to take away the one row nothing will put back.
-     *
-     * By id rather than through `bubbleId`, because the ack is awaited: frames of this very run may already
-     * have moved the open bubble on by the time it lands. */
-    claimRun(id: number, run: string): void {
-        this.write((state) => ({
-            ...state,
-            messages: state.messages.map((message) => (message.id === id && message.run === undefined ? { ...message, run } : message)),
-        }));
-    }
-
-    /* TAKE BACK WHAT THIS RUN ALREADY DREW HERE, before attaching to it again.
-     *
-     * An attach replays its run from the first frame, the daemon has no idea how much of it this window has
-     * seen, so everything below is about to arrive a second time. Dropping it is what makes re-attaching
-     * idempotent, and re-attaching is ordinary: a stream drops, a sandbox restarts, a tab is reopened onto a
-     * run that is still going.
-     *
-     * TRAILING rows only, and by run rather than by position, because the rows above them are the ones that
-     * matter: a resumed turn sits under the dead run's work and the notice explaining the interruption, and
-     * nothing will ever redraw those. Truncating to the user bubble would take them with it, which is why
-     * reuseUserBubble refuses to for a resume, and why the duplicate had nowhere else to be caught. */
-    dropRun(run: string): void {
-        const messages = this.state.value.messages;
-        let end = messages.length;
-        while (end > 0 && messages[end - 1]?.run === run) {
-            end -= 1;
-        }
-        if (end === messages.length) {
-            return;
-        }
-        this.state.value = { ...this.state.value, messages: messages.slice(0, end), bubbleId: null };
-    }
-
-    /* THE BUBBLE AN ATTACHED RUN'S PROMPT IS ALREADY IN. Two different situations put it there, and in both the
-     * alternative is showing the user saying the same thing twice.
-     *
-     * RESTORED-AND-LIVE. The daemon's session store holds a turn from the moment it starts, the SDK writes the
-     * user message before the first token, so a hydrate that lands mid-turn restores that turn and then attaches
-     * to the very same run. On a fleet agent, whose whole chat is often one long turn, rendering the head again
-     * reads as the entire conversation duplicated; reopening the tab adds another copy, because the duplicate is
-     * what got mirrored to the cache in between.
-     *
-     * RESUMED. The daemon re-ran a turn something killed (turn-resume.ts). Its prompt is the same words behind a
-     * note the caller has already stripped, so it matches the bubble the user really typed, one run up.
-     *
-     * `truncate` is the whole difference between them, and it is the difference between "this bubble's tail is
-     * about to be re-rendered" and "this bubble's tail is somebody else's work". The restored copy is followed by
-     * a partial replay of the SAME run, which the live frames replay from seq 0, so it comes off. A resumed run's
-     * bubble is followed by whatever the run that DIED had already streamed, plus the notice explaining the
-     * interruption; nothing will ever re-render those, so they stay and the resumed answer appends below them.
-     *
-     * Either way the bubble itself stays, with the attachment chips and checkpoint a replay has no way to rebuild.
-     * Returns its id, or undefined when the transcript's tail is not about this prompt at all.
-     *
-     * Matched on the LAST user message only, and only by whole text: the stored prompt keeps an editor-context
-     * note the daemon appended after it (the run's own prompt is the bare text), which is why a `${prompt}\n\n`
-     * prefix counts, but a bare prefix does not, or a live "Continue" would swallow a restored "Continue with
-     * the tests" sitting above it. */
-    reuseUserBubble(prompt: string, truncate: boolean): number | undefined {
-        const wanted = prompt.trim();
-        if (wanted.length === 0) {
-            return undefined;
-        }
-        const messages = this.state.value.messages;
-        const index = messages.findLastIndex((message) => message.role === `user`);
-        const candidate = index === -1 ? undefined : messages[index];
-        if (candidate === undefined) {
-            return undefined;
-        }
-        const restored = candidate.text.trim();
-        if (restored !== wanted && !restored.startsWith(`${wanted}\n\n`)) {
-            return undefined;
-        }
-        if (truncate) {
-            this.state.value = { ...this.state.value, messages: messages.slice(0, index + 1), bubbleId: null };
-        }
-        return candidate.id;
+    /* TAKE THE ATTACHED RUN'S ROWS, WHOLE, from its head. Everything buffered lands first, so a patch from an
+     * earlier attach of the same run cannot land on the rows that just replaced its target. `drawn` is the bubble
+     * this window drew ahead of the head (a send's own), which the run's rows replace in place. Returns where the
+     * run's rows start and the user bubble the turn answers, so the stream's context can name them. */
+    attachRun(head: AttachHead, drawn?: number): { readonly base: number; readonly userMessageId: number | undefined } {
+        this.catchUp();
+        const next = attachRun(this.state.value, head, drawn);
+        this.state.value = next;
+        const base = next.attached?.base ?? next.messages.length;
+        return { base, userMessageId: next.messages.slice(base).find((message) => message.role === `user`)?.id };
     }
 
     // Take a user bubble the daemon turned away back OUT of the transcript, and hand it to the caller to hold.
     // A turn refused before it ran produced nothing, so leaving the bubble in place would show a message as
-    // said-and-answered when the agent never saw it, and a later replay would then say it twice. The blank
-    // assistant bubble the refused turn opened comes off with it.
+    // said-and-answered when the agent never saw it, and a later attach would then say it twice.
     takeBackUserBubble(userMessageId: number): ChatMessage | undefined {
         const index = this.messages.value.findIndex((message) => message.id === userMessageId);
         const bubble = this.messages.value[index];
         if (bubble === undefined || bubble.role !== `user`) {
             return undefined;
         }
-        this.state.value = {
-            ...this.state.value,
-            messages: this.state.value.messages.filter((message, at) => message.id !== userMessageId && !(at > index && blank(message))),
-            bubbleId: null,
-        };
+        this.state.value = { ...this.state.value, messages: this.state.value.messages.filter((message) => message.id !== userMessageId) };
         return bubble;
     }
 
-    // Replace the transcript with messages that carry no ids of their own, a branch's inherited turns, a
-    // daemon replay, allocating fresh ones as they land.
-    rebuild(messages: readonly Omit<ChatMessage, "id">[]): void {
-        this.state.value = messages.reduce((state, message) => appendMessage(state, message), emptyTurnState);
+    // Replace the transcript with rows that carry no ids of their own, a branch's inherited turns, the daemon's
+    // record, allocating fresh ones as they land. Nothing is attached afterwards: whatever run these rows came
+    // out of, its place in this list is gone with them.
+    rebuild(rows: readonly TranscriptRow[]): void {
+        this.state.value = rows.reduce((state, row) => appendMessage(state, row), emptyTranscriptState);
     }
 
     // Replace the transcript with messages that keep the ids they already carry (the local mirror's), resuming
     // the allocator ABOVE them, otherwise the next notice would collide with a restored bubble.
     adopt(messages: readonly ChatMessage[]): void {
-        this.state.value = { ...emptyTurnState, messages, nextId: Math.max(0, ...messages.map((message) => message.id)) + 1 };
+        this.state.value = { ...emptyTranscriptState, messages, nextId: Math.max(0, ...messages.map((message) => message.id)) + 1 };
     }
 }

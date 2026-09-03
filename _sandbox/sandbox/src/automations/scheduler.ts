@@ -4,7 +4,8 @@ import { Cron } from "croner";
 import type { AgentEvent, AgentOrigin, AgentTurn, AutomationApproval } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
+import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
+import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
@@ -407,16 +408,16 @@ const runFire = async (
             ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
             ...(automation.model !== undefined ? { model: automation.model } : {}),
         };
-        const events: AgentEvent[] = [];
-        // When this wake's turn began, the stamp its recorded message carries, taken here rather than at the
-        // append below, which on a long turn runs many minutes later (see RestoredMessage.sentAt).
-        const startedAt = Date.now();
-        // Opened before the provider runs, like every other conversation turn. A first fire has nothing to adopt;
-        // a RE-fire reuses its interrupted run's id, so its record is already open and this is a no-op.
+        // The wake's transcript, folded as it streams exactly as a composer's turn is inside its run
+        // (turn-runs.ts): a wake has no run, its frames are consumed here, so the fold runs here too. It opens
+        // with the wake's prompt stamped with when the turn began, not with when the append below runs, which on
+        // a long turn is many minutes later (see TranscriptRow.sentAt).
+        const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()));
+        // Opened before the provider runs, like every other conversation turn (a fork's copy; nothing else opens).
         await openTurnTranscript(services, turn);
         try {
             for await (const event of wake(services, turn, undefined)) {
-                events.push(event);
+                fold.apply(event);
                 if (event.kind === "session") {
                     runtimeSessionId = event.sessionId;
                 }
@@ -431,7 +432,8 @@ const runFire = async (
             failure = error instanceof Error ? error.message : "automation turn failed";
             services.logger.warn({ err: error, automation: automation.id, conversationId }, "automation turn failed");
         } finally {
-            await recordTurnTranscript(services, turn, events, startedAt);
+            fold.finish("settled");
+            await recordTurnTranscript(services, turn, fold.rows, fold.steerRows);
         }
         /* Tell the sink the turn is not going to answer, BEFORE the finally closes it. The daemon has always
          * known this, it is on the run record below and in the activity feed, and used to keep it: a wake

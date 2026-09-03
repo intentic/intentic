@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { basename } from "@intentic/ui/path";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
-import type { ChatAttachment } from "../composables/chat/transcript";
 
 /* The floating card a truncated name gets on hover: one component for every surface that shows an agentic
  * session under a width it doesn't fit in: the chat tab strip and the Changes panel's origin chips today.
@@ -39,7 +39,7 @@ const { to = `body` } = defineProps<{
 interface HoverCardMessage {
     readonly label?: string;
     readonly text?: string;
-    readonly attachments?: readonly ChatAttachment[];
+    readonly attachments?: readonly string[];
 }
 
 // What one anchor reveals. `label` is the muted eyebrow ("Landed by"), `title` the full derived title,
@@ -168,7 +168,7 @@ const messages = computed(() => {
                 label: message.label,
                 text: text === undefined || text === `` || text === title ? undefined : text,
                 images: (message.attachments ?? [])
-                    .map((attachment) => ({ src: attachmentPreview(attachment.path), alt: attachment.name }))
+                    .map((path) => ({ src: attachmentPreview(path), alt: basename(path) }))
                     .filter((image): image is { src: string; alt: string } => image.src !== undefined),
             };
         })

@@ -8,9 +8,9 @@ import { SETTLES } from "@intentic/testing/vitest";
 
 import { createApp } from "../app.js";
 
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 import type { AgentWorktrees } from "../agents/worktrees.js";
-import { clientFor, codexConnectedProxy, collect, errorCode, runAgentTurn, services, withTranslator } from "../route-testing.js";
+import { attachedRows, clientFor, codexConnectedProxy, collect, errorCode, runAgentTurn, services, withTranslator } from "../route-testing.js";
 import { createRequest } from "./agent-requests.js";
 
 /* The agent routes, driven over the daemon's HTTP surface exactly as the browser drives them.
@@ -93,8 +93,8 @@ test("a second concurrent turn for the same conversation is refused with CONFLIC
     const frames = await collect(await client.agent.attach({ conversationId: "conv1" }));
     expect(frames[0]).toMatchObject({ kind: "attached", run: first });
     // The next turn starts, and runs the full isolated path again.
-    const events = await runAgentTurn(client, { prompt: "after", conversationId: "conv1", isolated: true });
-    expect(events[0]).toMatchObject({ kind: "worktree" });
+    const { facts } = await runAgentTurn(client, { prompt: "after", conversationId: "conv1", isolated: true });
+    expect(facts[0]).toMatchObject({ kind: "worktree" });
 });
 
 test("a chat turn without a conversationId is refused: the run registry has nothing to key it on", async () => {
@@ -163,10 +163,16 @@ test("a spent allowance on a native runtime carries the reset the translator alr
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-limit", agent: "codex" });
+    const { facts } = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-limit", agent: "codex" });
 
-    expect(events).toContainEqual(
-        expect.objectContaining({ kind: "error", code: "rate_limit", message: "429 You've hit your usage limit.", held: { ran: false }, resetsAt: reopensAt }),
+    expect(facts).toContainEqual(
+        expect.objectContaining({
+            kind: "error",
+            code: "rate_limit",
+            message: "429 You've hit your usage limit.",
+            held: { ran: false },
+            resetsAt: reopensAt,
+        }),
     );
 });
 
@@ -187,8 +193,8 @@ test("a spent allowance goes out bare when the pool reading names no reset", asy
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-cooldown", agent: "codex" });
-    const limits = events.filter((event) => event.kind === "error" && event.code === "rate_limit");
+    const { facts } = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-cooldown", agent: "codex" });
+    const limits = facts.filter((fact) => fact.kind === "error" && fact.code === "rate_limit");
 
     expect(limits).toHaveLength(1);
     // Absent, not present-and-undefined: the client branches on the field existing at all.
@@ -226,8 +232,8 @@ test("a spent allowance holds the turn, and agent.resume runs that same turn aga
         ),
     );
 
-    const first = await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-held" });
-    // The frame says the turn is HELD and that nothing ran, which is the whole of what the client needs: a press
+    const { facts: first } = await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-held" });
+    // The fact says the turn is HELD and that nothing ran, which is the whole of what the client needs: a press
     // now re-runs this turn, and the strip can stop claiming there is work behind it.
     expect(first).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit", held: { ran: false } }));
 
@@ -242,7 +248,7 @@ test("a spent allowance holds the turn, and agent.resume runs that same turn aga
     expect(seen[1]!.prompt).toMatch(/no part of the request below/i);
     // And NOT onto s-void, whose whole content is the message the provider refused to read.
     expect(seen[1]!.sessionId).toBeUndefined();
-    expect(frames).toContainEqual(expect.objectContaining({ kind: "frame", event: { kind: "delta", text: "on it" } }));
+    expect(attachedRows(frames).map(({ role, text }) => ({ role, text }))).toContainEqual({ role: "assistant", text: "on it" });
 });
 
 // ...and once it is not held, the route says so rather than starting something, which is what sends the client
@@ -380,10 +386,11 @@ test("an isolated turn announces the state its message can be rewound to, and fi
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "start it", conversationId: "conv-anchor", isolated: true });
+    const { rows } = await runAgentTurn(client, { prompt: "start it", conversationId: "conv-anchor", isolated: true });
 
-    // The first turn of the conversation, so the message it answers is row 0 of the record.
-    expect(events.find((event) => event.kind === "checkpoint")).toEqual({ kind: "checkpoint", id: "worktree:0", index: 0 });
+    // The first turn of the conversation, so the message it answers is row 0 of the record, and the checkpoint
+    // is stamped on that very row.
+    expect(rows[0]).toMatchObject({ role: "user", text: "start it", checkpointId: "worktree:0" });
     // And the frame is not a claim on its own: the state behind it is filed under the same message.
     expect(filed).toEqual([{ index: 0, kind: "worktree" }]);
 });
@@ -400,7 +407,7 @@ test("a steer taken mid-turn lands in the run's frames, and in the record, betwe
     const delivered = new Promise<void>((resolve) => (taken = resolve));
     let running: (() => void) | undefined;
     const started = new Promise<void>((resolve) => (running = resolve));
-    const recorded: RestoredMessage[] = [];
+    const recorded: TranscriptRow[] = [];
     // Spread the harness's own transcripts fake rather than replacing it: the override is shallow, and a
     // transcripts object missing the members the TURN path reads fails the run with a bare "Internal server
     // error" before the agent below is ever called (see route-testing's note on that fake).
@@ -426,17 +433,18 @@ test("a steer taken mid-turn lands in the run's frames, and in the record, betwe
     expect(await client.agent.steer({ conversationId: "conv-steer", text: "and the tests" })).toEqual({ ok: true });
     taken?.();
 
-    const frames = (await collect(await client.agent.attach({ conversationId: "conv-steer" }))).flatMap((frame) =>
-        frame.kind === "frame" ? [frame.event] : [],
-    );
-    expect(frames.filter((event) => event.kind === "delta" || event.kind === "steer")).toEqual([
-        { kind: "delta", text: "on it" },
-        { kind: "steer", text: "and the tests", sentAt: expect.any(Number) },
-        { kind: "delta", text: "will do" },
+    // The rows every window draws hold the three speakers in the order the turn took them.
+    const [head] = await collect(await client.agent.attach({ conversationId: "conv-steer" }));
+    expect(head?.kind === "attached" ? head.rows.map(({ role, text }) => ({ role, text })) : undefined).toEqual([
+        { role: "user", text: "ship it" },
+        { role: "assistant", text: "on it" },
+        { role: "user", text: "and the tests" },
+        { role: "assistant", text: "will do" },
     ]);
-    // And the copy a reopened chat is drawn from holds the same three speakers in the same order.
+    // And the copy a reopened chat is drawn from holds the same three speakers in the same order (an isolated
+    // turn's record ends on the daemon's line about landing its work, which is none of them).
     await vi.waitFor(() => expect(recorded).not.toHaveLength(0), SETTLES);
-    expect(recorded.map(({ role, text }) => ({ role, text }))).toEqual([
+    expect(recorded.filter((row) => row.role !== "notice").map(({ role, text }) => ({ role, text }))).toEqual([
         { role: "user", text: "ship it" },
         { role: "assistant", text: "on it" },
         { role: "user", text: "and the tests" },
@@ -593,13 +601,13 @@ test("a turn that stopped talking is recorded as such: unproven edits, its own c
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-quiet" });
+    const { facts } = await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-quiet" });
 
     /* AND IT IS STILL A FINISHED TURN, which is the carve-out `silentEnding` makes for exactly this shape. The
      * turn said nothing, but it left a diff, a diffstat on its card and a standing to land, so there is
      * something to come back to and the pair of readings below is the honest account of it. Reporting it as a
      * failure as well would overwrite a considered answer with a blunter one. */
-    expect(events.filter((event) => event.kind === "error")).toEqual([]);
+    expect(facts.filter((fact) => fact.kind === "error")).toEqual([]);
     await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect(ledger[0]).toMatchObject({
         outcome: "ok",
@@ -638,13 +646,13 @@ test("a turn that ends with nothing to show for it is reported as a failure, not
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-silent" });
+    const { facts } = await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-silent" });
 
-    /* The frame lands AHEAD of `done`, which is what puts it on the one path every reader of a failed turn
-     * already watches: the transcript, the activity record, the ledger below, and the registry, whose `errored`
-     * is what moves this card out of Finished and into Attention. */
-    expect(events.map((event) => event.kind).slice(-2)).toEqual(["error", "done"]);
-    const failure = events.find((event) => event.kind === "error");
+    /* The fact is the turn's last word, ahead of its `done`, which is what puts it on the one path every reader
+     * of a failed turn already watches: the transcript, the activity record, the ledger below, and the registry,
+     * whose `errored` is what moves this card out of Finished and into Attention. */
+    expect(facts.at(-1)?.kind).toBe("error");
+    const failure = facts.find((fact) => fact.kind === "error");
     expect(failure).toMatchObject({ message: expect.stringContaining("2 tool calls") });
     /* UNCODED, and that is the difference between a red dead end and a way on: an uncoded failure is the one
      * shape the chat answers with a Continue press, which is the whole recovery here (turnFailures.ts). */
@@ -668,9 +676,9 @@ test("a turn that stops after thinking and nothing else is reported the same way
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "go", conversationId: "conv-thought" });
+    const { facts } = await runAgentTurn(client, { prompt: "go", conversationId: "conv-thought" });
 
-    expect(events.find((event) => event.kind === "error")).toMatchObject({
+    expect(facts.find((fact) => fact.kind === "error")).toMatchObject({
         message:
             "The turn ended with nothing to show for it: the model started and then stopped, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.",
     });

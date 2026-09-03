@@ -1,5 +1,15 @@
 import { STATE_DIR } from "@intentic/constants";
-import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AttachFrame,
+    isTurnFact,
+    RESUME_NOTES,
+    resumeDisclosure,
+    type TranscriptRow,
+    withoutResumeNote,
+    withResumeNote,
+} from "@intentic/sandbox-contract";
+import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Conversation } from "./conversation";
@@ -18,6 +28,7 @@ import {
     recordedRows,
     turnsOf,
 } from "./transcript";
+import type { AttachHead } from "./turnStream";
 
 // `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
 // sandbox stores sandboxRequest reaches for at import time). It keeps the half this file depends on: the daemon
@@ -91,52 +102,118 @@ afterEach(() => {
 const encoder = new TextEncoder();
 const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
 
-// The attach head for a run: tests that don't care about the identity fields use the defaults.
-const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: number; seq: number }>): Record<string, unknown> => ({
-    kind: `attached`,
-    run: `r1`,
-    prompt: `hi`,
-    startedAt: 0,
-    seq: 0,
-    ...overrides,
-});
-
-// Serve the detached-run protocol: POST /agent acks `{ run }` (the turn executes daemon-side), POST
-// /agent/attach streams the head, the given events as seq-stamped frames, then `end`; control posts ack ok.
-// stayOpen leaves the attach stream open after the frames; aborting the request then errors it, mirroring
-// fetch cancellation.
-/* `head` overrides the attach head's fields, which a RESUMED run needs two of. `prompt`, because a resumed run's
- * prompt is the original words behind a resume note, and recognising that note is how an attaching window reuses
- * the bubble instead of drawing a second copy. And `startedAt`, because the default is 0 and an adopted run's
- * start is what its DURATION is measured from (endTurn → scheduleAutoContinue): left at the epoch, every resumed
- * turn reads as having run for fifty-six years, which resets the auto-continue ladder on every rung.
+/* Serve the detached-run protocol: POST /agent acks `{ run }` (the turn executes daemon-side), POST
+ * /agent/attach streams the head (the run's rows so far), then the given events folded into patches and facts
+ * by the daemon's own fold, then `end`; control posts ack ok. stayOpen leaves the attach stream open after the
+ * frames; aborting the request then errors it, mirroring fetch cancellation.
+ *
+ * The fold is the contract's (transcript-fold.ts), the very one the daemon runs, so a test written as the
+ * frames a provider produced exercises exactly the rows a window would be handed for them.
+ *
+ * `head` overrides the run's identity, which a RESUMED run needs two of. `prompt`, because a resumed run opens
+ * with a notice standing in for the repeated words rather than the words again, so the opening row is built
+ * from it as the daemon builds it (a `rows` override supplies the opening rows outright). And `startedAt`,
+ * because the default is 0 and an adopted run's start is what its DURATION is measured from (endTurn →
+ * scheduleAutoContinue): left at the epoch, every resumed turn reads as having run for fifty-six years, which
+ * resets the auto-continue ladder on every rung.
  *
  * A THUNK, not a value, because it is read per attach: a test that serves several runs off one implementation
  * would otherwise stamp them all with the instant the mock was installed, and a "run" that started thirty
  * seconds of fake time ago is one the ladder reads as having got somewhere. */
 const sseResponse = (
     events: AgentEvent[],
-    options?: { stayOpen?: boolean; head?: () => Partial<{ prompt: string; startedAt: number }> },
+    options?: { stayOpen?: boolean; head?: () => Partial<{ run: string; prompt: string; rows: TranscriptRow[]; startedAt: number }> },
 ): ((path: string, init?: RequestInit) => Promise<Response>) => {
+    // The open stream a stop ends. The daemon cancels the run, writes whatever the stop caught pending as
+    // cancelled and its own `Stopped.` line, and ends the stream: that ending is what a window that pressed Stop
+    // waits for, so the fake has to say it too.
+    let live: { readonly controller: ReadableStreamDefaultController<Uint8Array>; readonly fold: TranscriptFold; seq: number } | undefined;
     return (path, init) => {
+        if (path === `/agent/stop` && live !== undefined) {
+            const stopped = live;
+            live = undefined;
+            for (const patch of stopped.fold.finish(`stopped`)) {
+                stopped.controller.enqueue(sseFrame({ kind: `patch`, seq: (stopped.seq += 1), patch }));
+            }
+            stopped.controller.enqueue(sseFrame({ kind: `end` }));
+            stopped.controller.close();
+        }
         if (path !== `/agent/attach`) {
             return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
         }
+        const overrides = options?.head?.() ?? {};
+        const run = overrides.run ?? `r1`;
+        const startedAt = overrides.startedAt ?? 0;
+        const opening = overrides.rows ?? [userRow(overrides.prompt ?? `hi`, startedAt, [])];
         const body = new ReadableStream<Uint8Array>({
             start(controller) {
-                controller.enqueue(sseFrame(head(options?.head?.())));
-                events.forEach((event, index) => controller.enqueue(sseFrame({ kind: `frame`, seq: index + 1, event })));
+                const fold = new TranscriptFold(opening);
+                let seq = 0;
+                controller.enqueue(sseFrame({ kind: `attached`, run, startedAt, seq, rows: structuredClone(fold.rows) }));
+                for (const event of events) {
+                    for (const patch of fold.apply(event)) {
+                        controller.enqueue(sseFrame({ kind: `patch`, seq: ++seq, patch }));
+                    }
+                    if (isTurnFact(event)) {
+                        controller.enqueue(sseFrame({ kind: `fact`, seq: ++seq, fact: event }));
+                    }
+                }
                 if (!options?.stayOpen) {
+                    for (const patch of fold.finish(`settled`)) {
+                        controller.enqueue(sseFrame({ kind: `patch`, seq: ++seq, patch }));
+                    }
                     controller.enqueue(sseFrame({ kind: `end` }));
                     controller.close();
                     return;
                 }
+                live = { controller, fold, seq };
                 init?.signal?.addEventListener(`abort`, () => {
+                    live = undefined;
                     controller.error(new DOMException(`aborted`, `AbortError`));
                 });
             },
         });
         return Promise.resolve({ ok: true, body } as Response);
+    };
+};
+
+/* A run's opening rows, as the daemon builds them (turn-transcript.ts openingRows): a resumed run's prompt opens
+ * with the notice that stands in for its repeated words, an answered park with the answer under a note, and any
+ * other prompt with the words themselves. */
+const openingOf = (prompt: string, sentAt: number): TranscriptRow[] => {
+    const resume = resumeDisclosure(prompt);
+    if (resume?.kind === `notice`) {
+        return [{ role: `notice`, text: resume.text }];
+    }
+    const row = userRow(withoutResumeNote(prompt), sentAt, []);
+    return [resume?.kind === `note` ? { ...row, notes: [resume.note] } : row];
+};
+
+// The head frame of an attach stream: the run's identity and its rows so far.
+const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: number; seq: number; rows: TranscriptRow[] }>): AttachHead => ({
+    kind: `attached`,
+    run: overrides?.run ?? `r1`,
+    startedAt: overrides?.startedAt ?? 0,
+    seq: overrides?.seq ?? 0,
+    rows: overrides?.rows ?? openingOf(overrides?.prompt ?? `hi`, overrides?.startedAt ?? 0),
+});
+
+/* A run served a frame at a time, for the tests that hold the stream open and feed it by hand: the daemon's own
+ * fold turns each provider event into the patches and facts a window receives, and `head()` is the run's rows
+ * at that moment, which is what a re-attach is handed. */
+const liveRun = (overrides?: Parameters<typeof head>[0]): { head: () => AttachHead; frames: (event: AgentEvent) => AttachFrame[] } => {
+    const opening = head(overrides);
+    const fold = new TranscriptFold(opening.rows);
+    let seq = opening.seq;
+    return {
+        head: () => ({ ...opening, seq, rows: [...structuredClone(fold.rows)] }),
+        frames: (event) => {
+            const frames: AttachFrame[] = fold.apply(event).map((patch) => ({ kind: `patch`, seq: (seq += 1), patch }));
+            if (isTurnFact(event)) {
+                frames.push({ kind: `fact`, seq: (seq += 1), fact: event });
+            }
+            return frames;
+        },
     };
 };
 
@@ -446,7 +523,13 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
         sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `question`, requestId: `q1`, questions }], { stayOpen: true }),
+            sseResponse(
+                [
+                    { kind: `session`, sessionId: `s-1` },
+                    { kind: `question`, requestId: `q1`, questions },
+                ],
+                { stayOpen: true },
+            ),
         );
         const turn = conversation.send(`ask me`, settings);
         await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
@@ -635,7 +718,7 @@ describe(`Conversation`, () => {
             expect(isAcknowledgment(user(text)), text).toBe(false);
         }
         // An attachment is content of its own, whatever the caption says; and only the user nudges.
-        expect(isAcknowledgment({ id: 1, role: `user`, text: `continue`, attachments: [{ name: `a.png`, path: `p/a.png` }] })).toBe(false);
+        expect(isAcknowledgment({ id: 1, role: `user`, text: `continue`, attachments: [`p/a.png`] })).toBe(false);
         expect(isAcknowledgment({ id: 1, role: `assistant`, text: `continue` })).toBe(false);
     });
 
@@ -912,11 +995,12 @@ describe(`Conversation`, () => {
      * it and printed over the words it was answering. */
     it(`steers mid-turn: the message lands where the turn took it and the answer opens below it`, async () => {
         const conversation = new Conversation(`c1`);
+        const run = liveRun();
         let controller!: ReadableStreamDefaultController<Uint8Array>;
         const body = new ReadableStream<Uint8Array>({
             start(c) {
                 controller = c;
-                controller.enqueue(sseFrame(head()));
+                controller.enqueue(sseFrame(run.head()));
             },
         });
         sandboxRequestMock.mockImplementation((path: string) => {
@@ -925,8 +1009,11 @@ describe(`Conversation`, () => {
             }
             return Promise.resolve(path === `/agent/attach` ? ({ ok: true, body } as Response) : ({ ok: true } as Response));
         });
-        let seq = 0;
-        const emit = (event: AgentEvent): void => controller.enqueue(sseFrame({ kind: `frame`, seq: (seq += 1), event }));
+        const emit = (event: AgentEvent): void => {
+            for (const frame of run.frames(event)) {
+                controller.enqueue(sseFrame(frame));
+            }
+        };
 
         const turn = conversation.send(`2+3?`, settings);
         emit({ kind: `delta`, text: `5` });
@@ -1016,7 +1103,7 @@ describe(`Conversation`, () => {
             expect(conversation.messages.value.at(-1)).toMatchObject({
                 role: `user`,
                 text: `look at this`,
-                attachments: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }],
+                attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
             }),
         );
 
@@ -1216,7 +1303,7 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({
             role: `user`,
             text: `this bit is wrong`,
-            attachments: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/a1/shot.png` }],
+            attachments: [`.intentic/records/artifacts/attachments/a1/shot.png`],
         });
     });
 
@@ -1933,7 +2020,14 @@ describe(`Conversation`, () => {
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled`, held: { ran: false } },
+                {
+                    kind: `error`,
+                    code: `rate_limit`,
+                    message: `Claude usage limit reached.`,
+                    resetsAt,
+                    autoResume: `scheduled`,
+                    held: { ran: false },
+                },
                 { kind: `done` },
             ]),
         );
@@ -2265,17 +2359,11 @@ describe(`Conversation`, () => {
             // and a run of its OWN, because resuming starts a turn rather than reviving the one that died. That
             // is what keeps the renewal notice above: it belongs to the run that failed, and only that run's own
             // rows come off when this window attaches to a run it has already drawn.
-            sandboxRequestMock.mockImplementation(() => {
-                const body = new ReadableStream<Uint8Array>({
-                    start(controller) {
-                        controller.enqueue(sseFrame(head({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) })));
-                        controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Picking it back up.` } }));
-                        controller.enqueue(sseFrame({ kind: `end` }));
-                        controller.close();
-                    },
-                });
-                return Promise.resolve({ ok: true, body } as Response);
-            });
+            sandboxRequestMock.mockImplementation(
+                sseResponse([{ kind: `delta`, text: `Picking it back up.` }], {
+                    head: () => ({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) }),
+                }),
+            );
             await vi.advanceTimersByTimeAsync(2_000);
 
             // The wait is over, and the resumed answer is in the transcript under the original question.
@@ -2401,11 +2489,12 @@ describe(`Conversation`, () => {
      * is refused here (the trial has no queue-and-steer), which is exactly when the two end up side by side. */
     it(`hands back a refused nudge as the one already pressed, not as a second copy in front of it`, async () => {
         const conversation = new Conversation(`c1`);
+        const run = liveRun();
         let controller!: ReadableStreamDefaultController<Uint8Array>;
         const body = new ReadableStream<Uint8Array>({
             start(c) {
                 controller = c;
-                c.enqueue(sseFrame(head()));
+                c.enqueue(sseFrame(run.head()));
             },
         });
         sandboxRequestMock.mockImplementation((path: string) => {
@@ -2422,13 +2511,9 @@ describe(`Conversation`, () => {
         // Pressed again while it hangs: unsteerable, so it waits in the queue.
         await conversation.enqueue(`Continue`);
         expect(conversation.queued.value).toHaveLength(1);
-        controller.enqueue(
-            sseFrame({
-                kind: `frame`,
-                seq: 1,
-                event: { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` },
-            }),
-        );
+        for (const frame of run.frames({ kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` })) {
+            controller.enqueue(sseFrame(frame));
+        }
         controller.enqueue(sseFrame({ kind: `end` }));
         controller.close();
         await turn;
@@ -2778,6 +2863,7 @@ describe(`Conversation`, () => {
     it(`re-attaches from the seq cursor when the stream drops mid-turn and loses nothing`, async () => {
         const conversation = new Conversation(`c1`);
         const attachBodies: Record<string, unknown>[] = [];
+        const run = liveRun();
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
             if (path === `/agent`) {
                 return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
@@ -2785,25 +2871,21 @@ describe(`Conversation`, () => {
             attachBodies.push(JSON.parse(init!.body as string) as Record<string, unknown>);
             const body =
                 attachBodies.length === 1
-                    ? // Two frames, then the connection breaks mid-run (no `end`).
+                    ? // Two patches, then the connection breaks mid-run (no `end`).
                       chunkStream(
-                          [
-                              head(),
-                              { kind: `frame`, seq: 1, event: { kind: `delta`, text: `Hello ` } },
-                              { kind: `frame`, seq: 2, event: { kind: `delta`, text: `wor` } },
-                          ],
+                          [run.head(), ...run.frames({ kind: `delta`, text: `Hello ` }), ...run.frames({ kind: `delta`, text: `wor` })],
                           `error`,
                       )
-                    : // The resumed attach replays only what the client missed.
-                      chunkStream([head({ seq: 3 }), { kind: `frame`, seq: 3, event: { kind: `delta`, text: `ld` } }, { kind: `end` }], `close`);
+                    : // The resumed attach's head carries the rows whole, and the stream carries on from there.
+                      chunkStream([run.head(), ...run.frames({ kind: `delta`, text: `ld` }), { kind: `end` }], `close`);
             return Promise.resolve({ ok: true, body } as Response);
         });
 
         await conversation.send(`Hi`, settings);
 
         expect(attachBodies).toEqual([
-            { conversationId: conversation.conversationId, run: `r1`, after: 0 },
-            { conversationId: conversation.conversationId, run: `r1`, after: 2 },
+            { conversationId: conversation.conversationId, run: `r1` },
+            { conversationId: conversation.conversationId, run: `r1` },
         ]);
         expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Hello world` });
         expect(conversation.error.value).toBeNull();
@@ -2812,6 +2894,8 @@ describe(`Conversation`, () => {
     it(`settles instead of misrendering when the resumed attach reports a different run`, async () => {
         const conversation = new Conversation(`c1`);
         let attaches = 0;
+        const first = liveRun();
+        const other = liveRun({ run: `r2`, prompt: `someone else's turn` });
         sandboxRequestMock.mockImplementation((path: string) => {
             if (path === `/agent`) {
                 return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
@@ -2819,16 +2903,9 @@ describe(`Conversation`, () => {
             attaches += 1;
             const body =
                 attaches === 1
-                    ? chunkStream([head(), { kind: `frame`, seq: 1, event: { kind: `delta`, text: `partial` } }], `error`)
-                    : // A NEWER turn is live by the time the tab reconnects — its frames must not land here.
-                      chunkStream(
-                          [
-                              head({ run: `r2`, prompt: `someone else's turn` }),
-                              { kind: `frame`, seq: 1, event: { kind: `delta`, text: `other` } },
-                              { kind: `end` },
-                          ],
-                          `close`,
-                      );
+                    ? chunkStream([first.head(), ...first.frames({ kind: `delta`, text: `partial` })], `error`)
+                    : // A NEWER turn is live by the time the tab reconnects: its rows must not land here.
+                      chunkStream([other.head(), ...other.frames({ kind: `delta`, text: `other` }), { kind: `end` }], `close`);
             return Promise.resolve({ ok: true, body } as Response);
         });
 
@@ -2838,17 +2915,18 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
-    it(`reattach renders a daemon-side run it never initiated: prompt bubble from the head, frames replayed`, async () => {
+    it(`reattach renders a daemon-side run it never initiated: its rows from the head, its facts replayed`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
             expect(path).toBe(`/agent/attach`);
             const request = JSON.parse(init!.body as string) as Record<string, unknown>;
-            expect(request).toEqual({ conversationId: conversation.conversationId, after: 0 });
+            expect(request).toEqual({ conversationId: conversation.conversationId });
             const body = new ReadableStream<Uint8Array>({
                 start(controller) {
-                    controller.enqueue(sseFrame(head({ prompt: `refactor the parser`, startedAt: 1234, seq: 2 })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `session`, sessionId: `s-9` } }));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 2, event: { kind: `delta`, text: `On it.` } }));
+                    const rows: TranscriptRow[] = [userRow(`refactor the parser`, 1234, []), { role: `assistant`, text: `On it.` }];
+                    controller.enqueue(sseFrame(head({ startedAt: 1234, seq: 2, rows })));
+                    // A fact is replayed to every attach of the run; its words are not, the head holds them.
+                    controller.enqueue(sseFrame({ kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s-9` } }));
                     controller.enqueue(sseFrame({ kind: `end` }));
                     controller.close();
                 },
@@ -2862,39 +2940,35 @@ describe(`Conversation`, () => {
             { role: `user`, text: `refactor the parser` },
             { role: `assistant`, text: `On it.` },
         ]);
-        // The run's frames armed the session exactly as they would have for the initiating window.
+        // The replayed fact armed the session exactly as it would have for the initiating window.
         expect(conversation.session.value).toMatchObject({ id: `s-9` });
         expect(conversation.streaming.value).toBe(false);
     });
 
-    /* THE SEND'S OWN ROWS BELONG TO A RUN TOO, and until the ack lands they cannot say which. This is the pair
-     * that makes re-attaching to a run this window STARTED idempotent, the way it already is for one it merely
-     * found: the bubble opened for the typing indicator is stamped the moment the daemon names the run, so the
-     * replay's dropRun can take it back before drawing the answer again.
-     *
-     * Unstamped, that row was invisible to the drop AND blocked it: dropRun walks back from the end and stops at
-     * the first row that is not this run's, so an empty "thinking" bubble sitting between the prompt and the
-     * replayed answer kept every stamped row above it from being reclaimed. What caught the duplicate then was
-     * reuseUserBubble's text match alone, one guard doing the work of two. */
-    it(`stamps the bubble its own send opened with the run the ack names`, async () => {
+    /* THE SEND'S OWN ROWS BELONG TO THE RUN the ack names, which is what makes re-attaching to a run this window
+     * STARTED idempotent, the way it is for one it merely found: the bubble opened for the typing indicator is
+     * the row the daemon's head replaces, and a later head for the same run replaces the run's rows again
+     * (transcriptState.attachRun) rather than drawing them under themselves. */
+    it(`redraws a run its own send opened when attached to it again, rather than stacking a second copy`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
-
         await conversation.send(`refactor the parser`, settings);
+        const ids = conversation.messages.value.map((message) => message.id);
 
-        // The answer's rows carry the run, so a second attach to it can take them back (TranscriptClock.dropRun)
-        // before the replay draws them again...
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, run: `r1` });
-        // ...and the user's own row does not, because no replay redraws that one: reuseUserBubble keeps it, with
-        // the attachment chips and checkpoint a replay has no way to rebuild.
-        expect(conversation.messages.value[0]?.role).toBe(`user`);
-        expect(conversation.messages.value[0]?.run).toBeUndefined();
+        // The same run served again, as a reload's reattach does.
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `refactor the parser` },
+            { role: `assistant`, text: `On it.` },
+        ]);
+        // The same rows, under the same ids: nothing about them was redrawn from this window's point of view.
+        expect(conversation.messages.value.map((message) => message.id)).toEqual(ids);
     });
 
-    /* THE CARDS A RECORD KEPT come back as the cards they were. A question the user answered used to survive a
-     * reload only while the run's frame log lived; the daemon's record now holds the card and the reply
-     * verbatim, and this is the seam that turns them back into the live shape, through the same status rule the
-     * resolved frame goes through, so "answered, with these picks" reads identically live and a week later. */
+    /* THE CARDS A RECORD KEPT come back as the cards they were: the daemon's fold settles a card's status on the
+     * row itself (card-status.ts), live and in the record alike, so "answered, with these picks" reads
+     * identically live and a week later without this window deciding anything about it. */
     it(`restores the cards a record kept, frozen with the decisions that settled them`, () => {
         const conversation = new Conversation(`c1`);
         const questions = [
@@ -2910,26 +2984,12 @@ describe(`Conversation`, () => {
         ];
         conversation.restoreMessages([
             { role: `user`, text: `choose` },
-            {
-                role: `assistant`,
-                text: ``,
-                question: { requestId: `q1`, questions, reply: { kind: `question`, requestId: `q1`, answers: { "Which?": [`A`, `B`] } } },
-            },
-            { role: `assistant`, text: `Here is the plan.`, plan: { requestId: `p1`, text: `1. do it` } },
-            {
-                role: `assistant`,
-                text: ``,
-                permission: {
-                    requestId: `perm1`,
-                    toolName: `Bash`,
-                    explain: `Runs the tests.`,
-                    reply: { kind: `permission`, requestId: `perm1`, decision: `always` },
-                },
-            },
+            { role: `assistant`, text: ``, question: { requestId: `q1`, questions, status: `answered`, answers: { "Which?": [`A`, `B`] } } },
+            { role: `assistant`, text: `Here is the plan.`, plan: { requestId: `p1`, text: `1. do it`, status: `cancelled` } },
+            { role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, explain: `Runs the tests.`, status: `always` } },
         ]);
         const [, asked, planned, permitted] = conversation.messages.value;
         expect(asked?.question).toEqual({ requestId: `q1`, questions, status: `answered`, answers: { "Which?": [`A`, `B`] } });
-        // No reply on record is nobody's decision: the card reads as stopped, never as approved or rejected.
         expect(planned?.plan).toEqual({ requestId: `p1`, text: `1. do it`, status: `cancelled` });
         expect(permitted?.permission).toEqual({ requestId: `perm1`, toolName: `Bash`, explain: `Runs the tests.`, status: `always` });
         // A record row per bubble, cards included: the count a fork copies a prefix of agrees with the daemon's.
@@ -2959,17 +3019,7 @@ describe(`Conversation`, () => {
             { role: `user`, text: `start the migration` },
             { role: `assistant`, text: `Done with step one.` },
         ]);
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame(head({ prompt: `Continue` })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Step two.` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `Step two.` }], { head: () => ({ prompt: `Continue` }) }));
 
         await expect(conversation.reattach()).resolves.toBe(true);
 
@@ -2993,17 +3043,9 @@ describe(`Conversation`, () => {
             { role: `user`, text: `now do step two`, attachments: [`plan.md`] },
             { role: `assistant`, text: `Working on` },
         ]);
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame(head({ prompt: `now do step two` })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Working on it.` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `Working on it.` }], { head: () => ({ prompt: `now do step two` }) }),
+        );
 
         await expect(conversation.reattach()).resolves.toBe(true);
 
@@ -3026,16 +3068,7 @@ describe(`Conversation`, () => {
             { role: `user`, text: `Continue with the tests` },
             { role: `assistant`, text: `All green.` },
         ]);
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame(head({ prompt: `Continue` })));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
+        sandboxRequestMock.mockImplementation(sseResponse([], { head: () => ({ prompt: `Continue` }) }));
 
         await expect(conversation.reattach()).resolves.toBe(true);
 
@@ -3054,17 +3087,11 @@ describe(`Conversation`, () => {
     it(`reattach continues the original prompt when the daemon resumed the turn`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.restoreMessages([{ role: `user`, text: `refactor the store` }]);
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame(head({ prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Picking it back up.` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `Picking it back up.` }], {
+                head: () => ({ prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) }),
+            }),
+        );
 
         await expect(conversation.reattach()).resolves.toBe(true);
 
@@ -3086,17 +3113,9 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         conversation.restoreMessages([{ role: `user`, text: `which shape should it be?` }]);
         const carried = withResumeNote(`The user answered: a mode of the board.`, RESUME_NOTES.answered);
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame(head({ run: `r2`, prompt: carried })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `That settles it.` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `That settles it.` }], { head: () => ({ run: `r2`, prompt: carried }) }),
+        );
 
         await expect(conversation.reattach()).resolves.toBe(true);
         await expect(conversation.reattach()).resolves.toBe(true);
@@ -3119,17 +3138,11 @@ describe(`Conversation`, () => {
             { role: `user`, text: `refactor the store` },
             { role: `assistant`, text: `Got as far as the reducer.` },
         ]);
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame(head({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.restart) })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Picking it back up.` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `Picking it back up.` }], {
+                head: () => ({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.restart) }),
+            }),
+        );
 
         await expect(conversation.reattach()).resolves.toBe(true);
         await expect(conversation.reattach()).resolves.toBe(true);
@@ -3414,25 +3427,16 @@ describe(`Conversation`, () => {
         // already resolved, underneath a transcript that had visibly moved on.
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame(head({ prompt: `which one?`, startedAt: 1234, seq: 3 })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `question`, requestId: `q1`, questions } }));
-                    controller.enqueue(
-                        sseFrame({
-                            kind: `frame`,
-                            seq: 2,
-                            event: { kind: `resolved`, requestId: `q1`, reply: { kind: `question`, requestId: `q1`, answers: { Which: [`A`] } } },
-                        }),
-                    );
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 3, event: { kind: `delta`, text: `Doing A.` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
+        sandboxRequestMock.mockImplementation(
+            sseResponse(
+                [
+                    { kind: `question`, requestId: `q1`, questions },
+                    { kind: `resolved`, requestId: `q1`, reply: { kind: `question`, requestId: `q1`, answers: { Which: [`A`] } } },
+                    { kind: `delta`, text: `Doing A.` },
+                ],
+                { head: () => ({ prompt: `which one?`, startedAt: 1234 }) },
+            ),
+        );
 
         await expect(conversation.reattach()).resolves.toBe(true);
 
@@ -3509,7 +3513,7 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value[0]).toMatchObject({
             role: `user`,
             text: `analyze this`,
-            attachments: [{ name: `image.png`, path: `.intentic/records/artifacts/attachments/uuid-1/image.png` }],
+            attachments: [`.intentic/records/artifacts/attachments/uuid-1/image.png`],
         });
     });
 
@@ -3860,18 +3864,8 @@ describe(`Conversation sent time`, () => {
     // drawn now and was sent then, so it takes the RUN's start rather than the moment its reader turned up.
     it(`takes the running turn's own start for a bubble drawn on reattach`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(() =>
-            Promise.resolve({
-                ok: true,
-                body: new ReadableStream<Uint8Array>({
-                    start(controller) {
-                        controller.enqueue(sseFrame(head({ prompt: `refactor the parser`, startedAt: 1234, seq: 1 })));
-                        controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `On it.` } }));
-                        controller.enqueue(sseFrame({ kind: `end` }));
-                        controller.close();
-                    },
-                }),
-            } as Response),
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `On it.` }], { head: () => ({ prompt: `refactor the parser`, startedAt: 1234 }) }),
         );
 
         await expect(conversation.reattach()).resolves.toBe(true);
@@ -3880,7 +3874,7 @@ describe(`Conversation sent time`, () => {
     });
 
     // Reopened tomorrow, the same message keeps the hour it was typed at: the daemon wrote it down beside the
-    // words (RestoredMessage.sentAt), and a redraw from the record must not re-date the conversation.
+    // words (TranscriptRow.sentAt), and a redraw from the record must not re-date the conversation.
     it(`keeps the daemon's stamp when a stored transcript is restored`, () => {
         const conversation = new Conversation(`c1`);
 

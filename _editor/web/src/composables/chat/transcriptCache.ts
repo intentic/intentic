@@ -85,17 +85,9 @@ const run = async <T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => 
     });
 };
 
-// Object URLs for image thumbnails are revoked with the page that minted them, so a persisted one would point
-// at nothing after a reload, dropped, which degrades the chip to its file icon exactly as a restored tab's
-// attachments already do. Everything else on a message is plain data and structured-clones as-is.
-const persistable = (messages: readonly ChatMessage[]): ChatMessage[] =>
-    messages
-        .slice(-KEPT_MESSAGES)
-        .map((message) =>
-            message.attachments === undefined
-                ? message
-                : Object.assign({}, message, { attachments: message.attachments.map(({ name, path }) => ({ name, path })) }),
-        );
+// The tail of the conversation, as it stands: every field on a row is plain data (a picture is a workspace path
+// the chip re-fetches, never an object URL) and structured-clones as-is.
+const persistable = (messages: readonly ChatMessage[]): ChatMessage[] => messages.slice(-KEPT_MESSAGES);
 
 /* `authoritative` marks a transcript the DAEMON confirmed (a session replay), which is allowed to shrink the
  * mirror, it is the source of truth, and a compacted or trimmed session legitimately has fewer messages than

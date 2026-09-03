@@ -5,7 +5,7 @@
 // neither throws when it goes wrong, it just draws the wrong thing.
 import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 
 // Same runtime globals ChatToolCard's suite stands up, and for the same reason: the import chain reads
 // window.matchMedia and window.env at module load, and jsdom provides neither.
@@ -13,7 +13,7 @@ import type { ChatTool } from "../composables/chat/transcript";
 const { default: ChatToolRun } = await import("./ChatToolRun.vue");
 
 let app: App | undefined;
-const mount = (tools: readonly ChatTool[], live = false): HTMLElement => {
+const mount = (tools: readonly TranscriptTool[], live = false): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatToolRun, { tools, live }) });
@@ -47,14 +47,14 @@ const settle = async (): Promise<void> => {
 };
 
 let next = 0;
-const tool = (over: Partial<ChatTool> & Pick<ChatTool, "category">): ChatTool => ({
+const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "category">): TranscriptTool => ({
     id: `t${(next += 1)}`,
     name: `Tool`,
     status: `completed`,
     ...over,
 });
-const read = (path: string): ChatTool => tool({ category: `read`, name: `Read`, target: path });
-const edit = (path: string): ChatTool => tool({ category: `edit`, name: `Edit`, target: path });
+const read = (path: string): TranscriptTool => tool({ category: `read`, name: `Read`, target: path });
+const edit = (path: string): TranscriptTool => tool({ category: `edit`, name: `Edit`, target: path });
 
 describe(`ChatToolRun`, () => {
     it(`stands in for the whole run with a count and the most notable call's mark`, () => {

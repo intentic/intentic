@@ -72,7 +72,8 @@ it(`draws the model from the conversation when the fleet cannot resolve it`, asy
     conversation.registered.value = true;
     conversation.title.value = `Detached intentic chat · fix`;
     conversation.model.value = `claude-opus-4-5`;
-    conversation.costUsd.value = 7.02;
+    // The cost is read off the rows: each turn's usage sits on the bubble its answer ended in.
+    conversation.restoreMessages([{ role: `assistant`, text: `done`, usage: { costUsd: 7.02 } }]);
 
     await mountList();
 

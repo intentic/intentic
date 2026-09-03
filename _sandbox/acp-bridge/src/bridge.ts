@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { agent, type AgentApp, type AgentContext, methods, RequestError, type RequestPermissionRequest } from "@agentclientprotocol/sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { TranscriptPlan, TranscriptQuestion } from "@intentic/sandbox-contract";
 import { type BridgeConfig, readSessions, resolveConfig, writeSessions } from "./config.js";
 import { createDaemonClient, type DaemonClient } from "./daemon-client.js";
-import { sessionUpdateOf } from "./translate.js";
+import { createTranslator } from "./translate.js";
 
 /* The ACP agent the editor spawns: a thin stdio bridge onto the intentic sandbox daemon. One ACP session =
- * one daemon conversation (bridge-minted id); each session/prompt streams POST /agent and translates
- * AgentEvents into session/update notifications. Control flow the daemon models as side channels maps onto
+ * one daemon conversation (bridge-minted id); each session/prompt starts a turn and watches it over
+ * /agent/attach, translating the daemon's rows into session/update notifications. Control flow the daemon models as side channels maps onto
  * ACP's one interactive primitive, request_permission: a plan frame becomes a "Review plan" tool call with
  * Approve/Keep-planning options (the claude-code-acp ExitPlanMode pattern), an AskUserQuestion frame becomes
  * one permission request per question (multiSelect collapses to a single choice, documented loss). Modes:
@@ -49,7 +49,7 @@ const reviewPlan = async (
     ctx: AgentContext,
     sessionId: string,
     daemon: DaemonClient,
-    event: Extract<AgentEvent, { kind: "plan" }>,
+    event: TranscriptPlan,
 ): Promise<void> => {
     const toolCallId = `plan-${event.requestId}`;
     await ctx.notify(methods.client.session.update, {
@@ -93,7 +93,7 @@ const askQuestions = async (
     ctx: AgentContext,
     sessionId: string,
     daemon: DaemonClient,
-    event: Extract<AgentEvent, { kind: "question" }>,
+    event: TranscriptQuestion,
 ): Promise<void> => {
     const answers: Record<string, string[]> = {};
     for (const [index, question] of event.questions.entries()) {
@@ -288,31 +288,40 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                     },
                     state.abort.signal,
                 );
-                for await (const event of turn) {
-                    if (event.kind === "session") {
-                        state.providerSessionId = event.sessionId;
+                const translate = createTranslator(state.cwd);
+                // The cards this turn has already handed the editor, by requestId: a card's row is replaced
+                // again as it settles, and only its first, pending appearance is a question to ask.
+                const asked = new Set<string>();
+                for await (const frame of turn) {
+                    if (frame.kind === "end") {
+                        break;
+                    }
+                    if (frame.kind === "fact" && frame.fact.kind === "session") {
+                        state.providerSessionId = frame.fact.sessionId;
                         persistSessions();
                         continue;
                     }
-                    if (event.kind === "plan") {
-                        await reviewPlan(ctx, params.sessionId, daemon, event);
+                    if (frame.kind === "fact" && frame.fact.kind === "error") {
+                        // Remember the failure but keep draining: the daemon writes the failure into the rows
+                        // and ends the stream after it, and partial updates already rendered should not be
+                        // interleaved with a hung stream.
+                        failure = RequestError.internalError({ details: frame.fact.message });
                         continue;
                     }
-                    if (event.kind === "question") {
-                        await askQuestions(ctx, params.sessionId, daemon, event);
-                        continue;
+                    if (frame.kind === "patch" && frame.patch.op === "replace") {
+                        const { plan, question } = frame.patch.row;
+                        if (plan?.status === "pending" && !asked.has(plan.requestId)) {
+                            asked.add(plan.requestId);
+                            await reviewPlan(ctx, params.sessionId, daemon, plan);
+                            continue;
+                        }
+                        if (question?.status === "pending" && !asked.has(question.requestId)) {
+                            asked.add(question.requestId);
+                            await askQuestions(ctx, params.sessionId, daemon, question);
+                            continue;
+                        }
                     }
-                    if (event.kind === "error") {
-                        // Remember the failure but keep draining: the daemon streams `done` after error frames,
-                        // and partial updates already rendered should not be interleaved with a hung stream.
-                        failure = RequestError.internalError({ details: event.message });
-                        continue;
-                    }
-                    if (event.kind === "done") {
-                        break;
-                    }
-                    const update = sessionUpdateOf(event, state.cwd);
-                    if (update !== undefined) {
+                    for (const update of translate(frame)) {
                         await ctx.notify(methods.client.session.update, { sessionId: params.sessionId, update });
                     }
                 }

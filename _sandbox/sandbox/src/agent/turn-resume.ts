@@ -13,7 +13,7 @@ import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
-import { openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../sessions/turn-transcript.js";
+import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import { grantRestoredPermission, POST_PLAN_MODE } from "./agent.js";
 import { formatAnswers } from "./question-answers.js";
 import { restoreRequest } from "./agent-requests.js";
@@ -481,13 +481,13 @@ export const startConversationTurn = async (
 ): Promise<TurnRun | undefined> => {
     const turn = await withAgentRunModel(services, started);
     const { conversationId, prompt } = turn;
-    // Start adoption now, then make the pump wait for it before invoking the provider. A first turn opens an
-    // empty record; a legacy conversation adopts only its OLD turns.
+    // A fork's record is copied now, and the pump waits for it before invoking the provider.
     const transcriptOpen = openTurnTranscript(services, turn);
     return startTurnRun((input, signal) => wake(services, input, signal), turn, {
         journal: services.turnJournal,
         before: transcriptOpen,
-        transcript: (events, startedAt) => recordTurnTranscript(services, turn, events, startedAt),
+        opening: (startedAt) => openingRows(turn, services.workspace.root, startedAt),
+        transcript: (rows, steerRows) => recordTurnTranscript(services, turn, rows, steerRows),
         attempts,
         observer: {
             awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),

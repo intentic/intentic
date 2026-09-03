@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { SETTLES } from "@intentic/testing/vitest";
 
-import type { AgentEvent, Capability, RestoredMessage } from "@intentic/sandbox-contract";
+import { type AgentEvent, type Capability, isTurnFact, type TranscriptRow } from "@intentic/sandbox-contract";
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
@@ -566,19 +566,23 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
             }),
         ),
     );
-    /* Preamble frames dropped: an unstubbed git.sync makes every turn in this suite carry a repo-sync note, which
-     * is a real injection being really disclosed (agent.routes.ts) and not part of what the adapter streamed.
-     * The tier verdict goes with it and for the same reason: the complexity judge runs on every turn in the
-     * default mode (settings.autoTier "shadow") and says so on its own frame, which the daemon adds ahead of
-     * the adapter's stream. What this test is about is that the adapter's own frames arrive intact. */
-    const frames = await runAgentTurn(client, { prompt: "do it" });
+    /* The tier verdict dropped: the complexity judge runs on every turn in the default mode (settings.autoTier
+     * "shadow") and says so on a fact of its own, which the daemon states ahead of the adapter's stream. (The
+     * repo-sync note an unstubbed git.sync adds to every turn in this suite is disclosed on the user's row, not
+     * as a fact.) What this test is about is that the adapter's own facts arrive intact. */
+    const { facts, rows } = await runAgentTurn(client, { prompt: "do it" });
     /* The session frame carries the account the daemon RESOLVED for the turn (this suite's store answers
      * "default"), the same stamp the usage and rate-limit frames wear and for a sharper reason: a session
      * resumes only under the credential that minted it, and an unattributed one leaves the client binding it to
      * whatever its own tab happens to be picking. Everything else arrives exactly as the adapter streamed it. */
-    expect(frames.filter((frame) => frame.kind !== "preamble" && frame.kind !== "tier")).toEqual(
-        events.map((event) => (event.kind === "session" ? { ...event, account: "default" } : event)),
+    expect(facts.filter((fact) => fact.kind !== "tier")).toEqual(
+        events.filter(isTurnFact).map((event) => (event.kind === "session" ? { ...event, account: "default" } : event)),
     );
+    // And its words arrive as the run's rows, under the prompt they answer.
+    expect(rows).toMatchObject([
+        { role: "user", text: "do it" },
+        { role: "assistant", text: "hi" },
+    ]);
     // Attribution: pending user changes are captured BEFORE the agent runs, so the turn snapshot is agent-only.
     expect(triggers).toEqual(["user", "turn"]);
 });
@@ -646,8 +650,8 @@ test("agent.run serves a Codex turn on the translator subscription over the loca
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
-    expect(events.some((event) => event.kind === "error")).toBe(false);
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
     // Served over the translator's OpenAI endpoint on the fixed local bearer; the adapter's default home serves.
     expect(seen?.codexEndpoint).toEqual({ baseUrl: "http://127.0.0.1:8788", authToken: "local-bearer" });
     expect(seen?.codexHome).toBeUndefined();
@@ -666,9 +670,9 @@ test("agent.run gates a Codex turn with no subscription and no api key as subscr
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
     expect(codexCalled).toBe(false);
-    expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
+    expect(facts.some((fact) => fact.kind === "error" && fact.code === "subscription-required")).toBe(true);
 });
 
 /* GEMINI HAS NO CLAUDE CODE ROAD LEFT, and this is the test that holds the door shut.
@@ -707,9 +711,9 @@ test("agent.run sends a Gemini turn to the native runtime even when the Claude C
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code" });
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code" });
 
-    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
     expect(nativeCalled).toBe(true);
     expect(claudeCodeCalled).toBe(false);
 });
@@ -735,9 +739,9 @@ test("agent.run serves Kimi K3 on the Kimi Code subscription through the transla
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "kimi" });
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "kimi" });
 
-    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
     expect(seen?.baseUrl).toBe("http://127.0.0.1:8788");
     expect(seen?.authToken).toBe("local-bearer");
     expect(seen?.model).toBe("kimi-k3");
@@ -802,10 +806,10 @@ test("agent.run gates a Gemini turn with no Google account connected", async () 
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
 
     expect(nativeCalled).toBe(false);
-    expect(events.some((event) => event.kind === "error" && /Connect your Google account/.test(String(event.message)))).toBe(true);
+    expect(facts.some((fact) => fact.kind === "error" && /Connect your Google account/.test(String(fact.message)))).toBe(true);
 });
 
 /* A GEMINI TURN THAT NAMES NO HARNESS TAKES THE NATIVE RUNTIME: the default flipped when Gemini got one, and
@@ -845,9 +849,9 @@ test("agent.run sends a Gemini turn with no harness to the native OpenCode runti
         ),
     );
 
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
 
-    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
     expect(nativeCalled).toBe(true);
     expect(claudeCodeCalled).toBe(false);
 });
@@ -867,10 +871,10 @@ test("agent.run runs a Codex turn whose thread is gone as a fresh one, rather th
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "gone" });
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "gone" });
     // The dead id is dropped rather than handed on: a resume against it fails opaquely inside the CLI.
     expect(seen?.sessionId).toBeUndefined();
-    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
 });
 
 test("agent.run sends a Grok turn an explicit live-valid model, replacing an invalid or absent pinned id", async () => {
@@ -974,10 +978,10 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "do it" });
+    const { facts } = await runAgentTurn(client, { prompt: "do it" });
     // The turn never reaches the agent: the user gets an actionable message instead of exit-code-1.
     expect(agentCalled).toBe(false);
-    expect(events.some((event) => event.kind === "error" && event.message.includes("No Claude account connected"))).toBe(true);
+    expect(facts.some((fact) => fact.kind === "error" && fact.message.includes("No Claude account connected"))).toBe(true);
 });
 
 /* THE STOPPED-IN-ITS-OPENING-SECONDS CASE, which is what makes this the ordinary path rather than the rebuilt-
@@ -988,7 +992,7 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
  * is nothing here the user was needed for. */
 test("agent.run reopens a conversation whose session the sandbox never stored, seeded from its own record", async () => {
     let seen: { prompt?: string; sessionId?: string } | undefined;
-    const recorded: RestoredMessage[] = [
+    const recorded: TranscriptRow[] = [
         { role: "user", text: "what is 2+2?" },
         { role: "assistant", text: "4" },
     ];
@@ -1008,7 +1012,6 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
                 },
                 transcripts: {
                     read: async () => recorded,
-                    open: async () => {},
                     fork: async () => {},
                     append: async () => {},
                     count: async () => recorded.length,
@@ -1017,8 +1020,8 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "and now?", conversationId: "conv-stopped", sessionId: "gone" });
-    expect(events.some((event) => event.kind === "error")).toBe(false);
+    const { facts } = await runAgentTurn(client, { prompt: "and now?", conversationId: "conv-stopped", sessionId: "gone" });
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
     // Fresh session, carrying what the conversation already said: the same handoff a provider switch gets.
     expect(seen?.sessionId).toBeUndefined();
     expect(seen?.prompt).toContain("User: what is 2+2?");
@@ -1029,7 +1032,7 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
     let seen: { prompt?: string } | undefined;
     // The daemon's OWN record of the conversation: the seed for a turn that resumes no session, which is what
     // a provider/account/harness switch leaves behind. The client never sends a transcript up the wire.
-    const recorded: RestoredMessage[] = [
+    const recorded: TranscriptRow[] = [
         { role: "user", text: "what is 2+2?" },
         { role: "assistant", text: "4" },
     ];
@@ -1042,7 +1045,6 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
                 },
                 transcripts: {
                     read: async () => recorded,
-                    open: async () => {},
                     fork: async () => {},
                     append: async () => {},
                     count: async () => recorded.length,
@@ -1078,8 +1080,8 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
 
 test("agent.run rejects an attachment path escaping the workspace with an error frame", async () => {
     const client = clientFor(createApp(services()));
-    const events = await runAgentTurn(client, { prompt: "look", attachments: ["../escape.png"] });
-    expect(events).toEqual([{ kind: "error", message: "invalid attachment path: ../escape.png" }, { kind: "done" }]);
+    const { facts } = await runAgentTurn(client, { prompt: "look", attachments: ["../escape.png"] });
+    expect(facts).toEqual([{ kind: "error", message: "invalid attachment path: ../escape.png" }]);
 });
 
 /* STOPPING A TURN IS NOT A FAILURE: end to end, because the failure was assembled from three files agreeing
@@ -1118,8 +1120,7 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
     expect(agents[0]).toMatchObject({ id: "conv1", status: "stopped" });
     // And nothing in the transcript a window replaying this run would draw as a failure.
     const frames = await collect(await client.agent.attach({ conversationId: "conv1" }));
-    const events = frames.flatMap((frame) => (frame.kind === "frame" ? [frame.event] : []));
-    expect(events.filter((event) => event.kind === "error")).toEqual([]);
+    expect(frames.filter((frame) => frame.kind === "fact" && frame.fact.kind === "error")).toEqual([]);
     /* ...but the RECORD says the turn stopped short, which is the one thing about a stop that has to outlive the
      * window that pressed it. The continue press used to be armed by the stream watching the turn die, so it
      * existed only where somebody had been looking: this same session opened tomorrow, or on another device, or

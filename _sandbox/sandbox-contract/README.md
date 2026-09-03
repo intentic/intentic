@@ -10,7 +10,8 @@ mismatch is a type error rather than a runtime surprise.
 
 - Declare the contracts, one file per subject area (`src/contracts/`).
 - Declare the wire shapes those contracts are built from, one module per subject area (`src/schemas/`).
-- Declare the event union the daemon pushes over SSE (`src/events.ts`).
+- Declare the event union the daemon pushes over SSE (`src/events.ts`), and the transcript a turn becomes: the
+  rows, the patches that change them and the facts about a turn that `/agent/attach` carries.
 - Hold the small pieces of logic that BOTH sides must agree on rather than each deciding: the chore book,
   hostname and tunnel-id rules, session naming, terminal protocol, workspace state, runtime state, and the two
   things every surface that waits on a daemon-run command needs (`src/command-run.ts`): the loop that follows a
@@ -28,7 +29,16 @@ mismatch is a type error rather than a runtime surprise.
   proximity in a shared file. `schemas/internal.ts` is the exception and is not re-exported from the index: it
   holds the id and ref primitives several modules are written in, which are vocabulary rather than shapes either
   side of the wire sends.
-- [src/events.ts](src/events.ts): what the daemon pushes, and when.
+- [src/events.ts](src/events.ts): what the daemon pushes, and when. It also holds the transcript wire: a
+  `TranscriptRow` (a speaker's bubble, a notice, a card), a `TranscriptPatch` (append, replace, drop, more text or
+  thinking, a tool's progress), a `TurnFact` (the event kinds that are about the turn rather than its words:
+  session, worktree, usage, error...) and the `AttachFrame` union a window follows a run through.
+- [src/transcript-fold.ts](src/transcript-fold.ts), its own entry point (`@intentic/sandbox-contract/transcript-fold`):
+  THE fold from a turn's frames to its rows, and the patches each frame is worth. The daemon runs it inside every
+  run, the demo runs it over its recording, and the browser only applies the patches it emits, so there is one
+  opinion about what a turn looks like. Its notices (a stop, a refusal, a landing, a routed tier) are written
+  here too. [src/card-status.ts](src/card-status.ts) is how a card settles: raised `pending`, and given its
+  status by the reply that released it or by the stop that cancelled it.
 - [src/workspace-state.ts](src/workspace-state.ts) and [src/runtime-state.ts](src/runtime-state.ts): which
   changed file, and which moved runtime thing, makes which browser view stale. The workspace table also assigns
   each daemon-owned path its export lifecycle (`carry`, `secret`, `identity`, or `derived`), including the

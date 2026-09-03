@@ -10,7 +10,7 @@ import { conversationTaintSource, markConversationTaint } from "../guard/turn-ta
 import { noteChildWork } from "../agent/child-verification.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "../agent/subagents.js";
 import { startTurnRun, turnRunOf } from "../agent/turn-runs.js";
-import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
+import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { credentialsTravel, placeFanOut } from "../runners/runner-scheduler.js";
 import { runnerSummaries } from "../runners/runner.routes.js";
@@ -209,7 +209,8 @@ const runChildTurn = (
     const opened = openTurnTranscript(services, turn);
     const run = startTurnRun((input, signal) => turnFn(services, input, signal), turn, {
         before: opened,
-        transcript: (events, startedAt) => recordTurnTranscript(services, turn, events, startedAt),
+        opening: (startedAt) => openingRows(turn, services.workspace.root, startedAt),
+        transcript: (rows, steerRows) => recordTurnTranscript(services, turn, rows, steerRows),
     });
     if (run === undefined) {
         return { ok: false, message: "A turn is already running on that conversation." };
@@ -222,7 +223,7 @@ const runChildTurn = (
         let tokens = 0;
         let failure: string | undefined;
         try {
-            for await (const { event } of run.follow(0)) {
+            for await (const event of run.frames()) {
                 /* WHAT THIS CHILD PROVED, off its own normalized frames, which is what makes the verdict hold
                  * on a child running Codex, Cursor or Gemini rather than only where the Claude hooks reach
                  * (child-verification.ts). Its OWN delegations count too, deliberately: a child that handed

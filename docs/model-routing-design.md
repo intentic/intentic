@@ -274,7 +274,7 @@ that it only routes down. Swapping it for something merely known to be cheap is 
 | The readout: fast share, money, escalations | `sandbox/src/usage/tier-report.ts` → `SavingsReport.tier` |
 | The settings row + the numbers under it | `AgentModels.vue` |
 | Per-turn awareness in chat | the `tier` frame (`events.ts`) → picker notice (`ChatModelPicker.vue`), routed-turn notice (`conversation.ts` `applyTier`) |
-| …and the same notice on a reopened chat | `sessions/turn-transcript.ts` folds a routed `tier` frame into a recorded notice row, offer included (`RestoredMessage.noticeAction`) |
+| …and the same notice on a reopened chat | the transcript fold (`sandbox-contract/src/transcript-fold.ts`) turns a routed `tier` frame into a notice row, offer included (`TranscriptRow.noticeAction`), which the record keeps |
 | The pre-send preview + per-chat veto | `composables/chat/tierPreview.ts`, `ComposerTierChip.vue`, `AgentTurn.tierHold` |
 | The one dial | `FAST_CEILINGS` + `ComplexityInput.eagerness` (`settings.autoTierEagerness`) |
 

@@ -32,7 +32,7 @@ interface FakeRunner {
 const fakeServices = (over: Partial<SandboxSettings> = {}, fleet: readonly FakeRunner[] = []): Services =>
     unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings(over) }),
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { open: async () => {}, append: async () => {} }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, error: () => {} }),
         config: unstubbed<Services["config"]>("config", {
@@ -691,9 +691,9 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     const cardOn = async (): Promise<string> => {
         const run = turnRunOf(parent.conversationId);
         for (let attempt = 0; attempt < 200; attempt += 1) {
-            const card = run?.events.find((event) => event.kind === "permission");
+            const card = run?.rows.find((row) => row.permission !== undefined)?.permission;
             if (card !== undefined) {
-                return (card as { requestId: string }).requestId;
+                return card.requestId;
             }
             await new Promise((resolve) => setTimeout(resolve, 5));
         }
@@ -706,7 +706,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
             const requestId = await cardOn();
             // The card names the move and the provider, so answering it is not a guess about what it would do.
-            const card = turnRunOf(parent.conversationId)?.events.find((event) => event.kind === "permission");
+            const card = turnRunOf(parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
             expect(card).toMatchObject({ toolName: "agents.spawn", title: "Start a child agent on claude?", displayName: "Start it" });
             // No always-allow offered, because nothing here would remember one.
             expect(card).not.toHaveProperty("alwaysLabel");
@@ -717,8 +717,8 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             if (result.ok) {
                 await settled(result.id);
             }
-            // The stream gets its resolution frame, which is what stops a client drawing the card as live.
-            expect(turnRunOf(parent.conversationId)?.events.some((event) => event.kind === "resolved")).toBe(true);
+            // The card's row settles on the parent's run, which is what stops a client drawing the card as live.
+            expect(turnRunOf(parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission?.status).toBe("allowed");
         } finally {
             live.release();
         }

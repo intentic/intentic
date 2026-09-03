@@ -5,7 +5,7 @@ import {
     type AgentEvent,
     type AgentTurn,
     type ParkedCard,
-    type RestoredMessage,
+    type TranscriptRow,
     RESUME_NOTES,
     type SandboxSettings,
     SandboxSettingsSchema,
@@ -86,8 +86,7 @@ const fakeServices = (
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
-            open: (agent: TranscriptAgent) => record.open(agent.id, async () => []),
-            append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => record.append(agent.id, messages),
+            append: (agent: TranscriptAgent, messages: readonly TranscriptRow[]) => record.append(agent.id, messages),
             // Read as a settled turn is written down, to place any message steered into it (sessions/
             // turn-transcript.ts). Real here rather than stubbed away, so this suite exercises the same order of
             // reads the daemon does.

@@ -3,8 +3,9 @@ import { type IconName, growTextarea, MarkdownFigure, useDevice, ui } from "@int
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
+import { basename } from "@intentic/ui/path";
 import { CAPABILITY_CATALOG } from "@intentic-app/capability-catalog";
-import { type AskQuestion, type CardDocument, planParts } from "@intentic/sandbox-contract";
+import { type AskQuestion, type CardDocument, planParts, type TranscriptPlan, type TranscriptTerminalHelp } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
@@ -14,7 +15,7 @@ import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../comp
 import { formatCredits } from "../composables/membership/creditMeter";
 import { useAgents } from "../composables/agents/useAgents";
 import { errandOf } from "../composables/chat/errands";
-import { type ChatMessage, foldsIntoTurn, type PlanRequest, type TerminalHelpRequest } from "../composables/chat/transcript";
+import { type ChatMessage, foldsIntoTurn } from "../composables/chat/transcript";
 import { navigateInApp } from "../composables/mainWindow";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
@@ -89,7 +90,7 @@ const helpBrowserAt = (session: string): string => `/browsers/${session}`;
 // The terminal-help card's, the same way: except the terminal is a PANEL under every view rather than a
 // route, so this opens and focuses it on the agent's own session instead of navigating. The title is what the
 // panel says about itself while the tab is on its way (useTerminalPanel), which for a handover is the ask.
-const openHelpTerminal = (help: TerminalHelpRequest): void =>
+const openHelpTerminal = (help: TranscriptTerminalHelp): void =>
     useTerminalPanel().openFocused(help.session, { title: `The agent needs you at this terminal`, detail: help.message });
 
 /* The capability card's Connect is a decision AND a navigation: the reply un-parks the daemon's watch (the
@@ -214,7 +215,7 @@ const body = useMarkdown(
 // A plan card's body arrives whole with the card, so it never streams.
 const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.plan.text).body : ``), false, linkAgent);
 
-const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
+const planTitle = (request: TranscriptPlan): string => planParts(request.text).title ?? `Proposed plan`;
 
 /* Whether this bubble ALREADY draws the document a card is carrying, as the card of the write that produced it
  * (a markdown Write renders as prose, see toolPresentation). The question or plan card then opens FOLDED: the
@@ -785,10 +786,10 @@ const toggleExpanded = (): void => {
 // was staged if it was staged here, else one re-minted from the workspace bytes for a restored, replayed or
 // cached bubble (attachmentPreview: reactive, so the name chip flips to a thumb when the bytes land).
 const attachmentThumbs = computed(() =>
-    (props.message.attachments ?? []).map((attachment) => ({
-        name: attachment.name,
-        path: attachment.path,
-        previewUrl: attachmentPreview(attachment.path),
+    (props.message.attachments ?? []).map((path) => ({
+        name: basename(path),
+        path,
+        previewUrl: attachmentPreview(path),
     })),
 );
 

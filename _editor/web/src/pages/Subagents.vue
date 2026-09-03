@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type AgentProvider, NATIVE_PROVIDERS, providerLabel, type RestoredMessage, type SubagentSession } from "@intentic/sandbox-contract";
+import { type AgentProvider, NATIVE_PROVIDERS, providerLabel, type TranscriptRow, type SubagentSession } from "@intentic/sandbox-contract";
 import { Icon, type IconName, Markdown, ui, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, ref, watch } from "vue";
@@ -311,16 +311,16 @@ const transcript = useQuery({
     queryKey: computed(() => SUBAGENT_TRANSCRIPT.of(selected.value ?? ``)),
     enabled: computed(() => selected.value !== undefined),
     refetchInterval: computed(() => (current.value !== undefined && subagentLive(current.value) ? TRANSCRIPT_POLL_MS : false)),
-    queryFn: async (): Promise<RestoredMessage[]> => {
+    queryFn: async (): Promise<TranscriptRow[]> => {
         const id = selected.value;
         if (id === undefined) {
             return [];
         }
-        const body = (await sandboxJson(`/system/subagents/${encodeURIComponent(id)}/transcript`)) as { messages?: RestoredMessage[] };
+        const body = (await sandboxJson(`/system/subagents/${encodeURIComponent(id)}/transcript`)) as { messages?: TranscriptRow[] };
         return body.messages ?? [];
     },
 });
-const messages = computed<RestoredMessage[]>(() => transcript.data.value ?? []);
+const messages = computed<TranscriptRow[]>(() => transcript.data.value ?? []);
 
 // A child's prose is the chat's prose: the same component the transcript renders an answer with, so a report
 // that draws a diagram draws it here too. The decorator is built once rather than in the template: it is a

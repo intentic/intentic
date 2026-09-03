@@ -1,4 +1,4 @@
-import type { RestoredMessage } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { REDACTED, shareTranscript } from "./share-payload.js";
 
@@ -6,7 +6,7 @@ import { REDACTED, shareTranscript } from "./share-payload.js";
  * the reason share-payload.ts is a pure function over plain values: every claim the share dialog makes to the
  * person about to publish a conversation is checked here, against the payload itself. */
 
-const conversation: RestoredMessage[] = [
+const conversation: TranscriptRow[] = [
     {
         role: "user",
         text: "here is the key: sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345",
@@ -57,10 +57,10 @@ describe("a messages-only share", () => {
 
 /* The one row-level flag that SURVIVES a share, at every detail level: a line the owner placed wearing the
  * agent's voice must not read as the agent's to a recipient: the share page is a human audience, which is the
- * only audience the mark exists for. (The agent-facing handoff stays blind to it; see RestoredMessageSchema.) */
+ * only audience the mark exists for. (The agent-facing handoff stays blind to it; see TranscriptRowSchema.) */
 describe("a placed row", () => {
     it("keeps its mark in the shared payload", () => {
-        const placed: RestoredMessage[] = [{ role: "assistant", text: "I verified it myself.", placed: true }];
+        const placed: TranscriptRow[] = [{ role: "assistant", text: "I verified it myself.", placed: true }];
         expect(shareTranscript(placed, "messages").messages[0]).toEqual({ role: "assistant", text: "I verified it myself.", placed: true });
         expect(shareTranscript(placed, "everything").messages[0]).toEqual({ role: "assistant", text: "I verified it myself.", placed: true });
     });
@@ -83,7 +83,7 @@ describe("an everything share", () => {
     });
 
     it("carries and redacts the task checklist in everything mode", () => {
-        const withTodos: RestoredMessage[] = [
+        const withTodos: TranscriptRow[] = [
             {
                 role: "assistant",
                 text: "Working",

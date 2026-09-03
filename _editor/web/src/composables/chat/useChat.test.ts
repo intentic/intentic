@@ -9,12 +9,13 @@ vi.mock("../sandbox/sandboxClient", () => {
     return {
         sandboxRequest,
         sandboxJson,
-    /* The reach-aimed pair, on the real client's terms: `undefined` is the active box, which is every call
-     * these tests make. They delegate to the mocks above so the assertions stay written against one spy per
-     * verb rather than two that would have to agree. */
+        /* The reach-aimed pair, on the real client's terms: `undefined` is the active box, which is every call
+         * these tests make. They delegate to the mocks above so the assertions stay written against one spy per
+         * verb rather than two that would have to agree. */
         sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
             init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
-        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) => (init === undefined ? sandboxJson(path) : sandboxJson(path, init)),
+        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) =>
+            init === undefined ? sandboxJson(path) : sandboxJson(path, init),
         sandboxError: vi.fn(async (response: Response) => {
             const body = (await response.json()) as { message?: string; error?: string };
             return new Error(body.message ?? body.error ?? `Request failed (${response.status}).`);
@@ -291,14 +292,24 @@ describe(`account usage hydration`, () => {
         mockConnections({
             accounts: (path) =>
                 path.startsWith(`/claude`)
-                    ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 30, gates: `all` }], measuredAt: 500 } }]
+                    ? [
+                          {
+                              id: `a1`,
+                              label: `Personal`,
+                              connectedAt: 0,
+                              usage: { windows: [{ kind: `seven_day`, utilization: 30, gates: `all` }], measuredAt: 500 },
+                          },
+                      ]
                     : [],
         });
         await loadAccountStatus();
 
         // The daemon's write is fire-and-forget, so a refresh can land between a frame and its persist:
         // the newer reading must win, or the chip would flicker backwards mid-session.
-        expect(usageByAccount.value[`claude:a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 80, gates: `all` }], measuredAt: 9_000 });
+        expect(usageByAccount.value[`claude:a1`]).toMatchObject({
+            windows: [{ kind: `seven_day`, utilization: 80, gates: `all` }],
+            measuredAt: 9_000,
+        });
     });
 });
 
@@ -1006,7 +1017,18 @@ describe(`abandoned drafts`, () => {
                 strip: {
                     active: `far`,
                     panes: [`far`],
-                    tabs: [{ id: `far`, registered: false, standing: `draft`, provider: `claude`, harness: `native`, model: ``, unsent: true, preview: `half a thought` }],
+                    tabs: [
+                        {
+                            id: `far`,
+                            registered: false,
+                            standing: `draft`,
+                            provider: `claude`,
+                            harness: `native`,
+                            model: ``,
+                            unsent: true,
+                            preview: `half a thought`,
+                        },
+                    ],
                 },
             },
         });
@@ -1575,14 +1597,29 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         ],
     } as const;
 
-    // A run parked on its plan card: head, one frame, and no `end`, the stream stays open for as long as the
+    // A run parked on its plan card: head, one patch, and no `end`, the stream stays open for as long as the
     // agent waits on the user, which is the whole reason nothing redraws what a rebuild takes away.
     const parkedRun = (): Response => {
         const body = new ReadableStream<Uint8Array>({
             start(controller) {
-                controller.enqueue(sseFrame({ kind: `attached`, run: `r1`, prompt: `add the reconcile engine`, startedAt: 1000, seq: 1 }));
                 controller.enqueue(
-                    sseFrame({ kind: `frame`, seq: 1, event: { kind: `plan`, requestId: `p1`, text: `# Reconcile engine\n\nStep 1` } }),
+                    sseFrame({
+                        kind: `attached`,
+                        run: `r1`,
+                        startedAt: 1000,
+                        seq: 0,
+                        rows: [{ role: `user`, text: `add the reconcile engine`, sentAt: 1000 }],
+                    }),
+                );
+                controller.enqueue(
+                    sseFrame({
+                        kind: `patch`,
+                        seq: 1,
+                        patch: {
+                            op: `append`,
+                            row: { role: `assistant`, text: ``, plan: { requestId: `p1`, text: `# Reconcile engine\n\nStep 1`, status: `pending` } },
+                        },
+                    }),
                 );
             },
         });

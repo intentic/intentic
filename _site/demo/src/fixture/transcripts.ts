@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentProvider, RestoredMessage } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { REVIEW_AGENT_ID } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
@@ -12,7 +12,7 @@ interface AgentTranscript {
     readonly provider?: AgentProvider;
     readonly harness?: AgentHarness;
     readonly account?: string;
-    readonly messages: readonly RestoredMessage[];
+    readonly messages: readonly TranscriptRow[];
 }
 
 /* WHAT A FINISHED AGENT'S CHAT HOLDS. `/agents/{id}/transcript` is what the panel reads when a conversation is
@@ -20,7 +20,7 @@ interface AgentTranscript {
  * list made the board's central move ("open the agent") land on "Start a conversation with Claude Code", as if
  * the work on the card had happened somewhere else.
  *
- * The shape is the restored one (`RestoredMessage`), not the streaming one: prose, the thinking that preceded
+ * The shape is the restored one (`TranscriptRow`), not the streaming one: prose, the thinking that preceded
  * it, and the tool cards that prose introduced, which is why a reopened chat redraws its cards with their
  * diffs instead of a flat wall of text. The diffs below are the SAME strings the review panel serves for these
  * paths (fixture/workspace.ts), because they are the same change seen from the other side: the transcript is

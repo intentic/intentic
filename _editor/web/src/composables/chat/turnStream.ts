@@ -1,55 +1,53 @@
 import { createBackoff, sleep } from "@intentic/base/async";
-import { type AgentEvent, type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFrames } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFrames } from "@intentic/sandbox-contract";
 import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxRequestVia } from "../sandbox/sandboxClient";
 import { acquireStreamSlot } from "../sandbox/streamBudget";
 
 /* HOW THIS WINDOW TALKS TO A RUNNING TURN. A turn EXECUTES as a detached run on the sandbox daemon (POST /agent
- * starts it; the platform is not in the path) and a tab merely renders it: /agent/attach replays the run's frame
- * log and then follows it live, resumable by seq cursor when the connection drops, and the same stream serves a
- * reload, a second window, another device, or a probe hunting a run the daemon restarted. The side channel
- * (/agent/steer · /agent/stop · /agent/reply) is the other direction, messages TO a turn already running.
+ * starts it; the platform is not in the path) and a tab merely renders it: /agent/attach hands over the run's
+ * rows so far and then every change to them as it lands, and the same stream serves a reload, a second window,
+ * another device, or a probe hunting a run the daemon restarted. The side channel (/agent/steer · /agent/stop ·
+ * /agent/reply) is the other direction, messages TO a turn already running.
  *
- * All of it is stateless about the conversation: what a frame MEANS is the reducer's, and what to do about it is
- * the Conversation's. This file owns only the connection, the slot budget, the reconnect backoff, the replay
- * boundary, and the give-up rules. */
+ * All of it is stateless about the conversation: the rows are the daemon's, what to do about a fact is the
+ * Conversation's. This file owns only the connection, the slot budget, the reconnect backoff, and the give-up
+ * rules. */
 
-// One in-flight turn's streaming context: which run's frames are being rendered under which attribution, the
+// One in-flight turn's streaming context: which run's rows are being rendered under which attribution, the
 // provider/account/harness serving the turn, captured onto the session the stream mints.
 export interface TurnContext {
-    // The turn's user bubble, the checkpoint frame anchors its restore affordance here. The turn's CURRENT
-    // bubble is not here: which bubble the agent is writing into moves with every block boundary and card, so
-    // it belongs to the reducer's state (TurnState.bubbleId) rather than to a context the caller holds.
+    // The turn's user bubble, where a refused turn's words are taken back out from.
     readonly userMessageId: number;
-    // The run these frames belong to, as the daemon named it in the attach head. Stamped onto every row they
-    // draw, which is what lets a SECOND attach to the same run take the first one's copy back out first.
+    // The run these rows belong to, as the daemon named it in the attach head.
     readonly run: string;
     readonly provider: AgentProvider;
     readonly account: string | undefined;
     readonly harness: AgentHarness;
 }
 
-// The head frame of an /agent/attach stream, the run's identity plus what a non-initiating window needs to
-// synthesize the turn locally (user bubble from the prompt, elapsed readout from the start time).
+// The head frame of an /agent/attach stream: the run's identity and its rows so far.
 export type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
+// Everything after it: a change to the rows, or a fact about the turn.
+export type AttachEntry = Extract<AttachFrame, { kind: "patch" | "fact" }>;
 
-/* What a followed run needs from the conversation rendering it: whose turn the frames belong to and where to
- * put them. */
+/* What a followed run needs from the conversation rendering it: whose turn the rows belong to and where to put
+ * them. */
 export interface RunRenderer {
-    // Runs once, at the first attach head. The send path returns the context it already prepared; the reattach
-    // path synthesizes bubbles from the head, or returns undefined to stand down when a send won the race.
-    ensureTurn(head: AttachHead): TurnContext | undefined;
-    /* `replay` is the frame's side of the boundary the head names, and the renderer is told because a replayed
-     * frame is HISTORY: it already happened, nobody watched it happen, and animating it is the difference
-     * between a reopened turn appearing and a reopened turn typing itself out at reading speed. See
-     * TranscriptClock for what is done with it. */
-    frame(event: AgentEvent, turn: TurnContext, replay: boolean): void;
+    // Runs at EVERY attach head, a fresh attach and every re-attach alike, because each head carries the run's
+    // rows whole and they replace what this window holds for the run. The send path returns the context it
+    // already prepared; the reattach path adopts the turn, or returns undefined to stand down when a send won
+    // the race.
+    attached(head: AttachHead): TurnContext | undefined;
+    // One entry after the head. `replay` says the entry was already delivered to an earlier attach of this
+    // stream (a fact at or below the head's seq): the daemon replays facts so a window joining late learns
+    // them, and a window that already applied them is told so.
+    entry(entry: AttachEntry, turn: TurnContext, replay: boolean): void;
 }
 
-/* Render a run by attaching to it, re-attaching from the seq cursor whenever the stream drops, until the
- * daemon says `end` (the run settled, every frame delivered) or the run disappears (404: finished past
- * retention, stopped, or never started). Returns whether the stream ever engaged (a head arrived and
- * ensureTurn produced a context). */
+/* Render a run by attaching to it, re-attaching whenever the stream drops, until the daemon says `end` (the run
+ * settled, every entry delivered) or the run disappears (404: finished past retention, stopped, or never
+ * started). Returns whether the stream ever engaged (a head arrived and `attached` produced a context). */
 export const followRun = async (
     conversationId: string,
     // The run to attach to, when the caller already knows it (the send path just started it). Undefined asks
@@ -60,8 +58,7 @@ export const followRun = async (
     /* WHICH DAEMON IS RUNNING IT: undefined for the box this browser is pointed at, a sandbox id for a
      * conversation homed elsewhere (Conversation.box). The attach is an ordinary authenticated request and the
      * bearer store is keyed by sandbox already, so following a turn in another box costs this argument and
-     * nothing else: the frames, the cursor, the backoff and the replay boundary are the same protocol wherever
-     * the run is. It rides every re-attach in the loop below, so a stream that drops and resumes cannot come
+     * nothing else. It rides every re-attach in the loop below, so a stream that drops and resumes cannot come
      * back pointed at the active box.
      *
      * Required rather than defaulted, in a signature where every other argument is: a stream aimed at the wrong
@@ -69,49 +66,39 @@ export const followRun = async (
      * out loud. */
     at: string | undefined,
 ): Promise<boolean> => {
-    // The resume cursor, held here because nothing outside this loop reads it: `run` latches the run being
-    // rendered, `after` the last seq delivered, and every re-attach picks up from the pair.
     let run = initialRun;
-    let after = 0;
     let attached = false;
     const ladder = createBackoff({ floorMs: 500, capMs: 5_000 });
     let turn: TurnContext | undefined;
-    /* THE REPLAY/LIVE BOUNDARY, which the daemon has always published on the head (`seq` is the run's frame
-     * count at the moment this attach opened) and this loop used to drop on the floor.
-     *
-     * Everything at or below it already happened: the frames between the run's first and whatever this tab last
-     * saw, delivered as fast as the socket carries them. Everything above arrives as the model produces it.
-     * Rendered identically, a reopened turn replayed its whole answer through the typewriter, so opening an
-     * agent that had been working for an hour meant watching that hour get typed out instead of seeing where it
-     * had got to. Reset per attach, because each attach names its own: a reconnect mid-turn replays only the
-     * gap it missed, and that gap is history for exactly the same reason. */
+    // The head's seq: a fact at or below it was delivered to a previous attach of this stream.
     let replayThrough = 0;
-    // Consecutive re-attaches that returned no new frames and no `end`. A run that keeps answering empty is
+    // Consecutive re-attaches that returned no new entries and no `end`. A run that keeps answering empty is
     // done with nothing left to stream (or never terminates its stream), so give up after a few rounds
     // rather than tight-looping the daemon at network speed. Reset the moment real progress arrives.
     let idleRounds = 0;
-    /* Apply one attach frame to the cursor state above. Returns undefined while the stream should keep being
-     * drained, otherwise the value followRun itself answers with: this attach is over. A closure rather than a
-     * free function because `run`, `after`, `attached` and `turn` ARE the loop's state, not arguments. */
+    let delivered = 0;
+    /* Apply one attach frame. Returns undefined while the stream should keep being drained, otherwise the
+     * value followRun itself answers with: this attach is over. A closure rather than a free function because
+     * `run`, `attached` and `turn` ARE the loop's state, not arguments. */
     const applyFrame = (parsed: AttachFrame): boolean | undefined => {
         if (parsed.kind === `attached`) {
-            // A head naming a different run than the cursor's means a newer turn started while
-            // this tab was disconnected, that turn belongs at a different transcript position
-            // (after ITS user message), so this stream settles rather than misrendering it here.
+            // A head naming a different run than the cursor's means a newer turn started while this tab was
+            // disconnected, that turn belongs at a different transcript position (after ITS user message), so
+            // this stream settles rather than misrendering it here.
             if (run !== undefined && parsed.run !== run) {
                 return attached;
             }
             run = parsed.run;
             replayThrough = parsed.seq;
-            turn ??= renderer.ensureTurn(parsed);
+            turn = renderer.attached(parsed);
             if (turn === undefined) {
                 return false;
             }
             attached = true;
-        } else if (parsed.kind === `frame`) {
-            after = parsed.seq;
+        } else if (parsed.kind === `patch` || parsed.kind === `fact`) {
+            delivered += 1;
             if (turn !== undefined) {
-                renderer.frame(parsed.event, turn, parsed.seq <= replayThrough);
+                renderer.entry(parsed, turn, parsed.seq <= replayThrough);
             }
         } else if (parsed.kind === `end`) {
             return attached;
@@ -146,17 +133,13 @@ export const followRun = async (
                 method: `POST`,
                 headers: { "content-type": `application/json` },
                 signal: controller.signal,
-                body: JSON.stringify({
-                    conversationId,
-                    ...(run !== undefined ? { run } : {}),
-                    after,
-                }),
+                body: JSON.stringify({ conversationId, ...(run !== undefined ? { run } : {}) }),
             });
         } catch {
             // Network drop between attaches. A probe that never engaged gives up (its caller retries on
             // the next reachability flip); an engaged stream backs off and retries, the turn may well
-            // still be running, and the cursor resumes it exactly where this tab left off. The slot goes
-            // back first either way: a stream that is not open must not hold one across the backoff.
+            // still be running, and the next head brings its rows back whole. The slot goes back first
+            // either way: a stream that is not open must not hold one across the backoff.
             slot();
             if (controller.signal.aborted || !attached) {
                 return attached;
@@ -169,7 +152,7 @@ export const followRun = async (
             return attached;
         }
         ladder.reset();
-        const beforeAfter = after;
+        const before = delivered;
         try {
             for await (const frame of sseFrames(response.body)) {
                 const parsed = sseData(frame) as AttachFrame | undefined;
@@ -182,18 +165,18 @@ export const followRun = async (
                 }
             }
         } catch {
-            // The stream broke mid-read, fall through and re-attach from the cursor.
+            // The stream broke mid-read, fall through and re-attach.
         } finally {
             // However this attach ended, settled, superseded, torn, or returned from inside the loop,
             // the connection is done and the next stream may have it.
             slot();
         }
         // Reached only when the stream ENDED WITHOUT an `end` frame (a clean `end` returns above). If it also
-        // delivered nothing new (cursor unmoved), the run has no more for us, a done run whose tail we
-        // already hold, or one whose stream never terminates, so an immediate re-attach would spin. Back off,
-        // and after a few empty rounds give up: what we hold is complete, and a live turn would have advanced
-        // the cursor (resetting this). Real progress OR a fresh `end` keep the reconnect loop responsive.
-        if (after === beforeAfter) {
+        // delivered nothing new, the run has no more for us, a done run whose tail we already hold, or one
+        // whose stream never terminates, so an immediate re-attach would spin. Back off, and after a few
+        // empty rounds give up: what we hold is complete, and a live turn would have delivered something
+        // (resetting this). Real progress OR a fresh `end` keep the reconnect loop responsive.
+        if (delivered === before) {
             idleRounds += 1;
             if (idleRounds >= 3) {
                 return attached;

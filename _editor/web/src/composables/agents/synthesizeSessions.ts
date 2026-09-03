@@ -1,4 +1,4 @@
-import type { RestoredMessage, RestoredQuestion, RestoredToolCall, ToolCallContent } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptQuestion, TranscriptTool, ToolCallContent } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { track } from "../analytics";
 import type { Conversation } from "../chat/conversation";
@@ -38,7 +38,7 @@ const roleNames = { user: `User`, assistant: `Assistant`, notice: `Notice` } as 
 /* One tool call as transcript prose, children indented under their parent by deepening the marker. The aim is
  * a rendering an LLM reads unambiguously, not strict markdown: diffs keep their before/after whole, output is
  * verbatim, and an image stays a path the reader can open from the workspace. */
-const renderTool = (tool: RestoredToolCall, depth: number): string => {
+const renderTool = (tool: TranscriptTool, depth: number): string => {
     const parts = [`${`▸`.repeat(depth + 1)} ${tool.name}${tool.target === undefined ? `` : `, ${tool.target}`} (${tool.status})`];
     if (tool.thinking !== undefined && tool.thinking !== ``) {
         parts.push(`thinking:\n${tool.thinking}`);
@@ -68,13 +68,11 @@ const renderContent = (content: ToolCallContent): string => {
     }
 };
 
-const renderQuestion = (question: RestoredQuestion): string => {
-    const reply = question.reply?.kind === `question` ? question.reply : undefined;
-    const answers = reply?.answers;
+const renderQuestion = (question: TranscriptQuestion): string => {
     const lines = question.questions.map((asked) => {
-        const picks = answers?.[asked.question] ?? [];
+        const picks = question.answers?.[asked.question] ?? [];
         const answer =
-            reply === undefined ? `(unanswered)` : reply.cancelled === true ? `(dismissed)` : picks.length > 0 ? picks.join(`, `) : `(no answer)`;
+            question.status === `answered` ? (picks.length > 0 ? picks.join(`, `) : `(no answer)`) : question.status === `cancelled` ? `(dismissed)` : `(unanswered)`;
         return `- ${asked.header || asked.question}: ${answer}`;
     });
     return lines.join(`\n`);
@@ -85,7 +83,7 @@ const renderQuestion = (question: RestoredQuestion): string => {
  * record retained around it: reasoning, tool calls, the daemon's notes, attachment paths, notices. The header
  * frames all of it as quoted evidence, which is the guard against a source's own instructions (or something a
  * tool read off the web) steering the synthesizer. */
-export const renderTranscript = (label: string, title: string, messages: readonly RestoredMessage[]): string => {
+export const renderTranscript = (label: string, title: string, messages: readonly TranscriptRow[]): string => {
     const sections = messages.map((message, index) => {
         const parts = [`## ${label}.${index + 1}: ${roleNames[message.role]}`];
         for (const note of message.notes ?? []) {
@@ -163,13 +161,13 @@ const slugOf = (title: string): string => {
     return cleaned === `` ? `conversation` : cleaned;
 };
 
-const transcriptOf = async (conversation: Conversation): Promise<RestoredMessage[] | undefined> => {
+const transcriptOf = async (conversation: Conversation): Promise<TranscriptRow[] | undefined> => {
     try {
         const response = await sandboxRequest(`/agents/${encodeURIComponent(conversation.conversationId)}/transcript`);
         if (!response.ok) {
             return undefined;
         }
-        const body = (await response.json()) as { messages?: RestoredMessage[] };
+        const body = (await response.json()) as { messages?: TranscriptRow[] };
         // Empty is the daemon saying it holds no record of a conversation whose bubbles are on screen, a
         // snapshot taken anyway would synthesize over a silently incomplete source.
         return body.messages !== undefined && body.messages.length > 0 ? body.messages : undefined;

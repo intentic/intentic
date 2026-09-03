@@ -172,10 +172,13 @@ survive reconnects. Its subsystems:
   something reads it, and `agent-catalog.test.ts` walks PROVIDERS × HARNESSES so a new provider cannot arrive
   without a row
   ([webchat/](_sandbox/sandbox/src/webchat/)). A chat turn executes as a **detached run**
-  ([agent/turn-runs.ts](_sandbox/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the
-  frames land in a seq-stamped log, which any number of clients render via `/agent/attach`
-  (replay-from-cursor, then live): so a turn survives reloads and dropped connections, and every window or
-  device on the conversation streams it concurrently. Only `/agent/stop` cancels it. A turn also survives **the
+  ([agent/turn-runs.ts](_sandbox/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id, the
+  daemon folds the provider's frames into the conversation's rows as they arrive (one fold, the contract's
+  [transcript-fold.ts](_sandbox/sandbox-contract/src/transcript-fold.ts), shared with the demo), and any number
+  of clients render them via `/agent/attach`: the head carries the run's rows whole, then every change lands as
+  a patch and every fact about the turn (session, worktree, usage, error) as itself. The browser applies patches
+  and folds nothing, so a turn survives reloads and dropped connections, and every window or device on the
+  conversation streams it concurrently. Only `/agent/stop` cancels it. A turn also survives **the
   daemon**: every in-flight turn and automation fire is written to a **turn journal** on the history volume
   ([agent/turn-journal.ts](_sandbox/sandbox/src/agent/turn-journal.ts)) and cleared when it settles, so whatever
   is still there at boot is exactly what the process died under: and `resumeInterruptedTurns`
@@ -189,11 +192,11 @@ survive reconnects. Its subsystems:
   appends it to the conversation's transcript before consuming the journal entry that names it, so an hour of
   tool calls that never settled is still there to read. The fleet card reads `interrupted` and an automation's
   row shows an `interrupted` run.
-  The frame log itself stays in memory on purpose: the durable copy is the daemon's own **transcript record**,
+  A run's rows stay in memory only until it settles: the durable copy is the daemon's own **transcript record**,
   one file per conversation on the history volume
-  ([sessions/transcript-record.ts](_sandbox/sandbox/src/sessions/transcript-record.ts)), appended as each turn
-  settles. The provider's session store is now only a backfill for conversations older than that record and the
-  recovery source above, which is why a provider that keeps no readable store still opens.
+  ([sessions/transcript-record.ts](_sandbox/sandbox/src/sessions/transcript-record.ts)), appended the settled
+  run's rows, the same rows every window drew. The provider's session store is only the recovery source above,
+  which is why a provider that keeps no readable store still opens.
 - **Terminals**: interactive PTYs over WebSocket ([terminal/terminal.ts](_sandbox/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews**: per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
   ([panels/](_sandbox/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal

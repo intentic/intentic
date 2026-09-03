@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 /* Both by FILE rather than through the barrel, which is boot.ts's rule and this is what enforces it: the barrel
  * statically imports every component in the kit, and among them is the graph canvas, whose stylesheet import is
  * a side effect no bundler will drop. Reached through the barrel, prose costs this page a fifth of a megabyte of
@@ -49,7 +49,7 @@ const subtitle = computed(() => {
 });
 
 /* WHERE THE DAY CHANGES, so a conversation that ran across a week reads as one: the same marker the app's
- * transcript draws. Only user rows carry a stamp (RestoredMessage.sentAt), which is enough: a turn's answers
+ * transcript draws. Only user rows carry a stamp (TranscriptRow.sentAt), which is enough: a turn's answers
  * belong to the day its question was asked, and a conversation recorded before stamps existed simply gets no
  * markers rather than a row of guesses. */
 const dayMarks = computed(() => {
@@ -73,7 +73,7 @@ const dayMarks = computed(() => {
 const LIVE = false;
 
 // Tool calls arrive as the contract's own restored shape, which is what the app's card renders too.
-const toolsOf = (message: RestoredMessage): readonly RestoredToolCall[] => message.tools ?? [];
+const toolsOf = (message: TranscriptRow): readonly TranscriptTool[] => message.tools ?? [];
 
 // The agent's reasoning is folded away by default even on an `everything` share: it is the longest and least
 // read part of a transcript, and a page that opens on three screens of it buries the conversation.

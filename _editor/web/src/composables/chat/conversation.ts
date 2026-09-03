@@ -1,7 +1,5 @@
-import { STATE_DIR } from "@intentic/constants";
 import {
     type AgentCommand,
-    type AgentEvent,
     type AgentHarness,
     type AgentProvider,
     type AgentReply,
@@ -11,13 +9,19 @@ import {
     deriveTitle,
     type EditorContext,
     fastAllowed,
+    isAwaitingDecision,
+    mentionPaths,
     newConversationId,
     type PermissionMode,
     providerLabel,
-    type RestoredMessage,
-    withoutResumeNote,
+    settledCards,
+    type TranscriptCards,
+    type TranscriptPatch,
+    type TranscriptRow,
+    type TurnFact,
 } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
+import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
 import { sandboxError, sandboxRequestVia } from "../sandbox/sandboxClient";
@@ -28,25 +32,14 @@ import type { PickUp } from "./pickUp";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId, setAccountUsage } from "./providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "./providerCatalog";
-import {
-    type CardKind,
-    type ChatAttachment,
-    type ChatMessage,
-    continuationFor,
-    isAwaitingDecision,
-    isNudgeText,
-    recordedRows,
-    withCancelledCards,
-} from "./transcript";
+import { type ChatAttachment, type ChatMessage, continuationFor, isNudgeText, recordedRows, withCancelledCards } from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
 import { TranscriptClock } from "./transcriptClock";
 import { rememberedModelFor, rememberedProviderFor, rememberPick, startingMode, turnDefaults, type TurnPick } from "./turnDefaults";
 import { TurnFailures } from "./turnFailures";
-import { restoredCards, type TurnEffect } from "./turnReducer";
 import { type SessionRef, type TurnSettings, boundSession, resumes, turnRequestBody } from "./turnRequest";
-import { type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
+import { type AttachEntry, type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
 import { formatReset, formatUtilization, isStale, modelAllowance, SPENT_PERCENT, usageStatusFor } from "./usageStatus";
-import { mentionPaths, mentionedPathTokens } from "./useMentions";
 import { uuid } from "../uuid";
 
 // A file staged in a conversation's composer, uploaded to the workspace the moment it's attached (send is
@@ -100,21 +93,6 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
     return isNudgeText(message.text) && isNudgeText(neighbour.text);
 };
 
-const UPLOADED_ATTACHMENT_DIR = `${STATE_DIR}/records/artifacts/attachments/`;
-
-/* The turn wire historically carried uploaded files and inline @-mentioned workspace paths in one array.
- * The live bubble knew which were uploads because it drew from the composer's objects; a reload knew only the
- * array and redrew every entry as a chip. Remove paths already visible inline, while keeping a real uploaded
- * file if the user also happened to type its generated path. This also cleans already-recorded turns whose
- * copied pnpm output was misread as a list of @scope/package:test attachments. */
-const restoredAttachmentFields = (message: RestoredMessage): { readonly attachments?: readonly ChatAttachment[] } => {
-    const inline = new Set(mentionedPathTokens(message.text));
-    const attachments = (message.attachments ?? [])
-        .filter((path) => !inline.has(path) || path.includes(UPLOADED_ATTACHMENT_DIR))
-        .map((path) => ({ name: path.split(`/`).at(-1) ?? path, path }));
-    return attachments.length > 0 ? { attachments } : {};
-};
-
 // What a conversation is doing right now, surfaced as the tab's status icon.
 export type ConversationStatus = "idle" | "streaming" | "awaiting" | "error";
 
@@ -128,10 +106,10 @@ export type ConversationStatus = "idle" | "streaming" | "awaiting" | "error";
  * turnRequest.ts states the turn on the wire. What is left here is the conversation itself: the selection, the
  * queue, the cards, and the effects a frame has on all three. */
 export class Conversation {
-    /* The transcript and its clock. Frames are buffered into it and folded on the next paint; the effects they
-     * raise come back through `applied` below, because what an effect DOES is this conversation's business and
-     * what it does it TO is the transcript's. */
-    private readonly transcript = new TranscriptClock((event, turn, effects) => this.applied(event, turn, effects));
+    /* The transcript and its clock. The run's entries are buffered into it and applied on the next paint; what
+     * each one means for the conversation beyond its rows comes back through `applied` below, because what a
+     * fact DOES is this conversation's business and what a patch does it TO is the transcript's. */
+    private readonly transcript = new TranscriptClock((entry, turn, replay) => this.applied(entry, turn, replay));
 
     readonly messages = this.transcript.messages;
     // Whether a pane is showing this transcript WITH the focus, the typewriter's gate, written by the pane
@@ -375,12 +353,13 @@ export class Conversation {
     // conversation's life: the condition is a property of the container, not of any one turn.
     private warnedUnenforced = false;
 
-    // Lifetime accounting across the conversation's turns (finally surfaced, the fleet card and the usage
-    // popover read these). The daemon's registry is the authoritative cross-device total; these accumulate the
-    // turns THIS tab streamed, which matches it whenever the tab saw every turn.
-    readonly costUsd = ref(0);
-    readonly inputTokens = ref(0);
-    readonly outputTokens = ref(0);
+    // Lifetime accounting across the conversation's turns (the fleet card and the usage popover read these),
+    // summed off the rows on screen: each turn's usage sits on the bubble its answer ended in. The daemon's
+    // registry is the authoritative cross-device total; this is what this tab can see, which matches it
+    // whenever the tab holds every turn.
+    readonly costUsd = computed(() => this.messages.value.reduce((sum, message) => sum + (message.usage?.costUsd ?? 0), 0));
+    readonly inputTokens = computed(() => this.messages.value.reduce((sum, message) => sum + (message.usage?.inputTokens ?? 0), 0));
+    readonly outputTokens = computed(() => this.messages.value.reduce((sum, message) => sum + (message.usage?.outputTokens ?? 0), 0));
 
     // Start of the in-flight turn (ms), for the card's elapsed readout; undefined while idle.
     readonly turnStartedAt = ref<number | undefined>();
@@ -554,21 +533,21 @@ export class Conversation {
      * matters most to a waiting user: nothing has failed and nothing has been lost, this turn is still running.
      * Rendered as a status beside the streaming indicator and dropped the moment the turn produces anything or
      * settles, so it can never outlive the wait it describes. */
-    readonly providerRetry = ref<Extract<AgentEvent, { kind: `provider_retry` }> | undefined>();
+    readonly providerRetry = ref<Extract<TurnFact, { kind: `provider_retry` }> | undefined>();
 
     /* What speed the harness actually served the last turn at, and, when it wasn't the one asked for, its
      * reason. Kept ACROSS turns rather than cleared at the boundary like providerRetry above: the answer is a
      * standing fact about this conversation's model and account ("your plan doesn't include fast mode") far
      * more often than a property of one turn, and clearing it would make the notice flicker away exactly when
      * the user goes looking for why the toggle did nothing. A turn that changes the answer replaces it. */
-    readonly fastMode = ref<Extract<AgentEvent, { kind: `fast_mode` }> | undefined>();
+    readonly fastMode = ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>();
 
     /* What the complexity judge said about the LAST judged turn here, fastMode's twin for automatic tier
      * selection, and kept across turns for its reason: "this ran on the cheaper model" is exactly what the user
      * goes looking for after noticing an answer felt thinner, and a value cleared at the boundary would be gone
      * by then. Replaced by the next judged turn's frame; undefined until one arrives (the judge off, or a
      * conversation reopened — the VERDICT half is reseeded from the entry via `lastTier` below). */
-    readonly tierAnswer = ref<Extract<AgentEvent, { kind: `tier` }> | undefined>();
+    readonly tierAnswer = ref<Extract<TurnFact, { kind: `tier` }> | undefined>();
 
     /* The last verdict alone, the one judge input a draft cannot contain (prompt-complexity.ts `afterHardTurn`),
      * held apart from `tierAnswer` because it outlives it: a reopened tab has no frames yet, but the entry
@@ -621,10 +600,15 @@ export class Conversation {
     });
 
     // What a followed run writes into. The turn a stream renders under is the one varying part, so each call
-    // adds its own `ensureTurn`.
+    // adds its own `attached`.
     private readonly sink = {
-        frame: (event: AgentEvent, turn: TurnContext, replay: boolean): void => this.transcript.push(event, turn, replay),
+        entry: (entry: AttachEntry, turn: TurnContext, replay: boolean): void => this.transcript.push(entry, turn, replay),
     };
+
+    /* THE TOOLS THIS TURN HAS ALREADY DRAWN, by id, so a card's first arrival can be told from its updates: a
+     * main-tree turn's writes are recorded for the Changes panel once per call (liveWrites), and a tool patch
+     * carries the whole card every time it moves. Cleared as each turn begins. */
+    private liveTools = new Set<string>();
 
     // The one unsent "switched" divider notice, upserted/removed as the user toggles provider/account and made
     // permanent by the next send (the segment cut).
@@ -999,7 +983,7 @@ export class Conversation {
             }));
             return;
         }
-        this.pendingSwitchNoticeId = this.transcript.append({ role: `notice`, text });
+        this.pendingSwitchNoticeId = this.transcript.notice(text);
     }
 
     /* The settle hook's half of that: the switches that were made WHILE the turn ran and so had nowhere to draw
@@ -1017,7 +1001,7 @@ export class Conversation {
         const text = (this.switchedMidTurn ? this.segmentSwitchNotice() : undefined) ?? this.modelSwitchNotice();
         this.switchedMidTurn = false;
         if (text !== undefined && this.pendingSwitchNoticeId === undefined) {
-            this.pendingSwitchNoticeId = this.transcript.append({ role: `notice`, text });
+            this.pendingSwitchNoticeId = this.transcript.notice(text);
         }
     }
 
@@ -1137,13 +1121,11 @@ export class Conversation {
          * than the intent, and leaves the transcript looking as though a rewind and a fresh prompt happened to
          * land together. Named for what the reader did, the line is the only record that the prompt below it
          * replaced one, the old wording is kept exactly for the rewind that really is just going back. */
-        this.transcript.append({
-            role: `notice`,
-            text:
-                reason === `edit`
-                    ? `Edited this message, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`
-                    : `Went back to here, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
-        });
+        this.transcript.notice(
+            reason === `edit`
+                ? `Edited this message, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`
+                : `Went back to here, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
+        );
         this.session.value = undefined;
         this.error.value = null;
         this.persist(true);
@@ -1171,10 +1153,10 @@ export class Conversation {
          * one, so it must not own one either (removing it would revoke a URL the bubbles still on screen are
          * drawn from). The thumb comes from the path, like every other redraw of these bytes, and a chip whose
          * path this page has never fetched falls back to its name while it loads. */
-        this.attachments.value = (message.attachments ?? []).map((attachment): PendingAttachment => ({
+        this.attachments.value = (message.attachments ?? []).map((path): PendingAttachment => ({
             id: uuid(),
-            name: attachment.name,
-            path: attachment.path,
+            name: basename(path),
+            path,
             status: `done`,
             progress: 100,
         }));
@@ -1270,59 +1252,21 @@ export class Conversation {
      * problem (the transcript is intact, only the disk moved), which is exactly why it is a notice and not a
      * truncation, what the reader needs is to know that the next turn starts somewhere else. */
     noteWorkspaceRestored(): void {
-        this.transcript.append({ role: `notice`, text: `The workspace was restored to an earlier point, the files below this line have changed.` });
+        this.transcript.notice(`The workspace was restored to an earlier point, the files below this line have changed.`);
         this.persist(true);
     }
 
-    // Redraw the bubbles of a transcript the daemon replayed, leaving every other property of the conversation
+    // Redraw the rows of a transcript the daemon replayed, leaving every other property of the conversation
     // alone. This is the whole of what a RESTORED tab needs: it already carries its own session, title,
     // provider and isolation from the tab snapshot, and overwriting those with the history-menu defaults below
-    // would quietly move an isolated agent's next turn onto the main tree.
-    restoreMessages(messages: readonly RestoredMessage[]): void {
+    // would quietly move an isolated agent's next turn onto the main tree. The rows are drawn as they arrive:
+    // they are the same rows every window watched being written, so there is nothing to translate.
+    restoreMessages(messages: readonly TranscriptRow[]): void {
         // A replayed record is a different transcript wearing the same ids (see `editing`), so an edit armed
         // against the one being replaced cannot survive it, the message it named may not be in the new record
         // at all, and the id it named certainly means something else now.
         this.editing.value = undefined;
-        this.transcript.rebuild(
-            messages.map((message, index) => ({
-                role: message.role,
-                text: message.text,
-                // Every row here IS a row of the daemon's record, which for a notice is the only way to know: a
-                // fork counts the recorded ones and skips the ones this client drew locally (see recordedRows).
-                ...(message.role === `notice` ? { recorded: true } : {}),
-                // …and the one press a recorded notice can carry, so a routed turn reopened tomorrow still
-                // offers "keep this chat on my pick" rather than becoming a sentence with nothing behind it.
-                ...(message.noticeAction !== undefined ? { noticeAction: message.noticeAction } : {}),
-                // When the turn was sent, as the daemon wrote it down, so a bubble reopened tomorrow shows the
-                // hour it was actually typed rather than nothing at all.
-                ...(message.sentAt !== undefined ? { sentAt: message.sentAt } : {}),
-                /* The rewind anchor. The array position IS the daemon's index here, this is the record read
-                 * back verbatim, one bubble per stored row, which is the one moment the two numberings are
-                 * guaranteed to agree, and why the index is captured now rather than recomputed later from a
-                 * bubble list that has since grown local notices.
-                 *
-                 * Only where the daemon supplied a checkpoint: it stamps one on the messages that still have a
-                 * state to go back to, so an offer here is an offer the rewind route will honour. */
-                ...(message.checkpointId !== undefined ? { checkpointId: message.checkpointId, rewindIndex: index } : {}),
-                // Chips from the restored workspace-relative paths; thumbnails re-mint from the
-                // workspace bytes at render time (attachmentPreview), object URLs don't survive here.
-                ...restoredAttachmentFields(message),
-                ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
-                ...(message.tools !== undefined ? { tools: message.tools } : {}),
-                ...(message.todos !== undefined ? { todos: message.todos } : {}),
-                // The user's words in the agent's voice keep their quiet mark across a reopen, the mark's
-                // whole audience is the human re-reading this later.
-                ...(message.placed === true ? { placed: true } : {}),
-                // What the daemon added to that turn's message. Kept across a reopen for the same reason it is
-                // shown live: a reader who can see the agent's instructions only while the tab stays open can't
-                // see them at all.
-                ...(message.notes !== undefined ? { notes: message.notes } : {}),
-                // The card this bubble parked on, frozen with the decision that settled it, the question and the
-                // picks that answered it above all: the part of a conversation the user actually did something
-                // in, and until the record kept it, the part a reopen lost.
-                ...restoredCards(message),
-            })),
-        );
+        this.transcript.rebuild(messages);
         this.error.value = null;
         this.persist(true);
     }
@@ -1378,7 +1322,7 @@ export class Conversation {
     // Restore a past conversation pulled from the history menu: build bubbles from the stored transcript and
     // arm its session so the next turn resumes it in the sandbox. Unlike restoreMessages this also seeds the
     // conversation's identity, because the tab it lands in is a fresh one that has none.
-    loadTranscript(messages: readonly RestoredMessage[], sessionId: string, title: string | null): void {
+    loadTranscript(messages: readonly TranscriptRow[], sessionId: string, title: string | null): void {
         this.restoreMessages(messages);
         // History-menu sessions live in the MAIN tree's session namespace, resuming one in a worktree would
         // miss it. The fleet's own open path rehydrates isolated conversations separately.
@@ -1453,14 +1397,18 @@ export class Conversation {
         if (this.title.value === null) {
             this.title.value = deriveTitle(text.length > 0 ? text : attachments.map((file) => file.name).join(`, `));
         }
-        const userMessageId = this.transcript.append({ role: `user`, text, ...(attachments.length > 0 ? { attachments } : {}) });
-        // Streaming context for the turn: the current text bubble, a fresh empty assistant message (so the
-        // typing indicator shows immediately; a plan card clears it so the post-decision continuation streams
-        // into a new bubble below the card), plus the provider/account attribution for the session frame.
-        // Its id is kept because the run it belongs to is not named until the ack, see claimRun below.
-        const openedBubbleId = this.transcript.openBubble();
+        /* The user's bubble, drawn NOW so the send reads as sent, and replaced the moment the daemon's head
+         * arrives with the row the daemon made of it (the same words, with what the daemon knows: the uploads
+         * as chips, the notes it added, the checkpoint it took). It keeps its id across that replacement
+         * (transcriptState.attachRun), which is what lets a turn refused before it ran take these exact words
+         * back out. */
+        const userMessageId = this.transcript.append({
+            role: `user`,
+            text,
+            ...(attachments.length > 0 ? { attachments: attachments.map((file) => file.path) } : {}),
+        });
         // Everything but the run, which the daemon only names in the ack below, the head that carries it is
-        // what completes this into the context the frames are rendered under.
+        // what completes this into the context the entries are rendered under.
         const turn: Omit<TurnContext, "run"> = { userMessageId, provider: settings.agent, account: settings.account, harness: settings.harness };
         // This turn starts from the user's pick; the previous turn's live posture (a plan it entered, a mode an
         // approval landed in) is history, and the daemon will echo this one back at init. Only this path clears
@@ -1532,10 +1480,21 @@ export class Conversation {
             const { run } = (await response.json()) as { run: string };
             this.turnAccepted = true;
             this.latchRemoteRegistration();
-            // The bubble drawn before the daemon had named anything now belongs to a run, and says so, which is
-            // what lets a later attach to this same run take it back instead of drawing its answer underneath.
-            this.transcript.claimRun(openedBubbleId, run);
-            await followRun(this.conversationId, run, { ...this.sink, ensureTurn: (head) => ({ ...turn, run: head.run }) }, controller, this.at);
+            await followRun(
+                this.conversationId,
+                run,
+                {
+                    ...this.sink,
+                    // Every head, the first and every re-attach, replaces this run's rows with the daemon's,
+                    // starting at the bubble drawn above, which keeps its id under the daemon's row.
+                    attached: (head) => {
+                        this.transcript.attachRun(head, userMessageId);
+                        return { ...turn, run: head.run };
+                    },
+                },
+                controller,
+                this.at,
+            );
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
             const stopped = err instanceof DOMException && err.name === `AbortError`;
@@ -1584,6 +1543,7 @@ export class Conversation {
         // replaced it, whether the scheduler fired it or another window did.
         this.failures.clear();
         this.turnStartedAt.value = startedAt;
+        this.liveTools = new Set();
     }
 
     // Settle it: drain whatever the typewriter still holds, drop the streaming affordances, mirror the finished
@@ -1787,7 +1747,7 @@ export class Conversation {
         if (bubble === undefined) {
             return;
         }
-        const held = { text: bubble.text, attachments: bubble.attachments ?? [] };
+        const held = { text: bubble.text, attachments: (bubble.attachments ?? []).map((path) => ({ name: basename(path), path })) };
         // Pressed again while this very turn was failing, so the press is already queued and the words coming
         // back are the same nudge: one of the two is the whole message (see repeatsNudge).
         if (repeatsNudge(held, this.queued.value[0])) {
@@ -2023,29 +1983,41 @@ export class Conversation {
         return true;
     }
 
-    // User-initiated Stop button: retire any card the turn was parked on, record a muted notice, hard-cancel
-    // the turn daemon-side (/agent/stop), then abort the local stream. The control request is retained as a
-    // barrier for the next send: its response means the detached run has released the conversation lock.
+    /* User-initiated Stop button: hard-cancel the turn daemon-side (/agent/stop) and let its stream say the rest.
+     * The daemon's fold freezes the cards the turn was parked on and writes the "Stopped." line into the run's
+     * own rows as it unwinds, so every window and the record read the stop the same way; this window keeps
+     * its stream open to receive exactly that, and the stream ends when the run does. The control request is
+     * retained as a barrier for the next send: its response means the detached run has released the
+     * conversation lock.
+     *
+     * Only a stop the daemon could not be told about is drawn here (cancelPendingCards, a local line): the
+     * stream would otherwise stay open on a turn nobody is ending. */
     stop(): void {
         if (!this.streaming.value) {
             return;
         }
-        const stopping = postTurnControl(this.at, `/agent/stop`, { conversationId: this.conversationId }).then(() => undefined);
+        this.ended();
+        const stopping = postTurnControl(this.at, `/agent/stop`, { conversationId: this.conversationId }).then((delivered) => {
+            if (!delivered) {
+                this.stopLocally();
+            }
+        });
         this.stopping = stopping;
         void stopping.finally(() => {
             if (this.stopping === stopping) {
                 this.stopping = undefined;
             }
         });
-        this.ended();
     }
 
-    // This side of a turn ending on the user's say-so: freeze the cards it was parked on, say so in the
-    // transcript, and drop the stream. Shared with a dismissal, which ends the turn as part of the dismissal
-    // itself and so has no request of its own to send (see cancelQuestion).
+    // This side of a turn ending on the user's say-so: hold the queue, and arm the way back. Shared with a
+    // dismissal, which ends the turn as part of the dismissal itself and so has no request of its own to send
+    // (see cancelQuestion).
     private ended(): void {
-        this.cancelPendingCards();
-        this.transcript.notice(`Stopped.`);
+        // The turn is ending on the user's say-so, not its own, hold the queue back from the settle flush (a
+        // stopped agent must not be immediately restarted), and drop a continuation already on the clock.
+        this.interrupted = true;
+        this.cancelAutoContinue();
         /* The work stopped mid-flight and the session is untouched, so the way back is one press (see
          * `resumable`). Armed HERE rather than in abort(), which a closed tab and a sandbox switch also call:
          * neither of those is the user standing in front of a chat deciding what to do next.
@@ -2056,15 +2028,22 @@ export class Conversation {
          * answer that it has nothing to continue. What that Stop earns instead is the words back, which the
          * send's own pre-ack path hands over. */
         this.pickUp.value = this.turnAccepted ? { reason: `stopped` } : undefined;
+        this.persist();
+    }
+
+    // The stop the daemon never heard: nothing is going to write the ending into the rows, so this window draws
+    // it, freezes the cards, and drops the stream it can no longer trust.
+    private stopLocally(): void {
+        this.cancelPendingCards();
+        this.transcript.notice(`Stopped.`);
         this.abort();
         this.persist();
     }
 
     // Freeze whatever the stopped turn was parked on. Stop is offered WHILE a plan / question / permission card
-    // is open, a turn holding the user's attention is exactly when they most want out, and the daemon settles
-    // its own waiter with an abort reply, so the local card must stop asking too: /agent/reply would 404 from
-    // here on, and a card left `pending` would keep awaitingDecision (and with it the composer's plan-feedback
-    // routing and the tab's "awaiting" status) wedged on a turn that no longer exists.
+    // is open, a turn holding the user's attention is exactly when they most want out, and a card left `pending`
+    // would keep awaitingDecision (and with it the composer's plan-feedback routing and the tab's "awaiting"
+    // status) wedged on a turn that no longer exists.
     private cancelPendingCards(): void {
         if (!this.awaitingDecision.value) {
             return;
@@ -2090,8 +2069,8 @@ export class Conversation {
 
     // Attach to a turn already running daemon-side, started before a reload, or by another window/device on
     // the same conversation. False when nothing is live (or recently finished): the caller falls back to
-    // transcript hydration. The attach head synthesizes what the initiating window appended locally: the
-    // user bubble from the run's prompt and the elapsed readout from its start time.
+    // transcript hydration. The attach head carries the run's rows whole, the user's message included, so
+    // there is nothing for this window to synthesize.
     async reattach(): Promise<boolean> {
         if (this.streaming.value) {
             return true;
@@ -2099,44 +2078,36 @@ export class Conversation {
         const controller = new AbortController();
         this.probe = controller;
         let engaged = false;
-        const ensureTurn = (head: AttachHead): TurnContext | undefined => {
+        let turn: TurnContext | undefined;
+        const attached = (head: AttachHead): TurnContext | undefined => {
             // A send that started between this probe's entry check and the daemon's reply owns the stream.
-            if (this.streaming.value) {
+            if (!engaged && this.streaming.value) {
                 return undefined;
             }
-            engaged = true;
-            this.beginTurn(controller, head.startedAt);
-            // The daemon is streaming this run at us, so it is its own record already, nothing here is
-            // undelivered, and a stream that drops later leaves a turn that really is worth continuing.
-            this.turnAccepted = true;
+            if (!engaged) {
+                engaged = true;
+                this.beginTurn(controller, head.startedAt);
+                // The daemon is streaming this run at us, so it is its own record already, nothing here is
+                // undelivered, and a stream that drops later leaves a turn that really is worth continuing.
+                this.turnAccepted = true;
+            }
             /* THIS WINDOW MAY HAVE DRAWN THIS RUN ALREADY, a stream that dropped and came back, a sandbox that
-             * restarted underneath one, a tab reopened onto a run still going. The attach below replays the run
-             * from its first frame regardless, so its rows come off before they are drawn again; what stays is
-             * everything they sit UNDER, which is the part no replay will ever redraw. */
-            this.transcript.dropRun(head.run);
-            /* What the user actually asked, whichever run this is. A run the DAEMON restarted carries the original
-             * prompt behind a note saying why (RESUME_NOTES), and rendering that verbatim put a paragraph of
-             * machine prose into the transcript as something the user had supposedly typed, right under the copy
-             * of it they really did type. Stripped, it matches that copy, and the bubble is reused instead.
-             *
-             * The strip is also what identifies a resume, which is what decides whether the tail under that bubble
-             * belongs to this run, see reuseUserBubble. */
-            const prompt = withoutResumeNote(head.prompt);
-            const userMessageId =
-                this.transcript.reuseUserBubble(prompt, prompt === head.prompt) ??
-                // The RUN's start, not this moment: the bubble is being drawn for a turn that has been going
-                // since before this tab attached to it (a reload, a second window), and stamping it now would
-                // date the question to whenever its reader turned up.
-                //
-                // Marked as this run's own work, because that is what it is: an answered park's bubble carries
-                // words the transcript has never shown (RESUME_NOTES.answered), so the NEXT attach has to be
-                // able to take it back rather than reuse it and stack the answer under it a second time.
-                this.transcript.append({ role: `user`, text: prompt, sentAt: head.startedAt, run: head.run });
-            this.transcript.openBubble(head.run);
-            return { userMessageId, run: head.run, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
+             * restarted underneath one, a tab reopened onto a run still going. The head's rows REPLACE what this
+             * window holds for the run (transcriptState.attachRun remembers where each run's rows start), so
+             * nothing is drawn twice, and what the run sits UNDER, an interrupted run's work, the notice
+             * explaining it, is untouched. */
+            const { userMessageId } = this.transcript.attachRun(head);
+            turn = {
+                userMessageId: userMessageId ?? turn?.userMessageId ?? -1,
+                run: head.run,
+                provider: this.provider.value,
+                account: this.account.value,
+                harness: this.harness.value,
+            };
+            return turn;
         };
         try {
-            return await followRun(this.conversationId, undefined, { ...this.sink, ensureTurn }, controller, this.at);
+            return await followRun(this.conversationId, undefined, { ...this.sink, attached }, controller, this.at);
         } finally {
             this.probe = undefined;
             if (engaged) {
@@ -2159,7 +2130,8 @@ export class Conversation {
      * back (see `deciding` above for why the `pending` check upstairs cannot do this job). A second answer
      * arriving while the first is in the air is dropped in silence: it is not an error, it is a person
      * clicking, and the card is about to show them what their first press decided. */
-    private async decide(id: number, body: AgentReply, failure: string, decided: Pick<ChatMessage, CardKind>): Promise<boolean> {
+    private async decide(message: ChatMessage, body: AgentReply, failure: string, cards: TranscriptCards): Promise<boolean> {
+        const { id } = message;
         if (this.deciding.value.has(id)) {
             return false;
         }
@@ -2169,7 +2141,9 @@ export class Conversation {
                 this.error.value = failure;
                 return false;
             }
-            this.transcript.attachCard(id, decided);
+            // The same derivation the daemon applies when it writes the `resolved` row (card-status.ts), applied
+            // here first so the card reads answered on the click rather than a round trip later.
+            this.transcript.attachCard(id, settledCards(cards, body));
             return true;
         } finally {
             // Released even on the failure path: the card is back to `pending` on screen, so it has to be
@@ -2196,20 +2170,16 @@ export class Conversation {
         }
         const trimmed = feedback?.trim();
         const written = [trimmed, ...attachments.map((file) => `@${file.path}`)].filter(Boolean).join(`\n`);
+        // The verdict's own line and the feedback bubble are the daemon's to write, into the run's rows, so a
+        // second window and the record read them too (agent.routes' reply handler).
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `plan`, requestId: plan.requestId, approve, feedback: written.length > 0 ? written : undefined },
             `Could not record your plan decision: the turn may have ended.`,
-            { plan: { ...plan, status: approve ? `approved` : `rejected` } },
+            { plan },
         );
         if (!landed) {
             return;
-        }
-        this.transcript.notice(approve ? `Plan approved.` : `Kept planning.`);
-        // Keep the rejection feedback visible as the user's turn, otherwise the typed text (and the files it
-        // went with) vanish from the transcript even though the agent has them.
-        if (!approve && (trimmed !== undefined || attachments.length > 0)) {
-            this.transcript.append({ role: `user`, text: trimmed ?? ``, ...(attachments.length > 0 ? { attachments } : {}) });
         }
         // The turn is generating again, so anything queued behind the card can go in now.
         void this.drainQueue();
@@ -2223,10 +2193,12 @@ export class Conversation {
             return;
         }
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `question`, requestId: question.requestId, answers },
             `Could not submit your answers: the turn may have ended.`,
-            { question: { ...question, status: `answered`, answers } },
+            {
+                question,
+            },
         );
         if (landed) {
             void this.drainQueue();
@@ -2250,17 +2222,17 @@ export class Conversation {
         if (question?.status !== `pending`) {
             return;
         }
+        // Both lines, "Question dismissed." and the "Stopped." under it, are the daemon's: it writes the first
+        // before it ends the turn and the second as the run unwinds, and the stream carries both here.
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `question`, requestId: question.requestId, cancelled: true },
             `Could not dismiss the question: the turn may have ended.`,
-            { question: { ...question, status: `cancelled` } },
+            { question },
         );
         if (!landed) {
             return;
         }
-        this.transcript.notice(`Question dismissed.`);
-        // After the card is frozen, so it reads back as dismissed rather than as a card the ending caught pending.
         this.ended();
     }
 
@@ -2274,12 +2246,11 @@ export class Conversation {
         if (permission?.status !== `pending`) {
             return;
         }
-        const status = decision === `deny` ? `denied` : decision === `always` ? `always` : `allowed`;
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `permission`, requestId: permission.requestId, decision, feedback },
             `Could not record your decision: the turn may have ended.`,
-            { permission: { ...permission, status } },
+            { permission },
         );
         if (!landed) {
             return;
@@ -2301,10 +2272,10 @@ export class Conversation {
             return;
         }
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `service_offer`, requestId: offer.requestId, approve },
             `Could not record your decision: the offer may have expired.`,
-            { serviceOffer: { ...offer, status: approve ? `approved` : `skipped` } },
+            { serviceOffer: offer },
         );
         if (landed) {
             void this.drainQueue();
@@ -2322,10 +2293,10 @@ export class Conversation {
             return;
         }
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `payment_offer`, requestId: offer.requestId, approve },
             `Could not record your decision: the offer may have expired.`,
-            { paymentOffer: { ...offer, status: approve ? `approved` : `skipped` } },
+            { paymentOffer: offer },
         );
         if (landed) {
             void this.drainQueue();
@@ -2343,10 +2314,10 @@ export class Conversation {
             return;
         }
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `capability_offer`, requestId: offer.requestId, connect },
             `Could not record your decision: the ask may have expired.`,
-            { capabilityOffer: { ...offer, status: connect ? `connecting` : `skipped` } },
+            { capabilityOffer: offer },
         );
         if (landed) {
             void this.drainQueue();
@@ -2363,10 +2334,12 @@ export class Conversation {
             return;
         }
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `browser_help`, requestId: help.requestId, helped: false },
             `Could not send that: the turn may have ended.`,
-            { browserHelp: { ...help, status: `declined` } },
+            {
+                browserHelp: help,
+            },
         );
         if (landed) {
             void this.drainQueue();
@@ -2383,168 +2356,167 @@ export class Conversation {
             return;
         }
         const landed = await this.decide(
-            message.id,
+            message,
             { kind: `terminal_help`, requestId: help.requestId, helped: false },
             `Could not send that: the turn may have ended.`,
-            { terminalHelp: { ...help, status: `declined` } },
+            {
+                terminalHelp: help,
+            },
         );
         if (landed) {
             void this.drainQueue();
         }
     }
 
-    /* One folded frame's consequences for the conversation, in the order the frames arrived. Both orderings
-     * here matter and neither can be hoisted: `providerRetry` is cleared by any other frame and SET by an
-     * effect below, so a batch holding a retry and the frame that answers it would otherwise settle on
-     * whichever won the reshuffle. */
-    private applied(event: AgentEvent, turn: TurnContext, effects: readonly TurnEffect[]): void {
-        // Any other frame means the wait a provider_retry described is over, the request went through, or
-        // the turn moved on to a different problem. Retired against any frame rather than specific ones
-        // because "still waiting" is only true until literally anything else happens, and a replayed
-        // transcript must not restore a countdown that finished minutes ago.
-        if (event.kind !== `provider_retry`) {
+    /* One entry's consequences for the conversation beyond its rows, in the order the entries arrived. The
+     * ordering matters and cannot be hoisted: `providerRetry` is cleared by any other entry and SET by the
+     * retry fact, so a batch holding a retry and the entry that answers it would otherwise settle on whichever
+     * won the reshuffle.
+     *
+     * A REPLAYED fact (delivered to an earlier attach of this same stream) is applied again all the same: every
+     * fact below is a statement of state rather than an increment, so applying it twice lands on the same
+     * answer, and the one that was an increment, the turn's cost, is read off the rows instead. */
+    private applied(entry: AttachEntry, turn: TurnContext, _replay: boolean): void {
+        // Any other entry means the wait a provider_retry described is over, the request went through, or the
+        // turn moved on to a different problem. Retired against anything rather than specific entries because
+        // "still waiting" is only true until literally anything else happens.
+        if (entry.kind !== `fact` || entry.fact.kind !== `provider_retry`) {
             this.providerRetry.value = undefined;
         }
-        for (const effect of effects) {
-            this.applyEffect(effect, turn);
+        if (entry.kind === `patch`) {
+            this.applyPatchConsequence(entry.patch);
+            return;
+        }
+        this.applyFact(entry.fact, turn);
+    }
+
+    /* What a change to the rows means BEYOND the rows: a tool card arriving for the first time. A MAIN-TREE turn
+     * writes the files the Changes panel commits, so its paths are recorded for the panel to warn against, per
+     * repo, so an agent working in one repo says nothing about the rest. An isolated turn writes its own
+     * worktree and lands as a reviewable diff, so it records nothing: that distinction is the whole reason the
+     * panel no longer blocks committing on "an agent is running", which was true of both and meaningful for
+     * neither. */
+    private applyPatchConsequence(patch: TranscriptPatch): void {
+        if (patch.op !== `tool` || this.liveTools.has(patch.tool.id)) {
+            return;
+        }
+        this.liveTools.add(patch.tool.id);
+        if (!this.isolated.value && this.turnStartedAt.value !== undefined) {
+            const startedAt = this.turnStartedAt.value;
+            const call = patch.tool;
+            void import(`../workspace/liveWrites`).then((m) => m.recordTurnWrite(this.conversationId, startedAt, call));
         }
     }
 
-    private applyEffect(effect: TurnEffect, turn: TurnContext): void {
-        switch (effect.kind) {
+    private applyFact(fact: TurnFact, turn: TurnContext): void {
+        switch (fact.kind) {
             case `session`:
                 /* Captured with the runtime and credential it was minted under, so a later mismatch (a mid-chat
                  * switch) is detectable at send time.
                  *
-                 * The ACCOUNT comes off the frame whenever the daemon named one, and only falls back to what
+                 * The ACCOUNT comes off the fact whenever the daemon named one, and only falls back to what
                  * this turn asked for when it did not. They differ exactly where it matters: a turn that names
                  * no account is served by whichever connected one has headroom, so an automation's session,
                  * reattached in a tab, would otherwise be bound to nobody, and the tab's first send would
                  * announce, and take, a fresh session over one that resumes perfectly well. */
-                this.bindSession(boundSession(effect.sessionId, turn, effect.account));
+                this.bindSession(boundSession(fact.sessionId, turn, fact.account));
                 return;
             case `worktree`:
-                // First frame of an isolated turn: which branch/base this conversation works on.
-                this.worktree.value = { branch: effect.branch, base: effect.base };
+                // First fact of an isolated turn: which branch/base this conversation works on. The rebase it
+                // may report is a row of the run's own, written by the daemon.
+                this.worktree.value = { branch: fact.branch, base: fact.base };
                 /* The container cannot enforce the worktree with mounts, so the harness is redirecting tool
                  * paths into it instead, which covers tool input but not a path a subprocess computes for
                  * itself. Said ONCE per conversation rather than per turn: it is a property of the sandbox, it
                  * does not change while it runs, and repeating it every turn would train the reader to skip it. */
-                if (effect.unenforced === true && !this.warnedUnenforced) {
+                if (fact.unenforced === true && !this.warnedUnenforced) {
                     this.warnedUnenforced = true;
                     this.transcript.notice(
-                        `This sandbox can't isolate agent turns at the filesystem level (it was created without CAP_SYS_ADMIN). Work is redirected into ${effect.branch}, but a command that builds its own paths can still reach the shared workspace: recreate the sandbox to restore full isolation.`,
+                        `This sandbox can't isolate agent turns at the filesystem level (it was created without CAP_SYS_ADMIN). Work is redirected into ${fact.branch}, but a command that builds its own paths can still reach the shared workspace: recreate the sandbox to restore full isolation.`,
                     );
                 }
                 return;
-            case `liveMode`:
+            case `mode`:
                 // The turn's live posture, the user's pick echoed back at init, or a move the AGENT made
                 // (EnterPlanMode / a plan approval). Drives the composer's selector so it never lies, without
                 // overwriting the pick the NEXT turn starts from.
-                this.liveMode.value = effect.mode;
+                this.liveMode.value = fact.mode;
                 return;
             case `commands`:
                 // The provider's slash commands (ACP agents), replaced whole, the composer's `/` popover.
-                this.availableCommands.value = effect.items;
+                this.availableCommands.value = fact.items;
                 return;
-            case `activeModel`:
-                this.activeModel.value = effect.model;
+            case `init`:
+                this.activeModel.value = fact.model;
                 return;
-            case `contextUsage`:
+            case `context_usage`:
                 // Per-conversation context-window fill, held on this instance (not the singleton) so the
                 // composer shows the active chat's meter for auto-compaction awareness.
-                this.contextUsage.value = effect.usage;
+                this.contextUsage.value = { tokens: fact.tokens, contextWindow: fact.contextWindow };
                 return;
-            case `totals`:
-                // The conversation's lifetime accounting (the fleet card's cost/token readout). The usage's
-                // TRANSCRIPT attachment already happened, it is a change to a bubble, so the reducer made it.
-                this.costUsd.value += effect.usage.costUsd ?? 0;
-                this.inputTokens.value += effect.usage.inputTokens ?? 0;
-                this.outputTokens.value += effect.usage.outputTokens ?? 0;
+            case `usage`:
+                // The turn's cost is on the bubble its answer ended in (the daemon put it there), and the
+                // conversation's totals are summed off the rows; nothing to keep here.
                 return;
-            case `accountUsage`:
+            case `account_usage`:
                 // Account-wide subscription headroom, keyed by the account that served the turn so switching
                 // accounts shows the right one. Stamped with the read time, and written into the one shared map
-                // newest-wins, so the daemon's own push of the same reading and the next list load agree.
-                setAccountUsage(this.provider.value, effect.account, { windows: [...effect.windows], measuredAt: Date.now() });
-                return;
-            case `toolCall`: {
-                const { call } = effect;
-                // A MAIN-TREE turn writes the files the Changes panel commits, so its paths are recorded for the
-                // panel to warn against, per repo, so an agent working in one repo says nothing about the rest.
-                // An isolated turn writes its own worktree and lands as a reviewable diff, so it records nothing:
-                // that distinction is the whole reason the panel no longer blocks committing on "an agent is
-                // running", which was true of both and meaningful for neither.
-                if (!this.isolated.value && this.turnStartedAt.value !== undefined) {
-                    const startedAt = this.turnStartedAt.value;
-                    void import(`../workspace/liveWrites`).then((m) => m.recordTurnWrite(this.conversationId, startedAt, call));
+                // newest-wins, so the daemon's own push of the same reading and the next list load agree. An
+                // env-token turn has no account to attribute headroom to, so there is nothing to key it by.
+                if (fact.account !== undefined) {
+                    setAccountUsage(this.provider.value, fact.account, { windows: [...fact.windows], measuredAt: Date.now() });
                 }
                 return;
-            }
-            case `surfaceTerminal`: {
+            case `terminal`: {
                 // The agent started running Bash in its live `agent-<id>` tmux terminal. Remember it, so this
                 // conversation's Bash cards can offer to watch it, and tell the terminal layer whose it is, so
                 // its popover names the conversation instead of eight hex characters. The panel is then asked to
                 // surface it, which tabs it only if the user opted into work terminals, no auto-open, no focus
                 // steal either way. Both imports are lazy so the chat model doesn't statically pull in the
                 // xterm/terminal-panel chain.
-                const { session } = effect;
+                const { session } = fact;
                 this.agentTerminal.value = session;
                 const title = this.title.value;
                 void import("../terminal/useWorkTerminals").then((m) => m.noteAgentTerminal(session, title));
                 void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
                 return;
             }
-            case `surfaceBrowser`: {
+            case `browser`: {
                 // The agent just used a browser tool. Everything above applies unchanged, the browser is the
                 // same kind of thing as the shell (this conversation's, for this turn, watchable but hidden
                 // until asked for), which is why it rides the same three calls rather than a parallel channel.
-                const { session } = effect;
+                const { session } = fact;
                 this.agentBrowser.value = session;
                 const title = this.title.value;
                 void import("../terminal/useWorkTerminals").then((m) => m.noteAgentTerminal(session, title));
                 void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
                 return;
             }
-            case `providerRetry`:
+            case `provider_retry`:
                 // A wait, not a failure: the turn is still running. Held only while it is (see endTurn), so a
                 // stale "retrying…" can never sit under a finished answer.
-                this.providerRetry.value = effect.retry;
+                this.providerRetry.value = fact;
                 return;
-            case `fastMode`:
+            case `fast_mode`:
                 // Deliberately NOT cleared at the turn boundary (see the ref): the answer usually outlives the
                 // turn that reported it.
-                this.fastMode.value = effect.fast;
+                this.fastMode.value = fact;
                 return;
             case `tier`:
-                this.applyTier(effect.tier);
+                /* A judged turn's verdict: two standing facts are replaced (the picker notice's answer, the next
+                 * preview's `afterHardTurn` input). The line a routed turn earns in the transcript, with its
+                 * opt-out a press away, is a row of the run's own, written by the daemon, so the live chat and
+                 * the reopened one carry it identically. */
+                this.tierAnswer.value = fact;
+                this.lastTier.value = fact.tier;
                 return;
             case `error`:
-                this.failures.apply(effect, turn);
+                this.failures.apply(fact, turn);
                 return;
-        }
-    }
-
-    /* A judged turn's verdict arriving. Two standing facts are replaced (the picker notice's answer, the next
-     * preview's `afterHardTurn` input), and EVERY turn that really ran cheaper earns one muted line in the
-     * transcript with the opt-out a press away — the land/outage rule: the moment an automatic behaviour fires
-     * is the moment "don't do that" is worth exactly one press, not a trip to settings.
-     *
-     * EVERY routed turn, not just the first of the conversation, and the reason is what a reader does with the
-     * line months later: scrolling back, the question is not "did this chat ever route" but "was THIS answer the
-     * cheap one", and a single line at the top cannot answer that about message thirty. It is also what keeps
-     * the live chat and the reopened one identical, because the daemon records the same line per routed turn
-     * (turn-transcript.ts); a client rule of its own would make a reopened tab disagree with the tab that
-     * watched it. The line is rare by construction (only turns that really moved) and the offer under it
-     * retires itself the moment it is taken. */
-    private applyTier(answer: Extract<AgentEvent, { kind: `tier` }>): void {
-        this.tierAnswer.value = answer;
-        this.lastTier.value = answer.tier;
-        if (answer.routed && answer.model !== undefined) {
-            this.transcript.notice(
-                `This turn looked simple, so it ran on ${modelLabelFor(this.provider.value, answer.model)} instead of your pick.`,
-                { noticeAction: `tierHold` },
-            );
+            case `rate_limit_info`:
+                // The live gate, not a headroom reading: `account_usage` carries every pool, and is what the
+                // readouts use.
+                return;
         }
     }
 }

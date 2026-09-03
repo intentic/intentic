@@ -1,4 +1,4 @@
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { diffStat } from "./chatToolDiff";
 
 /* Consecutive tool calls that do exactly the same thing: 30 edits to the same file, a batch of reads against
@@ -16,21 +16,21 @@ const GROUP_THRESHOLD = 3;
 export interface ToolGroup {
     readonly kind: "group";
     readonly name: string;
-    readonly category: ChatTool["category"];
+    readonly category: TranscriptTool["category"];
     readonly target: string | undefined;
-    readonly tools: readonly ChatTool[];
+    readonly tools: readonly TranscriptTool[];
 }
 
-export type ToolEntry = ChatTool | ToolGroup;
+export type ToolEntry = TranscriptTool | ToolGroup;
 
-const groupKey = (tool: ChatTool): string => `${tool.name}\0${tool.target ?? ""}`;
+const groupKey = (tool: TranscriptTool): string => `${tool.name}\0${tool.target ?? ""}`;
 
-export const groupConsecutiveTools = (tools: readonly ChatTool[]): readonly ToolEntry[] => {
+export const groupConsecutiveTools = (tools: readonly TranscriptTool[]): readonly ToolEntry[] => {
     if (tools.length < GROUP_THRESHOLD) {
         return tools as ToolEntry[];
     }
     const result: ToolEntry[] = [];
-    let run: ChatTool[] = [];
+    let run: TranscriptTool[] = [];
     let runKey = ``;
 
     const flushRun = (): void => {
@@ -64,7 +64,7 @@ export const groupConsecutiveTools = (tools: readonly ChatTool[]): readonly Tool
 
 // Aggregated +/− across every tool in a group, for the collapsed header. Returns undefined when no tool
 // carries structured diffs (bash calls, reads, anything that isn't an edit).
-export const groupDiffSummary = (tools: readonly ChatTool[]): string | undefined => {
+export const groupDiffSummary = (tools: readonly TranscriptTool[]): string | undefined => {
     let additions = 0;
     let deletions = 0;
     let hasDiffs = false;

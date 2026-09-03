@@ -29,7 +29,7 @@ const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSche
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         // No device subscribed, which is what a workspace that has never granted push reports.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),

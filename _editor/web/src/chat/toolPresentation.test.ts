@@ -1,17 +1,17 @@
 import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
 
 // A completed call with no output, spread over per-case.
-const tool = (over: Partial<ChatTool> & Pick<ChatTool, "name">): ChatTool => ({
+const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "name">): TranscriptTool => ({
     id: `t1`,
     category: `other`,
     status: `completed`,
     ...over,
 });
 
-const withText = (name: string, text: string, over: Partial<ChatTool> = {}): ChatTool => tool({ name, content: [{ type: `text`, text }], ...over });
+const withText = (name: string, text: string, over: Partial<TranscriptTool> = {}): TranscriptTool => tool({ name, content: [{ type: `text`, text }], ...over });
 
 // The SDK's numbered file view a Read returns: a right-padded line number, an arrow (or tab), then the content.
 const numbered = (lines: string[], start = 1, sep = `→`): string =>
@@ -229,7 +229,7 @@ describe(`present: diffs`, () => {
  * test the card asks is the contract's (documents.ts), so a document is the same thing on both sides of the
  * wire: what the daemon attaches to a question card is what the write's own card drew. */
 describe(`present: documents`, () => {
-    const written = (path: string, markdown: string, over: Partial<ChatTool> = {}): ChatTool =>
+    const written = (path: string, markdown: string, over: Partial<TranscriptTool> = {}): TranscriptTool =>
         tool({ name: `Write`, category: `edit`, content: [{ type: `diff`, path, newText: markdown }], ...over });
 
     it(`draws a markdown file written whole as prose, titled by its heading, and not also as its diff`, () => {

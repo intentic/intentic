@@ -27,7 +27,7 @@ const fakeServices = (root: string): Services =>
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),

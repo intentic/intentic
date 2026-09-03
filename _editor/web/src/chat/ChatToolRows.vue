@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ChatTool } from "../composables/chat/transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import ChatToolCard from "./ChatToolCard.vue";
 import ChatToolGroup from "./ChatToolGroup.vue";
 import { type ToolEntry, groupConsecutiveTools } from "./toolGrouping";
@@ -11,7 +11,7 @@ import { type ToolEntry, groupConsecutiveTools } from "./toolGrouping";
  * rather than two that drift. */
 
 const props = defineProps<{
-    tools: readonly ChatTool[];
+    tools: readonly TranscriptTool[];
     live: boolean;
 }>();
 
@@ -22,6 +22,6 @@ const entries = computed((): readonly ToolEntry[] => groupConsecutiveTools(props
 <template>
     <template v-for="(entry, index) in entries" :key="'kind' in entry ? `g-${index}` : entry.id">
         <ChatToolGroup v-if="'kind' in entry" :group="entry" :live="live" />
-        <ChatToolCard v-else :tool="entry as ChatTool" :live="live" />
+        <ChatToolCard v-else :tool="entry as TranscriptTool" :live="live" />
     </template>
 </template>

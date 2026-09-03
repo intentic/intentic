@@ -1,5 +1,5 @@
 import { sdk } from "../claude/claude-sdk.js";
-import type { MatchSnippet, RestoredMessage, Speaker } from "@intentic/sandbox-contract";
+import type { MatchSnippet, TranscriptRow, Speaker } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
@@ -140,7 +140,7 @@ export const recordConversationPrompt = (conversationId: string, prompt: string)
 // conversation's record and for one settling turn alike. A `notice` row is neither side speaking (it is
 // something that HAPPENED to the turn), and a message's thinking and tool cards are not speech, so only the
 // text survives.
-export const spokenLinesOf = (messages: readonly RestoredMessage[]): SpokenLine[] =>
+export const spokenLinesOf = (messages: readonly TranscriptRow[]): SpokenLine[] =>
     messages.flatMap((message) => {
         if (message.role === "user") {
             return userMessageLines(message.text);
