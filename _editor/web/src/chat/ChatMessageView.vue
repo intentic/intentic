@@ -32,6 +32,7 @@ import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import { markedFragments } from "./commandPieces";
 import { capabilityStatus, helpStatus, offerStatus, permissionStatus, planStatus, questionStatus } from "./cardStatus";
+import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolRows from "./ChatToolRows.vue";
 import ChatToolRun from "./ChatToolRun.vue";
@@ -235,15 +236,6 @@ const documentDrawn = (document: CardDocument | undefined): boolean =>
 const onMarkdownClick = (event: MouseEvent): void => {
     copyCodeFromEvent(event);
     openFileRefFromEvent(event);
-};
-
-// --- Thinking fold / typing loader -----------------------------------------------------------
-// Manual override of the thinking section's expanded state. When unset, it defaults to expanded while the
-// turn streams and collapsed once done.
-const thinkingOverride = ref<boolean>();
-const isThinkingOpen = computed(() => thinkingOverride.value ?? props.streaming);
-const toggleThinking = (): void => {
-    thinkingOverride.value = !isThinkingOpen.value;
 };
 
 // The permission card's header line: the bridge's own rendered prompt sentence, else its short noun phrase,
@@ -1046,23 +1038,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             </template>
         </div>
         <template v-else>
-            <div v-if="message.thinking" class="w-full overflow-hidden rounded-lg border-l-2 border-line-strong bg-overlay/60">
-                <button
-                    type="button"
-                    class="flex w-full items-center gap-1.5 px-2 py-1 text-2xs uppercase tracking-wide text-subtle"
-                    @click="toggleThinking"
-                >
-                    <Icon class="text-2xs" :name="isThinkingOpen ? 'chevron-down' : 'chevron-right'" />
-                    <span>Thinking</span>
-                    <Icon name="spinner" v-if="streaming" class="text-2xs" spin />
-                </button>
-                <div
-                    v-if="isThinkingOpen"
-                    class="scrollbar-thin max-h-64 overflow-auto whitespace-pre-wrap px-3 pb-2 text-xs leading-relaxed text-muted"
-                >
-                    {{ message.thinking }}
-                </div>
-            </div>
+            <!-- The fold is ChatThinking's, which the Subagents area draws too: a delegated agent's reasoning
+                 and this one's are the same kind of thing and read the same way. -->
+            <ChatThinking v-if="message.thinking" :thinking="message.thinking" :streaming="streaming" />
 
             <!-- `live` is this bubble's own stream flag, which is what "still happening" means for both of
                  these: a call in flight and the checklist the agent is moving both belong to the bubble the
@@ -1642,7 +1620,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <span v-if="trailer" class="text-2xs text-subtle"
             >↳ {{ trailer.label }}<template v-if="trailer.count > 1"> ×{{ trailer.count }}</template></span
         >
-
     </div>
 
     <!-- WHAT THE DAEMON ADDED TO WHAT THE AGENT READ (see `notesOpen`): one line naming each note, opening

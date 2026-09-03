@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { type AgentProvider, NATIVE_PROVIDERS, type RestoredMessage, type SubagentSession } from "@intentic/sandbox-contract";
-import { formatTokens, Icon, type IconName, Markdown, ui, useDevice } from "@intentic/ui";
+import { type AgentProvider, NATIVE_PROVIDERS, providerLabel, type RestoredMessage, type SubagentSession } from "@intentic/sandbox-contract";
+import { Icon, type IconName, Markdown, ui, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -8,12 +8,17 @@ import { activityIcon } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
+import { sessionCategory } from "../composables/sessionCategory";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { SUBAGENT_TRANSCRIPT } from "../composables/queryKeys";
 import { subagentLive, useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { CHAT_SURFACE } from "../chat/chatSurface";
 import { workspaceSurface } from "../chat/workspaceSurface";
-import ChatToolCard from "../chat/ChatToolCard.vue";
+import { useToolCalls } from "../composables/chat/useToolCalls";
+import ChatThinking from "../chat/ChatThinking.vue";
+import ChatToolCallsToggle from "../chat/ChatToolCallsToggle.vue";
+import ChatToolRows from "../chat/ChatToolRows.vue";
+import ChatToolRun from "../chat/ChatToolRun.vue";
 import ProviderLogo from "../chat/ProviderLogo.vue";
 import ActionLink from "../components/ActionLink.vue";
 import IdentityTile from "../components/IdentityTile.vue";
@@ -30,21 +35,32 @@ import { fileLinkDecorator } from "../composables/renderMarkdown";
  * WHY IT IS A ROUTE AND NOT A PANE. A subagent has no byte stream and no live page: the thing you watch it
  * through is its TRANSCRIPT, which wants a column, not a strip. So the shape is the Browsers area's: a list down
  * the left answering "which agent?", the selected one's work filling the rest, and the content is the chat's own,
- * rendered by the very components the conversation uses (ChatToolCard), because a child's work should read exactly
- * like its parent's.
+ * rendered by the very components the conversation uses (ChatThinking, ChatToolRows/ChatToolRun) and governed by
+ * the same preference (useToolCalls), because a child's work should read exactly like its parent's — including
+ * when the reader has folded the tool calls away.
+ *
+ * WHAT IT HAS NO COMPOSER FOR. The chat's footer is missing here because there is nothing to send: steering a
+ * child goes through the daemon's `/children/send` door, which is a SUPERVISION call and admits only a shell
+ * carrying a live turn stamp (children/children.routes.ts) — an agent talking to the agent it started. A person
+ * reaches a child through its parent, so the header's "Parent" is the outward action this pane has, and the
+ * tool-calls toggle takes the slot the composer's status strip would have carried it in.
  *
  * THE LIST IS THE CHAT RAIL'S, NOT A SECOND LIST OF SESSIONS. Its rows are RailCard on RailLane inside
  * RailColumn: the same card, the same lane slab and the same column the floating chat lists its conversations
  * in, down to the width, which is one shared number rather than two that happen to agree (composables/rail.ts).
  * This used to be its own thing: a flat column of bordered rows, its own status glyphs, its own facts in
  * its own order, no identity tile and no card surface, so the agents an AGENT started looked like a different
- * kind of object from the agents the user started, two screens apart in the same app. Everything a row needs
- * beyond the shared card is a fact about parentage and only that: which turn started it, and that it was
- * backgrounded.
+ * kind of object from the agents the user started, two screens apart in the same app. A row needs NOTHING
+ * beyond the shared card now: what is particular about a child — what it runs as, and which conversation it came
+ * out of — is answered about the ONE child being read, in the pane's header, which is where one child is read.
  *
- * SAME CARD MEANS SAME FORM AND SAME FACTS. It is the card's `tight` shape here as it is in the chat, so a row
- * is the same height in both lists, and the model rides the facts line here as it does there, so the one thing
- * this list used to leave unanswered ("which model is that child burning?") is answered where it is asked.
+ * SAME CARD MEANS SAME FORM AND SAME FACTS, and the facts are the CHAT RAIL'S, not a superset of them. It is
+ * the card's `tight` shape here as it is there, so a row is the same height in both lists; and it carries what
+ * that card carries — the model, the age of a settled row, the live readout in the corner — because a rail is a
+ * switcher and those are the three facts that decide which row to open. The four that used to sit ahead of them
+ * (`bg`, the parent's clipped title, the agent type, a tool-call/token counter) are accounted for at `hasFacts`:
+ * the one thing this list used to leave unanswered was "which model is that child burning?", which is precisely
+ * what they were crowding out.
  *
  * TWO KINDS IN ONE LIST, deliberately: an Agent/Task subagent and a full agent the daemon spawned for the turn
  * are the same fact from out here: another agent, working, that you did not start. What differs is only how you
@@ -60,6 +76,11 @@ const router = useRouter();
 const { mobile } = useDevice();
 const { sessions } = useSubagentsQuery();
 const { agentById, open: openAgent } = useAgents();
+/* WHETHER THE WORK BELOW DRAWS ITS TOOL CALLS: the chat's own account preference, read here for the reason it
+ * is read there. A child's transcript IS a transcript, and it is the same person reading both; one of the two
+ * surfaces quietly ignoring the setting is how "hide tool calls" came to mean "except over there". The header
+ * carries the control (ChatToolCallsToggle) because this pane has no composer to put a status strip under. */
+const { showToolCalls } = useToolCalls();
 
 /* ONE AGENT'S CHILDREN, when the card's chip is what opened this. The chip is a fact about ONE agent: "this
  * one started five", and following it into a list of everything every agent in the sandbox has spawned makes
@@ -116,14 +137,13 @@ const lanes = computed<{ readonly label: string; readonly dot: string; readonly 
 ]);
 
 /* The row's heading: WHAT IT WAS ASKED TO DO. The card's one piece of content, so the description takes it
- * whole: the type it runs as (`Explore`, `general-purpose`) is a fact ABOUT the row and rides the meta line
- * with the rest of them. It used to lead the title, where on a rail this wide it ate the half of the line that
- * says which of fourteen children this one is: every row began "general-purpose · " and the descriptions were
- * clipped at the point they started to differ. */
+ * whole: the type it runs as (`Explore`, `general-purpose`) is a fact ABOUT the row and belongs to the pane
+ * header, which names the ONE child being read rather than repeating a word down a column of fourteen. It used
+ * to lead the title, where on a rail this wide it ate the half of the line that says which of fourteen children
+ * this one is: every row began "general-purpose · " and the descriptions were clipped at the point they started
+ * to differ. */
 const titleOf = (session: SubagentSession): string =>
     [session.description, session.agentType].find((part) => part !== undefined && part !== ``) ?? `Agent ${session.id.slice(-6)}`;
-// Which agent's turn started it: the way back to the conversation this all came out of.
-const parentOf = (session: SubagentSession): string | undefined => agentById(session.conversationId)?.title ?? undefined;
 
 /* THE WAY BACK, AND WHERE "BACK" IS. A conversation lives on exactly one surface per form factor: the docked
  * chat on desktop, the drill-in page on a phone, which has none. This used to be a plain link to /agents/:id
@@ -150,12 +170,32 @@ const providerOf = (session: SubagentSession): AgentProvider =>
 
 /* WHICH MODEL IT RUNS ON, in the chat rail's own words (modelLabelFor): the same fact, the same short label,
  * in the same slot on the same card, because the rail here and the rail in the floating chat are read minutes
- * apart by one eye. It used to be left off on the argument that the tile already says whose runtime it is and
- * that the exact model is a header fact: but the tile says `claude`, not which Claude, and "is this the cheap
- * one or the expensive one" is exactly what a column of a dozen delegations is scanned for. Falls back to the
- * runtime's own name when the child never reported a model, which is what the chat's card does too. */
-const modelOf = (session: SubagentSession): string | undefined =>
-    session.model === undefined || session.model === `` ? undefined : modelLabelFor(providerOf(session), session.model);
+ * apart by one eye. The tile says `claude`, not WHICH Claude, and "is this the cheap one or the expensive one"
+ * is exactly what a column of a dozen delegations is scanned for.
+ *
+ * AND IT IS NEVER LEFT BLANK, which it usually was: the daemon learns a child's model from the SDK's own
+ * per-subagent meta file, and that file is read when the child's transcript is opened, not when the child is
+ * born (agent/subagents.ts) — so the fact this card is scanned for was missing from precisely the rows still
+ * running. Three sources, best first:
+ *   · what the child itself reported, which is the only one that can name an OVERRIDE (the Agent tool's
+ *     `model` argument, a haiku fan-out under an opus parent);
+ *   · the PARENT's model, which is what an SDK subagent inherits when the call named none: it runs inside its
+ *     parent's own turn, so this is not a guess about the child, it is where the child's tokens are being
+ *     billed. `inherited` says so on hover rather than passing it off as the child's own reading;
+ *   · the runtime's own name, under the chat card's own floor rule (AgentCard's): a card says WHO RUNS IT
+ *     exactly once, so the provider is spelled out here only when the identity tile is wearing a category
+ *     glyph instead of the provider mark — which is the same question `sessionCategory` answers for the tile. */
+const modelOf = (session: SubagentSession): { label: string; inherited: boolean } | undefined => {
+    const provider = providerOf(session);
+    if (session.model !== undefined && session.model !== ``) {
+        return { label: modelLabelFor(provider, session.model), inherited: false };
+    }
+    const parent = session.kind === `subagent` ? agentById(session.conversationId)?.model : undefined;
+    if (parent !== undefined && parent !== ``) {
+        return { label: modelLabelFor(provider, parent), inherited: true };
+    }
+    return sessionCategory(titleOf(session)) === undefined ? undefined : { label: providerLabel(provider), inherited: false };
+};
 
 /* THE BRAND MARK FOR AN AGENT TYPE THAT NAMES A RUNTIME. `claude` set as a lowercase word among the header's
  * other grey facts reads as a stray label rather than as the vendor it is; the same fact as a glyph is read in
@@ -164,10 +204,16 @@ const modelOf = (session: SubagentSession): string | undefined =>
 const typeMark = (session: SubagentSession): AgentProvider | undefined =>
     session.agentType !== undefined && (NATIVE_PROVIDERS as readonly string[]).includes(session.agentType) ? session.agentType : undefined;
 
-/* The header's two actions, drawn the way the rail's cards are: no box until you are on them. A hairline
- * button on a surface whose whole structure is card-and-lane is a third kind of edge, and two of them in the
- * corner of an otherwise borderless header is what made this bar read as a toolbar bolted to the top. */
-const HEADER_ACTION = `flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 transition-colors hover:bg-overlay hover:text-content`;
+/* The header's actions, drawn the way the rail's cards are: no box until you are on them. A hairline button on
+ * a surface whose whole structure is card-and-lane is a third kind of edge, and two of them in the corner of an
+ * otherwise borderless header is what made this bar read as a toolbar bolted to the top.
+ *
+ * Two spellings of one box, because one of these actions is a COMPONENT that already lays itself out
+ * (ChatToolCallsToggle is `inline-flex` and positions a slash against itself): handing it the row half as well
+ * would be two `display` rules on one element, decided by stylesheet order. So the box is stated once and the
+ * row is what the plain elements add to it. */
+const HEADER_ACTION_BOX = `shrink-0 rounded-md px-1.5 py-1 transition-colors hover:bg-overlay hover:text-content`;
+const HEADER_ACTION = `flex items-center gap-1 ${HEADER_ACTION_BOX}`;
 
 // The SDK's own task vocabulary, ready to `v-bind` onto the Icon: the shape agentStatusMeta returns for a
 // fleet agent, so the rail's glyph slot is fed the same way here as it is there.
@@ -234,15 +280,19 @@ const liveOf = (session: SubagentSession): { icon: IconName; text: string; since
 
 /* HAS THE ROW'S FACTS LINE ANYTHING TO SAY? Asked for the same reason the chat rail's card asks it: a slot
  * handed a `v-if`-ed template still hands back a vnode, so an unguarded line draws an empty strip under the
- * title on a child the daemon has only just heard of. */
-const hasFacts = (session: SubagentSession): boolean =>
-    (session.background === true && subagentLive(session)) ||
-    (focus.value === undefined && parentOf(session) !== undefined) ||
-    session.agentType !== undefined ||
-    modelOf(session) !== undefined ||
-    (session.toolUses ?? 0) > 0 ||
-    (session.tokens ?? 0) > 0 ||
-    (!subagentLive(session) && session.activityAt > 0);
+ * title on a child the daemon has only just heard of.
+ *
+ * WHAT THIS LINE NO LONGER CARRIES, AND WHY: this rail is a SWITCHER, and it had drifted into a dashboard —
+ * `bg`, the parent's clipped title, the agent type, and a tool-call/token counter, four facts wide, ahead of
+ * the one the reader came for. Not one of them ever decided which of a dozen children to open: the type is
+ * already the title of any child that has no description and is spelled in full in the pane header; the
+ * parent's title arrived clipped to three words ("package.json an…") and is one press away as "Parent"; `bg`
+ * and the counters are a running child's own readout, which the live line beside them gives in the words that
+ * mean something ("Read · 30s"). What they did do was crowd out the MODEL and push the live readout onto a row
+ * of its own, buying every card a third more height in the one place height is scarcest. So the line is now
+ * exactly the chat rail's (ChatTabList): the model, the age of a settled row, and the live readout in the
+ * corner — because the two lists are read minutes apart by one eye. */
+const hasFacts = (session: SubagentSession): boolean => modelOf(session) !== undefined || (!subagentLive(session) && session.activityAt > 0);
 
 // One second ticks every live row's elapsed together: the board's `now` pattern, one timer for the whole list.
 const now = ref(Date.now());
@@ -470,51 +520,30 @@ watch(
                                 :selected="session.id === selected"
                                 :to="rowTo(session.id)"
                             >
+                                <!-- THE CHAT RAIL'S OWN FACTS LINE, to the letter: the model, the age of a
+                                     settled row, and the live readout in the corner (the card's `tight` form
+                                     puts it there). See `hasFacts` for the four facts that used to be here and
+                                     what each of them cost the one the reader came for. -->
                                 <template v-if="hasFacts(session)" #meta>
-                                    <!-- Backgrounded: the parent went on working instead of waiting. The fact
-                                             that explains a child still running under a turn that looks finished. -->
+                                    <!-- WHICH MODEL, in the chat rail's slot and clipped to its width: the fact
+                                             this list was missing, and the one that decides whether a delegation
+                                             is worth reading before you open it. A model it INHERITED from its
+                                             parent is drawn no differently (it is what the child is spending)
+                                             and says so on hover, which is the honest way round: the row is not
+                                             claiming the child chose it. -->
                                     <span
-                                        v-if="session.background === true && subagentLive(session)"
-                                        v-tooltip.top="`Its parent went on working instead of waiting for it`"
-                                        class="shrink-0 rounded-full bg-overlay px-1.5 py-px font-semibold text-subtle"
-                                        >bg</span
+                                        v-if="modelOf(session) !== undefined"
+                                        class="max-w-24 truncate"
+                                        v-tooltip.top="
+                                            modelOf(session)!.inherited ? `Its parent's model: this agent reported none of its own` : undefined
+                                        "
+                                        >{{ modelOf(session)!.label }}</span
                                     >
-                                    <!-- Whose turn started it. Dropped once the list is already narrowed to one
-                                             agent: repeating the answer on every row is not an answer. Cut short
-                                             rather than given room: every child of one turn repeats it, so it is
-                                             the fact on this line least worth a second row of card height. -->
-                                    <span v-if="focus === undefined && parentOf(session) !== undefined" class="flex min-w-0 items-center gap-1">
-                                        <Icon name="comments" class="shrink-0 text-2xs" />
-                                        <span class="max-w-24 truncate">{{ parentOf(session) }}</span>
-                                    </span>
-                                    <span v-if="session.agentType !== undefined" class="shrink-0">{{ session.agentType }}</span>
-                                    <!-- WHICH MODEL, in the chat rail's slot and clipped to its width: the
-                                             fact this list was missing, and the one that decides whether a
-                                             delegation is worth reading before you open it. -->
-                                    <span v-if="modelOf(session) !== undefined" class="max-w-24 truncate">{{ modelOf(session) }}</span>
-                                    <!-- HOW FAR IT HAS GOT, as one chip rather than two: what it has done and
-                                             what that has cost answer a single question here ("is this one
-                                             working, or is it stuck?"), they are read together, and at this width
-                                             a second glyph is what pushed the line onto a second row. Its tokens
-                                             are ITS OWN: a parent's cost line and the sum of its children's are
-                                             two different true numbers, and this is where a child's are
-                                             attributed. -->
-                                    <span
-                                        v-if="(session.toolUses ?? 0) > 0 || (session.tokens ?? 0) > 0"
-                                        v-tooltip.top="`Tool calls · tokens`"
-                                        class="shrink-0 tabular-nums"
-                                    >
-                                        <Icon name="list-check" class="mr-0.5 text-2xs" />{{
-                                            [session.toolUses, session.tokens === undefined ? undefined : formatTokens(session.tokens)]
-                                                .filter((part) => part !== undefined && part !== 0)
-                                                .join(` · `)
-                                        }}
-                                    </span>
                                     <!-- The age keeps to the settled rows: a live one's clock is the live
-                                             readout's ticking elapsed, which on this card now ends the same
-                                             line, and two clocks on one card disagree by construction. Right-
-                                             aligned, the chat rail's slot: the "when" of a card has one corner
-                                             whether or not the turn has ended. -->
+                                             readout's ticking elapsed, which on this card ends the same line,
+                                             and two clocks on one card disagree by construction. Right-aligned,
+                                             the chat rail's slot: the "when" of a card has one corner whether or
+                                             not the turn has ended. -->
                                     <span v-if="!subagentLive(session) && session.activityAt > 0" class="ml-auto shrink-0">{{
                                         relativeTime(session.activityAt)
                                     }}</span>
@@ -549,8 +578,20 @@ watch(
                     <span v-else-if="current.agentType !== undefined" class="shrink-0">{{ current.agentType }}</span>
                     <!-- The same label the row above it wears (modelOf): a header that spelled the raw id while
                          the card said the short name read as two different models. -->
-                    <span v-if="modelOf(current) !== undefined" class="shrink-0">{{ modelOf(current) }}</span>
+                    <span
+                        v-if="modelOf(current) !== undefined"
+                        class="shrink-0"
+                        v-tooltip.bottom="modelOf(current)!.inherited ? `Its parent's model: this agent reported none of its own` : undefined"
+                        >{{ modelOf(current)!.label }}</span
+                    >
                     <Icon v-bind="STATUS[current.status]" class="shrink-0" />
+                    <!-- WHETHER THE WORK BELOW SHOWS ITS TOOL CALLS: the chat's own control (the same component
+                         the composer's status strip draws), because this is the chat's own transcript with the
+                         chat's own folded runs in it, and a reader who hid the calls in one place has said what
+                         they want of the other. In the header for the reason it is under the composer over
+                         there: it goes wherever the surface's own furniture is, and this pane has a header
+                         where a pane has a status strip. -->
+                    <ChatToolCallsToggle :class="HEADER_ACTION_BOX" />
                     <!-- A control AND an address (ActionLink): the plain click points the docked chat at the
                          parent, which is better than a page load; Ctrl/⌘-click opens that conversation's own
                          page in a tab, which a <button> could never offer. -->
@@ -643,40 +684,62 @@ watch(
                                 </button>
                             </section>
 
-                            <!-- ITS WORK, in the chat's own shapes: prose as prose, tool calls as the very
-                                 cards the conversation draws (children and all: a child that itself delegates
-                                 nests here too). Its label earns its row only when there is a report above to
-                                 be told apart from — heading a pane that holds nothing else is decoration,
-                                 and this column has no air to spend on any. -->
+                            <!-- ITS WORK, IN THE CHAT'S OWN SHAPES, and by now in the chat's own COMPONENTS:
+                                 the prompt on the surface a prompt is drawn on, the reasoning in the fold the
+                                 conversation folds it into (ChatThinking), the answer on the assistant's own
+                                 wash, and the tool calls through the very pair the transcript renders
+                                 (ChatToolRows shown, ChatToolRun folded) — children and all, since a child that
+                                 itself delegates nests here too. That last one is what this pane was missing:
+                                 it drew every call as a card unconditionally, so a reader who had folded the
+                                 runs away in chat got a screenful of them here, and one preference quietly
+                                 meant two different things on two surfaces.
+                                 Its label earns its row only when there is a report above to be told apart
+                                 from — heading a pane that holds nothing else is decoration, and this column
+                                 has no air to spend on any. -->
                             <section class="flex min-w-0 flex-col gap-1.5">
                                 <span v-if="report !== undefined" class="text-2xs font-semibold uppercase tracking-wide text-muted">Work</span>
                                 <div class="chat-stack flex min-w-0 flex-col">
                                     <div v-for="(message, index) in messages" :key="index" class="chat-stack flex flex-col">
                                         <!-- The prompt it was given reads as a prompt: the same right-aligned
-                                             bubble the chat gives the user's own words, because from the
-                                             child's side that is what it is. -->
+                                             bubble on the same `.chat-surface` the chat gives the user's own
+                                             words, because from the child's side that is what it is. Uncapped,
+                                             unlike the conversation's, which clamps to six lines and offers to
+                                             open: there is exactly one prompt on this surface and it is the
+                                             delegation itself, so the thing the chat's clamp defends (the
+                                             answer's room, turn after turn) is not at stake. -->
                                         <p
                                             v-if="message.role === 'user'"
-                                            class="self-end whitespace-pre-wrap rounded-lg bg-overlay px-2.5 py-1.5 text-xs leading-relaxed text-content"
+                                            class="chat-surface max-w-[85%] self-end whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content"
                                         >
                                             {{ message.text }}
                                         </p>
                                         <template v-else>
-                                            <div v-if="message.thinking" class="text-2xs italic leading-relaxed text-subtle">
-                                                {{ message.thinking }}
-                                            </div>
+                                            <ChatThinking
+                                                v-if="message.thinking"
+                                                :thinking="message.thinking"
+                                                :streaming="current !== undefined && subagentLive(current)"
+                                            />
                                             <!-- <Markdown> brings `md-prose` with it, which is what dresses the
                                                  output: every rule in prose.css hangs off that class, and
                                                  rendered without it the headings, lists, tables and code blocks
                                                  all came out as undifferentiated body text. `chat-markdown` is
-                                                 only the transcript's tuning of those tokens. -->
-                                            <Markdown v-if="message.text" :source="message.text" :decorate="decorate" class="chat-markdown" />
-                                            <ChatToolCard
-                                                v-for="tool in message.tools ?? []"
-                                                :key="tool.id"
-                                                :tool="tool"
-                                                :live="current !== undefined && subagentLive(current)"
+                                                 only the transcript's tuning of those tokens, and
+                                                 `chat-surface-assistant` the wash the conversation sets an
+                                                 answer on. -->
+                                            <Markdown
+                                                v-if="message.text"
+                                                :source="message.text"
+                                                :decorate="decorate"
+                                                class="chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5"
                                             />
+                                            <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
+                                                <ChatToolRows
+                                                    v-if="showToolCalls"
+                                                    :tools="message.tools"
+                                                    :live="current !== undefined && subagentLive(current)"
+                                                />
+                                                <ChatToolRun v-else :tools="message.tools" :live="current !== undefined && subagentLive(current)" />
+                                            </div>
                                         </template>
                                     </div>
                                     <!-- WHERE THE LIVE VIEW COMES FROM, said out loud. A running child is read

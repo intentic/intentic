@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
 //
-// jsdom because the subject is WHICH ROWS ARE DRAWN. The list itself is the daemon's, sorted and filtered
-// nowhere else; what this pins is the narrowing the card's chip asks for: a chip is a claim about one agent
-// ("this one started five"), and following it into every child the sandbox has ever spawned makes the reader
-// redo the filtering the click already expressed.
+// jsdom because the subject is WHICH ROWS ARE DRAWN, AND WHAT EACH ONE SAYS. The list itself is the daemon's,
+// sorted and filtered nowhere else; what this pins is the narrowing the card's chip asks for: a chip is a claim
+// about one agent ("this one started five"), and following it into every child the sandbox has ever spawned
+// makes the reader redo the filtering the click already expressed.
 //
 // The second case is the one the lifetime count created. A card counts children for the agent's whole life,
 // while this list holds a finished child for minutes, so a chip followed an hour later lands on an empty rail,
 // and "No agents started" would flatly contradict the number that was just clicked.
+//
+// The last two are about the CARD's line of facts, which is a switcher's line and had grown into a dashboard's:
+// the model, the one fact that decides whether a delegation is worth opening, was the one it left out, behind
+// four that never decided anything. Pinned because that line is a shared shape rather than this page's own
+// taste: it is the floating chat's rail card carrying other rows.
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -35,9 +40,12 @@ vi.mock("../composables/subagents/subagentsQuery", async (importOriginal) => ({
     ...(await importOriginal<typeof import("../composables/subagents/subagentsQuery")>()),
     useSubagentsQuery: () => ({ sessions: computed(() => sessions.value), running: computed(() => sessions.value), refetch: async () => undefined }),
 }));
+// The parent carries a MODEL, because that is what a child inheriting one inherits: an SDK subagent runs inside
+// its parent's turn, and the daemon only learns the child's own model from a meta file read when its transcript
+// is opened, so the parent's entry is what answers "which model is that child burning" while it is still running.
 vi.mock("../composables/agents/useAgents", () => ({
     useAgents: () => ({
-        agentById: (id: string) => (id === `c1` ? { id, title: `analyse the gap` } : undefined),
+        agentById: (id: string) => (id === `c1` ? { id, title: `analyse the gap`, model: `x-test-model` } : undefined),
         open: (agent: { id: string }) => void opened.push(agent.id),
     }),
 }));
@@ -139,4 +147,43 @@ it(`opens the parent conversation in the chat instead of leaving for its diff`, 
     await nextTick();
     expect(opened).toEqual([`c1`]);
     expect(mounted?.currentRoute.value.name).toBe(`subagents`);
+});
+
+/* THE ROW SAYS WHICH MODEL, AND SAYS NOTHING ELSE THE CHAT RAIL WOULDN'T.
+ *
+ * A rail is a switcher: it is read to pick one row out of a dozen, and the model is the fact that decides it.
+ * This row used to answer everything BUT that: `bg`, the parent's title clipped to three words, the agent type
+ * (which is already the title of any child that has no description, and is spelled out in the pane header), and
+ * a tool-call/token counter — four facts wide, none of which ever picked a row, and between them they crowded
+ * out the model and pushed the live readout onto a second line of card height.
+ *
+ * The model is asserted on a child that reported NONE, which is the ordinary case for a running one, so what is
+ * pinned here is the inheritance as much as the label. Scoped to the card, not the page: the type and the parent
+ * are still answered in the pane's header, about the one child being read, which is the whole point of moving
+ * them there. */
+it(`names the model on the card and drops the facts that crowded it out`, async () => {
+    sessions.value = [child({ background: true, toolUses: 6, tokens: 19_000 })];
+    const card = (await mount({})).querySelector(`.session-card`);
+    const text = card?.textContent ?? ``;
+    expect(text).toContain(`Locate the handler`);
+    expect(text).toContain(`x-test-model`);
+    expect(text).not.toContain(`bg`);
+    expect(text).not.toContain(`Explore`);
+    expect(text).not.toContain(`analyse the gap`);
+    expect(text).not.toContain(`19k`);
+});
+
+/* A CHILD'S TRANSCRIPT IS A TRANSCRIPT, so the one control that decides how one reads is here too: the chat's
+ * own hide/show for tool calls (ChatToolCallsToggle, the very component the composer's status strip draws). It
+ * reads an account preference, so a reader who folded the calls away in chat has already said what they want of
+ * this pane, and it used to draw every call as a card regardless — one setting quietly meaning two things.
+ *
+ * In the HEADER because this pane has no composer to put a status strip under, and it has none because there is
+ * nothing to send: steering a child goes through a supervision door that admits only a shell carrying a live
+ * turn stamp. Hidden is the default, so the control offers to show them. */
+it(`offers the chat's tool-call control, and no composer`, async () => {
+    sessions.value = [child({})];
+    const el = await mount({});
+    expect(el.querySelector(`[aria-label="Show tool calls"]`)).not.toBeNull();
+    expect(el.querySelector(`textarea`)).toBeNull();
 });

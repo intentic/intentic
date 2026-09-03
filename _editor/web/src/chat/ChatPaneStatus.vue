@@ -7,10 +7,10 @@ import { useMembership } from "../composables/membership/useMembership";
 import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { formatReset, formatUtilization, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { usePaneView } from "../composables/chat/useChat";
-import { useToolCalls } from "../composables/chat/useToolCalls";
 import { sandboxAvailabilityVisual } from "../composables/sandbox/availability";
 import { useSandboxAvailability } from "../composables/sandbox/useSandboxAvailability";
 import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
+import ChatToolCallsToggle from "./ChatToolCallsToggle.vue";
 import UsageRing from "../components/UsageRing.vue";
 
 /* THE PANE'S STATUS BAR: the readouts under the composer, and the one part of the footer that stays OUT of the
@@ -29,7 +29,6 @@ const { block, hint } = defineProps<{
 }>();
 
 const { contextUsage, provider, account, model } = usePaneView();
-const { showToolCalls } = useToolCalls();
 const { meter: creditMeter } = useMembership();
 const { mobile, keyboardInset } = useDevice();
 
@@ -132,37 +131,11 @@ const creditChip = computed(() => {
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
         <div class="ml-auto flex items-center gap-3">
-            <!-- WHETHER THIS TRANSCRIPT SHOWS ITS TOOL CALLS. It belongs in the chat because that is where the
-                 question is asked: you want the calls back at the moment you are staring at a run mark
-                 wondering what it did, not two screens away in settings (where it also lives, for the person who
-                 wants it decided once). A pane has no header to hang it off, so it joins the readouts under the
-                 composer: the strip that already says what this chat is doing.
-
-                 A HAMMER, ALONE, AND STRUCK THROUGH WHEN THE CALLS ARE HIDDEN. The glyph names what is being
-                 shown: the work a run did, not an eye's "visible/hidden", and at that it needs no label beside
-                 it; the word was the chip's crutch back when the icon was a generic eye. Tilted off upright
-                 because a hammer mid-swing is a hammer, where the straight-on one is a capital T at the size
-                 this draws at.
-                 State is the slash, NOT brightness: the strip is read at a glance and a control that lights up
-                 to say "on" is a second bright thing competing with the numbers beside it. So the glyph stays at
-                 the strip's own weight in both states and only lifts a tier under the pointer, and the
-                 crossed-out reading (the one every mute and hide control in the world already uses) carries
-                 the answer. The slash runs across the handle, not along it. -->
-            <button
-                type="button"
-                class="touch-target relative inline-flex cursor-pointer items-center transition-colors hover:text-muted"
-                :aria-pressed="showToolCalls"
-                :aria-label="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
-                v-tooltip.top="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
-                @click="showToolCalls = !showToolCalls"
-            >
-                <Icon name="hammer" class="rotate-[35deg] text-xs" />
-                <span
-                    v-if="!showToolCalls"
-                    aria-hidden="true"
-                    class="pointer-events-none absolute top-1/2 left-1/2 h-px w-[130%] -translate-x-1/2 -translate-y-1/2 rotate-45 bg-current"
-                />
-            </button>
+            <!-- WHETHER THIS TRANSCRIPT SHOWS ITS TOOL CALLS (ChatToolCallsToggle, which the Subagents area's
+                 pane header draws too: one control, both places a transcript is read). A pane has no header to
+                 hang it off, so here it joins the readouts under the composer: the strip that already says what
+                 this chat is doing. -->
+            <ChatToolCallsToggle />
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
