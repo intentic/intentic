@@ -57,8 +57,9 @@ RUN git config --system --add safe.directory '*'
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
 # version is digest-pinned and this layer needs no network. -slim is bookworm, so the binary is linked against
 # the same glibc as this image.
-# ponytail: keep in lockstep with the oven/bun tag in _platform/api/Dockerfile.
-COPY --from=oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 /usr/local/bin/bun /usr/local/bin/bun
+# ponytail: keep in lockstep with _platform/api/Dockerfile and _platform/ingress/Dockerfile — all three
+# ship bun 1.4.1 via the same digest-pinned canary-slim until 1.4.1-slim exists on Docker Hub.
+COPY --from=oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b4334faa009a500594b71 /usr/local/bin/bun /usr/local/bin/bun
 
 # pnpm pre-activated at the version package.json pins, so no job pays a corepack fetch on first use. The chmod
 # is the node-gyp fix the jobs applied by hand: corepack strips the exec bit off its bundled gyp_main.py, and

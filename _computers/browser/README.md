@@ -56,7 +56,7 @@ package is built on, connects from inside the compiled binary and gets a CDP rep
 CDP needs no dependency either way. The protocol is JSON, `fetch` and `WebSocket` are globals, and the ~200 lines
 here are the subset that driving a page actually uses.
 
-**Worth re-testing rather than inheriting.** The above was measured against playwright-core 1.62.1 on Bun 1.3.14.
+**Worth re-testing rather than inheriting.** The above was measured against playwright-core 1.62.1 on Bun 1.4.1.
 If a later pair connects, Playwright's accessibility snapshot is a better instrument than the DOM walk in
 `snapshot.ts`, and this whole package is ~500 lines: the trade would be worth making, not merely tolerable.
 

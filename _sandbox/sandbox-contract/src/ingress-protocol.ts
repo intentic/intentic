@@ -576,8 +576,8 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
 /* ── THE WEBSOCKET, AS A DUPLEX ──────────────────────────────────────────────────────────────────────────
  *
  * `ws` ships this as `createWebSocketStream`, and BUN DOES NOT IMPLEMENT IT: the call throws
- * `Error("Not supported yet in Bun")` out of ws's `Receiver` constructor (verified on 1.3.14 and on 1.4.0,
- * the current latest). The edge runs on Bun, and the throw landed inside its `upgrade` handler with no
+ * `Error("Not supported yet in Bun")` out of ws's `Receiver` constructor (verified on 1.3.14, on 1.4.0, and on
+ * 1.4.1). The edge runs on Bun, and the throw landed inside its `upgrade` handler with no
  * `try` of ours on the stack — so the FIRST sandbox to register a tunnel killed the process, taking every
  * other sandbox's tunnel with it, and the container restarted straight into the same crash when that
  * sandbox retried. It is the reason a hosted sandbox could be provisioned and then never come up.

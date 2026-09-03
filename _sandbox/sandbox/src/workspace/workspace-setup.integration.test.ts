@@ -99,7 +99,7 @@ test("a running install reads as installing even once it has created an empty no
 
 test("a manager that isn't in this sandbox is `unsupported`, not an install that would fail in a terminal", async () => {
     const root = await workspace();
-    await write(root, "app/package.json", `{"packageManager":"bun@1.3.14"}`);
+    await write(root, "app/package.json", `{"packageManager":"bun@1.4.0-canary.20260903.1"}`);
     const [project] = await discoverProjects(root);
     // bun is deliberately not baked into the sandbox image; detection still names it, so the UI can say which
     // binary is missing rather than offering an install that would exit 127 in a terminal.
