@@ -77,7 +77,8 @@ refused.
 
 The push is the one gate nothing routes around, and it runs `_tools/scripts/verify-push.mjs`: from the app's
 "Check before you push" rule (`pnpm verify:push`), in a terminal the owner can watch, and again from
-`.githooks/pre-push` for any push git makes from the checkout. Cheapest first: every check the manifest lists
+`.githooks/pre-push` for any BRANCH push git makes from the checkout — a tag push is a pointer move onto
+commits a branch push already measured (the release tag, `stable`), so it stands down. Cheapest first: every check the manifest lists
 (`_tools/checks/run.mjs`, under two seconds, needing nothing installed), the assertion ratchet over the
 range's test files (`_tools/scripts/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
 only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the

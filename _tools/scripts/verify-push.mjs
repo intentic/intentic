@@ -67,6 +67,19 @@
  * spent ten minutes re-running the suite to refuse what they just chose would only teach them `--no-verify`. What
  * the hook guarantees is that nothing leaves UNMEASURED. `STRICT` below is the one-word change to refuse instead.
  *
+ * A TAG IS A POINTER, NOT WORK. git names every ref on stdin, and a push whose refs are all tags moves a
+ * pointer onto commits that are on the remote already: semantic-release pushing `v1.241.0` between prepare and
+ * publish, ship-stable.sh force-pushing that tag onto `stable`, rollback-stable.sh moving it back. Measuring
+ * one measures the wrong thing, and the v1.241.0 release is what that cost: the hook fired on
+ * `refs/tags/v1.241.0 → refs/tags/stable`, took the OLD stable tag as the range's base — the previous release —
+ * and handed the assertion ratchet every commit since it, two hundred of them, each already measured when it
+ * was pushed. Two test files no single commit had weakened were weaker across that span, so the push was
+ * refused, and the release stopped with its GitHub Release created, its images pushed, and `stable` still
+ * naming the version before. The same shape would have run typecheck, build and tests inside the publish job.
+ * So tag refs are dropped from what leaves, and a push carrying nothing else stands down. What reaches main
+ * reaches it through a branch push, which is measured; a tag pushed at commits no branch carries reaches no
+ * branch either, and nothing builds or ships from it.
+ *
  * WHAT IT MEASURES IS THE WORKING TREE, and CI measures the COMMIT. They differ when the tree holds work that is
  * not in the push: landed agent work the owner has not committed yet, a lockfile an install left beside a
  * committed manifest. The suite here sees the union, so a commit that passes only because of something
@@ -89,6 +102,7 @@ const STRICT = false;
 // streams everything; this case has no terminal, only the pusher's error message).
 const TAIL_LINES = 80;
 const ZERO_SHA = /^0+$/;
+const TAG_REF = /^refs\/tags\//;
 
 // stderr throughout: git shows a hook's stderr to whoever pushed, and the daemon reads the same stream.
 const say = (line) => console.error(`verify-push: ${line}`);
@@ -116,9 +130,10 @@ const step = (label, command, args) => {
 
 /* ── what is leaving ─────────────────────────────────────────────────────────────────────────────────────────
  * git hands a pre-push hook one line per ref on stdin, `<local ref> <local sha> <remote ref> <remote sha>`: a
- * deletion has an all-zero local sha, a new branch an all-zero remote one. The rule has no stdin and asks the
- * branch's upstream instead. The range only SCOPES tier 2; the suite is unfiltered, and a range this cannot
- * resolve widens to "every crate", never to "none". */
+ * deletion has an all-zero local sha, a new branch an all-zero remote one, and a tag is the pointer move the
+ * header describes, dropped here rather than measured. The rule has no stdin and asks the branch's upstream
+ * instead. The range only SCOPES tier 2; the suite is unfiltered, and a range this cannot resolve widens to
+ * "every crate", never to "none". */
 const pushes = [];
 if (hook) {
     let stdin = "";
@@ -127,15 +142,28 @@ if (hook) {
     } catch {
         // No stdin at all (run by hand): nothing is named, so everything is in scope.
     }
+    const pointers = [];
     for (const line of stdin.split("\n")) {
-        const [, local, , remote] = line.trim().split(/\s+/);
-        if (local !== undefined && !ZERO_SHA.test(local)) {
-            pushes.push({ local, remote: remote !== undefined && !ZERO_SHA.test(remote) ? remote : undefined });
+        const [ref, local, , remote] = line.trim().split(/\s+/);
+        if (local === undefined || ZERO_SHA.test(local)) {
+            continue;
         }
+        if (TAG_REF.test(ref)) {
+            pointers.push(ref.slice("refs/tags/".length));
+            continue;
+        }
+        pushes.push({ local, remote: remote !== undefined && !ZERO_SHA.test(remote) ? remote : undefined });
     }
     if (stdin.trim() !== "" && pushes.length === 0) {
-        say("only deletions; nothing to verify");
+        say(
+            pointers.length > 0
+                ? `only tags (${pointers.join(", ")}): a pointer move onto commits a branch push already measured, and a release runs on those`
+                : "only deletions; nothing to verify",
+        );
         process.exit(0);
+    }
+    if (pointers.length > 0) {
+        say(`${pointers.join(", ")} ${pointers.length === 1 ? "is a tag and rides" : "are tags and ride"} along; what is measured is the branch`);
     }
 } else {
     const head = git("rev-parse", "-q", "--verify", "HEAD")?.trim();
