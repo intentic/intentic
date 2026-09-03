@@ -258,6 +258,12 @@ services:
             # grant registers.
             PLATFORM_URL: ${INGRESS_PLATFORM_URL:-http://api:6480}
             LOG_LEVEL: ${LOG_LEVEL:-info}
+            # ONE MACHINE, as written. To run the edge on several hosts behind one address, give each the
+            # others and its own name as the others reach it; they hand requests to whichever holds a
+            # sandbox's tunnel. The cluster's listener (INGRESS_INTERNAL_PORT, 8081) must stay off the
+            # internet: reachable across the hosts' private network, published nowhere.
+            #   INGRESS_PEERS: 10.0.0.2,10.0.0.3
+            #   INGRESS_ADVERTISE_HOST: 10.0.0.1
         networks: [intentic-platform]
 
     cloudflared:

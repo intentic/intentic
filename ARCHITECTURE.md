@@ -1040,7 +1040,11 @@ Who pays for scale is a design decision, not an accident:
   router's connection table. It is metered vendor bandwidth (~$0.02/GB out of North America and Europe) that
   grows by adding machines, which makes the scaling question a bill and a region's capacity rather than a
   saturated link nobody else can relieve. And a sandbox's registration is a live connection rather than a row,
-  so tunnels re-establish themselves against whichever machine answers next.
+  so tunnels re-establish themselves against whichever machine answers next. A tunnel lands on the machine
+  nearest the sandbox and a browser on the machine nearest itself, so the machines tell each other what they
+  hold and hand a request across the private network to the one that has it — a hop the owner at home never
+  takes, since anycast puts their laptop and their browser on the same machine
+  ([_platform/ingress/src/cluster.ts](_platform/ingress/src/cluster.ts)).
   A sandbox still costs ZERO DNS records: one wildcard record and one wildcard
   certificate (issued and renewed over DNS-01, $1/mo) serve every hostname. That is what replaced a shared
   Cloudflare account where each sandbox held ~10 records against a per-zone cap, and a full zone answered

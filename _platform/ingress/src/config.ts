@@ -27,6 +27,41 @@ export const configSchema = z.object({
             // Binds every interface: TLS terminates in front of this (Fly's edge, or a proxy) and the process
             // itself speaks plain HTTP.
             host: z.string().default(`0.0.0.0`),
+            /* THE CLUSTER, which is several of this process behind one anycast address (cluster.ts). A tunnel
+             * lands on ONE machine and a browser on whichever is nearest IT, so every machine has to be able to
+             * hand a request to the one holding the tunnel. Nothing here is required: no peers means one
+             * machine, which is exactly the process this was before it could have peers. */
+            // How this instance names itself to its peers, in logs and on /health. INGRESS_INSTANCE_ID; empty
+            // falls back to Fly's machine id, then to a random one for the process's life (main.ts).
+            instanceId: z.string().default(``),
+            /* A static peer list, `host[:port[:internalPort]]` comma-separated, for a deployment that is not on
+             * Fly (compose across hosts, a test). Ports default to this instance's own, since every instance
+             * runs the same image with the same env. On Fly leave this empty: the app's internal DNS lists
+             * every machine and is polled instead (peers.ts). INGRESS_PEERS. */
+            peers: z.string().default(``),
+            /* The address THIS instance tells its peers to reach it at. On Fly it is the private address and
+             * needs no setting; with a static list it is whatever the other hosts know this one as. Empty with
+             * peers configured means this machine routes and forwards but cannot say what it holds, which
+             * main.ts warns about at boot. INGRESS_ADVERTISE_HOST. */
+            advertiseHost: z.string().default(``),
+            /* The holds protocol's own listener, separate from the public port so it can be bound to a private
+             * address: Fly's 6PN on Fly (unreachable from the internet by construction), and simply never
+             * published in compose. INGRESS_INTERNAL_PORT / INGRESS_INTERNAL_HOST; an empty host binds the
+             * Fly private address when there is one and every interface otherwise. */
+            internalPort: z.coerce.number().int().positive().default(8081),
+            internalHost: z.string().default(``),
+        })
+        .prefault({}),
+    /* What Fly injects into every machine, read as-is: the app name is what internal DNS is asked about
+     * (`<app>.internal` answers every machine's private address), the private address is how this instance
+     * recognises itself in that answer and what its internal listener binds, and the machine id is its name.
+     * All empty off Fly, and the cluster then runs on INGRESS_PEERS or on nobody. FLY_APP_NAME /
+     * FLY_PRIVATE_IP / FLY_MACHINE_ID. */
+    fly: z
+        .object({
+            appName: z.string().default(``),
+            privateIp: z.string().default(``),
+            machineId: z.string().default(``),
         })
         .prefault({}),
     /* Where to ask whether a sandbox still exists (GET /api/reachability/<id>). Empty ⇒ that check is off and

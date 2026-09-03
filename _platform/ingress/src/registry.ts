@@ -1,9 +1,11 @@
 import type { IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
 
-/* WHICH TUNNEL SERVES WHICH SANDBOX, and nothing else. This is the entire state the edge keeps, it lives in
- * memory, and it is deliberately not durable: a tunnel is a live connection, so the truth about it cannot
- * outlive the process holding it. An edge that restarts forgets every registration and every container redials
- * within its backoff — which is also why the edge scales by adding machines rather than by sharing a store.
+/* WHICH TUNNEL SERVES WHICH SANDBOX ON THIS MACHINE, and nothing else. This is the entire durable-looking state
+ * the edge keeps, it lives in memory, and it is deliberately not durable: a tunnel is a live connection, so the
+ * truth about it cannot outlive the process holding it. An edge that restarts forgets every registration and
+ * every container redials within its backoff. Which OTHER machine holds a tunnel is cluster.ts's soft map,
+ * fed by the events this registry raises — the edge scales by adding machines that tell each other what they
+ * hold, not by sharing a store.
  *
  * DISPLACEMENT IS THE WHOLE DESIGN. A second tunnel claiming an id takes it, and the previous session is
  * closed with 4001. Under the hub this replaced, a recreated container fought its dead predecessor for a name
@@ -25,10 +27,25 @@ export interface TunnelEntry {
     readonly close: (code: number, reason: string) => void;
 }
 
+// What the registry tells the cluster (cluster.ts): a local tunnel came or went, so the peers should hear.
+export interface RegistryEvent {
+    readonly kind: `register` | `unregister`;
+    readonly sandboxId: string;
+}
+
+export interface TunnelRegistryOptions {
+    readonly onChange?: (event: RegistryEvent) => void;
+}
+
 export interface TunnelRegistry {
     /* Take the id for this session, closing whatever held it. Returns whether anything was displaced, which is
      * only ever a log line — the caller has no decision to make either way. */
     readonly register: (sandboxId: string, entry: TunnelEntry) => boolean;
+    /* Close and drop the local session for an id because a NEWER one registered on another machine (the
+     * cluster's delta says so). The same "newest wins" as a local displacement, reaching across the cluster:
+     * without it, two machines would each keep answering for a sandbox whose container has moved on, and
+     * which one a browser got would depend on where anycast landed it. Returns whether anything was held. */
+    readonly displace: (sandboxId: string, reason: string) => boolean;
     /* Give the id up, but ONLY if this session still holds it.
      *
      * The guard is not defensive tidiness, it is the correctness of displacement. A displaced session's close
@@ -42,13 +59,14 @@ export interface TunnelRegistry {
     readonly ids: () => readonly string[];
 }
 
-export const createTunnelRegistry = (): TunnelRegistry => {
+export const createTunnelRegistry = (options: TunnelRegistryOptions = {}): TunnelRegistry => {
     const tunnels = new Map<string, TunnelEntry>();
 
     return {
         register: (sandboxId, entry) => {
             const previous = tunnels.get(sandboxId);
             tunnels.set(sandboxId, entry);
+            options.onChange?.({ kind: `register`, sandboxId });
             if (previous === undefined) {
                 return false;
             }
@@ -58,9 +76,22 @@ export const createTunnelRegistry = (): TunnelRegistry => {
             previous.session.close();
             return true;
         },
+        displace: (sandboxId, reason) => {
+            const held = tunnels.get(sandboxId);
+            if (held === undefined) {
+                return false;
+            }
+            /* Dropped BEFORE the socket is closed, and no event is raised: the id is not leaving the cluster,
+             * it has moved, and the close handler's `unregister` finds nothing of its own to remove. */
+            tunnels.delete(sandboxId);
+            held.close(DISPLACED_CODE, reason);
+            held.session.close();
+            return true;
+        },
         unregister: (sandboxId, session) => {
             if (tunnels.get(sandboxId)?.session === session) {
                 tunnels.delete(sandboxId);
+                options.onChange?.({ kind: `unregister`, sandboxId });
             }
         },
         lookup: (sandboxId) => tunnels.get(sandboxId)?.session,

@@ -4,7 +4,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
+import { HOP_HEADER, type Cluster } from "./cluster.js";
+import { forwardRequest, forwardUpgrade, PeerUnreachable } from "./forward.js";
 import { PING_INTERVAL_MS, startHeartbeat } from "./heartbeat.js";
+import type { PeerDiscovery } from "./peers.js";
 import { createTunnelRegistry, type TunnelRegistry } from "./registry.js";
 import type { Revocation } from "./revocation.js";
 
@@ -27,8 +30,12 @@ import type { Revocation } from "./revocation.js";
  * of it and nothing else.
  *
  * THE EDGE HOLDS NOTHING IT COULD LOSE. No database, no name claims, no accounts: the registry is a Map, and
- * a restart is answered by every container's own reconnect loop. That is what makes "add another machine" the
- * scaling story and what makes this process safe to redeploy at any moment.
+ * a restart is answered by every container's own reconnect loop. That is what makes this process safe to
+ * redeploy at any moment.
+ *
+ * SEVERAL OF THESE BEHIND ONE ADDRESS is the cluster (cluster.ts): a request whose sandbox this machine does
+ * not hold is handed to the machine that does (forward.ts), once, and never back. Without a cluster wired in,
+ * a local miss is a 502 — which is exactly the one-machine edge this was.
  */
 
 export interface IngressServerOptions {
@@ -37,6 +44,11 @@ export interface IngressServerOptions {
     readonly revocation: Revocation;
     readonly log: (event: Record<string, unknown>, message: string) => void;
     readonly registry?: TunnelRegistry;
+    // Where a locally-unknown sandbox may be found. Absent ⇒ one machine, and a miss is a 502.
+    readonly cluster?: Cluster;
+    // For /health only: how many machines this one knows of.
+    readonly peers?: PeerDiscovery;
+    readonly instanceId?: string;
     readonly heartbeatIntervalMs?: number;
 }
 
@@ -101,7 +113,16 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         const path = (request.url ?? `/`).split(`?`)[0];
         if (path === `/health`) {
             response.writeHead(200, { "content-type": `application/json`, "cache-control": `no-store` });
-            response.end(JSON.stringify({ status: `ok`, tunnels: registry.size() }));
+            response.end(
+                JSON.stringify({
+                    status: `ok`,
+                    tunnels: registry.size(),
+                    instance: options.instanceId ?? ``,
+                    peers: options.peers?.current().length ?? 0,
+                    // Ids this machine would forward rather than serve.
+                    remote: options.cluster?.remoteCount() ?? 0,
+                }),
+            );
             return;
         }
         if (path === INGRESS_TUNNEL_PATH) {
@@ -115,6 +136,26 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         response.end(`no sandbox is named by this address\n`);
     };
 
+    /* WHERE A LOCAL MISS GOES. A request another machine already handed us carries the hop header, and a miss
+     * on it is final: the peer that forwarded believed we held the sandbox and was wrong, so answering 502 is
+     * what lets it forget that belief, and forwarding again is how a loop would start. A request straight
+     * from a browser asks the cluster, which either names the holder or has nothing to add. */
+    const holderFor = (sandboxId: string, request: IncomingMessage) =>
+        request.headers[HOP_HEADER] === undefined ? options.cluster?.holder(sandboxId) : undefined;
+
+    // The hop header is the cluster's and stops here: a workspace's dev server never sees it.
+    const stripHop = (request: IncomingMessage): void => {
+        delete request.headers[HOP_HEADER];
+    };
+
+    // A forward that failed to even reach the peer is a holder to forget; anything else was the peer's answer.
+    const forgetIfGone = (sandboxId: string, error: Error): void => {
+        if (error instanceof PeerUnreachable) {
+            options.cluster?.forget(sandboxId);
+            options.log({ sandboxId, peer: `${error.peer.host}:${error.peer.port}` }, `peer unreachable; forgetting it as the holder`);
+        }
+    };
+
     const onRequest = (request: IncomingMessage, response: ServerResponse): void => {
         const host = request.headers.host ?? ``;
         const sandboxId = hostOwnerId(host);
@@ -123,15 +164,25 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             return;
         }
         const session = registry.lookup(sandboxId);
-        if (session === undefined) {
+        if (session !== undefined) {
+            stripHop(request);
+            /* The session reports failure by rejecting, and `headersSent` is what the rejection MEANS: nothing
+             * said to the browser yet, so the edge still owes it an answer; already answering, so the only
+             * honest signal left is a truncated body on a reset socket. `unreachable` reads the same flag, so
+             * both cases land in one call. */
+            void session.forwardRequest(request, response).catch(() => unreachable(response, host));
+            return;
+        }
+        const peer = holderFor(sandboxId, request);
+        if (peer === undefined) {
             unreachable(response, host);
             return;
         }
-        /* The session reports failure by rejecting, and `headersSent` is what the rejection MEANS: nothing said
-         * to the browser yet, so the edge still owes it an answer; already answering, so the only honest signal
-         * left is a truncated body on a reset socket. `unreachable` reads the same flag, so both cases land in
-         * one call. */
-        void session.forwardRequest(request, response).catch(() => unreachable(response, host));
+        // The same contract as the session's: a rejection before headers is our 502, after them a reset.
+        void forwardRequest(peer, request, response).catch((error: Error) => {
+            forgetIfGone(sandboxId, error);
+            unreachable(response, host);
+        });
     };
 
     const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
@@ -149,13 +200,22 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             return;
         }
         const session = registry.lookup(sandboxId);
-        if (session === undefined) {
+        if (session !== undefined) {
+            stripHop(request);
+            /* Nothing is written to the socket until the far end accepts the stream (see forwardUpgrade), so a
+             * rejection leaves it untouched and this can still answer on it rather than merely resetting it. */
+            void session.forwardUpgrade(request, socket, head).catch(() => refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} dropped the connection.`));
+            return;
+        }
+        const peer = holderFor(sandboxId, request);
+        if (peer === undefined) {
             refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} is not connected right now.`);
             return;
         }
-        /* Nothing is written to the socket until the far end accepts the stream (see forwardUpgrade), so a
-         * rejection leaves it untouched and this can still answer on it rather than merely resetting it. */
-        void session.forwardUpgrade(request, socket, head).catch(() => refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} dropped the connection.`));
+        void forwardUpgrade(peer, request, socket, head).catch((error: Error) => {
+            forgetIfGone(sandboxId, error);
+            refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} is not connected right now.`);
+        });
     };
 
     /* A SANDBOX ARRIVING. Two gates, in this order and for different reasons: the signature is arithmetic and

@@ -8,14 +8,20 @@
 #
 # THERE IS NO BOOT CHAIN HERE, and the contrast with the api's is the point: no migrations to apply, no schema
 # to prove, no database to reach. The process holds live connections and nothing else, so "started" and "ready"
-# are the same moment — which is also what makes it safe to redeploy at any time and what makes "add another
-# machine" the whole of the scaling story. A restart drops every registration; every container redials inside
-# its own backoff.
+# are the same moment — which is also what makes it safe to redeploy at any time. A restart drops every
+# registration; every container redials inside its own backoff. Several of these behind one address find
+# each other and hand requests to whichever holds the tunnel (src/cluster.ts), so "add another machine" is
+# the scaling story and needs nothing set on Fly, where the app's own DNS lists the machines.
 #
 # Runtime config (see src/config.ts) is injected by the deployment, never baked:
-#   INGRESS_PUBLIC_KEY  the platform's Ed25519 PUBLIC key (SPKI PEM). Required — the process exits without it.
-#   PLATFORM_URL        where to ask whether a sandbox still exists. Unset ⇒ that check is off.
-#   INGRESS_PORT/HOST   defaults 8080 / 0.0.0.0.
+#   INGRESS_PUBLIC_KEY      the platform's Ed25519 PUBLIC key (SPKI PEM). Required — the process exits without it.
+#   PLATFORM_URL            where to ask whether a sandbox still exists. Unset ⇒ that check is off.
+#   INGRESS_PORT/HOST       defaults 8080 / 0.0.0.0.
+#   INGRESS_INTERNAL_PORT   the cluster's own listener, default 8081, bound to the private address (FLY_PRIVATE_IP
+#                           when present, else INGRESS_INTERNAL_HOST, else every interface). Never publish it.
+#   INGRESS_PEERS           off Fly only: the other machines, `host[:port[:internalPort]]` comma-separated, with
+#                           INGRESS_ADVERTISE_HOST naming this one as they reach it. On Fly both are derived.
+#   INGRESS_INSTANCE_ID     this machine's name in logs and on /health; defaults to FLY_MACHINE_ID.
 # The private half NEVER appears here: this image can verify grants and can never mint one, which is the whole
 # of why a compromised edge cannot make anything reachable.
 # BUN CANARY, PINNED BY DIGEST, AND THE ONE REASON IT IS NOT A RELEASED TAG: the edge asks the platform
