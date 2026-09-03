@@ -329,17 +329,23 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
      * ports, the public outbox) is one it can prove it owns with the grant it already holds. The platform is
      * not on the naming path at all, which is one fewer thing a compromised platform could do to a sandbox. */
 
-    /* IS THIS SANDBOX STILL A SANDBOX? The ingress asks on every tunnel registration, and the answer is the
-     * whole of revocation under this fabric: a grant carries no expiry (it lives in a container's env for the
-     * container's life), so "this box may no longer be reached" has to be a question somebody can ask, and the
-     * only party that knows is the registry. 200 the row exists, 404 it does not — and a 404 is what makes
-     * deleting a sandbox the act that takes its address away (sandbox/reachability.ts).
+    /* IS THIS SANDBOX STILL A SANDBOX, AND HOW IS IT REACHED? The ingress asks on every tunnel registration,
+     * and the answer is the whole of revocation under this fabric: a grant carries no expiry (it lives in a
+     * container's env for the container's life), so "this box may no longer be reached" has to be a question
+     * somebody can ask, and the only party that knows is the registry. 200 the row exists, 404 it does not —
+     * and a 404 is what makes deleting a sandbox the act that takes its address away (sandbox/reachability.ts).
      *
-     * UNAUTHENTICATED, on purpose. What it discloses is whether a 12-hex id names a live sandbox, and that id
-     * is the leading label of every URL its owner has ever shared: existence is not a secret, and the address
-     * itself already answers this question to anyone who loads it. Guessing one is guessing 48 bits, and a
-     * guess that lands still learns nothing but "yes". Signing this would mean giving the edge a credential to
-     * hold for a fact the edge could read off DNS.
+     * The edge asks the same question for a hostname no tunnel holds, because the answer decides what it does
+     * next: a HOSTED sandbox is one the platform runs on Fly, reached by replaying the request to its app
+     * (`lane: "hosted"`, with the app named so the edge need not derive it), while a sandbox on somebody's own
+     * machine is reached only by the tunnel it dials, so a missing tunnel is simply "not connected". A row that
+     * has no hosted machine yet answers `tunnel`, since nothing can be replayed to.
+     *
+     * UNAUTHENTICATED, on purpose. What it discloses is whether a 12-hex id names a live sandbox and whether
+     * the platform runs its machine, and that id is the leading label of every URL its owner has ever shared:
+     * existence is not a secret, and the address itself already answers this question to anyone who loads it.
+     * Guessing one is guessing 48 bits, and a guess that lands still learns nothing but "yes". Signing this
+     * would mean giving the edge a credential to hold for a fact the edge could read off DNS.
      *
      * Resolved by exact match on the stored `tunnelId` — the row's own copy of the derivation, written at
      * creation (sandbox.routes create). The id is the first 12 hex of `tokenDigest`, so this LOOKS like a
@@ -355,8 +361,11 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (!/^[0-9a-f]{12}$/.test(sandboxId)) {
             return c.json({ error: `not a sandbox id` }, 404);
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tunnelId: sandboxId }, select: { id: true } });
-        return sandbox === null ? c.json({ error: `unknown sandbox` }, 404) : c.json({ ok: true });
+        const sandbox = await prisma.sandbox.findUnique({ where: { tunnelId: sandboxId }, select: { id: true, hosted: { select: { appName: true } } } });
+        if (sandbox === null) {
+            return c.json({ error: `unknown sandbox` }, 404);
+        }
+        return c.json(sandbox.hosted === null ? { ok: true, lane: `tunnel` } : { ok: true, lane: `hosted`, app: sandbox.hosted.appName });
     });
 
     /* The LOOPBACK CERTIFICATE's DNS relay, kept through the tunnel migration because it is not a tunnel: a

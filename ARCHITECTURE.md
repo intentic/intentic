@@ -74,19 +74,24 @@ flowchart TB
   SDK, Codex app-server, Grok, Kimi Code, Gemini: spawned per turn, not resident) and the `intentic` CLI over the three repos
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
   the application code), and exposes its daemon through the platform's own edge, **`@intentic/ingress`**
-  ([_platform/ingress](_platform/ingress)): the box dials ONE outbound WebSocket to it, presenting a
-  platform-signed Ed25519 **reachability grant** that says which sandbox it is, and from then on serves its
-  daemon and previews under that sandbox's hostnames. Nothing else is provisioned, because every public name a
-  sandbox answers to already ends in its own 12-hex id: the ingress decides who may serve a request by parsing
-  the `Host` header, so there are no accounts, no name claims and no namespace to reconcile
+  ([_platform/ingress](_platform/ingress)). A box on the user's own machine dials ONE outbound WebSocket to
+  it, presenting a platform-signed Ed25519 **reachability grant** that says which sandbox it is, and from then
+  on serves its daemon and previews under that sandbox's hostnames. A hosted box (below) dials nothing: it is
+  a Fly app already on the internet, and the edge answers a request for its hostname with a Fly replay
+  (`fly-replay: app=<its app>`) that Fly's proxy carries straight to the machine, caching the route per
+  hostname so the edge is off the path of everything that follows. Nothing else is provisioned in either case,
+  because every public name a sandbox answers to already ends in its own 12-hex id: the ingress decides who
+  may serve a request by parsing the `Host` header, and a hosted sandbox's app is named after the same id, so
+  there are no accounts, no name claims and no namespace to reconcile
   ([ingress-contract.ts](_sandbox/sandbox-contract/src/ingress-contract.ts) is what the three parties agree
   on). A reconnecting box DISPLACES its own previous tunnel, which is why recreating a container heals itself
   instead of fighting over names its dead predecessor still held. The platform can mint and revoke that
   reachability — revoking is deleting the sandbox row — but cannot impersonate the daemon's own auth: the
-  credential that binds an owner is born inside the box. TLS terminates at the edge, under ONE wildcard
-  certificate for `*.sbx.intentic.dev`, so the ingress handles plaintext requests: it is a trusted hop, and
-  what makes that acceptable is that the daemon verifies every credential it accepts inside the box instead of
-  trusting a header. Cloudflare is DNS only now, and every record it still holds is a wildcard or a transient:
+  credential that binds an owner is born inside the box. TLS terminates at Fly's proxy, under ONE wildcard
+  certificate for `*.sbx.intentic.dev`, so the ingress and the hosted machine's front door both handle
+  plaintext requests: the proxy is a trusted hop, and what makes that acceptable is that the daemon verifies
+  every credential it accepts inside the box instead of trusting a header. Cloudflare is DNS only now, and
+  every record it still holds is a wildcard or a transient:
   the wildcard aimed at the ingress's anycast addresses, `*.local.<zone>` for the loopback shortcut, and one
   ACME TXT per loopback certificate being issued. Nothing per-sandbox is left, which is the point — the
   loopback name was the last thing minting a record each, and enough of them filled the zone's quota and
@@ -114,7 +119,8 @@ flowchart TB
   intentic's own provider account (Fly, one microVM + one persistent volume per sandbox, each app on its
   own private network: [_platform/api/src/sandbox/hosted/](_platform/api/src/sandbox/hosted/)) and
   deliberately keeps the way back into: wake on the next visit, stop, destroy on delete. The command
-  path is unchanged: the browser still drives the daemon directly over the sandbox's tunnel, the
+  path is unchanged: the browser still drives the daemon directly — browser, Fly's proxy, machine, with no
+  tunnel and no intentic process carrying bytes, since the edge only names the app to replay to — and the
   platform still never proxies a request or holds a daemon credential: but existence and power are now
   the platform's, and an operator (or a breach) holding the provider credential could reach inside a
   hosted machine the way any cloud provider can reach inside a rented VM. Every other lane keeps the
@@ -307,11 +313,14 @@ survive reconnects. Its subsystems:
 a bootstrap shim: it gets Docker on, fetches the `ic` host-side CLI ([_sandbox/ic](_sandbox/ic)) and hands the
 flow to `ic sandbox connect`: so is the desktop app ([_editor/desktop-app](_editor/desktop-app)) not a third
 way: it *spawns that same `connect.sh`*, which is what makes its onboarding identical to the pasted one rather
-than a second implementation to keep in step. Every lane then reaches the box the same way, and there is only
-one way: the daemon dials ONE outbound WebSocket to the ingress and presents the
+than a second implementation to keep in step. Every lane on a machine the user owns then reaches the box the
+same way, and there is only one way: the daemon dials ONE outbound WebSocket to the ingress and presents the
 platform-signed grant naming `<id> = sha256(connectToken).slice(0, 12)`
 ([tunnel-ids.ts](_sandbox/sandbox-contract/src/tunnel-ids.ts)); the edge reads the `Host` header of each
-request and sends it down that sandbox's tunnel.
+request and sends it down that sandbox's tunnel. The hosted lane is the one box that is dialled instead of
+dialling: the same image, booted as a Fly machine (`SANDBOX_VM`), declares its preview proxy as a Fly service
+([sandbox-run/fly.ts](_sandbox/sandbox-run/src/fly.ts)) and the edge replays requests for its hostnames to
+the app named after the same `<id>`.
 
 Publishing anything is therefore free of provisioning, because every name a sandbox serves already carries its
 id: `sandbox-<id>` for the daemon, `preview-<panel>-<id>` for a panel, `port-<slot>-<id>` for a forwarded port,
@@ -1037,7 +1046,7 @@ Who pays for scale is a design decision, not an accident:
   a `sandbox.list` every 30 s of navigation plus a plan check. The API is stateless with DB-backed
   sessions, so it scales horizontally; background jobs (retention sweep, the zone's DNS sweep, hosted-pool
   top-up) take a Postgres advisory lock so replicas don't duplicate the work.
-- **The one ceiling intentic owns is the edge** every sandbox is reached through: `@intentic/ingress`
+- **The one ceiling intentic owns is the edge** user-run sandboxes are reached through: `@intentic/ingress`
   ([_platform/ingress](_platform/ingress)), N stateless machines on Fly behind anycast addresses. Intentic
   operates no host in that path any more, so the limit is no longer one home server's uplink and its overlay
   router's connection table. It is metered vendor bandwidth (~$0.02/GB out of North America and Europe) that
@@ -1047,7 +1056,9 @@ Who pays for scale is a design decision, not an accident:
   nearest the sandbox and a browser on the machine nearest itself, so the machines tell each other what they
   hold and hand a request across the private network to the one that has it — a hop the owner at home never
   takes, since anycast puts their laptop and their browser on the same machine
-  ([_platform/ingress/src/cluster.ts](_platform/ingress/src/cluster.ts)).
+  ([_platform/ingress/src/cluster.ts](_platform/ingress/src/cluster.ts)). Hosted sandboxes do not count
+  against that ceiling at all: their bytes go from Fly's proxy to their own machine, and the edge is asked
+  once per hostname per cache TTL for a routing decision. Their bill is the machine's own egress.
   A sandbox still costs ZERO DNS records: one wildcard record and one wildcard
   certificate (issued and renewed over DNS-01, $1/mo) serve every hostname. That is what replaced a shared
   Cloudflare account where each sandbox held ~10 records against a per-zone cap, and a full zone answered

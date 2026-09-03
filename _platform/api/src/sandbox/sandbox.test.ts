@@ -269,7 +269,7 @@ describe(`sandbox routes`, () => {
         expect(data.tokenDigest.startsWith(data.tunnelId)).toBe(true);
     });
 
-    it(`flags providedTunnel only for a daemonUrl under the fabric's own zone`, async () => {
+    it(`flags providedAddress only for a daemonUrl under the fabric's own zone`, async () => {
         const rows = [
             { ...sandboxRow, id: `s1`, daemonUrl: `https://sandbox-abc.sbx.test` },
             { ...sandboxRow, id: `s2`, daemonUrl: `https://sandbox-def.example.com` },
@@ -286,7 +286,7 @@ describe(`sandbox routes`, () => {
         });
 
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma, config }) });
-        expect(sandboxes.map((sandbox) => sandbox.providedTunnel)).toEqual([true, false, false]);
+        expect(sandboxes.map((sandbox) => sandbox.providedAddress)).toEqual([true, false, false]);
 
         // The zone alone defaults even when the fabric is off (no signing key): it must not flag on its own.
         const tokenless = {
@@ -299,6 +299,6 @@ describe(`sandbox routes`, () => {
             sandboxMember: { findMany: vi.fn().mockResolvedValue([]) },
         });
         const { sandboxes: unflagged } = await call(sandboxRoutes.list, undefined, { context: context({ prisma: prismaAgain, config: tokenless }) });
-        expect(unflagged.every((sandbox) => !sandbox.providedTunnel)).toBe(true);
+        expect(unflagged.every((sandbox) => !sandbox.providedAddress)).toBe(true);
     });
 });

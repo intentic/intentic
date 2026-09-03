@@ -1,7 +1,7 @@
 import { INGRESS_GRANT_HEADER } from "@intentic/sandbox-contract/ingress-contract";
 import type { IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
 import { describe, expect, test, vi } from "vitest";
-import { startIngressTunnel, startIngressTunnelWhenConfigured, tunnelUrl, type TunnelSocket } from "./ingress-tunnel.js";
+import { reachPosture, startIngressTunnel, startIngressTunnelWhenConfigured, tunnelUrl, type TunnelSocket } from "./ingress-tunnel.js";
 
 /* WHAT THE RECONNECT LOOP OWES, tested against a fake socket because every property worth pinning here is
  * about WHEN it dials again, and none of them is about bytes: the protocol's own end-to-end test covers those.
@@ -163,7 +163,7 @@ describe(`startIngressTunnel`, () => {
 });
 
 describe(`startIngressTunnelWhenConfigured`, () => {
-    const base = { url: `https://ingress.example.test`, grant: `ig1.a.b`, targetPort: 5173, frontDoor: true };
+    const base = { url: `https://ingress.example.test`, grant: `ig1.a.b`, targetPort: 5173, frontDoor: true, vm: false };
 
     // Each refusal names the piece that is missing, because the three are fixed in three different places.
     test.each([
@@ -173,6 +173,34 @@ describe(`startIngressTunnelWhenConfigured`, () => {
     ])(`%s is a loopback-only posture, not a failure`, (_name, options, reason) => {
         const log = vi.fn();
         expect(startIngressTunnelWhenConfigured({ ...options, log })).toBeUndefined();
+        expect(log.mock.calls[0]?.[0]).toContain(`loopback only`);
         expect(log.mock.calls[0]?.[0]).toContain(reason);
+    });
+
+    /* A HOSTED MACHINE DIALS NOTHING, whatever else its env says: the platform's edge replays requests for its
+     * hostname to the Fly app it is, so a tunnel would be a second, worse path to the same machine. Said as
+     * the posture it is, never as something missing. */
+    test(`a Fly machine is reached directly and dials no tunnel`, () => {
+        const log = vi.fn();
+        expect(startIngressTunnelWhenConfigured({ ...base, vm: true, log })).toBeUndefined();
+        expect(log.mock.calls[0]?.[0]).toContain(`reachable directly`);
+    });
+});
+
+describe(`reachPosture`, () => {
+    const base = { url: `https://ingress.example.test`, grant: `ig1.a.b`, frontDoor: true, vm: false };
+
+    test(`is the tunnel when every piece is there`, () => {
+        expect(reachPosture(base)).toEqual({ by: `tunnel` });
+    });
+
+    // The VM switch wins over everything else: a hosted machine with a stray grant in its env still dials nothing.
+    test(`is direct on a Fly machine, whatever else is configured`, () => {
+        expect(reachPosture({ ...base, vm: true }).by).toBe(`direct`);
+        expect(reachPosture({ ...base, vm: true, grant: `` }).by).toBe(`direct`);
+    });
+
+    test(`is loopback with the reason when a tunnel's piece is missing`, () => {
+        expect(reachPosture({ ...base, grant: `` })).toEqual({ by: `loopback`, reason: expect.stringContaining(`SANDBOX_GRANT`) });
     });
 });

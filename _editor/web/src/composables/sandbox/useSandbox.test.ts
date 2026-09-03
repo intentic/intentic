@@ -22,7 +22,7 @@ const summary = (id: string): SandboxSummary => ({
     hosted: null,
     token: `token-${id}`,
     role: `owner`,
-    providedTunnel: false,
+    providedAddress: false,
     localHostname: null,
 });
 

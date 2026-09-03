@@ -10,20 +10,21 @@ import type { FlyMachineConfig } from "@intentic/sandbox-run/fly";
  *
  * Topology: one Fly APP per sandbox (apps are free), created on its OWN private network. Fly's 6PN spans an
  * org by default, and two strangers' sandboxes must not share a LAN. The app name is <prefix>-<sandbox id>,
- * which is what lets the reaper recognize ours by prefix and the delete dialog name what it is deleting.
- * Ingress stays Cloudflare: the machine dials out through the sandbox's own tunnel like every other lane, so
- * no Fly services, proxies or certificates are configured at all. */
+ * which is what lets the reaper recognize ours by prefix, the delete dialog name what it is deleting, and
+ * the edge replay a hostname to the app named after the id in it. Fly's proxy is the only proxy on the way
+ * in: the machine declares one service (sandbox-run/fly.ts, the front door) and no IP or certificate of its
+ * own, since a replay from the edge is the only way to it. */
 
 const BASE = `https://api.machines.dev/v1`;
 
 /* WHAT A MACHINE IS, in the one place Fly can be asked about it. Fly has no labels on an app, no way to
- * rename one, and a machine's name is fixed at birth, so a warm machine's `<prefix>-pool-<hex>` app keeps
- * that name for life, INCLUDING after somebody claims it. The console's app list therefore cannot tell the
- * platform's own stock from a person's working sandbox, and no naming scheme can make it: the name is minted
- * before anyone has asked for the machine. Machine metadata is the lever that does work, set at create,
- * rewritten with the config at claim (updates replace the whole config), and filterable server-side, e.g.
- * GET /apps/{app}/machines?metadata.intentic_role=sandbox. hosted-fleet.ts is the readable answer built on
- * top; this is the vocabulary both the pool's builder and the sandbox's composer write.
+ * rename one, and a machine's name is fixed at birth. Every hosted app is named `<prefix>-<sandbox id>`,
+ * warm stock included (its id is minted at build, hosted-pool.ts), so the console's app list cannot tell the
+ * platform's own stock from a person's working sandbox by name at all. Machine metadata is the lever that
+ * does work, set at create, rewritten with the config at claim (updates replace the whole config), and
+ * filterable server-side, e.g. GET /apps/{app}/machines?metadata.intentic_role=sandbox. hosted-fleet.ts is
+ * the readable answer built on top; this is the vocabulary both the pool's builder and the sandbox's
+ * composer write.
  *
  * WHICH PLATFORM the machine belongs to rides in the same bag, and it is the load-bearing half. An app name
  * says the deployment's prefix and nothing about WHOSE deployment: two platforms sharing a Fly org and a

@@ -21,7 +21,7 @@ describe(`streamCapacity`, () => {
     it(`only caps the transport that cannot multiplex`, () => {
         // h2 carries ~100 streams on one connection, so capping there would serialize for nothing.
         expect(streamCapacity(`local`)).toBe(Number.POSITIVE_INFINITY);
-        expect(streamCapacity(`tunnel`)).toBe(Number.POSITIVE_INFINITY);
+        expect(streamCapacity(`public`)).toBe(Number.POSITIVE_INFINITY);
         expect(streamCapacity(undefined)).toBe(Number.POSITIVE_INFINITY);
         // Plain http loopback is HTTP/1.1 and always will be: no browser speaks cleartext h2.
         expect(streamCapacity(`local-insecure`)).toBe(4);
@@ -51,7 +51,7 @@ describe(`streamPermits`, () => {
 
     it(`rations nothing on a transport that multiplexes`, () => {
         for (const stream of [`events`, `attach`] satisfies StreamKind[]) {
-            expect(streamPermits(`tunnel`, stream)).toBe(Number.POSITIVE_INFINITY);
+            expect(streamPermits(`public`, stream)).toBe(Number.POSITIVE_INFINITY);
             expect(streamPermits(`local`, stream)).toBe(Number.POSITIVE_INFINITY);
         }
     });

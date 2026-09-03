@@ -3,13 +3,13 @@
 # "the workspace hangs". The app name has to match the deployed app, because Fly injects FLY_APP_NAME and
 # src/peers.ts asks `<app>.internal` who the other machines are — that is the whole of peer discovery.
 #
-# ONE MACHINE PER REGION A SANDBOX CAN LAND IN. This is the invariant, and it is the one that was missing.
-# The platform places hosted machines in HOSTED_REGION and HOSTED_REGION_EU (_platform/api/src/config.ts:
-# `iad` and `arn`), while the edge ran as a single machine — so a European browser reached a European sandbox
-# by crossing to the ingress and back, twice, on every request. Measured from an EEA client against a healthy
-# hosted box: ~126ms to reach the edge before the sandbox was touched at all, against a ~40ms round trip to
-# the Fly PoP that answered. With a machine in each region anycast puts the browser on the near one, the
-# sandbox's tunnel lands on the same one, and src/cluster.ts's forward is not used at all in the common case.
+# ONE MACHINE PER REGION A TUNNEL-LANE SANDBOX'S OWNER IS LIKELY TO BE IN. A sandbox on somebody's own machine
+# dials this app and is served through it, so for those the placement rule from before still holds: anycast
+# puts a browser on the machine nearest IT and a tunnel on the machine nearest the sandbox, and when the two
+# differ src/cluster.ts hands the request across. Hosted sandboxes no longer care where this app is: they are
+# reached by a replay Fly's proxy carries from whichever edge answered straight to the machine, and this
+# process is consulted once per hostname per cache TTL (below). Fly's own advice for a router is "close to
+# the user", which argues for more cheap machines here, not fewer.
 #
 # Regions are NOT expressible in this file (Fly removed the key); `fly scale count` places them, and README.md
 # ("Deploying") is the runbook. This file is the shape of a machine, not where they are.
@@ -28,10 +28,27 @@ primary_region = "iad"
   # NEVER AUTO-STOP THIS. A stopped ingress machine is not a cold start, it is every tunnel it held dropping
   # at once: each container notices, backs off, and redials somewhere else, and for that window its owner's
   # workspace answers 502. The process holds live connections and nothing else, so there is nothing to scale
-  # to zero for and nothing to warm up — "started" and "ready" are the same moment (Dockerfile).
+  # to zero for and nothing to warm up — "started" and "ready" are the same moment (Dockerfile). Hosted
+  # sandboxes are the exception that proves it: a restart here costs them nothing that is streaming, only the
+  # next uncached hostname's first request waits.
   auto_stop_machines = false
   auto_start_machines = false
   min_machines_running = 1
+
+  # THE REPLAY CACHE, and the reason a hosted sandbox's traffic does not come through this process at all.
+  # For a sandbox the platform runs on Fly, src/server.ts answers a request with `fly-replay: app=<its app>`
+  # rather than carrying it down a tunnel, and Fly's proxy delivers the request there. This rule lets the
+  # proxy REMEMBER that decision per hostname (the Host header is the key, so one sandbox's route can never
+  # apply to another's name) for the TTL the response names (fly-replay-cache-ttl-secs, REPLAY_CACHE_TTL_SECS),
+  # after which every further request for that hostname goes browser → Fly → machine without asking here.
+  # Without this rule the replay still works; the edge is simply on the head of every request, ~10 ms, and
+  # a request over 1 MB cannot be replayed at all (Fly buffers what it replays). With it, the only request
+  # that ever meets that limit is the first one on a hostname per TTL, which from a browser is a GET.
+  [[http_service.http_options.replay_cache]]
+    path_prefix = "/"
+    ttl_seconds = 300
+    type = "header"
+    name = "host"
 
   [http_service.concurrency]
     # CONNECTIONS, NOT REQUESTS, and this is the trap worth naming. Fly's default counts in-flight REQUESTS,

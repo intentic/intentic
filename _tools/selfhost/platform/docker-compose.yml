@@ -257,6 +257,10 @@ services:
             # name so the question never leaves this network. Unset ⇒ the check is off and every validly-signed
             # grant registers.
             PLATFORM_URL: ${INGRESS_PLATFORM_URL:-http://api:6480}
+            # DELIBERATELY ABSENT: HOSTED_APP_PREFIX. Hosted sandboxes are reached by a Fly replay, which only
+            # an edge running as a Fly app in the hosted org can issue; this compose file runs the edge on a
+            # host of your own, where a replay means nothing. A self-hosted platform with a hosted lane runs
+            # the edge on Fly instead (_platform/ingress/README.md, "Deploying").
             LOG_LEVEL: ${LOG_LEVEL:-info}
             # ONE MACHINE, as written. To run the edge on several hosts behind one address, give each the
             # others and its own name as the others reach it; they hand requests to whichever holds a

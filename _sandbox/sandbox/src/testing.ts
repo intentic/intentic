@@ -81,6 +81,7 @@ export const testConfig: Config = {
         port: 8787,
         host: "0.0.0.0",
         publicUrl: "",
+        vm: false,
         grant: "",
         allowUnauthenticated: false,
         name: "",

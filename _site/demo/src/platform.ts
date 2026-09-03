@@ -27,7 +27,7 @@ export const DEMO_SANDBOX: SandboxSummary = {
     announceRefusal: null,
     token: `demo-connect-token`,
     role: `owner`,
-    providedTunnel: false,
+    providedAddress: false,
     // No certified loopback shortcut: the demo's daemon is the fixture at `daemonUrl`, and there is no real
     // container publishing a port, no zone, and nothing for a CA to have signed. Null is what a platform with
     // the loopback-certificate path switched off reports, so the shell takes the same branch a visitor's

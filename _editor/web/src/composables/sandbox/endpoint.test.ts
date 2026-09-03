@@ -44,7 +44,7 @@ it(`ranks by multiplexing, not by distance: the HTTP/1.1 address is last`, async
      * per streaming agent is a workspace that freezes, so the un-multiplexed address goes BELOW the tunnel and
      * is reached only when nothing else answers, which is the outage it was written for. Put it back in the
      * middle and a missing DNS record silently downgrades every window again. */
-    expect(withToken.map((candidate) => candidate.kind)).toEqual([`local`, `tunnel`, `local-insecure`]);
+    expect(withToken.map((candidate) => candidate.kind)).toEqual([`local`, `public`, `local-insecure`]);
     expect(withToken[0]?.base).toBe(certifiedLoopbackUrl(id, CERT_HOST));
     expect(withToken[1]?.base).toBe(TUNNEL);
     expect(withToken[2]?.base).toBe(localDaemonUrlInsecure(id));
@@ -58,7 +58,7 @@ it(`ranks by multiplexing, not by distance: the HTTP/1.1 address is last`, async
     expect(new URL(withToken[0]!.base).port).toBe(new URL(withToken[2]!.base).port);
 
     // No token ⇒ no derivable id ⇒ no address to guess. The tunnel is the only way in.
-    expect(await candidatesFor({ daemonUrl: TUNNEL, token: undefined, ...anywhere })).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
+    expect(await candidatesFor({ daemonUrl: TUNNEL, token: undefined, ...anywhere })).toEqual([{ kind: `public`, base: TUNNEL }]);
 });
 
 it(`offers no loopback candidate for a machine the platform put somewhere this browser is not`, async () => {
@@ -66,7 +66,7 @@ it(`offers no loopback candidate for a machine the platform put somewhere this b
     // browser's Local Network Access prompt: the "is this app looking around my computer" dialog: on an
     // address that could never have answered.
     const hosted = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } });
-    expect(hosted).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
+    expect(hosted).toEqual([{ kind: `public`, base: TUNNEL }]);
 
     // …and the verdict itself, which is a cheap NO and never a yes: no machine record means the sandbox MIGHT
     // be a loopback hop away, which is the whole reason the probe still exists.
@@ -77,7 +77,7 @@ it(`offers no loopback candidate for a machine the platform put somewhere this b
 it(`never reaches for the machine when the sandbox cannot be on it`, async () => {
     const fetchMock = vi.fn();
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
-        kind: `tunnel`,
+        kind: `public`,
         base: TUNNEL,
     });
     // The point of the gate: not merely that the tunnel wins, but that nothing was fetched to decide it.
@@ -90,11 +90,11 @@ it(`drops the certified candidate when the platform reports no loopback name`, a
      * failure, and it reads the same whether the reason is configuration or a sandbox behind somebody's own
      * bare domain. The tunnel carries it, and plain http is still there for the outage. */
     const candidates = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: null, localHostname: null });
-    expect(candidates.map((candidate) => candidate.kind)).toEqual([`tunnel`, `local-insecure`]);
+    expect(candidates.map((candidate) => candidate.kind)).toEqual([`public`, `local-insecure`]);
 
     // An older platform that does not report the field at all is the same answer, not a crash.
     const legacy = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: null });
-    expect(legacy.map((candidate) => candidate.kind)).toEqual([`tunnel`, `local-insecure`]);
+    expect(legacy.map((candidate) => candidate.kind)).toEqual([`public`, `local-insecure`]);
 });
 
 it(`accepts a loopback candidate only when the daemon behind it names THIS sandbox`, async () => {
@@ -158,7 +158,7 @@ it(`qualifies the tunnel too, now that something ranks below it`, async () => {
      * plain-http address it has to be qualified like anything else, or it always wins and the offline case
      * behind it is dead code. */
     const id = await sandboxIdOf(TOKEN);
-    const tunnel = { kind: `tunnel` as const, base: TUNNEL };
+    const tunnel = { kind: `public` as const, base: TUNNEL };
     const answering = vi.fn(async () => health(id));
     expect(await probeEndpoint(tunnel, id, answering)).toBe(true);
     expect(answering).toHaveBeenCalledWith(`${TUNNEL}/health`, expect.anything());
@@ -174,7 +174,7 @@ it(`takes the tunnel on trust when nothing ranks below it`, async () => {
     // machine the platform placed elsewhere it is also the only candidate there has ever been.
     const fetchMock = vi.fn();
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
-        kind: `tunnel`,
+        kind: `public`,
         base: TUNNEL,
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -202,7 +202,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
         }
         return health(id);
     }) as unknown as typeof fetch;
-    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, noCertificate)).toEqual({ kind: `tunnel`, base: TUNNEL });
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, noCertificate)).toEqual({ kind: `public`, base: TUNNEL });
 
     /* OFFLINE: neither public address resolves, and the daemon is a loopback hop away. This is the one state
      * plain http exists for, and the only one that reaches it. */
@@ -226,7 +226,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
                 throw new TypeError(`Failed to fetch`);
             }),
         ),
-    ).toEqual({ kind: `tunnel`, base: TUNNEL });
+    ).toEqual({ kind: `public`, base: TUNNEL });
 });
 
 /* THE ANSWER THAT EXPIRES, and why exactly one of the three does.
@@ -238,7 +238,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
 it(`keeps the tunnel and the certified shortcut for good, and only ages out the plain one`, () => {
     const now = 1_000_000;
     const stale = now - PROMOTION_INTERVAL_MS - 1;
-    for (const kind of [`tunnel`, `local`] as const) {
+    for (const kind of [`public`, `local`] as const) {
         // Nothing better exists to promote to, so re-probing could only cost a request and a permission prompt.
         expect(settledEndpoint({ kind, base: TUNNEL }, stale, now)).toBe(true);
     }

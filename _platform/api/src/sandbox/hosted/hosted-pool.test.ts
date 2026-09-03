@@ -1,3 +1,4 @@
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
 import { reconcileHostedPool, WARM_BOOT_EXEC } from "./hosted-pool.js";
@@ -15,6 +16,7 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
         webOrigin: `https://app.test`,
         google: { clientId: `gcid` },
         api: { url: `https://api.test` },
+        secrets: { key: `` },
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         hosted: {
             flyApiToken: `fly`,
@@ -36,15 +38,18 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
         },
     }) as unknown as Config;
 
-// A pool row as the reconcile reads it. Fresh stamps by default: staleness is opted into per case.
+// A pool row as the reconcile reads it. Fresh stamps by default: staleness is opted into per case. Named after
+// its identity, exactly as the build names it (secrets.key is empty, so the stored token is the plaintext).
+const POOL_TOKEN = `p00l-t0k3n`;
 const poolRow = (over?: Record<string, unknown>) => ({
     id: `p1`,
-    appName: `intentic-sbx-pool-abc123`,
+    appName: `intentic-sbx-${sandboxIdFromToken(POOL_TOKEN)}`,
     machineId: `m1`,
     volumeId: `vol_1`,
     region: `iad`,
     image: `ghcr.io/intentic/sandbox:stable`,
     state: `ready`,
+    token: POOL_TOKEN,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
@@ -115,6 +120,42 @@ describe(`reconcileHostedPool`, () => {
         expect(create.mock.calls[0]?.[0]).toMatchObject({ data: { state: `building`, image: `ghcr.io/intentic/sandbox:stable` } });
     });
 
+    /* THE APP IS NAMED AFTER AN IDENTITY MINTED AT BUILD, before anybody has asked for the machine. The edge
+     * reaches a hosted sandbox by replaying to `<prefix>-<id>` with no lookup, and Fly never renames an app,
+     * so a pool app named any other way could never serve the sandbox that is later claimed onto it. The
+     * identity lives in the row only: the machine's env stays empty until claim. */
+    it(`names each warm app after a connect token it mints, and keeps that token in the row, not the machine`, async () => {
+        const create = vi.fn().mockResolvedValue({});
+        const calls = stubFetch(builderRoutes);
+        await reconcileHostedPool(fakePrisma({ hostedPoolMachine: { create } }), config({ regionEu: `` }), logger);
+        const app = calls.find((entry) => entry.method === `POST` && entry.url.endsWith(`/apps`))?.body as { app_name: string };
+        const row = create.mock.calls[0]?.[0] as { data: { appName: string; token: string } };
+        expect(row.data.token).not.toBe(``);
+        expect(row.data.appName).toBe(`intentic-sbx-${sandboxIdFromToken(row.data.token)}`);
+        expect(app.app_name).toBe(row.data.appName);
+        const machine = calls.find((entry) => entry.method === `POST` && entry.url.includes(`/machines`))?.body as {
+            config: { env: Record<string, string> };
+        };
+        expect(machine.config.env[`CONNECT_TOKEN`]).toBeUndefined();
+    });
+
+    // Stock from before identities existed: its app is not named after any id the edge could route to, so it
+    // is worth exactly what a wrong rootfs is worth, and is replaced the same way.
+    it(`replaces standing stock that carries no identity`, async () => {
+        const deleteRow = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `stopped` }) },
+            ...builderRoutes,
+        ]);
+        await reconcileHostedPool(
+            fakePrisma({ hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow({ token: `` })]), delete: deleteRow } }),
+            config({ regionEu: `` }),
+            logger,
+        );
+        expect(deleteRow).toHaveBeenCalledWith({ where: { id: `p1` } });
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.endsWith(`/apps/${poolRow().appName}`))).toBe(true);
+    });
+
     it(`flips a build to ready once its no-op boot is observed stopped`, async () => {
         const update = vi.fn().mockResolvedValue({});
         stubFetch([
@@ -144,7 +185,7 @@ describe(`reconcileHostedPool`, () => {
         ]);
         const prisma = fakePrisma({ hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow()]), delete: del } });
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
-        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`intentic-sbx-pool-abc123`))).toBe(true);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
         // …and the slot it was squatting is refilled in the same pass, which is the half that was missing.
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
@@ -194,7 +235,7 @@ describe(`reconcileHostedPool`, () => {
             hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow({ image: `ghcr.io/intentic/sandbox:old` })]), delete: del },
         });
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
-        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`intentic-sbx-pool-abc123`))).toBe(true);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
         // …and the slot is refilled in the same pass.
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
@@ -228,7 +269,7 @@ describe(`reconcileHostedPool`, () => {
         });
         await reconcileHostedPool(adopted, config({ regionEu: `` }), logger);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
-        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`pool-abc123`))).toBe(false);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(false);
 
         del.mockClear();
         calls.length = 0;
@@ -236,7 +277,7 @@ describe(`reconcileHostedPool`, () => {
             hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow({ state: `claimed`, updatedAt: stale })]), delete: del },
         });
         await reconcileHostedPool(unadopted, config({ regionEu: `` }), logger);
-        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`pool-abc123`))).toBe(true);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
     });
 

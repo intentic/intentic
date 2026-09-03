@@ -104,6 +104,8 @@ import {
     UploadTooLargeError,
 } from "./workspace/workspace-files.js";
 import { scopedTarget } from "./workspace/workspace-scope.js";
+import { reachPosture } from "./platform/ingress-tunnel.js";
+import { profileTraits } from "./platform/profile.js";
 
 /* Headers about ONE transport connection cannot cross the extension-backend proxy. The child host speaks
  * HTTP/1.1, whose server adds `Connection: keep-alive` and `Keep-Alive` to every answer; the browser-facing
@@ -545,6 +547,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             // probing itself. Same readers, same reason, except that a broken tunnel is the one failure a
             // caller cannot learn any other way, because every other route to the answer runs through it.
             reach: services.reach.status(),
+            // HOW the world gets here: through a tunnel this daemon dials, directly (a Fly machine the
+            // platform's edge replays to, no intentic process on the path), or over loopback alone. The
+            // address is the same in the first two cases, so nothing but this can tell them apart.
+            reachedBy: reachPosture({
+                url: services.config.ingress.url,
+                grant: services.config.sandbox.grant,
+                frontDoor: profileTraits(services.config).extraListeners,
+                vm: services.config.sandbox.vm,
+            }).by,
         }),
     );
 

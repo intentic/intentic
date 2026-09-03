@@ -16,7 +16,19 @@ import type { Revocation } from "./revocation.js";
  *
  *   • an upgrade to INGRESS_TUNNEL_PATH is a SANDBOX registering itself — verify the grant, ask the platform
  *     whether the sandbox still exists, then hold the session
- *   • everything else is a BROWSER, routed to a registered tunnel by the Host header's own sandbox id
+ *   • everything else is a BROWSER, routed to a registered tunnel by the Host header's own sandbox id — or,
+ *     for a sandbox the platform runs on Fly, answered with a REPLAY that sends Fly's proxy to that
+ *     sandbox's own app, so the bytes never come through here at all
+ *
+ * TWO LANES, ONE HOSTNAME SHAPE. A sandbox on somebody's own machine can only be reached through a tunnel it
+ * dials, so for it this process IS the data path. A hosted sandbox is a Fly app in the same org, already on
+ * the internet, and dials nothing: the edge's whole job for it is one routing decision. `fly-replay: app=…`
+ * tells Fly's proxy to deliver this request to that app (across private networks, with no public address on
+ * the target), and `fly-replay-cache` tells it to keep doing so for every request on this hostname for a
+ * while without asking again — so in the steady state a hosted sandbox's traffic is browser → Fly → machine
+ * and this process sees one request per hostname per cache TTL. The app is named after the id in the
+ * hostname (`<prefix>-<id>`, hosted-pool.ts on the platform makes that true of pool-born machines too), so
+ * the decision needs no state here and, when the platform cannot be asked, no platform either.
  *
  * The tunnel door is checked first and by PATH, never by host, because the edge's own hostname carries no
  * sandbox id: `ingress.<zone>` is a label under the same wildcard as every sandbox, and asking `hostOwnerId`
@@ -50,6 +62,11 @@ export interface IngressServerOptions {
     readonly peers?: PeerDiscovery;
     readonly instanceId?: string;
     readonly heartbeatIntervalMs?: number;
+    /* The app-name prefix of the platform's hosted sandboxes (`<prefix>-<id>`), which is also the switch:
+     * absent ⇒ no request is ever replayed, and a sandbox with no tunnel is simply not connected. Present ⇒
+     * a hostname no tunnel holds is replayed to that app unless the platform says the sandbox is a
+     * tunnel-lane one (revocation.ts lookup). */
+    readonly hostedAppPrefix?: string;
 }
 
 export interface IngressServer {
@@ -69,22 +86,43 @@ const labelOf = (host: string): string => host.split(`:`)[0]?.split(`.`)[0] ?? h
  * refusal message, and nothing about the refusal depends on having one. */
 const remoteAddressOf = (socket: Duplex): string | undefined => (socket instanceof Socket ? socket.remoteAddress : undefined);
 
-/* An error on a HIJACKED socket. Once an upgrade has been taken off the server, node will never write a
- * response for us, so a refusal has to be a hand-written HTTP/1.1 head or the client waits for a timeout with
- * no idea why. `Connection: close` because there is no keep-alive to return to on a socket we are done with. */
-const refuse = (socket: Duplex, status: number, reason: string, body: string): void => {
+/* A response on a HIJACKED socket. Once an upgrade has been taken off the server, node will never write a
+ * response for us, so anything said on it has to be a hand-written HTTP/1.1 head or the client waits for a
+ * timeout with no idea why. `Connection: close` because there is no keep-alive to return to on a socket we
+ * are done with. */
+const answer = (socket: Duplex, status: number, reason: string, headers: Readonly<Record<string, string>>, body: string): void => {
     if (socket.destroyed) {
         return;
     }
-    const payload = Buffer.from(`${body}\n`, `utf8`);
-    socket.end(
-        `HTTP/1.1 ${status} ${reason}\r\n` +
-            `Content-Type: text/plain; charset=utf-8\r\n` +
-            `Content-Length: ${payload.length}\r\n` +
-            `Connection: close\r\n\r\n${ 
-            payload.toString(`utf8`)}`,
-    );
+    const payload = Buffer.from(body === `` ? `` : `${body}\n`, `utf8`);
+    const lines = Object.entries({
+        "Content-Type": `text/plain; charset=utf-8`,
+        ...headers,
+        "Content-Length": String(payload.length),
+        Connection: `close`,
+    }).map(([name, value]) => `${name}: ${value}`);
+    socket.end(`HTTP/1.1 ${status} ${reason}\r\n${lines.join(`\r\n`)}\r\n\r\n${payload.toString(`utf8`)}`);
 };
+
+const refuse = (socket: Duplex, status: number, reason: string, body: string): void => answer(socket, status, reason, {}, body);
+
+// ── The replay ──────────────────────────────────────────────────────────────────────────────────────────
+
+/* How long Fly's proxy keeps sending a hostname's requests to the app this edge named, without asking again.
+ * Long enough that the edge is off the path of everything a person does in one sitting; short enough that a
+ * sandbox destroyed and re-made (hostedRestart on the platform builds a replacement under the same app name,
+ * so even that is not a move) is followed within minutes rather than hours. Fly's floor is ten seconds. */
+export const REPLAY_CACHE_TTL_SECS = 300;
+
+/* The three headers that make Fly's proxy carry a request elsewhere: the target app; the pattern of
+ * requests the decision covers, spelled with the hostname so it never leaks onto another sandbox's name (the
+ * cache is keyed on the Host header, fly.toml); and for how long. Read by Fly's proxy and stripped: nothing
+ * downstream sees them. */
+export const replayHeaders = (host: string, app: string): Readonly<Record<string, string>> => ({
+    "fly-replay": `app=${app}`,
+    "fly-replay-cache": `${host.split(`:`)[0] ?? host}/*`,
+    "fly-replay-cache-ttl-secs": String(REPLAY_CACHE_TTL_SECS),
+});
 
 /* NO TUNNEL FOR THIS SANDBOX. 502 rather than 404 deliberately: the browser's availability flow reads any 5xx
  * as "the sandbox is unreachable" and drives the wake, while a 404 reads as "there is no such thing" and stops
@@ -121,6 +159,9 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
                     peers: options.peers?.current().length ?? 0,
                     // Ids this machine would forward rather than serve.
                     remote: options.cluster?.remoteCount() ?? 0,
+                    // Whether hosted sandboxes are replayed to their apps here, the one config fact a
+                    // deployment can get wrong without any tunnel looking different.
+                    replay: options.hostedAppPrefix !== undefined,
                 }),
             );
             return;
@@ -156,6 +197,28 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         }
     };
 
+    /* WHERE A SANDBOX NOBODY HOLDS MAY BE SENT INSTEAD: the Fly app of a hosted sandbox, or nowhere.
+     *
+     * The platform is asked (cached) which lane the id is on. `tunnel` is definite: the box dials the edge
+     * and is simply not here, so the answer is the 502 the browser's wake flow already reads. `hosted` is a
+     * replay, to the app the platform named or, failing that, the one the naming rule implies. A platform
+     * that cannot be asked leaves the lane unknown, and unknown REPLAYS: a wrong replay costs the browser one
+     * proxy error for a sandbox that was unreachable anyway, a wrong refusal costs a working hosted sandbox
+     * its whole outage — the same fail-open the registration check makes, for the same reason.
+     *
+     * A request another machine already handed us is never replayed: the peer believed we held the tunnel,
+     * and the only honest answer to a belief that was wrong is the 502 that lets it forget. */
+    const replayTarget = async (sandboxId: string, request: IncomingMessage): Promise<string | undefined> => {
+        if (options.hostedAppPrefix === undefined || request.headers[HOP_HEADER] !== undefined) {
+            return undefined;
+        }
+        const reachability = await options.revocation.lookup(sandboxId);
+        if (!reachability.exists || reachability.lane === `tunnel`) {
+            return undefined;
+        }
+        return reachability.app ?? `${options.hostedAppPrefix}-${sandboxId}`;
+    };
+
     const onRequest = (request: IncomingMessage, response: ServerResponse): void => {
         const host = request.headers.host ?? ``;
         const sandboxId = hostOwnerId(host);
@@ -175,7 +238,17 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         }
         const peer = holderFor(sandboxId, request);
         if (peer === undefined) {
-            unreachable(response, host);
+            void replayTarget(sandboxId, request).then((app) => {
+                if (app === undefined) {
+                    unreachable(response, host);
+                    return;
+                }
+                // The head is the whole answer: Fly's proxy reads the headers and replays the request it
+                // already holds, body and all. Nothing of this response reaches the browser.
+                options.log({ sandboxId, app }, `replaying to the sandbox's app`);
+                response.writeHead(200, { ...replayHeaders(host, app), "content-length": `0` });
+                response.end();
+            });
             return;
         }
         // The same contract as the session's: a rejection before headers is our 502, after them a reset.
@@ -204,12 +277,24 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             stripHop(request);
             /* Nothing is written to the socket until the far end accepts the stream (see forwardUpgrade), so a
              * rejection leaves it untouched and this can still answer on it rather than merely resetting it. */
-            void session.forwardUpgrade(request, socket, head).catch(() => refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} dropped the connection.`));
+            void session
+                .forwardUpgrade(request, socket, head)
+                .catch(() => refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} dropped the connection.`));
             return;
         }
         const peer = holderFor(sandboxId, request);
         if (peer === undefined) {
-            refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} is not connected right now.`);
+            void replayTarget(sandboxId, request).then((app) => {
+                if (app === undefined) {
+                    refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} is not connected right now.`);
+                    return;
+                }
+                /* An upgrade is replayed by NOT upgrading: Fly's rule is that the app answering with the
+                 * replay headers must not negotiate the WebSocket itself, the target does. So the answer is
+                 * a plain head with the headers on it, and the 101 comes from the sandbox. */
+                options.log({ sandboxId, app }, `replaying an upgrade to the sandbox's app`);
+                answer(socket, 200, `OK`, replayHeaders(host, app), ``);
+            });
             return;
         }
         void forwardUpgrade(peer, request, socket, head).catch((error: Error) => {

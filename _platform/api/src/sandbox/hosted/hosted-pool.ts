@@ -1,9 +1,11 @@
-import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@intentic-app/prisma";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
+import { encryptSecret } from "../../crypto.js";
 import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
+import { mintConnectToken } from "../mint-sandbox.js";
 import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine } from "./fly.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 
@@ -14,7 +16,14 @@ import { hostedEnabled, hostedInstanceId } from "./hosted.js";
  * host. Everything else, app, volume, machine, the daemon's own boot, is seconds. So the pool pays the pull
  * ahead of demand: a machine is built with the REAL image but its first boot runs a no-op (`init.exec`
  * replaces the entrypoint), which forces the pull and then exits clean, leaving a stopped machine with a warm
- * rootfs. It never runs the sandbox, carries no identity, and costs only its volume while it waits.
+ * rootfs. It never runs the sandbox and costs only its volume while it waits.
+ *
+ * IT DOES HAVE AN IDENTITY, held in its row and nowhere near the machine: a connect token minted at build,
+ * whose 12-hex digest names the app (`<prefix>-<id>`, exactly what a built-to-order machine is called). The
+ * edge reaches a hosted sandbox by replaying to the app named after the id in its hostname, with no lookup,
+ * and Fly never renames an app — so the name has to be right at build, before anybody has asked for the
+ * machine, and the sandbox that is eventually claimed onto it adopts this identity rather than the reverse
+ * (hosted.ts claimPoolMachine). The machine's env stays empty until claim: a warm machine holds no secret.
  *
  * The reconcile below is the pool's whole management: build up to the target per region, notice builds that
  * finished (or died), CHECK THE STANDING STOCK IS STILL THERE (a row is a claim about a machine on Fly, not
@@ -32,16 +41,15 @@ const BUILD_TIMEOUT_MS = 30 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 15 * 60 * 1000;
 const TICK_MS = 5 * 60 * 1000;
 
-// Random rather than derived: a pool machine belongs to nobody, so there is no sandbox id to derive from,
-// but the shared prefix keeps it inside the reaper's jurisdiction and the Fly console's story.
-const poolAppName = (config: Config): string => `${config.hosted.appPrefix}-pool-${randomBytes(6).toString(`hex`)}`;
-
 // Build one pool machine: app → volume → machine whose boot is the no-op. The row is stamped `building`; the
 // reconcile flips it `ready` once Fly reports the no-op boot stopped. Cleanup mirrors provisionHosted's: a
 // failure deletes the app, and anything that slips through is an app with no row, reaper food.
 const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Logger, region: string): Promise<void> => {
     const { flyApiToken, flyOrg, image, cpus, memoryMb, volumeGb } = config.hosted;
-    const appName = poolAppName(config);
+    // The identity first, because the app is named after it (see the header). The same derivation as a
+    // built-to-order app's, so the two are indistinguishable by name, which is the point.
+    const token = mintConnectToken();
+    const appName = `${config.hosted.appPrefix}-${sandboxIdFromToken(token) ?? ``}`;
     await createApp(flyApiToken, flyOrg, appName);
     try {
         const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
@@ -55,7 +63,9 @@ const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Lo
             metadata: flyWarmRole(hostedInstanceId(config)),
         };
         const { machineId } = await createMachine(flyApiToken, appName, { name: appName, region, config: warm });
-        await prisma.hostedPoolMachine.create({ data: { appName, machineId, volumeId, region, image, state: `building` } });
+        await prisma.hostedPoolMachine.create({
+            data: { appName, machineId, volumeId, region, image, state: `building`, token: encryptSecret(config, token) },
+        });
         logger.info({ app: appName, region }, `hosted pool: building a warm machine`);
     } catch (error) {
         await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>
@@ -142,8 +152,10 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
     }
     const live = new Map<string, (typeof rows)[number][]>();
     for (const row of rows) {
-        // The image moved under a finished machine: its warm rootfs is the WRONG rootfs, worth nothing.
-        if (row.image !== config.hosted.image) {
+        // The image moved under a finished machine: its warm rootfs is the WRONG rootfs, worth nothing. And
+        // stock with no identity (built before the app was named after one) is unclaimable for the same
+        // reason a wrong rootfs is: nothing about it is what a sandbox would be handed.
+        if (row.image !== config.hosted.image || row.token === ``) {
             // oxlint-disable-next-line eslint/no-await-in-loop
             await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                 logger.error({ err: error, app: row.appName }, `hosted pool: replacing a drifted machine failed`),

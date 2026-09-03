@@ -64,9 +64,9 @@ export const configSchema = z.object({
             machineId: z.string().default(``),
         })
         .prefault({}),
-    /* Where to ask whether a sandbox still exists (GET /api/reachability/<id>). Empty ⇒ that check is off and
-     * every validly-signed grant registers, which is the right shape for a local run and for a deployment
-     * standing the edge up before the platform knows about it.
+    /* Where to ask whether a sandbox still exists, and how it is reached (GET /api/reachability/<id>). Empty ⇒
+     * that check is off and every validly-signed grant registers, which is the right shape for a local run and
+     * for a deployment standing the edge up before the platform knows about it.
      *
      * The check FAILS OPEN by design when the platform is unreachable — see revocation.ts. Reachability must
      * not depend on the platform being up; that is the whole reason the platform is off the hot path.
@@ -74,6 +74,20 @@ export const configSchema = z.object({
     platform: z
         .object({
             url: z.string().default(``),
+        })
+        .prefault({}),
+    /* THE HOSTED LANE, as the edge sees it: sandboxes the platform runs as Fly apps in this same org, each
+     * named `<prefix>-<sandbox id>` (HOSTED_APP_PREFIX on the api, the same value here). A request for such a
+     * sandbox's hostname is not carried down a tunnel — the machine dials none — it is answered with a Fly
+     * replay to that app, and Fly's proxy delivers it there directly (server.ts). The prefix is what lets the
+     * edge name the app from the hostname alone, with no lookup, when the platform cannot be asked.
+     *
+     * Empty ⇒ this edge replays nothing: a local run, a compose deployment off Fly, or a platform with no
+     * hosted lane. Set it only on an edge that runs in the Fly org the hosted apps are created in, since a
+     * replay cannot cross organisations. HOSTED_APP_PREFIX. */
+    hosted: z
+        .object({
+            appPrefix: z.string().default(``),
         })
         .prefault({}),
     log: z

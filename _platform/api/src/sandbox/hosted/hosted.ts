@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
-import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { ingressEnabled, type Reachability } from "../reachability.js";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
+import { decryptSecret } from "../../crypto.js";
+import { connectTokenIdentity } from "../mint-sandbox.js";
+import { ingressEnabled, sandboxHostname } from "../reachability.js";
 import {
     createApp,
     createMachine,
@@ -24,18 +25,24 @@ import {
 } from "./fly.js";
 
 /* The hosted lane's orchestration, what the routes call, over the fly.ts client. One machine + one volume in
- * one app per sandbox; the app name is derived from the sandbox's 12-hex tunnel id, so the Fly console, the
- * sandbox-<id> hostname the user sees, and the reaper's prefix match all tell the same story.
+ * one app per sandbox; the app name is `<prefix>-<the sandbox's 12-hex tunnel id>`, ALWAYS, pool-born or built
+ * to order, so the Fly console, the sandbox-<id> hostname the user sees, the reaper's prefix match and the
+ * edge's routing all tell the same story.
  *
- * Reachability is the machine's own business: the env carries its signed grant and the address it dials, the
- * daemon opens the tunnel outbound, and the daemon's announce is the only "it's up" signal — the platform
- * never probes or dials a machine, it only flips power. That is the hosted trust trade in one line: power and
- * existence are the platform's, the command path stays browser → daemon. A hosted machine needs no Fly
- * services or IPs for any of it, because nothing ever connects TO it. */
+ * REACHABILITY IS A REPLAY, not a tunnel. A hosted machine is on the internet already, so it dials nothing:
+ * the edge (`@intentic/ingress`) answers a request for `sandbox-<id>.<zone>` with `fly-replay: app=<prefix>-<id>`
+ * and Fly's proxy delivers that request, and every byte after it, to the machine's front door (the service
+ * flyMachineConfig declares). The edge derives the app name from the hostname with no lookup, which is why
+ * the naming rule above is load-bearing rather than tidy: a pool machine is named after an identity minted
+ * when it is BUILT (hosted-pool.ts), and the claim adopts that identity into the sandbox row it serves.
+ *
+ * The daemon's announce is still the only "it's up" signal — the platform never probes or dials a machine,
+ * it only flips power. That is the hosted trust trade in one line: power and existence are the platform's,
+ * the command path stays browser → daemon. The machine gets no public address and no certificate of its own:
+ * the edge's wildcard covers its hostname, and a replay is the only way to it. */
 
-// The lane needs BOTH its own switch and a reachability fabric: a hosted machine is reachable only through the
-// grant the platform signs, so Fly credentials without a configured ingress would build machines that boot to
-// nothing.
+// The lane needs BOTH its own switch and the edge: a hosted machine is reached by the edge's replay under the
+// edge's wildcard, so Fly credentials on a platform with no ingress would build machines nobody can reach.
 export const hostedEnabled = (config: Config): boolean =>
     config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && ingressEnabled(config);
 
@@ -104,11 +111,10 @@ const alreadyProvisioned = async (prisma: PrismaClient, sandboxId: string, error
 
 export interface HostedProvisionArgs {
     readonly sandboxId: string;
-    // Decrypted by the route (the row stores them encrypted), this module never touches crypto.
+    /* The sandbox row's connect token, decrypted by the route. Everything the machine is addressed by derives
+     * from it: the app name, the hostname, the env the daemon reads. A pool claim REPLACES it with the pool
+     * machine's own (see claimPoolMachine), and writes that replacement back onto the row. */
     readonly connectToken: string;
-    // The sandbox's reachability, signed by the route (reachability.ts): the grant the box presents when it
-    // dials, its derived address, and the ingress it dials.
-    readonly grant: Reachability;
     readonly ownerEmail: string;
     // Decided by the route from the caller's country (region.ts), because only the request knows it, a
     // European user's machine and volume are both created here, which is what makes the residency promise
@@ -123,33 +129,45 @@ export interface HostedProvisionArgs {
  * that would have been built to order. OWNER_EMAIL is in the env before the daemon ever runs, so the
  * first-bind trust story (only this Google identity may claim ownership) is origin-independent too.
  *
- * The metadata stamp rides on that same "one composer" property: whatever the machine was a second ago, a
- * machine holding this config is somebody's sandbox and says so to Fly, which is the only way to read a
- * pool-born app's true state, since its name will say `pool` forever (fly.ts). The sandbox ID and not the
- * owner's address: metadata is casually visible provider-side, and the ID joins to the platform's own rows. */
-const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) => ({
-    ...flyMachineConfig({
-        name: machineName,
-        image: config.hosted.image,
-        baseImage: config.hosted.image,
-        guest: { cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb },
-        volumeId,
-        env: [
-            [`GOOGLE_CLIENT_ID`, config.google.clientId],
-            [`CONNECT_TOKEN`, args.connectToken],
-            [`OWNER_EMAIL`, args.ownerEmail],
-            [`WEB_ORIGIN`, config.webOrigin],
-            [`SANDBOX_PUBLIC_URL`, `https://${args.grant.hostname}`],
-            [`PLATFORM_URL`, config.api.url],
-            // The reachability pair, spelled from the contract every other lane spells it from (the connect
-            // one-liner's claim payload, the compose file): the daemon reads exactly these two names.
-            [ENV_SANDBOX_GRANT, args.grant.grant],
-            [ENV_INGRESS_URL, args.grant.ingressUrl],
-            [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
-        ],
-    }),
-    metadata: flySandboxRole(args.sandboxId, hostedInstanceId(config)),
-});
+ * NO GRANT AND NO EDGE ADDRESS IN THE ENV, which is the whole of how a hosted machine differs from a pasted
+ * run: it dials no tunnel. The hostname it answers under declares its front door instead (the service and
+ * the health check flyMachineConfig emits), and the edge replays requests for that hostname to this app.
+ *
+ * The metadata stamp rides on the same "one composer" property: whatever the machine was a second ago, a
+ * machine holding this config is somebody's sandbox and says so to Fly, which is what tells stock from a
+ * person's machine in the console now that both are named alike. The sandbox ID and not the owner's address:
+ * metadata is casually visible provider-side, and the ID joins to the platform's own rows. */
+const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) => {
+    const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
+    return {
+        ...flyMachineConfig({
+            name: machineName,
+            image: config.hosted.image,
+            baseImage: config.hosted.image,
+            guest: { cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb },
+            volumeId,
+            env: [
+                [`GOOGLE_CLIENT_ID`, config.google.clientId],
+                [`CONNECT_TOKEN`, args.connectToken],
+                [`OWNER_EMAIL`, args.ownerEmail],
+                [`WEB_ORIGIN`, config.webOrigin],
+                [`SANDBOX_PUBLIC_URL`, `https://${hostname}`],
+                [`PLATFORM_URL`, config.api.url],
+                [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
+            ],
+            frontDoor: { hostname },
+        }),
+        metadata: flySandboxRole(args.sandboxId, hostedInstanceId(config)),
+    };
+};
+
+// What a provision answers: the app the machine lives in, where it is, and whether it came warm (seconds) or
+// cold (minutes), which the wizard and the canary both word their wait off.
+export interface HostedProvisioned {
+    readonly appName: string;
+    readonly region: string;
+    readonly warm: boolean;
+}
 
 /* Power on a (probably) stopped machine, and the one place "it is coming up" is decided. Idempotent by reading
  * the state on refusal: Fly answers an error for a machine that is already started/starting, and for one it is
@@ -222,10 +240,19 @@ export const startAfterUpdate = async (config: Config, hosted: { appName: string
  * `hostedMachineConfig`, so pool-born and built-to-order machines cannot drift), which is also what starts it
  * (the update carries the launch, see fly.ts: a separate start loses a race against Fly's own `replacing`
  * state and refused every claim this pool ever made), and commits the hand-off in one transaction: the
- * HostedMachine row appears and the pool row disappears together, so no crash leaves a machine that is both
- * claimable and somebody's. The start below is the same idempotent confirmation a wake uses: it turns "Fly
- * launched it" into "Fly says it is live", and a machine that is genuinely not coming up still fails here and
- * moves the claim to the next candidate.
+ * HostedMachine row appears, the pool row disappears, and the SANDBOX ROW TAKES THE MACHINE'S IDENTITY, all
+ * together, so no crash leaves a machine that is both claimable and somebody's, or a sandbox whose hostname
+ * names an app that is not its machine's. The start below is the same idempotent confirmation a wake uses:
+ * it turns "Fly launched it" into "Fly says it is live", and a machine that is genuinely not coming up still
+ * fails here and moves the claim to the next candidate.
+ *
+ * THE IDENTITY GOES THE OTHER WAY from what a reader expects: the machine does not take the sandbox's token,
+ * the sandbox takes the machine's. A pool app is named `<prefix>-<id>` after a token minted at build, and the
+ * edge routes `sandbox-<id>.<zone>` by replaying to exactly that app name with no lookup — so the sandbox
+ * that ends up served by this machine must be the sandbox whose hostname carries this machine's id. The row
+ * was minted moments ago (a browser arrival) and nothing has been done under its first token: the setup
+ * page reads the row back after this returns and every derived fact (the address line, the loopback id)
+ * follows. The token the row gives up was never handed to anything.
  *
  * Region is a hard filter, not a preference: an EEA caller may only ever claim an EEA machine, or the privacy
  * policy's residency promise breaks. `wokeAt` opens the hour meter here, at claim, the pool's own no-op boot
@@ -246,9 +273,11 @@ const claimPoolMachine = async (
     config: Config,
     logger: Logger,
     args: HostedProvisionArgs,
-): Promise<{ appName: string; region: string } | undefined> => {
+): Promise<HostedProvisioned | undefined> => {
     const candidates = await prisma.hostedPoolMachine.findMany({
-        where: { region: args.region, state: `ready`, image: config.hosted.image },
+        // Stock with no identity (built before identities existed) is not claimable: its app is not named
+        // after any id the edge could route to. The reconcile replaces it (hosted-pool.ts).
+        where: { region: args.region, state: `ready`, image: config.hosted.image, NOT: { token: `` } },
         orderBy: { createdAt: `asc` },
     });
     for (const row of candidates) {
@@ -258,8 +287,11 @@ const claimPoolMachine = async (
             continue;
         }
         try {
+            // The machine's identity, not the row's: the config, the hostname and the row all follow it.
+            const connectToken = decryptSecret(config, row.token);
+            const adopted: HostedProvisionArgs = { ...args, connectToken };
             // oxlint-disable-next-line eslint/no-await-in-loop
-            await updateMachine(config.hosted.flyApiToken, row.appName, row.machineId, hostedMachineConfig(config, args, row.appName, row.volumeId));
+            await updateMachine(config.hosted.flyApiToken, row.appName, row.machineId, hostedMachineConfig(config, adopted, row.appName, row.volumeId));
             // oxlint-disable-next-line eslint/no-await-in-loop
             await startAfterUpdate(config, row);
             // oxlint-disable-next-line eslint/no-await-in-loop
@@ -271,12 +303,16 @@ const claimPoolMachine = async (
                         machineId: row.machineId,
                         volumeId: row.volumeId,
                         region: row.region,
+                        warm: true,
                         wokeAt: new Date(),
                     },
                 }),
                 prisma.hostedPoolMachine.delete({ where: { id: row.id } }),
+                // The ciphertext moves as it is (same key, and a fresh IV bought nothing); the derived
+                // columns are the same derivation the mint writes.
+                prisma.sandbox.update({ where: { id: args.sandboxId }, data: { token: row.token, ...connectTokenIdentity(connectToken) } }),
             ]);
-            return { appName: row.appName, region: row.region };
+            return { appName: row.appName, region: row.region, warm: true };
         } catch (error) {
             /* THE ONE FAILURE THAT MUST NOT MOVE TO THE NEXT CANDIDATE: this sandbox already has a machine, so
              * every further candidate would be branded and stranded for nothing (see HostedAlreadyProvisioned).
@@ -306,12 +342,7 @@ const claimPoolMachine = async (
  * anything this cleanup misses is an app with no HostedMachine row, which is precisely what the reaper
  * deletes. A pool claim that fails falls through to the cold path: the reader asked for a machine, not for a
  * pool hit. */
-export const provisionHosted = async (
-    prisma: PrismaClient,
-    config: Config,
-    logger: Logger,
-    args: HostedProvisionArgs,
-): Promise<{ appName: string; region: string }> => {
+export const provisionHosted = async (prisma: PrismaClient, config: Config, logger: Logger, args: HostedProvisionArgs): Promise<HostedProvisioned> => {
     const { flyApiToken, flyOrg, volumeGb } = config.hosted;
     const { region } = args;
     const claimed = await claimPoolMachine(prisma, config, logger, args);
@@ -330,8 +361,8 @@ export const provisionHosted = async (
         // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
         // so the free lane's clock starts here rather than at the first wake, which is the only version that
         // does not hand out an uncounted first session to everyone who ever provisions one.
-        await prisma.hostedMachine.create({ data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, wokeAt: new Date() } });
-        return { appName, region };
+        await prisma.hostedMachine.create({ data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() } });
+        return { appName, region, warm: false };
     } catch (error) {
         await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>
             logger.warn({ err: cleanupError, appName }, `hosted: cleanup after failed provision failed; orphaned for the reaper`),

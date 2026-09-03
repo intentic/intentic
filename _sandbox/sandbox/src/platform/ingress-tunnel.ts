@@ -84,34 +84,62 @@ const realConnect = (url: string, headers: Record<string, string>): TunnelSocket
 const realServe = async (socket: TunnelSocket, targetPort: number): Promise<IngressSessionServer> =>
     serveIngressSession(webSocketDuplex(socket as unknown as TunnelWebSocket), { targetPort });
 
-/* START IT ONLY IF THIS SANDBOX HAS WHAT IT TAKES, and say which piece is missing when it does not.
+/* HOW THIS SANDBOX IS REACHED, decided from its own configuration and reported on /health: through a tunnel
+ * it dials, directly (a Fly machine the platform's edge replays to), or over loopback alone.
  *
- * Three postures reach here and only one of them is a tunnel: a container the platform made reachable, a
- * `local` profile serving one loopback port, and a test. The other two are not degraded — a loopback-only
- * sandbox is a supported way to run this — so the log line states the posture rather than warning about it.
- * Naming the missing piece matters because the three causes are fixed in three different places: the profile,
- * the deployment's env, and the lane that was supposed to mint a grant.
+ * `reason` names the piece that decides it, because the postures are fixed in different places: the profile,
+ * the deployment's env, the lane that was supposed to mint a grant, or the platform's provisioner. */
+export type ReachPosture =
+    { readonly by: "tunnel" } | { readonly by: "direct"; readonly reason: string } | { readonly by: "loopback"; readonly reason: string };
+
+export const reachPosture = (options: {
+    readonly url: string;
+    readonly grant: string;
+    readonly frontDoor: boolean;
+    readonly vm: boolean;
+}): ReachPosture => {
+    if (options.vm) {
+        return { by: `direct`, reason: `this machine is a Fly app the platform's edge replays requests to, so there is no tunnel to dial` };
+    }
+    if (!options.frontDoor) {
+        return { by: `loopback`, reason: `this profile serves no front door for a tunnel to reach` };
+    }
+    if (options.url === ``) {
+        return { by: `loopback`, reason: `no INGRESS_URL, so there is no edge to dial` };
+    }
+    if (options.grant === ``) {
+        return { by: `loopback`, reason: `no SANDBOX_GRANT, so nothing proves which sandbox this is` };
+    }
+    return { by: `tunnel` };
+};
+
+/* START IT ONLY IF THIS SANDBOX HAS WHAT IT TAKES, and say what the posture is when it does not.
+ *
+ * Four postures reach here and only one of them is a tunnel: a container the platform made reachable over
+ * one, a hosted machine the edge reaches directly, a `local` profile serving one loopback port, and a test.
+ * None of the other three is degraded — a loopback-only sandbox is a supported way to run this, and a hosted
+ * machine is reached better without a tunnel than with one — so the log line states the posture rather than
+ * warning about it.
  *
  * `frontDoor` is whether the preview proxy is running (traits.extraListeners): the tunnel forwards every
- * hostname to it, so without one there is nowhere for a stream to land. */
+ * hostname to it, so without one there is nowhere for a stream to land. `vm` is SANDBOX_VM, the platform's
+ * own hosted machine, which is reached by replay and holds no grant to present. */
 export const startIngressTunnelWhenConfigured = (options: {
     readonly url: string;
     readonly grant: string;
     readonly targetPort: number;
     readonly frontDoor: boolean;
+    readonly vm: boolean;
     readonly log: (message: string, error?: unknown) => void;
 }): IngressTunnelHandle | undefined => {
-    const { url, grant, targetPort, frontDoor, log } = options;
-    if (!frontDoor) {
-        log(`reachable over loopback only: this profile serves no front door for a tunnel to reach`);
+    const { url, grant, targetPort, log } = options;
+    const posture = reachPosture(options);
+    if (posture.by === `direct`) {
+        log(`reachable directly: ${posture.reason}`);
         return undefined;
     }
-    if (url === ``) {
-        log(`reachable over loopback only: no INGRESS_URL, so there is no edge to dial`);
-        return undefined;
-    }
-    if (grant === ``) {
-        log(`reachable over loopback only: no SANDBOX_GRANT, so nothing proves which sandbox this is`);
+    if (posture.by === `loopback`) {
+        log(`reachable over loopback only: ${posture.reason}`);
         return undefined;
     }
     return startIngressTunnel({ url, grant, targetPort, log });

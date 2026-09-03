@@ -14,7 +14,7 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
     hosted: null,
     token: `token-${overrides.id}`,
     role: `owner`,
-    providedTunnel: false,
+    providedAddress: false,
     localHostname: null,
     ...overrides,
 });

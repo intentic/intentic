@@ -98,7 +98,15 @@ const machine = async (name: string): Promise<Machine> => {
     });
     const internal = createInternalServer({ cluster, registry, self, instanceId: name });
     await listen(internal);
-    const edge = createIngressServer({ publicKey, revocation: { allows: () => Promise.resolve(true) }, log: () => undefined, registry, cluster, peers: discovery, instanceId: name });
+    const edge = createIngressServer({
+        publicKey,
+        revocation: { allows: () => Promise.resolve(true), lookup: () => Promise.resolve({ exists: true, lane: `tunnel` }) },
+        log: () => undefined,
+        registry,
+        cluster,
+        peers: discovery,
+        instanceId: name,
+    });
     await edge.listen(0, `127.0.0.1`);
     // SAFETY: `self` was declared mutable in effect by these two writes only, before anyone reads it.
     (self as { port: number }).port = portOf(edge.server);
@@ -137,7 +145,10 @@ const frontDoor = async (): Promise<{ readonly server: Server; readonly seen: ()
 };
 
 // A container dialling a machine, the way the daemon does.
-const dial = async (edge: IngressServer, targetPort: number): Promise<{ socket: WebSocket; daemon: IngressSessionServer; closedWith: Promise<number> }> => {
+const dial = async (
+    edge: IngressServer,
+    targetPort: number,
+): Promise<{ socket: WebSocket; daemon: IngressSessionServer; closedWith: Promise<number> }> => {
     const grant = mintReachabilityGrant(privateKey, SANDBOX_ID, Date.now());
     const socket = new WebSocket(`ws://127.0.0.1:${portOf(edge.server)}/tunnel/v1`, { headers: { [INGRESS_GRANT_HEADER]: grant } });
     const closedWith = new Promise<number>((resolve) => socket.on(`close`, (code) => resolve(code)));

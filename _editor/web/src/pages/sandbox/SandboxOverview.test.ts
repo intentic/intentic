@@ -42,7 +42,7 @@ const sandboxRow = (overrides: Partial<SandboxSummary> = {}): SandboxSummary =>
         setupCodeClaimedAt: null,
         token: `tok`,
         role: `owner`,
-        providedTunnel: false,
+        providedAddress: false,
         ...overrides,
     }) as SandboxSummary;
 

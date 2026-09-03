@@ -394,9 +394,14 @@ const main = async (): Promise<void> => {
     }
     /* Obtain/renew in the background, and give the listener what comes back rather than waiting for a restart
      * to read it off disk. Never rejects: a sandbox with no certificate is a working sandbox, just one whose
-     * shortcut is plain HTTP/1.1, which is the transport the editor has to ration connections on. */
+     * shortcut is plain HTTP/1.1, which is the transport the editor has to ration connections on.
+     *
+     * NEVER ON A FLY MACHINE. The certificate exists for a browser on the same machine as the sandbox, and
+     * nothing is ever on the same machine as a hosted one (the editor knows it: endpoint.ts probes no
+     * loopback for a hosted sandbox). Ordering one there spent a Let's Encrypt certificate from the zone's
+     * shared weekly allowance and a DNS write per machine boot, for a name no browser would ever dial. */
     const localCertRenewal =
-        role.container && traits.extraListeners
+        role.container && traits.extraListeners && !config.sandbox.vm
             ? startLocalCertificateRenewal(config, logger, (certificate) => {
                   localServer?.useCertificate(certificate);
                   logger.info({ hostname: certificate.hostname }, "loopback listener is serving TLS");
@@ -431,12 +436,15 @@ const main = async (): Promise<void> => {
     previewProxy?.listen(config.preview.port, host);
     shutdown.push(() => previewProxy?.close());
 
-    /* HOW THE WORLD REACHES THIS SANDBOX, and it is one outbound dial (platform/ingress-tunnel.ts).
+    /* HOW THE WORLD REACHES THIS SANDBOX: one outbound dial (platform/ingress-tunnel.ts), or nothing at all.
      *
      * It lives HERE, in the daemon, rather than in the entrypoint that used to arrange it, and that move is
      * the whole shape of the change: reachability stopped being state somebody provisions before the process
      * starts (an account, a claimed name, a bound share, a predecessor to evict) and became a signature this
      * container was handed and presents. Nothing is created, so nothing leaks and nothing has to be reclaimed.
+     *
+     * A hosted machine (SANDBOX_VM) dials nothing: it is a Fly app the platform's edge replays requests to,
+     * and Fly's proxy delivers them to the preview proxy above, the same front door a tunnel would land on.
      *
      * Gated on the front door existing, not merely on the config: the tunnel forwards every hostname to the
      * preview proxy, so without one there is nowhere to forward to. A daemon with no grant, no edge or no
@@ -447,6 +455,7 @@ const main = async (): Promise<void> => {
         grant: config.sandbox.grant,
         targetPort: config.preview.port,
         frontDoor: traits.extraListeners,
+        vm: config.sandbox.vm,
         log: (message, error) => (error === undefined ? logger.info(message) : logger.warn({ err: error }, message)),
     });
     shutdown.push(() => ingressTunnel?.close());

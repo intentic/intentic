@@ -358,7 +358,7 @@ describe(`GET /api/reachability/:sandboxId`, () => {
     const id = `abcdef012345`;
 
     it(`200s a sandbox that exists, resolved by its indexed tunnel id`, async () => {
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
+        const findUnique = vi.fn().mockResolvedValue({ id: `s1`, hosted: null });
         const res = await ask(fakePrisma({ sandbox: { findUnique } }), id);
 
         expect(res.status).toBe(200);
@@ -366,7 +366,18 @@ describe(`GET /api/reachability/:sandboxId`, () => {
          * so the tempting version of this route is a prefix match on a column that already exists — and that
          * cannot use the index under a default collation, making a fleet-wide restart a sequential scan per
          * box. An equality on `tunnelId` is the point of the column. */
-        expect(findUnique).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { id: true } });
+        expect(findUnique).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { id: true, hosted: { select: { appName: true } } } });
+    });
+
+    /* THE LANE IS THE OTHER HALF OF THE ANSWER. The edge asks this for a hostname no tunnel holds, and what it
+     * does next depends on it: a hosted sandbox is reached by replaying the request to its Fly app, a sandbox
+     * on somebody's own machine only by the tunnel it dials, so "no tunnel" there is simply "not connected". */
+    it(`names the lane: a hosted sandbox's app to replay to, or the tunnel it must dial`, async () => {
+        const hosted = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-${id}` } }) } }), id);
+        expect(await hosted.json()).toEqual({ ok: true, lane: `hosted`, app: `intentic-sbx-${id}` });
+
+        const own = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
+        expect(await own.json()).toEqual({ ok: true, lane: `tunnel` });
     });
 
     // Revocation: the row is gone, so the edge refuses the tunnel. Nothing else had to happen for that.
@@ -391,8 +402,8 @@ describe(`GET /api/reachability/:sandboxId`, () => {
      * whether a 12-hex id names a live sandbox, and that id is the leading label of every URL its owner has
      * ever shared. Signing it would mean handing the edge a credential for a fact DNS already answers. */
     it(`answers with no credential presented`, async () => {
-        const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1` }) } }), id);
+        const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
         expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ ok: true });
+        expect(await res.json()).toEqual({ ok: true, lane: `tunnel` });
     });
 });

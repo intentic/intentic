@@ -89,6 +89,7 @@ const ingress = createIngressServer({
     cluster,
     peers,
     instanceId,
+    ...(config.hosted.appPrefix === `` ? {} : { hostedAppPrefix: config.hosted.appPrefix }),
     log: (event, message) => logger.info(event, message),
 });
 
@@ -103,6 +104,8 @@ logger.info(
         revocation: config.platform.url === `` ? `off (no PLATFORM_URL)` : config.platform.url,
         // And the same for the cluster: one machine, a list, or an app whose DNS is being watched.
         cluster: config.ingress.peers !== `` ? `${peers.current().length} static peers` : config.fly.appName === `` ? `single machine` : `fly app ${config.fly.appName}`,
+        // And whether hosted sandboxes are replayed to their apps, which is the whole of how they are reached.
+        replay: config.hosted.appPrefix === `` ? `off (no HOSTED_APP_PREFIX)` : `apps ${config.hosted.appPrefix}-<id>`,
         internal: `${internalHost}:${config.ingress.internalPort}`,
         advertise: self.host === `` ? `(none)` : self.host,
     },

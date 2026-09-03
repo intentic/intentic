@@ -316,6 +316,11 @@ model HostedMachine {
     machineId String
     volumeId  String
     region    String
+    // Whether this machine came out of the warm pool (seconds to a working sandbox) or was built to order
+    // (minutes, the image pulled on first boot). Stored because nothing else records it any more: every app,
+    // pool-born or not, is named `<prefix>-<sandbox id>` (HostedPoolMachine below), and the setup wizard
+    // words its wait off this fact.
+    warm      Boolean  @default(false)
     // When the platform last STARTED this machine, and null once that stretch has been counted. The open end
     // of the awake interval the hour meter bills: the platform performs every wake, so it always knows when
     // running began — it is the STOP it never sees, since the machine puts itself to sleep from the inside
@@ -355,6 +360,16 @@ model HostedPoolMachine {
     region    String
     image     String
     state     String
+    /* THE IDENTITY THIS MACHINE WILL HAVE, minted at build rather than at claim: a connect token (encrypted
+     * exactly like Sandbox.token), whose 12-hex digest names the app (`<prefix>-<id>`, the same name a
+     * built-to-order machine gets). The claim adopts it into the Sandbox row it serves. It lives ONLY in this
+     * row until then: the machine's env gets it at claim, so a warm machine holds no secret while it waits.
+     *
+     * Minted early for the edge's sake. A hosted sandbox is reached by a Fly replay to its app, and the edge
+     * derives the app name from the id in the hostname with no lookup at all — which holds only if every
+     * hosted app is named after its sandbox's id, pool-born ones included, and Fly never renames an app.
+     * Empty on stock built before identities existed, which the reconcile collects as worthless. */
+    token     String   @default("")
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 

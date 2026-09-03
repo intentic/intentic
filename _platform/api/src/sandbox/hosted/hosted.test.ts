@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
+import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
-import { ensureReachability } from "../reachability.js";
 import { testIngressConfig } from "../../testing.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
@@ -59,6 +59,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
             ...overrides[`hostedPoolMachine`],
         },
         hostedMachine: { update: vi.fn().mockResolvedValue({}), ...overrides[`hostedMachine`] },
+        // The claim adopts the pool machine's identity onto the sandbox row inside the hand-off transaction.
+        sandbox: { update: vi.fn().mockResolvedValue({}), ...overrides[`sandbox`] },
     }) as unknown as OrpcContext[`prisma`];
 
 // `respond` receives the URL so a route can answer per app (the orphan sweep asks each app about its own
@@ -163,7 +165,9 @@ describe(`hostedInstanceId`, () => {
     // The credential never goes into the stamp: this is a label Fly stores in plaintext and shows to anyone
     // who can read the machine.
     it(`ignores the database's credentials, so the same server under two passwords is one deployment`, () => {
-        expect(hostedInstanceId(withDb(`postgresql://app:one@db:5432/intentic`))).toBe(hostedInstanceId(withDb(`postgresql://app:two@db:5432/intentic`)));
+        expect(hostedInstanceId(withDb(`postgresql://app:one@db:5432/intentic`))).toBe(
+            hostedInstanceId(withDb(`postgresql://app:two@db:5432/intentic`)),
+        );
     });
 
     it(`hands identity over when HOSTED_INSTANCE_ID says so`, () => {
@@ -177,13 +181,13 @@ describe(`provisionHosted`, () => {
     const args = {
         sandboxId: `s1`,
         connectToken: `t0k3n`,
-        // The reachability the route signs and hands down. Produced by the real thing rather than transcribed,
-        // so the env assertions below pin the HANDDOWN and not a shape somebody typed twice.
-        grant: ensureReachability(config(), { id: `s1`, token: `t0k3n` }),
         ownerEmail: `owner@example.com`,
         // The route decides this from the caller's country (region.test.ts covers the pick itself).
         region: `iad`,
     };
+    // The address a machine answers under is a pure derivation of its connect token, the same one the
+    // hostname builders and the edge's routing use.
+    const hostnameOf = (token: string): string => `sandbox-${sandboxIdFromToken(token)}.sbx.test`;
 
     it(`creates app → volume → machine and stamps the row; the env is the contract's vocabulary`, async () => {
         const created = vi.fn().mockResolvedValue({});
@@ -193,27 +197,44 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
         ]);
         const result = await provisionHosted(fakePrisma({ hostedMachine: { create: created } }) as never, config(), logger, args);
-        expect(result.region).toBe(`iad`);
-        expect(result.appName.startsWith(`intentic-sbx-`)).toBe(true);
+        expect(result).toEqual({ appName: `intentic-sbx-${sandboxIdFromToken(`t0k3n`)}`, region: `iad`, warm: false });
         const machine = calls.find((entry) => entry.url.includes(`/machines`))?.body as {
-            config: { env: Record<string, string>; mounts: { volume: string }[]; metadata: Record<string, string> };
+            config: {
+                env: Record<string, string>;
+                mounts: { volume: string }[];
+                metadata: Record<string, string>;
+                services: { internal_port: number }[];
+                checks: Record<string, { headers: { name: string; values: string[] }[] }>;
+            };
         };
         expect(machine.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
         // The platform stamp rides with the role: it is what lets THIS deployment's reaper tell its own
         // machines from those of anything else sharing the Fly org and credential (fly.ts, hosted.ts).
         expect(machine.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
-        // The pair the daemon reads to open its outbound tunnel, in the contract's own vocabulary.
-        expect(machine.config.env[`SANDBOX_GRANT`]).toBe(args.grant.grant);
-        expect(machine.config.env[`INGRESS_URL`]).toBe(`https://ingress.sbx.test`);
-        expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${args.grant.hostname}`);
+        expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${hostnameOf(`t0k3n`)}`);
+        /* NO TUNNEL. A hosted machine is reached by the edge replaying to its app, so the env carries neither
+         * a grant nor an edge to dial: the two names every pasted run reads are absent here, on purpose. */
+        expect(machine.config.env[`SANDBOX_GRANT`]).toBeUndefined();
+        expect(machine.config.env[`INGRESS_URL`]).toBeUndefined();
+        // …and the front door is declared instead, checked under the hostname the replay arrives with.
+        expect(machine.config.services.map((service) => service.internal_port)).toEqual([5173]);
+        expect(machine.config.checks[`front-door`]?.headers).toEqual([{ name: `Host`, values: [hostnameOf(`t0k3n`)] }]);
         expect(machine.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(machine.config.env[`IDLE_STOP_MINUTES`]).toBe(`20`);
         expect(machine.config.env[`SANDBOX_VM`]).toBe(`1`);
         // `wokeAt` opens the hour meter's first stretch: the machine is running from the moment it is made,
         // so provisioning starts the clock rather than handing out an uncounted first session.
         expect(created).toHaveBeenCalledWith({
-            data: { sandboxId: `s1`, appName: result.appName, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: expect.any(Date) },
+            data: {
+                sandboxId: `s1`,
+                appName: result.appName,
+                machineId: `m1`,
+                volumeId: `vol_1`,
+                region: `iad`,
+                warm: false,
+                wokeAt: expect.any(Date),
+            },
         });
     });
 
@@ -229,16 +250,23 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
-    // A warm machine matching the caller's region: identity written in (the SAME composer the cold path
-    // uses, so nothing can drift), no-op override written out, machine started, hour meter opened at claim.
+    /* A warm machine matching the caller's region: ITS identity written in (the SAME composer the cold path
+     * uses, so nothing can drift), no-op override written out, machine started, hour meter opened at claim.
+     * The pool machine was named after a token minted when it was built; secrets.key is empty in these
+     * fixtures, so the stored token is the plaintext one. */
+    const POOL_TOKEN = `p00l-t0k3n`;
+    const POOL_APP = `intentic-sbx-${sandboxIdFromToken(POOL_TOKEN)}`;
+    const SECOND_TOKEN = `p00l-t0k3n-2`;
+    const SECOND_APP = `intentic-sbx-${sandboxIdFromToken(SECOND_TOKEN)}`;
     const poolRow = {
         id: `p1`,
-        appName: `intentic-sbx-pool-abc123`,
+        appName: POOL_APP,
         machineId: `m7`,
         volumeId: `vol_7`,
         region: `iad`,
         image: `ghcr.io/intentic/sandbox:stable`,
         state: `ready`,
+        token: POOL_TOKEN,
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -246,6 +274,7 @@ describe(`provisionHosted`, () => {
     it(`claims a warm machine when one is waiting: brands it, starts it, and opens the meter at claim`, async () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
+        const adopt = vi.fn().mockResolvedValue({});
         const updateMany = vi.fn().mockResolvedValue({ count: 1 });
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([
@@ -256,9 +285,10 @@ describe(`provisionHosted`, () => {
         const prisma = fakePrisma({
             hostedMachine: { create: created },
             hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow]), updateMany, delete: poolDelete },
+            sandbox: { update: adopt },
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
-        expect(result).toEqual({ appName: `intentic-sbx-pool-abc123`, region: `iad` });
+        expect(result).toEqual({ appName: POOL_APP, region: `iad`, warm: true });
         // The row was WON, not just read: the guarded update is what keeps two claimers off one machine.
         expect(updateMany).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
         // The identity goes in before the machine ever runs the sandbox, and the no-op boot override goes out.
@@ -266,12 +296,20 @@ describe(`provisionHosted`, () => {
             config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[]; metadata: Record<string, string> };
             skip_launch?: boolean;
         };
-        // The stamp flips with the identity, in the same call: the app name will say `pool` forever, so this
-        // is the only thing that can tell Fly this machine stopped being the platform's stock.
+        // The stamp flips with the identity, in the same call: pool-born and built-to-order apps are named
+        // alike, so this is the only thing that can tell Fly this machine stopped being the platform's stock.
         expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
-        expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
+        /* THE MACHINE'S IDENTITY, NOT THE ROW'S. The app was named after a token minted at build, and the edge
+         * replays `sandbox-<id>` to the app named `<prefix>-<id>` with no lookup, so the sandbox served by
+         * this machine has to become the sandbox whose hostname carries this machine's id. */
+        expect(update.config.env[`CONNECT_TOKEN`]).toBe(POOL_TOKEN);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
-        expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${args.grant.hostname}`);
+        expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${hostnameOf(POOL_TOKEN)}`);
+        // …and the row is told, in the same transaction as the hand-off: token, digest and id together.
+        expect(adopt).toHaveBeenCalledWith({
+            where: { id: `s1` },
+            data: { token: POOL_TOKEN, tokenDigest: sha256Hex(POOL_TOKEN), tunnelId: sandboxIdFromToken(POOL_TOKEN) },
+        });
         expect(update.config.init).toBeUndefined();
         expect(update.config.mounts).toEqual([{ volume: `vol_7`, path: `/data` }]);
         // The branding call IS the launch. Holding it back (skip_launch) and starting afterwards raced Fly's
@@ -285,10 +323,11 @@ describe(`provisionHosted`, () => {
         expect(created).toHaveBeenCalledWith({
             data: {
                 sandboxId: `s1`,
-                appName: `intentic-sbx-pool-abc123`,
+                appName: POOL_APP,
                 machineId: `m7`,
                 volumeId: `vol_7`,
                 region: `iad`,
+                warm: true,
                 wokeAt: expect.any(Date),
             },
         });
@@ -328,7 +367,7 @@ describe(`provisionHosted`, () => {
             },
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
-        expect(result).toEqual({ appName: `intentic-sbx-pool-abc123`, region: `iad` });
+        expect(result).toEqual({ appName: POOL_APP, region: `iad`, warm: true });
         // No cold build was touched, and the hand-off committed: the reader owns the warm machine.
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
         expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m7` }) }));
@@ -348,7 +387,8 @@ describe(`provisionHosted`, () => {
         await provisionHosted(prisma as never, config(), logger, { ...args, region: `arn` });
         // The pool was asked ONLY for the caller's region (and the current image): never "anything warm".
         expect(findMany).toHaveBeenCalledWith({
-            where: { region: `arn`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable` },
+            // …and only for stock that has an identity: a row with none names no app the edge could reach.
+            where: { region: `arn`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable`, NOT: { token: `` } },
             orderBy: { createdAt: `asc` },
         });
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
@@ -375,7 +415,7 @@ describe(`provisionHosted`, () => {
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
         expect(result.appName.startsWith(`intentic-sbx-`)).toBe(true);
-        expect(result.appName).not.toBe(`intentic-sbx-pool-abc123`);
+        expect(result.appName).not.toBe(POOL_APP);
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
         // The won row is NOT put back: a half-branded machine already carries this sandbox's tokens, so it
         // stays `claimed` for the reconcile job to collect rather than becoming someone else's "warm" machine.
@@ -396,7 +436,7 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8/start`), respond: () => secondMachine.start() },
             { match: (method, url) => method === `GET` && url.includes(`/machines/m8`), respond: () => secondMachine.read() },
         ]);
-        const second = { ...poolRow, id: `p2`, appName: `intentic-sbx-pool-def456`, machineId: `m8`, volumeId: `vol_8` };
+        const second = { ...poolRow, id: `p2`, appName: SECOND_APP, machineId: `m8`, volumeId: `vol_8`, token: SECOND_TOKEN };
         const prisma = fakePrisma({
             hostedMachine: { create: created },
             hostedPoolMachine: {
@@ -407,7 +447,7 @@ describe(`provisionHosted`, () => {
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
         // The reader gets the SECOND warm machine, in seconds, and the cold path is never touched.
-        expect(result).toEqual({ appName: `intentic-sbx-pool-def456`, region: `iad` });
+        expect(result).toEqual({ appName: SECOND_APP, region: `iad`, warm: true });
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m8/start`))).toBe(true);
         expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m8` }) }));
@@ -435,7 +475,7 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
             { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
         ]);
-        const second = { ...poolRow, id: `p2`, appName: `intentic-sbx-pool-def456`, machineId: `m8`, volumeId: `vol_8` };
+        const second = { ...poolRow, id: `p2`, appName: SECOND_APP, machineId: `m8`, volumeId: `vol_8`, token: SECOND_TOKEN };
         const claim = vi.fn().mockResolvedValue({ count: 1 });
         const prisma = fakePrisma({
             hostedMachine: {
@@ -734,7 +774,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const prisma = fakePrisma({
             sandbox: {
                 findFirst: vi.fn().mockResolvedValue(ownedRow),
-                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, appName: `intentic-sbx-pool-abc123` } }),
+                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: true } }),
             },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-pool-abc123`, machineId: `m1` }), count: vi.fn() },
         });
@@ -763,7 +803,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const prisma = fakePrisma({
             sandbox: {
                 findFirst: vi.fn().mockResolvedValue(ownedRow),
-                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, appName: `intentic-sbx-pool-abc123` } }),
+                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: true } }),
                 update: vi.fn().mockResolvedValue(ownedRow),
             },
             hostedMachine: {
@@ -875,7 +915,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const prisma = fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
             hostedMachine: {
-                findUnique: vi.fn().mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null }),
+                findUnique: vi
+                    .fn()
+                    .mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null }),
                 create: machineCreate,
                 delete: rowDelete,
                 update: vi.fn().mockResolvedValue({}),
@@ -905,7 +947,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const prisma = fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
             hostedMachine: {
-                findUnique: vi.fn().mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null }),
+                findUnique: vi
+                    .fn()
+                    .mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null }),
                 delete: rowDelete,
                 update: vi.fn().mockResolvedValue({}),
             },

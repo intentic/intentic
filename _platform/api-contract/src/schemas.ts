@@ -493,10 +493,11 @@ export interface PlanStreamEvent {
 
 // A sandbox as the browser sees it. `token` is the tunnel-hostname seed + the daemon's first-bind secret;
 // `daemonUrl` + `lastSeenAt` (ISO) are reported by the daemon's announce, null until it first phones home.
-// `role` is the caller's relationship to it (owner can manage access; member has access only). `providedTunnel`
-// is server-computed: the reported daemonUrl lives under intentic's own zone (an intentic-provided tunnel), so
-// the infra operator panel knows to mint host tunnels via the daemon's relay (POST /sandbox/host-tunnel) instead
-// of asking for the user's Cloudflare token. `setupCodeClaimedAt` (ISO) is when a machine last redeemed the
+// `role` is the caller's relationship to it (owner can manage access; member has access only). `providedAddress`
+// is server-computed: the reported daemonUrl lives under intentic's own zone (an address the platform made
+// reachable, by tunnel or by replay to a hosted machine), so the infra operator panel knows to mint host tunnels
+// via the daemon's relay (POST /sandbox/host-tunnel) instead of asking for the user's Cloudflare token.
+// `setupCodeClaimedAt` (ISO) is when a machine last redeemed the
 // sandbox's CURRENT setup code, the setup wizard's only evidence that the pasted command actually ran, which
 // is what lets it stop showing a spinner at someone who has not opened a terminal yet. sandbox.list returns
 // owned ∪ shared.
@@ -659,7 +660,7 @@ export const SandboxSummarySchema = z.object({
     // one. What the web gates its affordances on; the daemon independently enforces the same tier as route
     // floors, so this is a rendering fact, never the security boundary.
     role: MemberRoleSchema,
-    providedTunnel: z.boolean(),
+    providedAddress: z.boolean(),
     /* THE NAME THIS SANDBOX'S LOOPBACK LISTENER IS CERTIFIED UNDER, or null where it cannot have one (no
      * connect token to derive an id from, or a platform with the loopback-certificate path switched off).
      *

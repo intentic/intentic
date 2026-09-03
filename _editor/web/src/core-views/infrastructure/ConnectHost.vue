@@ -38,7 +38,7 @@ const hostNameReady = computed(() => rawHostName.value === `` || canonicalHostNa
 /* The zone to create this host's tunnel in, derived client-side from the daemon URL: right when the sandbox is
  * behind the user's OWN domain (same account, same zone). A sandbox we connect answers under intentic's zone,
  * which the user's token cannot touch: pass no ZONE there and let the host resolve the token's own zone. */
-const zone = computed(() => (active.value?.providedTunnel === true ? undefined : zoneFromUrl(daemonUrl.value)));
+const zone = computed(() => (active.value?.providedAddress === true ? undefined : zoneFromUrl(daemonUrl.value)));
 
 const commandReady = computed(() => {
     if (active.value === undefined) {
@@ -181,8 +181,8 @@ onUnmounted(() => clearInterval(timer));
             <div v-if="commandReady" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="text-info" spin />
                 <span
-                    >Waiting for machines to register: each appears in your server list as you connect it. Re-run the command on each host you want
-                    to add.</span
+                    >Waiting for machines to register: each appears in your server list as you connect it. Re-run the command on each host you want to
+                    add.</span
                 >
             </div>
         </form>

@@ -46,7 +46,7 @@ The parts where a bug is most likely to matter to someone other than the operato
 | `_sandbox/sandbox/src/secrets` | credential storage and the redaction that keeps secrets out of transcripts |
 | `_sandbox/sandbox/src/guard` | the admission floor, the in-turn command and outbound gates, and the envelope that marks content the owner did not write |
 | `_computers/machine` | the one agent behind the connect-this-computer and desktop-sync install commands, and the tunnel it opens |
-| `_platform/ingress` | the edge every sandbox is reached through: it terminates TLS, verifies the signed grant a sandbox presents when it dials in, and routes each request to a tunnel by hostname |
+| `_platform/ingress` | the edge every sandbox is reached through: it verifies the signed grant a sandbox presents when it dials in, routes each request to a tunnel by hostname, and for a hosted sandbox tells Fly's proxy which app to deliver the request to |
 | `_editor/desktop-app` | the installer and auto-updater |
 | `_platform/api` · `_editor/web` | the hosted platform: identity and the browser workspace |
 | `_extensions/*` | anything that reaches a third-party system with the operator's credentials |
@@ -59,13 +59,14 @@ listener or Front Desk message, a fetched page, a foreign MCP server's result: t
 `<untrusted-content>` envelope, or a way for such content to forge or escape one.
 
 At the **edge**, the interesting findings are the ones that cross between sandboxes: a request whose `Host`
-carries one sandbox's id being served down another's tunnel, a tunnel that registers without a validly signed
-reachability grant, or a way to displace a live sandbox's tunnel without holding its grant. Two things that
-are deliberate and therefore not findings on their own: the edge terminates TLS under one wildcard
-certificate, so it handles plaintext requests and is a trusted hop by construction; and the platform can mint
-a sandbox's reachability grant and revoke it (deleting the sandbox row is the revocation). What the platform
-must NOT be able to do is act as the sandbox: it holds no credential the daemon accepts, so a path that lets
-the platform — or anyone holding a grant — answer a daemon call as its owner is a finding.
+carries one sandbox's id being served down another's tunnel or replayed to another's app, a tunnel that
+registers without a validly signed reachability grant, or a way to displace a live sandbox's tunnel without
+holding its grant. Two things that are deliberate and therefore not findings on their own: TLS terminates at
+Fly's proxy under one wildcard certificate, so the edge and a hosted machine's front door both handle
+plaintext requests and the proxy is a trusted hop by construction; and the platform can mint a sandbox's
+reachability grant and revoke it (deleting the sandbox row is the revocation). What the platform must NOT be
+able to do is act as the sandbox: it holds no credential the daemon accepts, so a path that lets the platform
+— or anyone holding a grant — answer a daemon call as its owner is a finding.
 
 On the platform side: anything that would let it reach a user's code or credentials, which
 [ARCHITECTURE.md](ARCHITECTURE.md) argues it structurally cannot: except for **hosted** sandboxes, where the

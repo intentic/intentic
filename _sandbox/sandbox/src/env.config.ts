@@ -156,9 +156,21 @@ const configSchema = z.object({
             host: z.string().default("0.0.0.0"),
             // This sandbox's public URL (set by connect.{sh,ps1} after the tunnel is created).
             publicUrl: z.string().default(""),
+            /* IS THIS DAEMON THE WHOLE MACHINE (SANDBOX_VM): a Fly microVM the platform runs, rather than a
+             * container on somebody's computer. The entrypoint reads the same switch to link /work and /history
+             * onto the machine's one volume; the daemon reads it for how it is REACHED. A hosted machine is on
+             * the internet already: the platform's edge answers requests for its hostname with a Fly replay to
+             * this app, so it dials no tunnel, and no browser can ever be on the same machine as it, so it
+             * orders no loopback certificate either (platform/local-cert.ts). Set only by the platform's
+             * provisioner (@intentic/sandbox-run fly.ts); every docker-run lane leaves it empty. */
+            vm: z
+                .string()
+                .default("")
+                .transform((value) => value === "true" || value === "1"),
             /* THE PLATFORM-SIGNED PROOF OF WHO THIS SANDBOX IS (SANDBOX_GRANT), presented on the tunnel
-             * upgrade and nowhere else. Every lane that can make a sandbox reachable puts it here: the setup
-             * code's payload, the compose file, a hosted machine's env.
+             * upgrade and nowhere else. Every lane that can make a sandbox reachable over a tunnel puts it
+             * here: the setup code's payload, the compose file. A hosted machine's env does not: it is reached
+             * by replay, not by a tunnel, and holds no grant at all.
              *
              * It is a capability, so it is marked secret — but it is a narrow one, and worth being precise
              * about: it says "the bearer is sandbox <id>" and buys exactly one thing, the right to serve that

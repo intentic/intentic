@@ -30,7 +30,7 @@ import { sha256Hex } from "../workspace/contentHash";
 // connection watchdog: this must resolve inside the time the tunnel would have taken to answer anyway.
 const PROBE_TIMEOUT_MS = 1500;
 
-/* Where a daemon call goes. `tunnel` is the sandbox's public URL (the platform's registry value, and the only
+/* Where a daemon call goes. `public` is the sandbox's public URL (the platform's registry value, and the only
  * address that works from anywhere); the other two are the same loopback port, differing only in what the
  * daemon managed to serve on it.
  *
@@ -50,7 +50,7 @@ const PROBE_TIMEOUT_MS = 1500;
  * public internet, and the tunnel needs the internet outright. When the owner's connection drops, both go with
  * it and plain loopback is the only thing still standing between the browser and a daemon on the same machine.
  * That, and only that, is when it is chosen — see candidatesFor for what ranking it any higher cost. */
-export type EndpointKind = "local" | "local-insecure" | "tunnel";
+export type EndpointKind = "local" | "local-insecure" | "public";
 
 export interface Endpoint {
     readonly kind: EndpointKind;
@@ -131,7 +131,7 @@ export const certifiedLoopbackUrl = (sandboxId: string, hostname: string | null 
  * Without a connect token there is no id, hence no derivable port and no local candidate at all; a sandbox on
  * a machine the platform placed elsewhere has nothing to reach for either. Both collapse to the tunnel. */
 export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> => {
-    const tunnel: Endpoint = { kind: `tunnel`, base: sandbox.daemonUrl };
+    const tunnel: Endpoint = { kind: `public`, base: sandbox.daemonUrl };
     if (sandbox.token === undefined || sandbox.token === `` || !couldBeOnThisMachine(sandbox)) {
         return [tunnel];
     }
@@ -218,7 +218,7 @@ export const healthAnswers = async (
  * the credential layer asks it too, of an address it has already chosen (sandboxSession), and it is not
  * choosing between candidates when it does. */
 export const probeEndpoint = (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> =>
-    healthAnswers(endpoint.base, expectedSandboxId, endpoint.kind === `tunnel` ? TUNNEL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS, fetchImpl);
+    healthAnswers(endpoint.base, expectedSandboxId, endpoint.kind === `public` ? TUNNEL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS, fetchImpl);
 
 /* The first candidate that answers as the sandbox we mean, with the tunnel as the floor under all of them: it
  * is the registry's own address, so a sandbox whose every probe failed is still addressable rather than broken.
@@ -232,7 +232,7 @@ export const selectEndpoint = async (sandbox: Addressing, fetchImpl: typeof fetc
     const candidates = await candidatesFor(sandbox);
     const expected = sandbox.token === undefined || sandbox.token === `` ? `` : await sandboxIdOf(sandbox.token);
     for (const [index, candidate] of candidates.entries()) {
-        if (candidate.kind === `tunnel` && index === candidates.length - 1) {
+        if (candidate.kind === `public` && index === candidates.length - 1) {
             return candidate;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are ORDERED preferences: probing the rest in parallel would spend requests on addresses we would discard anyway
@@ -240,5 +240,5 @@ export const selectEndpoint = async (sandbox: Addressing, fetchImpl: typeof fetc
             return candidate;
         }
     }
-    return { kind: `tunnel`, base: sandbox.daemonUrl };
+    return { kind: `public`, base: sandbox.daemonUrl };
 };

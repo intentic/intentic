@@ -78,3 +78,56 @@ describe(`createRevocation`, () => {
         expect(fetchImpl).toHaveBeenCalledTimes(0);
     });
 });
+
+/* THE LANE, for a hostname no tunnel holds: the same question asked for the replay decision (server.ts), so it
+ * rides the same cache and the same fail-open. */
+describe(`createRevocation lookup`, () => {
+    const answeringWith = (body: unknown, status = 200): typeof fetch =>
+        vi.fn(() =>
+            Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } })),
+        ) as unknown as typeof fetch;
+
+    test(`reads the lane and the app the platform names`, async () => {
+        const revocation = createRevocation({
+            platformUrl: `https://api.example.test`,
+            fetchImpl: answeringWith({ ok: true, lane: `hosted`, app: `intentic-sbx-abcdef012345` }),
+        });
+        await expect(revocation.lookup(`abcdef012345`)).resolves.toEqual({ exists: true, lane: `hosted`, app: `intentic-sbx-abcdef012345` });
+    });
+
+    test(`reads a tunnel-lane sandbox as one with nothing to replay to`, async () => {
+        const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: answeringWith({ ok: true, lane: `tunnel` }) });
+        await expect(revocation.lookup(`abcdef012345`)).resolves.toEqual({ exists: true, lane: `tunnel` });
+    });
+
+    // An older platform answers `{ ok: true }` and nothing else: the sandbox exists, on a lane it will not name.
+    test(`treats an answer that names no lane as existing on an unknown lane`, async () => {
+        const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: answeringWith({ ok: true }) });
+        await expect(revocation.lookup(`abcdef012345`)).resolves.toEqual({ exists: true });
+    });
+
+    test(`answers gone for a 404, and unknown-but-existing when the platform cannot be asked`, async () => {
+        await expect(
+            createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: answeringWith({}, 404) }).lookup(`abcdef012345`),
+        ).resolves.toEqual({ exists: false });
+        const down = vi.fn(() => Promise.reject(new Error(`ECONNREFUSED`))) as unknown as typeof fetch;
+        await expect(createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: down }).lookup(`abcdef012345`)).resolves.toEqual({
+            exists: true,
+        });
+    });
+
+    // One answer serves both callers: a registration and a replay decision inside the TTL cost one request.
+    test(`shares its cache with the registration gate`, async () => {
+        const fetchImpl = answeringWith({ ok: true, lane: `hosted` });
+        const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl });
+        await revocation.lookup(`abcdef012345`);
+        await expect(revocation.allows(`abcdef012345`)).resolves.toBe(true);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    test(`answers unknown-but-existing with no platform configured, asking nobody`, async () => {
+        const fetchImpl = answeringWith({});
+        await expect(createRevocation({ platformUrl: ``, fetchImpl }).lookup(`abcdef012345`)).resolves.toEqual({ exists: true });
+        expect(fetchImpl).not.toHaveBeenCalled();
+    });
+});

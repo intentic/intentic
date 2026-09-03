@@ -17,7 +17,7 @@ const row = (over: Partial<SandboxSummary>): SandboxSummary =>
         setupCodeClaimedAt: null,
         token: `tok`,
         role: `owner`,
-        providedTunnel: false,
+        providedAddress: false,
         hosted: null,
         ...over,
     }) as SandboxSummary;

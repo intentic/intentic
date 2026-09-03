@@ -26,7 +26,12 @@ const push = vi.fn();
 const query = ref<Record<string, string>>({});
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ get query() { return query.value; } }) as never,
+    useRoute: () =>
+        ({
+            get query() {
+                return query.value;
+            },
+        }) as never,
     useRouter: () => ({ push, replace: vi.fn() }) as never,
     // "Back to workspace" is a link now, and the real one resolves its href out of a router this bare mount
     // never installs.
@@ -140,7 +145,7 @@ const sandboxRow = (overrides: Partial<SandboxSummary> = {}): SandboxSummary =>
         setupCodeClaimedAt: null,
         token: `tok`,
         role: `owner`,
-        providedTunnel: false,
+        providedAddress: false,
         hosted: null,
         ...overrides,
     }) as SandboxSummary;

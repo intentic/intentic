@@ -989,10 +989,13 @@ conversation's worktree instead of a path that still reaches the shared checkout
   run plus 50 ended runs and removes a run's artifacts when that record is evicted or forgotten.
 - **The hosted flavor** (`SANDBOX_VM=1`) runs this image as a whole microVM the platform created, with one
   persistent volume standing in for the three docker ones (the entrypoint's VM mode links `/work`, `/history`
-  and dockerd's data-root onto it: layout in `@intentic/sandbox-run/fly`). Two stated deviations from the
-  container flavor: the whole box is the platform's machine rather than the user's (so its reachability grant
-  is necessarily within the agent's reach: its scope is this sandbox's own address and nothing else), and the
-  daemon **stops itself when idle** (`IDLE_STOP_MINUTES` →
+  and dockerd's data-root onto it: layout in `@intentic/sandbox-run/fly`). Three stated deviations from the
+  container flavor: the whole box is the platform's machine rather than the user's; it is **reached directly**
+  rather than through a tunnel it dials (the platform's edge replays requests for its hostname to the Fly app
+  it is, and Fly's proxy lands them on the preview proxy, the same front door a tunnel would; so its env
+  carries no grant, `startIngressTunnelWhenConfigured` logs the posture and dials nothing, no loopback
+  certificate is ordered since no browser can ever be on the same machine, and `/health` says `reachedBy:
+  "direct"`); and the daemon **stops itself when idle** (`IDLE_STOP_MINUTES` →
   `src/system/idle-stop.ts`: nobody connected, no turn, no live delegate, no armed condition watch, no terminal
   output for the window → the graceful exit, so the machine stops and the platform wakes it on the next visit). The corollary worth
   knowing: scheduled automations run only while the box is awake. Nested dockerd needs no privilege directive

@@ -116,8 +116,9 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
 // Shape a sandbox row for the browser. `role` is the caller's relationship, owner rows drive management, member
 // rows are access-only. token + daemonUrl are what the browser needs to reach the daemon directly (the stored
 // token is encrypted at rest, so it is decrypted here); daemonUrl + lastSeenAt come from the daemon's announce.
-// `providedTunnel` flags a daemonUrl under the platform's own tunnel zone, the browser reads it to tell a
-// sandbox we made reachable from one the owner attached behind a domain of their own.
+// `providedAddress` flags a daemonUrl under the platform's own zone, the browser reads it to tell a sandbox we
+// made reachable (through the edge, by tunnel or by replay) from one the owner attached behind a domain of
+// their own.
 // `setupCodeClaimedAt` rides along for the setup wizard: it is the platform's only evidence that the pasted
 // command reached a machine, and the wizard's wait reads very differently before and after it.
 const toSummary = (
@@ -135,7 +136,7 @@ const toSummary = (
         // rename or an announce can never silently strip the hosted badge from the browser's row. Optional
         // (not just nullable) as the same shield the report parse below gives rows from before a schema
         // existed: a caller that skipped the include reads as "not hosted", never as a crash.
-        hosted?: { region: string; appName: string } | null;
+        hosted?: { region: string; warm: boolean } | null;
         token: string;
     },
     role: MemberRole,
@@ -164,16 +165,10 @@ const toSummary = (
         hosted:
             sandbox.hosted === null || sandbox.hosted === undefined
                 ? null
-                : {
-                      region: sandbox.hosted.region,
-                      // The app name already records the machine's origin (`<prefix>-pool-<hex>` for a pool
-                      // claim, `<prefix>-<sandbox id>` built to order, the HostedMachine model documents
-                      // this), so "warm" is read off it rather than stored twice.
-                      warm: sandbox.hosted.appName.includes(`-pool-`),
-                  },
+                : { region: sandbox.hosted.region, warm: sandbox.hosted.warm },
         token: decryptSecret(context.config, sandbox.token),
         role,
-        providedTunnel: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
+        providedAddress: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
         /* Derived from the LOOPBACK zone, never from `daemonUrl`: those are two different zones now, and
          * conflating them is what took the certified shortcut down (see the schema). Null where the platform
          * runs no loopback-certificate path at all, which the browser reads as "no local candidate". */
@@ -308,10 +303,12 @@ export const sandboxRoutes = {
      * on arrival, and taking this lane moves a MACHINE, never the sandbox, so stepping off it onto the
      * reader's own computer keeps the name and address they already have.
      *
-     * The tunnel comes first (already claimed from the pool by `create`, else provisioned here) because the
-     * machine env must carry the connector token and public URL; then the machine is created and the daemon's
-     * ordinary announce narrates the rest to the waiting browser, exactly as a pasted run's does. OWNER_EMAIL
-     * seeds the daemon's first-bind exactly like setupCode's payload: only this Google identity may bind.
+     * The machine's env carries the connect token and the public URL, then the daemon's ordinary announce
+     * narrates the rest to the waiting browser, exactly as a pasted run's does. No grant and no tunnel: a
+     * hosted machine is reached by the edge replaying to its app (hosted.ts). A warm claim hands the sandbox
+     * the MACHINE's identity — the row's token, digest and id change under it — which is why the browser is
+     * answered with the row re-read after provisioning rather than the one it arrived with. OWNER_EMAIL seeds
+     * the daemon's first-bind exactly like setupCode's payload: only this Google identity may bind.
      *
      * Idempotent, a sandbox that already has a machine answers with itself rather than growing a second one,
      * so a double-click or a retry after a slow response costs nothing. A FAILURE leaves the sandbox exactly
@@ -332,15 +329,10 @@ export const sandboxRoutes = {
         if (!ingressEnabled(context.config)) {
             throw new ORPCError(`NOT_FOUND`, { message: `this platform has no reachability fabric configured` });
         }
-        // The machine's env must carry the sandbox's grant, so it is minted before the machine exists — the
-        // same ordering the tunnel had, except that this is now a signature rather than a provider round trip,
-        // so it cannot fail in a way the reader could act on and needs no gateway-error wrapper of its own.
-        const grant = ensureReachability(context.config, sandbox);
         try {
             await provisionHosted(context.prisma, context.config, context.logger, {
                 sandboxId: sandbox.id,
                 connectToken: decryptSecret(context.config, sandbox.token),
-                grant,
                 ownerEmail: user.email.toLowerCase(),
                 region: hostedRegionFor(context.config.hosted, context.headers),
             });
@@ -456,11 +448,9 @@ export const sandboxRoutes = {
             });
         }
         try {
-            const grant = ensureReachability(context.config, sandbox);
             const args = {
                 sandboxId: sandbox.id,
                 connectToken: decryptSecret(context.config, sandbox.token),
-                grant,
                 ownerEmail: user.email.toLowerCase(),
                 region: hosted.region,
             };

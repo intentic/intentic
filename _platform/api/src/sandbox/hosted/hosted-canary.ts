@@ -4,7 +4,6 @@ import { sleep as pause } from "@intentic/base/async";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { mintSandbox } from "../mint-sandbox.js";
-import { ensureReachability } from "../reachability.js";
 import { JOB_HOSTED_CANARY, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { destroyHosted, hostedEnabled, provisionHosted } from "./hosted.js";
@@ -128,18 +127,14 @@ export const runHostedCanary = async (
     const { token, sandbox } = await mintSandbox(prisma, config, { name: canarySandboxName, ownerId });
     const startedAt = Date.now();
     try {
-        const grant = ensureReachability(config, sandbox);
-        const { appName } = await provisionHosted(prisma, config, logger, {
+        const { warm } = await provisionHosted(prisma, config, logger, {
             sandboxId: sandbox.id,
             connectToken: token,
-            grant,
             ownerEmail: email,
             // The default region: the canary proves the lane, and a per-region proof is what the pool's own
             // stock check (hosted-health.ts) is for.
             region: config.hosted.region,
         });
-        // A pool claim keeps its pool app name for life, which is also how the wizard knows what to promise.
-        const warm = appName.startsWith(`${config.hosted.appPrefix}-pool-`);
         const announced = await waitForAnnounce(prisma, sandbox.id, DEADLINE_MS, sleep);
         const announcedInMs = Date.now() - startedAt;
         return announced

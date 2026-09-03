@@ -5,11 +5,11 @@ import { hostedEnabled } from "./hosted.js";
 
 /* WHAT IS ACTUALLY ON FLY, said in one screen, the operator's view the Fly console cannot give.
  *
- * The console lists apps by name, and a warm machine's name (`<prefix>-pool-<hex>`) is minted before anybody
- * has asked for it and can never change, so the moment a claim brands that app it is somebody's sandbox still
- * wearing a pool name. Reading the org's app list is therefore reading a story that stopped being true. The
- * platform's own rows never stop being true. HostedPoolMachine IS the standing stock, HostedMachine IS a
- * person's machine, so this joins Fly's list of what exists against them and names every app.
+ * The console lists apps by name, and every hosted app is named `<prefix>-<sandbox id>` — warm stock included,
+ * since its id is minted at build (hosted-pool.ts) and Fly never renames an app — so the org's app list says
+ * nothing about which apps are anybody's. The platform's own rows do. HostedPoolMachine IS the standing stock,
+ * HostedMachine IS a person's machine, so this joins Fly's list of what exists against them and names every
+ * app.
  *
  * Four things an app can be, and each is worth telling apart:
  *   warm    , built ahead of demand, nobody's, safe to destroy.
