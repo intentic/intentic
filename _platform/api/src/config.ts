@@ -164,8 +164,23 @@ export const configSchema = z.object({
              * capped the guest shape stops being the bill's driver, a capped month on this shape costs less
              * than the DISK did on the 4×/8 GB/20 GB box this replaces, so the money saved by halving memory
              * again buys nothing and costs the thing people actually notice: 4 GB survives an install and a
-             * build on a real repository, 2 GB meets the OOM killer and reads as "intentic is broken". */
-            cpus: z.coerce.number().int().positive().default(2),
+             * build on a real repository, 2 GB meets the OOM killer and reads as "intentic is broken".
+             *
+             * THE CPU CUT IS THE ONE THAT WENT TOO FAR, and it is back at four. Memory at 4 GB was the right
+             * half of that trade; two shared vCPUs was not, because this box does not run one thing. The
+             * entrypoint puts cloudflared and a nested dockerd beside the daemon (SANDBOX_VM), and the
+             * daemon's hot path is git: a Changes review is ~11 spawns per repo, and a workspace write sets
+             * one off. On two shared vCPUs that work is not merely slow, it CROWDS OUT the event loop serving
+             * everything else, so an unrelated read behind it goes from ~300ms to seconds and creating one
+             * empty file reads as a ten-second hang. Measured against a hosted box over the tunnel: p50 314ms,
+             * p90 2.2s, p99 4.9s, against a ~126ms floor that is pure network.
+             *
+             * The daemon side of that was fixed too (git.routes.ts bounds how many repos are scanned at once,
+             * workspace/repo-watch.ts stopped re-walking the tree per reader), and this is the other half:
+             * bounding concurrency on a box with two shared vCPUs just means the bound is two. Four shared
+             * vCPUs is still the cheap end of Fly's shapes and still far under `monthlyHours` as the cost
+             * driver — the disk outlasts the awake time, and the awake time is what is capped. */
+            cpus: z.coerce.number().int().positive().default(4),
             memoryMb: z.coerce.number().int().positive().default(4096),
             volumeGb: z.coerce.number().int().positive().default(10),
             // Hosted sandboxes per user. The free promise is ONE instant box each; more is a product decision,

@@ -1,11 +1,13 @@
 import { access, writeFile } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { gitContract, type GitChange, type GitChanges, type OriginAgent, type RepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
-import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
+import { isValidRepoId } from "../workspace/repo-discovery.js";
+import { currentRepos } from "../workspace/repo-watch.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/workspace-files.js";
 import type { ActionResult } from "./changes.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./code-counts.js";
@@ -39,6 +41,40 @@ export const capRepoChanges = (
         unstaged: unstaged.length > unstagedBudget ? unstaged.slice(0, unstagedBudget) : unstaged,
         truncated: Math.max(0, staged.length - stagedBudget) + Math.max(0, unstaged.length - unstagedBudget),
     };
+};
+
+/* HOW MANY REPOS ARE SCANNED AT ONCE, and it is a FAIRNESS bound, not a throughput one.
+ *
+ * One repo's row of the review is ~11 git spawns. `Promise.all` over every candidate starts all of them at
+ * once, which on a workstation is free — the spawns are mostly waiting on a disk, and there are cores to spare
+ * — and on the two shared vCPUs a hosted sandbox is given it is the thing that stalls the daemon. A five-repo
+ * workspace becomes ~55 child processes competing for two vCPUs with the event loop that has to read their
+ * output, so every OTHER request in flight (the save the editor just issued, the tree, the /events stream)
+ * waits behind work nobody asked to prioritise. Measured against a hosted box from a browser, that is the
+ * difference between a 300ms read and a four-second one, and it is why a single empty file took ten seconds
+ * to create: the write itself was never slow, it was queued behind this.
+ *
+ * Bounding it costs the panel close to nothing. The scans were never completing faster than the machine could
+ * actually run them, so the scan's own wall clock is roughly what it was; what changes is that the daemon
+ * stays answerable while it works. Sized FROM the machine rather than fixed, because the same daemon runs on a
+ * sixteen-core laptop and on a 2-vCPU VM and no single number is right for both. */
+const SCAN_CONCURRENCY = Math.max(2, Math.min(8, availableParallelism()));
+
+/* `Promise.all` with a ceiling. Workers pull from one shared cursor, so a slow repo delays only itself rather
+ * than a whole wave, and results keep the INPUT's order — the panel's rows are ordered by repo, never by which
+ * scan happened to finish first. */
+const mapBounded = async <T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> => {
+    const results = Array.from({ length: items.length }) as R[];
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+        while (cursor < items.length) {
+            const index = cursor;
+            cursor += 1;
+            results[index] = await run(items[index] as T);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+    return results;
 };
 
 const exists = async (path: string): Promise<boolean> => {
@@ -303,7 +339,7 @@ export const createGitRoutes = (services: Services) => {
         services.agentOrigins.identify(new Set(repos.flatMap((scanned) => Object.values(scanned.origins ?? {}).flat())));
 
     const scanAll = async (): Promise<GitChanges> => {
-        const repoIds = await services.perf.track("git.discover", {}, () => discoverRepos(services.workspace.root));
+        const repoIds = await services.perf.track("git.discover", {}, () => currentRepos(services.workspace.root));
         // A Changes review right after a clone must not sweep the new repo's files into the root scope,
         // converge the root excludes on the repo set we're about to scan.
         await syncRootExcludes(services.config.historyRoot, repoIds);
@@ -312,16 +348,18 @@ export const createGitRoutes = (services: Services) => {
             ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
         ];
         scannedRepos = candidates.length;
-        // Each candidate is its own repo dir (own .git, no shared index.lock), so the scans run
-        // concurrently, the panel waits for the slowest repo, not the sum of all of them.
-        const scanned = await Promise.all(candidates.map((candidate) => scanRepo(candidate.repo, candidate.dir)));
+        // Each candidate is its own repo dir (own .git, no shared index.lock), so the scans run concurrently
+        // and the panel waits for the slowest repo rather than the sum of all of them — up to SCAN_CONCURRENCY
+        // at a time, which is what keeps the rest of the daemon answerable while this runs.
+        const scanned = await mapBounded(candidates, SCAN_CONCURRENCY, (candidate) => scanRepo(candidate.repo, candidate.dir));
         const repos = scanned.filter((repo) => repo !== undefined);
         const originAgents = identifyOrigins(repos);
         return { repos, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
     };
 
     // The panel refetches on every workspace-change batch, several times a second while a drop or a build lands,
-    // from every connected browser, and each scan is a full discoverRepos walk plus a `git status` per repo.
+    // from every connected browser, and each scan is ~11 git spawns per repo (the walk that used to sit in front
+    // of them is repo-watch.ts's memo now, shared with every other reader of the repo set).
     // Collapse them: callers arriving while a scan runs share it, and its result is reused for COALESCE_MS after it
     // settles, so a burst costs one scan instead of one per observer per batch. `reusableUntil` is 0 for the whole
     // time a scan is in flight, which is what makes the sharing (not just the caching) work.
@@ -380,9 +418,9 @@ export const createGitRoutes = (services: Services) => {
             return input.side === "conflicted" ? services.git.conflictedFileDiff(dir, input.path) : services.git.unstagedFileDiff(dir, input.path);
         }),
         // The git-history graph: every workspace repo (for the tree affordance + the graph's switcher), one
-        // repo's commit log, and lazy per-commit detail. "root" is implicit for the switcher; discoverRepos
-        // returns only the nested repos (the same set the Changes panel and history scopes use).
-        repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
+        // repo's commit log, and lazy per-commit detail. "root" is implicit for the switcher; the repo set
+        // holds only the nested repos (the same set the Changes panel and history scopes use).
+        repos: i.repos.handler(async () => ({ repos: await currentRepos(services.workspace.root) })),
         /* The same repos with the host + project their remote names. The workspace repo ("root") is deliberately
          * absent: it is the sandbox's own shadow repo over /work, not a project anybody publishes, and offering
          * it as somewhere to push a file would be offering to push the whole workspace.
@@ -390,7 +428,7 @@ export const createGitRoutes = (services: Services) => {
          * A repo whose remote cannot be read at all is skipped rather than reported as remote-less, the caller's
          * question is "which of these do I recognise", and a repo it cannot answer for does not belong in it. */
         remoteRepos: i.remoteRepos.handler(async () => {
-            const ids = await discoverRepos(services.workspace.root);
+            const ids = await currentRepos(services.workspace.root);
             const entries = await Promise.all(
                 ids.map(async (repo) => {
                     const found = await services.git.remoteProjectOf(join(services.workspace.root, repo)).catch(() => undefined);

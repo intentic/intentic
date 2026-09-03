@@ -463,7 +463,8 @@ reports the profile.
   later from roots that were safely under `/tmp`.
 - The four change feeds that keep the browser fresh without it ever asking twice, all riding the one `/events`
   stream: [src/workspace/workspace-watch.ts](src/workspace/workspace-watch.ts) (files),
-  [src/workspace/repo-watch.ts](src/workspace/repo-watch.ts) (the repo set),
+  [src/workspace/repo-watch.ts](src/workspace/repo-watch.ts) (the repo set, and the one memo of it every
+  reader shares — the discovery walk used to run again inside each Changes scan),
   [src/git/ref-watch.ts](src/git/ref-watch.ts) (refs), and
   [src/system/runtime-watch.ts](src/system/runtime-watch.ts): everything that is RUNNING rather than written:
   tmux sessions, panel dev servers, listening sockets, the agent's browsers and its subagents. The first three

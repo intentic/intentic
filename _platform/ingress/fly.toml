@@ -1,0 +1,67 @@
+# THE EDGE'S DEPLOYMENT, and the reason it is tracked here rather than living in somebody's shell history:
+# every value below is load-bearing, and three of them are the difference between "the workspace is quick" and
+# "the workspace hangs". The app name has to match the deployed app, because Fly injects FLY_APP_NAME and
+# src/peers.ts asks `<app>.internal` who the other machines are — that is the whole of peer discovery.
+#
+# ONE MACHINE PER REGION A SANDBOX CAN LAND IN. This is the invariant, and it is the one that was missing.
+# The platform places hosted machines in HOSTED_REGION and HOSTED_REGION_EU (_platform/api/src/config.ts:
+# `iad` and `arn`), while the edge ran as a single machine — so a European browser reached a European sandbox
+# by crossing to the ingress and back, twice, on every request. Measured from an EEA client against a healthy
+# hosted box: ~126ms to reach the edge before the sandbox was touched at all, against a ~40ms round trip to
+# the Fly PoP that answered. With a machine in each region anycast puts the browser on the near one, the
+# sandbox's tunnel lands on the same one, and src/cluster.ts's forward is not used at all in the common case.
+#
+# Regions are NOT expressible in this file (Fly removed the key); `fly scale count` places them, and README.md
+# ("Deploying") is the runbook. This file is the shape of a machine, not where they are.
+
+app = "intentic-ingress"
+primary_region = "iad"
+
+[build]
+  # Built and pushed by the `docker:release` turbo task, never by Fly. See Dockerfile.
+  image = "ghcr.io/intentic/ingress:latest"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # NEVER AUTO-STOP THIS. A stopped ingress machine is not a cold start, it is every tunnel it held dropping
+  # at once: each container notices, backs off, and redials somewhere else, and for that window its owner's
+  # workspace answers 502. The process holds live connections and nothing else, so there is nothing to scale
+  # to zero for and nothing to warm up — "started" and "ready" are the same moment (Dockerfile).
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    # CONNECTIONS, NOT REQUESTS, and this is the trap worth naming. Fly's default counts in-flight REQUESTS,
+    # and most of what this edge carries never finishes: one /events stream per open browser window, an attach
+    # per live agent turn, a terminal, a dev server's HMR socket. Counted as requests they are permanently
+    # in-flight, so a busy machine walks up to the hard limit and Fly's proxy stops routing to a process that
+    # is perfectly healthy. Counting connections is the honest unit for a proxy, and the numbers are high
+    # because a few hundred sandboxes with several windows each is an ordinary day, not a surge.
+    type = "connections"
+    soft_limit = 5000
+    hard_limit = 10000
+
+  [[http_service.checks]]
+    # /health is answered by the process itself (src/server.ts) with no tunnel, no platform call and no disk,
+    # so it proves exactly what a load balancer needs to know and nothing that could fail for someone else's
+    # reason. Deliberately NOT strict about tunnel count: a machine holding zero tunnels is a machine that was
+    # just deployed, not a broken one.
+    path = "/health"
+    method = "GET"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "5s"
+
+[[vm]]
+  # The edge carries bytes and holds sockets; it parses nothing bigger than a header and stores nothing at
+  # all. Memory is the resource that matters (h2 sessions cap at MAX_SESSION_MEMORY_MB=128 each, a ceiling
+  # rather than an allocation), CPU is not — which is the opposite of the sandbox machines it serves.
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+# Nothing here publishes INGRESS_INTERNAL_PORT (8081). The holds protocol trusts any peer discovery knows, and
+# discovery is the only lock on it: it binds FLY_PRIVATE_IP, which is unreachable from the internet by
+# construction. Publishing it would be handing the cluster's registry to anyone who found the port.

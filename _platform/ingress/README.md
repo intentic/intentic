@@ -56,6 +56,33 @@ Machines find each other on Fly through the app's own DNS (`<app>.internal`, pol
 
 A request that misses locally is handed to the holder over the private network with a hop header, and a hop-marked request that misses is a 502 — at most one hop, ever. A holder that turns out to be unreachable is forgotten on the spot. `fly scale count N` is the whole of the operator's part.
 
+## Deploying
+
+[fly.toml](fly.toml) is the shape of a machine. **Where** the machines are is not expressible there — Fly removed the key — so placement is `fly scale count`, and it is the part that has to be got right:
+
+> **One ingress machine in every region a hosted sandbox can land in.** Today that is `HOSTED_REGION` and `HOSTED_REGION_EU` (`iad` and `arn`, `_platform/api/src/config.ts`).
+
+```sh
+fly deploy --image ghcr.io/intentic/ingress:latest
+fly scale count 2 --region iad,arn        # one per hosted region; add a region here when the platform adds one
+fly secrets set INGRESS_PUBLIC_KEY="$(cat ingress.pub)" PLATFORM_URL=https://app.intentic.dev
+fly certs add '*.sbx.intentic.dev'        # the one wildcard every sandbox hostname is covered by
+```
+
+Adding a machine needs nothing else set: `FLY_APP_NAME`, `FLY_PRIVATE_IP` and `FLY_MACHINE_ID` are injected, the app's own DNS lists the machines, and [src/peers.ts](src/peers.ts) polls it.
+
+**Why the placement matters more than the count.** Anycast puts a browser on the machine nearest *it* and a sandbox's tunnel on the machine nearest *the sandbox*. When both are in the same region those are the same machine and the cluster's forward never runs. When the edge is a single machine on the wrong continent, every request from a European browser to a European sandbox crosses the Atlantic twice — measured at ~126 ms to reach the edge before the sandbox is touched at all, against a ~40 ms round trip to the Fly PoP that answered.
+
+**Verify with `/health`**, which is also how a single-machine deployment gives itself away:
+
+```jsonc
+{ "status": "ok", "tunnels": 5, "instance": "148e…", "peers": 1, "remote": 3 }
+```
+
+- `peers` is how many *other* machines discovery currently sees. **`0` on an app that has been scaled past one machine means discovery is broken**, and every request for a sandbox held next door is a 502.
+- `remote` is how many ids this machine would forward rather than serve. Persistently `0` alongside a healthy `peers` on a multi-region app is worth a look — it usually means one region is holding every tunnel.
+- An answer with **no `instance`/`peers`/`remote` fields at all** predates the cluster: that build is a single machine no matter how many you scale to.
+
 ## Conventions & gotchas
 
 - **Routing is per request, never per connection.** The edge terminates one wildcard certificate, and HTTP/2 browsers coalesce connections across every name it covers — one TCP connection can carry `sandbox-a…` and `preview-x-b…` interleaved. Routing a connection by its first `Host` would deliver one sandbox's requests to another.
