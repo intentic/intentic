@@ -46,7 +46,10 @@ const fail = (message, detail) => {
     process.exitCode = 1;
 };
 
-const browser = await chromium.launch();
+// The full chromium, headless, rather than Playwright's headless shell (playwright.config.ts says why the shell
+// is not on disk here). This check exists because the same request is answered 200 to curl and 400 to a real
+// Chromium, so the browser it drives should be the one a person gets, not the stripped shell.
+const browser = await chromium.launch({ channel: "chromium" });
 const page = await browser.newPage();
 const consoleErrors = [];
 page.on("console", (message) => {

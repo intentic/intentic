@@ -114,7 +114,9 @@ const record = async () => {
     rmSync(join(OUT, "raw"), { recursive: true, force: true });
     mkdirSync(join(OUT, "raw"), { recursive: true });
 
-    const browser = await chromium.launch({ args: ["--force-color-profile=srgb", "--font-render-hinting=none"] });
+    // `channel: chromium` is the full baked browser rather than the headless shell (../playwright.config.ts
+    // carries the reasoning), and it matters more here than anywhere: this take is the picture people watch.
+    const browser = await chromium.launch({ channel: "chromium", args: ["--force-color-profile=srgb", "--font-render-hinting=none"] });
     const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, recordVideo: { dir: join(OUT, "raw"), size: VIEWPORT } });
     // A chat wide enough to read a streaming turn from across a room: the panel is drag-resizable, so this is a
     // stored preference, not a special build. Written before the app boots, which is when useLayout reads it.

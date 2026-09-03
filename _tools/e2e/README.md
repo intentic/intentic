@@ -26,6 +26,13 @@ Requirements: Docker (compose Postgres + the daemon image), Bun, and Playwright'
 is reused; whatever the setup started is torn down, including the seeded rows. `SANDBOX_E2E_IMAGE` overrides
 the daemon image (e.g. a source build).
 
+**In a sandbox that browser is already there and no install is wanted.** The image bakes chromium and deletes
+Playwright's separate headless shell on purpose, so every launch here names `channel: chromium` — the full
+browser, run headless — and finds it on disk. A bare `chromium.launch()` asks for the shell instead, fails on a
+missing executable, and the obvious repair (`playwright install chromium-headless-shell`) writes ~90 MB into
+`/root/.cache`, which no container recreate keeps. It was run twice that way before the channel was named;
+`playwright.config.ts` has the long version.
+
 **A dev-machine tier, not a CI one**, and that is what the separate task name records (turbo.json says it at
 length): every server above is addressed on `localhost`, and every CI job here drives a docker-in-docker
 *service* that publishes ports on its own namespace instead: `pnpm e2e` in the nightly used to include this
@@ -67,8 +74,8 @@ which catches the *cause* of the blank-screen case across every view in the app 
 browser at all. The pair is deliberate: the unit test proves nobody can reintroduce the mistake, the gate proves
 the app actually draws.
 
-Requires Playwright's Chromium (`pnpm --filter @intentic-app/e2e exec playwright install chromium`). Unlike
-`e2e:browser` above it needs no stack on localhost, so it runs anywhere.
+Requires Playwright's Chromium (`pnpm --filter @intentic-app/e2e exec playwright install chromium`; a sandbox
+has it baked, see Run above). Unlike `e2e:browser` above it needs no stack on localhost, so it runs anywhere.
 
 ## The one thing here that runs against production: `smoke:signin`
 

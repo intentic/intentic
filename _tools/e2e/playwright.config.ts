@@ -28,5 +28,18 @@ export default defineConfig({
         launchOptions: { args: [`--disable-web-security`] },
         trace: `retain-on-failure`,
     },
-    projects: [{ name: `chromium`, use: { ...devices[`Desktop Chrome`] } }],
+    /* `channel: chromium` names the FULL browser, run headless — not Playwright's headless shell.
+     *
+     * Since 1.49 a plain headless chromium launch resolves to `chromium-headless-shell`, a second binary with a
+     * download of its own. The sandbox image installs chromium and then deletes that shell deliberately
+     * (_sandbox/sandbox/packs/browser.Dockerfile): nothing in the daemon ever launches it — every browser tool
+     * passes `--executable-path` from `chromium.executablePath()`, which is the full browser — and the shell is
+     * the single loudest tell an anti-bot WAF looks for. This suite was the one caller that still asked for it,
+     * and the runtime-install ledger is the bill: `npx playwright install chromium-headless-shell` run from this
+     * package in two separate sessions, each time into /root/.cache, which no container recreate keeps.
+     *
+     * Naming the channel points the headless run at the chromium already baked into the image, so the suite
+     * needs no download the image has not already made. CI is unaffected: `playwright install chromium` there
+     * fetches the same binary this then uses. */
+    projects: [{ name: `chromium`, use: { ...devices[`Desktop Chrome`], channel: `chromium` } }],
 });

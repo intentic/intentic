@@ -43,5 +43,7 @@ export default defineConfig({
         // a certificate, and a browser that insisted on one would be testing the harness.
         ignoreHTTPSErrors: true,
     },
-    projects: [{ name: `compose`, use: { ...devices[`Desktop Chrome`] } }],
+    // The full baked chromium rather than the headless shell the sandbox image deletes on purpose;
+    // _tools/e2e/playwright.config.ts carries the reasoning.
+    projects: [{ name: `compose`, use: { ...devices[`Desktop Chrome`], channel: `chromium` } }],
 });

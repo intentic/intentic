@@ -885,7 +885,8 @@ const run = async (): Promise<void> => {
 
     mkdirSync(OUT_DIR, { recursive: true });
     const server = serveDemo();
-    const browser = await chromium.launch();
+    // The full baked chromium rather than the headless shell; ../playwright.config.ts carries the reasoning.
+    const browser = await chromium.launch({ channel: "chromium" });
     let failed = 0;
     try {
         for (const shot of wanted) {
