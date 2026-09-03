@@ -15,9 +15,10 @@ strongest and the calibration burden smallest.
 Three pieces are already in place, and they shape the answer more than the research does.
 
 **An ordered ladder is the established unit of model configuration.** `quickModel` and `agentRunModels`
-(`_sandbox/sandbox-contract/src/schemas/settings.ts`) are both *lists* of `${provider}:${model}` keys
-resolved by `resolveQuickModels` / `resolveAgentRunModels`. The comment in `quick-model.ts` states the rule
-plainly:
+(`_sandbox/sandbox-contract/src/schemas/settings.ts`) are both *lists*, resolved by `resolveQuickModels` /
+`resolveAgentRunModels`: `quickModel` holds `${provider}:${model}` keys, while an `agentRunModels` entry is a
+pin that carries how its model is to be run (effort, thinking, speed, harness) beside which model it is. The
+comment in `quick-model.ts` states the rule plainly:
 
 > IT IS AN ORDER, NOT A MODEL … A single pick is a single point of failure.
 

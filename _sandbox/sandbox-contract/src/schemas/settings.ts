@@ -1,6 +1,6 @@
 // settings: per-sandbox agent settings (.intentic/config/settings.json)
 import { z } from "zod";
-import { AdmissionPolicySchema, AdmissionRuleSchema, CommandClassSchema } from "./agent.js";
+import { AdmissionPolicySchema, AdmissionRuleSchema, AgentRunPinSchema, CommandClassSchema } from "./agent.js";
 // Which prompt the agent is, before this turn composes anything on top. Two built-in bases and an escape
 // hatch: Intentic's own (the default), Claude Code's preset, or the owner's text. Declared out here rather
 // than inline in the settings object because both sides of the wire branch on it, the daemon to build the
@@ -434,10 +434,9 @@ export const SandboxSettingsSchema = z.object({
      *
      * Off by default like every other flag here, and off means genuinely nothing: no hook is wired, and the
      * sandbox makes no network call it would not otherwise have made. */
-    dependencyFreshness: DependencyFreshnessSchema.default("off")
-        .describe(
-            "Whether a version the agent is about to pin is checked against the package's own registry first. Facts only, or facts plus the name of a maintained replacement where the registry agrees the current choice has been abandoned. It tells the agent and lets it decide rather than refusing, because matching a version your project already uses is usually the right answer and a gate would fight it.",
-        ),
+    dependencyFreshness: DependencyFreshnessSchema.default("off").describe(
+        "Whether a version the agent is about to pin is checked against the package's own registry first. Facts only, or facts plus the name of a maintained replacement where the registry agrees the current choice has been abandoned. It tells the agent and lets it decide rather than refusing, because matching a version your project already uses is usually the right answer and a gate would fight it.",
+    ),
     outputCleaners: z
         .string()
         .default("")
@@ -491,10 +490,16 @@ export const SandboxSettingsSchema = z.object({
         ),
     /* WHAT AN AGENT RUN OPENS ON, the tier above quickModel, and the answer for every turn a SURFACE starts
      * rather than a person at a composer: Fix with agent on a pipeline or a deployment, a Maintenance chore, a
-     * Documentation or Acceptance run, the fix a failed pre-push check proposes. An ORDERED list of
-     * `${provider}:${model}` (quickModelKey) plus the reasoning effort beside it; EMPTY ⇒ whatever the chat
+     * Documentation or Acceptance run, the fix a failed pre-push check proposes. An ORDERED list of PINS, each
+     * naming a provider and model AND how that one is to be run (AgentRunPinSchema); EMPTY ⇒ whatever the chat
      * composer would have started with, which is the honest floor because it is the model the user already
      * chose to work with.
+     *
+     * EACH ENTRY CARRIES ITS OWN REASONING AND COST KNOBS, which is why these are objects rather than the
+     * `${provider}:${model}` keys the two lists around them still hold. The effort used to be one field beside
+     * the list, answering for every model in it, and the entries of this list are the least interchangeable
+     * things on the page: the head is the tier the owner wants the work done at and what follows it is the
+     * account that catches it when the first is spent. AgentRunPinSchema has the rest of the argument.
      *
      * A LIST, for the reason quickModel is one: the account at the head runs out, and every surface-started run
      * in the sandbox then fails on a credential the user cannot see from the row they pressed. Written in order,
@@ -511,13 +516,12 @@ export const SandboxSettingsSchema = z.object({
      * surface added tomorrow inherits it by saying what it is instead of re-deriving where models come from. A
      * surface MAY still name one (the shared run button's caret, Acceptance's per-run pick), and that wins. */
     agentRunModels: z
-        .array(z.string())
+        .array(AgentRunPinSchema)
         .max(10)
         .default([])
         .describe(
-            "Which models run the work a screen starts rather than a person: fixing a red pipeline, a maintenance chore, an acceptance run. Tried in order, so one spent account does not take every such run down. Empty falls back to whatever the chat would have used, which is the honest floor because it is the model you already chose to work with.",
+            "Which models run the work a screen starts rather than a person: fixing a red pipeline, a maintenance chore, an acceptance run. Tried in order, so one spent account does not take every such run down, and each entry says how hard that model should think as well as which one it is. Empty falls back to whatever the chat would have used, which is the honest floor because it is the model you already chose to work with.",
         ),
-    agentRunEffort: z.string().default("").describe("How hard those runs should think."),
     /* AUTOMATIC TIER SELECTION: may the daemon run an easy-looking turn on a cheaper rung of the provider the
      * user is already on, instead of on the model they picked?
      *

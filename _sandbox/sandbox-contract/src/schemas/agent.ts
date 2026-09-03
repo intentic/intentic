@@ -275,7 +275,7 @@ export const AgentTurnSchema = z
          * opposite defaults, the chat wants the provider's own catalog default, an unattended run wants the
          * tier its owner chose for work that spends money while they are not watching.
          *
-         * The daemon fills `agent`/`model`/`effort` from agentRunModels/agentRunEffort for any turn that says
+         * The daemon fills `agent`/`model` and the pinned entry's own knobs from agentRunModels for any turn that says
          * this and names none of them (startConversationTurn), walking that list until one can actually be
          * started. Naming one still wins: every surface-started run now carries a caret that overrides the list
          * for that run alone, and Acceptance picks per run because it fans a session out per story. Either way
@@ -395,6 +395,39 @@ export const AgentRunPickSchema = z
     })
     .optional();
 export type AgentRunPick = z.infer<typeof AgentRunPickSchema>;
+/* A MODEL PINNED FOR EVERY SURFACE-STARTED RUN, one entry of settings.agentRunModels: the standing version of
+ * the pick above, and not merely which model but HOW it is to be run.
+ *
+ * THE KNOBS RIDE THE ENTRY RATHER THAN THE LIST, which is the whole reason this is an object where the setting
+ * used to hold a `${provider}:${model}` string. The reasoning effort was a single field beside the list, so one
+ * tier answered for every model in it — and the entries of that list are deliberately NOT interchangeable: it
+ * is a frontier pin with the cheap account underneath that catches it when the first is spent. A tier scale is
+ * a property of the MODEL as well ('max' is off Kimi's scale entirely, and off Claude's own the moment thinking
+ * is switched off), so a shared effort was either off-scale for half the list or the lowest common rung for all
+ * of it. Each entry now carries what the composer's picker configures for the turn in front of you.
+ *
+ * EVERY FIELD BUT THE PAIR IS OPTIONAL, AND ABSENT MEANS ABSENT: the turn goes out without the field and the
+ * provider's own default answers, exactly as an unconfigured pin always did. Nothing here invents a "low".
+ *
+ * NO TIER HOLD, and its absence is the rule rather than an omission: automatic tier selection gates on
+ * `unattended` (prompt-complexity.ts), so a surface-started run is never downgraded in the first place and a
+ * veto over it would be a control whose state can make no difference to anything.
+ *
+ * The pair is BOTH HALVES for the reason the pick above is: a model id is only meaningful to the provider that
+ * vends it, so half a pin would send a Codex id to Claude. Taken verbatim, never validated against a catalog:
+ * the picker offers a custom-id escape hatch, so a model this build has never heard of is a supported pin. */
+export const AgentRunPinSchema = z.object({
+    provider: AgentProviderSchema.describe("Which provider serves the run."),
+    model: z.string().min(1).describe("Which of its models. Both halves, because a model name only means anything to the provider that serves it."),
+    effort: z
+        .string()
+        .optional()
+        .describe("How hard this model should think, where it offers a choice. Leave it out to take the model's own default."),
+    thinking: z.boolean().optional().describe("Whether this model reasons before it answers, where that is a choice it offers."),
+    fast: z.boolean().optional().describe("Ask for this model's work at a higher rate for a higher price. A request rather than a promise."),
+    harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out to use the provider's own."),
+});
+export type AgentRunPin = z.infer<typeof AgentRunPinSchema>;
 // POST /agent's ack: the daemon-minted id of the detached turn run it started. The turn executes daemon-side
 // regardless of any client connection; every window, the initiator included, renders it via /agent/attach.
 export const StartedTurnSchema = z.object({

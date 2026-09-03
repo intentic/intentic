@@ -1,9 +1,9 @@
-import { compareCheapestFirst, NATIVE_PROVIDERS, type QuickModelChoice, quickModelKey, resolveQuickModels } from "@intentic/sandbox-contract";
+import { NATIVE_PROVIDERS, type QuickModelChoice, resolveQuickModels } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { providerReady } from "./access";
 import { modelChoiceLabel } from "./modelPins";
-import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
+import { endpointProviders, modelOptionsFor } from "./providerCatalog";
 
 /* WHICH MODELS THE ONE-CLICK HELPERS RUN, AND IN WHAT ORDER, browser-side, the same rule the daemon walks
  * before it spends the call (contract quick-model.ts), read here for the three things only a UI needs: NAMING
@@ -28,26 +28,15 @@ const quickModelSources = computed(() =>
     })),
 );
 
-// Every model a user could pin, cheapest-first within each provider and grouped by it, the settings row's
-// option list. Only READY providers: pinning a model this sandbox has no credential for would resolve straight
-// back to Auto, so offering it would be offering a no-op.
-export interface QuickModelGroup {
-    readonly provider: string;
-    readonly label: string;
-    readonly options: readonly { readonly key: string; readonly label: string }[];
-}
-
-export const quickModelGroups = computed<readonly QuickModelGroup[]>(() =>
-    quickModelSources.value
-        .filter((source) => source.ready && source.models.length > 0)
-        .map((source) => ({
-            provider: source.provider,
-            label: providerDisplayLabel(source.provider),
-            options: modelOptionsFor(source.provider)
-                .toSorted((left, right) => compareCheapestFirst(left.value, right.value))
-                .map((option) => ({ key: quickModelKey({ provider: source.provider, model: option.value }), label: option.label })),
-        })),
-);
+/* NO OPTION LIST HERE ANY MORE. This file used to publish `quickModelGroups`, every pinnable model grouped by
+ * provider and sorted cheapest-first, for the 14rem dropdown the settings row used to offer. That row now opens
+ * the app's own model picker (ModelPinPicker → ModelPicker): the same list the composer uses, with its search,
+ * its provider rail and its access badges, none of which the grouped copy could carry.
+ *
+ * The cheap-end ORDER did not go with it, and is not missing: it lives in resolveQuickModels, where it decides
+ * what Auto actually runs. What the dropdown added was a hint about which row to pick by hand, and the picker
+ * says more about that than a sort could — while `namesThinking` on the row below the picker catches the one
+ * mistake this list invites, a reasoning rung pinned to a job meant to be instant. */
 
 export interface QuickModel {
     // Every model a helper may run, in the order it will try them, the pinned list, or Auto's own ladder when

@@ -1,4 +1,5 @@
-import { parsePinned, type QuickModelChoice, quickModelKey, type QuickModelSource } from "./quick-model.js";
+import { quickModelKey, type QuickModelSource } from "./quick-model.js";
+import type { AgentRunPin } from "./schemas/agent.js";
 
 /* WHAT A SURFACE-STARTED AGENT RUN OPENS ON, the resolver for `agentRunModels`, sibling to resolveQuickModels
  * and deliberately not the same function.
@@ -35,17 +36,30 @@ import { parsePinned, type QuickModelChoice, quickModelKey, type QuickModelSourc
  * row renders the stored list, not this one, because a setting that vanished from view would look like the app
  * had eaten it.
  *
+ * THE WHOLE PIN SURVIVES, not the pair inside it: the entry's own effort, harness and cost knobs are what the
+ * turn is composed from (turn-resume.ts), so a resolver that handed back a bare (provider, model) would silently
+ * run the head of the list at the provider's defaults. Nothing here reads or judges those fields, which is the
+ * point of carrying them whole.
+ *
  * Empty out means nobody has pinned anything this sandbox can reach, and the caller's floor takes over. */
-export const resolveAgentRunModels = (sources: readonly QuickModelSource[], pinned: readonly string[]): readonly QuickModelChoice[] => {
+export const resolveAgentRunModels = (sources: readonly QuickModelSource[], pinned: readonly AgentRunPin[]): readonly AgentRunPin[] => {
     const ready = new Set(sources.filter((source) => source.ready).map((source) => source.provider));
-    const requested = pinned.flatMap((key) => {
-        // Verbatim, unvalidated against the catalog, the same call resolveQuickModels makes and for the same
-        // reason: the picker offers a custom-id escape hatch for a model the static catalog has not caught up
-        // with, and second-guessing the id here would run a different model than the settings row names.
-        const choice = parsePinned(key);
-        return choice === undefined || !ready.has(choice.provider) ? [] : [choice];
-    });
-    // The same model twice would spend two attempts proving the same account is out. Hand-edited list, so this
-    // is a real state rather than a defensive branch.
-    return [...new Map(requested.map((choice) => [quickModelKey(choice), choice])).values()];
+    // Taken verbatim, unvalidated against the catalog, the same reading resolveQuickModels gives its keys and
+    // for the same reason: the picker offers a custom-id escape hatch for a model the static catalog has not
+    // caught up with, and second-guessing the id here would run a different model than the settings row names.
+    const requested = pinned.filter((pin) => ready.has(pin.provider));
+    /* The same model twice would spend two attempts proving the same account is out. Hand-edited list, so this
+     * is a real state rather than a defensive branch.
+     *
+     * THE FIRST OF A PAIR WINS, WHOLE. Two entries can now name one model and differ in their knobs (the same
+     * Sonnet at Max and again at Low, written while reordering the list), and the one the user reads first is
+     * the one they meant; keeping the earlier position with the later entry's effort would run a tier that
+     * appears nowhere the pin does. */
+    const chain: AgentRunPin[] = [];
+    for (const pin of requested) {
+        if (!chain.some((held) => quickModelKey(held) === quickModelKey(pin))) {
+            chain.push(pin);
+        }
+    }
+    return chain;
 };

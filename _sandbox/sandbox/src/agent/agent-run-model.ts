@@ -1,4 +1,4 @@
-import { endpointProvider, NATIVE_PROVIDERS, type QuickModelChoice, type QuickModelSource, resolveAgentRunModels } from "@intentic/sandbox-contract";
+import { type AgentRunPin, endpointProvider, NATIVE_PROVIDERS, type QuickModelSource, resolveAgentRunModels } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { harnessReadyProviders } from "./harness-credentials.js";
 import { spentRung } from "./quick-model-quota.js";
@@ -40,13 +40,16 @@ const readinessSources = async (services: Services): Promise<QuickModelSource[]>
     ];
 };
 
-/* The model a surface-started turn should open on, or undefined for "nobody pinned anything this sandbox can
+/* The PIN a surface-started turn should open on, or undefined for "nobody pinned anything this sandbox can
  * reach", which is not an error: the caller's floor (the owner's own composer pick) answers instead, and that
  * is the honest fallback because it is a model they chose.
  *
+ * The whole pin rather than its (provider, model) pair, because the entry says how hard that model thinks and
+ * on which loop as well as which model it is, and the turn is composed from all of it (turn-resume.ts).
+ *
  * The empty-list shortcut is not just a fast path. It is what keeps a sandbox that has pinned nothing from
  * paying for a readiness sweep on every single unattended turn it starts. */
-export const agentRunModel = async (services: Services): Promise<QuickModelChoice | undefined> => {
+export const agentRunModel = async (services: Services): Promise<AgentRunPin | undefined> => {
     const { agentRunModels } = await services.sandboxSettings.get();
     if (agentRunModels.length === 0) {
         return undefined;

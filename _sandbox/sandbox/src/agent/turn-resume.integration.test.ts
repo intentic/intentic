@@ -194,7 +194,7 @@ const ranWith = async (
 
 test("an unattended turn takes the agent-run model, provider and effort", async () => {
     const ran = await ranWith(
-        { agentRunModels: ["codex:gpt-5.6"], agentRunEffort: "high" },
+        { agentRunModels: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] },
         { prompt: "fix CI", conversationId: "ar-fill", unattended: true },
     );
     // The provider rides along with the id and has to: a model id is only meaningful to the provider that vends
@@ -202,32 +202,66 @@ test("an unattended turn takes the agent-run model, provider and effort", async 
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
 });
 
+test("every knob the pin carries rides onto the turn, and the ones it doesn't stay absent", async () => {
+    // The point of the pins being objects: the entry that runs says how it runs. A field the user never pinned
+    // must stay OFF the turn rather than becoming an invented default, so the provider's own answer stands.
+    const ran = await ranWith(
+        { agentRunModels: [{ provider: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" }] },
+        { prompt: "fix CI", conversationId: "ar-knobs", unattended: true },
+    );
+    expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" });
+    expect(ran.fast).toBeUndefined();
+});
+
+test("a knob the turn already carries is not overwritten by the pin's", async () => {
+    // The model guard only proves nobody named a MODEL. A surface may still have sent an effort for a run whose
+    // model it left to the setting (the push flow's proposed fix does exactly that), and that is a choice the
+    // user made a second ago.
+    const ran = await ranWith(
+        { agentRunModels: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] },
+        { prompt: "fix CI", conversationId: "ar-knob-kept", unattended: true, effort: "max" },
+    );
+    expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "max" });
+});
+
 test("the head of the list wins while its account is connected", async () => {
     const ran = await ranWith(
-        { agentRunModels: ["codex:gpt-5.6", "claude:claude-opus-4-5"] },
+        {
+            agentRunModels: [
+                { provider: "codex", model: "gpt-5.6" },
+                { provider: "claude", model: "claude-opus-4-5" },
+            ],
+        },
         { prompt: "fix CI", conversationId: "ar-head", unattended: true },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
 
-test("a disconnected head is stepped over rather than failing the run", async () => {
+test("a disconnected head is stepped over, and the entry that answers brings its own knobs", async () => {
     // The whole reason the setting is a list. Without this the user's Codex account going away takes every
-    // surface-started run in the sandbox down, and the row they pressed cannot tell them why.
+    // surface-started run in the sandbox down, and the row they pressed cannot tell them why. What the fallback
+    // runs AT is its own entry's business: the head's effort is not a property of the list.
     const ran = await ranWith(
-        { agentRunModels: ["codex:gpt-5.6", "claude:claude-opus-4-5"] },
+        {
+            agentRunModels: [
+                { provider: "codex", model: "gpt-5.6", effort: "low" },
+                { provider: "claude", model: "claude-opus-4-5", effort: "max" },
+            ],
+        },
         { prompt: "fix CI", conversationId: "ar-fallback", unattended: true },
         ["claude"],
     );
-    expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
+    expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5", effort: "max" });
 });
 
 test("a list with nothing reachable left leaves the turn unset: it does not reach for a connected account", async () => {
     // An agent run is billed in whole sessions, so a list that has stopped saying anything about this sandbox
     // hands the choice back to the composer's own pick rather than spending Gemini because it happens to be there.
-    const ran = await ranWith({ agentRunModels: ["codex:gpt-5.6"] }, { prompt: "fix CI", conversationId: "ar-none", unattended: true }, [
-        "claude",
-        "gemini",
-    ]);
+    const ran = await ranWith(
+        { agentRunModels: [{ provider: "codex", model: "gpt-5.6" }] },
+        { prompt: "fix CI", conversationId: "ar-none", unattended: true },
+        ["claude", "gemini"],
+    );
     expect(ran.model).toBeUndefined();
     expect(ran.agent).toBeUndefined();
 });
@@ -236,7 +270,7 @@ test("an unattended turn that names its own model keeps it", async () => {
     // The shared run button's caret, and Acceptance's per-run pick: a choice the user made a second ago
     // outranks the standing list.
     const ran = await ranWith(
-        { agentRunModels: ["codex:gpt-5.6"] },
+        { agentRunModels: [{ provider: "codex", model: "gpt-5.6" }] },
         { prompt: "walk the story", conversationId: "ar-explicit", unattended: true, agent: "claude", model: "claude-opus-4-5" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
@@ -246,7 +280,7 @@ test("a turn nobody flagged unattended is left alone", async () => {
     // The chat sends no model whenever its live catalog has not loaded yet. That must still resolve to the
     // PROVIDER's catalog default, not to the agent-run list: the two look identical on the wire without the
     // flag, which is exactly why the flag exists rather than being inferred from a missing model.
-    const ran = await ranWith({ agentRunModels: ["codex:gpt-5.6"] }, { prompt: "hello", conversationId: "ar-chat" });
+    const ran = await ranWith({ agentRunModels: [{ provider: "codex", model: "gpt-5.6" }] }, { prompt: "hello", conversationId: "ar-chat" });
     expect(ran.model).toBeUndefined();
     expect(ran.agent).toBeUndefined();
 });
@@ -1244,7 +1278,14 @@ test("a press that names no routing runs the turn exactly as it was", async () =
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
     recordLimitFailure({
-        input: { prompt: "ship the parser", conversationId: "lim-bare", isolated: true, account: "spent-one", agent: "codex", harness: "claude-code" },
+        input: {
+            prompt: "ship the parser",
+            conversationId: "lim-bare",
+            isolated: true,
+            account: "spent-one",
+            agent: "codex",
+            harness: "claude-code",
+        },
         sessionId: "s-real",
         ran: true,
     });
@@ -1334,7 +1375,10 @@ test("an armed conversation sends the held turn again once the window reopens, a
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-1", true]]));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-1", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+    recordLimitFailure(
+        { input: { prompt: "ship the parser", conversationId: "lim-auto-1", isolated: true }, ran: false, reopensAt: REOPENS },
+        RECORDED,
+    );
 
     // An hour in, with three to go: the window is shut, and a fire here would be a request the provider refuses
     // for exactly the reason it refused the last one.
@@ -1356,7 +1400,10 @@ test("an armed conversation fires exactly once per hold", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-2", true]]));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-2", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+    recordLimitFailure(
+        { input: { prompt: "ship the parser", conversationId: "lim-auto-2", isolated: true }, ran: false, reopensAt: REOPENS },
+        RECORDED,
+    );
 
     await scheduler.tick(REOPENS * 1000 + 1);
     await settle("lim-auto-2");
@@ -1374,7 +1421,10 @@ test("an unarmed conversation is never fired for, however long the window has be
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-3", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+    recordLimitFailure(
+        { input: { prompt: "ship the parser", conversationId: "lim-auto-3", isolated: true }, ran: false, reopensAt: REOPENS },
+        RECORDED,
+    );
 
     await scheduler.tick(REOPENS * 1000 + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
@@ -1391,7 +1441,10 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, resumeAfterLimit: true });
     const turns: AgentTurn[] = [];
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+    recordLimitFailure(
+        { input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS },
+        RECORDED,
+    );
 
     await createTurnResumeScheduler(services, heldWake(turns)).tick(REOPENS * 1000 + 1);
     await settle("lim-auto-4");
@@ -1420,7 +1473,10 @@ test("a reset instant that had already passed when the refusal happened is never
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-6", true]]));
     const turns: AgentTurn[] = [];
     const stale = Math.round((RECORDED - 60 * 60 * 1000) / 1000);
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-6", isolated: true }, ran: false, reopensAt: stale }, RECORDED);
+    recordLimitFailure(
+        { input: { prompt: "ship the parser", conversationId: "lim-auto-6", isolated: true }, ran: false, reopensAt: stale },
+        RECORDED,
+    );
 
     await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 5_000);
     expect(turns).toHaveLength(0);

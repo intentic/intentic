@@ -1,6 +1,7 @@
 import {
     type AgentEvent,
     type AgentReply,
+    type AgentRunPin,
     type AgentTurn,
     type ParkedCard,
     RESUME_NOTES,
@@ -399,8 +400,8 @@ const resumedTurn = (
 };
 
 /* WHAT AN UNATTENDED TURN RUNS ON. A turn a surface started names no model, because nobody touched the caret
- * on the button that started it (see AgentTurn.unattended), so the owner's `agentRunModels` answers for it,
- * and `agentRunEffort` beside it.
+ * on the button that started it (see AgentTurn.unattended), so the owner's `agentRunModels` answers for it —
+ * the whole pin, not just its model: how hard that one thinks, on which loop, and at whose speed.
  *
  * Resolved HERE, at the one boundary every detached turn passes through, rather than at each of the five
  * surfaces that start one. Two things follow from that placement and neither is incidental: a surface added
@@ -418,6 +419,26 @@ const resumedTurn = (
  * (it fans one session out per story), and every resume below re-runs a turn that already carries whatever this
  * resolved the first time. A list that resolves to nothing leaves the turn's model unset, the daemon then
  * falls to the provider's live catalog default exactly as a composer turn with an unloaded catalog does. */
+/* WHAT ELSE A PIN ANSWERS FOR, applied only where the turn is silent about it.
+ *
+ * Each of these is a question the pinned entry answers for itself: how hard to think, whether to reason at all,
+ * whether to pay for speed, and which loop runs it. A field the user never pinned stays ABSENT rather than
+ * becoming an invented default, so the provider's own answer stands, exactly as it did when a pin carried
+ * nothing but a name.
+ *
+ * ABSENT-ONLY PER FIELD, not per pin, because these arrive from somewhere else than the model does: a surface
+ * may send an `effort` for a run whose model it left to the setting (the push flow's proposed fix does), and the
+ * caller's guard only proves that nobody named a MODEL.
+ *
+ * A table rather than four conditional spreads: what a pin can say about a run is a list worth reading in one
+ * place, and it is the same list the settings row draws its footer from. */
+const PIN_KNOBS = ["effort", "thinking", "fast", "harness"] as const;
+
+const pinnedKnobs = (turn: AgentTurn, pin: AgentRunPin): Partial<AgentTurn> =>
+    Object.fromEntries(
+        PIN_KNOBS.filter((knob) => turn[knob] === undefined && pin[knob] !== undefined && pin[knob] !== "").map((knob) => [knob, pin[knob]]),
+    );
+
 const withAgentRunModel = async <T extends AgentTurn>(services: Services, turn: T): Promise<T> => {
     /* A TURN THAT NAMES ITS PROVIDER KEEPS IT, and the `agent` half of this guard matters as much as the
      * `model` half. The pin below carries a provider WITH its model, so filling a turn that already chose one
@@ -436,16 +457,10 @@ const withAgentRunModel = async <T extends AgentTurn>(services: Services, turn: 
     if (pinned === undefined) {
         return turn;
     }
-    const { agentRunEffort } = await services.sandboxSettings.get();
-    return {
-        ...turn,
-        // The pin carries the provider too (`${provider}:${model}`), and it has to: a model id is only
-        // meaningful to the provider that vends it, so honouring one without the other would send a Codex id
-        // to Claude. An effort the user never pinned stays absent rather than becoming an invented "low".
-        agent: pinned.provider,
-        model: pinned.model,
-        ...(agentRunEffort !== "" ? { effort: agentRunEffort } : {}),
-    };
+    // The pin carries a provider WITH its model, and has to: a model id is only meaningful to the provider that
+    // vends it, so honouring one without the other would send a Codex id to Claude. Everything else the entry
+    // says about the run rides along beside them.
+    return { ...turn, agent: pinned.provider, model: pinned.model, ...pinnedKnobs(turn, pinned) };
 };
 
 /* THE one way the daemon starts a conversation's detached turn. POST /agent and all three

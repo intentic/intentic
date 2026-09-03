@@ -53,10 +53,13 @@ export interface QuickModelChoice {
 // for its entries (PickerEntry.key). An empty LIST of these ⇒ Auto.
 export const quickModelKey = (choice: QuickModelChoice): string => `${choice.provider}:${choice.model}`;
 
-// Split on the FIRST colon only: a provider id never contains one and a model id might. Exported because the
-// key shape is shared: `agentRunModels` pins what a surface-started run opens with the same keys in the same
-// order (agent-run-model.ts), and both the daemon (filling an unattended turn) and the dialogs that seed from
-// it have to read one back.
+/* Split on the FIRST colon only: a provider id never contains one and a model id might. Exported because the
+ * key is what several surfaces carry a pinned pair AS: `autoFastModels` stores the same keys, the settings rows
+ * read one back to draw the model they name, and a session composed from a pin travels as one (composeSession).
+ *
+ * `agentRunModels` is the one list that does NOT: an agent-run entry is an object, because it carries how the
+ * model is to be run beside which model it is (AgentRunPinSchema), and a key with knobs spelled into it would
+ * be a second encoding of the same thing for nobody's benefit. */
 export const parsePinned = (pinned: string): QuickModelChoice | undefined => {
     const separator = pinned.indexOf(`:`);
     if (separator <= 0 || separator === pinned.length - 1) {

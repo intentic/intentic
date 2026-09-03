@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { type AgentProvider, quickModelKey } from "@intentic/sandbox-contract";
-import { Picker, type PickerOptions, Row, RowGroup, SegmentedControl } from "@intentic/ui";
-import { computed, ref, watch } from "vue";
-import { agentRunModelGroups, useAgentRunModel } from "../../../composables/chat/agentRunModel";
+import { type AgentRunPin, parsePinned, quickModelKey } from "@intentic/sandbox-contract";
+import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
+import { computed, shallowRef } from "vue";
+import { useAgentRunModel } from "../../../composables/chat/agentRunModel";
 import { clampEffort, effortsFor } from "../../../composables/chat/effortScale";
-import { describeModelPin } from "../../../composables/chat/modelPins";
-import { quickModelGroups, useQuickModel } from "../../../composables/chat/quickModel";
+import { describePin, modelChoiceLabel } from "../../../composables/chat/modelPins";
+import { useQuickModel } from "../../../composables/chat/quickModel";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { useSavings } from "../../../composables/sandbox/useSavings";
-import ProviderLogo from "../../../chat/ProviderLogo.vue";
+import AddModelButton from "./AddModelButton.vue";
 import ModelPinList from "./ModelPinList.vue";
+import ModelPinPicker from "./ModelPinPicker.vue";
 
 /* WHICH MODEL SPENDS THIS SANDBOX'S MONEY WHEN NOBODY IS AT THE COMPOSER: the two tiers of that, in the order
  * they escalate. It sits directly under the AI accounts because both rows are a choice OVER them: a model
@@ -39,7 +40,14 @@ import ModelPinList from "./ModelPinList.vue";
  *   caret on the button that starts it; this is what they open on when nobody touches it.
  *
  * The chat's own model is the third tier and has no row here: it lives in the composer, where it is chosen per
- * turn and per conversation. */
+ * turn and per conversation.
+ *
+ * EVERY ENTRY IS EDITED IN THE APP'S OWN MODEL PICKER (ModelPinPicker → the composer's ModelPicker), which is
+ * what replaced the 14rem dropdown these rows used to offer and the single effort control that used to sit
+ * beside the agent-run list. That control asked ONE question of a list whose entries are chosen precisely
+ * because they differ — a frontier head, a cheap account under it — and a reasoning scale is a property of the
+ * model, so any answer to it was off-scale for half the list. Effort, thinking, speed and the harness now
+ * belong to the entry that will actually run. */
 
 const { settings, patch } = useSandboxSettings();
 const quickModel = useQuickModel();
@@ -55,140 +63,160 @@ const { savings } = useSavings(tierWindow);
 const tierReport = computed(() => savings.value?.tier);
 const pct = (part: number, whole: number): string => `${Math.round((part / whole) * 100)}%`;
 
-/* BOTH ROWS ARE THE SAME LIST WIDGET over two different settings, so the editing is written once. It became
- * worth extracting the moment the second row grew a list: add, promote and remove are three ways to write the
- * same array, and three hand-rolled copies per row is where two rows quietly stop agreeing about what "already
- * in the order" means.
+/* THE TIER AN ENTRY WILL ACTUALLY RUN AT, clamped the way the composer clamps its own (effortScale.ts): a
+ * stored `max` on a model whose scale stops at `high`, or on one whose thinking the same pin switched off,
+ * would otherwise name a rung this run cannot use. The user's own pick stays stored either way, for the day the
+ * longer-scaled model leads again. */
+const effortLabel = (pin: AgentRunPin): string | undefined => {
+    if (pin.effort === undefined || pin.effort === ``) {
+        return undefined;
+    }
+    const thinking = pin.thinking === true;
+    const running = clampEffort(pin.effort, pin.provider, pin.model, thinking);
+    return effortsFor(pin.provider, pin.model, thinking).find((option) => option.value === running)?.label ?? running;
+};
+
+/* WHAT AN ENTRY SAYS ABOUT HOW IT RUNS, in one line beside its name. Only the fields actually pinned are named,
+ * so an entry left at the provider's own defaults reads as just a model: the point of the line is that a
+ * deliberate choice is legible from the list without opening anything, not that every field has a value. */
+const knobSummary = (pin: AgentRunPin): string | undefined =>
+    [
+        ...(effortLabel(pin) === undefined ? [] : [effortLabel(pin)!]),
+        ...(pin.thinking === undefined ? [] : [pin.thinking ? `thinking` : `no thinking`]),
+        ...(pin.fast === true ? [`fast`] : []),
+        ...(pin.harness === `claude-code` ? [`Claude Code`] : []),
+    ].join(` · `) || undefined;
+
+/* ONE EDITOR OVER THREE LISTS, AND TWO STORED SHAPES. Add, re-point, promote and remove are the same four
+ * gestures whichever list they are made in, and three hand-rolled copies of each is where the rows quietly stop
+ * agreeing about what "already in the order" means. What actually differs between the lists is how an entry is
+ * WRITTEN DOWN: the quick and cheaper-tier lists keep `${provider}:${model}` keys, while an agent-run entry is
+ * a pin carrying its own run settings (AgentRunPinSchema). So the rows and the picker work in PINS, and each
+ * list says how one is stored.
  *
- * `read`/`write` rather than a settings key, because the two lists are read through their own composables: each
- * one resolves its own chain, and the row has to draw THE LIST AS THE USER WROTE IT either way. A pin whose
+ * `read`/`write` rather than a settings key, because two of the lists are read through their own composables:
+ * each resolves its own chain, and the row has to draw THE LIST AS THE USER WROTE IT either way. A pin whose
  * account was disconnected still belongs on screen, greyed: it is a setting they made, and a row that silently
- * stopped drawing it would look like the app had eaten it. (Both resolvers drop it at run time, which is the
- * right answer THERE: neither feature may fail on a credential the sandbox no longer has.) */
-const pinList = (read: () => readonly string[], write: (keys: readonly string[]) => void) => {
-    /* The picker ADDS rather than selects, which is why it is bound to a scratch ref that empties itself again:
-     * the trigger has to keep saying "Add a model" instead of latching onto the last pick, since the list below
-     * is where a choice actually lands. A model already in the order is shown greyed rather than hidden: a
-     * picker whose contents change as you use it makes you hunt for a row that was there a moment ago. */
-    const adding = ref<string | undefined>(undefined);
-    watch(adding, (key) => {
-        if (key !== undefined && key !== `` && !read().includes(key)) {
-            write([...read(), key]);
-        }
-        adding.value = undefined;
-    });
+ * stopped drawing it would look like the app had eaten it. (Every resolver drops it at run time, which is the
+ * right answer THERE: no feature may fail on a credential the sandbox no longer has.) */
+function pinnedList<T>(list: {
+    readonly read: () => readonly T[];
+    readonly write: (entries: readonly T[]) => void;
+    readonly decode: (entry: T) => AgentRunPin | undefined;
+    readonly encode: (pin: AgentRunPin) => T;
+    // Whether entries carry their own run settings. Only the agent-run list does; ModelPinPicker says why.
+    readonly knobs?: boolean;
+}) {
+    const entries = computed(() =>
+        list.read().map((stored, index) => {
+            const pin = list.decode(stored);
+            const described = describePin(pin, String(stored));
+            return {
+                key: `${index}:${described.label}`,
+                index,
+                pin,
+                detail: list.knobs === true && pin !== undefined ? knobSummary(pin) : undefined,
+                ...described,
+            };
+        }),
+    );
     return {
-        adding,
-        entries: computed(() =>
-            read().map((key, index) => {
-                const pin = describeModelPin(key);
-                return { key, index, choice: pin.choice, label: pin.label, ready: pin.ready };
-            }),
-        ),
+        knobs: list.knobs === true,
+        entries,
+        // Everything already written down, so the picker can offer those rows without letting one be pinned
+        // twice: a model that vanished from the list as you used it would make you hunt for a row that was
+        // there a moment ago.
+        taken: computed(() => entries.value.flatMap((entry) => (entry.choice === undefined ? [] : [quickModelKey(entry.choice)]))),
+        // Adding appends; re-pointing an entry replaces it where it stands, because its position in the order is
+        // the other half of what the user said.
+        apply: (index: number | undefined, pin: AgentRunPin): void => {
+            const stored = list.encode(pin);
+            const current = list.read();
+            list.write(index === undefined ? [...current, stored] : current.map((held, at) => (at === index ? stored : held)));
+        },
         // Emptying the list is not a broken state: it is how each row gets back to its own floor, which is why
         // removing the last one needs no confirmation and no separate "reset" control.
-        remove: (index: number): void => write(read().filter((_, at) => at !== index)),
+        remove: (index: number): void => list.write(list.read().filter((_, at) => at !== index)),
         // One step up the order. Only up, and only where there is a step to take: with a whole list on screen,
         // "move this one earlier" repeated is the entire vocabulary needed, and a second button per row in a
         // 14rem column is how a settings page turns into a control panel.
         promote: (index: number): void => {
-            const keys = [...read()];
-            const [moved] = keys.splice(index, 1);
-            keys.splice(index - 1, 0, moved!);
-            write(keys);
+            const held = [...list.read()];
+            const [moved] = held.splice(index, 1);
+            held.splice(index - 1, 0, moved!);
+            list.write(held);
         },
     };
+}
+
+const quick = pinnedList({
+    read: () => quickModel.pinned.value,
+    write: (keys) => patch({ quickModel: [...keys] }),
+    decode: (key) => parsePinned(key),
+    encode: (pin) => quickModelKey(pin),
+});
+
+/* WHAT AN AGENT RUN OPENS ON. Pointedly not cheapest-first like the quick model's list above, because these are
+ * opposite jobs: that one exists to keep a one-click helper off the frontier tier, while this one has to read a
+ * failing suite, or a container log, and repair the thing.
+ *
+ * A LIST here for the same reason it is one above, and for no other: one connected account whose allowance went
+ * on the chat this morning takes every Fix with agent, chore and documentation run in the sandbox down with it.
+ * What the empty list means is where the two part company: Auto up there, and down here the composer's own
+ * pick, because nothing can judge which tier a whole session is worth.
+ *
+ * THE ONLY LIST WHOSE ENTRIES CARRY KNOBS, and the reason is what each list's job can actually honour: the
+ * quick helpers are one-shot calls the daemon deliberately runs with thinking disabled and no effort at all
+ * (agent/one-shot.ts), and the cheaper-tier list names a substitution the judge makes, which never touches an
+ * unattended run. A reasoning control on either would be a switch with nothing behind it. */
+const runs = pinnedList({
+    read: () => agentRun.pinned.value,
+    write: (pins) => patch({ agentRunModels: [...pins] }),
+    decode: (pin) => pin,
+    encode: (pin) => pin,
+    knobs: true,
+});
+
+/* THE THIRD ROW IS ABOUT THE CHAT, which the two above deliberately are not, and it is the only one that can
+ * change what a model the user picked themselves actually runs. So it says so, and its default says nothing at
+ * all: "Measure" judges every turn, records the verdict beside what the turn really cost, and moves nothing. */
+const fast = pinnedList({
+    read: () => settings.value?.autoFastModels ?? [],
+    write: (keys) => patch({ autoFastModels: [...keys] }),
+    decode: (key) => parsePinned(key),
+    encode: (pin) => quickModelKey(pin),
+});
+
+/* ONE PICKER FOR THE PAGE, over whichever entry raised it, which is the shape the shell's own picker already
+ * has (hostModelPicker.ts) and for the same reason: a second ask supersedes the first, because a panel still
+ * open belongs to a trigger the user has already moved away from. `index` absent means ADDING, and an add draws
+ * no knobs — there is nothing to configure until the entry exists, and the row it lands on opens this same
+ * panel with them in it. */
+const LISTS = { quick, runs, fast };
+const editing = shallowRef<{ id: keyof typeof LISTS; index: number | undefined; anchor: HTMLElement } | undefined>(undefined);
+const openPicker = (id: keyof typeof LISTS, index: number | undefined, anchor: HTMLElement): void => {
+    editing.value = { id, index, anchor };
 };
+const active = computed(() => (editing.value === undefined ? undefined : LISTS[editing.value.id]));
+const editingPin = computed<AgentRunPin | undefined>(() => {
+    const open = editing.value;
+    return open?.index === undefined ? undefined : active.value?.entries.value[open.index]?.pin;
+});
 
-// The option list, with what is already in the order greyed out. Shared for the same reason the editing is:
-// the two rows offer different models and owe the reader the identical treatment of one already chosen.
-const pickerOptionsFor = (
-    groups: readonly { readonly label: string; readonly options: readonly { readonly key: string; readonly label: string }[] }[],
-    chosen: readonly string[],
-): PickerOptions =>
-    groups.map((group) => ({
-        label: group.label,
-        options: group.options.map((option) => ({
-            value: option.key,
-            label: option.label,
-            ...(chosen.includes(option.key) ? { disabled: true, description: `In the order` } : {}),
-        })),
-    }));
-
-const quick = pinList(
-    () => quickModel.pinned.value,
-    (keys) => patch({ quickModel: [...keys] }),
-);
-const quickModelPickerOptions = computed(() => pickerOptionsFor(quickModelGroups.value, quickModel.pinned.value));
+// A model row answers the panel's question, so it closes behind the pick (the picker's own doing); a knob row
+// writes through and stays open, because those are settings of the entry rather than the answer.
+const pick = (pin: AgentRunPin): void => active.value?.apply(editing.value?.index, pin);
+const configure = (pin: AgentRunPin): void => {
+    if (editing.value?.index !== undefined) {
+        active.value?.apply(editing.value.index, pin);
+    }
+};
 
 /* WHAT AUTO WOULD DO, spelled out: the same ladder the daemon would walk, named in order. It is the row's
  * whole discoverability story: a user who has never opened this page still sees which account their commit
  * messages come from and which one catches them when it runs out, and the difference between "Auto" and a list
  * they wrote themselves becomes a thing they can compare rather than a thing they have to imagine. */
-const autoOrder = computed(() =>
-    quickModel.chain.value.map(
-        (choice) =>
-            quickModelGroups.value.flatMap((group) => group.options).find((option) => option.key === quickModelKey(choice))?.label ?? choice.model,
-    ),
-);
-
-/* WHAT AN AGENT RUN OPENS ON. Every connected provider's full catalog in CATALOG order: pointedly not
- * cheapest-first like the quick model's list above, because these are opposite jobs: that one exists to keep a
- * one-click helper off the frontier tier, while this one has to read a failing suite, or a container log, and
- * repair the thing.
- *
- * A LIST here for the same reason it is one above, and for no other: one connected account whose allowance went
- * on the chat this morning takes every Fix with agent, chore and documentation run in the sandbox down with it.
- * What the empty list means is where the two part company: Auto up there, and down here the composer's own
- * pick, because nothing can judge which tier a whole session is worth. */
-const runs = pinList(
-    () => agentRun.pinned.value,
-    (keys) => patch({ agentRunModels: [...keys] }),
-);
-const agentRunPickerOptions = computed(() => pickerOptionsFor(agentRunModelGroups.value, agentRun.pinned.value));
-
-/* THE EFFORT BELONGS TO WHICHEVER MODEL IS ACTUALLY GOING TO RUN: the head of the chain, not the head of the
- * list, since a disconnected first entry is stepped over before anything is spent. Nothing to offer until one
- * of them is reachable, because a tier scale is a property of the model.
- *
- * `thinking: false` because the setting pins a starting effort, not a turn: extended thinking is a per-turn
- * Claude knob a proposed session still owns, and Conversation.effort re-clamps this pick against whatever it
- * is when a session actually opens.
- *
- * "Default" leads with the empty value and is not decoration: an unpinned effort really does mean "whatever the
- * composer is set to", and rendering the scale's lowest segment as selected instead would claim this sandbox
- * had pinned `low` when it had pinned nothing. */
-const agentRunEffortOptions = computed(() =>
-    agentRun.choice.value === undefined
-        ? []
-        : [
-              { label: `Default`, value: `` },
-              ...effortsFor(agentRun.choice.value.provider, agentRun.choice.value.model, false).map((e) => ({ label: e.label, value: e.value })),
-          ],
-);
-
-/* CLAMPED FOR DISPLAY, never written back: the composer's own rule (effortScale.ts). Reordering the list can
- * put a model with a shorter scale at the head, and a stored `max` would then light no segment at all and read
- * as an unset control. Clamping shows the tier that will actually run while leaving the user's own pick intact
- * for the day the longer-scaled model leads again. */
-const agentRunEffort = computed(() => {
-    const stored = settings.value?.agentRunEffort ?? ``;
-    const head = agentRun.choice.value;
-    return stored === `` || head === undefined ? stored : clampEffort(stored, head.provider, head.model, false);
-});
-
-/* THE THIRD ROW IS ABOUT THE CHAT, which the two above deliberately are not, and it is the only one that can
- * change what a model the user picked themselves actually runs. So it says so, and its default says nothing at
- * all: "Measure" judges every turn, records the verdict beside what the turn really cost, and moves nothing.
- *
- * It reuses the quick model's option groups rather than growing its own, because it is asking the identical
- * question, which of this provider's rows is the cheap one, and two lists that answered it differently would be
- * a bug wearing two names. */
-const fast = pinList(
-    () => settings.value?.autoFastModels ?? [],
-    (keys) => patch({ autoFastModels: [...keys] }),
-);
-const fastModelPickerOptions = computed(() => pickerOptionsFor(quickModelGroups.value, settings.value?.autoFastModels ?? []));
+const autoOrder = computed(() => quickModel.chain.value.map(modelChoiceLabel));
 
 /* Three states, in the order they escalate, and the middle one is the point of the control rather than a
  * halfway house: nobody can name a sensible cutoff for "easy enough" before there is traffic to fit it against,
@@ -209,9 +237,6 @@ const eagernessOptions = [
     { label: `Balanced`, value: `balanced` },
     { label: `Eager`, value: `eager` },
 ];
-
-// A pinned key is `${provider}:${model}` (quickModelKey): the provider prefix drives the row's brand mark.
-const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`:`)) as AgentProvider;
 </script>
 
 <template>
@@ -225,13 +250,10 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
              say all of them, numbered, in the order they will actually be tried. -->
         <Row icon="sparkles" title="Quick model" description="Fast models for automatic background tasks.">
             <template #control>
-                <Picker
-                    v-model="quick.adding.value"
-                    :options="quickModelPickerOptions"
-                    :disabled="settings === undefined || quickModelGroups.length === 0"
-                    placeholder="Add a model…"
-                    class="w-56 py-1.5 text-xs"
-                    aria-label="Add a quick model"
+                <AddModelButton
+                    label="Add a quick model"
+                    :disabled="settings === undefined"
+                    @open="(anchor: HTMLElement) => openPicker(`quick`, undefined, anchor)"
                 />
             </template>
             <!-- Four states, in the order they matter: the list the user wrote, the list the app would use,
@@ -244,6 +266,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                     warn-thinking
                     @promote="quick.promote"
                     @remove="quick.remove"
+                    @edit="(index: number, anchor: HTMLElement) => openPicker(`quick`, index, anchor)"
                 />
                 <!-- AUTO, SPELLED OUT. Naming the ladder rather than the word is what makes this row readable
                      without opening anything: you can see which account your commit messages come from and
@@ -251,8 +274,8 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                 <p v-else-if="autoOrder.length > 0" class="text-2xs text-muted">
                     <span class="text-content">Auto</span>: {{ autoOrder.join(`, then `) }}. Add a model to choose the order yourself.
                 </p>
-                <!-- Nothing connected: the helpers are inert and the dropdown is empty, which on its own reads
-                     as a broken control rather than a missing account. -->
+                <!-- Nothing connected: the helpers are inert, which on its own reads as a broken control
+                     rather than a missing account. -->
                 <p v-else-if="settings !== undefined" class="text-2xs text-muted">Connect an AI account above to enable the one-click helpers.</p>
             </template>
         </Row>
@@ -262,45 +285,31 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
              them, but BELOW rather than in the description, because the description column is 14rem wide and
              a five-item list read there as six lines of prose beside a one-line dropdown. The same names on
              the full-width row underneath are one line, and read as the list they are. -->
-        <Row icon="bolt" title="Agent runs" description="Model tier for runs started in a worktree." wide-control>
+        <Row icon="bolt" title="Agent runs" description="Model tier for runs started in a worktree.">
             <template #control>
-                <div class="flex flex-wrap items-center justify-end gap-2">
-                    <div
-                        v-if="agentRunEffortOptions.length > 0"
-                        class="flex shrink-0 items-center"
-                        role="group"
-                        aria-label="Reasoning effort"
-                    >
-                        <SegmentedControl
-                            :model-value="agentRunEffort"
-                            :options="agentRunEffortOptions"
-                            wrap
-                            @update:model-value="(agentRunEffort: string) => patch({ agentRunEffort })"
-                        />
-                    </div>
-                    <Picker
-                        v-model="runs.adding.value"
-                        :options="agentRunPickerOptions"
-                        :disabled="settings === undefined || agentRunModelGroups.length === 0"
-                        placeholder="Add a model…"
-                        class="w-56 py-1.5 text-xs"
-                        aria-label="Add a model for agent runs"
-                    >
-                        <template #icon="{ option }">
-                            <ProviderLogo :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
-                        </template>
-                    </Picker>
-                </div>
+                <AddModelButton
+                    label="Add a model for agent runs"
+                    :disabled="settings === undefined"
+                    @open="(anchor: HTMLElement) => openPicker(`runs`, undefined, anchor)"
+                />
             </template>
             <template #below>
-                <ModelPinList v-if="runs.entries.value.length > 0" :entries="runs.entries.value" @promote="runs.promote" @remove="runs.remove" />
+                <!-- Each entry names the tier it will run at beside the model, because that is now a property
+                     of the entry: press the row to change either half. -->
+                <ModelPinList
+                    v-if="runs.entries.value.length > 0"
+                    :entries="runs.entries.value"
+                    @promote="runs.promote"
+                    @remove="runs.remove"
+                    @edit="(index: number, anchor: HTMLElement) => openPicker(`runs`, index, anchor)"
+                />
                 <!-- The floor, named. Unlike the row above there is no ladder to spell out: deliberately,
                      since nothing here can judge which tier a whole session is worth, so what this has to
                      say is simply which model answers while the list is empty, and that it follows the
                      composer. -->
                 <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                    <span class="text-content">Composer default</span>: whatever your chat is set to, which keeps following it as you change it.
-                    Add a model to pin these runs to a tier of their own.
+                    <span class="text-content">Composer default</span>: whatever your chat is set to, which keeps following it as you change it. Add a
+                    model to pin these runs to a tier of their own.
                 </p>
             </template>
         </Row>
@@ -340,7 +349,8 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         >
                             <template v-if="tierReport.routed > 0">{{ tierReport.routed }} down-routed</template
                             ><template v-if="tierReport.escalated > 0"
-                                ><template v-if="tierReport.routed > 0"> · </template>{{ tierReport.escalated }}/{{ tierReport.fast }} bumped up</template
+                                ><template v-if="tierReport.routed > 0"> · </template>{{ tierReport.escalated }}/{{ tierReport.fast }} bumped
+                                up</template
                             ><template v-if="tierReport.denied > 0"> · {{ tierReport.denied }} vetoed</template>
                         </p>
                     </div>
@@ -349,12 +359,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <span class="text-xs font-medium text-content">Cheaper model</span>
                             <div class="flex flex-wrap items-center justify-end gap-2">
-                                <div
-                                    v-if="settings?.autoTier !== `off`"
-                                    class="flex shrink-0 items-center"
-                                    role="group"
-                                    aria-label="How readily"
-                                >
+                                <div v-if="settings?.autoTier !== `off`" class="flex shrink-0 items-center" role="group" aria-label="How readily">
                                     <SegmentedControl
                                         :model-value="settings?.autoTierEagerness ?? `balanced`"
                                         :options="eagernessOptions"
@@ -365,18 +370,11 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                                         "
                                     />
                                 </div>
-                                <Picker
-                                    v-model="fast.adding.value"
-                                    :options="fastModelPickerOptions"
-                                    :disabled="settings === undefined || quickModelGroups.length === 0"
-                                    placeholder="Add a model…"
-                                    class="w-56 py-1.5 text-xs"
-                                    aria-label="Add a model for automatic tier selection"
-                                >
-                                    <template #icon="{ option }">
-                                        <ProviderLogo :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
-                                    </template>
-                                </Picker>
+                                <AddModelButton
+                                    label="Add a model for automatic tier selection"
+                                    :disabled="settings === undefined"
+                                    @open="(anchor: HTMLElement) => openPicker(`fast`, undefined, anchor)"
+                                />
                             </div>
                         </div>
                         <ModelPinList
@@ -384,6 +382,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                             :entries="fast.entries.value"
                             @promote="fast.promote"
                             @remove="fast.remove"
+                            @edit="(index: number, anchor: HTMLElement) => openPicker(`fast`, index, anchor)"
                         />
                         <p v-else-if="settings !== undefined" class="text-2xs text-muted">
                             <span class="text-content">Auto</span>: cheapest from the chat's provider.
@@ -393,4 +392,19 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
             </template>
         </Row>
     </RowGroup>
+
+    <!-- ONE PANEL, STANDING BY, opened over whichever trigger raised it. It is mounted rather than created per
+         open because the overlay hosts inside it measure and place themselves in a watcher on that flag: a host
+         that arrives already open never places, and parks off-screen (ResponsiveOverlay's header). Its CONTENT
+         is what remounts per open, which is what resets the search box and refreshes the catalogs. -->
+    <ModelPinPicker
+        :open="editing !== undefined"
+        :anchor="editing?.anchor"
+        :pin="editingPin"
+        :knobs="active?.knobs === true"
+        :taken="active?.taken.value ?? []"
+        @update:open="editing = undefined"
+        @pick="pick"
+        @configure="configure"
+    />
 </template>

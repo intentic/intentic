@@ -306,13 +306,17 @@ export function usePushFlow() {
             return;
         }
         const push: PendingPush = { verb, what, targets };
-        // The HEAD of the agent-run list, the entry the daemon would reach for, rather than the raw setting:
-        // this is composed into a draft the user can see and re-point, so it has to name a model that can
-        // actually be sent. `quickModelKey` because composeSession takes the pinned `${provider}:${model}` form.
-        // Read before the check is even considered: a push with no check configured can still be refused by
-        // the repository's own hook, and the fix proposed for that reads the same settings.
+        /* The HEAD of the agent-run list, the entry the daemon would reach for, rather than the raw setting:
+         * this is composed into a draft the user can see and re-point, so it has to name a model that can
+         * actually be sent. `quickModelKey` because composeSession takes the pinned `${provider}:${model}`
+         * form. Read before the check is even considered: a push with no check configured can still be refused
+         * by the repository's own hook, and the fix proposed for that reads the same settings.
+         *
+         * THE EFFORT COMES OFF THAT ENTRY, not from a setting beside the list: each pin now carries its own
+         * (AgentRunPinSchema), so the tier proposed here is the one the owner wrote for the model being
+         * proposed rather than one shared with every other entry. */
         const head = agentRun.choice.value;
-        fixWith = { ...(head === undefined ? {} : { model: quickModelKey(head) }), effort: settings.value?.agentRunEffort };
+        fixWith = head === undefined ? {} : { model: quickModelKey(head), effort: head.effort };
         const command = prepushCommandOf(settings.value?.rules ?? []);
         if (command === `` || !targets.some((target) => target.push)) {
             void send(push);

@@ -94,8 +94,12 @@ vi.mock(`../sandbox/useSandboxSettings`, async () => {
             enabled: true,
         },
     ];
+    // The pinned entry carries its own effort (AgentRunPinSchema), so the tier the proposal names comes off the
+    // entry being proposed rather than from a setting shared with every other one.
     return {
-        useSandboxSettings: () => ({ settings: ref({ rules, agentRunModels: [`claude:claude-sonnet-4-5`], agentRunEffort: `high` }) }),
+        useSandboxSettings: () => ({
+            settings: ref({ rules, agentRunModels: [{ provider: `claude`, model: `claude-sonnet-4-5`, effort: `high` }] }),
+        }),
     };
 });
 
