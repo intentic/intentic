@@ -20,8 +20,14 @@ import type { InjectionKey } from "vue";
 /** Provided by a view whose bar has room for the open file's context. Absent ⇒ the breadcrumb draws its own band. */
 export const HOISTED_CONTEXT: InjectionKey<boolean> = Symbol(`workspace.hoistedContext`);
 
+/* WHICH BAR, once there are two. The editor area splits into two panes, each with a bar of its own and each
+ * possibly rendering a viewer, and a teleport addresses its target by DOM id: with one fixed id per target, both
+ * panes would write into whichever seat the document happened to hold first, so the companion pane's breadcrumb
+ * would land above the main pane's file. Each pane provides its own scope and the ids are derived from it. */
+export const CHROME_SCOPE: InjectionKey<string> = Symbol(`workspace.chromeScope`);
+
 /** The element in that bar the breadcrumb teleports into. */
-export const CONTEXT_TARGET = `ws-viewer-context`;
+export const contextTarget = (scope: string): string => `ws-viewer-context-${scope}`;
 
 /** The element INSIDE the breadcrumb where a viewer hangs its own controls, so no second toolbar opens below it. */
-export const VIEWER_ACTIONS_TARGET = `ws-viewer-actions`;
+export const viewerActionsTarget = (scope: string): string => `ws-viewer-actions-${scope}`;

@@ -59,7 +59,7 @@ const tabsKey = (sandboxId: string): string => `intentic.workspaceTabs.${sandbox
  * dir, or a repo). */
 export type StoredWorkspaceTab = Exclude<WorkspaceTab, { kind: "diff" }>;
 
-export interface WorkspaceTabStrip {
+export interface StoredPane {
     // Which tab is focused, or null, a legitimate state, not a missing value: closing the last tab leaves the
     // strip empty, and a bare /workspace URL deselects a file tab while its neighbours stay open.
     readonly active: string | null;
@@ -68,6 +68,14 @@ export interface WorkspaceTabStrip {
     // asked to keep, once per reload.
     readonly preview: string | null;
     readonly tabs: readonly StoredWorkspaceTab[];
+}
+
+/* The main pane is the blob itself, and the companion pane hangs off it under `side`, absent whenever there is
+ * nothing in it worth restoring, which is most of the time: the split's usual occupant is a diff, and no diff is
+ * stored. So the common shape on disk is exactly what it was before there were two panes, and a window that
+ * comes back unsplit came back that way because its split held only things this file refuses to keep. */
+export interface WorkspaceTabStrip extends StoredPane {
+    readonly side?: StoredPane;
 }
 
 // Every field that NAMES something is required and non-empty, an entry missing one names nothing this build
@@ -85,33 +93,53 @@ const StoredTabSchema: z.ZodType<StoredWorkspaceTab> = z.discriminatedUnion(`kin
     z.object({ kind: z.literal(`document`), id: named, extension: named, provider: named, path: z.string(), title: named, icon: named }),
 ]);
 
-// Parse one stored blob into a coherent strip: readable tabs only (an unreadable one is skipped rather than
-// fatal, it must not cost the user every other file they had open), each id once (a duplicate would render as
-// two tabs sharing a key), and a focus and a preview slot that each name one of them.
-const parseStrip = (raw: string): WorkspaceTabStrip | undefined => {
-    let stored: { active?: unknown; preview?: unknown; tabs?: unknown };
-    try {
-        stored = JSON.parse(raw) as { active?: unknown; preview?: unknown; tabs?: unknown };
-    } catch {
+interface RawPane {
+    active?: unknown;
+    preview?: unknown;
+    tabs?: unknown;
+}
+
+/* Parse one pane out of the blob: readable tabs only (an unreadable one is skipped rather than fatal, it must
+ * not cost the user every other file they had open), each id once ACROSS BOTH PANES (`seen` is shared, because
+ * one tab in two panes would render as two tabs sharing a key and an edit buffer), and a focus and a preview
+ * slot that each name one of this pane's own tabs. */
+const parsePane = (raw: RawPane | undefined, seen: Set<string>): StoredPane | undefined => {
+    if (raw === undefined || !Array.isArray(raw.tabs)) {
         return undefined;
     }
-    if (!Array.isArray(stored.tabs)) {
-        return undefined;
-    }
-    const seen = new Set<string>();
+    const mine = new Set<string>();
     const tabs: StoredWorkspaceTab[] = [];
-    for (const entry of stored.tabs) {
+    for (const entry of raw.tabs) {
         const tab = StoredTabSchema.safeParse(entry).data;
         if (tab !== undefined && !seen.has(tab.id)) {
             seen.add(tab.id);
+            mine.add(tab.id);
             tabs.push(tab);
         }
     }
     if (tabs.length === 0) {
         return undefined;
     }
-    const names = (id: unknown): string | null => (typeof id === `string` && seen.has(id) ? id : null);
-    return { active: names(stored.active), preview: names(stored.preview), tabs };
+    const names = (id: unknown): string | null => (typeof id === `string` && mine.has(id) ? id : null);
+    return { active: names(raw.active), preview: names(raw.preview), tabs };
+};
+
+const parseStrip = (raw: string): WorkspaceTabStrip | undefined => {
+    let stored: RawPane & { side?: unknown };
+    try {
+        stored = JSON.parse(raw) as RawPane & { side?: unknown };
+    } catch {
+        return undefined;
+    }
+    const seen = new Set<string>();
+    const main = parsePane(stored, seen);
+    if (main === undefined) {
+        return undefined;
+    }
+    // A side pane whose every tab was unreadable (or absent entirely) is simply no split: the main pane is a
+    // whole strip on its own, and there is nothing to fill a second column with.
+    const side = parsePane(typeof stored.side === `object` && stored.side !== null ? (stored.side as RawPane) : undefined, seen);
+    return side === undefined ? main : { ...main, side };
 };
 
 // This window's editor tabs for a sandbox, else the last window's (the seed) when this one has never opened it.

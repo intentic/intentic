@@ -5,7 +5,7 @@ One repository's commit graph, its branches, and the actions you can take on the
 ## Responsibilities
 
 - Draw the history as a graph: commits, branches, merges, and where you are in it.
-- Open a commit and show what it changed, as a file tree.
+- Open a commit and show what it changed, as a file tree, and open any of those files' diffs beside the graph.
 - Search commits, switch and group branches, manage stashes, undo the last operation.
 
 ## Key files
@@ -26,6 +26,14 @@ documentation extension makes for its architecture pages, and the same grain: a 
 The graph is WIDE, which is why it earns the editor area rather than the sidebar. This is the division VSCode
 makes between its SCM list and its Git Graph tab; the uncommitted half of the story: the Changes review:
 stays in the app's sidebar where it already lives.
+
+**The diff opens BESIDE the graph, not over it.** Clicking a file in a commit hands the host a diff, and because
+this tab is a document with a file list in it, the host puts that diff in the editor's companion pane (its
+`EditorStrip`) and leaves the graph where it is. Reading a commit is a list and a diff, and in one pane they take
+turns: every file clicked used to replace the very list that named it. A click is a PEEK (one companion tab,
+replaced by the next file) and a double-click keeps the tab, the grammar the Changes panel already uses; the row
+whose diff is showing stays marked, so the two halves read as one view. The tab opens on the click with the
+status letter and ± counts it already knows, and its content lands underneath (`pending` + `fillDiff`).
 
 ## Conventions & gotchas
 

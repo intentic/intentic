@@ -23,8 +23,31 @@ sessionStorage.setItem(
 
 const { useWorkspaceTabs } = await import("./useWorkspaceTabs");
 const { useEditBuffers } = await import("./useEditBuffers");
+const { documentTabId } = await import("../../core-views/documentRegistry");
 
-const { tabs, activeId, previewId, openDiff, openFile, keepTab, selectTab, closedTabs, closeTabIds, reopenClosedTab } = useWorkspaceTabs();
+// The git graph, as the strip identifies it: an extension's document tab about the /work root. Composed the way
+// the store composes it, so the tests pin the BEHAVIOUR rather than a spelling of the id.
+const GIT_DOC = documentTabId(`git-history`, `log`, ``);
+
+const {
+    tabs,
+    activeId,
+    previewId,
+    openDiff,
+    openFile,
+    openDocument,
+    keepTab,
+    selectTab,
+    closedTabs,
+    closeTabIds,
+    reopenClosedTab,
+    strip,
+    focusedPane,
+    splitOpen,
+    splitAllowed,
+    openToSide,
+    collapseSplit,
+} = useWorkspaceTabs();
 const diffPayload = (path: string) => ({
     key: `working:root`,
     scope: `root`,
@@ -34,7 +57,12 @@ const diffPayload = (path: string) => ({
     before: `a`,
     after: `b`,
 });
-const stored = (): { active: string | null; preview: string | null; tabs: { id: string }[] } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
+interface StoredPane {
+    active: string | null;
+    preview: string | null;
+    tabs: { id: string }[];
+}
+const stored = (): StoredPane & { side?: StoredPane } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
 
 it(`comes back with the tabs and focus the last visit left`, () => {
     expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`]);
@@ -222,4 +250,116 @@ it(`keeps the previewed file the moment it is edited`, async () => {
     await nextTick();
 
     expect(previewId.value).toBeNull();
+});
+
+/* THE SPLIT. Reading a commit is a list and a diff, and in one pane they take turns: every file clicked in the
+ * git graph replaced the graph that named it. So a diff asked for by a DOCUMENT opens in the companion pane. */
+const startFresh = (): void => {
+    closeTabIds(new Set([...strip.value.main.tabs, ...strip.value.side.tabs].map((tab) => tab.id)));
+    closedTabs.value = [];
+    splitAllowed.value = true;
+};
+
+it(`opens a document's diff beside it, leaving the document on screen`, () => {
+    startFresh();
+    openDocument(`git-history`, `log`, ``, `History`, `sitemap`);
+
+    openDiff(diffPayload(`src/a.ts`), `preview`);
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([GIT_DOC]);
+    expect(strip.value.main.active).toBe(GIT_DOC);
+    expect(strip.value.side.tabs.map((tab) => tab.kind)).toEqual([`diff`]);
+    expect(focusedPane.value).toBe(`side`);
+    expect(splitOpen.value).toBe(true);
+});
+
+// The second file clicked arrives with the companion pane focused and a diff active, which is not a document,
+// so it lands where the first one did: one companion tab, replaced as the reader moves down the file list.
+it(`replaces the companion diff as the reader moves down the list`, () => {
+    openDiff(diffPayload(`src/b.ts`), `preview`);
+
+    const companion = strip.value.side.tabs[0];
+    expect(strip.value.side.tabs).toHaveLength(1);
+    expect(companion?.kind === `diff` ? companion.path : undefined).toBe(`src/b.ts`);
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([GIT_DOC]);
+});
+
+// Each pane owns a preview slot, so a peek in the companion cannot evict the document it was opened from.
+it(`peeks in the companion pane without touching the main pane's slot`, () => {
+    expect(strip.value.side.preview).toBe(strip.value.side.active);
+    expect(strip.value.main.preview).toBeNull();
+});
+
+it(`ends the split when the companion's last tab is closed, and hands the focus back`, () => {
+    closeTabIds(new Set(strip.value.side.tabs.map((tab) => tab.id)));
+
+    expect(splitOpen.value).toBe(false);
+    expect(focusedPane.value).toBe(`main`);
+    expect(activeId.value).toBe(GIT_DOC);
+});
+
+// The explicit way in, for the pairings the store cannot guess: a README beside the code it describes.
+it(`sends a tab to the side on request, and takes it back`, () => {
+    startFresh();
+    openFile(`src/left.ts`);
+    openFile(`src/right.ts`);
+
+    openToSide();
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`src/left.ts`]);
+    expect(strip.value.side.tabs.map((tab) => tab.id)).toEqual([`src/right.ts`]);
+    expect(focusedPane.value).toBe(`side`);
+
+    openToSide();
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`src/left.ts`, `src/right.ts`]);
+    expect(splitOpen.value).toBe(false);
+});
+
+// A phone, or a workspace column with no room for two readable halves: the diff opens where the reader is,
+// exactly as it did before there were panes.
+it(`opens a document's diff in place when a split is not allowed`, () => {
+    startFresh();
+    splitAllowed.value = false;
+    openDocument(`git-history`, `log`, ``, `History`, `sitemap`);
+
+    openDiff(diffPayload(`src/c.ts`), `preview`);
+
+    expect(splitOpen.value).toBe(false);
+    expect(strip.value.main.tabs.map((tab) => tab.kind)).toEqual([`document`, `diff`]);
+});
+
+// The room for two panes goes away (the chat opens, the window narrows). The tabs are the reader's place, so
+// they fold back into one pane rather than being closed.
+it(`folds the companion pane back in when the room for two goes away`, () => {
+    startFresh();
+    openFile(`src/left.ts`);
+    openFile(`src/right.ts`);
+    openToSide();
+
+    collapseSplit();
+
+    expect(splitOpen.value).toBe(false);
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`src/left.ts`, `src/right.ts`]);
+    expect(activeId.value).toBe(`src/right.ts`);
+});
+
+// A split of real files survives a reload; a split holding only a diff does not, because no diff is stored, and
+// a restored empty column would be worse than the unsplit editor it comes back as.
+it(`stores the companion pane, and stores nothing when it holds only a diff`, async () => {
+    startFresh();
+    openFile(`src/left.ts`);
+    openFile(`src/right.ts`);
+    openToSide();
+    await nextTick();
+
+    expect(stored().side?.tabs.map((tab) => tab.id)).toEqual([`src/right.ts`]);
+
+    collapseSplit();
+    openDocument(`git-history`, `log`, ``, `History`, `sitemap`);
+    openDiff(diffPayload(`src/only-a-diff.ts`), `preview`);
+    await nextTick();
+
+    expect(splitOpen.value).toBe(true);
+    expect(stored().side).toBeUndefined();
 });

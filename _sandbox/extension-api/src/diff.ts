@@ -62,4 +62,12 @@ export interface DiffPayload extends DiffRawSides {
      * Absent means the payload IS the content, which is what an extension handing over an already-computed
      * before/after pair should send. */
     readonly pending?: boolean;
+    /* THIS IS A LOOK, NOT AN OPEN: the tab takes the strip's single transient slot (the italic tab), and the
+     * next peek replaces it in place.
+     *
+     * It is the difference between a list being READ and a file being CHOSEN. An extension whose document lists
+     * changed files (a commit's, a run's) has a reader who will click ten of them in a row, and ten pinned tabs
+     * is what the slot exists to prevent, so those clicks are peeks and a double-click, which should send the
+     * payload without this, is what keeps one. Absent means keep, which is right for a single deliberate open. */
+    readonly preview?: boolean;
 }

@@ -4,7 +4,7 @@ import { computed, inject } from "vue";
 import { viewersOfPath } from "../../composables/usePresence";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { formatBytes } from "@intentic/ui";
-import { CONTEXT_TARGET, HOISTED_CONTEXT, VIEWER_ACTIONS_TARGET } from "./viewerChrome";
+import { CHROME_SCOPE, contextTarget, HOISTED_CONTEXT, viewerActionsTarget } from "./viewerChrome";
 
 /* The open file's context: where it sits, who else is reading it, and whatever its viewer and the host want to
  * offer about it. The trailing slot hosts the host's actions (FileViewer puts its edit controls there); the
@@ -27,6 +27,8 @@ import { CONTEXT_TARGET, HOISTED_CONTEXT, VIEWER_ACTIONS_TARGET } from "./viewer
 const { path, meta } = defineProps<{ path: string; meta?: WorkspaceTreeEntry }>();
 
 const hoisted = inject(HOISTED_CONTEXT, false);
+// Which pane's bar this belongs to (see CHROME_SCOPE). The phone provides none and never teleports anyway.
+const scope = inject(CHROME_SCOPE, `main`);
 
 const segments = computed(() => path.split(`/`));
 // Hoisted: the folders alone, and nothing at all for a file at the root, where there is no folder context to
@@ -38,7 +40,7 @@ const fullTitle = computed(() => (sizeLabel.value === `` ? path : `${path} · ${
 </script>
 
 <template>
-    <Teleport defer :to="`#${CONTEXT_TARGET}`" :disabled="!hoisted">
+    <Teleport defer :to="`#${contextTarget(scope)}`" :disabled="!hoisted">
         <div :class="hoisted ? `flex min-w-0 items-center gap-2` : `flex h-8 shrink-0 items-center gap-2 border-b border-line bg-card px-3`">
             <div
                 v-if="crumbs.length > 0"
@@ -59,7 +61,7 @@ const fullTitle = computed(() => (sizeLabel.value === `` ? path : `${path} · ${
             <!-- Members looking at the same file as you, live. -->
             <PresenceAvatars :members="viewersOfPath(path)" label="also viewing this file" />
             <!-- The viewer's own controls, teleported in rather than opening a toolbar under this one. -->
-            <div :id="VIEWER_ACTIONS_TARGET" class="flex shrink-0 items-center gap-1"></div>
+            <div :id="viewerActionsTarget(scope)" class="flex shrink-0 items-center gap-1"></div>
             <slot />
         </div>
     </Teleport>

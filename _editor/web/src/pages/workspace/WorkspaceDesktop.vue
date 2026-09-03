@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { STATE_DIR } from "@intentic/constants";
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, SegmentedControl, useNarrow, useLoadingReveal } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
@@ -18,8 +17,8 @@ import { workspaceAgent } from "../../composables/workspace/workspaceScope";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
-import { type SidebarPanel, useLayout } from "../../composables/useLayout";
-import { toAppPx, uiLength } from "../../composables/uiScale";
+import { DEFAULT_SIDE_PANE_WIDTH, MIN_PANE_PX, type SidebarPanel, useLayout } from "../../composables/useLayout";
+import { toAppPx, toScreenPx, uiLength } from "../../composables/uiScale";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
 import { useDiffStat } from "../../composables/workspace/useDiffStat";
@@ -33,26 +32,16 @@ import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { dragOffer, watchDragSource } from "./dragSource";
 import { filesToEntries } from "./dropEntries";
-import CodebaseHealth from "./CodebaseHealth.vue";
-import DiffToolbar from "./viewers/DiffToolbar.vue";
-import DiffSkeleton from "./viewers/DiffSkeleton.vue";
-import FileDiffPane from "./viewers/FileDiffPane.vue";
-import DirectoryOperator from "./DirectoryOperator.vue";
 import DirectoryPersonas from "./DirectoryPersonas.vue";
-import DirectoryUiHost from "./DirectoryUiHost.vue";
-import FileBreadcrumb from "./FileBreadcrumb.vue";
-import FileTabs from "./FileTabs.vue";
-import FileViewer from "./viewers/FileViewer.vue";
+import EditorPane from "./EditorPane.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
-import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
 import WorkspaceScopeChip from "./WorkspaceScopeChip.vue";
-import WorkspaceScopeGone from "./WorkspaceScopeGone.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import WorkspaceTree from "./WorkspaceTree.vue";
-import ExtensionDocument from "../../core-views/ExtensionDocument.vue";
 import { type RowAction, rowActionsFor } from "./rowActions";
-import { CONTEXT_TARGET, HOISTED_CONTEXT } from "./viewerChrome";
+import { paneOf } from "./workspaceTabs";
+import { HOISTED_CONTEXT } from "./viewerChrome";
 
 /* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
  * ("what the LLM sees"), read DIRECTLY from the sandbox daemon (no platform state, see CLAUDE.md). A resizable
@@ -61,7 +50,7 @@ import { CONTEXT_TARGET, HOISTED_CONTEXT } from "./viewerChrome";
  * toggled from the rail: this view owns no control for it. */
 
 const layout = useLayout();
-const { tree, rootHidden, error, isLoading, refetch, entry, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
+const { tree, rootHidden, error, isLoading, refetch, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -137,8 +126,6 @@ const {
     tabs,
     activeId,
     activeTab,
-    openLine,
-    previewId,
     openFile,
     openAtLine,
     openDiff,
@@ -151,6 +138,11 @@ const {
     closedTabs,
     closeTabIds,
     reopenClosedTab,
+    strip,
+    splitOpen,
+    splitAllowed,
+    openToSide,
+    collapseSplit,
 } = useWorkspaceTabs();
 // Mirror the active file into the URL (`/workspace/<path>`) so a reload / shared link reopens it.
 useWorkspaceRoute();
@@ -168,10 +160,34 @@ useWorkspaceRoute();
 const workspaceBody = ref<HTMLElement | undefined>(undefined);
 const narrowBody = useNarrow(workspaceBody, 40);
 const drawerOpen = ref(false);
-const sidebarOpen = computed(() => (narrowBody.value ? drawerOpen.value : !layout.sidebarCollapsed.value));
+/* THE EXPLORER STANDS ASIDE FOR A SPLIT, and says so on the control that brings it back.
+ *
+ * Two panes and a docked tree are three columns in a pane that often has room for two, and the tree is the one
+ * of the three the reader is NOT looking at: they are reading a document and the file it names. So opening a
+ * split hides it, and closing the split gives it back.
+ *
+ * It is its own piece of state, never the stored preference: `sidebarCollapsed` is what this reader chose for a
+ * docked column, and writing "collapsed" into it because a split is open would hand them a hidden explorer in
+ * every later session. Same two-pieces-of-state rule as the narrow drawer above. The hamburger carries a dot
+ * while this is true, because a panel that vanishes without a trace is indistinguishable from one that broke. */
+const autoHidden = ref(false);
+// The dot's one-shot pulse, at the moment of hiding: an indicator that appears silently on a control nobody was
+// looking at is the same as no indicator. It stops on its own, so it never becomes furniture.
+const justHidden = ref(false);
+let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+const PULSE_MS = 2600;
+
+const sidebarOpen = computed(() => (narrowBody.value ? drawerOpen.value : !layout.sidebarCollapsed.value && !autoHidden.value));
 const toggleSidebar = (): void => {
     if (narrowBody.value) {
         drawerOpen.value = !drawerOpen.value;
+        return;
+    }
+    // The press answers the dot first: the reader is asking for the panel the split took away, and it then stays
+    // for the rest of that split. A second press collapses it as it always did.
+    if (autoHidden.value) {
+        autoHidden.value = false;
+        justHidden.value = false;
         return;
     }
     layout.toggleSidebar();
@@ -182,13 +198,57 @@ watch(
     () => (drawerOpen.value = false),
 );
 
-// The gap between clicking a changed file and its content arriving. The tab, its label and the toolbar's status
-// and ± counts are already on screen by then: this decides only whether the panes below them are worth drawing
-// as an outline, which for a warmed or cached diff (the common case) they are not: it lands in the same tick.
-const diffPending = computed(() => activeTab.value?.kind === `diff` && activeTab.value.pending === true);
-const diffOutline = useLoadingReveal(
-    diffPending,
-    computed(() => activeTab.value?.id ?? ``),
+watch(splitOpen, (open) => {
+    clearTimeout(pulseTimer);
+    if (!open) {
+        autoHidden.value = false;
+        justHidden.value = false;
+        return;
+    }
+    if (narrowBody.value || layout.sidebarCollapsed.value) {
+        return; // nothing to stand aside: a drawer, or a column the reader already closed
+    }
+    autoHidden.value = true;
+    justHidden.value = true;
+    pulseTimer = setTimeout(() => (justHidden.value = false), PULSE_MS);
+});
+
+/* HOW WIDE THE PANE IS, in one measurement that answers both of the split's geometry questions: whether there is
+ * room for two panes at all, and how far the seam between them may travel. Measured rather than inferred from
+ * the window, this view renders into the workspace column, which the chat panel and the rail have already taken
+ * their share of. */
+const bodyWidth = ref(0);
+let bodyObserver: ResizeObserver | undefined;
+// Both panes have to stay readable, and a diff's floor is the chat's: two gutters, two sets of line numbers and
+// something like eighty characters between them (see MIN_PANE_PX).
+const canSplit = computed(() => toAppPx(bodyWidth.value) >= MIN_PANE_PX * 2);
+// What the seam may not cross: the companion never squeezes the pane it was opened from below that same floor,
+// and the docked explorer's column is not the editor's to spend.
+const maxSideWidth = computed(() =>
+    Math.max(MIN_PANE_PX, toAppPx(bodyWidth.value) - MIN_PANE_PX - (sidebarOpen.value && !narrowBody.value ? layout.sidebarWidth.value : 0)),
+);
+const sideWidth = computed(() => Math.min(layout.sidePaneWidth.value, maxSideWidth.value));
+// The seam speaks in pointer coordinates; every width above is in app pixels (see uiScale).
+const seamWidth = computed<number>({
+    get: () => toScreenPx(sideWidth.value),
+    set: (px) => layout.setSidePaneWidth(toAppPx(px)),
+});
+
+// The store never asks the layout anything; the surface that draws the panes tells it whether a split can be
+// drawn at all. A pane that has just become too narrow folds its companion back in rather than leaving tabs in
+// a column nobody can read.
+watch(
+    canSplit,
+    (allowed) => {
+        splitAllowed.value = allowed;
+        // Only once the pane has actually been MEASURED: before the first observer callback the width is zero,
+        // which is not "too narrow", and folding on it would collapse a split restored from the last session
+        // one tick before the real width arrived.
+        if (!allowed && bodyWidth.value > 0) {
+            collapseSplit();
+        }
+    },
+    { immediate: true },
 );
 
 // Repository directories that a directory-surface extension serves (Apps, UI): selecting one in the tree
@@ -235,29 +295,13 @@ const rowActions = (dir: string): readonly RowAction[] =>
         openDocument,
     });
 
-const activeFile = computed(() => (activeTab.value?.kind === `file` ? activeTab.value : undefined));
-// What the open diff is showing once its comments are out, for the bar above it: see useDiffStat.
-const { stat: diffStat, onStat: setDiffStat } = useDiffStat(computed(() => activeTab.value?.id));
-const openPath = computed(() => activeFile.value?.path);
-const openMeta = computed(() => entry(openPath.value));
+// The file the reader is IN, which with two panes means the focused one's: the tree's selection mark and the
+// presence report are both about where the person is, not about everything on screen.
+const openPath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
 // Presence: announce which file this tab has open. Component-scoped is right here, the open file genuinely
 // ceases to exist when the Workspace area unmounts, and the unmount below clears it.
 watch(openPath, (path) => reportOpenPath(path), { immediate: true });
 onBeforeUnmount(() => reportOpenPath(undefined));
-// A directory declares its own UI via `<dir>/.intentic/ui/index.html`; opening that file renders the directory's
-// interaction surface (sandboxed iframe + action bridge) instead of the raw HTML source. undefined = a normal
-// file, shown in the viewer. `directoryUiDir` is the owning dir, root-relative ("" = /work root).
-const UI_INDEX = `${STATE_DIR}/ui/index.html`;
-const directoryUiDir = computed<string | undefined>(() => {
-    const path = openPath.value;
-    if (path === undefined) {
-        return undefined;
-    }
-    if (path === UI_INDEX) {
-        return ``;
-    }
-    return path.endsWith(`/${UI_INDEX}`) ? path.slice(0, -(UI_INDEX.length + 1)) : undefined;
-});
 
 const fileInput = ref<HTMLInputElement>();
 // Root drop zone highlight, tracked with an enter/leave depth so bubbling over child rows doesn't flicker it off.
@@ -359,6 +403,10 @@ const tabMenu = ref<{ show: (event: Event) => void }>();
 const menuTabId = ref<string>();
 const pendingClose = ref<ReadonlySet<string>>();
 
+// Every open tab, both panes: what a close CONFIRM has to look through (unsaved work in the companion pane is
+// exactly the kind that is easy to miss) and what the strip-wide "Close All" means.
+const allTabs = computed(() => [...strip.value.main.tabs, ...strip.value.side.tabs]);
+
 // The store drops the tabs (and remembers them for Reopen Closed Tab); this layer forgets their edit buffers.
 const applyClose = (ids: ReadonlySet<string>): void => {
     closeTabIds(ids).forEach(forget); // drop unsaved edit buffers for the closed files
@@ -367,7 +415,7 @@ const applyClose = (ids: ReadonlySet<string>): void => {
 // first when any of the tabs going away has unsaved edits (a background tab's dirt is easy to miss).
 const closeTab = (id: string): void => applyClose(new Set([id]));
 const requestClose = (ids: ReadonlySet<string>): void => {
-    const hasDirty = tabs.value.some((tab) => ids.has(tab.id) && tab.kind === `file` && dirtyPaths.value.has(tab.path));
+    const hasDirty = allTabs.value.some((tab) => ids.has(tab.id) && tab.kind === `file` && dirtyPaths.value.has(tab.path));
     if (!hasDirty) {
         applyClose(ids);
         return;
@@ -383,20 +431,22 @@ const confirmClose = (): void => {
 const pendingCloseDirty = computed(() =>
     pendingClose.value === undefined
         ? []
-        : tabs.value.flatMap((tab) => (pendingClose.value?.has(tab.id) && tab.kind === `file` && dirtyPaths.value.has(tab.path) ? [tab.path] : [])),
+        : allTabs.value.flatMap((tab) =>
+              pendingClose.value?.has(tab.id) === true && tab.kind === `file` && dirtyPaths.value.has(tab.path) ? [tab.path] : [],
+          ),
 );
 // The row that names no particular tab: it tails a tab's menu and it IS the menu a right-click on the strip's
 // empty space opens (the chat and terminal strips carry the same pair of entry points).
 // Reopen is here too, and it is the one row that survives an EMPTY strip: closing the last tab is exactly when
 // a mis-close leaves nothing to right-click but the empty space.
 const stripItems = computed<MenuItem[]>(() => [
-    ...(tabs.value.length === 0
+    ...(allTabs.value.length === 0
         ? []
         : [
               {
                   label: `Close All`,
                   shortcut: commandShortcut(`workspace.closeAllTabs`),
-                  command: () => requestClose(new Set(tabs.value.map((tab) => tab.id))),
+                  command: () => requestClose(new Set(allTabs.value.map((tab) => tab.id))),
               },
           ]),
     ...(closedTabs.value.length === 0
@@ -409,17 +459,33 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     if (id === undefined) {
         return stripItems.value;
     }
-    const index = tabs.value.findIndex((tab) => tab.id === id);
-    const menuTab = tabs.value[index];
+    // The menu acts on the tab that was right-clicked, in whichever pane holds it: a strip is a strip.
+    const home = paneOf(strip.value, id) ?? `main`;
+    const paneTabs = strip.value[home].tabs;
+    const index = paneTabs.findIndex((tab) => tab.id === id);
+    const menuTab = paneTabs[index];
     if (menuTab === undefined) {
         return [];
     }
-    const others = new Set(tabs.value.filter((tab) => tab.id !== id).map((tab) => tab.id));
-    const toRight = new Set(tabs.value.slice(index + 1).map((tab) => tab.id));
+    const others = new Set(paneTabs.filter((tab) => tab.id !== id).map((tab) => tab.id));
+    const toRight = new Set(paneTabs.slice(index + 1).map((tab) => tab.id));
     return [
         // Promoting the preview tab, beside the double-click that does the same thing: the gesture is invisible,
         // and a menu is where someone goes to find out what a tab can do.
-        ...(id === previewId.value ? [{ label: `Keep Open`, command: () => keepTab(id) }, { separator: true }] : []),
+        ...(id === strip.value[home].preview ? [{ label: `Keep Open`, command: () => keepTab(id) }, { separator: true }] : []),
+        // The way into a split for the pairings nothing can guess: a README beside the code it describes, a test
+        // beside its subject. A diff opened from a document tab already lands beside it without being asked.
+        ...(canSplit.value
+            ? [
+                  {
+                      label: home === `side` ? `Move Back` : `Open to the Side`,
+                      icon: `split-columns`,
+                      shortcut: commandShortcut(`workspace.splitEditor`),
+                      command: () => openToSide(id),
+                  },
+                  { separator: true },
+              ]
+            : []),
         { label: `Close`, icon: `times`, shortcut: commandShortcut(`workspace.closeTab`), command: () => closeTab(id) },
         {
             label: `Close Others`,
@@ -509,9 +575,11 @@ const closeTabsToRight = (): void => {
         requestClose(toRight);
     }
 };
+// The one close verb that is not about a pane: "Close All" means the editor, so it takes the companion pane's
+// tabs with it and the split ends.
 const closeAllTabs = (): void => {
-    if (tabs.value.length > 0) {
-        requestClose(new Set(tabs.value.map((tab) => tab.id)));
+    if (allTabs.value.length > 0) {
+        requestClose(new Set(allTabs.value.map((tab) => tab.id)));
     }
 };
 const filterInput = ref<HTMLInputElement>();
@@ -520,6 +588,7 @@ const filterInput = ref<HTMLInputElement>();
 // waits out the v-if that mounts the input when the sidebar mode flips.
 const focusSearch = (scope?: "name" | SearchScope): void => {
     layout.setSidebarCollapsed(false);
+    autoHidden.value = false; // asked for the explorer by name: a split must not swallow the answer
     layout.setSidebarPanel(`files`);
     if (scope !== undefined) {
         searchScope.value = scope;
@@ -556,6 +625,20 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => toggleSidebar() },
+    /* The split, both directions on one chord, because it is one toggle: the active tab goes to the companion
+     * pane, and a tab already there comes back. `Ctrl+Shift+\` rather than VSCode's bare `Ctrl+\`, which is
+     * SIGQUIT in a focused terminal (a bound chord is forwarded there, see the note above), and it keeps the
+     * editor's verbs in the one Ctrl+Shift family. Unsplitting the whole pane is palette-only: it is the button
+     * on the companion pane's own bar, where a reader who opened a split looks for it. */
+    {
+        command: `workspace.splitEditor`,
+        title: `Open Tab to the Side`,
+        icon: `split-columns`,
+        keybinding: `Ctrl+Shift+\\`,
+        when: `tabSurface == 'workspace'`,
+        handler: () => openToSide(),
+    },
+    { command: `workspace.unsplitEditor`, title: `Close Split`, icon: `split-columns`, handler: () => collapseSplit() },
     // The explorer's two filters, reachable from the palette, and from anywhere the sidebar is collapsed, where
     // the toolbar's funnel isn't on screen to click.
     { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye`, handler: () => layout.toggleShowIgnored() },
@@ -672,6 +755,14 @@ const onRootDrop = (event: DragEvent): void => {
 // the drop hint can never stick on. (Ctrl+` and the terminal panel itself live in the shell: sandbox-global.)
 onMounted(() => {
     unwatchDragSource = watchDragSource();
+    // The pane's own width, which is what decides whether two panes fit in it and how far their seam may travel
+    // (the window's width is not it: the rail and the chat column have already taken their share).
+    bodyObserver = new ResizeObserver((entries) => {
+        bodyWidth.value = entries[0]?.contentRect.width ?? 0;
+    });
+    if (workspaceBody.value !== undefined) {
+        bodyObserver.observe(workspaceBody.value);
+    }
     window.addEventListener(`drop`, resetRootDrag, true);
     window.addEventListener(`dragend`, resetRootDrag, true);
     // Load Monaco (+ Shiki bridge) while the user browses the tree, so the first file open isn't cold.
@@ -681,6 +772,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
     unwatchDragSource?.();
     unwatchDragSource = undefined;
+    bodyObserver?.disconnect();
+    bodyObserver = undefined;
+    clearTimeout(pulseTimer);
     window.removeEventListener(`drop`, resetRootDrag, true);
     window.removeEventListener(`dragend`, resetRootDrag, true);
     for (const disposable of workspaceCommandDisposables) {
@@ -701,7 +795,14 @@ const tooltipWithChord = (label: string, command: string): string => {
     const chord = commandShortcut(command);
     return chord === undefined ? label : `${label} (${chord})`;
 };
-const explorerTooltip = computed(() => tooltipWithChord(sidebarOpen.value ? `Hide explorer` : `Show explorer`, `workspace.toggleSidebar`));
+// The auto-hidden state says WHY as well as what, because the reader did not close this panel and should not
+// have to work out what happened to it.
+const explorerTooltip = computed(() =>
+    tooltipWithChord(
+        autoHidden.value ? `Show explorer · hidden to make room for the split` : sidebarOpen.value ? `Hide explorer` : `Show explorer`,
+        `workspace.toggleSidebar`,
+    ),
+);
 const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
 
 const startResize = (event: PointerEvent): void => {
@@ -996,128 +1097,73 @@ const endResize = (event: PointerEvent): void => {
                  only affordance the toggle button does not already provide. -->
             <div v-if="narrowBody && sidebarOpen" class="absolute inset-0 z-10 bg-black/30" @click="drawerOpen = false"></div>
 
-            <section class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
-                <!-- THE VIEW'S ONE BAR: explorer toggle, open tabs, the open file's own context, the workspace
-                     status/actions the old top bar held, and which copy of the workspace all of it is about.
-                     Always rendered so the controls survive zero open tabs.
-
-                     It absorbed two bands. The breadcrumb used to sit under it repeating the active tab's
-                     filename, and a markdown file put a third band under THAT for three toggles; both now
-                     arrive in `#ws-viewer-context` by teleport (see viewerChrome), which is why a viewer this
-                     component never renders directly can still put controls on its bar. -->
-                <div class="view-header flex items-stretch border-b border-line bg-card">
-                    <button
-                        type="button"
-                        :class="ui.iconButton(`mx-1 h-7 w-7 self-center`)"
-                        @click="toggleSidebar()"
-                        v-tooltip.bottom="explorerTooltip"
-                        aria-label="Toggle explorer"
-                    >
-                        <Icon name="bars" class="text-sm" />
-                    </button>
-                    <FileTabs
-                        :tabs="tabs"
-                        :active="activeId"
-                        :preview="previewId"
-                        @select="selectTab"
-                        @keep="keepTab"
-                        @close="closeTab"
-                        @contextmenu="openTabMenu"
-                    />
-                    <!-- Where the open file's breadcrumb and its viewer's controls land.
-                         RULED OFF FROM THE TABS, and it earns the line: the strip scrolls its overflow, so on a
-                         busy row the last tab is clipped mid-word, and against a bare crumb that reads as
-                         broken text rather than as a strip continuing under a boundary. Capped at a share of
-                         the row for the same reason: this region is what a file brings WITH it, and no file's
-                         context is worth more than half the space for reaching the other files. -->
-                    <div :id="CONTEXT_TARGET" class="ws-context flex min-w-0 max-w-[45%] shrink items-center gap-2"></div>
-                    <div class="flex shrink-0 items-center gap-2 px-2">
-                        <span
-                            v-if="actionError"
-                            class="max-w-64 truncate text-2xs text-danger"
-                            v-tooltip.bottom="actionError.detail ?? actionError.title"
-                            >{{ actionError.title }}</span
+            <!-- THE EDITOR: one pane, or two with a seam between them (see EditorStrip). The panes are alike,
+                 so they are one component rendered twice; what belongs to the WORKSPACE rather than to a pane,
+                 the explorer toggle on the left, the tree's status and the scope chip on the right, is handed
+                 to the main pane's bar as slots. -->
+            <div class="relative flex min-h-0 min-w-0 flex-1">
+                <EditorPane
+                    pane="main"
+                    :broken="scopeBroken"
+                    :empty="!isLoading && tree.length === 0"
+                    @select="selectTab"
+                    @keep="keepTab"
+                    @close="closeTab"
+                    @contextmenu="openTabMenu"
+                    @pick="fileInput?.click()"
+                >
+                    <template #lead>
+                        <!-- The explorer's one control, and, while a split has stood the explorer aside, the one
+                             thing on screen that says so: a dot, pulsing once as it happens. Without it a panel
+                             that vanished on its own is indistinguishable from one that broke. -->
+                        <button
+                            type="button"
+                            :class="ui.iconButton(`relative mx-1 h-7 w-7 self-center`)"
+                            @click="toggleSidebar()"
+                            v-tooltip.bottom="explorerTooltip"
+                            aria-label="Toggle explorer"
                         >
-                        <!-- The lone remaining status: one spinner for both a running file action and a tree
-                             (re)load: the Refresh button that used to spin is now only the command. -->
-                        <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin aria-label="Working" />
-                        <!-- Suppressed while the scope is what failed: the pane below is already saying it at
-                             full size, and the same sentence twice on one screen reads as two problems. -->
-                        <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
-                            error
-                        }}</span>
-                        <!-- Which copy of the workspace all of the above is about. Absent on the shared tree:
-                             the default needs no marker (see WorkspaceScopeChip). -->
-                        <WorkspaceScopeChip />
-                        <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
-                    </div>
+                            <Icon name="bars" class="text-sm" />
+                            <span v-if="autoHidden" class="ws-stashed" :class="{ 'ws-stashed-new': justHidden }" aria-hidden="true"></span>
+                        </button>
+                    </template>
+                    <template #status>
+                        <div class="flex shrink-0 items-center gap-2 px-2">
+                            <span
+                                v-if="actionError"
+                                class="max-w-64 truncate text-2xs text-danger"
+                                v-tooltip.bottom="actionError.detail ?? actionError.title"
+                                >{{ actionError.title }}</span
+                            >
+                            <!-- The lone remaining status: one spinner for both a running file action and a tree
+                                 (re)load: the Refresh button that used to spin is now only the command. -->
+                            <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin aria-label="Working" />
+                            <!-- Suppressed while the scope is what failed: the pane below is already saying it at
+                                 full size, and the same sentence twice on one screen reads as two problems. -->
+                            <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
+                                error
+                            }}</span>
+                            <!-- Which copy of the workspace all of the above is about. Absent on the shared tree:
+                                 the default needs no marker (see WorkspaceScopeChip). -->
+                            <WorkspaceScopeChip />
+                            <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
+                        </div>
+                    </template>
+                </EditorPane>
+                <!-- The seam sizes the COMPANION, so it is dragged left to make the diff bigger; double-click
+                     puts it back to the width the split opens at. -->
+                <ResizeSeam
+                    v-if="splitOpen && !scopeBroken"
+                    v-model="seamWidth"
+                    pane="after"
+                    :min="toScreenPx(MIN_PANE_PX)"
+                    :max="toScreenPx(maxSideWidth)"
+                    :reset="toScreenPx(DEFAULT_SIDE_PANE_WIDTH)"
+                />
+                <div v-if="splitOpen && !scopeBroken" class="flex min-h-0 shrink-0 flex-col border-l border-line" :style="{ width: uiLength(sideWidth) }">
+                    <EditorPane pane="side" @select="selectTab" @keep="keepTab" @close="closeTab" @contextmenu="openTabMenu" />
                 </div>
-                <!-- Nothing in this view can be read: the scope names a checkout that no longer exists. It
-                     pre-empts every branch below rather than letting each one fail in its own words. -->
-                <WorkspaceScopeGone v-if="scopeBroken" />
-                <template v-else-if="activeFile">
-                    <!-- FileViewer renders its own breadcrumb (with edit actions); the directory UI gets a bare one. -->
-                    <FileBreadcrumb v-if="directoryUiDir !== undefined" :path="activeFile.path" :meta="openMeta" />
-                    <div class="min-h-0 flex-1">
-                        <DirectoryUiHost v-if="directoryUiDir !== undefined" :dir="directoryUiDir" />
-                        <FileViewer v-else :path="activeFile.path" :meta="openMeta" :line="openLine" @gone="closeTab" />
-                    </div>
-                </template>
-                <!-- The tab strip names the file; this bar says how it is being READ (side-by-side or inline,
-                     comments in or out): the same bar the agent review renders, so one habit carries across
-                     both surfaces. Above every diff state, so a binary or oversized one still has its controls. -->
-                <template v-else-if="activeTab?.kind === 'diff'">
-                    <DiffToolbar
-                        :path="activeTab.label"
-                        :status="activeTab.status"
-                        :code="diffStat"
-                        :additions="activeTab.additions"
-                        :deletions="activeTab.deletions"
-                    />
-                    <div class="min-h-0 flex-1">
-                        <!-- Still being read. Nothing below it can be decided yet, whether the file is binary is
-                             part of the answer, so this branch comes first, and the viewer mounts once, with
-                             content, rather than being remounted when the content replaces the empty panes. -->
-                        <template v-if="activeTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
-                        <!-- Bytes, a patch of the changed regions, or two whole sides: FileDiffPane decides,
-                             for this surface and for the two others that render the same diff. -->
-                        <FileDiffPane
-                            v-else
-                            :key="activeTab.id"
-                            :path="activeTab.path"
-                            :before="activeTab.before"
-                            :after="activeTab.after"
-                            :binary="activeTab.binary"
-                            :partial="activeTab.partial"
-                            :before-raw="activeTab.beforeRaw"
-                            :after-raw="activeTab.afterRaw"
-                            @stat="setDiffStat"
-                        />
-                    </div>
-                </template>
-                <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">
-                    <DirectoryOperator :dir="activeTab.dir" />
-                </div>
-                <div v-else-if="activeTab?.kind === 'health'" class="min-h-0 flex-1">
-                    <!-- Every ranked row is an anchor: clicking one opens the file it names, because a ranking
-                         whose rows don't go anywhere just makes the reader retype a path. -->
-                    <CodebaseHealth :repo="activeTab.repo" @open-file="openFile" @switch-repo="openHealth" />
-                </div>
-                <!-- A directory's document, rendered by the extension that has something to say about it: the
-                     open-ended member of this family, beside the code it explains. -->
-                <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">
-                    <ExtensionDocument
-                        :extension="activeTab.extension"
-                        :provider="activeTab.provider"
-                        :path="activeTab.path"
-                        :title="activeTab.title"
-                    />
-                </div>
-                <!-- `empty` splits the two silences this pane covers: a workspace with nothing in it gets every
-                     way of getting code in, a workspace between files gets the drop target. Gated on the tree
-                     having LOADED, so the first paint of a full workspace never flashes the newcomer's screen. -->
-                <WorkspaceEmptyState v-else :empty="!isLoading && tree.length === 0" @pick="fileInput?.click()" />
-                <!-- Drop-to-root hint over the viewer, shown only for external file drags (an internal move is
+                <!-- Drop-to-root hint over the editor, shown only for external file drags (an internal move is
                      guided by the row rings instead). pointer-events-none so the drop still reaches the body. -->
                 <div
                     v-if="rootDragging && externalDrag"
@@ -1126,7 +1172,7 @@ const endResize = (event: PointerEvent): void => {
                     <Icon name="upload" class="text-2xl" />
                     <span class="text-xs font-medium">Drop files to add to workspace root</span>
                 </div>
-            </section>
+            </div>
         </div>
 
         <!-- Bottom terminal panel. v-if unmounts it when closed, but the tabs live in a module-level Map in
@@ -1180,19 +1226,49 @@ const endResize = (event: PointerEvent): void => {
 /* `.ws-scoped` (the tint that says this is not the shared tree) lives in styles.css beside .view-header: it has
  * to reach the bars inside child components, and the phone's workspace wears the same one. */
 
-/* The seat the open file's context is teleported into, ruled off from the tab strip beside it. THE RULE IS
- * CONDITIONAL ON THERE BEING SOMETHING THERE, and `:empty` is what states that rather than a `v-if` on a class:
- * this seat is filled from elsewhere (see viewerChrome), so the component that draws the border is not the one
- * that knows whether anything arrived, and a diff, a health report or an empty strip would each have to
- * remember to say so. A stray 1px rule floating in a bar is exactly the kind of thing nobody files a bug for
- * and everybody sees.
+/* (The context seat's own rule travels with the markup, in EditorPane: there are two of those seats now.) */
+
+/* SOMETHING OF YOURS IS PUT AWAY HERE. The dot on the explorer toggle while a split has the tree stood aside:
+ * six pixels, the accent colour, on the control that brings it back, which is the only place it can be read as
+ * an instruction rather than as an alert.
  *
- * The line matches a tab's own right divider, deliberately: the strip scrolls its overflow, so a busy row clips
- * its last tab mid-word, and the eye needs to read that as a strip continuing under a boundary rather than as
- * broken text running into a path. */
-.ws-context:not(:empty) {
-    border-left: 1px solid var(--color-line);
-    padding-left: 0.5rem;
+ * It PULSES ONCE, at the moment of hiding, and then stops. A panel that disappears while the reader is looking
+ * at the file they just opened is a change nobody sees happen, and a badge that keeps pulsing for as long as the
+ * state lasts is a thing people learn to ignore. The ring is a separate element scaling out from under the dot,
+ * so the dot itself never moves. `prefers-reduced-motion` keeps the dot and drops the ring: the information is
+ * in the dot, the animation is only what draws the eye to it. */
+.ws-stashed {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: var(--color-primary-500);
+}
+.ws-stashed-new::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1px solid var(--color-primary-500);
+    animation: ws-stashed-ping 1.3s cubic-bezier(0, 0, 0.2, 1) 2;
+}
+@keyframes ws-stashed-ping {
+    0% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    80%,
+    100% {
+        transform: scale(2.8);
+        opacity: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ws-stashed-new::after {
+        animation: none;
+    }
 }
 /* Root drop-zone hint (a folder row shows its own inset ring instead). */
 .ws-dropzone {

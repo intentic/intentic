@@ -351,9 +351,10 @@ export const createExtensionApi = (
              * openDiffNav, which is what the app's Changes and History panels go through; an extension must not
              * end up with a diff that exists but is unreachable on a phone. */
             openDiff: (payload) => {
-                // An extension opening a diff is asking for a tab, not for a look, nothing here would know to
-                // promote the strip's preview slot afterwards.
-                useWorkspaceTabs().openDiff(payload, `keep`);
+                // The gesture the extension is reporting, not this layer's guess: a peek takes the strip's
+                // transient slot and is replaced by the next one (a reader going down a commit's file list), a
+                // plain open keeps its tab. See DiffPayload.preview.
+                useWorkspaceTabs().openDiff(payload, payload.preview === true ? `preview` : `keep`);
                 if (!useDevice().mobile.value) {
                     return;
                 }

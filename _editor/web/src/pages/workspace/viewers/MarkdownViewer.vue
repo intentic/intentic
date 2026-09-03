@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, ui, Icon, Markdown, ResponsiveOverlay, useNarrow } from "@intentic/ui";
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
-import { computed, ref, watch } from "vue";
+import { computed, inject, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../composables/renderMarkdown";
 import { useLayout } from "../../../composables/useLayout";
 import { openFileRefFromEvent } from "../../../composables/workspace/openFileRef";
@@ -12,7 +12,7 @@ import MarkdownDocumentSurface from "./MarkdownDocumentSurface.vue";
 import MarkdownOutline from "./MarkdownOutline.vue";
 import { toggleTaskCheckbox } from "./markdownTasks";
 import { useMarkdownOutline } from "./markdownOutline";
-import { VIEWER_ACTIONS_TARGET } from "../viewerChrome";
+import { CHROME_SCOPE, viewerActionsTarget } from "../viewerChrome";
 
 /* THE MARKDOWN SURFACE: one rendered document, in both of the app's two states.
  *
@@ -43,6 +43,8 @@ const { source, path, line, editable } = defineProps<{ source: string; path: str
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
 const layout = useLayout();
+// Which pane's breadcrumb these controls ride (see CHROME_SCOPE): with two panes open there are two of them.
+const scope = inject(CHROME_SCOPE, `main`);
 
 /* The document, held rather than watched, exactly like the editable CodeView beside it: `source` is a SEED and
  * this surface owns the text from mount onwards. FileViewer re-keys the component whenever disk should win. */
@@ -179,7 +181,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
              of content, and a band of them under the breadcrumb, under the tab row, put a markdown file's
              first line four rules down the screen. They ride the breadcrumb instead (see viewerChrome), which
              on the desktop is itself riding the tab row: same controls, same order, no band. -->
-        <Teleport defer :to="`#${VIEWER_ACTIONS_TARGET}`">
+        <Teleport defer :to="`#${viewerActionsTarget(scope)}`">
             <!-- The section the reader is in. A button rather than a label because the list behind it is what
                  they want next often enough to be worth the press, and on a pane too narrow to dock the rail,
                  this is the only way to it. -->

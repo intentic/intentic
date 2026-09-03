@@ -88,6 +88,22 @@ const NARROW_DEFAULT_SIDEBAR_WIDTH = 240;
 const MIN_SIDEBAR_WIDTH = 272;
 const MAX_SIDEBAR_WIDTH = 600;
 
+/* The editor's companion pane, the right-hand column of a split (see EditorStrip). Its width rather than a
+ * ratio, because what has to stay readable is the pane itself: a percentage silently squeezes a diff below the
+ * width its two sides need every time the window or the chat column changes.
+ *
+ * The floor is a DIFF's floor, not a column's: two gutters, two sets of line numbers and something like eighty
+ * characters of code, which is what MIN_PANE_PX already buys the chat, so the same number serves. The default is
+ * bigger than the floor for the reason the chat's is (a default sitting on its own minimum has no slack), and
+ * the split's own opener clamps it to half the pane it opens in, so a narrow workspace column never hands the
+ * companion more room than the document it was opened from. */
+const SIDE_PANE_WIDTH_KEY = `ui-workspace-side-pane-width`;
+// Exported because the seam's double-click needs the number it resets TO, and a second spelling of it in the
+// view is how the two would drift.
+export const DEFAULT_SIDE_PANE_WIDTH = 560;
+const MIN_SIDE_PANE_WIDTH = MIN_PANE_PX;
+const MAX_SIDE_PANE_WIDTH = 4000;
+
 // The agent review panel's file list, the left column in /agents/:id. Its own width, not the workspace
 // explorer's: the two columns are never on screen together, and a review list wants room for long paths that
 // the file tree (already indented into folders) does not.
@@ -198,6 +214,8 @@ const clampSidebarWidth = (px: number): number => Math.round(Math.max(MIN_SIDEBA
 
 const clampReviewListWidth = (px: number): number => Math.round(Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(px, MAX_REVIEW_LIST_WIDTH)));
 
+const clampSidePaneWidth = (px: number): number => Math.round(Math.max(MIN_SIDE_PANE_WIDTH, Math.min(px, MAX_SIDE_PANE_WIDTH)));
+
 /* THE THREE SHAPES EVERY PREFERENCE BELOW TAKES, as `read`/`write` pairs handed to definePreference. Storage
  * access, the DOM, and telling the other windows are all the primitive's, so what is left here is only what
  * differs between these settings: what a stored string means. */
@@ -244,6 +262,7 @@ const chatHome = enumPref(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`);
 const chatWidth = widthPref(WIDTH_KEY, clampWidth, defaultChatWidth);
 const sidebarWidth = widthPref(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth);
 const reviewListWidth = widthPref(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, defaultReviewListWidth);
+const sidePaneWidth = widthPref(SIDE_PANE_WIDTH_KEY, clampSidePaneWidth, () => DEFAULT_SIDE_PANE_WIDTH);
 const sidebarCollapsed = boolPref(SIDEBAR_COLLAPSED_KEY);
 const sidebarPanel = enumPref(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`);
 const showIgnored = boolPref(SHOW_IGNORED_KEY);
@@ -293,6 +312,16 @@ const setReviewListWidth = (px: number): void => {
 
 const resetReviewListWidth = (): void => {
     setReviewListWidth(defaultReviewListWidth());
+};
+
+// The seam reports a size, so this takes one; the clamp is what keeps a drag past either end from storing a
+// companion pane too narrow to read a diff in.
+const setSidePaneWidth = (px: number): void => {
+    sidePaneWidth.value = clampSidePaneWidth(px);
+};
+
+const resetSidePaneWidth = (): void => {
+    setSidePaneWidth(DEFAULT_SIDE_PANE_WIDTH);
 };
 
 const setSidebarCollapsed = (collapsed: boolean): void => {
@@ -361,6 +390,7 @@ export function useLayout() {
         chatWidth,
         sidebarWidth,
         reviewListWidth,
+        sidePaneWidth,
         sidebarCollapsed,
         terminalOpen,
         sidebarPanel,
@@ -381,6 +411,8 @@ export function useLayout() {
         resetSidebarWidth,
         setReviewListWidth,
         resetReviewListWidth,
+        setSidePaneWidth,
+        resetSidePaneWidth,
         setSidebarCollapsed,
         toggleSidebar,
         setTerminalOpen,

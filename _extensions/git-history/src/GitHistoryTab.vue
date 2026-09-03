@@ -227,6 +227,16 @@ const refBadge = (decoration: string): { tag: boolean; label: string } =>
 
 // --- inline expandable detail (accordion): one commit open at a time; its changed files load lazily ----------
 const openSha = ref<string | undefined>(undefined);
+/* WHICH ROW THE PANE BESIDE THIS ONE IS SHOWING. With the diff open in the companion pane, both halves of the
+ * reading are on screen at once, and a file list with nothing marked in it is then a list you have to re-find
+ * your place in after every glance to the right. So the row that opened the diff wears the selection, exactly as
+ * a row does in the Changes panel.
+ *
+ * Kept by sha AND path because the same path exists in every commit, and the graph is a list of commits: without
+ * the sha, opening `README.md` in one commit would light up `README.md` in every other one the reader expands.
+ * Local, not read back from the host: it says what THIS tab opened, which is the question the highlight answers,
+ * and a tab the reader has since closed or replaced from elsewhere is not this list's business. */
+const showing = ref<{ sha: string; path: string } | undefined>(undefined);
 const files = ref<readonly GitChange[]>([]);
 const filesLoading = ref(false);
 const filesError = ref<string | undefined>(undefined);
@@ -306,45 +316,55 @@ const workingRawSides = (change: GitChange, side: GitDiffSide): { beforeRaw?: st
     };
 };
 
-/* The host owns the tab strip; this hands it a diff and it lands beside the files it is about.
+/* The host owns the tab strip; this hands it a diff and the host puts it BESIDE this tab, in the editor's
+ * companion pane, because this is a document with a file list in it: the graph stays on screen and the next file
+ * clicked replaces the diff rather than the graph (see the host's EditorStrip).
+ *
+ * Which is also why a click is a PEEK and a double-click keeps: reading a commit means clicking every file in
+ * it, and ten pinned tabs is what the strip's transient slot exists to prevent. Same grammar as the app's own
+ * Changes panel, so one habit covers both lists.
+ *
+ * The tab opens on the CLICK, with `pending`, and its content lands under it: the reader's click has to change
+ * something on screen immediately, or it reads as a click that missed and gets repeated. Everything the tab
+ * needs to exist, its identity, its label, the status letter, the ± counts, is known here without asking git.
  *
  * Row zero opens a WORKING-TREE diff instead of a commit one, against the side the row came from: a partially
  * staged file's staged and unstaged halves are two different diffs, and opening whichever happened to be found
  * first would show the user the wrong one. Keyed `working:<repo>` so it is the same tab identity the app's own
  * Changes panel opens, which means clicking a file in either place focuses one tab rather than stacking two. */
-// Awaited rather than fired and forgotten: the promise is what holds the row while the diff is fetched, so a
-// second click on a slow one cannot open it twice.
-const openFileDiff = async (commit: GitCommit, change: GitChange): Promise<void> => {
+const openFileDiff = (commit: GitCommit, change: GitChange, mode: "peek" | "keep" = `peek`): void => {
+    const preview = mode === `peek`;
+    showing.value = { sha: commit.sha, path: change.path };
     if (commit.sha === WORKING) {
         const side = working.sideOf(change);
-        await workingFileDiff(change.path, side).then((body) => {
-            host().workspace.openDiff({
-                key: `working:${repoRef.value}`,
-                scope: repoRef.value,
-                label: change.path,
-                status: change.status,
-                path: change.path,
-                additions: change.additions,
-                deletions: change.deletions,
-                ...body,
-                ...workingRawSides(change, side),
-            });
-        });
-        return;
-    }
-    await commitFileDiff(commit.sha, change.path).then((body) => {
-        host().workspace.openDiff({
-            key: `commit:${repoRef.value}:${commit.sha}`,
+        const tab = {
+            key: `working:${repoRef.value}`,
             scope: repoRef.value,
-            label: `${change.path} @ ${commit.short}`,
+            label: change.path,
             status: change.status,
             path: change.path,
             additions: change.additions,
             deletions: change.deletions,
-            ...body,
-            ...rawSides(commit.sha, change),
-        });
-    });
+            preview,
+            ...workingRawSides(change, side),
+        };
+        host().workspace.openDiff({ ...tab, pending: true });
+        void workingFileDiff(change.path, side).then((body) => host().workspace.fillDiff({ ...tab, ...body }));
+        return;
+    }
+    const tab = {
+        key: `commit:${repoRef.value}:${commit.sha}`,
+        scope: repoRef.value,
+        label: `${change.path} @ ${commit.short}`,
+        status: change.status,
+        path: change.path,
+        additions: change.additions,
+        deletions: change.deletions,
+        preview,
+        ...rawSides(commit.sha, change),
+    };
+    host().workspace.openDiff({ ...tab, pending: true });
+    void commitFileDiff(commit.sha, change.path).then((body) => host().workspace.fillDiff({ ...tab, ...body }));
 };
 
 /* Reached through this tab's root, not the module's `navigator`: a POPPED-OUT panel keeps its JS in the opener's
@@ -849,7 +869,9 @@ const runPending = async (): Promise<void> => {
                                 {{ files.length }} changed {{ files.length === 1 ? "file" : "files" }}
                             </p>
                             <!-- Changed files as a collapsible directory tree (compact folders), each file with
-                                 its +/- line stat; clicking a file opens its diff at this commit. -->
+                                 its +/- line stat; clicking a file peeks its diff at this commit in the pane
+                                 beside this one, double-clicking keeps that tab. The row stays marked while its
+                                 diff is the one on the right. -->
                             <div class="scrollbar-thin max-h-64 overflow-auto">
                                 <template v-for="row in fileRows" :key="`${row.kind}:${row.path}`">
                                     <button
@@ -866,9 +888,14 @@ const runPending = async (): Promise<void> => {
                                     <button
                                         v-else
                                         type="button"
-                                        class="flex w-full items-center gap-1.5 py-0.5 text-left text-xs transition-colors hover:bg-overlay"
+                                        class="ui-row-select flex w-full items-center gap-1.5 py-0.5 text-left text-xs transition-colors"
+                                        :class="{
+                                            'ui-row-select-on': showing?.sha === commit.sha && showing?.path === row.file.path,
+                                        }"
                                         :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
+                                        v-tooltip.top="'Click to peek · double-click to keep the tab'"
                                         @click="openFileDiff(commit, row.file)"
+                                        @dblclick="openFileDiff(commit, row.file, 'keep')"
                                     >
                                         <span class="w-2.5 shrink-0"></span>
                                         <ChangeStatusMark :status="row.file.status" />

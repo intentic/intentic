@@ -109,6 +109,7 @@ export type IconName =
     | "sliders-h"
     | "sort-desc"
     | "sparkles"
+    | "split-columns"
     | "spinner"
     | "square"
     | "star"
@@ -274,6 +275,11 @@ export const ICONS: Record<IconName, string> = {
      * its 9→1 annotation is mush at the 12px these bars are drawn at. */
     "sort-desc": "ri:sort-desc",
     sparkles: "ri:sparkling-line",
+    /* The editor's second pane: two columns, which is the whole of what the verb does. Both directions wear it
+     * ("Open to the Side", and the button that folds the split back), because they are one toggle and a second
+     * glyph would ask the reader to learn which arrow means which. Not `window-maximize`, which promises
+     * fullscreen, and not `th-large`, which is a grid of four and belongs to boards. */
+    "split-columns": "ri:layout-column-line",
     spinner: "ri:loader-4-line",
     square: "ri:checkbox-blank-line",
     star: "ri:star-line",
