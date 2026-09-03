@@ -272,6 +272,27 @@ export const restoredSessionMessages = (
     // The working checklist reassembled from the Task tool family, matching the live sdk-stream.
     const checklist = new TaskChecklist();
     const checklistToolIds = new Set<string>();
+    // The list renders onto the open bubble, and only when the checklist actually moved: a patch naming a task
+    // this pass never saw, or a result its parsers do not recognise, comes back undefined and must leave the
+    // last rendered list standing rather than blanking it.
+    const showTodos = (items: TodoItem[] | undefined): void => {
+        if (items !== undefined) {
+            open().todos = items;
+        }
+    };
+    // The call side of a checklist verb, by the live stream's own rule (sdk-stream's onChecklistCall): a create
+    // can only render from its RESULT, which is where it learns its task id; an update names the id in its
+    // input, so the list moves at call time; a TaskList renders from its result alone.
+    const checklistCall = (id: string, name: string, input: unknown): void => {
+        checklistToolIds.add(id);
+        if (name === "TaskCreate") {
+            checklist.created(id, input);
+            return;
+        }
+        if (name === "TaskUpdate") {
+            showTodos(checklist.updated(input));
+        }
+    };
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
     // card is in the open bubble or already in `out`; either way it is mutated in place, so a result that lands
     // after its bubble closed needs no second pass.
@@ -308,10 +329,7 @@ export const restoredSessionMessages = (
                 if (checklistToolIds.has(block.tool_use_id)) {
                     checklistToolIds.delete(block.tool_use_id);
                     const content = resultText(block.content);
-                    const items = checklist.resolved(block.tool_use_id, content) ?? checklist.listed(content);
-                    if (items !== undefined) {
-                        open().todos = items;
-                    }
+                    showTodos(checklist.resolved(block.tool_use_id, content) ?? checklist.listed(content));
                     continue;
                 }
                 const tool = awaiting.get(block.tool_use_id);
@@ -388,15 +406,7 @@ export const restoredSessionMessages = (
                 open().thinking += block.thinking;
             } else if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
                 if (block.name === "TaskCreate" || block.name === "TaskList" || block.name === "TaskUpdate") {
-                    checklistToolIds.add(block.id);
-                    if (block.name === "TaskCreate") {
-                        checklist.created(block.id, block.input);
-                    } else if (block.name === "TaskUpdate") {
-                        const items = checklist.updated(block.input);
-                        if (items !== undefined) {
-                            open().todos = items;
-                        }
-                    }
+                    checklistCall(block.id, block.name, block.input);
                     continue;
                 }
                 /* The ask tool's call is where the live stream raised its `question` card, one frame ahead of the

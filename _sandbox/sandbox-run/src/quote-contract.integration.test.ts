@@ -86,7 +86,10 @@ test("the sites that carry secrets to a host still import the quoters", async ()
         "_deploy/providers/src/backings/postgres-database.ts",
         "_deploy/providers/src/backings/valkey-namespace.ts",
         "_deploy/providers/src/komodo/komodo.ts",
-        "_deploy/providers/src/auth/authentik.ts",
+        // The write-once .env every backing provider's secrets now cross (writeEnvOnce → envArg), which is
+        // where authentik's four used to be quoted by hand before the backing-provider consolidation moved
+        // them here. Naming the chokepoint holds the floor under all of them at once.
+        "_deploy/providers/src/core/host-files.ts",
         "_sandbox/sandbox/src/secrets/secrets.routes.ts",
     ];
     for (const carrier of carriers) {

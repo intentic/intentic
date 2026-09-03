@@ -233,7 +233,7 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
 });
 
 test("rebuilds task checklist from TaskCreate and TaskUpdate tool calls rather than emitting tool cards", async () => {
-    mockSession("s0", [
+    getSessionMessages.mockResolvedValue([
         { type: "user", message: { content: "refactor the code" } },
         {
             type: "assistant",
@@ -269,11 +269,13 @@ test("rebuilds task checklist from TaskCreate and TaskUpdate tool calls rather t
 
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant"]);
-    expect(messages[1]).toEqual({
-        role: "assistant",
-        text: "Planning work.",
-        todos: [{ content: "Step 1", status: "pending", activeForm: "Doing step 1" }],
-    });
+    // The prose block closed its bubble before the create's RESULT arrived (the result is where a create learns
+    // its task id), so the checklist renders in the row BENEATH the sentence that announced it: the live fold's
+    // own arrangement, where a `todos` frame lands in whatever bubble is open and `text_end` had already retired
+    // this one (turn-transcript.ts). Exact shape, so the prose row is asserted to carry no list of its own.
+    expect(messages[1]).toEqual({ role: "assistant", text: "Planning work." });
+    // The update then moves that same list in place rather than opening a second one, and the checklist verbs
+    // emit no cards: the one card in the row is the Read that shared the bubble.
     expect(messages[2]?.todos).toEqual([{ content: "Step 1", status: "in_progress", activeForm: "Doing step 1" }]);
     expect(messages[2]?.tools?.map((tool) => tool.name)).toEqual(["Read"]);
 });
