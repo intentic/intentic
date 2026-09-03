@@ -49,7 +49,21 @@ const component = (stem: string, leaf: string): boolean => /\.(?:vue|tsx)$/.test
 // `page.tsx` up as the framework-chosen entry name that must NOT become a family, which are the two points it
 // is making. `one-file.ts` is the odd one out, an example argument in a documented command line — named here
 // rather than called "the last", because it stopped being last the moment the three new names were appended.
-const NOT_OURS = new Set(["BaseButton.vue", "ButtonV2.tsx", "Checkout.vue", "one-file.ts", "AppShell.vue", "ErrorBoundary.tsx", "page.tsx"]);
+// `client.mjs` is a DEPENDENCY's file, Vite's dev client under node_modules: the two styleStability modules
+// quote its `updateStyle` because that bare `style.textContent = content` is the write they exist to absorb, and
+// naming it is how a reader checks the claim against the version installed. It is caught by the first ground
+// rather than being long or PascalCase — eight of our own modules are called `client.ts` — so it needs the
+// exemption that `updateStyle`'s own file, being a name we never spell with an extension, does not.
+const NOT_OURS = new Set([
+    "BaseButton.vue",
+    "ButtonV2.tsx",
+    "Checkout.vue",
+    "one-file.ts",
+    "AppShell.vue",
+    "ErrorBoundary.tsx",
+    "page.tsx",
+    "client.mjs",
+]);
 
 // The one file that has to QUOTE dead names in order to explain itself: its header is evidence, not a pointer.
 const SELF = "_sandbox/sandbox/src/comment-refs.test.ts";
