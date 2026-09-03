@@ -1,11 +1,11 @@
 import { execFile, spawn } from "node:child_process";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
-import { STATE_DIR } from "@intentic/constants";
 
 /* WAKING UP IN THE WORKTREE, an isolated turn's own view of the filesystem.
  *
@@ -23,9 +23,15 @@ import { STATE_DIR } from "@intentic/constants";
  * just no longer what happens by accident.
  *
  * What the namespace must NOT hide, and so gets bound back in over the worktree's own copy:
- *   - <root>/.intentic, the workspace's daemon state: chat transcripts (~/.claude/projects symlinks into it,
- *     so a turn writing there would strand its own session), user attachments, browser output. Shared by
- *     definition; a per-worktree copy is a lost transcript.
+ *   - the UNTRACKED groups of <root>/.intentic (SHARED_STATE_PATHS, sandbox-contract workspace-state.ts): chat
+ *     transcripts (~/.claude/projects symlinks into it, so a turn writing there would strand its own session),
+ *     ledgers, browser output, caches, credentials, the staged docs tree. Shared by definition; a per-worktree
+ *     copy is a lost transcript. The TRACKED slice, `.intentic/config`, is deliberately NOT here: it is the
+ *     owner's configuration, checked out on the agent's branch like any other file, so an agent's edit to a
+ *     setting, an approval or a skill rides the branch and reaches the main tree through `land`, with a diff
+ *     and an author, instead of appearing in the owner's Changes as their own doing. Binding the state dir
+ *     whole used to put exactly that slice outside the one door that records provenance, and forced every
+ *     worktree to sparse-exclude it so git could not write through the bind; binding by group needs neither.
  *   - every installed dependency tree and build output, mirrored from the main checkout, replacing the
  *     absolute symlinks the no-namespace path uses (worktrees.ts). Untracked by definition, so a checkout has
  *     neither, and without them a worktree resolves neither a third-party import nor a sibling package's.
@@ -45,8 +51,13 @@ const execFileAsync = promisify(execFile);
 // a stable path for it, and every mount below sources from here after the shadow goes up.
 export const MAIN_MOUNT = "/mnt/intentic-main";
 
-// The workspace subdir that must stay SHARED rather than per-worktree, daemon state, not repo content.
-const SHARED_STATE = STATE_DIR;
+/* The state-dir subtrees that stay SHARED rather than per-worktree, root-relative and without the table's
+ * trailing slash (these are joined onto roots and compared against `rel` paths, both slash-free forms).
+ * Shallowest first, like the mirrors: no entry nests in another today, but a parent mounted after its child
+ * would shadow the child, and the sort is what makes that impossible rather than merely untrue. */
+const SHARED_STATE = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, "")).toSorted(
+    (a, b) => a.split("/").length - b.split("/").length || (a < b ? -1 : 1),
+);
 
 /* The reference shelf: repos cloned purely to be read against (`refs/eve`, `refs/t3code`). It is workspace
  * content but not repo content, so a worktree does not carry it, and until now an isolated turn simply had no
@@ -166,8 +177,12 @@ const overlayOptions = (lower: string, upper: string, work: string): string => {
  *  3. the shadow.
  *  4. the shared state and the mirrors, each sourced from MAIN_MOUNT, the only surviving handle on the real
  *     tree, and each preceded by `mkdir -p` because a fresh checkout has no mount point for an untracked
- *     dir. `.intentic` is a BIND, because a transcript written there has to reach the daemon; a mirror is an
- *     OVERLAY, because nothing written there should reach anyone (see overlayOptions).
+ *     dir. A shared state group is a BIND, because a transcript written there has to reach the daemon; a
+ *     mirror is an OVERLAY, because nothing written there should reach anyone (see overlayOptions). The state
+ *     binds `mkdir -p` the SOURCE as well: a sandbox that has never staged a doc or stored a secret has no
+ *     such directory on the main side yet, and a missing source is a failed mount and a dead anchor. An `if`
+ *     guard like the shelf's would be the wrong fix, since it would leave the worktree's own directory at
+ *     that path and quietly strand the first write to it.
  *
  * Every step is fatal (`set -e`): a half-built namespace is worse than no namespace, because the agent would
  * be writing into a tree that looks right and is not. The caller degrades to the plain unshadowed spawn only
@@ -184,8 +199,11 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
         `mount --bind ${shellQuote(plan.root)} ${shellQuote(MAIN_MOUNT)}`,
         `mount --bind ${shellQuote(plan.worktree)} ${shellQuote(plan.root)}`,
     ];
-    const shared = join(plan.root, SHARED_STATE);
-    lines.push(`mkdir -p ${shellQuote(shared)}`, `mount --bind ${shellQuote(join(MAIN_MOUNT, SHARED_STATE))} ${shellQuote(shared)}`);
+    for (const rel of SHARED_STATE) {
+        const source = join(MAIN_MOUNT, rel);
+        const target = join(plan.root, rel);
+        lines.push(`mkdir -p ${shellQuote(source)} ${shellQuote(target)}`, `mount --bind ${shellQuote(source)} ${shellQuote(target)}`);
+    }
     // Conditional rather than plan-driven: the shelf is optional by nature (most workspaces have none), and a
     // `set -e` script must not die over a directory whose absence means nothing. The `if` is the whole guard.
     const shelf = join(plan.root, SHELF);
@@ -492,8 +510,9 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
 // The root-relative subtrees that mean the MAIN checkout on both sides of the boundary, the namespace binds
 // them back in over the worktree's own copies, and where it cannot be built (worktree-redirect.ts) the
 // worktree reaches them through symlinks. Either way a path into one of these is already correct, so the rule
-// lives here rather than in a copy per caller.
-const sharedPrefixes = (plan: IsolationPlan): string[] => [SHARED_STATE, ...plan.mirrors];
+// lives here rather than in a copy per caller. `.intentic/config` is NOT among them: it is the worktree's own,
+// so a path into it moves with the root like any other tracked file.
+const sharedPrefixes = (plan: IsolationPlan): string[] => [...SHARED_STATE, ...plan.mirrors];
 
 /* WHICH FILE A WORKSPACE PATH ACTUALLY NAMES for an isolated turn, one mapping, used by both layers that
  * need it, because they are the same question asked from opposite ends:

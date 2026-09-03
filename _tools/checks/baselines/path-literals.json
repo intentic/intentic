@@ -35,7 +35,6 @@
     "_sandbox/sandbox/src/agent/watch-journal.integration.test.ts": 1,
     "_sandbox/sandbox/src/agent/watchers.test.ts": 1,
     "_sandbox/sandbox/src/agents/landed-subject.test.ts": 1,
-    "_sandbox/sandbox/src/agents/worktrees.integration.test.ts": 17,
     "_sandbox/sandbox/src/browser/browser-router.integration.test.ts": 1,
     "_sandbox/sandbox/src/browser/browser-tools.ts": 1,
     "_sandbox/sandbox/src/capabilities/handlers/localmodel.integration.test.ts": 2,

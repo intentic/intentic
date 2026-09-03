@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
+import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { afterEach, expect, test } from "vitest";
 import {
@@ -53,12 +54,27 @@ test("the main root is bound aside before the worktree shadows it", () => {
 
 test("shared state is re-bound from the aside mount, not from the shadowed path", () => {
     const script = isolationScript(plan);
-    // Sourcing this from /work would name the worktree's own (empty) copy: the mount would succeed and the
+    // Sourcing these from /work would name the worktree's own (empty) copy: the mount would succeed and the
     // agent would silently lose the transcript store. A BIND, not an overlay: a transcript written here has
-    // to reach the daemon.
-    expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/.intentic`)} ${shellQuote("/work/.intentic")}`);
-    // A fresh checkout has no mount point for an untracked dir.
-    expect(script).toContain(`mkdir -p ${shellQuote("/work/.intentic")}`);
+    // to reach the daemon. Every untracked group, and the one untracked entry inside the tracked one.
+    const shared = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, ""));
+    expect(shared).toContain(".intentic/records");
+    expect(shared).toContain(".intentic/config/docs");
+    for (const rel of shared) {
+        expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/${rel}`)} ${shellQuote(`/work/${rel}`)}`);
+        // Mount points on BOTH sides: a fresh checkout has none for an untracked dir, and a sandbox that has
+        // never staged a doc or stored a secret has no source dir yet either, which under `set -e` would be a
+        // dead anchor rather than an empty mount.
+        expect(script).toContain(`mkdir -p ${shellQuote(`${MAIN_MOUNT}/${rel}`)} ${shellQuote(`/work/${rel}`)}`);
+    }
+    // The tracked slice is the worktree's own checkout. Binding the whole dir over it, or the slice itself, is
+    // exactly what put the owner's configuration outside `land` and forced every worktree to sparse-exclude it.
+    const targets = script
+        .split("\n")
+        .filter((line) => line.startsWith("mount --bind "))
+        .map((line) => line.split(" ").at(-1));
+    expect(targets).not.toContain(shellQuote("/work/.intentic"));
+    expect(targets).not.toContain(shellQuote("/work/.intentic/config"));
 });
 
 test("the reference shelf comes back into the worktree, read-only, and only when the workspace has one", () => {
@@ -163,8 +179,20 @@ test("re-bound subtrees resolve to the main tree in both namespaces and are neve
     // Translating these would send the daemon looking in a worktree that has no such file.
     expect(inWorktree("/work/.intentic/records/artifacts/attachments/a.png", plan)).toBe("/work/.intentic/records/artifacts/attachments/a.png");
     expect(inWorktree("/work/_apps/web/node_modules/vue/index.js", plan)).toBe("/work/_apps/web/node_modules/vue/index.js");
+    // The staged docs tree is the untracked entry INSIDE the tracked group, and shared like the groups are.
+    expect(inWorktree("/work/.intentic/config/docs/root/repo.json", plan)).toBe("/work/.intentic/config/docs/root/repo.json");
     // A path that merely STARTS like one of them is still worktree content.
     expect(inWorktree("/work/.intentic-notes/x.md", plan)).toBe("/history/worktrees/abc/.intentic-notes/x.md");
+});
+
+test("the tracked state slice is the worktree's own, so it moves with the root like any other file", () => {
+    // A daemon-side reader handed `/work/.intentic/config/settings.json` by an isolated agent must open the
+    // agent's copy; the redirect layer must write there. Left untranslated, the edit would reach the live
+    // tree with no branch, no land and no author, which is the very bug this boundary exists to close.
+    expect(inWorktree("/work/.intentic/config/settings.json", plan)).toBe("/history/worktrees/abc/.intentic/config/settings.json");
+    expect(inWorktree("/work/.intentic/config/approvals/post-1.json", plan)).toBe("/history/worktrees/abc/.intentic/config/approvals/post-1.json");
+    expect(inWorktree("/work/.intentic/config", plan)).toBe("/history/worktrees/abc/.intentic/config");
+    expect(fromWorktree("/history/worktrees/abc/.intentic/config/settings.json", plan)).toBe("/work/.intentic/config/settings.json");
 });
 
 // A checked-out worktree of `root`: tracked source only, which is precisely why the dirs below are missing

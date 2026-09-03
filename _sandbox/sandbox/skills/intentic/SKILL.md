@@ -42,7 +42,9 @@ absent. Before telling the owner Intentic cannot do something, check, cheapest f
 1. The skill list in your prompt: the task skills routed below, plus one skill per connected capability.
 2. The deferred tool list: `ToolSearch` with a keyword (`+browser`, `+diagnostics`, `+deps`) shows what this
    turn can load.
-3. The daemon's own state, readable under `/work/.intentic/config/` (paths below).
+3. The daemon's own state, readable under `/work/.intentic/config/` (paths below). In an isolated turn that is
+   your branch's copy of the configuration; the live one, with the owner's uncommitted edits, is at
+   `/mnt/intentic-main/.intentic/config/`.
 4. The product's source, when the owner has it checked out (a repository whose root holds `_sandbox/sandbox/`,
    `_editor/web/`, `_platform/api/`, `_extensions/`). It is the owner's project, not a manual: read it to
    answer, and treat any edit to it as a product change.
@@ -80,9 +82,12 @@ description of the product, and it may describe a project that has nothing to do
                                      stableSystemPrompt, iqSearch, hashlineEdits, subagent limits, rules…)
 /work/.intentic/config/              capabilities.json, personas/, automations.json, workflows.json,
                                      environment.Dockerfile (the owner's overlay), skills/ (their own),
-                                     drafts/, extension-enablement.json
-/work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots)
-/work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay)
+                                     drafts/, extension-enablement.json. TRACKED: in an isolated turn this is
+                                     your branch's checkout, and a file you write here (an approval, an
+                                     environment.d fragment, a skill) reaches the daemon when the turn lands,
+                                     reviewed like code. The live copy is at /mnt/intentic-main/.intentic/config/
+/work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots). Shared live
+/work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live
 /work/.agents/skills/                the loaded skills every runtime reads (Claude links them from .claude/skills/)
 /root/.claude/skills/                the image-baked skills: this one and the task skills routed above
 /history/logs/                       daemon.log, perf.jsonl, resource-metrics.jsonl, client.jsonl (what the

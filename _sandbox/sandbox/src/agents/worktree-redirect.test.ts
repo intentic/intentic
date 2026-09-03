@@ -38,6 +38,9 @@ test("the subtrees that mean the main checkout on both sides survive the redirec
     expect(inWorktree("/work/.intentic/records/sessions/claude/projects/x.jsonl", plan)).toBe(
         "/work/.intentic/records/sessions/claude/projects/x.jsonl",
     );
+    // The TRACKED slice of the state dir is not one of them: it is the owner's configuration, checked out on the
+    // agent's branch, and an edit to it has to take the worktree road so that it lands with an author.
+    expect(inWorktree("/work/.intentic/config/settings.json", plan)).toBe("/history/worktrees/abc/.intentic/config/settings.json");
     // Every installed dependency tree, at each depth the plan recorded.
     expect(inWorktree("/work/node_modules/.bin/tsgo", plan)).toBe("/work/node_modules/.bin/tsgo");
     expect(inWorktree("/work/intentic/node_modules/vue/index.js", plan)).toBe("/work/intentic/node_modules/vue/index.js");

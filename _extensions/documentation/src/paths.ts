@@ -14,8 +14,10 @@ import { STATE_DIR } from "@intentic/sandbox-contract";
  *
  * STAGING: `.intentic/config/docs/<repo>/`, mirroring the published tail exactly. Generation writes here first, for
  * three reasons that all matter:
- *   1. N isolated agents can write into it at once, `.intentic` is bound back SHARED for isolated turns, so
- *      every agent in a fan-out lands in the same tree the browser is reading.
+ *   1. N isolated agents can write into it at once: the staging tree is untracked, and every untracked part of
+ *      `.intentic` is bound back SHARED for isolated turns (sandbox-contract `SHARED_STATE_PATHS`), so every
+ *      agent in a fan-out lands in the same tree the browser is reading. Its tracked siblings under `config/`
+ *      are the worktree's own and reach the main tree only by landing; this tree is deliberately not one.
  *   2. The browser sees it appear LIVE. `.intentic/config/docs/` is a workspace-root path, so it can ride the daemon's
  *      file-change push (contributes.files), an in-repo path cannot, because a manifest is static and repo
  *      names are not known when it is written.

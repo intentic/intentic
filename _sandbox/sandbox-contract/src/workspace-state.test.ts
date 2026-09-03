@@ -8,6 +8,7 @@ import {
     isReviewableLockedPath,
     REPORTED_MANIFEST_PATHS,
     SEARCHABLE_STATE_PATHS,
+    SHARED_STATE_PATHS,
     STATE_GROUP_DIR,
     type StateGroup,
     stateGroupOf,
@@ -488,6 +489,44 @@ describe(`state groups`, () => {
         expect(stateGroupOf(entry(`.intentic/local/tmp/`))).toBe(`local`);
         expect(stateGroupOf(entry(`.intentic/identity/members.json`))).toBe(`identity`);
         expect(stateGroupOf(entry(`.intentic/secrets/ci.json`))).toBe(`secrets`);
+    });
+});
+
+/* THE MOUNT BOUNDARY, and the claim that lets isolation bind by group instead of over the whole state dir: the
+ * shared prefixes and the tracked entries never overlap. A tracked entry under a shared prefix would be the old
+ * bug back in one folder, git in a worktree writing through a bind onto the live tree, and an untracked entry
+ * under no shared prefix is a transcript or a staged doc written into a per-worktree copy nobody reads. */
+describe(`SHARED_STATE_PATHS`, () => {
+    const under = (path: string, prefix: string): boolean => path === prefix || path.startsWith(prefix);
+
+    it(`is the four untracked groups whole, plus the one untracked entry inside config`, () => {
+        expect(SHARED_STATE_PATHS.toSorted()).toEqual([
+            `.intentic/config/docs/`,
+            `.intentic/identity/`,
+            `.intentic/local/`,
+            `.intentic/records/`,
+            `.intentic/secrets/`,
+        ]);
+    });
+
+    it(`never covers a tracked entry`, () => {
+        for (const path of VERSIONED_STATE_PATHS) {
+            expect([path, SHARED_STATE_PATHS.some((shared) => under(path, shared))]).toEqual([path, false]);
+        }
+    });
+
+    it(`covers every untracked entry`, () => {
+        for (const file of WORKSPACE_STATE_FILES) {
+            if (file.versioned !== true) {
+                expect([file.path, SHARED_STATE_PATHS.some((shared) => under(file.path, shared))]).toEqual([file.path, true]);
+            }
+        }
+    });
+
+    it(`spells every prefix as a directory, so a bind can never prefix-match a sibling`, () => {
+        for (const path of SHARED_STATE_PATHS) {
+            expect(path.endsWith(`/`), path).toBe(true);
+        }
     });
 });
 

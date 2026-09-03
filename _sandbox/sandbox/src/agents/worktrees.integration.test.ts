@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { STATE_DIR } from "@intentic/constants";
 import { gitInit } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { noIsolation } from "../testing.js";
@@ -492,159 +493,39 @@ test("an unborn-HEAD repo is excluded from the composition", async () => {
     expect(existsSync(join(conversation.cwd, "empty-repo"))).toBe(false);
 });
 
-/* The revert-by-checkout the sparse rule exists to stop (worktrees.ts excludeSharedState).
+/* THE TRACKED SLICE OF THE STATE DIR IS THE WORKTREE'S OWN.
  *
- * `.intentic` is ONE directory shared by every conversation (isolation.ts binds it over each worktree), and
- * part of it is tracked. Before the exclusion, a worktree whose branch predated a config change would put its
- * own committed copy back on any checkout — through the bind, over the live file — and commit it from there.
- * Both halves are asserted: the state dir never reaches the checkout, and the versioned entry is still in the
- * branch's index, so landing a config change from the main tree is unaffected.
+ * `.intentic/config` is the owner's configuration and the root repo tracks it, so it is checked out here like any
+ * other file: an agent's edit to a setting, an approval or a skill rides the branch and reaches the main tree
+ * through land, with a diff and an author. The UNTRACKED groups (records, local, identity, secrets, the staged docs
+ * tree) are what the turn's namespace binds in from the main tree instead (isolation.ts SHARED_STATE_PATHS), and
+ * that split is why nothing here has to keep git away from the state dir any more: no tracked path sits behind a
+ * bind, so a checkout, rebase or reset in this worktree can only ever write its own files. The sparse exclusion
+ * that used to hold the whole dir out of the checkout is gone with the hazard it guarded against.
  */
-test("the shared state dir is kept out of an agent's checkout, while its versioned entries stay in the index", async () => {
+test("the versioned state slice is checked out in the worktree and follows a rebase like any tracked file", async () => {
     const { work, worktrees } = await setup();
-    const versioned = join(work, ".intentic", "config", "settings.json");
-    await mkdir(join(work, ".intentic", "config"), { recursive: true });
-    await writeFile(versioned, '{"model":"v1"}\n');
-    await sh(work, "add", "-A", "--force", ".intentic/config/settings.json");
+    await mkdir(join(work, STATE_DIR, "config"), { recursive: true });
+    await writeFile(join(work, STATE_DIR, "config", "settings.json"), '{"model":"v1"}\n');
+    // No --force: the root repo's derived exclude (ensureRootRepo, off the contract's `versioned` list) already
+    // carves the entry back in, and this test leans on that being true for the worktree's own `add -A` too.
+    await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "config v1");
 
     const conversation = await worktrees.ensure("c1", []);
-
-    // Not on disk in the worktree: the bind mount, not the checkout, is what puts a state dir at this path.
-    expect(existsSync(join(conversation.cwd, ".intentic", "config", "settings.json"))).toBe(false);
-    // Still tracked on the branch, carrying git's skip-worktree bit rather than having been deleted.
-    expect(await sh(conversation.cwd, "rev-parse", "HEAD:.intentic/config/settings.json")).toBe(
-        await sh(work, "rev-parse", "HEAD:.intentic/config/settings.json"),
-    );
-    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
-    // And the worktree reports nothing to commit, so a retire/land `add -A` cannot sweep a stale copy back.
+    const checkedOut = join(conversation.cwd, STATE_DIR, "config", "settings.json");
+    expect(await readFile(checkedOut, "utf8")).toBe('{"model":"v1"}\n');
+    // An ordinary tracked entry (`H`), not a skip-worktree one, and a clean tree: nothing for a land to sweep.
+    expect(await sh(conversation.cwd, "ls-files", "-v", `${STATE_DIR}/config/settings.json`)).toBe(`H ${STATE_DIR}/config/settings.json`);
     expect(await sh(conversation.cwd, "status", "--short")).toBe("");
-});
 
-// The main line moving a versioned entry must still reach the branch: the whole point of sparse-checkout over a
-// bare skip-worktree bit is that a rebase updates the index for a path it never writes to disk.
-test("a rebase carries a config change the worktree never checks out", async () => {
-    const { work, worktrees } = await setup();
-    await mkdir(join(work, ".intentic", "config"), { recursive: true });
-    await writeFile(join(work, ".intentic", "config", "settings.json"), '{"model":"v1"}\n');
-    await sh(work, "add", "-A", "--force", ".intentic/config/settings.json");
-    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "config v1");
-    const conversation = await worktrees.ensure("c1", []);
-
-    await writeFile(join(work, ".intentic", "config", "settings.json"), '{"model":"v2"}\n');
-    await sh(work, "add", "-A", "--force", ".intentic/config/settings.json");
+    // The main line moving the entry reaches the worktree the way every other file does: through its checkout.
+    await writeFile(join(work, STATE_DIR, "config", "settings.json"), '{"model":"v2"}\n');
+    await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "config v2");
     await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "main");
-
-    expect(await sh(conversation.cwd, "rev-parse", "HEAD:.intentic/config/settings.json")).toBe(
-        await sh(work, "rev-parse", "HEAD:.intentic/config/settings.json"),
-    );
-    expect(existsSync(join(conversation.cwd, ".intentic", "config", "settings.json"))).toBe(false);
-});
-
-/* THE CONVERGENCE GUARD'S OWN TRAP, and why it reads the pattern file rather than the config flag.
- *
- * `info/sparse-checkout` is per-worktree, but `core.sparseCheckout` is repo config, SHARED by every worktree
- * unless `extensions.worktreeConfig` is on — and it is not. A guard that read the flag was therefore satisfied
- * by a SIBLING's work: the first worktree to converge set it repo-wide, and every worktree created after that
- * read `true`, returned early, and never wrote a pattern of its own. Sparse checkout nominally on, no pattern,
- * nothing excluded, the state dir fully live in `git status` — which is how one conversation's in-flight edit
- * to a workspace extension ended up inside another conversation's land, under an unrelated subject.
- *
- * ONE worktree cannot catch this; the first one always passes. The second is the regression.
- */
-test("a second conversation's worktree excludes the state dir too, though the first already set the shared flag", async () => {
-    const { work, worktrees } = await setup();
-    await mkdir(join(work, ".intentic", "config"), { recursive: true });
-    await writeFile(join(work, ".intentic", "config", "settings.json"), '{"model":"v1"}\n');
-    await sh(work, "add", "-A", "--force", ".intentic/config/settings.json");
-    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "config v1");
-
-    const first = await worktrees.ensure("c1", []);
-    const second = await worktrees.ensure("c2", []);
-
-    // The flag the old guard keyed off is repo-wide once the first worktree has converged. That is the trap the
-    // second worktree has to survive, so assert it is genuinely set rather than assuming it.
-    expect(await sh(second.cwd, "config", "--get", "core.sparseCheckout")).toBe("true");
-
-    for (const cwd of [first.cwd, second.cwd]) {
-        // Each worktree carries a pattern of its OWN: a sibling's file is not this worktree's exclusion.
-        expect(existsSync(join(cwd, ".intentic", "config", "settings.json"))).toBe(false);
-        expect(await sh(cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
-        // The half that actually bit: a land's `add -A` must find nothing of the shared tree to sweep up.
-        expect(await sh(cwd, "status", "--short")).toBe("");
-    }
-});
-
-/* THE UNLINK THROUGH THE BIND (worktrees.ts excludeSharedState, third incident).
- *
- * Inside the namespace the excluded path is main's live state dir, so every skipped entry is present as far as
- * git can see. Without `sparse.expectFilesOutsideOfPatterns` a `git status` reads that as "the user put it
- * back" and clears the skip-worktree bit, and the next tree reset re-applies the pattern by unlinking the file —
- * main's file. The bind is simulated by writing the tracked content at the worktree's own state path, which is
- * the same view git gets in production.
- */
-const commitConfig = async (work: string, content: string, message: string): Promise<void> => {
-    await mkdir(join(work, ".intentic", "config"), { recursive: true });
-    await writeFile(join(work, ".intentic", "config", "settings.json"), content);
-    await sh(work, "add", "-A", "--force", ".intentic/config/settings.json");
-    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
-};
-
-test("a versioned entry present through the bind survives a status and every kind of tree reset", async () => {
-    const { work, worktrees } = await setup();
-    await commitConfig(work, '{"model":"v1"}\n', "config v1");
-    const conversation = await worktrees.ensure("c1", []);
-    const bound = join(conversation.cwd, ".intentic", "config");
-    await mkdir(bound, { recursive: true });
-    await writeFile(join(bound, "settings.json"), '{"model":"v1"}\n');
-    await writeFile(join(bound, "draft.json"), "an unversioned file the agent wrote\n");
-
-    // The status that used to strip the bit.
-    await sh(conversation.cwd, "status", "--short");
-    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
-    // The resets that used to unlink. Each is an ordinary move for an agent told to rebase.
-    await sh(conversation.cwd, "reset", "--hard", "HEAD");
-    // A stash needs something of its own to save; the state dir must ride through untouched either way.
-    await writeFile(join(conversation.cwd, "CLAUDE.md"), "edited\n");
-    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "stash", "-u");
-    await sh(conversation.cwd, "stash", "pop");
-    expect(await readFile(join(bound, "settings.json"), "utf8")).toBe('{"model":"v1"}\n');
-    expect(existsSync(join(bound, "draft.json"))).toBe(true);
-    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
-});
-
-// The road without the status step: a rebase bringing a NEW versioned entry down from main used to leave it
-// checked in but present ("left despite sparse patterns"), and the reset after it removed the file.
-test("a versioned entry a rebase brings down from main arrives skipped: the reset after it removes nothing", async () => {
-    const { work, worktrees } = await setup();
-    const conversation = await worktrees.ensure("c1", []);
-    await commitConfig(work, '{"model":"v1"}\n', "config v1");
-    const bound = join(conversation.cwd, ".intentic", "config");
-    await mkdir(bound, { recursive: true });
-    await writeFile(join(bound, "settings.json"), '{"model":"v1"}\n');
-
-    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "main");
-    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
-    await sh(conversation.cwd, "reset", "--hard", "HEAD");
-    expect(await readFile(join(bound, "settings.json"), "utf8")).toBe('{"model":"v1"}\n');
-});
-
-// A worktree converged before the flag existed carries the old pattern text; the guard compares the whole file,
-// so the next turn re-converges it: flag set, and a bit an earlier status stripped is put back.
-test("a worktree from before the flag is re-converged on its next turn", async () => {
-    const { work, worktrees } = await setup();
-    await commitConfig(work, '{"model":"v1"}\n', "config v1");
-    const conversation = await worktrees.ensure("c1", []);
-    const patternFile = await sh(conversation.cwd, "rev-parse", "--git-path", "info/sparse-checkout");
-    await writeFile(patternFile, "/*\n!/.intentic/\n");
-    await sh(conversation.cwd, "config", "--unset", "sparse.expectFilesOutsideOfPatterns");
-    await sh(conversation.cwd, "update-index", "--no-skip-worktree", ".intentic/config/settings.json");
-
-    await worktrees.ensure("c1", conversation.repos);
-
-    expect(await sh(conversation.cwd, "config", "--get", "sparse.expectFilesOutsideOfPatterns")).toBe("true");
-    expect(await readFile(patternFile, "utf8")).toContain("!/.intentic/\n");
-    expect(await sh(conversation.cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
-    expect(await sh(conversation.cwd, "status", "--short")).toBe("");
+    expect(await readFile(checkedOut, "utf8")).toBe('{"model":"v2"}\n');
+    // And the main tree's own copy was never touched by any of it.
+    expect(await readFile(join(work, STATE_DIR, "config", "settings.json"), "utf8")).toBe('{"model":"v2"}\n');
+    expect(await sh(work, "status", "--short")).toBe("");
 });

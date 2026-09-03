@@ -705,6 +705,16 @@ conversation's worktree instead of a path that still reaches the shared checkout
   (src/workspace/state-janitor.ts) collects what the classes call disposable, and only that: tmp/ at boot,
   unreferenced pnpm-store blobs, browser captures past thirty days. A tree the table has no name for is left
   alone, since "I don't recognise this" must never resolve to a delete.
+- An isolated turn sees the state dir split along the line git already draws (`SHARED_STATE_PATHS`, derived from
+  the same table). What the root repo TRACKS, `.intentic/config/`, is the worktree's own checkout: an agent's edit
+  to a setting, an approval, an environment fragment or a skill rides `agent/<id>` and reaches the main tree
+  through `land`, with a diff and an author, and becomes visible to the daemon when the turn lands. Everything
+  git does NOT track (`records/`, `local/`, `identity/`, `secrets/`, and the staged docs tree inside `config/`)
+  is bind-mounted from the main tree by `agents/isolation.ts`, one directory for every conversation, because a
+  transcript or a browser capture written into a per-worktree copy is lost. Nothing tracked sits behind a bind,
+  so no checkout or rebase in a worktree can write through one, which is why worktrees no longer sparse-exclude
+  the state dir. A turn that genuinely needs the LIVE configuration (the owner's uncommitted edits) reads it at
+  `/mnt/intentic-main/.intentic/config/`.
 - The Claude credential lives in the sandbox's own `.intentic/secrets/auth/claude/` store (connected via the daemon's
   `/claude/*` flow), resolved + injected into the SDK per turn: never held by the platform. The generic file API
   protects the whole `auth/` parent, provider-native `sessions/`, and logged-in `browser/` profiles; purpose-built

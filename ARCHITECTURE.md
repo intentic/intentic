@@ -583,9 +583,10 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   first-party ones only `rtk` does, because its environment fragment composes per capability entry.
 - **Workspace**, a directory per extension under `.intentic/config/workspace-extensions/`, consumed in place: no
   clone, no capability entry, no install moment. The path for extensions authored *inside* the sandbox,
-  typically by an agent with its own file tools: `.intentic` is shared across sessions, so one written from
-  an isolated worktree is live for the daemon at once, and an edit to its UI entry is simply a new bundle
-  identity (the bundle route ETags the bytes rather than a commit). A workspace id can never shadow a baked
+  typically by an agent with its own file tools: `.intentic/config` is tracked, so one written from an
+  isolated worktree rides the agent's branch and reaches the daemon when the turn lands, reviewable in the
+  agent's diff like any code, and an edit to its UI entry is simply a new bundle identity (the bundle route
+  ETags the bytes rather than a commit). A workspace id can never shadow a baked
   or installed one, and a directory that fails to enumerate: no manifest, a manifest that doesn't parse, a
   taken id, is *reported* on `GET /extensions` (`invalid`) and rendered by the tab: with no install step to
   reject it, the list is the author's feedback channel.

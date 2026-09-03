@@ -786,6 +786,32 @@ export const stateGroupOf = (file: WorkspaceStateFile): StateGroup => {
 export const stateGroupPaths = (group: StateGroup): readonly string[] =>
     WORKSPACE_STATE_FILES.filter((file) => stateGroupOf(file) === group).map((file) => file.path);
 
+/* WHAT AN ISOLATED TURN SHARES LIVE WITH THE MAIN TREE, and what is its own. The state dir is split along ONE
+ * line, and it is the line git already draws: what the root repo TRACKS (`versioned`) is the worktree's own
+ * checkout, edited on the agent's branch, reviewed in its diff and landed like code; everything git does NOT
+ * track is bound in from the main tree (agents/isolation.ts), one directory for every conversation, because a
+ * transcript, a ledger, a browser capture or a staged doc written into a per-worktree copy is simply lost.
+ *
+ * The two used to be one bind over the whole dir, with the tracked slice sparse-excluded from every worktree to
+ * keep git from writing through it. That put the ONE thing a person reviews outside the one door that records
+ * provenance: an agent's settings edit, approval, environment fragment or skill went straight into the owner's
+ * working tree, unattributed, with no branch commit and nothing for a land to conflict on. Binding by group
+ * ends both problems at once, nothing tracked sits behind a bind, so nothing git does in a worktree can reach
+ * the live tree, and the sparse machinery has nothing left to guard.
+ *
+ * WHOLE GROUP DIRS WHERE THE WHOLE GROUP IS UNTRACKED (records, local, identity, secrets), not their entries: a
+ * file an extension writes under `records/` without declaring it must still land in the shared tree, and a
+ * per-entry bind would strand it in the worktree. Only a group that MIXES tracked and untracked entries (config,
+ * for the staged docs tree) is bound entry by entry. Derived, so a store added tomorrow is placed by its
+ * `versioned` flag alone, and the layout guard in workspace-state.test.ts pins that no tracked entry can ever
+ * sit under a shared prefix. Trailing slash kept on every entry, as the table spells directories. */
+export const SHARED_STATE_PATHS: readonly string[] = STATE_GROUPS.flatMap((group) => {
+    const files = WORKSPACE_STATE_FILES.filter((file) => stateGroupOf(file) === group);
+    return files.some((file) => file.versioned === true)
+        ? files.filter((file) => file.versioned !== true).map((file) => file.path)
+        : [`${STATE_GROUP_DIR[group]}/`];
+});
+
 /* THE SLICE DESKTOP-SYNC COPIES DOWN, ordinary state and the records that bind this sandbox to its owner,
  * minus anything that opted out (see `backup` on the interface).
  *

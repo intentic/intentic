@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { isolatedAgent, noIsolation } from "../testing.js";
@@ -70,6 +71,29 @@ test("land applies the delta as UNCOMMITTED main-tree changes: HEAD never moves"
     // landedTip advanced to the worktree branch's tip.
     const root = result.repos.find((repo) => repo.repo === "root");
     expect(root?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));
+});
+
+/* THE CONFIGURATION SLICE LANDS LIKE CODE. `.intentic/config` is checked out in the worktree (its untracked
+ * siblings are what the turn's namespace binds in from the main tree, isolation.ts), so an agent's edit to a
+ * setting takes the same road as any file: committed on the branch, patched into the owner's Changes with an
+ * author, and never written to the live tree before this. The direct write it replaces left no branch commit,
+ * nothing for a conflict to refuse on, and a row in Changes that read as the owner's own doing. */
+test("an agent's edit to a versioned state file lands as an uncommitted main-tree change", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await mkdir(join(conversation.cwd, STATE_DIR, "config"), { recursive: true });
+    await writeFile(join(conversation.cwd, STATE_DIR, "config", "settings.json"), '{"model":"agent"}\n');
+    // The live tree holds nothing at that path until the land: the write above went to the worktree alone.
+    expect(existsSync(join(work, STATE_DIR, "config", "settings.json"))).toBe(false);
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(result.landed).toBe(true);
+    expect(result.changed).toBe(true);
+    expect(await readFile(join(work, STATE_DIR, "config", "settings.json"), "utf8")).toBe('{"model":"agent"}\n');
+    // Uncommitted in main, reviewable in Changes (the derived exclude carves the versioned entry back in, so it
+    // is a real untracked row rather than an ignored one)…
+    expect(await sh(work, "status", "--porcelain", "-uall")).toContain(`?? ${STATE_DIR}/config/settings.json`);
+    // …and committed on the agent's branch first, which is the provenance the direct write never had.
+    expect(await sh(conversation.cwd, "show", "--stat", "--format=", "HEAD")).toContain(`${STATE_DIR}/config/settings.json`);
 });
 
 test("nothing to land reads as changed:false (no frame, no status flip)", async () => {
