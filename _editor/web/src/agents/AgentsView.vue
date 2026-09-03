@@ -1462,7 +1462,25 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         {{ filtering ? "No matches in this lane." : lane.empty }}
                     </p>
                     <div v-else class="relative flex flex-col gap-2.5 pb-2.5">
-                        <Transition v-for="agent in cardsFor(lane.key)" :key="agent.id" name="lane">
+                        <!-- v-memo skips a card whose inputs are unchanged. The roster ticks about once a second
+                             per running turn and `fleet` is rebuilt each time; without this every lane recreates
+                             every AgentCard vnode to redraw one elapsed readout (ChatPane.vue uses the same
+                             pattern for streaming transcript rows). -->
+                        <Transition
+                            v-for="agent in cardsFor(lane.key)"
+                            :key="agent.id"
+                            v-memo="[
+                                agent,
+                                narrow,
+                                draggedId === agent.id && dragging,
+                                pendingFor(agent),
+                                agent.id === highlightId || inPane(agent.id),
+                                snippetOf(agent),
+                                needle,
+                                matchCase,
+                            ]"
+                            name="lane"
+                        >
                             <AgentCard
                                 :ref="(el) => setCardEl(agent.id, el)"
                                 :agent="agent"

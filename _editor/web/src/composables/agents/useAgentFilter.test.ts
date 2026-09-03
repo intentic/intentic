@@ -264,6 +264,51 @@ describe(`useAgentFilter`, () => {
         expect(keys.map((key) => String(unref(key))).filter((key) => key.includes(`query=FROM&caseSensitive=true`))).toHaveLength(2);
     });
 
+    /* THE BOARD MEMOISES A CARD ON THIS SNIPPET (AgentsView hands it to `v-memo`), so an equal-but-new object
+     * every time it is asked IS a reported change: every matched card would redraw on every roster frame, which
+     * is the exact cost that memo was added to remove. The evidence therefore keeps its identity for as long as
+     * it says the same thing. */
+    it(`reports one unchanged hit as the same object every time it is asked`, async () => {
+        setAgents([agent(`a1`, { title: `whatever` })], 1);
+        const conversation = new Conversation(`a1`);
+        conversation.restoreMessages([{ role: `user`, text: `the landAgent bug` }]);
+        useChat().conversations.value = [placeholder(), conversation];
+
+        const filter = filterIn();
+        filter.query.value = `landagent`;
+        await nextTick();
+        const target = useAgents().fleet.value[0] as FleetAgent;
+        const first = filter.snippetOf(target);
+        expect(first).toEqual({ text: `the landAgent bug`, speaker: `user` });
+
+        // The board asks about seven times per render (cardsFor runs five times over, then the card reads its
+        // own match twice), and every one of them has to be the same answer rather than a new one.
+        expect(filter.snippetOf(target)).toBe(first);
+
+        // ...and across a rebuild of the local index, which every frame of every streaming turn causes: the
+        // line this hit quotes is untouched, so the hit is still the same hit.
+        conversation.restoreMessages([
+            { role: `user`, text: `the landAgent bug` },
+            { role: `assistant`, text: `looking at it now` },
+        ]);
+        await nextTick();
+        expect(filter.snippetOf(target)).toBe(first);
+    });
+
+    // ...but a rename is a real change of input, and the memo must not answer for the name it cached under.
+    it(`stops matching a title the user has renamed away from the query`, async () => {
+        setAgents([agent(`a1`, { title: `the landAgent rewrite` })], 1);
+        const filter = filterIn();
+        filter.query.value = `landagent`;
+        await nextTick();
+        const target = useAgents().fleet.value[0] as FleetAgent;
+        expect(filter.matches(target)).toBe(true);
+
+        setAgents([agent(`a1`, { title: `something else entirely` })], 2);
+        await nextTick();
+        expect(filter.matches(useAgents().fleet.value[0] as FleetAgent)).toBe(false);
+    });
+
     it(`surfaces archived matches, which are off the roster entirely`, async () => {
         setAgents([agent(`a1`, { title: `tidy the readme` })], 1);
         useAgents().archived.value = [

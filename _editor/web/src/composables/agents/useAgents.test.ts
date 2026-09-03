@@ -187,6 +187,71 @@ describe("roster titles", () => {
     });
 });
 
+/* WHAT THE BOARD IS ALLOWED TO SKIP, which is a guarantee about this projection rather than about any
+ * component. AgentsView memoises each card on the object it was handed (its `v-memo`), so a frame that changed
+ * nothing about an agent has to hand back the very same object or every lane rebuilds every card to tick one
+ * elapsed readout. The daemon re-frames the roster about once a second per running turn, which is the
+ * difference between one card repainting and all of them, once a second, for as long as anything is working. */
+describe("roster frames the board can skip", () => {
+    const summary = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
+        id,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        // seenAt outruns updatedAt so nothing here reads as unread: what is under test is object identity, and
+        // an unread badge flipping would be a second reason for a card to change.
+        updatedAt: 1_000,
+        seenAt: 2_000,
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        ...extra,
+    });
+    const cardsById = (): Map<string, FleetAgent> => new Map(useAgents().fleet.value.map((card) => [card.id, card]));
+
+    beforeEach(() => {
+        resetAgents();
+    });
+
+    it("hands back the identical cards when a frame said nothing new", async () => {
+        setAgents([summary(`a1`), summary(`a2`)], 1);
+        await nextTick();
+        const before = useAgents().fleet.value;
+        const wasA1 = cardsById().get(`a1`);
+
+        // The same roster over again, freshly off the wire: every object in it is new, nothing it says is.
+        setAgents([summary(`a1`), summary(`a2`)], 2);
+        await nextTick();
+
+        // The ARRAY too, not just its entries, so `lanes` never re-groups and the board never re-renders at all.
+        expect(useAgents().fleet.value).toBe(before);
+        expect(cardsById().get(`a1`)).toBe(wasA1);
+    });
+
+    // Which card a moving frame is allowed to re-mint is pinned beside the diff-invalidation cases above
+    // ("reuses fleet entries across frames that only tick another agent"); what is left for here is the
+    // stronger guarantee, and the one invariant holding the comparison itself together.
+
+    /* WHY THE CACHED ENTRY IS RE-FINGERPRINTED EVERY FRAME instead of carrying the string it was filed under.
+     * The optimistic writes go into the held entry IN PLACE, so a stored fingerprint would describe that entry
+     * as it was BEFORE the write: a frame carrying the server's own value would compare equal to a string
+     * nothing holds any more, the locally-mutated object would be handed back, and the board would keep showing
+     * an intent the daemon had refused, silently, for as long as that field never changed again. */
+    it("lets a later frame overrule an optimistic write still in flight", async () => {
+        setAgents([summary(`a1`, { title: `Old name` })], 1);
+        await nextTick();
+
+        // The request never settles, so what the board holds is the in-place optimistic write and nothing else.
+        vi.mocked(sandboxJson).mockImplementation(() => new Promise(() => undefined));
+        void useAgents().rename(`a1`, `New name`);
+        await nextTick();
+        expect(cardsById().get(`a1`)?.title).toBe(`New name`);
+
+        // ...and a frame that still says otherwise puts the roster back on the daemon's account of it.
+        setAgents([summary(`a1`, { title: `Old name` })], 2);
+        await nextTick();
+        expect(cardsById().get(`a1`)?.title).toBe(`Old name`);
+    });
+});
+
 /* The review panel's diff query is pull-only while the roster is push-fed, so a status transition is the one
  * signal that a land performed elsewhere (the auto-land at turn completion, another device's button) changed
  * what that query holds. Without it the header said "Landed" over a review still counting every file as
@@ -226,6 +291,17 @@ describe("diff invalidation", () => {
 
         expect(invalidate).not.toHaveBeenCalled();
         invalidate.mockRestore();
+    });
+
+    it("reuses fleet entries across frames that only tick another agent: the board must not replace every card", () => {
+        setAgents([summary(`a1`, `landed`), summary(`a2`, `running`)], 1);
+        const { fleet } = useAgents();
+        const before = fleet.value;
+
+        setAgents([summary(`a1`, `landed`), { ...summary(`a2`, `running`), updatedAt: 2_000 }], 2);
+
+        expect(fleet.value.find((agent) => agent.id === `a1`)).toBe(before.find((agent) => agent.id === `a1`));
+        expect(fleet.value.find((agent) => agent.id === `a2`)).not.toBe(before.find((agent) => agent.id === `a2`));
     });
 
     it("treats an unseen id as a transition: a reconnect's first snapshot may carry a land that happened offline", () => {

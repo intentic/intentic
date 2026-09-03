@@ -1,6 +1,7 @@
 import type { AgentSearchResult, MatchSnippet, Speaker } from "@intentic/sandbox-contract";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { computed, onScopeDispose, ref, watch } from "vue";
+import type { Conversation } from "../chat/conversation";
 import { type ChatSession, useChat } from "../chat/useChat";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -43,18 +44,35 @@ import { AGENTS, SESSIONS } from "../queryKeys";
  * of the chat: the user's prompts and the agent's own bubbles, which is the daemon's rule too (see
  * AgentSearchQuerySchema). A `notice` row is neither side speaking, and thinking and tool cards live on their
  * own fields of the message rather than in `text`, so what is left here is exactly the spoken half.
+ *
+ * FOLDED ONCE, HERE, rather than inside the match test. Collapsing a line's whitespace and lowercasing it is
+ * what a test against it costs, and the board asks about a card roughly seven times per render (see `finder`
+ * below), so every message of every open chat went through that regex seven times to answer one keystroke.
+ * What is left in the scan is a bare `indexOf`.
  */
-const localLinesOf = (id: string): readonly { text: string; speaker: Speaker }[] => {
-    const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
-    if (conversation === undefined) {
-        return [];
-    }
-    return conversation.messages.value.flatMap((message) =>
-        message.role === `user` || message.role === `assistant`
-            ? [{ text: message.text, speaker: message.role === `user` ? (`user` as const) : (`agent` as const) }]
-            : [],
-    );
-};
+interface SpokenLine {
+    // The line as a snippet quotes it: whitespace collapsed, trimmed.
+    readonly text: string;
+    // ...and as the one substring test reads it. Literally the same string when the case rule is on, so the
+    // fold costs nothing there.
+    readonly folded: string;
+    readonly speaker: Speaker;
+}
+
+const linesOf = (conversation: Conversation, caseSensitive: boolean): readonly SpokenLine[] =>
+    conversation.messages.value.flatMap((message) => {
+        if (message.role !== `user` && message.role !== `assistant`) {
+            return [];
+        }
+        const text = message.text.replace(/\s+/gu, ` `).trim();
+        return [
+            {
+                text,
+                folded: caseSensitive ? text : text.toLowerCase(),
+                speaker: message.role === `user` ? (`user` as const) : (`agent` as const),
+            },
+        ];
+    });
 
 // How much of a matched line a card shows, the daemon's own SNIPPET_CHARS, applied to the local tier so a
 // card looks the same whichever tier found it.
@@ -62,17 +80,17 @@ const SNIPPET_CHARS = 120;
 
 // The user's own words win when both sides match, exactly as the daemon's matchLines does it: a query is typed
 // from memory, and what a person remembers is their own phrasing.
-const snippetFor = (lines: readonly { text: string; speaker: Speaker }[], needle: string, caseSensitive: boolean): MatchSnippet | undefined => {
+const snippetFor = (lines: readonly SpokenLine[], needle: string): MatchSnippet | undefined => {
     const said = (speaker: Speaker): MatchSnippet | undefined => {
         for (const spoken of lines) {
             if (spoken.speaker !== speaker) {
                 continue;
             }
-            const line = spoken.text.replace(/\s+/gu, ` `).trim();
-            const at = (caseSensitive ? line : line.toLowerCase()).indexOf(needle);
+            const at = spoken.folded.indexOf(needle);
             if (at === -1) {
                 continue;
             }
+            const line = spoken.text;
             if (line.length <= SNIPPET_CHARS) {
                 return { text: line, speaker };
             }
@@ -199,22 +217,93 @@ export function useAgentFilter() {
         return fleetSearch.data.value?.indexing === true;
     });
 
-    // One agent against the current query, local tier first, a hit this browser can prove costs nothing and
-    // is already correct while the daemon's answer is still in flight.
-    const hitOf = (agent: FleetAgent): AgentHit | undefined => {
+    /* WHAT THIS BROWSER CAN MATCH, INDEXED ONCE PER CHANGE instead of re-read per card.
+     *
+     * Gated on `active`, and that gate is the point: with nothing in the box this must cost nothing, and an
+     * index built anyway would take a reactive dependency on every message of every open chat and rebuild
+     * itself on each frame of every streaming turn to answer a question nobody asked. */
+    const localLines = computed<ReadonlyMap<string, readonly SpokenLine[]>>(() => {
         if (!active.value) {
-            return undefined;
+            return new Map();
         }
-        const title = matchCase.value ? agent.title : agent.title?.toLowerCase();
-        if (title?.includes(needle.value) === true) {
-            return {};
-        }
-        const local = snippetFor(localLinesOf(agent.id), needle.value, matchCase.value);
-        if (local !== undefined) {
-            return { snippet: local };
-        }
-        return remote.value.get(agent.id);
-    };
+        const caseSensitive = matchCase.value;
+        return new Map(
+            useChat().conversations.value.map((conversation) => [conversation.conversationId, linesOf(conversation, caseSensitive)]),
+        );
+    });
+
+    /* A HIT'S OWN IDENTITY, HELD ACROSS EVALUATIONS, because `snippetOf(agent)` is one of the board's `v-memo`
+     * dependencies (AgentsView). Re-deriving the index hands back an equal-but-new snippet object, and to
+     * `v-memo` a new object IS a change: every matched card would redraw on every roster frame, which is the
+     * exact cost that memo exists to remove. So a hit that still says the same thing keeps the object it was
+     * last reported as. Keyed by card rather than by card-and-title: a rename may change WHETHER an agent is
+     * hit, but where the evidence is unchanged it is still the same evidence. */
+    const held = new Map<string, AgentHit>();
+    const sameHit = (left: AgentHit, right: AgentHit): boolean =>
+        left.snippet === right.snippet ||
+        (left.snippet !== undefined &&
+            right.snippet !== undefined &&
+            left.snippet.text === right.snippet.text &&
+            left.snippet.speaker === right.snippet.speaker);
+    /* One card, addressed by BOX AND ID and never by id alone: ids are minted per daemon, so the wider board
+     * can hold two cards carrying the same id from two sandboxes (fleetScope's own cardKey draws the same
+     * distinction, and AgentsView's pendingFor says why at length), and one would answer for the other. */
+    const cardKey = (agent: FleetAgent): string => `${agent.sandboxId ?? ``}/${agent.id}`;
+
+    /* ONE AGENT AGAINST THE CURRENT QUERY, local tier first: a hit this browser can prove costs nothing and is
+     * already correct while the daemon's answer is still in flight.
+     *
+     * A MEMOISING CLOSURE re-minted on every change, rather than a plain function, because of how often the
+     * board asks. `cardsFor` runs five times over per render (the lane's v-for, its empty-lane guard,
+     * laneCount -> keptIn, the `kept` tally and paneOrder) and each pass tests every card in the lane, then
+     * `snippetOf` is read twice more for the card actually drawn. Every one of those calls used to re-find the
+     * conversation in the chat list and rescan its whole transcript, so a single keystroke on a board with a
+     * dozen chats open spent ~50ms repeating itself: past the frame budget, on the one path that has to keep
+     * up with typing.
+     *
+     * A computed rather than a cache keyed off the query, because the answer has to STAY right: every input
+     * here is reactive (the query, the case rule, each open transcript, the daemon's reply), and a hand-rolled
+     * cache would go on answering "no match" for a word a streaming turn had since said. Same reads, same
+     * invalidation, one evaluation.
+     *
+     * The TITLE rides in the memo key because it is the one input the closure reads lazily, off the agent it is
+     * handed: everything else was captured above and therefore invalidates this whole computed. Without it a
+     * rename would keep answering for the old name for as long as the query stood. */
+    const finder = computed(() => {
+        const on = active.value;
+        const term = needle.value;
+        const caseSensitive = matchCase.value;
+        const index = localLines.value;
+        const answered = remote.value;
+        const found = new Map<string, AgentHit | undefined>();
+        return (agent: FleetAgent): AgentHit | undefined => {
+            if (!on) {
+                return undefined;
+            }
+            const card = cardKey(agent);
+            const key = `${card}/${agent.title ?? ``}`;
+            if (found.has(key)) {
+                return found.get(key);
+            }
+            const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
+            const hit = ((): AgentHit | undefined => {
+                if (title?.includes(term) === true) {
+                    return {};
+                }
+                const local = snippetFor(index.get(agent.id) ?? [], term);
+                return local === undefined ? answered.get(agent.id) : { snippet: local };
+            })();
+            const previous = hit === undefined ? undefined : held.get(card);
+            const reported = previous !== undefined && hit !== undefined && sameHit(previous, hit) ? previous : hit;
+            if (reported !== undefined) {
+                held.set(card, reported);
+            }
+            found.set(key, reported);
+            return reported;
+        };
+    });
+
+    const hitOf = (agent: FleetAgent): AgentHit | undefined => finder.value(agent);
 
     const matches = (agent: FleetAgent): boolean => !active.value || hitOf(agent) !== undefined;
     const snippetOf = (agent: FleetAgent): MatchSnippet | undefined => hitOf(agent)?.snippet;
