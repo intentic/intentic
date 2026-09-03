@@ -62,16 +62,25 @@ export interface HeroDemo {
 /**
  * One verb in the tour: the home page's single telling of what the product does. Each maps 1:1 to a page
  * in the Features menu and carries ONE line plus one proof: a real browser screenshot (`shot`, named like a
- * `ShotImage` and framed with the route it was taken on) OR, for Automate, the list of events it wakes on.
+ * `ShotImage` and framed with the route it was taken on) OR, for Automate, the machine it wakes by,
  * because there is no honest screenshot of an automations screen and a mockup would be the one lie here.
- * The first item leads the section at full width; the rest are compact cards.
+ *
+ * EVERY ITEM GETS THE SAME SIZE, and the tour is read one item per screenful. There is no lead item and
+ * no compact one: four verbs were cards with their screenshot cropped to a strip, which showed a
+ * thirteenth of four surfaces and made the section unreadable at exactly the point it was meant to be
+ * showing the product.
  */
 export interface VerbTourItem {
     verb: string;
     href: string;
     line: string;
     shot?: { name: string; alt: string; label: string };
-    triggers?: string[];
+    /**
+     * Automate's proof, and it is a machine rather than a picture: what wakes a run, what gets to veto it,
+     * and what the run turns out to be. Three parts rather than one list, because at a screenful's scale a
+     * bare list of six events says when an agent starts and nothing about what starts.
+     */
+    flow?: { triggers: string[]; check: string; outcome: string };
 }
 
 /**
@@ -101,8 +110,14 @@ export interface LandingContent {
     };
     /* The one telling of what you do with the product, in the same five verbs as the Features menu. So the
      * home page and the feature pages read as one product. It replaces the old "loop" beats and "extend"
-     * bento, which between them said the same powers three times over. */
-    verbs: LandingSectionIntro & { items: VerbTourItem[]; cta: string };
+     * bento, which between them said the same powers three times over.
+     *
+     * THE ONLY BAND OPENER ON THE PAGE WITH NO `sub`, and the pictures under it are why. The section is a
+     * showcase now — one verb, one screenful, one screenshot at the width of the window — so everything
+     * between the hero and the first of those screenshots is read INSTEAD of it. An eyebrow and a heading
+     * short enough to hold in one glance is all that fits there. The one mechanical fact the retired sub
+     * carried (an agent works on a branch of its own) is still on the page: `#workspace` closes on it. */
+    verbs: Omit<LandingSectionIntro, "sub"> & { items: VerbTourItem[]; cta: string };
     workspace: LandingSectionIntro & { comparison: WorkspaceComparison };
     economics: LandingSectionIntro & { accounts: { name: string; logo: ProviderBrand; detail: string }[]; points: string[] };
     /* Who is behind the promises the page just made. It sits here, last before `#connect`, because the
@@ -217,31 +232,30 @@ export const landingContent: LandingContent = {
             note: "The real app on a recorded workspace. Approve a plan, answer an agent, read a diff.",
         },
     },
-    // The tour: five verbs, each said once, each a picture instead of a paragraph. Order matches the
-    // Features menu. Orchestrate leads at full width because the board is the product's face; the other
-    // four are compact cards. Automate carries its trigger list, not a screenshot: it is diagram-led
-    // everywhere, because no honest capture of an automations screen exists.
+    // The tour: five verbs, each said once, each a screenful of its own with the screen itself at the
+    // width of the window. Order matches the Features menu. Automate carries its own machine rather than
+    // a screenshot: it is diagram-led everywhere, because no honest capture of an automations screen
+    // exists and a mockup would be the one lie on this page.
     verbs: {
         eyebrow: "A day at the board",
-        // The heading is a scene, not a to-do list. Two versions preceded it and both read as a chore
-        // chart, the very thing this section was accused of. First it was three bare verbs in a row
-        // ("Run agents. Connect your tools. Read every change."); then it was "One board holds every
-        // agent working for you", which read fine on its own but said almost exactly what the first verb
-        // card below it already says ("One board shows every agent you have running…"), so the reader met
-        // the same sentence twice and the second screen felt like filing, not delegating. This names the
-        // feeling the five verbs add up to, a whole fleet at work, and you still holding the thread of
-        // it, and leaves the board itself to the Run card. The sub keeps the one mechanical fact that
-        // makes "a whole fleet" believable, in words a reader already holds.
-        heading: "A whole fleet at work, and you never lose the thread.",
-        sub: "Each agent works on a branch of its own, so many can share one repo without ever stepping on each other.",
+        /* FIVE WORDS, because what comes after them is a picture the width of the window. The heading is a
+         * scene, not a to-do list. Three versions preceded it. First three bare verbs in a row ("Run
+         * agents. Connect your tools. Read every change."), which read as a chore chart. Then "One board
+         * holds every agent working for you", which said almost exactly what the Run line below it says,
+         * so the reader met the same sentence twice. Then the scene plus its own resolution ("…and you
+         * never lose the thread"), which was the right thought at the wrong length: two clauses and a
+         * supporting sentence under them is four lines of reading between the hero and the first
+         * screenshot, and this section's whole problem was that it talked where it should have shown.
+         * What is left is the claim only — the fleet — and the screens make the rest of the argument. */
+        heading: "A whole fleet at work.",
         items: [
             {
                 verb: "Run",
                 href: productHref("run"),
                 line: "One board shows every agent you have running, and puts the one that needs you first.",
                 shot: {
-                    name: "fleet-board",
-                    alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
+                    name: "stage-run",
+                    alt: "The intentic workspace on the fleet board: an Attention lane holding a Front Desk question and an agent asking one of its own, an Active lane where a Stripe checkout agent is running two subagents, and a Finished lane where a completed change offers Land now. Every card carries its model, its branch, what it has cost and its diff stats. The chat docked beside the board holds the plan that agent wrote, with Approve under it.",
                     label: "acme-shop · /agents",
                 },
             },
@@ -250,8 +264,8 @@ export const landingContent: LandingContent = {
                 href: productHref("connect"),
                 line: "Connect an agent to GitHub, Postgres, Stripe, Discord or any MCP server. Your keys stay on your machine.",
                 shot: {
-                    name: "capabilities",
-                    alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
+                    name: "stage-connect",
+                    alt: "The capability catalogue, twenty of them grouped by Platform, Code & issues, Observability, Data, Communication, Business & docs, Servers and Extend: GitHub, Sentry, PostgreSQL, Discord, Docker, Stripe, Obsidian, Outline, SSH and a VPN among them, seven marked as connected, and a row at the foot for any MCP server of your own.",
                     label: "acme-shop · /capabilities",
                 },
             },
@@ -259,15 +273,23 @@ export const landingContent: LandingContent = {
                 verb: "Automate",
                 href: productHref("automate"),
                 line: "Start an agent automatically on an event you pick. Every run is one you can open and watch.",
-                triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "a schedule"],
+                /* The one stage on the tour with no screenshot in it, so it carries the machine instead:
+                 * what wakes a run, the code of yours that gets to veto it, and what a run turns out to
+                 * be. The middle part is the one nobody expects and the reason this is a diagram rather
+                 * than a list — an event does not start an agent, your own check does. */
+                flow: {
+                    triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "a schedule"],
+                    check: "An optional command of yours reads the event first and decides whether it is worth a run.",
+                    outcome: "A fresh agent session appears on your board, with its own transcript and its own checkout.",
+                },
             },
             {
                 verb: "Review",
                 href: productHref("review"),
                 line: "The agent writes a plan and waits for your yes. Finished work sits on its branch until you read the diff.",
                 shot: {
-                    name: "workspace-changes",
-                    alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and the diff of one of them open beside the list.",
+                    name: "stage-review",
+                    alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and CheckoutPanel.tsx open beside them as a side-by-side diff — the removed lines in red on the left, the added ones in green on the right. The chat alongside holds the plan the change came from.",
                     label: "acme-shop · /workspace",
                 },
             },
@@ -276,9 +298,9 @@ export const landingContent: LandingContent = {
                 href: productHref("host"),
                 line: "Move the workspace to a server so it runs without your laptop, and invite your team into the same one.",
                 shot: {
-                    name: "sandbox-overview",
-                    alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and computers.",
-                    label: "acme-shop · /sandbox",
+                    name: "stage-host",
+                    alt: "The acme-shop sandbox's Access page: the owner, a field to invite a teammate by email with their role beside it, the browsers currently signed in and a control that signs every one of them out, and under Here now a collaborator, Grace Hopper, looking at the agents board. The list on the left is everything else the box holds: environment, secrets, agent account, extensions, personas and computers.",
+                    label: "acme-shop · /sandbox/access",
                 },
             },
         ],

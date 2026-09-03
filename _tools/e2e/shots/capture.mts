@@ -95,6 +95,28 @@ const POPOUT_WINDOW = { width: 800, height: 660 } as const;
  * and the crop — not the capture — decides where the picture ends. */
 const HERO_WINDOW = { width: DESKTOP.width, height: 860 } as const;
 
+/* THE VERB SHOWCASE'S WINDOW — 16:9 to the pixel, and that is the whole of why it exists.
+ *
+ * The landing page's tour is five frames of ONE rectangle, one screenful each (`home.css`, "the verbs"). A
+ * capture that arrives at its own proportion has two ways to meet a frame like that and both are bad: the
+ * frame bends to it, and five different silhouettes read as a section that has come loose, or the frame holds
+ * and the picture letterboxes inside it. So these four are shot at the shape they will be printed at, and the
+ * site scales them and nothing else.
+ *
+ * 1760×990 rather than a clip of it, because the SHAPE has to be guaranteed and a clip cannot guarantee it.
+ * Every other desktop shot here keeps the workspace pane and trims to where its content stops, which is right
+ * for a figure printed beside a paragraph and wrong here twice over: a curated board trims to 1322×330, a 4:1
+ * strip, and capped out to 16:9 instead it is three fifths empty canvas. The docked chat is what makes the
+ * picture full at this proportion — and it is not a concession, it is the app. Four pictures of the same
+ * window with a different surface in it is also what makes them read as a set rather than as four screenshots.
+ *
+ * 1.5× rather than 2×. The site paints these 1296 CSS px wide (`STAGE_SIZES` in Landing.astro), so a 2×
+ * display wants 2592 device px and this arrives at 2640 — one rung above the top of the site's own ladder and
+ * nothing wasted. At 2× it would be 3520 across to paint 1296, which is a third of a megabyte per shot spent
+ * below the pixel. */
+const SHOWCASE = { width: 1760, height: 990 } as const;
+const SHOWCASE_DPR = 1.5;
+
 interface Shot {
     name: string;
     path: string;
@@ -188,6 +210,85 @@ const SHOTS: Shot[] = [
         settleMs: 1200,
         clip: "area",
         mode: "full",
+    },
+    /* ── THE VERB SHOWCASE ───────────────────────────────────────────────────────────────────────────────
+     *
+     * One per verb on the landing page's tour, all four at `SHOWCASE` — 16:9, whole window, no clip and no
+     * trim. That const carries the reasoning for the shape and for the chat being in frame.
+     *
+     * ON THE CURATED RECORDING, which is the other half of what these are for. `full` is nine agents across
+     * three lanes and fourteen extension tiles down the icon rail: an honest picture of a team's Tuesday, and
+     * a bloated one of the product — the rail alone reads as a toolbar somebody has been collecting. The
+     * curated opening is one card per lane and the extensions somebody actually switched on, which is both the
+     * calmer picture and the one a reader who presses "Open the live workspace" will actually meet.
+     * `stage-connect` is the one exception and says why on itself.
+     *
+     * EVERY ONE OPENS A CONVERSATION FIRST AND THEN WAITS ~3s. The docked chat is a quarter of each of these
+     * pictures, and an unopened one is the words "Start a conversation with Claude Code." across an empty
+     * panel — a quarter of every shot in the set spent on a placeholder. The settle is what decides WHAT is
+     * in it: the fixture's turn keeps streaming across the navigation (turn.ts), so at 1.5s the panel reads
+     * "Waiting on 2 subagents…" and at 3s it holds the written plan with Approve under it, which is the same
+     * moment in the same conversation in all four and the reason they read as one set.
+     *
+     * Shot SEPARATELY from the `fleet-board`, `capabilities`, `workspace-changes` and `sandbox-overview`
+     * captures further down this list, even though three of the four stand on the same addresses. Those are
+     * figures for the feature pages, printed a column or half a column wide, framed to the surface and trimmed
+     * to its content; a whole 1760-px window shrunk into half a column is a picture of nothing. Same reason
+     * the hero shoots its own. */
+    {
+        name: "stage-run",
+        path: "/agents",
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: "text=ATTENTION",
+        settleMs: 3200,
+        viewport: SHOWCASE,
+        dpr: SHOWCASE_DPR,
+    },
+    {
+        /* THE ONE SHOT IN THE SET ON THE FULL RECORDING, and the catalogue is why: a capability an extension
+         * contributes is not in the catalogue while that extension is switched off, so the curated mode serves
+         * this page eleven tiles with no GitHub, no Postgres, no Sentry and no Discord among them — under a
+         * caption that names four of those five. The rail it comes with is the price, and it is the only shot
+         * here paying it. */
+        name: "stage-connect",
+        path: "/capabilities",
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: "text=Connected",
+        settleMs: 3200,
+        viewport: SHOWCASE,
+        dpr: SHOWCASE_DPR,
+        mode: "full",
+    },
+    {
+        /* Opens the Changes tab rather than the Files tab it lands on (a "drop your work here" pane, which is a
+         * screenshot of nothing), then opens `CheckoutPanel.tsx` — a real +24/−4 of a component, chosen over
+         * the three-line schema change the feature page's figure uses. That one is the better FIGURE: short,
+         * clean, followable in a paragraph's width. Here the diff has a whole 16:9 pane to fill and a
+         * three-line change fills a fifth of it, which is how this stage came to be "wide and short" with a
+         * picture floating in the middle of it. */
+        name: "stage-review",
+        path: "/workspace",
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: 'button:has-text("Changes")',
+        click: ['button:has-text("Changes")', "text=CheckoutPanel.tsx"],
+        settleMs: 1800,
+        viewport: SHOWCASE,
+        dpr: SHOWCASE_DPR,
+    },
+    {
+        /* ACCESS, not the sandbox Overview the feature page's figure uses. Overview is the right FIGURE for a
+         * page about the box — its name, that it is online, the URL it answers on — and at a whole screenful
+         * it is one small card and a nav list against two thirds of empty canvas. Access carries the half of
+         * the caption a picture can actually show: the owner, an invite field with a role beside it, and a
+         * teammate under "Here now" with what she is looking at. "Runs without your laptop" is a claim about
+         * a machine and unphotographable; "invite your team into the same one" is a person on the screen. */
+        name: "stage-host",
+        path: "/sandbox/access",
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: "text=Sign out everywhere",
+        settleMs: 3200,
+        viewport: SHOWCASE,
+        dpr: SHOWCASE_DPR,
     },
     /* ── THE HERO'S TWO SCREENS ──────────────────────────────────────────────────────────────────────────
      *

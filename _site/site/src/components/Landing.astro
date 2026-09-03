@@ -20,7 +20,7 @@ import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-da
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { Image } from "astro:assets";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
+import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import Corners from "./Corners.astro";
 import Divider from "./Divider.astro";
 import DownloadCta from "./DownloadCta.astro";
@@ -70,8 +70,14 @@ const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
  * shared string rather than retyped, so a rewording upstream still lands here. */
 const subheadLead = `${content.hero.subhead.split(/(?<=\.)\s+/u)[0] ?? content.hero.subhead}`;
 
-/* THE LEAD VERB leads the section at full width; the other four are the compact cards below it. */
-const [leadVerb, ...verbCards] = content.verbs.items;
+/* HOW WIDE A VERB STAGE PAINTS ITS SCREENSHOT. A stage takes the shell's measure — `max-width: 84rem` with
+ * a 1.5rem gutter either side — so the widest a shot is ever drawn is 1296px, and below 84rem it is the
+ * window minus those gutters. Under 48rem it is a top-left crop drawn at 275% of the frame instead, which
+ * is what the last term is; the number and the breakpoint both have to match `home.css`.
+ *
+ * Not `COLUMN_SIZES`: that one describes the 80rem shell the feature and docs pages are built on, and this
+ * page's is 84rem. Four rem of difference is a rung's worth of sharpness on a retina screen. */
+const STAGE_SIZES = "(min-width: 84rem) 1296px, (min-width: 48rem) calc(100vw - 3rem), 275vw";
 
 /* THE GETTING-STARTED BEATS, SORTED BY WHERE THEY HAPPEN rather than by their number. Everything up to the
  * last one is done in a browser on our side; the last is the line you paste into a terminal on your own
@@ -202,89 +208,97 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 2 · What you do: the five verbs ═════════════════════════════════════════════ -->
+            <!-- ═══ 2 · What you do: the five verbs, a screenful each ═══════════════════════════
+                 A SHOWCASE, NOT A GRID, and the difference is the whole redesign. This band used to be one
+                 wide frame followed by four cards, and each card cropped its screenshot into a 13rem strip
+                 at 150% width — a sliver of a surface, four times over, on the one screen of the page whose
+                 job is showing the product. A screenshot small enough that nothing in it can be read is not
+                 a picture of the product; it is a picture of a screenshot.
+                 Every verb now takes a stage: its name, its one line, its link, and then the screen itself,
+                 filling the page's own column in a 16:9 frame. The four `stage-*` captures are SHOT at that
+                 shape rather than fitted to it (`_tools/e2e/shots/capture.mts`), which is what lets this page
+                 scale them and do nothing else. The chapter opener is the band's only carved type, which is
+                 what puts a reader coming off the hero in front of five words and then a picture. -->
             <section class="band" id="verbs">
                 <div class="wall" aria-hidden="true"></div>
-                <div class="shell fade-in">
+
+                <div class="shell verbs-open fade-in">
                     <div class="eyebrow">{content.verbs.eyebrow}</div>
                     <h2 class="h2 display">{content.verbs.heading}</h2>
-                    <p class="lede">{content.verbs.sub}</p>
+                </div>
 
-                    {/* THE LEAD VERB IS ONE OF THE FIVE, so it is titled like the other four rather than
-                        with a style of its own — the same lotus-and-title pair the trust cards use, one step
-                        up in size because this one leads. That also gives the block the <h3> its four
-                        siblings have, so the section has an outline a screen reader can walk. */}
-                    <div class="lead-verb">
-                        <div class="lead-verb-head">
-                            <div>
-                                <h3 class="lead-verb-name">
-                                    <Lotus />
-                                    {leadVerb.verb}
-                                </h3>
-                                <p class="lead-verb-line">{leadVerb.line}</p>
-                            </div>
-                            <a href={leadVerb.href} class="link see">See it →</a>
-                        </div>
-                        {
-                            leadVerb.shot && (
-                                <Window class="window-wide" finial>
-                                    <Image
-                                        src={shotAsset(leadVerb.shot.name)}
-                                        alt={leadVerb.shot.alt}
-                                        widths={SHOT_WIDTHS}
-                                        sizes={COLUMN_SIZES}
-                                        loading="lazy"
-                                        decoding="async"
-                                        class="window-full"
-                                    />
-                                </Window>
-                            )
-                        }
-                    </div>
+                {
+                    content.verbs.items.map((item) => {
+                        const image = item.shot === undefined ? undefined : shotAsset(item.shot.name);
+                        return (
+                            <div class="stage fade-in">
+                                <div class="stage-head">
+                                    <h3 class="stage-verb">
+                                        <Lotus size="md" />
+                                        {item.verb}
+                                    </h3>
+                                    <p class="stage-line">{item.line}</p>
+                                    <a href={item.href} class="link see">See it →</a>
+                                </div>
 
-                    <div class="verb-grid">
-                        {
-                            verbCards.map((item) => (
-                                <Window class="verb-card" href={item.href}>
-                                    {item.shot ? (
-                                        <div class="verb-crop">
+                                {item.shot !== undefined && image !== undefined && (
+                                    /* `finial` on every one of them, because on this band every frame leads
+                                       its own screen — the ornament is not marking one of five here. The
+                                       ledge carries the route, which at this size reads as the picture's
+                                       caption and is the one thing a reader needs to go and open it. */
+                                    <Window class="stage-frame" finial label={item.shot.label}>
+                                        <div class="stage-crop">
                                             <Image
-                                                src={shotAsset(item.shot.name)}
+                                                src={image}
                                                 alt={item.shot.alt}
                                                 widths={SHOT_WIDTHS}
-                                                sizes="(min-width: 64rem) 420px, (min-width: 40rem) 45vw, calc(100vw - 3rem)"
+                                                sizes={STAGE_SIZES}
                                                 loading="lazy"
                                                 decoding="async"
+                                                class="stage-shot"
                                             />
                                         </div>
-                                    ) : (
-                                        /* Automate has no honest screenshot, so its picture is the events it
-                                           wakes on: a mocked-up automations screen would be the one lie here. */
-                                        <div class="triggers">
-                                            <div class="eyebrow">Wakes on</div>
+                                    </Window>
+                                )}
+
+                                {item.flow !== undefined && (
+                                    /* AUTOMATE, AND IT IS THE ONE STAGE WITH NO SCREENSHOT ON IT. There is
+                                       an automations screen, but what this stage has to explain is a machine
+                                       nobody has seen — an event, a veto, a session — and a list of five
+                                       configured automations shows the result of that rather than the shape
+                                       of it. So the stage draws the machine, left to right, and takes the
+                                       quieter `.card` treatment rather than the frame: on this site the
+                                       frame means "this is a photograph of the product", and it would be
+                                       lying here. */
+                                    <div class="card stage-flow">
+                                        <Corners />
+                                        <div class="flow-wakes">
+                                            <div class="eyebrow eyebrow-bare">Wakes on</div>
                                             <ul>
-                                                {item.triggers?.map((trigger) => (
+                                                {item.flow.triggers.map((trigger) => (
                                                     <li>
                                                         <Lozenge />
                                                         {trigger}
                                                     </li>
                                                 ))}
                                             </ul>
-                                            <p class="triggers-out">
-                                                <span aria-hidden="true">→</span> an optional command checks the event, then a new agent session starts and
-                                                appears on your board.
-                                            </p>
                                         </div>
-                                    )}
-                                    <div class="verb-body">
-                                        <h3>{item.verb}</h3>
-                                        <p>{item.line}</p>
+                                        <div class="flow-check">
+                                            <span class="flow-arrow" aria-hidden="true">→</span>
+                                            <p>{item.flow.check}</p>
+                                        </div>
+                                        <div class="flow-out">
+                                            <Lotus size="md" />
+                                            <p>{item.flow.outcome}</p>
+                                        </div>
                                     </div>
-                                </Window>
-                            ))
-                        }
-                    </div>
+                                )}
+                            </div>
+                        );
+                    })
+                }
 
+                <div class="shell verbs-close">
                     <a href="/features/" class="link band-cta">{content.verbs.cta} →</a>
                 </div>
             </section>

@@ -278,125 +278,215 @@
     color: #fff6e6;
 }
 
-/* ── 2 · The verbs ───────────────────────────────────── */
-.home .lead-verb {
-    margin-top: 3.5rem;
+/* ── 2 · The verbs, a screenful each ─────────────────────
+   THE SHOWCASE. Five stages down the page, and each one is a title, a line and then the screen itself,
+   filling the page's own column. Two rules decide the whole shape of it.
+
+   FIRST: A STAGE TAKES THE SHELL'S MEASURE, the same 84rem every other band on the page stops at, and it
+   is centred in it like everything else. It was 116rem for a while — a band that broke out of the page's
+   column and ran to the window's edges, on the theory that a photograph of a screen has no reading width
+   the way a column of words does. It does not, but the PAGE does: five frames wider than every heading
+   above and below them do not read as a generous showcase, they read as a section that has come loose.
+
+   SECOND: EVERY FRAME IS 16:9 AND EVERY SHOT FILLS IT, because the shots are TAKEN at 16:9. That is the
+   only arrangement of this section that works, and it took three tries to get there. The captures the
+   feature pages use are framed to their surface and trimmed to where its content stops, so they arrive
+   between 1.42:1 (the capability catalogue) and 3.65:1 (the diff) — and a frame can meet a set like that
+   two ways, both bad. Take each shot's own proportion and the section is five silhouettes down one page,
+   the widest of them a mail slot 1294 by 354. Hold one ratio and the wide ones letterbox, which no amount
+   of mount texture rescues: 250 pixels of almost-nothing reads as almost-nothing.
+   So the shape moved upstream. `_tools/e2e/shots/capture.mts` shoots the four `stage-*` captures at
+   1760×990 — the whole app window, chat included, 16:9 to the pixel — and this stylesheet does nothing to
+   them but scale. Nothing is cropped, nothing is padded, and there is no per-shot anything here. `cover`
+   below is only there to eat a rounding error. */
+.home .shell.verbs-open {
+    /* The opener and the first stage's title belong to one screenful: a reader coming off the hero should
+       meet the eyebrow, five words, a verb and a picture, in that order, without scrolling twice.
+       It names `.shell` as well as the modifier so it outranks the phone rule at the foot of this file
+       that resets every shell's vertical padding to 4rem — otherwise the tightening survives on a laptop
+       and is thrown away on a phone, which is where two lines read together matters most. */
+    padding-bottom: 0.5rem;
 }
-.home .lead-verb-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1.5rem;
-    max-width: 52rem;
+.home .shell.verbs-close {
+    padding-top: 1.5rem;
 }
-/* THE LEAD VERB IS ONE OF THE FIVE, so it is titled like the other four rather than with a style of its
-   own — the same lotus-and-title pair the trust cards use, one step up in size because this one leads. */
-.home .lead-verb-name {
+
+/* The shell's own measure and gutters, so a stage's frame lines up with the heading above it and with
+   every other band's card. Only the vertical rhythm is the stage's own: a screenful apart, not a card's
+   gap, which is what makes the section read one picture at a time. */
+.home .stage {
+    max-width: 84rem;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vh, 4.5rem) 1.5rem;
+}
+/* STACKED, and the link is the third line of it rather than the far end of a row. It was a row once, the
+   shape the old lead verb used: title and line at one end, "See it" pushed to the other. At card width
+   that reads as a header; across the whole column the two ends stop looking like one thought. */
+.home .stage-head {
+    margin-bottom: clamp(1.5rem, 3vh, 2.25rem);
+}
+/* The verb, and it stays in the body sans. The band's carved heading is the chapter's, once — five stone
+   headings down one section is a mason's sampler, and each of these is the caption on a picture that is
+   about to take the rest of the screen. */
+.home .stage-verb {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.65rem;
     margin: 0;
-    font-size: 1.375rem;
+    font-size: clamp(1.5rem, 2.3vw, 1.9rem);
+    line-height: 1.2;
     color: var(--color-content);
 }
-.home .lead-verb-line {
-    margin: 0.6rem 0 0;
-    max-width: 46ch;
-    font-size: 1.125rem;
-    line-height: 1.6;
-    color: var(--color-content);
+.home .stage-line {
+    margin: 0.55rem 0 0;
+    max-width: 60ch;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: var(--color-muted);
 }
 .home .see {
+    display: inline-block;
+    margin-top: 0.7rem;
     white-space: nowrap;
     font-size: 0.9375rem;
 }
-.home .window-wide {
-    margin-top: 1.8rem;
-}
 
-.home .verb-grid {
-    display: grid;
-    gap: 1.1rem;
-    margin-top: 1.1rem;
+/* THE BOX IS 16:9 AT EVERY WIDTH. What changes on a phone is the ZOOM, not the shape.
+   A 325px column makes a 16:9 frame 183px tall, and a whole 1760-px app window fitted into that is a
+   picture of a screenshot rather than of the product — nothing in it can be read. So a phone gets the
+   answer the hero already gives it: the screen drawn at nearly three times the frame and anchored at its
+   top-left corner, cropped by the box, so a reader sees the legible top-left of a real surface.
+   275% rather than the 205% this used to run, and the captures are why. They were shot of the workspace
+   pane alone — 1322 CSS px — and are now shot of the whole window at 1760, so the same percentage draws the
+   app a quarter smaller. This is the number that puts the app's own type back at the size a phone could read
+   it at before. */
+.home .stage-crop {
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
 }
-@media (min-width: 44rem) {
-    .home .verb-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+.home .stage-shot {
+    display: block;
+    width: 275%;
+    max-width: none;
+    height: auto;
+}
+/* THE 16:9 BOX TAKES OVER AT 48rem, which is also where `STAGE_SIZES` in `Landing.astro` stops asking for
+   a rung sized to the 205% crop and starts asking for one sized to the column. The two have to switch on
+   the same number or there is a viewport where the stylesheet paints at twice the width `sizes` budgeted
+   for and the browser hands back a picture at half the resolution it is being drawn at.
+   THE SHOT SITS FLUSH TO THE FRAME, as it does in every other frame on this site (`.window-full`). There
+   is no mount and no padding here, because there is nothing to mount: the capture already is the frame's
+   shape. An earlier version of this band had both, and they existed only to make a letterbox look
+   deliberate. */
+@media (min-width: 48rem) {
+    /* THE WHOLE SHOT, FILLING THE WHOLE BOX. `cover` never actually crops here: the capture is 16:9 and so
+       is the box, so the two agree to within the sub-pixel the column's own width leaves. `cover` is what
+       makes that sub-pixel a rounding error rather than a hairline of frame showing along one edge — which
+       `contain` would do, and which on a near-black picture in a near-black frame reads as a seam. */
+    .home .stage-shot {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center top;
     }
 }
-.home .verb-card {
-    display: flex;
-    flex-direction: column;
-    text-decoration: none;
-    color: inherit;
-}
-.home .verb-crop {
-    position: relative;
-    height: 13rem;
-    overflow: hidden;
-    border-bottom: 1px solid var(--color-line);
-}
-.home .verb-crop img {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 150%;
-    max-width: none;
-}
-.home .verb-body {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    padding: 1.25rem;
-}
-.home .verb-body h3 {
-    margin: 0;
-    font-size: 1.1875rem;
-    color: var(--color-content);
-}
-.home .verb-body p {
-    margin: 0.5rem 0 0;
-    max-width: 52ch;
-    font-size: 0.9375rem;
-    line-height: 1.65;
-    color: var(--color-muted);
-}
-.home .verb-card:hover .verb-body h3 {
-    color: var(--color-primary-400);
-}
 
-/* Automate has no honest screenshot, so its picture is the events it wakes on — a mocked-up automations
-   screen would be the one lie on this page. */
-.home .triggers {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--color-line);
-    background: rgba(224, 123, 39, 0.03);
-    padding: 1.4rem;
+/* Automate's stage: the machine, left to right. Three zones — what wakes a run, the check that may cancel
+   it, what a run turns out to be — because the middle one is the part nobody expects and a list of six
+   events cannot say it. */
+.home .stage-flow {
+    display: grid;
+    align-items: center;
+    gap: clamp(1.5rem, 3vw, 2.75rem);
+    padding: clamp(1.6rem, 3vw, 2.75rem);
 }
-.home .triggers ul {
+@media (min-width: 48rem) {
+    /* A RECTANGLE IN THE SAME FAMILY AS THE FOUR FRAMES, so the section is five panels rather than four
+       pictures and a footnote. 2.4 is the middle of the range they clamp into. It is a floor and not a
+       fixed height: the plate holds words, and words reflow, so at a narrow desktop the content wins and
+       the box grows past the ratio rather than clipping. */
+    .home .stage-flow {
+        aspect-ratio: 2.4;
+    }
+}
+.home .flow-wakes ul {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem 1.25rem;
-    margin: 0.9rem 0 0;
+    gap: 0.85rem 1.5rem;
+    margin: 1.2rem 0 0;
     padding: 0;
     list-style: none;
 }
-.home .triggers li {
+@media (min-width: 62rem) {
+    .home .stage-flow {
+        /* The events take exactly the width six short phrases need and the two zones they feed split the
+           rest, weighted to the outcome — which is the one of the three a reader has to leave with. */
+        grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1.2fr);
+    }
+    /* ONE COLUMN OF SIX, NOT TWO OF THREE. Two columns is the shape this list had inside a card, where it
+       had 380px to live in; here it has a plate the width of the window, and the useful direction to spend
+       on is DOWN — six events stacked read as a list of everything that can start an agent, and they stand
+       the plate up to the height of the frames either side of it without a pixel of filler. */
+    .home .flow-wakes ul {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+.home .flow-wakes li {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
-    font-size: 0.875rem;
+    gap: 0.6rem;
+    font-size: 1.0625rem;
+    line-height: 1.4;
+    color: var(--color-content);
+}
+.home .flow-check {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    /* A rule on either side of the middle zone, so the three read as a sequence rather than as three
+       cards side by side. Gold and fading, the same way every division on this page is drawn. */
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
+    border-image: linear-gradient(180deg, transparent, var(--color-line-strong) 30%, var(--color-line-strong) 70%, transparent) 1;
+    padding: 0.25rem clamp(1rem, 2vw, 1.75rem);
+}
+.home .flow-check p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.6;
     color: var(--color-muted);
 }
-.home .triggers-out {
-    margin: 1.3rem 0 0;
-    font-size: 0.75rem;
-    line-height: 1.65;
-    color: var(--color-subtle);
+.home .flow-arrow {
+    flex: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    color: var(--color-primary-500);
+}
+.home .flow-out {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    border: 1px solid rgba(224, 123, 39, 0.3);
+    background: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
+    padding: 1.4rem 1.5rem;
+}
+.home .flow-out p {
+    margin: 0;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    color: var(--color-content);
+}
+/* Below the three-column breakpoint the sequence turns vertical, so the rules that separated the zones
+   have to turn with it or they draw two lines down a stack. */
+@media (max-width: 61.99rem) {
+    .home .flow-check {
+        border-left: 0;
+        border-right: 0;
+        border-top: 1px solid transparent;
+        border-bottom: 1px solid transparent;
+        border-image: linear-gradient(90deg, transparent, var(--color-line-strong) 25%, var(--color-line-strong) 75%, transparent) 1;
+        padding: 1.25rem 0;
+    }
 }
 
 /* ── 3 · The comparison ────────────────────────────────
@@ -953,7 +1043,7 @@
     .home .screen-app {
         width: 205%;
     }
-    .home .triggers ul {
+    .home .flow-wakes ul {
         grid-template-columns: minmax(0, 1fr);
     }
     .home .btn {
