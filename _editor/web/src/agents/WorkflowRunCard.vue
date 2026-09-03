@@ -105,7 +105,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 type="button"
                 aria-label="Archive this run"
                 v-tooltip.top="`Archive: takes the run and its sessions off the board. Branches and transcripts are kept.`"
-                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`archive`)"
             >
                 <Icon name="box" class="text-2xs" />
@@ -117,7 +117,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 type="button"
                 aria-label="Restore this run"
                 v-tooltip.top="`Put the run and its sessions back on the board`"
-                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`restore`)"
             >
                 <Icon name="undo" class="text-2xs" />

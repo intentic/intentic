@@ -305,6 +305,15 @@
     .session-card.session-card-on:hover {
         --card-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
     }
+    /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it.
+     * A card's fill is a SURFACE token, so any chip that names another surface token to look inset is a chip
+     * that only works on one of the fills its host can wear: `bg-overlay` reads as a pill on the resting dark
+     * card and vanishes the moment selection lifts that card to overlay — and vanishes in the light scheme
+     * always, where `--role-overlay` and `--role-card` are the same white. A `.session-card-on .bg-overlay`
+     * override cannot rescue it either: `bg-overlay` is emitted into Tailwind's `utilities` layer and this
+     * sheet's rules are `components`, so the layer order settles it before specificity is ever consulted.
+     * The chips take a tint of the INK instead (`bg-content/10`, the recipe PlanLimitsPanel already uses),
+     * which is a step off whatever it is laid on: card, overlay or selection. See AgentCard's reason chip. */
     /* THIS CARD IS WAITING ON YOU: a bar down the left edge, as an inset shadow rather than a wider border, so
      * nothing shifts and a lane's cards keep their text on one axis. It STACKS with selection and paints over
      * the ring (first in the list): opening the card that needs you must not erase the reason it is in the

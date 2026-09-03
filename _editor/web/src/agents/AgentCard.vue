@@ -126,8 +126,16 @@ const reason = computed(() => attentionReason(props.agent));
  *
  * MUTED, therefore, and only for this one: it is still in the Attention lane, still counted, still asking to be
  * sent again — it just says so in the voice of an appointment rather than an alarm. AMBER for everything else,
- * unchanged. */
-const reasonTone = computed(() => (limited(props.agent) ? `bg-overlay text-muted` : `bg-warning/15 text-warning`));
+ * unchanged.
+ *
+ * ITS WASH IS A TINT OF THE INK, NOT A SURFACE TOKEN, which is what keeps it a chip on every card this card
+ * can be. The amber chip beside it is already written that way (`bg-warning/15`) and this one was not: it named
+ * `bg-overlay`, the surface one step above a resting card — so on a SELECTED card, whose fill is lifted to
+ * exactly that overlay (`.session-card-on` in styles.css), the pill and its plate became one colour and the
+ * chip dissolved into floating words. Worse in the light scheme, where `--role-overlay` and `--role-card` are
+ * the same white and it was never a chip at all. 10% of the content colour is a step off whatever it lies on,
+ * in both schemes and in every card state, and it darkens on light ground where the surface token could not. */
+const reasonTone = computed(() => (limited(props.agent) ? `bg-content/10 text-muted` : `bg-warning/15 text-warning`));
 // What the live line says: the shared derivation (agentStatus.activityLine), because the rail's cards carry
 // the same line and the two surfaces must never narrate the same turn differently.
 const activityText = computed(() => activityLine(props.agent));
@@ -408,7 +416,11 @@ const reviewCard = (): void => {
  * never on touch). What it could not fix by showing them is that four of them sit in one 390px row. So the
  * INK stays 20px and `touch-target` takes the hit area to 44 on a coarse pointer: the card's density is the
  * reason a fleet board fits on a phone at all, and it survives. */
-const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-overlay hover:text-content`;
+/* The hover fill is the ink tint the card's chips wear, not `bg-overlay`: these glyphs sit ON the card, so a
+ * fill named after the surface one step above it answers the pointer with nothing at all on a SELECTED card
+ * (whose own fill is that overlay) and nothing at all in the light scheme (where overlay and card are one
+ * white). A tint of the ink is a step off whichever fill the card is wearing. */
+const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-content/10 hover:text-content`;
 
 // Offer the card to the board's drag as long as the press starts on the card BODY: the rename pencil and its
 // input run their own pointer gestures, and a press while renaming belongs to the input's caret.
@@ -629,10 +641,13 @@ const grab = (event: PointerEvent): void => {
                      four machines' work in one Attention lane is only readable if each card says whose work it
                      is without being asked.
                      The box's own logo when it has one, so the chip matches the rail's sandbox tile and the
-                     switcher row it came from, and the same monogram fallback when it does not. -->
+                     switcher row it came from, and the same monogram fallback when it does not.
+                     Its wash is the reason chip's ink tint, and for that chip's reason: the pill has to survive
+                     selection lifting the card's fill to the overlay surface, and the light scheme where the
+                     overlay surface IS the card surface. -->
                 <span
                     v-if="box !== undefined"
-                    class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-overlay px-1 py-px text-muted"
+                    class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-1 py-px text-muted"
                     v-tooltip.top="`In ${box.name}, not in the sandbox you're in`"
                 >
                     <img v-if="box.image !== undefined" :src="box.image" alt="" class="h-3 w-3 shrink-0 rounded-sm object-cover" />
