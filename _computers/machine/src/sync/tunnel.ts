@@ -1,7 +1,8 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { pollUntil } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
-import type { DialedPairing } from "./daemon-base.js";
+import type { Dialed } from "../daemon-base.js";
+import type { Pairing } from "./config.js";
 
 /* THE TRANSPORT, THIS SIDE, a loopback port on this machine that IS the sandbox's sshd.
  *
@@ -99,7 +100,7 @@ export interface TunnelTarget {
  * Takes pairings with their base already resolved, because resolution is one pass-wide step shared with the
  * ports poll and the report (mirror.ts) — a transport that resolved its own would probe the same daemon a
  * third time and could disagree with the two of them about where the sandbox is. */
-export const tunnelTargets = (dialed: readonly DialedPairing[]): readonly TunnelTarget[] =>
+export const tunnelTargets = (dialed: readonly Dialed<Pairing>[]): readonly TunnelTarget[] =>
     dialed.flatMap(({ pairing, base }) =>
         pairing.syncToken === undefined ? [] : [{ sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken }],
     );

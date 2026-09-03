@@ -1,7 +1,8 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DialedPairing } from "./daemon-base.js";
+import type { Dialed } from "../daemon-base.js";
+import type { Pairing } from "./config.js";
 import { bridgeConnection, createTunnelPool, sshSocketUrl, startSshTunnel, syncSshPort, tunnelReady, tunnelTargets } from "./tunnel.js";
 
 /* THE TRANSPORT DESKTOP SYNC RUNS ON, exercised without a sandbox at the other end.
@@ -133,7 +134,7 @@ describe("tunnelTargets", () => {
     // The key is OMITTED rather than set to undefined for a pairing with no credential: `syncToken` is an
     // optional property, so spelling it `undefined` is a different type from not having it, and the pairing this
     // suite is about is the one that genuinely lacks one.
-    const dialed = (sandboxId: string, base: string, syncToken?: string): DialedPairing => ({
+    const dialed = (sandboxId: string, base: string, syncToken?: string): Dialed<Pairing> => ({
         pairing: { sandboxId, sandboxUrl: base, mode: "sync", ...(syncToken === undefined ? {} : { syncToken }) },
         base,
     });

@@ -2,6 +2,7 @@ import { createBackoff } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import { hostConnectUrl, type HostScopes } from "@intentic/sandbox-contract";
 import { RPCHandler } from "@orpc/server/websocket";
+import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
 import { type HostLink, rememberScopes } from "./config.js";
 import { createHostRouter } from "./router.js";
 
@@ -11,6 +12,15 @@ import { createHostRouter } from "./router.js";
  * OUTBOUND ONLY, and that is the entire networking story: no port is opened here, no router is configured, no
  * VPN is joined. A laptop on hotel wifi behind a corporate proxy can hold this connection because it is an
  * ordinary outbound wss://, the same thing every chat app on the machine is already doing.
+ *
+ * WHERE IT DIALS is resolved per attempt rather than fixed to the link's public URL (../daemon-base.ts, the
+ * same resolver the sync half's watcher uses): the sandbox's own container on this machine's loopback when
+ * /health there names the sandbox this link is for, the public URL as the floor. It matters here for a
+ * different reason than it does for a Mutagen stream. A socket carries kilobytes, so the edge costs it
+ * nothing worth saving; what it costs is REACHABILITY. A sandbox running on this very machine whose tunnel is
+ * down — a dev box, an ingress mid-move, an edge answering 502 for an hour — used to read "offline" on its own
+ * Computers tab while the sync half of this same process was polling the container a loopback hop away, and
+ * every control on that tab hangs on this socket being up.
  *
  * The socket has exactly two phases. First one plain-JSON `hello` carrying the enrollment token (see
  * host-protocol.ts for why a token must not ride the URL). Then the sandbox attaches its client and the socket
@@ -39,7 +49,17 @@ export interface HostConnection {
     readonly stop: () => void;
 }
 
-export const connect = (config: HostLink, version: string, log: Log): HostConnection => {
+/* The two things between this loop and the network, injectable together because a test of WHICH address gets
+ * dialled needs to stand in for both: the answer to "where is the daemon" and the socket that answer is
+ * handed to. Production wires the real resolver and the runtime's own WebSocket. */
+export interface Dial {
+    readonly resolveBase: (sandboxUrl: string) => Promise<DaemonBase>;
+    readonly socket: (url: string) => WebSocket;
+}
+
+const realDial: Dial = { resolveBase: resolveDaemonBase, socket: (url) => new WebSocket(url) };
+
+export const connect = (config: HostLink, version: string, log: Log, dial: Dial = realDial): HostConnection => {
     /* The live grant. Starts as whatever the last session cached and is replaced by the sandbox's `setScopes`,
      * which arrives immediately after every connect, so a scope the owner turned off is enforced from the first
      * call of the new session, not from the next restart of this agent. */
@@ -69,8 +89,19 @@ export const connect = (config: HostLink, version: string, log: Log): HostConnec
         resolveDone = resolvePromise;
     });
 
-    const open = (): void => {
-        const ws = new WebSocket(hostConnectUrl(config.sandboxUrl));
+    const open = async (): Promise<void> => {
+        /* Asked on EVERY attempt, never once at startup, because the answer is exactly what a reconnect is
+         * about: the container this socket was on went away (an update recreated it, the user stopped it, the
+         * sandbox moved to another machine), or one appeared where there was none (docker came up after login).
+         * The ordinary case costs nothing — a loopback port with no listener refuses in under a millisecond —
+         * and the one that costs a probe's budget is a hung socket, which is the case worth spending it on. */
+        const { base, local } = await dial.resolveBase(config.sandboxUrl);
+        // Stopped while the address was still being decided: there is nothing to open, and `stop` has already
+        // settled `done`.
+        if (stopped) {
+            return;
+        }
+        const ws = dial.socket(hostConnectUrl(base));
         socket = ws;
 
         ws.addEventListener("open", () => {
@@ -80,7 +111,9 @@ export const connect = (config: HostLink, version: string, log: Log): HostConnec
             // this machine enforcing a stale grant.
             handler.upgrade(ws);
             ws.send(JSON.stringify({ type: "hello", token: config.token, version }));
-            log(`connected to ${config.sandboxUrl} as "${config.id}"`);
+            // The loopback case is said, because it is the one a reader of this log cannot infer from the
+            // link's own address, and the one that explains a machine that is "connected" with its tunnel down.
+            log(`connected to ${config.sandboxUrl}${local ? ` over loopback (${base})` : ""} as "${config.id}"`);
         });
 
         ws.addEventListener("close", (event) => {
@@ -100,7 +133,7 @@ export const connect = (config: HostLink, version: string, log: Log): HostConnec
             const delay = ladder.next(openedAt === undefined ? 0 : Date.now() - openedAt);
             openedAt = undefined;
             log(`disconnected (${event.code}); reconnecting in ${Math.round(delay / 1000)}s`);
-            setTimeout(open, delay);
+            setTimeout(() => void open(), delay);
         });
 
         // A socket error is always followed by a close event, which owns the retry, this only records the cause,
@@ -108,7 +141,7 @@ export const connect = (config: HostLink, version: string, log: Log): HostConnec
         ws.addEventListener("error", () => log("connection error"));
     };
 
-    open();
+    void open();
 
     return {
         done,

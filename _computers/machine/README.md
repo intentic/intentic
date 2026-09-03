@@ -13,7 +13,8 @@ running" one answer instead of two halves of one.
 The **computer half** (`src/computer/`, the machine side of the `host` capability):
 
 - Dial each linked sandbox — one outbound WebSocket, enrollment token in the first frame, oRPC after that; the
-  machine *serves* `hostContract`, so no port ever opens here.
+  machine *serves* `hostContract`, so no port ever opens here. Where it dials is the shared resolver's answer
+  (below), re-asked on every reconnect, so a sandbox on this very machine stays connected with its tunnel down.
 - Expose the tool surface (`run_command`, files, screenshot, `describe`; deliberately no delete — trash is
   recoverable) as MCP carried verbatim, so a machine can learn a tool without a daemon release.
 - Enforce the owner's scopes **here**, never in the sandbox, and append every call to an audit log that
@@ -30,13 +31,6 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   a one-way backup of the sandbox's own state.
 - Serve the SSH transport itself on loopback (the sandbox's sshd reached over its HTTPS surface), mirror every
   workspace port onto this machine's localhost, and bridge git so commits appear in local clones.
-- **Dial a sandbox that runs on this very machine directly** ([src/sync/daemon-base.ts](src/sync/daemon-base.ts)):
-  the container publishes its daemon on `127.0.0.1:<port derived from the sandbox id>`, so the transport, the
-  ports poll and the machine report use that instead of sending a multi-gigabyte Mutagen sync out to the
-  reachability edge and back to the same laptop. A candidate is adopted only if the daemon's unauthenticated
-  `/health` answers with the id we expected — a port is not a sandbox, and the sync token is what would be
-  presented to whoever holds it. The sandbox's public URL stays the floor under every pairing, and a pairing
-  sitting on it is re-probed each minute, so a container started after the watcher gets promoted with no restart.
 - Own the **port-mirroring switch** (`sync mirror off|on`, optionally `--sandbox <id>`): mirroring is the one
   thing here that writes to *this* computer's localhost, so the flag lives on this side, survives a restart, and
   is read every tick. File sync, the state backup and the git bridge are untouched by it — the point is to stop
@@ -56,7 +50,18 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   registration flashes a console window at every boot.
 
 **Shared** (`src/`): the one resident loop (`run`), the merged `status` (and its `--json` envelope the desktop
-app's tray reads), self-`upgrade` with automatic rollback, and the autostart spec.
+app's tray reads), self-`upgrade` with automatic rollback, the autostart spec, and **where a sandbox's daemon is
+dialled** ([src/daemon-base.ts](src/daemon-base.ts)). A sandbox usually runs in a container on this very
+machine, which publishes its daemon on `127.0.0.1:<port derived from the sandbox id>`, so every dial either half
+makes — the computer socket, both enrollments, the sync transport, the ports poll, the machine report — tries
+that address first and the public URL last. A candidate is adopted only if the daemon's unauthenticated
+`/health` answers with the id we expected: a port is not a sandbox, and a token is what would be presented to
+whoever holds it. For the sync half the shortcut saves a multi-gigabyte Mutagen sync a trip out to the
+reachability edge and back to the same laptop. For the computer half it is reachability itself: the socket used
+to dial the public URL and nothing else, so a sandbox whose tunnel was down read "offline" on its own Computers
+tab, with every button there gone, while this same process was polling it over loopback. The watcher re-probes
+a pairing sitting on the public URL each minute, so a container started later is promoted with no restart; the
+socket re-resolves on every reconnect.
 
 ## The resident loop
 
@@ -74,6 +79,7 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 - [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall|updates`, `sync setup|pause|resume|mirror|uninstall`, shared `run|status|version|upgrade|uninstall`.
 - [src/install.ts](src/install.ts) — what every `setup` runs first: self-update (then re-exec), PATH repair, the Windows launcher stub. Everything the install scripts used to decide, decided once here.
 - [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step.
+- [src/daemon-base.ts](src/daemon-base.ts) — where a sandbox's daemon is dialled, for both halves: loopback first when `/health` proves it is ours, the public URL as the floor.
 - [src/resident.ts](src/resident.ts) — the one loop, its pidfile, and `reconcileResidency`.
 - [src/computer/auto-prepare.ts](src/computer/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.

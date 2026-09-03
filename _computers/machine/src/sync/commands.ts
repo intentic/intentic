@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
+import { resolveDaemonBase } from "../daemon-base.js";
 import { prepareSetup } from "../install.js";
 import { machineLauncher, readResidentPid, reconcileResidency } from "../resident.js";
 import { type Pairing, readState, removePairing, setMirrorOff, type SyncMode, type SyncState, upsertPairing } from "./config.js";
@@ -70,8 +71,13 @@ export const enrollKey = async (
     key: string,
     { attempts = 10, delayMs = 3000, takeover = false }: { attempts?: number; delayMs?: number; takeover?: boolean } = {},
 ): Promise<{ syncToken: string; mode: SyncMode }> => {
-    const url = `${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`;
     for (let attempt = 1; ; attempt++) {
+        // Enrolled wherever the daemon answers, resolved per attempt for the reason the computer half's enroll
+        // states (computer/commands.ts): the watcher this pairing is about to be served by dials through the
+        // same resolver, and a sandbox on this machine with its tunnel down must not fail the one call that
+        // pairs it.
+        const { base } = await resolveDaemonBase(sandboxUrl);
+        const url = `${base}/system/authorized-key`;
         let response: Response;
         try {
             response = await fetch(url, {

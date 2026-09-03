@@ -93,30 +93,30 @@ describe(`daemonIdOf`, () => {
 
 describe(`candidateBases`, () => {
     it(`puts the loopback shortcut first and the public address last`, () => {
-        expect(candidateBases(pairing)).toEqual([LOCAL, PUBLIC]);
+        expect(candidateBases(PUBLIC)).toEqual([LOCAL, PUBLIC]);
     });
 
     it(`is the public address alone when there is no id to derive a shortcut from`, () => {
-        expect(candidateBases({ sandboxId: `shop`, sandboxUrl: `https://myshop.example.com` })).toEqual([`https://myshop.example.com`]);
+        expect(candidateBases(`https://myshop.example.com`)).toEqual([`https://myshop.example.com`]);
     });
 
     // The base is compared as a string (the tunnel pool rebinds when it changes), so a trailing slash must not
     // read as a different address.
     it(`normalizes the public address, because the resolved base is compared as a string`, () => {
-        expect(candidateBases({ ...pairing, sandboxUrl: `${PUBLIC}/` })).toEqual([LOCAL, PUBLIC]);
+        expect(candidateBases(`${PUBLIC}/`)).toEqual([LOCAL, PUBLIC]);
     });
 
     // A dev box whose public URL already IS the shortcut would otherwise probe an address it is about to fall
     // back to anyway.
     it(`collapses to one candidate when the public address is the shortcut`, () => {
-        expect(candidateBases({ sandboxId: `local`, sandboxUrl: LOCAL })).toEqual([LOCAL]);
+        expect(candidateBases(LOCAL)).toEqual([LOCAL]);
     });
 });
 
 describe(`resolveDaemonBase`, () => {
     it(`adopts the loopback daemon that names the sandbox we asked about`, async () => {
         await daemonOn(localDaemonPort(ID), { answersAs: ID });
-        expect(await resolveDaemonBase(pairing)).toEqual({ base: LOCAL, local: true });
+        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: LOCAL, local: true });
     });
 
     /* THE LEAK THE IDENTITY CHECK PREVENTS, and the single most important case in this file. A port is not a
@@ -125,18 +125,18 @@ describe(`resolveDaemonBase`, () => {
      * workspace at it. A live, healthy, wrong daemon must therefore lose to the public URL. */
     it(`refuses a daemon that answers as a DIFFERENT sandbox`, async () => {
         await daemonOn(localDaemonPort(ID), { answersAs: `bce57bb9fe3b` });
-        expect(await resolveDaemonBase(pairing)).toEqual({ base: PUBLIC, local: false });
+        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
     });
 
     // The daemon that has no id to claim at all (no connect token: the local/test shape) is equally unprovable.
     // Named by OMITTING the claim rather than sending `undefined`, which is what such a daemon actually serves.
     it(`refuses a daemon that names no sandbox`, async () => {
         await daemonOn(localDaemonPort(ID), {});
-        expect(await resolveDaemonBase(pairing)).toEqual({ base: PUBLIC, local: false });
+        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
     });
 
     it(`falls back to the public address when nothing is listening`, async () => {
-        expect(await resolveDaemonBase(pairing)).toEqual({ base: PUBLIC, local: false });
+        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
     });
 
     /* A candidate that accepts the connection and never answers is the one failure a refused port does not
@@ -146,7 +146,7 @@ describe(`resolveDaemonBase`, () => {
         await daemonOn(localDaemonPort(ID), { hang: true });
         const started = Date.now();
 
-        expect(await resolveDaemonBase(pairing)).toEqual({ base: PUBLIC, local: false });
+        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
 
         // Bounded, not unbounded: asserted as an upper bound well clear of the 1.5s budget, so this reads as a
         // hang detector rather than a latency measurement of a machine under load.
@@ -161,11 +161,11 @@ describe(`resolveDaemonBase`, () => {
         const { impl, asked } = countingFetch();
         await daemonOn(localDaemonPort(ID), { answersAs: ID });
 
-        await resolveDaemonBase(pairing, impl);
+        await resolveDaemonBase(PUBLIC, impl);
         expect(asked).toEqual([`${LOCAL}/health`]);
 
         // …and with no shortcut to try, nothing is asked at all.
-        await resolveDaemonBase({ sandboxId: `shop`, sandboxUrl: `https://myshop.example.com` }, impl);
+        await resolveDaemonBase(`https://myshop.example.com`, impl);
         expect(asked).toEqual([`${LOCAL}/health`]);
     });
 });

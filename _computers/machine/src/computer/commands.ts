@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { sleep } from "@intentic/base/async";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
+import { resolveDaemonBase } from "../daemon-base.js";
 import { prepareSetup } from "../install.js";
 import { reconcileResidency } from "../resident.js";
 import { auditPath, configPath, type HostLink, readLinks, readPrepareUpdates, removeLinks, upsertLink, writePrepareUpdates } from "./config.js";
@@ -25,8 +26,15 @@ const enroll = async (
     pairToken: string,
     { attempts = 10, delayMs = 3000 }: { attempts?: number; delayMs?: number } = {},
 ): Promise<{ id: string; hostToken: string }> => {
-    const url = `${sandboxUrl.replace(/\/$/, "")}/system/hosts/enroll`;
     for (let attempt = 1; ; attempt++) {
+        /* Redeemed wherever the daemon answers, by the same resolution every later dial makes (../daemon-base.ts):
+         * the container on this machine's loopback when it proves to be this sandbox, the public URL otherwise.
+         * Per attempt rather than once, because the retry loop below exists for a sandbox that is still coming
+         * up, and the address that comes up may be the loopback one. A pairing minted for a sandbox whose tunnel
+         * is down would otherwise retry its own edge ten times and fail — for a container that is running one
+         * hop away, on the machine typing the command. */
+        const { base } = await resolveDaemonBase(sandboxUrl);
+        const url = `${base}/system/hosts/enroll`;
         let response: Response;
         try {
             response = await fetch(url, { method: "POST", headers: { "x-intentic-pair": pairToken } });

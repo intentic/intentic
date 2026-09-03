@@ -316,8 +316,8 @@ id: `sandbox-<id>` for the daemon, `preview-<panel>-<id>` for a panel, `port-<sl
 a dev server on a fresh port is reachable the moment it exists: no record to mint, no name to claim, no pool to
 keep warm, nothing to reap when it goes. Desktop sync rides the same surface rather than a name of its own,
 Mutagen's SSH tunnelled over the daemon's HTTPS (`/system/sync/ssh`), and when the agent and the sandbox are on
-one machine it resolves to the loopback address first and never crosses the edge at all
-([daemon-base.ts](_computers/machine/src/sync/daemon-base.ts)).
+one machine every dial the machine agent makes, the computer half's socket included, resolves to the loopback
+address first and never crosses the edge at all ([daemon-base.ts](_computers/machine/src/daemon-base.ts)).
 
 Two lanes stay off the shared edge entirely. **A sandbox published under its owner's own domain** is reached
 through whatever that owner already runs; the platform stores its URL and nothing else, which is the whole of

@@ -15,7 +15,7 @@ import {
     type SkippedPort,
     updateState,
 } from "./config.js";
-import { createDaemonBases, dialedPairings, type DialedPairing } from "./daemon-base.js";
+import { createDaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
     ensureMutagen,
@@ -334,7 +334,7 @@ const servePairing = async (
  * old enough not to have the route, must cost nothing, so failures are logged and dropped, and a definitive
  * "no such route" retires reporting for that pairing rather than knocking on the same door every 15 seconds for
  * the life of the login session. */
-const postReports = async (dialed: readonly DialedPairing[], mutagen: string, unsupported: Set<string>, log: Log): Promise<void> => {
+const postReports = async (dialed: readonly Dialed<Pairing>[], mutagen: string, unsupported: Set<string>, log: Log): Promise<void> => {
     const reportable = dialed.filter(({ pairing }) => pairing.syncToken !== undefined && !unsupported.has(pairing.sandboxId));
     if (reportable.length === 0) {
         return;
