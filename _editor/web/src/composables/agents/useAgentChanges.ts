@@ -50,6 +50,15 @@ export interface AgentReviewFile {
      * and whose problem is it?", was answered by neither. `undefined` for the overwhelming majority of rows,
      * including every row of an agent that never conflicted. */
     readonly blocked: LandConflictReason | undefined;
+    /* WHICH COMMIT OF THE USER'S OWN HISTORY CARRIES THIS FILE, set only on rows that came from the history
+     * read (useAgentHistory) and never on a reviewable one, since a row in the review is by definition work
+     * that is still a difference against main and therefore in no commit yet.
+     *
+     * It lives on the shared row rather than on a type of its own so that the list, the grouping, the size
+     * rail, the viewed pass and the diff pane keep taking ONE row shape: committed work is not a different
+     * kind of thing to read, and giving it a parallel type would have meant a second branch through every one
+     * of those mechanisms. */
+    readonly carriedBy?: { readonly sha: string; readonly short: string; readonly repo: string } | undefined;
 }
 
 const reviewFileKey = (repo: string, path: string): string => JSON.stringify([repo, path]);

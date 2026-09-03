@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
 import { Button, ChangeStatusMark, ui, explorerColorClass, iconForEntry, Notice, SegmentedControl, useDevice, useExplorerStyle } from "@intentic/ui";
-import { isTestPath } from "@intentic/sandbox-contract";
+import { isTestPath, type WorkspaceModule } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -16,6 +16,8 @@ import {
     readAgentFileDiff,
     useAgentChanges,
 } from "../composables/agents/useAgentChanges";
+import { useAgentHistory } from "../composables/agents/useAgentHistory";
+import { documentsAt } from "../core-views/documentRegistry";
 import { useSandboxQuery } from "../composables/sandbox/useSandboxQuery";
 import { useLayout } from "../composables/useLayout";
 import { toAppPx, uiLength } from "../composables/uiScale";
@@ -99,7 +101,18 @@ const router = useRouter();
 const { mobile } = useDevice();
 const { explorerStyle } = useExplorerStyle();
 const shell = useLayout();
-const { openDiff } = useWorkspaceTabs();
+const { openDiff, openDocument } = useWorkspaceTabs();
+
+/* WHAT THE REVIEW CAN NO LONGER SHOW, because the user committed it. The list is what still differs from main,
+ * so accepting an agent's work is what retires its rows; `absorbed` is the count of them, and this is where
+ * they went. Enabled off that count, so the read costs nothing at all until the daemon has said there is an
+ * answer to have, and its rows arrive in the review's own shape so the list below renders them unchanged (see
+ * useAgentHistory). */
+const history = useAgentHistory(
+    computed(() => agentId),
+    computed(() => changes.absorbed.value > 0),
+    computed(() => at),
+);
 
 // --- the list ------------------------------------------------------------------------------------------
 /* THE NARROWING CONTROL. Every option is offered exactly while it would tell the user something they cannot
@@ -111,11 +124,15 @@ const { openDiff } = useWorkspaceTabs();
  *   Blocked    : what refused. First, because when it exists it is the only reason the user is on this panel.
  *   Code/Tests : the product change vs the proof, offered only when the review holds both.
  *   Not landed , the remainder Land now would apply, offered only while it is a PROPER subset: with nothing
- *                 landed it filters nothing, and with everything landed it would empty the panel. */
-type ReviewFilter = `all` | `blocked` | `code` | `tests` | `pending`;
+ *                 landed it filters nothing, and with everything landed it would empty the panel.
+ *   In history , the work that STOPPED being a difference because the user committed it. It is not a narrowing
+ *                 of the rows at all but a second body of work, which is why it sits last and why `all` no
+ *                 longer prints when there is nothing left to be all OF: an agent whose every file has been
+ *                 committed would otherwise offer "All 0" beside the only thing it has. */
+type ReviewFilter = `all` | `blocked` | `code` | `tests` | `pending` | `history`;
 const filter = ref<ReviewFilter>(`all`);
 const filterOptions = computed<{ label: string; value: ReviewFilter }[]>(() => [
-    { label: `All ${changes.count.value}`, value: `all` },
+    ...(changes.count.value > 0 ? [{ label: `All ${changes.count.value}`, value: `all` as const }] : []),
     ...(changes.blocked.value.length > 0 ? [{ label: `Blocked ${changes.blocked.value.length}`, value: `blocked` as const }] : []),
     ...(changes.testStat.value.files > 0 && changes.codeStat.value.files > 0
         ? [
@@ -126,14 +143,27 @@ const filterOptions = computed<{ label: string; value: ReviewFilter }[]>(() => [
     ...(changes.pending.value.length > 0 && changes.pending.value.length < changes.count.value
         ? [{ label: `Not landed ${changes.pending.value.length}`, value: `pending` as const }]
         : []),
+    ...(history.count.value > 0 ? [{ label: `In history ${history.count.value}`, value: `history` as const }] : []),
 ]);
-// A filter whose option has gone (the agent landed the last blocker, say) would otherwise hold the list empty
-// with nothing on screen still claiming to be filtering it.
-watch(filterOptions, (options) => {
-    if (!options.some((option) => option.value === filter.value)) {
-        filter.value = `all`;
-    }
-});
+/* A filter whose option has gone (the agent landed the last blocker, say) would otherwise hold the list empty
+ * with nothing on screen still claiming to be filtering it. It falls back to whichever option is FIRST rather
+ * than to `all`, because `all` is the one option that can itself be absent: an agent whose every file the user
+ * has committed has no rows to be all of, and falling back to it would empty the panel over work that is
+ * sitting right there under the only option it has. */
+watch(
+    filterOptions,
+    (options) => {
+        if (options.length > 0 && !options.some((option) => option.value === filter.value)) {
+            filter.value = options[0]?.value ?? `all`;
+        }
+    },
+    /* Immediate, because the state this most matters for is the one the panel OPENS in: an agent whose every
+     * file the user committed has only the committed work to offer, and the seeded query answers on the first
+     * render, so a watch that waited for the options to CHANGE would never fire and the panel would sit on
+     * `all` with nothing in it. Guarded on a non-empty list so the first frame, before either read has landed,
+     * does not move the filter off a choice the user made. */
+    { immediate: true },
+);
 
 /* WHAT IS FOLDED AWAY, at both scopes the list has headings for: a repo, and a package inside it. Two sets
  * rather than one, because a package is only ever addressed together with its repo (the same package name can
@@ -160,6 +190,11 @@ const toggleGroup = (repo: string): void => flip(collapsed, repo);
 const toggleModule = (repo: string, bucket: string): void => flip(collapsedModules, moduleKey(repo, bucket));
 
 const filtered = computed<readonly AgentReviewFile[]>(() => {
+    // Not a narrowing of `changes.files` but the other body of work entirely: these rows are the ones the
+    // review dropped because they are in the user's own commits now (useAgentHistory).
+    if (filter.value === `history`) {
+        return history.files.value;
+    }
     if (filter.value === `blocked`) {
         return changes.blocked.value;
     }
@@ -201,13 +236,66 @@ const cross = (): void => {
 /* THE OTHER EMPTY LIST: not "this agent wrote nothing" but "you have already taken all of it". The list holds
  * what still differs from main, so committing an agent's every file empties it, and the difference matters
  * because the two states want opposite next moves from the reader. Whose history it names follows the review's
- * own subject: a cross-sandbox review is about a workspace on another machine. */
+ * own subject: a cross-sandbox review is about a workspace on another machine.
+ *
+ * This is now the LAST resort rather than the whole answer. It is what remains true when the commits carrying
+ * the work cannot be found: a branch pruned, a history rewritten under the landing, content that reached the
+ * main line by a road that passes through no commit since. Whenever they CAN be found the panel shows the work
+ * itself under the "In history" filter, which is what the reader came for; this sentence is for the cases
+ * where all that is honestly available is the fact. */
 const absorbedNote = computed(() => {
-    const history = remoteName.value === undefined ? `your workspace's history` : `${remoteName.value}'s history`;
+    const whose = remoteName.value === undefined ? `your workspace's history` : `${remoteName.value}'s history`;
     return changes.absorbed.value === 1
-        ? `The one file this agent wrote is in ${history}, so nothing of it differs from main any more.`
-        : `All ${changes.absorbed.value} files this agent wrote are in ${history}, so nothing of it differs from main any more.`;
+        ? `The one file this agent wrote is in ${whose}, so nothing of it differs from main any more.`
+        : `All ${changes.absorbed.value} files this agent wrote are in ${whose}, so nothing of it differs from main any more.`;
 });
+
+/* --- the committed work -------------------------------------------------------------------------------
+ * WHERE THE READER IS SENT, and the panel's answer is "nowhere": the commits are named here and their files
+ * read here, in the list beside them, for exactly the reason a clicked row no longer pushes a workspace tab
+ * (see the header). A reader who committed an agent's work and came back to look at it wants to READ it, and
+ * "it is in your history" followed by a hunt through a commit graph is the navigation this panel was rebuilt
+ * to stop doing.
+ *
+ * The graph is still offered, as a deliberate secondary act, for the questions a file list cannot answer: what
+ * else was in that commit, what came before it, where the branch was. */
+const historyStamp = (authored: number): string => new Date(authored).toLocaleDateString(undefined, { month: `short`, day: `numeric` });
+/* Whether a row has to say WHICH commit carries it. With one commit the summary above has already said it, and
+ * a column of twelve identical hashes down a file list is noise that costs the paths their width; with several
+ * it is the only thing on the row that says these files arrived in your history separately. */
+const manyCommits = computed(() => history.commits.value.length > 1);
+
+/* THE WAY INTO THE GRAPH, found rather than named. The git-history document is contributed by an extension, so
+ * the app cannot address it by an id it has hard-coded: it asks the registry which providers offer a document
+ * for that repo's directory and takes the one whose provider id says it is the history. An extension that is
+ * switched off simply offers nothing, and the button is not rendered at all (see `graphAt`).
+ *
+ * Never offered for a cross-sandbox review: "the workspace" is THIS box's /work, and a tab opened here would
+ * carry another box's repo path over a tree that has never held it, the same guard the diff's own
+ * open-in-workspace button makes. */
+const HISTORY_DOCUMENT = `git-history`;
+const graphAt = (repo: string) => {
+    if (at !== undefined) {
+        return undefined;
+    }
+    // The tree addresses a repo by its root-relative directory, and the workspace root is the empty path.
+    const path = repo === `root` ? `` : repo;
+    const found = documentsAt(path).find((entry) => entry.provider.id === HISTORY_DOCUMENT);
+    return found === undefined ? undefined : { path, ...found };
+};
+/* Resolved once per commit rather than per binding: the summary asks whether a commit's repo has a graph four
+ * times over (the hover treatment, the disabled state, the tooltip and the glyph), and `graphAt` calls every
+ * registered provider's `detect()` on each ask. Still reactive, since that call reads the registry's own ref,
+ * so an extension switching on mid-session repaints these rows. */
+const graphs = computed(() => new Map(history.commits.value.map((commit) => [commit.repo, graphAt(commit.repo)])));
+const openGitHistory = (repo: string): void => {
+    const graph = graphs.value.get(repo);
+    if (graph === undefined) {
+        return;
+    }
+    openDocument(graph.provider.owner, graph.provider.id, graph.path, graph.offer.title, graph.offer.icon);
+    void router.push({ name: `workspace` });
+};
 
 /* What a heading says about the rows under it: at BOTH scopes, because both fold. A collapsed heading is the
  * only thing left of its rows, so it has to carry what the rows would have said: how big the change is, and
@@ -225,6 +313,12 @@ interface GroupStats {
     readonly order: ShownStat;
 }
 const codeSumOf = (files: readonly AgentReviewFile[]): LineStat => sumCode(files.map((file) => file.change));
+/* THE BODY OF WORK THE LIST IS DRAWN FROM, which the header's totals have to follow. Every filter but one
+ * narrows the REVIEW, so this is the review's rows and the header reads exactly as it always has; `history`
+ * does not narrow anything, it swaps in the work that is no longer a difference, and a header still counting
+ * the review over it would say "0 files, 0/0 reviewed" above a list of twelve. */
+const bodyFiles = computed<readonly AgentReviewFile[]>(() => (filter.value === `history` ? history.files.value : changes.files.value));
+const bodyViewed = computed(() => bodyFiles.value.filter((file) => changes.viewed.value.has(file.key)).length);
 const statsOf = (files: readonly AgentReviewFile[]): GroupStats => ({
     additions: files.reduce((total, file) => total + (file.change.additions ?? 0), 0),
     deletions: files.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
@@ -232,8 +326,11 @@ const statsOf = (files: readonly AgentReviewFile[]): GroupStats => ({
     blocked: files.filter((file) => file.blocked !== undefined).length,
     order: sumShown(files.map(readingOfRow)),
 });
-// The whole review, for the list header: every file, not the filtered ones, exactly as its git totals are.
-const reviewCode = computed(() => codeSumOf(changes.files.value));
+// The whole body of work, for the list header: every file of it, not the filtered ones, exactly as its git
+// totals are.
+const reviewCode = computed(() => codeSumOf(bodyFiles.value));
+const bodyAdditions = computed(() => bodyFiles.value.reduce((total, file) => total + (file.change.additions ?? 0), 0));
+const bodyDeletions = computed(() => bodyFiles.value.reduce((total, file) => total + (file.change.deletions ?? 0), 0));
 
 interface RepoGroup extends GroupStats {
     readonly repo: string;
@@ -276,6 +373,15 @@ const groups = computed<readonly RepoGroup[]>(() => {
  * named yet: see the note there. */
 const { groupByModule } = useChangeGrouping();
 
+/* WHICH READ ANSWERS FOR A REPO'S PACKAGES, and it cannot be the review's alone: a repo whose every file the
+ * user has committed has no entry in the review at all, so its module map has never heard of it, and every one
+ * of its rows would group under no package. Each read carries the layout of the tree its own rows came from
+ * (see useAgentChanges' note), so this only has to pick the one that has an answer. */
+const modulesOf = (repo: string): readonly WorkspaceModule[] => {
+    const reviewed = changes.modulesOf(repo);
+    return reviewed.length > 0 ? reviewed : history.modulesOf(repo);
+};
+
 // A package's rows plus the numbers its heading carries, summed here rather than in the template so a fold is
 // a class change and not a pass over every row in the review.
 interface ReviewBucket extends ModuleGroup<AgentReviewFile>, GroupStats {}
@@ -288,7 +394,7 @@ type RepoView = ModuleView<ReviewBucket>;
 const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
     const views = new Map<string, RepoView>();
     for (const group of groups.value) {
-        const view = moduleView(group.files, (file) => file.change.path, changes.modulesOf(group.repo), group.repo, groupByModule.value);
+        const view = moduleView(group.files, (file) => file.change.path, modulesOf(group.repo), group.repo, groupByModule.value);
         const buckets: ReviewBucket[] = [];
         for (const bucket of view.buckets) {
             // Biggest first INSIDE a package before the packages themselves are ordered, so the ask is applied at
@@ -655,8 +761,58 @@ const endResize = (event: PointerEvent): void => {
             @select="jumpTo"
         />
 
+        <!-- WHERE THE COMMITTED WORK WENT, above the list that is showing it. Only while that filter is the
+             one selected: with reviewable rows on screen this is not what the reader is doing, and a standing
+             banner about work they finished with days ago is the kind of furniture a panel stops being read
+             over. One row per commit, and the row IS the way into the graph. -->
+        <div
+            v-if="filter === 'history' && history.commits.value.length > 0"
+            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-1.5"
+        >
+            <span class="inline-flex items-center gap-1 text-2xs font-medium text-success">
+                <Icon name="check" class="text-2xs" />In {{ remoteName === undefined ? "your" : `${remoteName}'s` }} history
+            </span>
+            <p class="text-2xs text-muted">
+                You committed this work, so it is not a difference against main any more and the review above cannot list it. It is still readable
+                here, file by file, exactly as the agent wrote it.
+            </p>
+            <button
+                v-for="commit in history.commits.value"
+                :key="commit.sha"
+                type="button"
+                class="flex items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors"
+                :class="graphs.get(commit.repo) === undefined ? 'cursor-default' : 'hover:bg-overlay'"
+                :disabled="graphs.get(commit.repo) === undefined"
+                @click="openGitHistory(commit.repo)"
+                v-tooltip.bottom="graphs.get(commit.repo) === undefined ? undefined : 'Open this repository\'s git history'"
+            >
+                <span class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-muted">{{ commit.short }}</span>
+                <span class="min-w-0 flex-1 truncate text-2xs text-content" v-tooltip.bottom.overflow="commit.subject">{{ commit.subject }}</span>
+                <span class="shrink-0 text-2xs text-subtle">
+                    {{ commit.author }} · {{ historyStamp(commit.at) }} · {{ commit.changes.length }} file{{ commit.changes.length === 1 ? "" : "s" }}
+                </span>
+                <Icon v-if="graphs.get(commit.repo) !== undefined" name="sitemap" class="shrink-0 text-2xs text-subtle" />
+            </button>
+            <!-- Absorbed and unattributable at once: its content reached the main line by a road that passes
+                 through none of the commits above. Said out loud, because a panel that quietly dropped those
+                 files would be claiming this list is the whole story. -->
+            <p v-if="history.unaccounted.value > 0" class="text-2xs text-subtle">
+                {{ history.unaccounted.value }} more file{{ history.unaccounted.value === 1 ? " is" : "s are" }} in your history without a commit here
+                accounting for {{ history.unaccounted.value === 1 ? "it" : "them" }}: that content reached your main line some other way.
+            </p>
+        </div>
+
+        <!-- The history read is only started once the review has reported something absorbed, so an agent whose
+             every file was committed would otherwise flash its "nothing to see" state for a round trip before
+             its work arrived. -->
         <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading the agent's diff…</p>
-        <div v-else-if="changes.count.value === 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+        <p v-else-if="changes.count.value === 0 && changes.absorbed.value > 0 && history.loading.value" class="px-3 py-2 text-2xs text-subtle">
+            Finding where this work went in your history…
+        </p>
+        <div
+            v-else-if="changes.count.value === 0 && history.count.value === 0"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+        >
             <Icon :name="changes.absorbed.value > 0 ? 'check' : 'file-edit'" class="text-2xl text-subtle" />
             <!-- AN EMPTY LIST IS TWO OPPOSITE FACTS, and which one it is decides the reader's next move. The
                  list is what still differs from main, so an agent whose every file the user COMMITTED empties
@@ -703,19 +859,19 @@ const endResize = (event: PointerEvent): void => {
                 <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
                     <SegmentedControl v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
                     <span v-else class="whitespace-nowrap text-2xs text-muted">
-                        <span class="font-medium text-content">{{ changes.count.value }}</span> file{{ changes.count.value === 1 ? "" : "s" }}
+                        <span class="font-medium text-content">{{ bodyFiles.length }}</span> file{{ bodyFiles.length === 1 ? "" : "s" }}
                     </span>
                     <Icon v-if="changes.loading.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
                     <span class="flex-1"></span>
                     <!-- Totals for the whole review. The code/tests SPLIT that used to sit here in ± lines is
                          gone: the Code/Tests filter options above already carry that division in files, and
                          saying it twice in two units is how a header becomes something you stop reading. -->
-                    <ReviewStat :code="reviewCode" :additions="changes.additions.value" :deletions="changes.deletions.value" />
+                    <ReviewStat :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" />
                     <!-- A check and "3/12" beside a file list reads as reviewed-of-total without being told.
                          The keyboard map it used to smuggle in here reached nobody: a hover on a counter is not
                          where anyone looks for shortcuts. -->
                     <span class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
-                        <Icon name="check" class="text-2xs" />{{ changes.viewedCount.value }}/{{ changes.count.value }}
+                        <Icon name="check" class="text-2xs" />{{ bodyViewed }}/{{ bodyFiles.length }}
                     </span>
                     <!-- The stronger half of "show me what matters": the rails on the rows rank the list without
                          moving it, and this reorders it, at repo, package and row scope alike. At the bar's
@@ -845,8 +1001,17 @@ const endResize = (event: PointerEvent): void => {
                                             >
                                                 <Icon :name="REASON_COPY[file.blocked].icon" class="text-2xs" />{{ REASON_COPY[file.blocked].mark }}
                                             </span>
+                                            <!-- Which of several commits took this file. Silent when there is
+                                     only one, since the summary above the list has already named it: see
+                                     `manyCommits`. -->
                                             <span
-                                                v-else-if="!file.change.landed"
+                                                v-else-if="file.carriedBy !== undefined && manyCommits"
+                                                class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-subtle"
+                                                v-tooltip.right="`You committed this file in ${file.carriedBy.short}`"
+                                                >{{ file.carriedBy.short }}</span
+                                            >
+                                            <span
+                                                v-else-if="file.carriedBy === undefined && !file.change.landed"
                                                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
                                                 v-tooltip.right="'Not yet landed in your workspace'"
                                             ></span>
@@ -934,6 +1099,17 @@ const endResize = (event: PointerEvent): void => {
                                 v-tooltip.bottom="REASON_COPY[selected.blocked].row"
                             >
                                 <Icon :name="REASON_COPY[selected.blocked].icon" class="text-2xs" />blocked · {{ REASON_COPY[selected.blocked].mark }}
+                            </span>
+                            <!-- WHAT THIS DIFF IS, on a file you have already committed: the AGENT'S change to
+                                 it, measured the same way every other row on this panel is, not the commit's
+                                 own patch. The two are usually identical and it is the tooltip's job to say
+                                 which one you are reading when they are not. -->
+                            <span
+                                v-else-if="selected.carriedBy !== undefined"
+                                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-1.5 py-px font-mono text-2xs font-medium text-success"
+                                v-tooltip.bottom="'You committed this file here. The diff is what the agent wrote, not the commit\'s own patch.'"
+                            >
+                                <Icon name="check" class="text-2xs" />{{ selected.carriedBy.short }}
                             </span>
                             <span
                                 v-else-if="!selected.change.landed"

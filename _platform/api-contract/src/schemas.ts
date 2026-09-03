@@ -48,6 +48,8 @@ import type {
     ServiceKindSchema,
     AgentChangeSchema,
     AgentChangesSchema,
+    AgentHistoryCommitSchema,
+    AgentHistorySchema,
     AgentRepoChangesSchema,
     FileDiffSchema,
     GitActionResultSchema,
@@ -371,6 +373,10 @@ export type GitBranchesResponse = z.infer<typeof GitBranchesSchema>;
 export type AgentChange = z.infer<typeof AgentChangeSchema>;
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
 export type AgentChangesResponse = z.infer<typeof AgentChangesSchema>;
+// Where the absorbed half of that review went: the commits of the user's OWN history that carry the files the
+// review can no longer list, because a file the user committed is not a difference against main any more.
+export type AgentHistoryCommit = z.infer<typeof AgentHistoryCommitSchema>;
+export type AgentHistoryResponse = z.infer<typeof AgentHistorySchema>;
 
 // ---- platform-native (owned by the platform; NOT daemon wire shapes) ----
 

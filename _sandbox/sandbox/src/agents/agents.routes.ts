@@ -1,5 +1,13 @@
 import { errorMessage } from "@intentic/base/errors";
-import { agentsContract, type AgentChange, type AgentRepoChanges, capabilitiesOf, type TurnEnding } from "@intentic/sandbox-contract";
+import {
+    agentsContract,
+    type AgentChange,
+    type AgentHistoryCommit,
+    type AgentRepoChanges,
+    type AgentRepoHistory,
+    capabilitiesOf,
+    type TurnEnding,
+} from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { opt } from "../agent/opt.js";
@@ -11,7 +19,9 @@ import type { OrpcContext } from "../context.js";
 import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
+import { headSha } from "../git/changes.js";
 import { agentRepoReview, agentRepoModules, anchorOf, presentInMain } from "./agent-changes.js";
+import { commitsCarrying, historySpanStart } from "./landed-history.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { landAgent, outstandingConflicts } from "./land.js";
@@ -493,6 +503,100 @@ export const createAgentsRoutes = (services: Services) => {
             // nothing, or one whose every file the reader has already committed. Two opposite facts that would
             // otherwise arrive as the same answer (see AgentChangesSchema).
             return { repos, absorbed, ...(conflicts.length > 0 ? { conflicts } : {}) };
+        }),
+        /* WHERE THE ABSORBED HALF WENT, the read that turns `absorbed` from a count into somewhere to go.
+         *
+         * The rows here are the very rows `diff` above filtered out, read from the SAME pass over the same tree
+         * (agentRepoReview, then presentInMain) rather than from a second reading of the agent's work, because
+         * two surfaces disagreeing about what a conversation did is the exact failure agent-changes.ts exists to
+         * prevent, and a "your history has it" panel disagreeing with the review it replaces would be the worst
+         * possible place for it.
+         *
+         * Its own route rather than more fields on the review: this costs a `git log` per repo and answers
+         * nothing at all until the user has committed something, which is a minority of the times the panel is
+         * opened and never the time it is opened in a hurry. The panel asks once it has been told there is an
+         * answer.
+         *
+         * WHERE THE SPAN STARTS is the whole reliability question, and there are two honest answers. `landedHead`
+         * is where main's HEAD stood when the patch went in, so nothing before it can be the commit that took
+         * this work: the tightest span there is. Its fallback is the merge-base anchor, which is where the branch
+         * left the main line, and is used both for a landing whose recorded head no longer resolves and for
+         * content that reached main without ever passing through a land. That anchor is sound for the same
+         * reason the review is anchored there: a path main already held at the fork point is not a row here at
+         * all, so the commit that made main match this conversation's version cannot sit behind it. */
+        history: i.history.handler(async ({ input }) => {
+            const entry = isolatedEntryOf(input.id);
+            const repos: AgentRepoHistory[] = [];
+            let unaccounted = 0;
+            for (const composed of entry.repos) {
+                try {
+                    const changes = await agentRepoReview(services.agentWorktrees, entry, composed);
+                    if (changes.length === 0) {
+                        continue;
+                    }
+                    const present = await presentInMain(
+                        services.agentWorktrees,
+                        entry,
+                        composed,
+                        changes.map((change) => change.path),
+                    );
+                    // Nothing of this repo's work is in history yet, so there is nothing here to place. The
+                    // common case by far, and it costs no git beyond the reading the review takes anyway.
+                    const absorbed = changes.filter((change) => present.absorbed.has(change.path));
+                    if (absorbed.length === 0) {
+                        continue;
+                    }
+                    const main = services.agentWorktrees.mainDir(composed.repo);
+                    const head = await headSha(main);
+                    if (head === undefined) {
+                        unaccounted += absorbed.length;
+                        continue;
+                    }
+                    // The anchor is read only when the recorded head cannot serve, which is the rare half: one
+                    // merge-base spawn saved on every ordinary landing.
+                    const landed = composed.landedHead === undefined ? undefined : await historySpanStart(main, composed.landedHead, head);
+                    const from = landed ?? (await anchorOf(main, main, entry.branch, undefined, composed.base));
+                    const byPath = new Map(absorbed.map((change) => [change.path, change]));
+                    const commits: AgentHistoryCommit[] = [];
+                    let placed = 0;
+                    for (const commit of await commitsCarrying(
+                        main,
+                        from,
+                        head,
+                        absorbed.map((change) => change.path),
+                    )) {
+                        const rows = commit.paths.flatMap((path) => {
+                            const row = byPath.get(path);
+                            return row === undefined ? [] : [row];
+                        });
+                        if (rows.length === 0) {
+                            continue;
+                        }
+                        placed += rows.length;
+                        commits.push({
+                            sha: commit.sha,
+                            short: commit.short,
+                            subject: commit.subject,
+                            author: commit.author,
+                            at: commit.at,
+                            changes: rows,
+                        });
+                    }
+                    // Absorbed but placed nowhere: its content reached the main line by some road other than a
+                    // commit in this span. Counted, never guessed at, see AgentHistorySchema.
+                    unaccounted += absorbed.length - placed;
+                    if (commits.length === 0) {
+                        continue;
+                    }
+                    const modules = await agentRepoModules(services.agentWorktrees, entry, composed.repo);
+                    repos.push({ repo: composed.repo, commits, modules });
+                } catch (error) {
+                    // One unreadable repo must not take down the others, the same seam and the same reason as
+                    // the review above.
+                    services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents history: repo skipped");
+                }
+            }
+            return { repos, unaccounted };
         }),
         // Against the same cumulative anchor as the list above: one row means one question, "what did this
         // agent do to this file", and its answer must not change the moment the work lands. (Diffing from

@@ -5,13 +5,14 @@
 // problem, and whose problem is it?" was a question the user answered by matching strings with their eyes. The
 // fix is entirely in what renders: a mark per blocked row, a count per repo heading, a filter that narrows to
 // them. None of that can be pinned by a unit test on the composable, only by looking at the rows.
-import type { AgentChangesResponse } from "@intentic-app/api-contract";
+import type { AgentChangesResponse, AgentHistoryResponse } from "@intentic-app/api-contract";
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { REASON_COPY } from "../composables/agents/conflictResolution";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
+import { agentHistoryKey } from "../composables/agents/useAgentHistory";
 import { queryClient } from "../composables/queryPersistence";
 import { AGENT_DIFF, WORKSPACE_MODULES } from "../composables/queryKeys";
 import { router } from "../router";
@@ -99,7 +100,7 @@ let app: App | undefined;
  * being reachable (useSandboxQuery), which no test drives, and the cache is where the real panel reads it from
  * anyway: this is the state a browser is in when it opens the review on a conflict it learned about from the
  * board. */
-const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChangesResponse): Promise<HTMLElement> => {
+const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChangesResponse, history?: AgentHistoryResponse): Promise<HTMLElement> => {
     // Empty by default: with no packages to group by, every path lands in one unnamed bucket and the list draws
     // repo headings only, which is what the tests that aren't about packages want.
     const repos: AgentChangesResponse[`repos`] = [];
@@ -107,6 +108,13 @@ const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChang
         repos.push(repo.repo === `root` ? { ...repo, modules: [...modules] } : repo);
     }
     queryClient.setQueryData(AGENT_DIFF.of(AGENT), seed ?? ({ ...changes, repos } satisfies AgentChangesResponse));
+    /* The history read is LAZY: the panel only enables it once the review reports something absorbed, so it is
+     * seeded only when a test is about that state. Seeded as EMPTY when the review says work was committed but
+     * the test isn't about where it went, since the panel would otherwise sit on its loading line waiting for a
+     * fetch this environment cannot serve. */
+    if ((seed ?? changes).absorbed > 0) {
+        queryClient.setQueryData(agentHistoryKey(AGENT), history ?? ({ repos: [], unaccounted: 0 } satisfies AgentHistoryResponse));
+    }
     const el = document.createElement(`div`);
     document.body.append(el);
     // The review's state is created by AgentDetail in the real page and handed down, so one instance serves
@@ -167,7 +175,7 @@ const packageHeading = (el: HTMLElement, name: string): HTMLElement =>
 const filters = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`button`)]
         .map((button) => button.textContent?.trim() ?? ``)
-        .filter((label) => /^(All|Blocked|Code|Tests|Not landed) \d+$/.test(label));
+        .filter((label) => /^(All|Blocked|Code|Tests|Not landed|In history) \d+$/.test(label));
 
 /* AN EMPTY LIST IS TWO OPPOSITE FACTS, and the panel has to pick the right sentence for each. The list holds
  * what still differs from main, so an agent whose every file the user COMMITTED empties it exactly as an agent
@@ -180,10 +188,132 @@ it(`tells an agent that wrote nothing from one whose work the user has committed
     document.body.innerHTML = ``;
     queryClient.clear();
 
-    const allCommitted = await mount([], { repos: [], absorbed: 3 });
+    /* The sentence is the LAST resort: what stays true when the commits carrying the work cannot be found (a
+     * pruned branch, a rewritten history, content that reached main by another road). The seeded history is
+     * deliberately empty here, which is exactly that case. */
+    const allCommitted = await mount([], { repos: [], absorbed: 3 }, { repos: [], unaccounted: 3 });
     expect(allCommitted.textContent).toContain(`All 3 files this agent wrote are in your workspace's history`);
     expect(allCommitted.textContent).toContain(`nothing of it differs from main`);
     expect(allCommitted.textContent).not.toContain(`hasn't changed any files`);
+});
+
+/* THE DEAD END THIS PANEL USED TO BE. Committing an agent's work retires its rows, correctly, so the whole
+ * review emptied out and said so in one sentence, at the exact moment a reader had come to look at what the
+ * agent did. The work was in a commit the whole time, and the panel now reads it out of one: same list, same
+ * diff pane, same keyboard pass, under a filter of its own. */
+it(`shows work the user has committed, under the commit that carries it`, async () => {
+    const el = await mount(
+        [],
+        { repos: [], absorbed: 2 },
+        {
+            repos: [
+                {
+                    repo: `root`,
+                    commits: [
+                        {
+                            sha: `a3f9c21ddb3f4e0b8a1c2d3e4f5a6b7c8d9e0f1a`,
+                            short: `a3f9c21`,
+                            subject: `fix: tighten the land anchor`,
+                            author: `Radarsu`,
+                            at: Date.parse(`2026-08-30T10:00:00Z`),
+                            changes: [
+                                { path: `src/auth/session.ts`, status: `modified`, additions: 12, deletions: 3 },
+                                { path: `src/config.ts`, status: `modified`, additions: 2, deletions: 1 },
+                            ],
+                        },
+                    ],
+                    modules: [],
+                },
+            ],
+            unaccounted: 0,
+        },
+    );
+
+    // The commit is NAMED, which is the whole point: "it is in your history somewhere" is the answer that sent
+    // the reader hunting through a commit graph.
+    expect(el.textContent).toContain(`a3f9c21`);
+    expect(el.textContent).toContain(`fix: tighten the land anchor`);
+    expect(el.textContent).toContain(`2 files`);
+    // And the work itself is on screen, as rows, rather than described.
+    expect(rowNames(el).toSorted()).toEqual([`config.ts`, `session.ts`]);
+    /* The panel OPENS standing in the committed work: `All 0` is not offered over a review with nothing left
+     * to be all of, so the committed work is the only body there is, and with one option there is nothing to
+     * choose between: no control at all, and the header states the count plainly. Getting this wrong is how
+     * the panel used to land on an empty `all` beside a filter naming work it was not showing. */
+    expect(filters(el)).toEqual([]);
+    expect(el.textContent).toContain(`2 files`);
+    expect(el.textContent).not.toContain(`hasn't changed any files`);
+    // The last-resort sentence is for when the commits CANNOT be found; here they were.
+    expect(el.textContent).not.toContain(`nothing of it differs from main`);
+});
+
+/* One commit is named once, above the list. Several have to be told apart ON the rows, because "which of these
+ * did I commit when?" is a question the summary cannot answer for a file. */
+it(`stamps each row with its own commit only when the work arrived in more than one`, async () => {
+    const commit = (short: string, path: string) => ({
+        sha: `${short}0000000000000000000000000000000000`,
+        short,
+        subject: `took ${path}`,
+        author: `Radarsu`,
+        at: Date.parse(`2026-08-30T10:00:00Z`),
+        changes: [{ path, status: `modified` as const, additions: 1, deletions: 0 }],
+    });
+    const one = await mount(
+        [],
+        { repos: [], absorbed: 1 },
+        {
+            repos: [{ repo: `root`, commits: [commit(`aaaaaaa`, `src/config.ts`)], modules: [] }],
+            unaccounted: 0,
+        },
+    );
+    // Named in the summary, and NOT repeated down the rows: a column of identical hashes costs the paths their
+    // width and tells the reader nothing the line above it has not.
+    expect(one.textContent).toContain(`aaaaaaa`);
+    expect(rowFor(one, `src/config.ts`).textContent).not.toContain(`aaaaaaa`);
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+    queryClient.clear();
+
+    const two = await mount(
+        [],
+        { repos: [], absorbed: 2 },
+        {
+            repos: [{ repo: `root`, commits: [commit(`aaaaaaa`, `src/config.ts`), commit(`bbbbbbb`, `src/auth/session.ts`)], modules: [] }],
+            unaccounted: 0,
+        },
+    );
+    expect(rowFor(two, `src/config.ts`).textContent).toContain(`aaaaaaa`);
+    expect(rowFor(two, `src/auth/session.ts`).textContent).toContain(`bbbbbbb`);
+});
+
+/* Absorbed and unattributable at once: content reaches the main line by roads that pass through no commit
+ * since the land. Saying so is what keeps the commit list from reading as the whole story. */
+it(`says how much of the work no commit here accounts for`, async () => {
+    const el = await mount(
+        [],
+        { repos: [], absorbed: 3 },
+        {
+            repos: [
+                {
+                    repo: `root`,
+                    commits: [
+                        {
+                            sha: `a3f9c21ddb3f4e0b8a1c2d3e4f5a6b7c8d9e0f1a`,
+                            short: `a3f9c21`,
+                            subject: `fix: tighten the land anchor`,
+                            author: `Radarsu`,
+                            at: Date.parse(`2026-08-30T10:00:00Z`),
+                            changes: [{ path: `src/config.ts`, status: `modified`, additions: 2, deletions: 1 }],
+                        },
+                    ],
+                    modules: [],
+                },
+            ],
+            unaccounted: 2,
+        },
+    );
+    expect(el.textContent).toContain(`2 more files are in your history without a commit here accounting for them`);
 });
 
 it(`marks each blocked row with its own cause, and leaves the rest of the review alone`, async () => {

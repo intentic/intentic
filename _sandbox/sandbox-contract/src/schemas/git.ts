@@ -492,3 +492,54 @@ export const AgentChangesSchema = z.object({
         ),
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
+
+/* WHERE THE WORK WENT once it stopped being a difference, the other half of the sentence `absorbed` above can
+ * only start. The review is what still differs from main, so a reader who committed an agent's every file
+ * arrives at an empty panel; the count lets it say WHICH kind of empty, and this says where to go and shows
+ * the work, which is what the reader actually came for.
+ *
+ * Deliberately its OWN read rather than more fields on the review. The review is on the panel's hot path and
+ * this is a `git log` per repo that only matters once history has taken something, so it is asked for exactly
+ * when there is an answer to have. That also keeps the review's shape honest: its rows are differences against
+ * main, and these are not.
+ *
+ * A COMMIT CARRIES the work, it did not necessarily author it: a path is attributed to the newest commit that
+ * left the agent's content there, which is where a reader should be sent to read it now. See the daemon's
+ * agents/landed-history.ts for the span this is measured over and for why an unattributable path is counted
+ * rather than assigned to a plausible commit. */
+export const AgentHistoryCommitSchema = z.object({
+    sha: z.string().describe("The commit."),
+    short: z.string().describe("Its abbreviated hash, which is what a reader recognises it by."),
+    subject: z.string().describe("Its first line."),
+    author: z.string().describe("Who committed it."),
+    at: z.number().describe("When it was authored, in milliseconds."),
+    changes: z
+        .array(GitChangeSchema)
+        .describe(
+            "The conversation's files that this commit is the newest carrier of, as the conversation changed them. Every file appears under exactly one commit, so these counts add up to the work rather than over-counting a file that history touched twice.",
+        ),
+});
+export type AgentHistoryCommit = z.infer<typeof AgentHistoryCommitSchema>;
+export const AgentRepoHistorySchema = z.object({
+    repo: z.string().describe("Which repository."),
+    commits: z.array(AgentHistoryCommitSchema).describe("The commits carrying this conversation's work there, newest first."),
+    /* Carried for the same reason the review's rows carry it, and read from the same tree at the same instant:
+     * a package the conversation created lives only in its own copy, so the shared tree cannot name it, and
+     * without this every file of a brand-new package groups under no package at all. */
+    modules: z.array(WorkspaceModuleSchema).describe("The packages of the tree these files came from, so a review can group them by package."),
+});
+export type AgentRepoHistory = z.infer<typeof AgentRepoHistorySchema>;
+export const AgentHistorySchema = z.object({
+    repos: z.array(AgentRepoHistorySchema).describe("One entry per repository holding committed work of this conversation."),
+    /* FILES HISTORY HOLDS THAT NO COMMIT HERE ACCOUNTS FOR, reported rather than hidden. Content reaches the
+     * main line by roads that do not pass through a commit since the land: a cherry-pick from elsewhere,
+     * another conversation landing the same lines, the user typing them by hand before this one landed. Those
+     * files are absorbed and unattributable at once, and a surface that quietly dropped them would be claiming
+     * the commits it names are the whole story. */
+    unaccounted: z
+        .number()
+        .describe(
+            "How many of the conversation's absorbed files none of these commits carries. Above zero means its content reached your main line by some other road, so the commits listed are not the whole story.",
+        ),
+});
+export type AgentHistory = z.infer<typeof AgentHistorySchema>;

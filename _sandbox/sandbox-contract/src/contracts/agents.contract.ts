@@ -20,7 +20,7 @@ import {
     LandResultSchema,
 } from "../schemas/agents.js";
 import { AgentsListSchema } from "../schemas/automations.js";
-import { AgentChangesSchema } from "../schemas/git.js";
+import { AgentChangesSchema, AgentHistorySchema } from "../schemas/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -222,6 +222,21 @@ export const agentsContract = {
         })
         .input(AgentIdSchema)
         .output(AgentChangesSchema),
+    // The other side of `diff`: the work that is no longer a difference because it is in your own history, and
+    // the commits holding it. Asked for only once `diff` reports something absorbed, since it costs a `git log`
+    // per repo and answers nothing until then. Reading one of these files is the SAME call as reading a
+    // reviewable one (`fileDiff` below): the question "what did this conversation do to this file" has one
+    // answer whether or not you have since committed it.
+    history: oc
+        .route({
+            method: "GET",
+            path: "/agents/{id}/history",
+            summary: "Where a conversation's committed work lives",
+            description:
+                "The commits in your own history that carry this conversation's work, with the files each one brought. Use it when the change list is empty or short because you already committed what it wrote: those files are not differences against the main line any more, so they are not in the review, and this is where they went.",
+        })
+        .input(AgentIdSchema)
+        .output(AgentHistorySchema),
     fileDiff: oc
         .route({
             method: "GET",
