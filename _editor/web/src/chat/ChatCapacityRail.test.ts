@@ -63,6 +63,10 @@ const drawn = (el: HTMLElement): string => [...el.querySelectorAll(`[aria-hidden
 
 const spoken = (el: HTMLElement): string[] => [...el.querySelectorAll(`.sr-only`)].map((node) => node.textContent ?? ``);
 
+// The name each bar is drawn under: the length of the window it measures, which is the whole of what makes two
+// bars per account fit in 240px.
+const lanes = (el: HTMLElement): string[] => [...el.querySelectorAll(`.text-3xs`)].map((node) => node.textContent?.trim() ?? ``);
+
 it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, () => {
     const el = mount(
         [],
@@ -126,10 +130,37 @@ it(`spells out for a screen reader what the bar says by its width`, () => {
         { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: 1_700_090_000, gates: `all` }] } },
     ]);
 
-    // A bar is decoration to a screen reader and a hover never reaches one, so every part the column drops —
-    // which pool the figure came from, when it reopens — is spoken here or nowhere.
-    expect(spoken(el)).toContain(`Weekly · all models 41% · resets ${formatReset(1_700_090_000)}`);
+    // A bar is decoration to a screen reader and a hover never reaches one, so every part the column shortens
+    // or drops — the pool's whole name behind the two characters the lane wears, when it reopens — is spoken
+    // here or nowhere.
+    expect(spoken(el)).toContain(`Weekly · all models 41% (resets ${formatReset(1_700_090_000)})`);
     // And spoken ONCE: the drawn row is hidden from the tree, or a reader hears the truncated line and then
     // the whole one.
     expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.textContent?.trim()).toBe(`41%`);
+});
+
+/* THE DEFECT THIS COLUMN WAS REPORTED FOR. Both of an account's allowances are drawn, each beside the length of
+ * the window it measures, because one bar showing the tightest of them left "87%" meaning either an hour's wait
+ * or a week's rationing with nothing on screen to say which. */
+it(`draws both the session and the week, each named by its own window`, () => {
+    const el = mount([
+        {
+            id: `a`,
+            label: `first@example.com`,
+            usage: {
+                measuredAt: MEASURED_AT,
+                windows: [
+                    { kind: `five_hour`, utilization: 12, resetsAt: 1_700_020_000, gates: `all` },
+                    { kind: `seven_day`, utilization: 87, resetsAt: 1_700_090_000, gates: `all` },
+                ],
+            },
+        },
+    ]);
+
+    // A bar each, at its own pool's reading, rather than one bar at the worse of the two.
+    expect(barWidths(el)).toEqual([`12%`, `87%`]);
+    // Each standing beside the length of the window it is a fraction of, in a form short enough to need no
+    // legend, and the 5-hour session first because that is the one that bites soonest.
+    expect(lanes(el)).toEqual([`5h`, `wk`]);
+    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`12%`, `87%`]);
 });

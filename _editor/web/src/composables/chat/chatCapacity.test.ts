@@ -208,11 +208,107 @@ describe(`a pool nobody picks among`, () => {
         expect(entry?.hidden).toBe(2);
     });
 
-    // A lone account is already named by the heading above it, so its line is spent on the pool the figure came
-    // from — which is the next thing worth knowing, and the thing the account name would have crowded out.
-    it(`leaves a lone account's row unnamed and puts its binding pool on the line instead`, () => {
+    // A lone account is already named by the heading above it, and its lanes name the allowances they measure,
+    // so the row itself has nothing left to be called: a name line there is the provider's name a second time.
+    it(`leaves a lone account's row unnamed and lets its lanes carry the pools`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `only@example.com`, usage: usage(30) })] };
-        expect(chatCapacity(NOW).providers[0]?.rows[0]).toMatchObject({ label: undefined, note: `Weekly · all models` });
+        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        expect(row).toMatchObject({ label: undefined });
+        expect(row?.lanes.map((lane) => [lane.short, lane.percent])).toEqual([[`wk`, 30]]);
+    });
+});
+
+/* WHAT THE READER IS ACTUALLY DECIDING, and the reason one number could not answer it. A subscription is not
+ * one allowance: the 5-hour session and the week run out separately and come back days apart, so "87%" is two
+ * completely different situations — an hour's wait, or the rest of the week rationed — and the rail used to
+ * print the same bar for both. */
+describe(`the allowances behind one account`, () => {
+    const pools = (
+        ...windows: { kind: string; label?: string; utilization: number; gates?: `all` | `none` | { models: string[] } }[]
+    ): AccountUsage => ({
+        measuredAt: NOW - 60_000,
+        windows: windows.map((window) => ({ resetsAt: 1_700_003_600, gates: `all` as const, ...window })),
+    });
+
+    it(`draws a lane per allowance, shortest window first, and names each by its length`, () => {
+        providerAccounts.value = {
+            claude: [claude({ id: `a`, usage: pools({ kind: `seven_day`, utilization: 87 }, { kind: `five_hour`, utilization: 12 }) })],
+        };
+
+        // The week is the binding pool and still ranks the row; what changed is that the reader can now see
+        // WHICH pool the 87% belongs to, and that the next hour is wide open.
+        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        expect(row?.percent).toBe(87);
+        expect(row?.lanes.map((lane) => [lane.short, lane.percent])).toEqual([
+            [`5h`, 12],
+            [`wk`, 87],
+        ]);
+    });
+
+    /* Two pools of the same LENGTH are two different allowances, and a plan that meters a model separately
+     * publishes exactly that. Both lanes would read "wk" with nothing to tell them apart, so the one metered
+     * for less than everything says what it is metered for — the same conflation WINDOW_NAMES exists to stop,
+     * one level shorter. */
+    it(`says what a scoped pool is scoped to, and leaves an all-models pool to its period alone`, () => {
+        providerAccounts.value = {
+            claude: [
+                claude({
+                    id: `a`,
+                    usage: pools(
+                        { kind: `seven_day`, utilization: 12 },
+                        { kind: `seven_day_opus`, utilization: 84, gates: { models: [`opus`] } },
+                        { kind: `model:Fable`, label: `Fable`, utilization: 30, gates: { models: [`Fable`] } },
+                    ),
+                }),
+            ],
+        };
+
+        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        // Same window, tightest first: the one about to gate a turn is the one read without hunting.
+        expect(row?.lanes.map((lane) => [lane.short, lane.scope])).toEqual([
+            [`wk`, `Opus`],
+            [`wk`, `Fable`],
+            [`wk`, undefined],
+        ]);
+    });
+
+    /* A pool that gates nothing a turn here runs (ChatGPT's code-review limit, Claude's Cowork slice) is the
+     * account's to reconcile on the Usage tab and never an answer to "what can I run on": a lane for one is a
+     * bar in a column of offers, measuring an allowance no offer spends. */
+    it(`draws no lane for a pool that cannot gate a turn`, () => {
+        providerAccounts.value = {
+            claude: [
+                claude({
+                    id: `a`,
+                    usage: pools({ kind: `five_hour`, utilization: 20 }, { kind: `surface:Cowork`, label: `Cowork`, utilization: 99, gates: `none` }),
+                }),
+            ],
+        };
+
+        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        expect(row?.lanes.map((lane) => lane.label)).toEqual([`5-hour session`]);
+    });
+
+    // A provider that states its window only in the display name still gets a lane, sorted by the length it
+    // named: an unrecognised period would sink to the end, and 12 hours is not the end of anything.
+    it(`reads a window the provider spells out in words`, () => {
+        translatorAccounts.value = {
+            ...NO_ROUTED,
+            kimi: [
+                {
+                    name: `kimi-1`,
+                    label: `kimi`,
+                    usage: pools(
+                        { kind: `seven_day`, utilization: 40 },
+                        { kind: `kimi:43200s`, label: `12-hour window`, utilization: 55 },
+                        { kind: `five_hour`, utilization: 5 },
+                    ),
+                },
+            ],
+        };
+
+        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        expect(row?.lanes.map((lane) => lane.short)).toEqual([`5h`, `12h`, `wk`]);
     });
 });
 

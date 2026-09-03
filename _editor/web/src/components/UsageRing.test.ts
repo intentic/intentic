@@ -28,10 +28,10 @@ const headroom = (over: Partial<PlanHeadroom> = {}): PlanHeadroom => ({
     stale: false,
     measuredAt: Date.now(),
     pools: [
-        { kind: `five_hour`, label: `5-hour session`, percent: 56, resetsAt: RESETS_AT },
-        { kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: undefined },
+        { kind: `five_hour`, label: `5-hour session`, percent: 56, resetsAt: RESETS_AT, gates: `all` },
+        { kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: undefined, gates: `all` },
     ],
-    binding: { kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: undefined },
+    binding: { kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: undefined, gates: `all` },
     ...over,
 });
 

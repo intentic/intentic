@@ -1,7 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
 import { providerDisplayLabel } from "./providerCatalog";
-import { type PlanLimitGroup, planLimitGroups, type PlanLimitRow, planLimitRows, SPENT_PERCENT } from "./usageStatus";
+import { type PlanLimitGroup, planLimitGroups, type PlanLimitRow, planLimitRows, poolPeriod, poolScope, SPENT_PERCENT } from "./usageStatus";
 
 /* WHAT CAN I START THE NEXT TASK ON, as a column narrow enough to stand beside a transcript.
  *
@@ -22,7 +22,14 @@ import { type PlanLimitGroup, planLimitGroups, type PlanLimitRow, planLimitRows,
  *      them forever. Either would draw a confident green bar over an account that cannot serve anything, which
  *      is the exact defect the composer's own account rows were built to end. So a standing refusal and a
  *      needs-reconnecting flag hold an account off the list as firmly as a full pool does.
- *   3. A POOL NOBODY PICKS AMONG IS ONE OFFER, NOT THIRTY-ONE. This sandbox holds 31 Google sign-ins that
+ *   3. AN ACCOUNT IS AS MANY ALLOWANCES AS IT PUBLISHES, and every one of them is drawn. A subscription is not
+ *      one pool: it is a 5-hour session AND a week, and on some plans a per-model slice of that week besides.
+ *      They run out independently and they come back at completely different times, so a single number — the
+ *      tightest, which is what everything else in this app shows — leaves the reader unable to tell the two
+ *      states apart that decide what to do next: an hour's wait, or a week's rationing. The rail draws a lane
+ *      per pool, named by the LENGTH of its window (usageStatus' poolPeriod), which is the only part of a
+ *      pool's name that fits here and the only part that says what the percentage costs.
+ *   4. A POOL NOBODY PICKS AMONG IS ONE OFFER, NOT THIRTY-ONE. This sandbox holds 31 Google sign-ins that
  *      CLIProxyAPI balances turns across by itself: the reader does not choose between them and cannot act on
  *      any one of them, so a row each would spend the whole rail restating one fact per gmail address. A routed
  *      provider is one row, standing at its roomiest reading. A provider whose accounts ARE choosable (the
@@ -43,7 +50,22 @@ const ROWS_PER_PROVIDER = 3;
 const NO_LIMITS = `no published limits`;
 const UNREAD = `no reading yet`;
 
-/** One offer, as the rail draws it: a name, a bar, and the pool the bar measures. */
+/** One allowance of one account: a bar, the window it measures, and what that window is called in full. */
+export interface CapacityLane {
+    // The pool's own key, unique within an account, which is what makes it the list key.
+    readonly kind: string;
+    // How long this window is, in the shortest form that still identifies it: "5h", "wk", "12h".
+    readonly short: string;
+    // What it is metered for, when it is metered for less than everything ("Opus", "Gemini"). Undefined for a
+    // pool that gates every model, where the period alone names it. See usageStatus' poolScope.
+    readonly scope: string | undefined;
+    // The provider's whole name for it ("Weekly · all models"), for the hover and the spoken sentence.
+    readonly label: string;
+    readonly percent: number;
+    readonly resetsAt: number | undefined;
+}
+
+/** One offer, as the rail draws it: a name, and a bar per allowance the plan publishes for it. */
 export interface CapacityRow {
     readonly id: string;
     /* The account's own name, or undefined when the heading above already names this row: a provider holding
@@ -54,13 +76,15 @@ export interface CapacityRow {
      * line, because at this width there is one line: a label the user chose is what they asked to see, and the
      * email behind it is what answers "which one is that" when the label turns out not to. */
     readonly identity: string | undefined;
-    // What the bar fills to. Undefined ⇒ no reading at all, and then there is no bar: an empty track and a
-    // measured 0% are opposite claims, and `note` says which of the two kinds of nothing this is.
+    /* WHAT RANKS THIS ROW: the binding pool's figure, the tightest of the lanes below, since an account is as
+     * constrained as its worst allowance. Undefined ⇒ no reading at all, and then there are no lanes either:
+     * an empty track and a measured 0% are opposite claims, and `note` says which kind of nothing this is. */
     readonly percent: number | undefined;
-    // The pool the figure came from ("Weekly · all models"), or the reason there is no figure.
+    // One per allowance that can gate a turn, shortest window first. Empty ⇒ nothing was measured.
+    readonly lanes: readonly CapacityLane[];
+    // Why there are no lanes. Never a pool's name: with lanes drawn, the pools name themselves.
     readonly note: string;
     readonly stale: boolean;
-    readonly resetsAt: number | undefined;
 }
 
 export interface CapacityProvider {
@@ -169,15 +193,53 @@ const ambiguousLabels = (rows: readonly PlanLimitRow[]): ReadonlySet<string> => 
     return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
 };
 
+/* THE ALLOWANCES THIS ACCOUNT ACTUALLY RUNS ON, one lane each, shortest window first and the tightest first
+ * within a window.
+ *
+ * EVERY POOL, not the tightest one summarised: a week at 12% and an Opus slice at 84% are two different
+ * sentences about what to do next, and folding them into one loses whichever the reader needed. There is no cap
+ * on purpose. The list is bounded by what plans publish, two pools on nearly every account and four on the
+ * fullest of them, and a cap would be a silent drop of an allowance that could stop the very next turn.
+ *
+ * A POOL THAT GATES NOTHING IS NOT AN ALLOWANCE HERE. ChatGPT's code-review limit and Claude's Cowork slice
+ * belong to other products on the same plan (gates "none"): they are the account's to reconcile on the Usage
+ * tab, and a lane for one would be a bar in a column that answers "what can I run" about something no turn
+ * here spends. */
+const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] =>
+    row.pools
+        .filter((pool) => pool.gates !== `none`)
+        .map((pool) => {
+            const period = poolPeriod(pool);
+            return {
+                lane: {
+                    kind: pool.kind,
+                    // A period this cannot read leaves the pool to introduce itself under its own name, which
+                    // is the one thing certain to be right ("Throttle"), and the column truncates it.
+                    short: period?.short ?? pool.label,
+                    scope: period === undefined ? undefined : poolScope(pool),
+                    label: pool.label,
+                    percent: pool.percent,
+                    resetsAt: pool.resetsAt,
+                },
+                // Unreadable periods sort last rather than as zero-length: an unknown window is not a short one.
+                seconds: period?.seconds ?? Number.POSITIVE_INFINITY,
+            };
+        })
+        .toSorted(
+            (left, right) =>
+                left.seconds - right.seconds || right.lane.percent - left.lane.percent || left.lane.label.localeCompare(right.lane.label),
+        )
+        .map((entry) => entry.lane);
+
 const capacityRow = (row: PlanLimitRow, label: string | undefined): CapacityRow => ({
     id: row.id,
     label,
     // Only when it adds something: a row already printing the identity must not repeat it on the hover.
     identity: row.identity === label ? undefined : row.identity,
     percent: row.percent,
-    note: row.binding?.label ?? (row.readable ? UNREAD : NO_LIMITS),
+    lanes: capacityLanes(row),
+    note: row.readable ? UNREAD : NO_LIMITS,
     stale: row.stale,
-    resetsAt: row.binding?.resetsAt,
 });
 
 const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[]): CapacityProvider => {

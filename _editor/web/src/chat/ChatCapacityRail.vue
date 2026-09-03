@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
-import { CAPACITY_RAIL_PX, type CapacityProvider, type CapacityRow, chatCapacity } from "../composables/chat/chatCapacity";
+import { CAPACITY_RAIL_PX, type CapacityLane, type CapacityProvider, type CapacityRow, chatCapacity } from "../composables/chat/chatCapacity";
 import { accountsLoaded } from "../composables/chat/providerAccounts";
 import { formatAge, formatReset, formatUtilization, usageTone } from "../composables/chat/usageStatus";
 import { refreshConnections } from "../composables/chat/useChat";
@@ -41,25 +41,35 @@ onMounted(() => void refreshConnections());
 
 const capacity = computed(() => chatCapacity());
 
-/* WHAT A ROW IS CALLED, and the two cases where the answer is not a name. A routed pool has no name worth
- * printing (see chatCapacity's rule 3: the address is not a choice), so the row says which of the pool's
- * readings it is showing; a lone account is already named by the heading over it, so its line is spent on the
- * pool the figure came from, which is the next thing worth knowing.
+/* WHAT A ROW IS CALLED, and the three cases where the answer is not a name. A routed pool has no name worth
+ * printing (see chatCapacity's rule 4: the address is not a choice), so the row says which of the pool's
+ * readings it is showing. A lone account is already named by the heading over it, and its lanes name the
+ * allowances they measure, so it takes NO line of its own — a name line there would be the provider's name
+ * said twice with a gap between. And an account with nothing measured has no lanes to say anything, so its
+ * line is spent on which kind of nothing that is.
  *
  * "MOST ROOM" ONLY WHERE ROOM WAS MEASURED. It names a comparison, and a pool whose plan publishes no limits
  * has had none made: two Grok connections drew "most room" directly above "no published limits", which is one
  * line contradicting the next and both of them describing a reading that does not exist. With no figure the
  * pool falls back to the same line a lone unread account gets, and says the one true thing once. */
-const rowName = (row: CapacityRow, entry: CapacityProvider): string =>
-    row.label ?? (entry.pooled && row.percent !== undefined ? `most room` : row.note);
+const rowName = (row: CapacityRow, entry: CapacityProvider): string | undefined =>
+    row.label ?? (entry.pooled && row.percent !== undefined ? `most room` : row.lanes.length === 0 ? row.note : undefined);
 
 /* The whole row as one sentence: the hover for a line that had to truncate, and the only form a screen reader
- * gets. Every part the column drops is in here — the sign-in behind an ambiguous name, which pool the figure
- * came from, when it reopens.
+ * gets. Every part the column shortens or drops is in here — the sign-in behind an ambiguous name, each pool
+ * under the name the provider gives it rather than the two characters the lane wears, when each one reopens.
+ *
+ * EVERY LANE, in the order they are drawn, because "5h" and "wk" are a shorthand a reader learns by seeing the
+ * bars beside them and a listener never sees at all. The reset rides in parentheses, as it does on the Usage
+ * tab (usageDetail), since with several pools in one sentence a bare "· resets Sun 05:00" clause would be
+ * unattached to any of them.
  *
  * The PROVIDER is not, in either medium. The heading says it, the heading is directly above, and a tooltip
  * floats an inch from the name it would be repeating; spoken, it turned a three-row block into "Claude Code"
  * three times over. */
+const laneDetail = (lane: CapacityLane, row: CapacityRow): string =>
+    `${lane.label} ${formatUtilization(lane.percent, row.stale)}${lane.resetsAt === undefined ? `` : ` (resets ${formatReset(lane.resetsAt)})`}`;
+
 const rowDetail = (row: CapacityRow, entry: CapacityProvider): string =>
     [
         row.label,
@@ -67,8 +77,7 @@ const rowDetail = (row: CapacityRow, entry: CapacityProvider): string =>
         // The same rule as the drawn line above, and it has to be stated twice because the two mediums are
         // built separately: a comparison nothing was measured for must not be claimed in either.
         entry.pooled && row.percent !== undefined ? `most room of ${entry.ready}` : undefined,
-        row.percent === undefined ? row.note : `${row.note} ${formatUtilization(row.percent, row.stale)}`,
-        row.resetsAt === undefined ? undefined : `resets ${formatReset(row.resetsAt)}`,
+        ...(row.lanes.length === 0 ? [row.note] : row.lanes.map((lane) => laneDetail(lane, row))),
     ]
         .filter((part) => part !== undefined)
         .join(` · `);
@@ -151,7 +160,11 @@ const remeasureLabel = computed(() =>
         </div>
 
         <template v-else>
-            <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3">
+            <!-- The rhythm carries the nesting, since nothing here is drawn with a frame: 4px between an
+                 account's own lanes, 10px between accounts, 20px between providers. It has to widen as the
+                 accounts grow taller — at one bar each the old 6px was enough to part them, at two or three it
+                 reads as one long ladder of bars with names loose in it. -->
+            <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
                 <!-- Every provider spent at once is the ordinary end of a working week, not an error, so it is
                      stated plainly and the list below says when each one is back. -->
                 <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">Nothing has room right now.</p>
@@ -161,7 +174,7 @@ const remeasureLabel = computed(() =>
                      is nobody's decision. The mark and the name head the block; the bars hang under it with no
                      frame of their own, since the column draws no surface at all and a card per provider would
                      be the only box on screen, saying what the gap above it already says for free. -->
-                <div v-for="entry in capacity.providers" :key="entry.provider" class="flex flex-col gap-1.5">
+                <div v-for="entry in capacity.providers" :key="entry.provider" class="flex flex-col gap-2.5">
                     <div class="flex items-center gap-1.5">
                         <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                         <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
@@ -177,37 +190,61 @@ const remeasureLabel = computed(() =>
                         >
                     </div>
 
-                    <!-- TWO LINES PER ACCOUNT: what it is with its figure, and the bar. The pool the figure
-                         came from and the instant it reopens ride the hover instead of a third line — at this
-                         width a third line per account turns three providers into a column you scroll, which
-                         is the one thing a glance surface must not become. -->
+                    <!-- A LANE PER ALLOWANCE, under the account's name: the 5-hour session and the week are
+                         separate pools that run out separately, and the single tightest-of-them bar this
+                         replaced could not tell the reader which of the two they were looking at. That is the
+                         difference between "wait an hour" and "the rest of the week is rationed", and the rail
+                         was printing the same 87% for both.
+                         WHAT MAKES TWO BARS AFFORDABLE is that the pool's name shrinks to its window's LENGTH
+                         ("5h", "wk"), which is both the shortest form that identifies it and the part that says
+                         what the percentage costs. It needs no legend for the same reason a clock needs none.
+                         A GRID, so the three columns line up down the whole block: the reader compares a week
+                         against a week by running an eye down one column, which they cannot do when each row
+                         sets its own bar start. The label column is content-sized, so the common case ("5h",
+                         "wk") spends nothing on it and a plan that meters a model separately can still say so
+                         ("wk · Opus") by taking the width from the bars, which lose nothing they were using. -->
                     <!-- THE DRAWN ROW IS THE DECORATION AND THE SENTENCE IS THE CONTENT, the same split
                          UsageRing draws: a bar means nothing to a screen reader and a hover never reaches one,
                          so the whole row is hidden from the tree and spoken once, in full, below. Announcing
                          both would read the truncated half and then the complete one. -->
                     <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1" v-tooltip.left="rowDetail(row, entry)">
-                        <div class="flex items-baseline justify-between gap-2" aria-hidden="true">
-                            <span class="min-w-0 truncate text-2xs" :class="row.label === undefined ? `text-subtle` : `text-muted`">
+                        <div class="grid grid-cols-[auto_minmax(0,1fr)_2.25rem] items-center gap-x-2 gap-y-1" aria-hidden="true">
+                            <span
+                                v-if="rowName(row, entry) !== undefined"
+                                class="col-span-3 min-w-0 truncate text-2xs"
+                                :class="row.label === undefined ? `text-subtle` : `text-muted`"
+                            >
                                 {{ rowName(row, entry) }}
                             </span>
-                            <span v-if="row.percent !== undefined" class="shrink-0 text-2xs font-medium tabular-nums" :class="usageTone(row.percent)">
-                                {{ formatUtilization(row.percent, row.stale) }}
+
+                            <template v-for="lane in row.lanes" :key="lane.kind">
+                                <!-- Set below the account's name rather than beside it in the same size: this
+                                     is the axis of the little chart to its right, not another name. -->
+                                <span class="max-w-18 truncate text-3xs text-subtle">
+                                    {{ lane.short }}<span v-if="lane.scope !== undefined">&nbsp;·&nbsp;{{ lane.scope }}</span>
+                                </span>
+                                <!-- A pool at 0% still draws a sliver: an empty track reads as "no reading",
+                                     and those mean opposite things. Which is why a row that genuinely has no
+                                     reading draws no lane at all and says so in words instead. -->
+                                <span class="block h-1 overflow-hidden rounded-full bg-content/10">
+                                    <span
+                                        class="block h-full rounded-full bg-current"
+                                        :class="usageTone(lane.percent)"
+                                        :style="{ width: `${Math.max(lane.percent, 1)}%` }"
+                                    />
+                                </span>
+                                <span class="text-right text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)">
+                                    {{ formatUtilization(lane.percent, row.stale) }}
+                                </span>
+                            </template>
+
+                            <!-- …and only when the line above is not already saying it, which it is for a row
+                                 that has no name of its own to print (an unread lone account reads "no reading
+                                 yet" once, not twice). -->
+                            <span v-if="row.lanes.length === 0 && rowName(row, entry) !== row.note" class="col-span-3 text-2xs text-subtle">
+                                {{ row.note }}
                             </span>
                         </div>
-                        <!-- A pool at 0% still draws a sliver: an empty track reads as "no reading", and those
-                             mean opposite things. Which is why a row that genuinely has no reading draws no
-                             track at all and says so in words instead. -->
-                        <div v-if="row.percent !== undefined" class="h-1 overflow-hidden rounded-full bg-content/10" aria-hidden="true">
-                            <div
-                                class="h-full rounded-full bg-current"
-                                :class="usageTone(row.percent)"
-                                :style="{ width: `${Math.max(row.percent, 1)}%` }"
-                            />
-                        </div>
-                        <!-- …and only when the line above is not already saying it, which it is for a row that
-                             has no name of its own to print (an unread lone account reads "no reading yet"
-                             once, not twice). -->
-                        <span v-else-if="rowName(row, entry) !== row.note" class="text-2xs text-subtle" aria-hidden="true">{{ row.note }}</span>
                         <span class="sr-only">{{ rowDetail(row, entry) }}</span>
                     </div>
 

@@ -250,7 +250,7 @@ describe(`planHeadroom`, () => {
             windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 91, resetsAt: 1_700_000_000 })],
         });
         expect(mixed.percent).toBe(91);
-        expect(mixed.binding).toEqual({ kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: 1_700_000_000 });
+        expect(mixed.binding).toEqual({ kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: 1_700_000_000, gates: `all` });
         expect(mixed.pools.map((pool) => pool.label)).toEqual([`5-hour session`, `Weekly · all models`]);
     });
 });
@@ -566,8 +566,8 @@ describe(`plan-limit aggregates`, () => {
         label: `account`,
         identity: undefined,
         percent,
-        pools: percent === undefined ? [] : [{ kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000 }],
-        binding: percent === undefined ? undefined : { kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000 },
+        pools: percent === undefined ? [] : [{ kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` }],
+        binding: percent === undefined ? undefined : { kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` },
         measuredAt: percent === undefined ? undefined : 0,
         stale: false,
         readable: true,
@@ -601,8 +601,8 @@ describe(`plan-limit aggregates`, () => {
     });
 
     it(`names the soonest pool still ahead of us, never one that has already reopened`, () => {
-        const past = at(30, { id: `past`, pools: [{ kind: `five_hour`, label: `5-hour`, percent: 30, resetsAt: 1_000 }] });
-        const future = at(40, { id: `future`, pools: [{ kind: `seven_day`, label: `Weekly`, percent: 40, resetsAt: 9_000 }] });
+        const past = at(30, { id: `past`, pools: [{ kind: `five_hour`, label: `5-hour`, percent: 30, resetsAt: 1_000, gates: `all` }] });
+        const future = at(40, { id: `future`, pools: [{ kind: `seven_day`, label: `Weekly`, percent: 40, resetsAt: 9_000, gates: `all` }] });
         // now = 5s in epoch ms ⇒ the 1,000s reset is behind us and the 9,000s one is not.
         expect(planLimitSummary([past, future], 5_000_000).nextResetAt).toBe(9_000);
         expect(planLimitSummary([past], 5_000_000).nextResetAt).toBeUndefined();

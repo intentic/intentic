@@ -9,6 +9,7 @@ import {
     scopedWindow,
     type TranslatorAccounts,
     type UsageWindow,
+    type WindowGates,
 } from "@intentic/sandbox-contract";
 import { formatWeekdayTime, timeAgo } from "@intentic/ui/format";
 import { lookupUsage, providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
@@ -166,6 +167,12 @@ export interface PlanLimitPool {
     // Rounded once here, so a meter's width and its printed number can't disagree.
     readonly percent: number;
     readonly resetsAt: number | undefined;
+    /* WHICH MODELS THIS POOL STANDS IN THE WAY OF, carried rather than dropped, because "does this allowance
+     * gate anything I run" is not a question a percentage can answer and a surface that lists pools has to ask
+     * it. A ChatGPT plan publishes a code-review limit and Claude a Cowork one: both are the account's to see
+     * on the ledger, and neither can stop a chat turn, so a glance surface offering "what can I run on" must
+     * leave them out (chatCapacity's lanes) while the roster still shows them. */
+    readonly gates: WindowGates;
 }
 
 /* ONE READING, AS THE POOLS IT IS MADE OF, named, ordered worst-first, rounded once. Everything that draws
@@ -178,7 +185,125 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
         label: usageWindowLabel(window),
         percent: Math.round(window.utilization),
         resetsAt: window.resetsAt,
+        gates: window.gates,
     }));
+
+/* ---- a pool's window, in the two characters a rail can spend on it ------------------------------------------
+ *
+ * A percentage means opposite things depending on the window under it. 87% of a 5-hour session is an hour's
+ * wait and nothing to plan around; 87% of a week is the rest of the week rationed. The Usage tab has the room
+ * to print a pool's whole name over every meter, so it never had to choose — but a 240px column beside a
+ * transcript does, and the choice it used to make was to print the account's name and drop the pool's, leaving
+ * a bare number whose consequence could not be read at all.
+ *
+ * So the window's LENGTH gets a token of its own, the shortest form that still says which allowance this is,
+ * and the pool's full name stays in the sentence beside it (the rail's hover, and what a screen reader hears).
+ * Two characters is what makes showing BOTH allowances affordable, which is the whole point: a reader who can
+ * see "5h 12%" over "wk 87%" knows to switch providers now, and one who sees "87%" knows nothing.
+ *
+ * READ OFF THE WORDS THE PROVIDER USED, kind AND label, because which of the two carries the period differs by
+ * vendor: Claude keys it (`five_hour`, `seven_day_opus`), Google buries it in a bucket id (`google:pro-weekly`)
+ * and Kimi states it only in the display name ("12-hour window"). Whole words, never substrings, the same rule
+ * plan-pools.ts matches gates by.
+ *
+ * `seconds` is a LENGTH rather than a rank so that lanes sort shortest-window-first — the one that bites
+ * soonest, the order WINDOW_ORDER already puts the meters in — and an unrecognised "12-hour window" falls into
+ * place between the named two instead of onto the end. */
+export interface PoolPeriod {
+    readonly seconds: number;
+    readonly short: string;
+}
+
+const HOUR_SECONDS = 3_600;
+const DAY_SECONDS = 86_400;
+
+// Every word of the pool's key and its name, separators gone and padded with spaces, so one set of rules reads
+// both spellings and `\b` never has to argue with an underscore ("seven_day_opus" is three words, not one).
+const poolWords = (pool: Pick<PlanLimitPool, `kind` | `label`>): string =>
+    ` ${`${pool.kind} ${pool.label}`
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/gu, ` `)
+        .trim()} `;
+
+/** How long the window behind a pool is, and the token a narrow column names it by. Undefined ⇒ the provider
+ * named a period this cannot read, and the caller falls back to the pool's own label rather than guessing. */
+export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `label`>): PoolPeriod | undefined => {
+    const words = poolWords(pool);
+    const hours = /\b(\d+) hours?\b/u.exec(words)?.[1];
+    const days = /\b(\d+) days?\b/u.exec(words)?.[1];
+    if (/\bfive hours?\b/u.test(words) || hours === `5`) {
+        return { seconds: 5 * HOUR_SECONDS, short: `5h` };
+    }
+    if (hours !== undefined) {
+        return { seconds: Number(hours) * HOUR_SECONDS, short: `${hours}h` };
+    }
+    if (/\bseven days?\b/u.test(words) || days === `7` || /\bweek(ly|s)?\b/u.test(words)) {
+        return { seconds: 7 * DAY_SECONDS, short: `wk` };
+    }
+    if (/\bmonth(ly|s)?\b/u.test(words)) {
+        return { seconds: 30 * DAY_SECONDS, short: `mo` };
+    }
+    if (/\bdaily\b/u.test(words) || days === `1`) {
+        return { seconds: DAY_SECONDS, short: `24h` };
+    }
+    if (days !== undefined) {
+        return { seconds: Number(days) * DAY_SECONDS, short: `${days}d` };
+    }
+    const minutes = /\b(\d+) minutes?\b/u.exec(words)?.[1];
+    return minutes === undefined ? undefined : { seconds: Number(minutes) * 60, short: `${minutes}m` };
+};
+
+/* WHAT A POOL IS FOR, when it is for less than everything: the part of its name that is not the period. A plan
+ * that meters models separately publishes several pools of the SAME length ("Weekly · all models" beside
+ * "Weekly · Opus"; Google's Gemini week beside its Claude-and-GPT week), and two lanes both reading "wk" would
+ * be the exact conflation this file's vocabulary exists to prevent — one line saying the week is 12% gone and
+ * the next saying it is 84% gone, with nothing on either to say they are different allowances.
+ *
+ * Taken from the provider's OWN name for the pool rather than from the gate words behind it, because that name
+ * is the one the reader will see again on the Usage tab and in the provider's own console. A trailing "models"
+ * goes ("Gemini Models" ⇒ "Gemini") for the width, and only there: it is the noun, never the distinction. */
+const PERIOD_WORDS = new Set([
+    `hour`,
+    `hours`,
+    `day`,
+    `days`,
+    `week`,
+    `weeks`,
+    `weekly`,
+    `month`,
+    `months`,
+    `monthly`,
+    `daily`,
+    `session`,
+    `window`,
+    `windows`,
+    `limit`,
+    `limits`,
+    `quota`,
+    `usage`,
+    `five`,
+    `seven`,
+    `twelve`,
+]);
+
+const isPeriodOnly = (part: string): boolean => {
+    const words = part
+        .toLowerCase()
+        .split(/[^a-z0-9]+/u)
+        .filter(Boolean);
+    return words.length > 0 && words.every((word) => PERIOD_WORDS.has(word) || /^\d+$/u.test(word));
+};
+
+export const poolScope = (pool: Pick<PlanLimitPool, `label` | `gates`>): string | undefined => {
+    if (pool.gates === `all` || pool.gates === `none`) {
+        return undefined;
+    }
+    const named = pool.label
+        .split(`·`)
+        .map((part) => part.trim())
+        .find((part) => part !== `` && !isPeriodOnly(part));
+    return (named ?? pool.gates.models.join(`, `)).replace(/\s+models?$/iu, ``);
+};
 
 /* ---- which pool a MODEL spends ---------------------------------------------------------------------------
  * A plan that meters models separately publishes one pool per model (`model:Opus`, `model:Fable`; Google's two
