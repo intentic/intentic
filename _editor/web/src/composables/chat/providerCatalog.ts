@@ -95,11 +95,12 @@ export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
     return qualifyCollidingLabels(live.length > 0 ? live : modelsFor(provider));
 };
 
-// The slash commands each provider last published daemon-side (GET /agent/commands), loaded on the same
-// reachable seam as accounts/models. A conversation's OWN list, replaced by every `commands` frame its turns
-// emit, stays authoritative once it has run one; this is the seed that makes the composer's `/` popover work
-// BEFORE that, since a provider's commands are a property of the workspace, not of one conversation. Empty
-// until the first load, and until that provider has run a turn in the daemon's lifetime.
+// The slash commands each provider last published daemon-side (GET /agent/commands). A conversation's OWN
+// list, replaced by every `commands` frame its turns emit, stays authoritative once it has run one; this is
+// the seed that makes the composer's `/` popover work BEFORE that, since a provider's commands are a property
+// of the workspace, not of one conversation. Claude's is read on the reachable seam beside accounts/models;
+// every other provider's is read by the composer that needs it, and so is Claude's when that seam came back
+// empty because the daemon had not served a turn yet (useChat.ensureProviderCommands).
 export const providerCommands = ref<Record<AgentProvider, readonly AgentCommand[]>>(perProvider<readonly AgentCommand[]>(() => []));
 
 // Installed ACP agent providers (agent-kind capabilities): id + display label, loaded on the same reachable

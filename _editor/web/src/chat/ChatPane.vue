@@ -26,7 +26,7 @@ import { type ChatMessage, cutsAboveOf, dayMarksOf, forkCutsOf, turnsOf } from "
 import { withShortcut } from "../composables/commands/useCommands";
 import { navigateInApp } from "../composables/mainWindow";
 import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
-import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
+import { conversationView, ensureProviderCommands, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
@@ -428,7 +428,9 @@ const conversationBox = computed(() => chat.value.box.value);
 const remote = computed(() => conversationBox.value !== undefined);
 // The name to put on it, from the roster rather than copied onto the conversation: the box's name is the box's
 // to change, and a chat holding its own copy would go stale the moment somebody renamed it.
-const remoteName = computed(() => (conversationBox.value === undefined ? undefined : (boxNameOf.value.get(conversationBox.value) ?? `another sandbox`)));
+const remoteName = computed(() =>
+    conversationBox.value === undefined ? undefined : (boxNameOf.value.get(conversationBox.value) ?? `another sandbox`),
+);
 
 // Files staged for the next turn, and the three ways they arrive (useChatAttachments). The bytes go to the
 // conversation's own box: the path they land on is what the prompt will tell that daemon to read.
@@ -963,6 +965,29 @@ const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
  * correct amount of ceremony for a thing that cannot be answered here. */
 const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && !remote.value);
 const commandOpen = computed(() => !mentionOpen.value && commandMatches.value.length > 0 && !popoverDismissed.value);
+
+/* ASK FOR THE LIST WHEN THIS COMPOSER HAS NONE, which is the only state in which it is worth a request (see
+ * ensureProviderCommands: it is a no-op once the provider's list is known). Two triggers, and both are
+ * moments the answer can newly matter rather than a poll:
+ *
+ *   the PROVIDER, immediately and on every switch — a pane on anything but Claude was never read for at all,
+ *   and switching provider mid-draft changes whose vocabulary the `/` is about to be matched against;
+ *
+ *   the `/` ITSELF, because it is the instant an empty list becomes visible to the user, and the last chance
+ *   to fill it before they finish typing a name. A list that arrives while they are still typing lands in a
+ *   computed the popover is already watching, so it opens under the caret with no further gesture.
+ *
+ * Deliberately NOT in the `availableCommands` computed, which several surfaces read: a fetch fired from a
+ * getter runs on whoever happens to render first and again on every re-evaluation. */
+watch(
+    [provider, () => draft.value.startsWith(`/`)],
+    ([target]) => {
+        if (availableCommands.value.length === 0) {
+            void ensureProviderCommands(target);
+        }
+    },
+    { immediate: true },
+);
 
 // Put the picked text into the draft and land the caret after it, keeping the textarea focused.
 const applyDraftEdit = (text: string, nextCaret: number): void => {

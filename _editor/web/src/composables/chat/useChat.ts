@@ -484,12 +484,53 @@ const readOrKeep = async <T>(path: string, apply: (body: T) => void): Promise<vo
     }
 };
 
+/* Bumped by resetChat, so a read still in flight when the sandbox changed cannot land its answer in the
+ * INCOMING daemon's record. Those commands are the outgoing box's, and a popover offering one the new sandbox
+ * does not have is the swallowed-message failure isUnknownSlashCommand exists to prevent: the CLI claims the
+ * leading `/`, finds no such command, and discards the rest of the user's message. */
+let commandsEpoch = 0;
+
 // Load a provider's daemon-published slash commands into the shared record. Cheap (a cached in-memory read
 // daemon-side), so it rides the same reachable seam as the account/model catalogs.
-const loadProviderCommands = (target: AgentProvider): Promise<void> =>
-    readOrKeep<{ commands: AgentCommand[] }>(`/agent/commands?agent=${encodeURIComponent(target)}`, (body) => {
-        providerCommands.value = { ...providerCommands.value, [target]: body.commands };
+const loadProviderCommands = (target: AgentProvider): Promise<void> => {
+    const epoch = commandsEpoch;
+    return readOrKeep<{ commands: AgentCommand[] }>(`/agent/commands?agent=${encodeURIComponent(target)}`, (body) => {
+        if (epoch === commandsEpoch) {
+            providerCommands.value = { ...providerCommands.value, [target]: body.commands };
+        }
     });
+};
+
+/* THE SAME READ, ASKED AGAIN BECAUSE THE ANSWER ARRIVES LATE, and asked for the provider the composer is
+ * actually on.
+ *
+ * The daemon learns a provider's commands from its first TURN (agent-commands.ts explains why it is not
+ * probed), and it holds them in memory. So the seam above, one read per page load, is racing something it
+ * cannot win: a tab opened before any turn has run in this daemon's lifetime — every reload right after a
+ * restart or a deploy — cached an empty list, nothing re-asked for the rest of the session, and every
+ * conversation opened in that tab had a DEAD `/` popover until it happened to run a turn of its own. The list
+ * was there the whole time; only this client's copy was empty.
+ *
+ * The seam also only ever asked for `claude`, so a conversation on any other provider read an empty record
+ * regardless of what its daemon knew.
+ *
+ * Repeated only while there is nothing to show: a populated list is never re-fetched (a provider's answer only
+ * grows within a daemon's life, and a conversation's own turns override it anyway), so the steady state is no
+ * requests at all. Concurrent askers — two panes, a provider switch racing a keystroke — share one. */
+const commandsInFlight = new Map<AgentProvider, Promise<void>>();
+
+export const ensureProviderCommands = (target: AgentProvider): Promise<void> => {
+    if ((providerCommands.value[target] ?? []).length > 0) {
+        return Promise.resolve();
+    }
+    const already = commandsInFlight.get(target);
+    if (already !== undefined) {
+        return already;
+    }
+    const reading = loadProviderCommands(target).finally(() => commandsInFlight.delete(target));
+    commandsInFlight.set(target, reading);
+    return reading;
+};
 
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
 const sessions = ref<ChatSession[]>([]);
@@ -1078,10 +1119,7 @@ watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, tri
          * own model, was dragged wholesale onto whichever model had been picked most recently — on every
          * account refresh, and again on every reload. `movedFrom` is set only by repointProvider below, so the
          * only chat that returns is one this pass itself moved, and it returns to its own provider. */
-        if (
-            conversation.movedFrom.value !== undefined &&
-            providerReadyOn(conversation.movedFrom.value.provider, conversation.harness.value)
-        ) {
+        if (conversation.movedFrom.value !== undefined && providerReadyOn(conversation.movedFrom.value.provider, conversation.harness.value)) {
             conversation.restoreProvider();
             continue;
         }
@@ -1379,6 +1417,10 @@ export const resetChat = (): void => {
     sessions.value = [];
     providerModels.value = perProvider<ModelOption[]>(() => []);
     providerCommands.value = perProvider<readonly AgentCommand[]>(() => []);
+    // The reads in flight were asked of the OUTGOING daemon: retire their epoch so their answers are dropped
+    // rather than applied here, and drop the handles so an asker for the incoming sandbox opens its own.
+    commandsEpoch += 1;
+    commandsInFlight.clear();
     providerDefaultModel.value = perProvider(() => ``);
     providerModelsState.value = perProvider<CatalogLoadState>(() => `idle`);
     // Which endpoints the INCOMING sandbox has, the free trial among them, is unknown until its own daemon
@@ -2315,9 +2357,11 @@ export const loadAccountStatus = async (): Promise<void> => {
         loadAllProviderModels(),
         // Installed ACP agents and model endpoints are providers too, surface them on the same seam.
         loadCapabilityProviders(),
-        // Each provider's last-published slash commands, so a fresh conversation's `/` popover is populated
-        // before its first turn. Claude only: the ACP list arrives per session on the wire anyway, and an ACP
-        // provider isn't known until loadAcpProviders resolves.
+        /* Claude's last-published slash commands, so the common case has a populated `/` popover the instant a
+         * conversation opens rather than one request later. Claude only HERE, deliberately: it is the default
+         * provider, and an ACP provider isn't even known until loadCapabilityProviders resolves. Every other
+         * provider — and this one, when the daemon had nothing to say yet — is read by the composer that needs
+         * it (ensureProviderCommands), which is what makes this a head start rather than the only chance. */
         loadProviderCommands(`claude`),
     ]);
 };

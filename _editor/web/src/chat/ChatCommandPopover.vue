@@ -51,7 +51,16 @@ defineExpose({ move, pickActive });
                  is what makes it optically match the mention/model rows. Same rule as .chat-markdown code.
                  Hierarchy against the hint/description beside it is carried by color, not size. -->
             <span class="shrink-0 font-mono text-2xs text-content">/{{ command.name }}</span>
-            <span v-if="command.hint" class="shrink-0 font-mono text-2xs text-subtle">{{ command.hint }}</span>
+            <!-- BOUNDED, because argumentHint is the provider's string and nothing caps its length. It used to
+                 be shrink-0, which reads as "a hint is short" and is true of almost all of them ([path],
+                 [name], <model>) and false of the ones that spell a whole grammar: /auto-mode-setup's is 649px
+                 of flags, which took the entire row, sat flush against the card's border with no ellipsis to
+                 say it had been cut, and squeezed the description beside it to ZERO width — the row then names
+                 a command and does not say what it does. A CAP rather than a shrink: made shrinkable, the hint
+                 yields space proportionally and short ones lose characters too ([<target>] rendered as
+                 [<tar…), which is worse than the bug. shrink-0 keeps a hint at its natural width, and max-w
+                 clamps only the ones that would spend the description's half. -->
+            <span v-if="command.hint" class="max-w-[45%] shrink-0 truncate font-mono text-2xs text-subtle">{{ command.hint }}</span>
             <span class="truncate text-2xs text-subtle">{{ command.description }}</span>
         </button>
     </ComposerPopover>
