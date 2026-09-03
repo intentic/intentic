@@ -50,7 +50,7 @@ import { HOISTED_CONTEXT } from "./viewerChrome";
  * toggled from the rail: this view owns no control for it. */
 
 const layout = useLayout();
-const { tree, rootHidden, error, isLoading, refetch, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
+const { tree, rootHidden, barren, error, isLoading, refetch, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -1070,6 +1070,7 @@ const endResize = (event: PointerEvent): void => {
                     <WorkspaceTree
                         :tree="tree"
                         :root-hidden="rootHidden"
+                        :barren="barren"
                         :filter="filter"
                         :selected-path="openPath"
                         :manageable-dirs="manageableDirs"

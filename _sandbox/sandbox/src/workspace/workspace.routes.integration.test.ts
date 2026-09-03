@@ -184,7 +184,7 @@ test("user file mutations ping history for a user-authored snapshot", async () =
 });
 
 test("workspace.tree returns the full working tree from the walker", async () => {
-    const tree = { root: WORKSPACE_ROOT, tree: [{ name: "app", path: "app", type: "dir" as const, children: [] }], hidden: 0 };
+    const tree = { root: WORKSPACE_ROOT, tree: [{ name: "app", path: "app", type: "dir" as const, children: [] }], hidden: 0, barren: ["app"] };
     const client = clientFor(createApp(services({ workspaceTree: async () => tree })));
     expect(await client.workspace.tree({})).toEqual(tree);
 });

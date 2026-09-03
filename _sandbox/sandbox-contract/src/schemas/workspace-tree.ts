@@ -99,6 +99,17 @@ export const WorkspaceTreeSchema = z.object({
     tree: z.array(WorkspaceTreeEntrySchema).describe("The workspace, one entry per file and folder."),
     // How many of the ROOT's own entries the budget cut (0 = complete); per-dir cuts are counted on each dir entry.
     hidden: z.number().describe("How many entries at the top level were cut for size. Zero means the listing is complete."),
+    /* Every folder holding nothing but empty folders, root-relative, in tree order. Answered by its own walk
+     * (workspace/empty-dirs.ts) precisely because it must NOT be read off `tree` above: that listing stops at
+     * the entry budget, so a directory below the cut arrives without `children`, which means "not looked at",
+     * and the emptiness question would silently shrink to whatever the budget happened to reach, the workspace
+     * root and little else. This list is complete, and it says nothing about whether the folders in it were
+     * listed. */
+    barren: z
+        .array(z.string())
+        .describe(
+            "Folders whose whole contents are empty folders, and nothing else. Complete for the workspace, however much of the tree above was listed, and ordered like the tree, so a parent comes before the branch below it.",
+        ),
 });
 export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
 // Lazy-load one directory's children, for a dir the tree walk listed but didn't descend into. The ordinary

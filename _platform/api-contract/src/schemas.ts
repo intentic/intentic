@@ -269,6 +269,11 @@ export interface WorkspaceTreeResponse {
     readonly tree: readonly WorkspaceTreeEntry[];
     // How many of the ROOT's own entries the budget cut (0 = complete); per-dir cuts are counted on each entry.
     readonly hidden: number;
+    /* Every folder holding nothing but empty folders, root-relative, in tree order. Answered by a walk of its
+     * own daemon-side and NOT derivable from `tree` above: a dir below the budget's cut arrives without
+     * `children`, which means "not looked at" rather than "empty", so reading emptiness off the listing would
+     * shrink it to whatever the budget reached. Complete however little of the tree was listed. */
+    readonly barren: readonly string[];
 }
 // Children of one not-yet-descended dir, fetched lazily on expand (GET /workspace/children).
 export interface WorkspaceChildrenResponse {

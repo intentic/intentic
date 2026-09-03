@@ -534,7 +534,10 @@ export const workspaceTree = (): WorkspaceTree => {
     for (const folder of folders.values()) {
         folder.children = folder.children === undefined ? undefined : ordered(folder.children);
     }
-    return { root: WORKSPACE_ROOT, hidden: 0, tree: ordered(roots) };
+    // Nothing to sweep: every folder in this recording exists because a file in it put it there, so none of them
+    // holds only empty folders. The explorer's sweep line is therefore absent from the demo, which is what a
+    // tidy workspace looks like.
+    return { root: WORKSPACE_ROOT, hidden: 0, tree: ordered(roots), barren: [] };
 };
 
 /** One directory's immediate children, the lazy-load behind an ignored dir, and how every extension walks. */

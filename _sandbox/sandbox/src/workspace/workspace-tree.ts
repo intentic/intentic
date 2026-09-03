@@ -9,6 +9,7 @@ import {
     type WorkspaceTreeEntry,
 } from "@intentic/sandbox-contract";
 import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/workspace-ignore";
+import { scanBarrenDirs } from "./empty-dirs.js";
 import { isUnder, realPathOf, realWithin, resolveWithin } from "./workspace-files.js";
 
 // WorkspaceTree / WorkspaceTreeEntry (the full /work tree the agent sees, untracked files, generated
@@ -90,6 +91,12 @@ const descendable = (entry: Entry, realDir: string): boolean =>
 // alphabetically.
 export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: number }): Promise<WorkspaceTree> => {
     const base = resolve(root);
+    /* WHICH FOLDERS ARE EMPTY is asked separately, and started here so it runs alongside the listing rather than
+     * after it (both are I/O, neither is the other's input). It cannot be read off the listing: the budget below
+     * leaves everything under its cut unlisted, and an unlisted directory is unknown rather than empty, so the
+     * answer would stop wherever the budget did. A scan that fails answers with nothing, which under-reports the
+     * chore rather than inventing one. */
+    const barren = scanBarrenDirs(base).catch((): string[] => []);
     // The root resolved ONCE, on the hosted VM /work is itself a link onto the persistent volume, so every
     // containment test below has to be made against where the workspace really is.
     const realRoot = await realPathOf(base);
@@ -191,7 +198,7 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
         level = next;
     }
 
-    return { root: base, tree, hidden: rootHidden };
+    return { root: base, tree, hidden: rootHidden, barren: await barren };
 };
 
 // Lazy-load one directory's children, a dir the tree walk listed but didn't descend into (ignored, or beyond

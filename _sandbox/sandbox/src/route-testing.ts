@@ -688,7 +688,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // ids to attribute, `identify` has nobody to resolve.
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}), metrics: () => ({}) },
         files: fakeFiles(),
-        workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0 }),
+        workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0, barren: [] }),
         // Inert resident search, no index, no rg. The search route test overrides `run` with a canned outcome.
         iq: unstubbed<Services["iq"]>("iq", {
             metrics: () => ({

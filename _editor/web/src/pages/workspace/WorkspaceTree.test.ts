@@ -94,6 +94,10 @@ const restoreFrom = (expanded: readonly string[]): void => {
 
 const mount = async (props: {
     tree: WorkspaceTreeEntry[];
+    // Every folder holding nothing but empty folders, as the daemon's own walk reports it (workspace/tree's
+    // `barren`). A separate input from the tree above, and deliberately so: the daemon answers it for the whole
+    // workspace while the tree stops at its entry budget.
+    barren?: readonly string[];
     selectedPath?: string;
     rowActions?: (dir: string) => readonly RowAction[];
     onOpenFile?: (path: string, mode: OpenMode) => void;
@@ -373,6 +377,8 @@ describe(`empty folders (barren branches)`, () => {
         dir(`src`, [file(`src/main.ts`)]),
         file(`README.md`),
     ];
+    // What the daemon's walk says about that tree: every folder of the chain, in the order the tree lists them.
+    const BARREN = [`web`, `web/demo`, `web/demo/assets`];
     // Two branches, the second buried under a folder holding real content, so revealing it has something to
     // open, which a root-level branch would never exercise.
     const TWO_BARREN_TREE: WorkspaceTreeEntry[] = [
@@ -380,6 +386,7 @@ describe(`empty folders (barren branches)`, () => {
         dir(`src`, [file(`src/main.ts`), dir(`src/old`, [])]),
         file(`README.md`),
     ];
+    const TWO_BARREN = [...BARREN, `src/old`];
 
     // The sweep line's controls, by the words on them.
     const button = (el: HTMLElement, label: string): HTMLElement =>
@@ -410,7 +417,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`stays quiet through the settle window, then collapses the chain into one dimmed row and names it`, async () => {
-        const el = await mount({ tree: BARREN_TREE });
+        const el = await mount({ tree: BARREN_TREE, barren: BARREN });
 
         // Before the window passes: an ordinary row, no marker, no sweep line.
         expect(rows(el)).toEqual([`web`, `src`, `README.md`]);
@@ -430,7 +437,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`folds several branches into a count that opens into their names`, async () => {
-        const el = await mount({ tree: TWO_BARREN_TREE });
+        const el = await mount({ tree: TWO_BARREN_TREE, barren: TWO_BARREN });
         await settle();
 
         // Closed: the count only. `src/old` is under a collapsed folder, so the tree itself shows nothing of it.
@@ -449,7 +456,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`opens the way down to a named folder and selects it`, async () => {
-        const el = await mount({ tree: TWO_BARREN_TREE });
+        const el = await mount({ tree: TWO_BARREN_TREE, barren: TWO_BARREN });
         await settle();
         button(el, `2 empty folders`).click();
         await nextTick();
@@ -467,7 +474,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`keeps one named folder instead of sweeping them all`, async () => {
-        const el = await mount({ tree: TWO_BARREN_TREE });
+        const el = await mount({ tree: TWO_BARREN_TREE, barren: TWO_BARREN });
         await settle();
         button(el, `2 empty folders`).click();
         await nextTick();
@@ -486,7 +493,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`sweeps from the line without a dialog, and the receipt names what went`, async () => {
-        const el = await mount({ tree: BARREN_TREE });
+        const el = await mount({ tree: BARREN_TREE, barren: BARREN });
         await settle();
 
         button(el, `Clean up`).click();
@@ -509,7 +516,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`says where a buried folder is, on the line and on the receipt`, async () => {
-        const el = await mount({ tree: [dir(`src`, [file(`src/main.ts`), dir(`src/old`, [])]), file(`README.md`)] });
+        const el = await mount({ tree: [dir(`src`, [file(`src/main.ts`), dir(`src/old`, [])]), file(`README.md`)], barren: [`src/old`] });
         await settle();
 
         // The line names it the same way the disclosed list would: what is going, then where it lives.
@@ -524,7 +531,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`keeps the count in the receipt when several branches go at once`, async () => {
-        const el = await mount({ tree: TWO_BARREN_TREE });
+        const el = await mount({ tree: TWO_BARREN_TREE, barren: TWO_BARREN });
         await settle();
 
         button(el, `Clean up`).click();
@@ -537,7 +544,7 @@ describe(`empty folders (barren branches)`, () => {
     });
 
     it(`skips the confirm dialog when the Delete key lands on a barren-only selection`, async () => {
-        const el = await mount({ tree: BARREN_TREE });
+        const el = await mount({ tree: BARREN_TREE, barren: BARREN });
         await settle();
 
         const chainRow = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.includes(`web / demo`)) as HTMLElement;

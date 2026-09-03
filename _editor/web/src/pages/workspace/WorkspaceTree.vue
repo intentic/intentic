@@ -48,6 +48,8 @@ interface Row {
     // into this ONE row: `chain` labels it ("public / demo / assets"), `chainTail` is the deepest link, whose
     // children are what an expanded chain shows. The row stays keyed by the branch ROOT, so selection, delete
     // and the keyboard axis all act on the unit the user would actually remove.
+    // `chainTail` is ABSENT when the chain descends past what the tree listing reached (the daemon knows the
+    // branch workspace-wide, the listing stops at its budget): there is then nothing below to draw.
     readonly barren?: boolean;
     readonly chain?: readonly string[];
     readonly chainTail?: WorkspaceTreeEntry;
@@ -79,6 +81,7 @@ interface MoreRow {
 const {
     tree,
     rootHidden = 0,
+    barren = [],
     filter = ``,
     selectedPath,
     manageableDirs = new Set<string>(),
@@ -87,6 +90,12 @@ const {
     tree: readonly WorkspaceTreeEntry[];
     // How many of the root's own entries the daemon's entry budget cut (0 = the root listing is complete).
     rootHidden?: number;
+    /* Every folder holding nothing but empty folders, from the daemon's own walk for them. A separate input
+     * from `tree` because it is a separate question: the tree stops at the daemon's entry budget, so a folder
+     * below the cut arrives with no `children` at all, which means "never listed" and can never mean "empty".
+     * This list is complete for the workspace, so a branch buried inside a repository is offered like any
+     * other, whether or not the listing above ever reached it. */
+    barren?: readonly string[];
     filter?: string;
     selectedPath?: string | null;
     // Directory paths that have a management surface (a directory-surface extension serves the repo). Activating
@@ -125,17 +134,14 @@ const layout = useLayout();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { say } = useNotifications();
 const { fileNesting } = useFileNesting();
-// Barren branches: folders holding nothing but empty folders (settled, so an agent mid-scaffold never
-// flickers the tree). Rows dim and collapse below; the sweep line names them and clears the whole set.
-const {
-    isBarren,
-    roots: barrenRootEntries,
-    chainOf,
-    branchDirs,
-} = useEmptyDirs(
-    () => tree,
-    () => lazyChildren.value,
-);
+/* Barren branches: folders holding nothing but empty folders (settled, so an agent mid-scaffold never flickers
+ * the tree). Rows dim and collapse below; the sweep line names them and clears the whole set.
+ *
+ * PATHS, not entries, because the daemon's list covers the whole workspace while `tree` covers what fitted its
+ * listing budget: a branch inside a repository is routinely in the first and absent from the second, and it is
+ * still nameable, revealable and sweepable, which is exactly the point. A row is drawn for one only where the
+ * tree does hold the entry, which is also the only place a row could go. */
+const { isBarren, roots: barrenRootPaths, chainOf, branchDirs } = useEmptyDirs(() => barren);
 
 // Expanded directory paths live in useWorkspaceTree (shared with the explorer toolbar's Collapse All), consulted
 // here only when not filtering: a filter force-expands matched branches.
@@ -247,6 +253,16 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
         return fileNesting.value && needle === `` ? nestSiblings(shown) : shown.map((entry) => ({ entry }));
     };
 
+    /* The one row a barren branch draws: the single-child descent collapsed into it, labelled with the chain.
+     * `chainTail` is the deepest link the TREE actually holds, and it can be missing entirely: the daemon knows
+     * the branch workspace-wide while the listing stops at its budget, so a chain routinely descends past what
+     * is loaded. Then there is nothing below to draw and no chevron to offer. */
+    const barrenRow = (entry: WorkspaceTreeEntry, depth: number, isExpanded: boolean): Row => {
+        const { names, tail } = chainOf(entry.path);
+        const chainTail = byPath.value.get(tail);
+        return { entry, depth, isExpanded, barren: true, ...(chainTail ? { chainTail } : {}), ...(names.length > 1 ? { chain: names } : {}) };
+    };
+
     const walk = (nodes: readonly WorkspaceTreeEntry[], depth: number): (Row | MoreRow)[] => {
         const out: (Row | MoreRow)[] = [];
         for (const { entry, nested } of level(nodes)) {
@@ -279,10 +295,10 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
             // continues from the chain's tail: three rows of debris become one legible line whose shape
             // says exactly what happened. Skipped while filtering, like nesting: a filter flattens.
             if (isBarren(entry.path)) {
-                const { names, tail } = chainOf(entry);
-                out.push({ entry, depth, isExpanded, barren: true, chainTail: tail, ...(names.length > 1 ? { chain: names } : {}) });
+                const row = barrenRow(entry, depth, isExpanded);
+                out.push(row);
                 if (isExpanded) {
-                    out.push(...walk(childrenOf(tail), depth + 1));
+                    out.push(...walk(childrenOf(row.chainTail ?? entry), depth + 1));
                 }
                 continue;
             }
@@ -626,10 +642,9 @@ const doDeleteSelection = (): void => {
     // A selection that is ONLY barren branches skips the confirm dialog: no content is lost, so "this can't
     // be undone" would be false: the receipt's Undo puts an empty folder back exactly. Anything holding real
     // content keeps the full confirmation below.
-    const entries = paths.map((path) => byPath.value.get(path));
-    const barrenOnly = entries.every((entry): entry is WorkspaceTreeEntry => entry !== undefined && entry.type === `dir` && isBarren(entry.path));
+    const barrenOnly = paths.every((path) => byPath.value.get(path)?.type === `dir` && isBarren(path));
     if (barrenOnly) {
-        sweepBarren(entries);
+        sweepBarren(paths);
         return;
     }
     confirmPaths.value = paths;
@@ -651,16 +666,16 @@ const pointedBarren = ref<string | undefined>(undefined);
  * everything in `label` is about to be deleted and everything in `where` is staying, and a reader who takes
  * "src / old" for one empty run would think a folder full of source was going with it. */
 interface BarrenBranch {
-    readonly entry: WorkspaceTreeEntry;
+    readonly path: string;
     readonly where: string;
     readonly label: string;
 }
-const branchOf = (entry: WorkspaceTreeEntry): BarrenBranch => ({
-    entry,
-    where: entry.path.split(`/`).slice(0, -1).join(` / `),
-    label: chainOf(entry).names.join(` / `),
+const branchOf = (path: string): BarrenBranch => ({
+    path,
+    where: path.split(`/`).slice(0, -1).join(` / `),
+    label: chainOf(path).names.join(` / `),
 });
-const barrenBranches = computed<readonly BarrenBranch[]>(() => barrenRootEntries.value.map(branchOf));
+const barrenBranches = computed<readonly BarrenBranch[]>(() => barrenRootPaths.value.map(branchOf));
 // One branch needs no disclosure: the line just says it.
 const soleBarren = computed(() => (barrenBranches.value.length === 1 ? barrenBranches.value[0] : undefined));
 // The whole path in one string: for a receipt, where there is no room to shade the two parts differently.
@@ -671,51 +686,50 @@ watch(barrenBranches, (branches) => {
     if (branches.length < 2) {
         sweepOpen.value = false;
     }
-    if (!branches.some((branch) => branch.entry.path === pointedBarren.value)) {
+    if (!branches.some((branch) => branch.path === pointedBarren.value)) {
         pointedBarren.value = undefined;
     }
 });
 /* Point at the folder the line is naming: open the way down to it, scroll it into view, select it. Selection
  * rather than focus, matching the reveal watch above: it orients the eye without taking the keyboard away
  * from the list the user is still working through. */
-const revealBarren = async (entry: WorkspaceTreeEntry): Promise<void> => {
-    const dirs = ancestorDirs(entry.path);
+const revealBarren = async (path: string): Promise<void> => {
+    const dirs = ancestorDirs(path);
     if (dirs.some((dir) => !expanded.value.has(dir))) {
         expanded.value = new Set([...expanded.value, ...dirs]);
     }
-    selection.value = new Set([entry.path]);
-    anchor.value = entry.path;
-    lead.value = entry.path;
+    selection.value = new Set([path]);
+    anchor.value = path;
+    lead.value = path;
     await nextTick();
-    rowEls.get(entry.path)?.scrollIntoView({ block: `nearest` });
+    rowEls.get(path)?.scrollIntoView({ block: `nearest` });
 };
 // The one-folder line's own press. A closure in the template would read `soleBarren` outside the `v-if` that
 // proved it exists, so the row asks for it here instead, where the check is an ordinary early return.
 const revealSoleBarren = async (): Promise<void> => {
     const sole = soleBarren.value;
     if (sole !== undefined) {
-        await revealBarren(sole.entry);
+        await revealBarren(sole.path);
     }
 };
 /* Remove barren branches without ceremony, and hold the way back: the branch shapes are recorded BEFORE the
  * delete (afterwards the tree no longer knows them), and Undo recreates the deepest folder of each chain:
  * recursive create rebuilds the exact shape, which is what makes this the one delete that is genuinely
  * reversible. Counted in BRANCHES, the unit the user sees and deletes. */
-const sweepBarren = (roots: readonly WorkspaceTreeEntry[]): void => {
+const sweepBarren = (roots: readonly string[]): void => {
     if (roots.length === 0) {
         return;
     }
     const dirs = roots.flatMap((root) => branchDirs(root));
     const leaves = dirs.filter((dir) => !dirs.some((other) => other !== dir && other.startsWith(`${dir}/`)));
-    const paths = roots.map((root) => root.path);
     // Named while the tree still knows the shape. ONE branch fits a receipt and is the whole story; several
     // would be a list, and a pill that retires itself is the wrong place for one: naming them was the line's
     // job, before the click, where the names could still change the decision.
     const first = roots[0];
     const only = roots.length === 1 && first !== undefined ? barrenPath(branchOf(first)) : undefined;
     void run(async () => {
-        await removeEntries(paths);
-        say(only !== undefined ? `${only} removed` : `${paths.length} empty folders removed`, async () => {
+        await removeEntries(roots);
+        say(only !== undefined ? `${only} removed` : `${roots.length} empty folders removed`, async () => {
             for (const dir of leaves) {
                 await createDir(dir);
             }
@@ -752,10 +766,10 @@ const confirmDelete = (): void => {
 };
 // Keep a barren branch on purpose: drop the standard placeholder into its DEEPEST folder, so the whole chain
 // is non-empty from then on: real for git, carried by clones, and out of the empty-folder list for good.
-const keepFolder = async (entry: WorkspaceTreeEntry): Promise<void> => {
-    const tail = chainOf(entry).tail;
+const keepFolder = async (path: string): Promise<void> => {
+    const tail = chainOf(path).tail;
     await run(async () => {
-        await saveText(joinPath(tail.path, `.gitkeep`), ``);
+        await saveText(joinPath(tail, `.gitkeep`), ``);
         say(`Folder kept`);
     }, `Couldn't keep that folder.`);
 };
@@ -1089,7 +1103,7 @@ const menuItems = computed<MenuItem[]>(() => {
          * genuinely non-empty from then on: real for git, visible to teammates, out of this list forever. No
          * private exclusion state anyone else can't see. */
         if (!multi && target.type === `dir` && isBarren(target.path)) {
-            items.push({ label: `Keep folder`, icon: `check-circle`, command: () => keepFolder(target) });
+            items.push({ label: `Keep folder`, icon: `check-circle`, command: () => keepFolder(target.path) });
         }
         items.push(
             { label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: () => doDeleteSelection() },
@@ -1376,14 +1390,14 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
             <!-- Space BETWEEN entries, since each is up to two lines and adjacent ones would otherwise read as
                  one four-line block with no telling which location belongs to which name. -->
             <ul v-if="sweepOpen && barrenBranches.length > 1" class="scrollbar-thin max-h-40 space-y-1.5 overflow-auto border-b border-line py-1.5">
-                <li v-for="branch in barrenBranches" :key="branch.entry.path" class="flex items-start gap-2 pr-2 pl-3">
+                <li v-for="branch in barrenBranches" :key="branch.path" class="flex items-start gap-2 pr-2 pl-3">
                     <button
                         type="button"
                         class="min-w-0 flex-1 cursor-pointer py-0.5 text-left text-2xs text-subtle hover:text-content"
-                        v-action="() => revealBarren(branch.entry)"
-                        @mouseenter="pointedBarren = branch.entry.path"
+                        v-action="() => revealBarren(branch.path)"
+                        @mouseenter="pointedBarren = branch.path"
                         @mouseleave="pointedBarren = undefined"
-                        @focus="pointedBarren = branch.entry.path"
+                        @focus="pointedBarren = branch.path"
                         @blur="pointedBarren = undefined"
                     >
                         <!-- Two lines rather than one path, because a path in a 16rem column truncates from the
@@ -1397,7 +1411,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         type="button"
                         class="shrink-0 cursor-pointer py-0.5 text-2xs text-subtle underline-offset-2 hover:text-content hover:underline"
                         v-tooltip.top="'Keep this folder: it stops counting as empty'"
-                        @click="keepFolder(branch.entry)"
+                        @click="keepFolder(branch.path)"
                     >
                         Keep
                     </button>
@@ -1410,9 +1424,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     type="button"
                     class="min-w-0 flex-1 cursor-pointer text-left hover:text-content"
                     v-action="revealSoleBarren"
-                    @mouseenter="pointedBarren = soleBarren?.entry.path"
+                    @mouseenter="pointedBarren = soleBarren?.path"
                     @mouseleave="pointedBarren = undefined"
-                    @focus="pointedBarren = soleBarren?.entry.path"
+                    @focus="pointedBarren = soleBarren?.path"
                     @blur="pointedBarren = undefined"
                 >
                     <span class="block truncate">{{ soleBarren.label }} is empty</span>
@@ -1431,7 +1445,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 <button
                     type="button"
                     class="shrink-0 cursor-pointer font-medium text-content/70 underline-offset-2 hover:text-content hover:underline"
-                    @click="sweepBarren(barrenRootEntries)"
+                    @click="sweepBarren(barrenRootPaths)"
                 >
                     Clean up
                 </button>

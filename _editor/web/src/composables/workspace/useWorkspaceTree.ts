@@ -222,6 +222,11 @@ export function useWorkspaceTree() {
     const root = computed(() => query.data.value?.root ?? ``);
     // How many of the ROOT's own entries the daemon's entry budget cut (0 = the root listing is complete).
     const rootHidden = computed(() => query.data.value?.hidden ?? 0);
+    /* Every folder holding nothing but empty folders, workspace-wide, from the daemon's own walk for it. Not
+     * derived from `tree` above and it cannot be: the budget that cut the listing leaves a directory below it
+     * with no `children`, which reads as "never looked at", so an emptiness computed here would only ever cover
+     * the handful of levels the budget reached, the workspace root and nothing inside any repository in it. */
+    const barren = computed<readonly string[]>(() => query.data.value?.barren ?? []);
     // The eager walk, cached against the tree alone. Split out because the map below is rebuilt every time a
     // lazy subtree lands, and re-walking every node the daemon already listed, recursively, allocating as it
     // goes, to add one directory's children is the bulk of that cost for nothing.
@@ -317,6 +322,7 @@ export function useWorkspaceTree() {
         hasSnapshot,
         root,
         rootHidden,
+        barren,
         entriesByPath,
         entry,
         error,
