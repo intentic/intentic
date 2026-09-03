@@ -27,7 +27,9 @@ const next = productPages[(index + 1) % productPages.length];
 
 /* A portrait hero (the docked chat, a phone) is a panel, not a page: stretched to the 6xl column it would be
  * three screens tall. Sit it in a narrow centred column instead. A diagram-led page (Automate) has no shot at
- * all: it leads with a figure in a medium centred column. */
+ * all: it leads with a figure, in a column wide enough for the drawing's own wide arrangement — the machine
+ * lays itself out from the width it is GIVEN (see `AutomateFigure.astro`), so a half-width column here would
+ * hand a 1440px screen the stacked phone shape and three screens of scrolling with it. */
 const heroShot = page.hero;
 const heroImage = heroShot ? shotAsset(heroShot.name) : undefined;
 const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
@@ -49,7 +51,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                     </div>
                 </div>
 
-                <div class:list={["mt-12", { "mx-auto max-w-sm": portraitHero, "mx-auto max-w-2xl": heroShot === undefined }]}>
+                <div class:list={["mt-12", { "mx-auto max-w-sm": portraitHero, "mx-auto max-w-5xl": heroShot === undefined }]}>
                     {
                         heroShot ? (
                             <ProductShotFigure

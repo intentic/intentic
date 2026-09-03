@@ -1,0 +1,733 @@
+---
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+ * THE AUTOMATION MACHINE, DRAWN. Three stations on one rail: what wakes a run, the command of yours that
+ * gets to veto it, and what a run turns out to be.
+ *
+ * WHY A DRAWING AND NOT A LIST. The middle station is the part nobody expects — an event does not start an
+ * agent, your own one-liner does — and a list of six events cannot say that, because a list has no middle.
+ * Six chips feeding one bus, a gate with two exits, and one lit box at the end says it before a word is read:
+ * many things in, one decision, one session out.
+ *
+ * THE SIGNAL MOVES, and that is the whole reason this stage stopped being boring. Each event lights in turn
+ * and a sheen runs down the rail behind it, so the picture demonstrates the sentence above it rather than
+ * illustrating it. It is one beat every 1.5s, in gold, with no layout animated — a background position and two
+ * colours — and it is gone entirely under `prefers-reduced-motion`, where the drawing still reads.
+ *
+ * TWO LAYOUTS FROM ONE MARKUP, chosen by the CONTAINER rather than the window: this figure is 1296px wide in
+ * the home page's plate and about half that in the feature page's column, and those want different shapes at
+ * the same viewport. So the switch is `@container`, and neither caller has to know which arrangement it gets.
+ * Wide: three columns, left to right, heads on one baseline. Narrow: the same three stations stacked, with the
+ * rails turned to point down. Nothing is dropped between them.
+ *
+ * EVERY CLASS IS PREFIXED `am-`. Astro's scoping stops this file leaking out, but not the page leaking IN:
+ * rendered inside `.home`, an unprefixed `.station` or `.rail` here would collect the home page's own rules
+ * for those names.
+ *
+ * The words are `site-content/automate.ts`, shared with every placement. Only the drawing is here.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+import { automateMachine, type AutomateTrigger } from "@intentic-dev/site-content/automate";
+import Lotus from "./Lotus.astro";
+import Lozenge from "./Lozenge.astro";
+
+const machine = automateMachine;
+
+/* One line drawing per event, in the Lucide grammar the nav's icons use: 24×24, strokes only, no fills, so
+ * the single `stroke: currentColor` below colours all six and they light with their chip. */
+const EVENT_ICONS: Record<AutomateTrigger["icon"], string> = {
+    push: '<circle cx="12" cy="12" r="3"/><path d="M3 12h6"/><path d="M15 12h6"/>',
+    alert: '<path d="M10.3 4.3 2.8 17.5A2 2 0 0 0 4.5 20.5h15a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/>',
+    payment: '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19"/><path d="M6.5 15h3"/>',
+    email: '<rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m3.5 6.5 7.4 5.3a2 2 0 0 0 2.2 0l7.4-5.3"/>',
+    message: '<path d="M20.5 14.5a2 2 0 0 1-2 2H8l-4.5 4v-16a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>',
+    schedule: '<circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/>',
+};
+
+const glyph = (paths: string) =>
+    `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+---
+
+{/* One picture to a screen reader, spoken as the sentence in `automate.ts`: the shape is the argument here,
+    and reading out three headings, six chips and two exit codes gives a listener the parts with none of it. */}
+<figure class="am" role="img" aria-label={machine.label}>
+    <div class="am-grid">
+        <div class="am-head am-head-events">
+            <span class="am-step">01</span>
+            <span class="am-label">{machine.events.eyebrow}</span>
+        </div>
+
+        <div class="am-body am-body-events">
+            <ul class="am-events">
+                {
+                    machine.events.items.map((trigger, index) => (
+                        <li class="am-event" style={`--i:${index}`}>
+                            <span class="am-event-icon" set:html={glyph(EVENT_ICONS[trigger.icon])} />
+                            <span class="am-event-label">{trigger.label}</span>
+                            <span class="am-event-source">{trigger.source}</span>
+                        </li>
+                    ))
+                }
+            </ul>
+            {/* The manifold: six stems into one bus, which is the claim "any of these, the same machine". It
+                fades at both ends rather than stopping square, the way every rule on this site does. */}
+            <span class="am-bus" aria-hidden="true"></span>
+        </div>
+
+        <div class="am-rail am-rail-in" aria-hidden="true">
+            <span class="am-rail-line"></span>
+        </div>
+
+        <div class="am-head am-head-check">
+            <span class="am-step">02</span>
+            <span class="am-label">{machine.check.eyebrow}</span>
+            <span class="am-optional">{machine.check.optional}</span>
+        </div>
+
+        <div class="am-body am-body-check">
+            <div class="am-node am-gate">
+                <div class="am-gate-main">
+                    <p class="am-node-title">{machine.check.title}</p>
+                    <p class="am-node-body">{machine.check.body}</p>
+                </div>
+                {/* One line of real shell, on the panel's own bottom rail rather than inside its copy: "your
+                    own command" is this station's whole claim, and a reader should be able to picture the
+                    thing rather than take the word for it. */}
+                <p class="am-cmd">
+                    <span class="am-cmd-caption">{machine.check.example.caption}</span>
+                    <code><span aria-hidden="true">$ </span>{machine.check.example.command}</code>
+                </p>
+            </div>
+        </div>
+
+        {/* THE FORK, AND IT IS THE ONE THING THIS DRAWING EXISTS FOR. Two exits leave the gate: the solid one
+            carries on to a session, the dashed one stops dead. Both are labelled with what actually decides
+            it — the command's exit status — because "an optional check" reads as a setting until you see that
+            it is your own code returning a number. */}
+        <div class="am-rail am-rail-out" aria-hidden="true">
+            <span class="am-rail-line"></span>
+            <span class="am-tag am-tag-pass">
+                <code>{machine.check.pass.code}</code>
+                <span>{machine.check.pass.note}</span>
+            </span>
+            <span class="am-fork"></span>
+            {/* A sibling of the stub rather than a child of it: the stub is a zero-width line, and a label
+                positioned inside one has nothing to measure its own wrapping against. */}
+            <span class="am-tag am-tag-skip">
+                <code>{machine.check.skip.code}</code>
+                <span>{machine.check.skip.note}</span>
+            </span>
+        </div>
+
+        <div class="am-head am-head-run">
+            <span class="am-step">03</span>
+            <span class="am-label">{machine.run.eyebrow}</span>
+        </div>
+
+        <div class="am-body am-body-run">
+            <div class="am-node am-outcome">
+                <p class="am-node-title">
+                    <Lotus size="md" />
+                    {machine.run.title}
+                </p>
+                <ul class="am-points">
+                    {
+                        machine.run.points.map((point) => (
+                            <li>
+                                <Lozenge />
+                                {point}
+                            </li>
+                        ))
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+</figure>
+
+<style>
+    /* ── The canvas ──────────────────────────────────────
+       `container-type` is what lets the same figure be a three-column machine in a 1296px plate and a stacked
+       one in a 672px column, on the same screen. `--am-beat` is the tempo everything moving shares: one event
+       per beat, six events to a cycle. */
+    .am {
+        container-type: inline-size;
+        --am-beat: 1.5s;
+        --am-cycle: 9s;
+        margin: 0;
+    }
+
+    .am-grid {
+        display: grid;
+        gap: 0;
+    }
+
+    /* ── Station heads ───────────────────────────────────
+       The numeral is the only thing on this drawing that counts, so it is set in the ember and the label in
+       gold: a reader sees 01 · 02 · 03 before reading any of it, which is the reading order the machine needs. */
+    .am-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.55rem;
+        margin-bottom: 0.9rem;
+    }
+    .am-step {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1;
+        color: var(--color-primary-500);
+    }
+    .am-label {
+        font-size: var(--text-2xs);
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        line-height: 1;
+        text-transform: uppercase;
+        color: var(--color-gold);
+    }
+    /* Said on the label rather than in the box, because it qualifies the whole station: this one you may skip. */
+    .am-optional {
+        border: 1px solid var(--color-line);
+        padding: 0.15rem 0.45rem;
+        font-size: 0.625rem;
+        letter-spacing: 0.12em;
+        line-height: 1;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+
+    /* ── 01 · the six events ─────────────────────────────
+       Two abreast here and a column of six in the wide arrangement, where a column is what gives the bus
+       something to collect — the manifold is the claim "any of these, the same machine", and it needs the six
+       stacked to draw. Stacked down a phone, two columns keep the block a block rather than a ladder. */
+    .am-events {
+        display: grid;
+        gap: 0.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    /* TWO LINES WHEN THE CHIPS ARE TWO ABREAST, one when they are a column (see the wide arrangement). Where
+       the source has to share a 145px chip with the event it names, setting them on one line does not make it
+       tight, it makes it an ellipsis: "A push  Gi…", which is the row saying nothing at all. */
+    .am-event {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        column-gap: 0.6rem;
+        align-items: center;
+        border: 1px solid var(--color-line);
+        background: rgba(31, 23, 16, 0.5);
+        padding: 0.5rem 0.8rem;
+        color: var(--color-gold);
+        transition:
+            border-color 0.4s ease,
+            background-color 0.4s ease,
+            color 0.4s ease;
+    }
+    .am-event-icon {
+        display: flex;
+        flex: none;
+        grid-row: 1 / 3;
+    }
+    .am-event-label {
+        font-size: 0.9375rem;
+        line-height: 1.3;
+        color: var(--color-content);
+        white-space: nowrap;
+    }
+    .am-event-source {
+        overflow: hidden;
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        line-height: 1.3;
+        color: var(--color-subtle);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* ── The rails ───────────────────────────────────────
+       A rail is a hairline with an arrowhead and a sheen travelling along it. The line is TWO gradients in one
+       background: the static rule, and a short bright one that is moved from off one end to off the other by
+       the animation. Nothing about the layout moves, so the whole thing costs a repaint of a 1px strip. */
+    .am-rail {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .am-rail-line {
+        position: relative;
+        background-repeat: no-repeat;
+    }
+    .am-rail-line::after {
+        content: "";
+        position: absolute;
+        width: 0;
+        height: 0;
+    }
+
+    /* The two labels on the fork. Two lines each: the exit status in mono, then what it means in words. */
+    .am-tag {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        line-height: 1.25;
+    }
+    .am-tag code {
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        letter-spacing: 0.02em;
+    }
+    .am-tag span {
+        font-size: 0.6875rem;
+    }
+    .am-tag-pass code {
+        color: var(--color-primary-400);
+    }
+    .am-tag-pass span {
+        color: var(--color-muted);
+    }
+    .am-tag-skip code,
+    .am-tag-skip span {
+        color: var(--color-subtle);
+    }
+    /* The dead end: dashed, unlit, and it stops at an open lozenge rather than at an arrowhead. A path that
+       goes nowhere must not be drawn as if it arrives somewhere, and the site's own full stop is the right
+       mark for where one ends. */
+    .am-fork {
+        position: absolute;
+        border-color: var(--color-line-strong);
+    }
+    .am-fork::after {
+        content: "";
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border: 1px solid var(--color-line-strong);
+        transform: rotate(45deg);
+    }
+
+    /* ── The two nodes ───────────────────────────────────
+       The gate is quiet and the session is lit, which is the only hierarchy this drawing needs: one of them is
+       a condition, the other is the thing you came for. */
+    .am-node {
+        position: relative;
+        padding: 1.1rem 1.2rem;
+    }
+    .am-gate {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--color-line);
+        background: linear-gradient(160deg, rgba(34, 25, 17, 0.6), rgba(18, 13, 9, 0.55));
+        padding: 0;
+    }
+    .am-gate-main {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: center;
+        padding: 1.15rem 1.25rem;
+    }
+    .am-node-title {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.35;
+        color: var(--color-content);
+    }
+    .am-node-body {
+        margin: 0.5rem 0 0;
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+    /* The example, on the panel's bottom rail and in the site's terminal treatment: a darker strip, a dim
+       prompt, mono. */
+    .am-cmd {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.25rem 0.75rem;
+        margin: 0;
+        border-top: 1px solid var(--color-line);
+        background: rgba(10, 8, 6, 0.5);
+        padding: 0.7rem 1.25rem;
+    }
+    .am-cmd-caption {
+        font-size: 0.625rem;
+        letter-spacing: 0.16em;
+        line-height: 1;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+    /* It wraps rather than clipping — a shell line with its tail cut off is not an example of anything — and it
+       wraps at its SPACES, so the narrowest strip breaks the command between its words rather than through the
+       middle of one. The command in `automate.ts` is short enough that it does not come to that. */
+    .am-cmd code {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--color-primary-300);
+    }
+    .am-cmd code span {
+        color: var(--color-subtle);
+    }
+    .am-outcome {
+        border: 1px solid rgba(224, 123, 39, 0.32);
+        background: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
+        box-shadow: 0 0 40px -18px rgba(224, 123, 39, 0.55);
+    }
+    .am-outcome .am-node-title {
+        font-size: 1.0625rem;
+    }
+    .am-points {
+        display: grid;
+        gap: 0.45rem;
+        margin: 0.85rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .am-points li {
+        display: flex;
+        align-items: baseline;
+        gap: 0.55rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--color-muted);
+    }
+
+    /* ── Stacked: the narrow arrangement, and the default ──
+       Three stations down the page with the rails turned to point at the next one. The bus and its stems go —
+       a manifold needs a column of six to collect — and the events become two abreast so the block stays a
+       block rather than a ladder. */
+    .am-events {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .am-bus,
+    .am-event::after {
+        display: none;
+    }
+    .am-rail {
+        min-height: 5rem;
+        /* Stacked, a rail ends just above the next station's label rather than on it. */
+        padding-bottom: 0.6rem;
+    }
+    .am-rail .am-rail-line {
+        width: 1px;
+        height: 100%;
+        background-image: linear-gradient(180deg, transparent, var(--color-line-strong) 12%, var(--color-line-strong) 88%, transparent),
+            linear-gradient(180deg, transparent, var(--color-primary-400), transparent);
+        background-size:
+            100% 100%,
+            100% 45%;
+        background-position:
+            0 0,
+            0 -60%;
+    }
+    .am-rail .am-rail-line::after {
+        bottom: -1px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 6px solid var(--color-primary-500);
+    }
+    .am-rail-out .am-tag-pass {
+        left: calc(50% + 0.75rem);
+        top: 0.35rem;
+    }
+    /* The dashed exit leaves the same point the solid one does and stops a stub later, with its label beside it.
+       It runs sideways in this arrangement, because down is already taken by the path that continues. */
+    .am-rail-out .am-fork {
+        top: 1.6rem;
+        right: calc(50% + 1px);
+        width: 1.75rem;
+        border-top: 1px dashed var(--color-line-strong);
+    }
+    .am-rail-out .am-fork::after {
+        top: -3px;
+        left: -3px;
+    }
+    .am-rail-out .am-tag-skip {
+        top: 0.95rem;
+        right: calc(50% + 2.5rem);
+        width: 8rem;
+        text-align: right;
+        align-items: flex-end;
+    }
+
+    /* ── Wide: the machine, left to right ────────────────
+       54rem is where three columns stop crowding: below it the gate's sentence sets at four words a line. It
+       is deliberately under the 1024px laptop, where the plate hands this figure about 900px — the width at
+       which stacking it costs 700px of page for an arrangement that fits.
+       Heads share row 1 so the three labels sit on one baseline; bodies share row 2, which is also what the
+       rails centre themselves on — a rail aimed at the middle of a station including its label points a
+       little above everything it connects. */
+    @container (min-width: 54rem) {
+        /* FIVE COLUMNS: three stations and the two rails between them, and the rails are columns of their own
+           rather than gaps, because a rail carries an arrowhead, a fork and two labels. The events column is
+           sized to the six phrases, the gate takes what a three-line sentence needs, and the session takes the
+           most of all — it is the one of the three a reader has to leave with. */
+        .am-grid {
+            /* The events column's floor is what the LONGEST row needs on one line — "A message · Discord ·
+               Slack" plus its glyph and the bus's gutter — because a truncated source is a row that names
+               nothing. Everything else divides what is left. */
+            grid-template-columns:
+                clamp(15.75rem, 21cqw, 19rem) clamp(2.5rem, 4cqw, 4rem) minmax(0, 1fr)
+                clamp(7.5rem, 11cqw, 10rem) minmax(0, 1.12fr);
+            grid-template-rows: auto auto;
+            align-items: center;
+        }
+        .am-head-events {
+            grid-area: 1 / 1;
+        }
+        .am-body-events {
+            grid-area: 2 / 1;
+        }
+        .am-rail-in {
+            grid-area: 2 / 2;
+        }
+        .am-head-check {
+            grid-area: 1 / 3;
+        }
+        .am-body-check {
+            grid-area: 2 / 3;
+        }
+        .am-rail-out {
+            grid-area: 2 / 4;
+        }
+        .am-head-run {
+            grid-area: 1 / 5;
+        }
+        .am-body-run {
+            grid-area: 2 / 5;
+        }
+        .am-head {
+            align-self: end;
+        }
+        /* THE TWO NODES TAKE THE HEIGHT OF THE EVENT STACK, and that is a composition decision rather than a
+           filling one: three panels of one height with rails between them read as a machine, while two short
+           boxes floating beside a tall list read as a list with two captions. Their content stays centred, so
+           what the extra height buys is frame, not padding. */
+        .am-body-check,
+        .am-body-run {
+            align-self: stretch;
+        }
+        .am-body-check .am-node,
+        .am-body-run .am-node {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .am-body-events {
+            position: relative;
+            padding-right: 1.5rem;
+        }
+        .am-events {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        /* A column of six has the width for the whole row on one line, and one line each is what keeps the
+           stack short enough that the two panels beside it are not floating in a tall empty plate. */
+        .am-event {
+            display: flex;
+            align-items: baseline;
+            gap: 0.6rem;
+        }
+        .am-event-icon {
+            /* The glyphs are drawn on a 24-grid and the label is set on a baseline; nudged so the two agree. */
+            transform: translateY(0.25rem);
+        }
+        /* Every chip reaches the bus with a stem of its own; the bus runs the height of the stack and fades
+           out at both ends, so it reads as a rail the six are wired into rather than as a box side. */
+        .am-event::after {
+            content: "";
+            display: block;
+            position: absolute;
+            top: 50%;
+            left: 100%;
+            width: 1.5rem;
+            height: 1px;
+            background: var(--color-line-strong);
+        }
+        .am-bus {
+            display: block;
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 1px;
+            background: linear-gradient(180deg, transparent, var(--color-line-strong) 8%, var(--color-line-strong) 92%, transparent);
+        }
+
+        .am-rail {
+            min-height: 0;
+            padding-bottom: 0;
+            align-self: center;
+        }
+        .am-rail .am-rail-line {
+            width: 100%;
+            height: 1px;
+            background-image: linear-gradient(90deg, transparent, var(--color-line-strong) 8%, var(--color-line-strong) 92%, transparent),
+                linear-gradient(90deg, transparent, var(--color-primary-400), transparent);
+            background-size:
+                100% 100%,
+                40% 100%;
+            background-position:
+                0 0,
+                -50% 0;
+        }
+        .am-rail .am-rail-line::after {
+            top: 50%;
+            right: -1px;
+            bottom: auto;
+            left: auto;
+            transform: translateY(-50%);
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            border-left: 6px solid var(--color-primary-500);
+            border-right: 0;
+        }
+
+        /* The two labels sit ON their own path: the one that continues is centred above the rail, the one that
+           stops hangs under the dashed stub. Both are allowed to run wider than the rail column — the plate is
+           empty above and below the two nodes either side, which is exactly the room a label wants. */
+        .am-rail-out .am-tag-pass {
+            top: auto;
+            left: 50%;
+            bottom: calc(50% + 0.6rem);
+            transform: translateX(-50%);
+            width: max-content;
+            max-width: 100%;
+            text-align: center;
+            align-items: center;
+        }
+        .am-rail-out .am-fork {
+            top: 50%;
+            left: 0.6rem;
+            right: auto;
+            width: 0;
+            height: 2rem;
+            border-top: 0;
+            border-left: 1px dashed var(--color-line-strong);
+        }
+        .am-rail-out .am-fork::after {
+            top: auto;
+            bottom: -3px;
+            left: -3px;
+        }
+        /* Capped to the rail's own column, because the panel beside it is full height here: a label allowed to
+           overrun would land ON the session, not in empty plate. It wraps to a third line instead. */
+        .am-rail-out .am-tag-skip {
+            top: calc(50% + 2.55rem);
+            left: 0;
+            right: auto;
+            width: max-content;
+            max-width: 100%;
+            text-align: left;
+            align-items: flex-start;
+        }
+    }
+
+    /* ── The signal ──────────────────────────────────────
+       Six events, one beat each: chip `--i` lights at `i × beat` and holds for half a beat, and the sheen runs
+       the length of both rails on every beat — the second one a third of a beat behind the first, so what you
+       read is one pulse crossing the gate rather than two rails blinking. Colour and a background position
+       only: nothing here moves a box or costs a layout. */
+    .am-event {
+        animation: am-wake var(--am-cycle) linear infinite;
+        animation-delay: calc(var(--i) * var(--am-beat));
+    }
+    .am-event::after {
+        animation: am-stem var(--am-cycle) linear infinite;
+        animation-delay: calc(var(--i) * var(--am-beat));
+    }
+    .am-rail-in .am-rail-line {
+        animation: am-flow-y var(--am-beat) linear infinite;
+    }
+    .am-rail-out .am-rail-line {
+        animation: am-flow-y var(--am-beat) linear infinite;
+        animation-delay: calc(var(--am-beat) / 3);
+    }
+    /* The signal arriving. Half a step of light on the box, on the beat the sheen reaches it, so the drawing
+       closes its own loop: an event went in and a session came out. Two-thirds of a beat behind the chip. */
+    .am-outcome {
+        animation: am-arrive var(--am-beat) ease-out infinite;
+        animation-delay: calc(var(--am-beat) * 0.66);
+    }
+    @container (min-width: 54rem) {
+        .am-rail-in .am-rail-line,
+        .am-rail-out .am-rail-line {
+            animation-name: am-flow-x;
+        }
+    }
+
+    @keyframes am-wake {
+        0% {
+            border-color: var(--color-line-bright);
+            background-color: rgba(60, 36, 16, 0.6);
+            color: var(--color-primary-400);
+        }
+        6% {
+            border-color: var(--color-line-bright);
+            background-color: rgba(60, 36, 16, 0.6);
+            color: var(--color-primary-400);
+        }
+        20%,
+        100% {
+            border-color: var(--color-line);
+            background-color: rgba(31, 23, 16, 0.5);
+            color: var(--color-gold);
+        }
+    }
+    @keyframes am-stem {
+        0%,
+        6% {
+            background: var(--color-primary-500);
+        }
+        20%,
+        100% {
+            background: var(--color-line-strong);
+        }
+    }
+    @keyframes am-arrive {
+        0% {
+            border-color: rgba(224, 123, 39, 0.5);
+            box-shadow: 0 0 46px -14px rgba(224, 123, 39, 0.7);
+        }
+        50%,
+        100% {
+            border-color: rgba(224, 123, 39, 0.32);
+            box-shadow: 0 0 40px -18px rgba(224, 123, 39, 0.55);
+        }
+    }
+    @keyframes am-flow-x {
+        to {
+            background-position:
+                0 0,
+                150% 0;
+        }
+    }
+    @keyframes am-flow-y {
+        to {
+            background-position:
+                0 0,
+                0 160%;
+        }
+    }
+
+    /* The drawing is complete without any of it: the chips rest lit-off, the rails keep their static rule, and
+       the fork still says what it says. */
+    @media (prefers-reduced-motion: reduce) {
+        .am-event,
+        .am-event::after,
+        .am-rail-line,
+        .am-outcome {
+            animation: none;
+        }
+    }
+</style>

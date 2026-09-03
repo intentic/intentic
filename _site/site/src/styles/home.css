@@ -391,102 +391,13 @@
     }
 }
 
-/* Automate's stage: the machine, left to right. Three zones — what wakes a run, the check that may cancel
-   it, what a run turns out to be — because the middle one is the part nobody expects and a list of six
-   events cannot say it. */
-.home .stage-flow {
-    display: grid;
-    align-items: center;
-    gap: clamp(1.5rem, 3vw, 2.75rem);
-    padding: clamp(1.6rem, 3vw, 2.75rem);
-}
-@media (min-width: 48rem) {
-    /* A RECTANGLE IN THE SAME FAMILY AS THE FOUR FRAMES, so the section is five panels rather than four
-       pictures and a footnote. 2.4 is the middle of the range they clamp into. It is a floor and not a
-       fixed height: the plate holds words, and words reflow, so at a narrow desktop the content wins and
-       the box grows past the ratio rather than clipping. */
-    .home .stage-flow {
-        aspect-ratio: 2.4;
-    }
-}
-.home .flow-wakes ul {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.85rem 1.5rem;
-    margin: 1.2rem 0 0;
-    padding: 0;
-    list-style: none;
-}
-@media (min-width: 62rem) {
-    .home .stage-flow {
-        /* The events take exactly the width six short phrases need and the two zones they feed split the
-           rest, weighted to the outcome — which is the one of the three a reader has to leave with. */
-        grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1.2fr);
-    }
-    /* ONE COLUMN OF SIX, NOT TWO OF THREE. Two columns is the shape this list had inside a card, where it
-       had 380px to live in; here it has a plate the width of the window, and the useful direction to spend
-       on is DOWN — six events stacked read as a list of everything that can start an agent, and they stand
-       the plate up to the height of the frames either side of it without a pixel of filler. */
-    .home .flow-wakes ul {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-.home .flow-wakes li {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    font-size: 1.0625rem;
-    line-height: 1.4;
-    color: var(--color-content);
-}
-.home .flow-check {
-    display: flex;
-    align-items: center;
-    gap: 0.9rem;
-    /* A rule on either side of the middle zone, so the three read as a sequence rather than as three
-       cards side by side. Gold and fading, the same way every division on this page is drawn. */
-    border-left: 1px solid transparent;
-    border-right: 1px solid transparent;
-    border-image: linear-gradient(180deg, transparent, var(--color-line-strong) 30%, var(--color-line-strong) 70%, transparent) 1;
-    padding: 0.25rem clamp(1rem, 2vw, 1.75rem);
-}
-.home .flow-check p {
-    margin: 0;
-    font-size: 1rem;
-    line-height: 1.6;
-    color: var(--color-muted);
-}
-.home .flow-arrow {
-    flex: none;
-    font-size: 1.25rem;
-    line-height: 1;
-    color: var(--color-primary-500);
-}
-.home .flow-out {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    border: 1px solid rgba(224, 123, 39, 0.3);
-    background: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
-    padding: 1.4rem 1.5rem;
-}
-.home .flow-out p {
-    margin: 0;
-    font-size: 1.0625rem;
-    line-height: 1.55;
-    color: var(--color-content);
-}
-/* Below the three-column breakpoint the sequence turns vertical, so the rules that separated the zones
-   have to turn with it or they draw two lines down a stack. */
-@media (max-width: 61.99rem) {
-    .home .flow-check {
-        border-left: 0;
-        border-right: 0;
-        border-top: 1px solid transparent;
-        border-bottom: 1px solid transparent;
-        border-image: linear-gradient(90deg, transparent, var(--color-line-strong) 25%, var(--color-line-strong) 75%, transparent) 1;
-        padding: 1.25rem 0;
-    }
+/* AUTOMATE'S STAGE IS THE ONE WITH NO SCREENSHOT ON IT, so it carries the machine: three stations on a rail,
+   drawn by `AutomateFigure.astro`, which owns every rule inside this plate and arranges itself from the plate's
+   OWN width rather than the window's — it is the same drawing at half the size on /features/automate/.
+   All that is left here is the plate: the quiet `.card` treatment rather than a `.window`, because on this site
+   a window means "this is a photograph of the product" and it would be lying here. */
+.home .stage-machine {
+    padding: clamp(1.5rem, 3vw, 2.5rem);
 }
 
 /* ── 3 · The comparison ────────────────────────────────
@@ -1042,9 +953,6 @@
 @media (max-width: 40rem) {
     .home .screen-app {
         width: 205%;
-    }
-    .home .flow-wakes ul {
-        grid-template-columns: minmax(0, 1fr);
     }
     .home .btn {
         padding: 0.75rem 1.2rem;

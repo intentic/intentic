@@ -35,7 +35,7 @@ export type ProductFigure =
     | "worktrees"
     | "shared-surfaces"
     | "integrations"
-    | "triggers"
+    | "automate"
     | "ownership"
     | "platform-boundary"
     | "prompt-vs-environment"
@@ -242,8 +242,9 @@ export const productPages: ProductPage[] = [
          * shoot; there is one (`/ext/automations`, and the menu previews it), so what keeps the drawing here is
          * that the page's first job is explaining a machine nobody has seen yet, six triggers, one optional
          * check, a fresh session, which a list of five configured automations shows the RESULT of rather than
-         * the shape of. The triggers figure IS the hero; a real screen (the fleet board) carries a block below. */
-        heroFigure: "triggers",
+         * the shape of. The machine IS the hero; a real screen (the fleet board) carries a block below. It is
+         * the same drawing the home page's Automate stage carries, from the same words in `automate.ts`. */
+        heroFigure: "automate",
         menuShot: {
             name: "menu-automate",
             alt: "The automations screen: one wake held for approval, two code chores triggered by a daily schedule and by work landing, and three integrations fired from Discord, a webchat and a webhook, each with when it last ran and a switch.",

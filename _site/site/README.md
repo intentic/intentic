@@ -19,6 +19,11 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
   gold; both are decided here.
 - [src/components/Window.astro](src/components/Window.astro): the one frame every product screenshot on the
   site sits in, ledge and turned corners included.
+- [src/components/AutomateFigure.astro](src/components/AutomateFigure.astro): the automation machine, drawn —
+  six events feeding one bus, the check that may veto a run, the session it turns into. The one figure both the
+  home page and a feature page carry, so it takes its arrangement from a `@container` query rather than the
+  window: wide in the home page's 1296px plate, stacked in a column half that, from the same markup. Its words
+  are `site-content/automate.ts`; its motion is one gold pulse a beat, and none under `prefers-reduced-motion`.
 - [src/components/PageBackdrop.astro](src/components/PageBackdrop.astro): the temple behind every page's
   first screen. The home page's hero paints its own; every other page gets this one, which is why the bar
   has the same carved band behind it wherever you are.

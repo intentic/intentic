@@ -62,8 +62,9 @@ export interface HeroDemo {
 /**
  * One verb in the tour: the home page's single telling of what the product does. Each maps 1:1 to a page
  * in the Features menu and carries ONE line plus one proof: a real browser screenshot (`shot`, named like a
- * `ShotImage` and framed with the route it was taken on) OR, for Automate, the machine it wakes by,
- * because there is no honest screenshot of an automations screen and a mockup would be the one lie here.
+ * `ShotImage` and framed with the route it was taken on) OR, for Automate, the machine it wakes by, drawn:
+ * that page's screen exists, and a list of five configured automations is a picture of the RESULT of the
+ * machine rather than of its shape.
  *
  * EVERY ITEM GETS THE SAME SIZE, and the tour is read one item per screenful. There is no lead item and
  * no compact one: four verbs were cards with their screenshot cropped to a strip, which showed a
@@ -77,10 +78,13 @@ export interface VerbTourItem {
     shot?: { name: string; alt: string; label: string };
     /**
      * Automate's proof, and it is a machine rather than a picture: what wakes a run, what gets to veto it,
-     * and what the run turns out to be. Three parts rather than one list, because at a screenful's scale a
-     * bare list of six events says when an agent starts and nothing about what starts.
+     * and what the run turns out to be, drawn as three stations on a rail (`AutomateFigure.astro`).
+     *
+     * A SWITCH, NOT THE CONTENT. The machine's own words live in `site-content/automate.ts`, because the
+     * feature page draws the same three stations and a reader who meets the diagram twice should meet the
+     * same claim twice. All this slot decides is that this stage carries the drawing instead of a screenshot.
      */
-    flow?: { triggers: string[]; check: string; outcome: string };
+    figure?: "automate";
 }
 
 /**
@@ -161,8 +165,7 @@ export const landingContent: LandingContent = {
         // Under 160 characters: a search result truncates past that, and this one has to survive
         // the cut with the claim and the price still in it.
         title: "intentic · A workspace for coding agents",
-        description:
-            "A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
+        description: "A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
     },
     hero: {
         // Three beats, split 2 + 1 so the second line lands the one the reader has to believe. The
@@ -277,11 +280,7 @@ export const landingContent: LandingContent = {
                  * what wakes a run, the code of yours that gets to veto it, and what a run turns out to
                  * be. The middle part is the one nobody expects and the reason this is a diagram rather
                  * than a list — an event does not start an agent, your own check does. */
-                flow: {
-                    triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "a schedule"],
-                    check: "An optional command of yours reads the event first and decides whether it is worth a run.",
-                    outcome: "A fresh agent session appears on your board, with its own transcript and its own checkout.",
-                },
+                figure: "automate",
             },
             {
                 verb: "Review",

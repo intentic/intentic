@@ -1,5 +1,6 @@
 ---
 import type { ProductFigure } from "@intentic-dev/site-content/product";
+import AutomateFigure from "./AutomateFigure.astro";
 import DiscordThread from "./DiscordThread.astro";
 
 /* The diagrams a screenshot can't carry: what isolation, sharing, wiring and the platform boundary actually
@@ -20,16 +21,6 @@ const botGlyph = icon('<rect x="5" y="8.5" width="14" height="10.5" rx="2"/><pat
 const userGlyph = icon('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>');
 const lockGlyph = icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>');
 const branchGlyph = icon('<circle cx="7" cy="5" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="12" r="2"/><path d="M7 7v10M7 12h8"/>');
-const boltGlyph = icon('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>');
-
-const triggers = [
-    { name: "Push", detail: "GitHub · GitLab" },
-    { name: "Alert", detail: "Sentry" },
-    { name: "Payment", detail: "Stripe" },
-    { name: "Email", detail: "IMAP" },
-    { name: "Message", detail: "Discord" },
-    { name: "Schedule", detail: "cron" },
-];
 
 const surfaces = [
     { surface: "Search", you: "the workspace search box", agent: "`iq` from Bash" },
@@ -149,31 +140,12 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
 }
 
 {
-    figure === "triggers" && (
+    /* The automation machine, and it is the same drawing the home page's Automate stage carries — one
+       component, one set of words (`site-content/automate.ts`), two placements. It takes the same quiet plate
+       every other figure on these pages sits on, and arranges itself for the width it lands in. */
+    figure === "automate" && (
         <div class="card p-6">
-            <div class="grid items-center gap-6 sm:grid-cols-[1fr_auto_1fr]">
-                <div class="grid grid-cols-2 gap-2">
-                    {triggers.map((trigger) => (
-                        <div class="border border-line bg-overlay/40 px-3 py-2">
-                            <div class="text-xs font-medium text-content">{trigger.name}</div>
-                            <div class="text-2xs text-subtle">{trigger.detail}</div>
-                        </div>
-                    ))}
-                </div>
-                <div class="flex items-center justify-center gap-2 text-2xs text-link sm:flex-col">
-                    <Fragment set:html={boltGlyph} />
-                    <span class="whitespace-nowrap">Optional check, then run</span>
-                </div>
-                <div class="border border-primary-600/30 bg-primary-600/[0.05] p-4">
-                    <span class="flex items-center gap-2 text-link">
-                        <Fragment set:html={cubeGlyph} />
-                        <span class="text-sm font-medium text-content">A fresh agent session</span>
-                    </span>
-                    <p class="mt-2 text-xs leading-relaxed text-muted">
-                        Its own session, reviewed before you accept its changes.
-                    </p>
-                </div>
-            </div>
+            <AutomateFigure />
         </div>
     )
 }

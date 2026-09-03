@@ -21,6 +21,7 @@ import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { Image } from "astro:assets";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
+import AutomateFigure from "./AutomateFigure.astro";
 import Corners from "./Corners.astro";
 import Divider from "./Divider.astro";
 import DownloadCta from "./DownloadCta.astro";
@@ -261,7 +262,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                     </Window>
                                 )}
 
-                                {item.flow !== undefined && (
+                                {item.figure === "automate" && (
                                     /* AUTOMATE, AND IT IS THE ONE STAGE WITH NO SCREENSHOT ON IT. There is
                                        an automations screen, but what this stage has to explain is a machine
                                        nobody has seen — an event, a veto, a session — and a list of five
@@ -269,28 +270,11 @@ const machineStep = content.connect.steps.at(-1)!;
                                        of it. So the stage draws the machine, left to right, and takes the
                                        quieter `.card` treatment rather than the frame: on this site the
                                        frame means "this is a photograph of the product", and it would be
-                                       lying here. */
-                                    <div class="card stage-flow">
+                                       lying here. The drawing itself is `AutomateFigure`, shared with the
+                                       feature page so the two tell it the same way. */
+                                    <div class="card stage-machine">
                                         <Corners />
-                                        <div class="flow-wakes">
-                                            <div class="eyebrow eyebrow-bare">Wakes on</div>
-                                            <ul>
-                                                {item.flow.triggers.map((trigger) => (
-                                                    <li>
-                                                        <Lozenge />
-                                                        {trigger}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                        <div class="flow-check">
-                                            <span class="flow-arrow" aria-hidden="true">→</span>
-                                            <p>{item.flow.check}</p>
-                                        </div>
-                                        <div class="flow-out">
-                                            <Lotus size="md" />
-                                            <p>{item.flow.outcome}</p>
-                                        </div>
+                                        <AutomateFigure />
                                     </div>
                                 )}
                             </div>
