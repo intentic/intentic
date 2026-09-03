@@ -1107,7 +1107,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :title="planTitle(message.plan)"
                 :status="planStatus(message.plan)"
             >
-                <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3">
+                <div class="md-prose chat-markdown chat-markdown-compact chat-card-body">
                     <template v-for="(part, index) in plan" :key="index">
                         <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
                         <MarkdownFigure v-else :figure="part.figure" />
@@ -1122,7 +1122,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     foldable
                     :open="!documentDrawn(message.plan.document)"
                     max-height="22rem"
-                    class="mx-3.5 mb-3"
+                    class="chat-card-doc chat-card-doc-bottom"
                 />
                 <template v-if="message.plan.status === 'pending'" #actions>
                     <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
@@ -1157,9 +1157,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     foldable
                     :open="!documentDrawn(message.question.document)"
                     max-height="22rem"
-                    class="mx-3.5 mt-3"
+                    class="chat-card-doc chat-card-doc-top"
                 />
-                <div class="flex flex-col gap-4 px-3.5 py-3">
+                <div class="chat-card-body flex flex-col gap-4">
                     <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">
                         <span v-if="message.question.questions.length > 1" class="chat-question-title text-xs font-medium text-content">{{
                             question.question
@@ -1319,10 +1319,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  sentence ("This command would read credential material"), so it wraps at the body tier rather
                  than truncating a size up. -->
             <ChatCard v-if="message.permission" icon="shield" prose :title="permissionTitle" :status="permissionStatus(message.permission)">
-                <!-- `pb-2.5` against `pt-3`: the card ends on a 2xs meta line whose line box carries several
-                     pixels of leading below the glyphs, so equal padding top and bottom reads as a heavier
-                     bottom. The trailing lines below take `leading-snug` for the same reason. -->
-                <div class="flex flex-col gap-2 px-3.5 pt-3 pb-2.5">
+                <div class="chat-card-body flex flex-col gap-2">
                     <!-- THE SENTENCE FIRST when there is one (settings.explainCommands): what the program does
                          and what it is for, in the words the quick model wrote from the program text. It leads
                          because it is the thing that can be read in the two seconds this card gets, and it is
@@ -1412,7 +1409,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :title="`The agent's browser needs you: ${message.browserHelp.account}`"
                 :status="helpStatus(message.browserHelp)"
             >
-                <div class="flex flex-col gap-1 px-3.5 py-3">
+                <div class="chat-card-body flex flex-col gap-1">
                     <span class="text-xs text-content/85">{{ message.browserHelp.message }}</span>
                 </div>
 
@@ -1437,7 +1434,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 title="The agent's terminal needs you"
                 :status="helpStatus(message.terminalHelp)"
             >
-                <div class="flex flex-col gap-1 px-3.5 py-3">
+                <div class="chat-card-body flex flex-col gap-1">
                     <span class="text-xs text-content/85">{{ message.terminalHelp.message }}</span>
                 </div>
 
@@ -1461,7 +1458,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :title="`Run ${message.serviceOffer.offer.name}?`"
                 :status="offerStatus(message.serviceOffer)"
             >
-                <div class="flex flex-col gap-1 px-3.5 py-3">
+                <div class="chat-card-body flex flex-col gap-1">
                     <span class="text-xs text-content/85">{{ message.serviceOffer.offer.description }}</span>
                     <span class="font-mono text-2xs text-subtle"
                         >{{ message.serviceOffer.offer.slug }} · by {{ message.serviceOffer.offer.publisher }}</span
@@ -1484,14 +1481,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
                 <!-- The run living: the provider's own status line, streamed through the platform while the
                      answer is composed: the paid seconds visible instead of a spinner of unknowable length. -->
-                <div v-if="serviceStatus" class="chat-card-row flex items-center gap-2 px-3.5 py-2.5">
+                <div v-if="serviceStatus" class="chat-card-row flex items-center gap-2">
                     <Icon name="spinner" class="text-2xs text-link" spin />
                     <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ serviceStatus }}</span>
                 </div>
 
                 <!-- The receipt, from the platform's own answer: what a served run cost and what is left, or the
                      two ways it ended free: a refunded no-answer, a refusal that raced the allowance. -->
-                <div v-if="message.serviceOffer.receipt" class="chat-card-row px-3.5 py-2.5">
+                <div v-if="message.serviceOffer.receipt" class="chat-card-row">
                     <span v-if="message.serviceOffer.receipt.outcome === 'ok'" class="font-mono text-2xs text-muted"
                         >Served · {{ formatCredits(message.serviceOffer.receipt.credits) }} credits<template
                             v-if="message.serviceOffer.receipt.remaining !== undefined"
@@ -1527,7 +1524,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :title="`Pay $${message.paymentOffer.offer.amountUsd} ${message.paymentOffer.offer.assetName}?`"
                 :status="offerStatus(message.paymentOffer)"
             >
-                <div class="flex flex-col gap-1 px-3.5 py-3">
+                <div class="chat-card-body flex flex-col gap-1">
                     <span v-if="message.paymentOffer.offer.description" class="text-xs text-content/85">{{
                         message.paymentOffer.offer.description
                     }}</span>
@@ -1553,7 +1550,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <!-- The receipt, from the endpoint's own settlement answer: what was paid and the onchain
                      transaction, or the one honest failure: a payment that never settled spends nothing,
                      because the signed authorization simply expires. -->
-                <div v-if="message.paymentOffer.receipt" class="chat-card-row px-3.5 py-2.5">
+                <div v-if="message.paymentOffer.receipt" class="chat-card-row">
                     <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate font-mono text-2xs text-muted"
                         >Paid ${{ message.paymentOffer.receipt.amountUsd
                         }}<template v-if="message.paymentOffer.receipt.transaction"> · {{ message.paymentOffer.receipt.transaction }}</template></span
@@ -1583,7 +1580,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :title="`${message.capabilityOffer.offer.name} isn't connected yet`"
                 :status="capabilityStatus(message.capabilityOffer)"
             >
-                <div class="flex flex-col gap-1 px-3.5 py-3">
+                <div class="chat-card-body flex flex-col gap-1">
                     <span v-if="capabilityDescription" class="text-xs text-content/85">{{ capabilityDescription }}</span>
                     <span v-if="message.capabilityOffer.offer.why" class="text-2xs text-subtle"
                         >The agent's case: {{ message.capabilityOffer.offer.why }}</span
@@ -1594,7 +1591,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      to it for whoever closed the page mid-flow. Settles via the outcome frame. -->
                 <div
                     v-if="message.capabilityOffer.status === 'connecting' && !message.capabilityOffer.outcome"
-                    class="chat-card-row flex items-center gap-2 px-3.5 py-2.5"
+                    class="chat-card-row flex items-center gap-2"
                 >
                     <Icon name="spinner" class="text-2xs text-link" spin />
                     <span class="min-w-0 flex-1 truncate text-2xs text-muted">Waiting for you to finish setup…</span>
@@ -1604,7 +1601,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <!-- How an accepted ask ended: the agent's side of it, so the row reads as what happened next. -->
-                <div v-if="message.capabilityOffer.outcome" class="chat-card-row px-3.5 py-2.5">
+                <div v-if="message.capabilityOffer.outcome" class="chat-card-row">
                     <span v-if="message.capabilityOffer.outcome.outcome === 'connected'" class="text-2xs text-muted"
                         >Connected<template v-if="message.capabilityOffer.outcome.id"> as "{{ message.capabilityOffer.outcome.id }}"</template>: the
                         agent is continuing with it.</span

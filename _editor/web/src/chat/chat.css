@@ -637,6 +637,51 @@
     color: var(--color-content);
     border-color: var(--color-line);
 }
+/* ── A DECISION CARD'S INNER SPACING ─────────────────────────────────────────────────────────────
+   ONE rule for all eight cards (ChatCard's callers in ChatMessageView), because this is the exact thing that
+   drifted before: every card wrote `px-3.5 py-3` by hand, so the band under the header was a caller's decision
+   eight times over and no two of them could be corrected together.
+
+   THREE NUMBERS, and each is a different question.
+
+   14px at the sides matches the header's own inset, so the title, the body and the answers sit on one margin.
+
+   8px on top, because the HEADER already contributes 8: the reader sees the sum, and 12+8 opened a band under
+   the title wide enough to read as a missing element — most visibly on the question card, where the thing under
+   the header is a bordered document and the empty strip above it had an edge to be measured against. 8+8 is
+   the same 16 the card spends above its title (8 padding, and the title's own leading), so the header now sits
+   in an even band rather than a top-heavy one.
+
+   10px at the bottom, not 8 and not 12: a card ends on TEXT, and a line box carries a couple of pixels of
+   leading below its glyphs that padding cannot see. 12 measured even and looked bottom-heavy; 10 plus that
+   slack is what the 8 above the title actually looks like. Where the body is followed by a document or the
+   answers row it is a gap between two blocks rather than the card's edge, and the same 10 reads correctly
+   there too.
+
+   Unlayered, like everything else in this file, so it outranks the Tailwind padding utilities the call sites
+   used to carry: a card that needs a different inside says so here, not in its own template. */
+.chat-card-body {
+    padding: 8px 14px 10px;
+}
+/* A card's own ROWS: the answers strip under the body (ChatCard), and the status lines and receipts the offer
+   cards add beside it. Same 14px inset as everything else on the card, and a shorter band top and bottom than
+   the body gets, because a row is one line of controls or one line of figures rather than a block of prose. */
+.chat-card-row {
+    padding: 10px 14px;
+}
+/* The document a card is ABOUT (ChatDocumentBody), which is a bordered surface rather than prose: it takes the
+   same insets, from whichever side it is attached to the card body it accompanies. */
+.chat-card-doc {
+    margin-left: 14px;
+    margin-right: 14px;
+}
+.chat-card-doc-top {
+    margin-top: 8px;
+}
+.chat-card-doc-bottom {
+    margin-bottom: 10px;
+}
+
 /* The taken option on a DECIDED card. Quieter than the live `.ui-row-select-on` it replaces when the card
    settles — a live selection is a state the user is still moving, this one is settled — and its border is what
    separates it from the options it was chosen over, which carry none. No :hover pair on purpose: a decided

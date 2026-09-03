@@ -15,9 +15,12 @@
      is left of the old split is the `prose` prop below, which is a real difference between these cards rather
      than an accident of who wrote them.
 
-     WHAT IT DELIBERATELY DOES NOT OWN: the body's padding. Every card's body is different — markdown, a
-     column of options, a program, a price — so the shell owns the frame and the caller owns what is inside it.
-     Rows that need their own dividing rule (a running service's status line, a receipt) use `chat-card-row`. -->
+     WHAT IT DOES NOT OWN, BUT NO LONGER LEAVES TO EACH CALLER: the body's spacing. Every card's body is
+     different — markdown, a column of options, a program, a price — so the shell still does not wrap it, but
+     the padding is one class (`chat-card-body` in chat.css, which explains the three numbers) rather than the
+     `px-3.5 py-3` each card used to spell out for itself. That copy is exactly how the band under the header
+     ended up wider on some cards than others. Rows of their own — the answers strip here, a running service's
+     status line, a receipt — take `chat-card-row`, which carries its own band for the same reason. -->
 <script lang="ts">
 /* HOW A SETTLED CARD SAYS SO, and the only two shapes it may take. Every one of the eight ends either in
  * something happening (`done`, a check, the success colour) or in nothing happening (`gone`, a cross, muted) —
@@ -79,7 +82,7 @@ const {
 
         <!-- The answers. A divided row, and only when there are any: a settled card has none, and an empty
              bordered strip under it would read as a control that has stopped working. -->
-        <div v-if="$slots[`actions`]" class="chat-card-row flex flex-wrap items-center gap-2 px-3.5 py-2.5">
+        <div v-if="$slots[`actions`]" class="chat-card-row flex flex-wrap items-center gap-2">
             <slot name="actions" />
         </div>
     </div>
