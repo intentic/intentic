@@ -1319,7 +1319,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  sentence ("This command would read credential material"), so it wraps at the body tier rather
                  than truncating a size up. -->
             <ChatCard v-if="message.permission" icon="shield" prose :title="permissionTitle" :status="permissionStatus(message.permission)">
-                <div class="flex flex-col gap-2 px-3.5 py-3">
+                <!-- `pb-2.5` against `pt-3`: the card ends on a 2xs meta line whose line box carries several
+                     pixels of leading below the glyphs, so equal padding top and bottom reads as a heavier
+                     bottom. The trailing lines below take `leading-snug` for the same reason. -->
+                <div class="flex flex-col gap-2 px-3.5 pt-3 pb-2.5">
                     <!-- THE SENTENCE FIRST when there is one (settings.explainCommands): what the program does
                          and what it is for, in the words the quick model wrote from the program text. It leads
                          because it is the thing that can be read in the two seconds this card gets, and it is
@@ -1365,8 +1368,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         <ChatCommandBlock v-if="commandOpen || !message.permission.explain" :program="message.permission.program" />
                     </template>
 
-                    <span v-if="message.permission.path" class="font-mono text-2xs text-subtle">{{ message.permission.path }}</span>
-                    <span v-if="message.permission.reason" class="text-2xs text-subtle">Requested because: {{ message.permission.reason }}</span>
+                    <span v-if="message.permission.path" class="font-mono text-2xs leading-snug text-subtle">{{ message.permission.path }}</span>
+                    <span v-if="message.permission.reason" class="text-2xs leading-snug text-subtle"
+                        >Requested because: {{ message.permission.reason }}</span
+                    >
                 </div>
 
                 <template v-if="message.permission.status === 'pending'" #actions>
