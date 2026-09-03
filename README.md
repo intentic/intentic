@@ -173,7 +173,12 @@ the live package graph, and flags any page whose code has moved on since it was 
 
 ## Develop locally
 
-> Requires **Node 24** and **pnpm 11**.
+> Requires **Node 24** and **pnpm 12**: `engines` names `24.18.0` and `12.2.1`, the pair CI runs. Another
+> Node 24 patch is fine; a pnpm below 12.2.0 is not, and `packageManager` makes corepack fetch the right one.
+>
+> **On Windows, put `openssl` on PATH first.** `pnpm install` mints this machine's development certificate
+> with it and fails without it. Git for Windows already ships one in `C:\Program Files\Git\usr\bin`: add that
+> directory to PATH, or run the install from Git Bash. macOS and every Linux dev image here have it already.
 
 A single `.env` at the repo root drives the platform (only the api reads it; web/site bake their dev config
 into `src`). Copy the template and fill in Google credentials: everything else degrades with a startup warning:

@@ -65,5 +65,8 @@ pnpm cert:trust     # approves the root — answer Yes to the OS prompt
   Restarting it is what clears that, not re-running anything here.
 - **`cert:trust` waits on a dialog on Windows.** Installing a root is exactly what an OS should not allow
   silently, so Windows asks; from WSL the prompt appears on the Windows desktop while the terminal sits quiet.
-- **It needs `openssl` on PATH**: every dev image here has it, and so does macOS. Firefox additionally needs
-  NSS's tools (`nss` on Arch, `libnss3-tools` on Debian and Ubuntu) and is skipped, with a note, without them.
+- **It needs `openssl` on PATH**: every dev image here has it, and so does macOS. **Windows does not**, which
+  makes this the one prerequisite a first `pnpm install` there fails on: `generate.mjs` runs from `prepare`, so
+  a missing binary takes the whole install down with it. Git for Windows already ships the binary — add
+  `C:\Program Files\Git\usr\bin` to PATH, or run the install from Git Bash. Firefox additionally needs NSS's
+  tools (`nss` on Arch, `libnss3-tools` on Debian and Ubuntu) and is skipped, with a note, without them.

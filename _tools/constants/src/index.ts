@@ -39,7 +39,7 @@ export const HOST_STATE_ROOT = "/opt/intentic";
 // The clickwrap legal version: the platform (@intentic-app/api) stamps the accepted version on each account
 // at sign-up; intentic.dev renders the /terms and /privacy documents under it. Bump on any material change
 // to the terms or privacy policy, one edit, both sides move together.
-export const LEGAL_VERSION = "2026-08-13";
+export const LEGAL_VERSION = "2026-09-03";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
 /* WHO THE COUNTERPARTY IS, in the words a contract needs. EU e-commerce law (Directive 2000/31 Art. 5, and in

@@ -9,7 +9,7 @@ pnpm init
 pnpm add -D vite @vitejs/plugin-vue vue typescript
 pnpm add @intentic/extension-api @intentic/sandbox-contract @intentic/extension-ui
 
-# pnpm 11 will not run a dependency's install script until you approve it by name, and
+# pnpm will not run a dependency's install script until you approve it by name, and
 # vite's bundler needs its own to put a platform binary in place. Without this, the build
 # fails on a missing binary rather than on anything you wrote.
 cat > pnpm-workspace.yaml <<'YAML'

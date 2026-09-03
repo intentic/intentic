@@ -180,7 +180,7 @@ pnpm intentic deploy --help  # the deploy group: init · resolve · plan · appl
 pnpm intentic deploy init       # scaffold the intent + desired-state repos
 ```
 
-> Requires **Node 24** and **pnpm 11**. From this repo the CLI runs as `pnpm intentic deploy <command>` (the first call builds `dist`, then runs incrementally). The full authoring reference is [_tools/examples/deploy.config.ts](../_tools/examples/deploy.config.ts).
+> Requires **Node 24** and **pnpm 12** (`engines` names `24.18.0` and `12.2.1`). From this repo the CLI runs as `pnpm intentic deploy <command>` (the first call builds `dist`, then runs incrementally). The full authoring reference is [_tools/examples/deploy.config.ts](../_tools/examples/deploy.config.ts).
 
 **Deploy against your own infra.** A filled artifact lives (gitignored) at `intent/` + `desired-state/`; `desired-state/.env` holds your `HOST_SSH_KEY` / `CLOUDFLARE_API_TOKEN` / `DISCORD_BOT_TOKEN` (regenerated as `.env.example` by `intentic deploy resolve`). Install the intent's deps once, then drive it:
 

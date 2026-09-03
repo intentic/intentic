@@ -13,8 +13,10 @@ pnpm typecheck        # the gate — emits declarations first, needs no build
 pnpm verify           # typecheck, then test
 ```
 
-Requires **Node 24** and **pnpm 11**, both pinned in `engines`. To run the platform locally (Postgres, the api,
-the browser workspace), see **Develop locally** in the [README](README.md).
+Requires **Node 24** and **pnpm 12**, both pinned in `engines` (`24.18.0` and `12.2.1`, the versions CI runs);
+`packageManager` makes corepack fetch that pnpm. On Windows, `openssl` has to be on PATH before the first
+install: it mints this machine's development certificate. To run the platform locally (Postgres, the api, the
+browser workspace), see **Develop locally** in the [README](README.md).
 
 ## How work is checked
 

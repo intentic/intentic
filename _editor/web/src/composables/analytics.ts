@@ -10,7 +10,18 @@ import { useAuth } from "./useAuth";
  * blockers match PostHog's hostnames and the recorder's filename and would otherwise drop replay entirely.
  * persistence: "sessionStorage" scopes the session id to the browser tab: it survives reloads and in-tab
  * navigation, under "memory" every load minted a new id, so one visit fragmented into unrelated one-page
- * recordings, while still leaving no cookie and nothing that outlives the tab to track a return visit by. */
+ * recordings, while still leaving no cookie and nothing that outlives the tab to track a return visit by.
+ *
+ * WHAT THIS FILE CAPTURES IS WHAT THE PRIVACY POLICY SAYS IT CAPTURES. The policy and the sub-processor list
+ * (_site/site-content/src/legal.ts) are written from this configuration, and LEGAL_VERSION is the clickwrap
+ * users re-accept: a change here that alters what leaves the browser moves all three in the same commit.
+ *
+ * REPLAY IS UNSCOPED ON PURPOSE, FOR NOW. `maskAllInputs` covers typed values and nothing else, so a recording
+ * reconstructs whatever the workspace had on screen — the editor's rendered file contents, diffs, transcripts,
+ * file and branch names. That is a launch-period bet on full-fidelity replay while the funnel is being learned,
+ * not an oversight, and the policy states it rather than glossing it. Narrowing it is configuration, not a
+ * project: `session_recording.maskTextSelector: "*"` keeps the shape of every page and the text of none, and
+ * `posthog.stopSessionRecording()` on entering a workspace keeps full fidelity only ahead of it. */
 let enabled = false;
 
 export const initAnalytics = (): void => {

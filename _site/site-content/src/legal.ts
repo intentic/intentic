@@ -4,7 +4,8 @@
  *
  * THESE ARE WRITTEN AGAINST THE CODE, and that is the only reason they can be this specific. Every window,
  * region, size and data category below was read out of the implementation, the retention sweep, the hosted
- * provisioner's region pick, the trial's per-account meter, the pool's Stripe wiring, rather than guessed at
+ * provisioner's region pick, the trial's per-account meter, the pool's Stripe wiring, the analytics client's
+ * own configuration (web/src/composables/analytics.ts, desktop-app/src/analytics.ts), rather than guessed at
  * from what a service like this usually does. The corollary is a maintenance duty: a change to any of those
  * makes a sentence here false, and a false privacy statement is a regulatory problem rather than stale copy.
  *
@@ -83,9 +84,19 @@ export const privacyDoc: LegalDoc = {
         {
             heading: "What we do not collect",
             paragraphs: [
-                "We run no analytics, no advertising and no tracking, on the website or in the app. The only cookie is the strictly necessary session cookie that keeps you signed in.",
-                "Sandboxes you run yourself report nothing to us. There are no usage pings, no active-day signals and no counts: the creator payout pool is deliberately built so that nothing a sandbox could report is worth money, which is why it can ask for nothing.",
+                "We run no advertising and no ad or cross-site tracking, on the website or in the app, and we sell no data to anyone. The only cookie is the strictly necessary session cookie that keeps you signed in. We do run product analytics, in the workspace app and the desktop app: the next section says exactly what that captures.",
+                "The sandbox itself reports nothing to us. A sandbox you run on your own machine sends no usage pings, no active-day signals and no counts: the creator payout pool is deliberately built so that nothing a sandbox could report is worth money, which is why it can ask for nothing. Your code, your files and your prompts are never sent to us by a sandbox: what the analytics below sees is the workspace interface in your browser, and the next section is explicit about that.",
                 "We never receive your payment card details. Stripe collects them directly and we see only a customer reference, the subscription status and the billing period.",
+            ],
+        },
+        {
+            heading: "Product analytics",
+            paragraphs: [
+                "The workspace app at app.intentic.dev and the desktop app carry product analytics, run for us by PostHog. We use it to see how the product is used and where people get stuck; it is not used for advertising, not shared, and not sold.",
+                "In the browser workspace it records the pages you open, clicks and other interactions with the interface, a handful of milestone events our own code sends (a sandbox connected, a hosted sandbox created, an installer downloaded, a message sent), and a session replay: a reconstruction of the interface as you used it, built from what was on the screen, so in an open workspace that is the files, diffs and conversation you had in front of you. Everything you type into a field is masked out of that recording. Once you are signed in, these events carry your account identifier, email address and name, so what happened can be tied back to the account it happened in.",
+                "It keeps an identifier for the browser tab you are working in, in that tab's session storage rather than in a cookie: closing the tab ends it, and it does not identify you when you come back. Requests reach PostHog through app.intentic.dev's own address rather than PostHog's own, which is also why a content blocker does not stop them.",
+                "The desktop app reports far less, and by design: named events about installing, updating and setting up a sandbox, each carrying which step, the outcome, how long it took, the app version and the operating system, under an identifier that is random per installation. It sends no folder path, no sandbox name, no setup code, no credential and no line of the output on its screen.",
+                `Our legal basis is our legitimate interest in understanding and improving the product (Art. 6(1)(f)), and you can object to it: write to ${LEGAL_CONTACT_EMAIL} and we will exclude your account and delete what has been recorded about you.`,
             ],
         },
         {
@@ -112,7 +123,7 @@ export const privacyDoc: LegalDoc = {
             heading: "Sandboxes we host for you",
             paragraphs: [
                 "If you take the free hosted sandbox, we create a virtual machine and a disk for it at Fly.io and we pay for them. Everything you then put in that workspace: repositories, files, environment variables, credentials you choose to store there, and everything the agent writes, sits on that disk, which is infrastructure we arranged rather than infrastructure you own. This is the one part of the service where your working content is in our sphere, and it is why the Data Processing Agreement exists.",
-                "We do not read it, and the product gives us no way to: the command path runs from your browser to the sandbox's own daemon, and the platform holds power over the machine (create it, stop it, start it, destroy it) rather than a path into it. We will not build ourselves such a path to satisfy an abuse complaint, a complaint is answered by stopping or destroying the machine.",
+                "We do not read it, and the product gives us no way to: the command path runs from your browser to the sandbox's own daemon, and the platform holds power over the machine (create it, stop it, start it, destroy it) rather than a path into it. We will not build ourselves such a path to satisfy an abuse complaint, a complaint is answered by stopping or destroying the machine. The one thing that can show your workspace's content is the session replay described under Product analytics, and it records the interface in your own browser rather than anything on the machine.",
                 "Two honest limits on that. Fly.io, as the operator of the physical infrastructure, necessarily has the access any infrastructure provider has to the memory and disks of the machines it runs; our agreement with them restricts what they may do with it. And a sandbox reachable from the internet is reachable by whatever you expose from it: what you publish from your workspace is published by you.",
             ],
         },
@@ -145,6 +156,7 @@ export const privacyDoc: LegalDoc = {
             list: [
                 "Performance of our contract with you (Art. 6(1)(b)) for account data, sandbox records, hosted machines, membership and credits.",
                 "Our legitimate interest (Art. 6(1)(f)) in keeping accounts and infrastructure secure, for session and sign-in security data and for acting on abuse reports.",
+                "Our legitimate interest (Art. 6(1)(f)) in understanding and improving the product, for the analytics above. You can object to that one, and the section says how.",
                 "Compliance with a legal obligation (Art. 6(1)(c)) for tax and accounting records of payments.",
             ],
         },
@@ -162,6 +174,7 @@ export const privacyDoc: LegalDoc = {
                 "Sessions and sign-in verifications: deleted when they expire.",
                 "Unaccepted sandbox invitations: deleted after 90 days.",
                 "Credit ledger, donations and service-run records: 13 months.",
+                "Analytics events and session replays: held by PostHog under the retention of our plan with them, and nowhere else. Ask and we delete yours before that.",
                 "Account, sandbox and membership records: until you delete your account.",
                 "Payment records: as long as tax law requires us to keep them, currently five years from the end of the accounting year in Poland.",
                 "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account, and, for a machine without a membership, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it, they expire on their own retention schedule, currently five days, so erasure completes within that window rather than instantly. We hold no other copy.",
@@ -506,6 +519,12 @@ export const subprocessorsDoc: LegalDoc = {
                         "Data Privacy Framework",
                     ],
                     [
+                        "PostHog, Inc. (US)",
+                        "Product analytics for the workspace app and the desktop app: usage events, and session replay of the workspace interface with everything you type masked out",
+                        "United States (PostHog Cloud US)",
+                        "Standard Contractual Clauses",
+                    ],
+                    [
                         "Stripe Payments Europe Ltd (IE)",
                         "Membership payments, invoicing and creator payouts, including the identity and tax details a payout account needs",
                         "European Union and United States",
@@ -518,7 +537,7 @@ export const subprocessorsDoc: LegalDoc = {
             heading: "Not on this list, deliberately",
             paragraphs: [
                 "Your own model provider, Anthropic, or whoever you configure with your own key, is not our sub-processor. Your sandbox talks to them directly under your own agreement, and that traffic never passes through us. The one exception is the free trial, where the model calls are ours: that is why Google appears above.",
-                "We use no analytics, advertising, error-tracking or customer-messaging providers, so none appear here.",
+                "We use no advertising, error-tracking or customer-messaging providers, so none appear here. Our one analytics provider, PostHog, is in the table above.",
             ],
         },
         {

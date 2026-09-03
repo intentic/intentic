@@ -37,7 +37,27 @@ const RENEW_WITHIN_DAYS = 30;
 // refuses anything else signed by it: including anything signed by a copy of the key.
 const PERMITTED = `permitted;DNS:localhost,permitted;DNS:localhost.com,permitted;IP:127.0.0.1/255.255.255.255,permitted;IP:::1/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff`;
 
-const openssl = (...args) => execFileSync(`openssl`, args, { stdio: [`ignore`, `pipe`, `pipe`] });
+/* WHY THIS SAYS SO MUCH ABOUT A MISSING BINARY. Every other machine that runs this already has `openssl`: the
+ * dev images here, macOS, every Linux distribution. Windows is the one that does not ship it on PATH, and this
+ * runs from `prepare`, so what a first-time Windows install sees is `pnpm install` dying on
+ * `spawnSync openssl ENOENT` inside a package nobody has heard of. The fix is one directory on PATH, and Git
+ * for Windows has already put the binary there. */
+const MISSING_OPENSSL = [
+    `localhost-https: needs \`openssl\` on PATH to mint this machine's development certificate, and did not find it.`,
+    `  Windows: Git for Windows ships one — add C:\\Program Files\\Git\\usr\\bin to PATH, or run the install from Git Bash.`,
+    `  Linux: install your distribution's openssl package. macOS: it is already there.`,
+].join(`\n`);
+
+const openssl = (...args) => {
+    try {
+        return execFileSync(`openssl`, args, { stdio: [`ignore`, `pipe`, `pipe`] });
+    } catch (cause) {
+        if (cause.code === `ENOENT`) {
+            throw new Error(MISSING_OPENSSL, { cause });
+        }
+        throw cause;
+    }
+};
 
 /** Days until the certificate stops being valid, or null when there is no readable certificate there. */
 const daysLeft = (path) => {
