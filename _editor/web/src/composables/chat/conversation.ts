@@ -1870,6 +1870,28 @@ export class Conversation {
         return true;
     }
 
+    /* THE SESSION AS THE DAEMON HAS IT, adopted whole (the id, the runtime and the credential that minted it,
+     * see SessionRef) from the two places the daemon states it: the `session` frame at the head of a turn, and the
+     * transcript a reopened tab reads (useChat.replayStoredSession).
+     *
+     * AND THE ONE THING THE TAB TAKES FROM IT: an account it never picked. A tab with no pin sends no account, and
+     * the daemon serves such a turn on whichever connected account has headroom (agent/harness-credentials.ts), so
+     * the session came back bound to an account the tab knew nothing about. Left that way two things were wrong
+     * at once: the picker highlighted its first row while the card's chip named the account that actually ran,
+     * and the next send compared "no pick" against that account (turnRequest.resumes), found no match, and quietly
+     * retired a session that resumed perfectly well. A pin the user DID make is never touched here: a session
+     * bound elsewhere than the pick is the switch they made and have not sent yet, and the divider already says
+     * what it costs. Nor is a conversation homed in another box, whose turns carry no account at all: the id the
+     * daemon names is a key in THAT box's store, and pinning it here would hand this box's reconciliation a
+     * foreign id to move off. Nor a session of another provider than the tab now points at, for the same reason
+     * pointAt reads the session's account only when switching back to its own runtime. */
+    bindSession(session: SessionRef): void {
+        this.session.value = session;
+        if (this.account.value === undefined && this.box.value === undefined && session.provider === this.provider.value) {
+            this.account.value = session.account;
+        }
+    }
+
     // Move this conversation onto a re-connected credential for the SAME human account. The session ref moves
     // with it: a reconnect mints a new local account id, and leaving the old one on the session would read as a
     // deliberate account switch and retire a live session that resumes perfectly well, the user reconnected to
@@ -2384,7 +2406,7 @@ export class Conversation {
                  * no account is served by whichever connected one has headroom, so an automation's session,
                  * reattached in a tab, would otherwise be bound to nobody, and the tab's first send would
                  * announce, and take, a fresh session over one that resumes perfectly well. */
-                this.session.value = boundSession(effect.sessionId, turn, effect.account);
+                this.bindSession(boundSession(effect.sessionId, turn, effect.account));
                 return;
             case `worktree`:
                 // First frame of an isolated turn: which branch/base this conversation works on.

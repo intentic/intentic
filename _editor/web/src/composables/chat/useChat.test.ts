@@ -92,7 +92,7 @@ const newChat = () => {
 };
 
 const { closedDrafts } = await import("./closedDrafts");
-const { usageByAccount } = await import("./providerAccounts");
+const { selectedAccountId, usageByAccount } = await import("./providerAccounts");
 const { Conversation } = await import("./conversation");
 const { endpointProviders, endpointsLoaded, trialStatus } = await import("./providerCatalog");
 const { turnDefaults } = await import("./turnDefaults");
@@ -1018,6 +1018,28 @@ describe(`abandoned drafts`, () => {
         expect(chatStrip.value.active).toBe(own);
     });
 
+    /* "NEW AGENT" PRESSED WHERE THE COMPOSER CANNOT BE SEEN. With the chat popped out, this window's tabs are a
+     * shadow: it holds the draft it summoned earlier exactly as untouched as it was then, while the reader has
+     * been typing into it a window away, since typing is never broadcast. Handing that shadow back summoned the
+     * chat they were already in and opened nothing. A window that is not drawing the chat mints instead; the
+     * drawing window's own write sweeps an untouched draft if it held one, so the strip converges either way. */
+    it(`mints a fresh draft from a window that is not drawing the chat: its copy cannot tell empty from being typed into`, async () => {
+        const { receiveFloatingNote } = await import("../floating");
+        const chat = useChat();
+        chat.draft.value = `real work`;
+        const shadow = newChat();
+        expect(draftConversation()).toBe(shadow); // docked, the untouched draft is handed back
+
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+        try {
+            const pressed = draftConversation();
+            expect(pressed).not.toBe(shadow);
+            expect(chat.conversations.value.map((c) => c.conversationId)).toContain(shadow.conversationId);
+        } finally {
+            receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+        }
+    });
+
     it(`leaves a draft the fleet has registered alone: that tab is a real agent now`, async () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;
@@ -1167,6 +1189,20 @@ describe(`opening a fleet agent`, () => {
      * and started one, re-seeding the whole transcript against a cold prompt cache; leaving it on the other
      * account promised a resume and would have sent that session's id out under a credential that never minted
      * it. The daemon names the binding now (AgentTranscriptSchema) and the client takes it as given. */
+    /* A TAB OPENED WITH NO PIN takes the account the daemon says served the session (Conversation.bindSession):
+     * the card's chip and the picker then name the same account, and the next send resumes rather than
+     * comparing "no pick" against a bound session and retiring it. */
+    it(`pins a tab that opened unpinned to the account the daemon says its session ran on`, async () => {
+        // No remembered pick and no account list yet: the seed the tab falls back to is nothing at all.
+        selectedAccountId.value = { ...selectedAccountId.value, claude: undefined };
+        const conversation = openAgentConversation({ id: `a4`, sessionId: `sess-s`, provider: `claude`, harness: `native` });
+        expect(conversation.account.value).toBeUndefined();
+
+        await vi.waitFor(() => expect(conversation.session.value?.account).toBe(`acct-work`));
+
+        expect(conversation.account.value).toBe(`acct-work`);
+    });
+
     it(`binds a reopened session to the account the daemon recorded, not to the tab's pick`, async () => {
         const conversation = openAgentConversation({
             id: `a6`,

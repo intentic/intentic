@@ -117,7 +117,8 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
     };
 };
 
-/* An untouched "New agent" tab, as the strip tells it: nothing sent, nothing typed, nothing named. The board's
- * "New agent" press hands such a tab back rather than minting a twin (useChat.draftConversation), and the strip
- * writer sweeps one the moment the focus leaves it (useChat.setConversations); both ask this. */
+/* An untouched "New agent" tab, as the strip tells it: nothing sent, nothing typed, nothing named. A "New agent"
+ * press in the window drawing the chat hands such a tab back rather than minting a twin
+ * (useChat.draftConversation), and the strip writer sweeps one the moment the focus leaves it
+ * (useChat.setConversations); both ask this. */
 export const untouched = (tab: TabFacts): boolean => !tab.registered && tab.standing === `draft` && !tab.unsent && tab.title === undefined;

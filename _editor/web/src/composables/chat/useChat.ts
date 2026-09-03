@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/ui/async";
+import { reloadOnHotUpdate } from "../hotReload";
 import {
     type AgentCommand,
     type AgentHarness,
@@ -1728,7 +1729,15 @@ export const openAgentConversation = (agent: AgentTabSeed): Conversation =>
  * to tell two apart, so the press is about the caret, and about the FOCUS landing on the draft, which is a
  * visible tab switch when it was pressed from another tab. */
 export const draftConversation = (): Conversation => {
-    const open = conversations.value.find(untouchedDraft);
+    /* ONLY WHERE THE COMPOSER CAN BE SEEN. A window that is not drawing the chat holds a shadow of the strip
+     * (untouchedDraft's note), and a shadow cannot tell an empty draft from one being typed into a window away:
+     * typing is never broadcast, so the board's copy of the draft the reader is writing in the popped-out chat
+     * stays untouched for as long as they write. Handing THAT back summoned the chat they were already in,
+     * re-hydrated it (the skeleton that flashed over their words) and opened nothing, and only a click that took
+     * the shadow's focus elsewhere, sweeping it, let the next press mint a draft. So such a window always mints:
+     * the drawing window receives a fresh tab, and its own write sweeps whatever untouched draft it held, which
+     * is the strip either press converges on. */
+    const open = drawsChat.value ? conversations.value.find(untouchedDraft) : undefined;
     if (open === undefined) {
         return new Conversation();
     }
@@ -2101,7 +2110,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
              * A record with no session leaves the ref alone: the daemon is saying this conversation has nothing
              * to resume from ITS store, which is not the same as saying the tab's own session ref is wrong. */
             if (transcript.session !== undefined) {
-                conversation.session.value = transcript.session;
+                conversation.bindSession(transcript.session);
             }
         }
     }
@@ -2631,3 +2640,7 @@ export function useChat() {
         disconnectTranslator,
     };
 }
+
+// One tab store per window: a hot update that re-ran this module would hand the panel a second, empty strip while
+// the channel's readers went on writing to the first (hotReload.ts).
+reloadOnHotUpdate(import.meta.hot);

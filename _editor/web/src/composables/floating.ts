@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, getCurrentScope, onScopeDispose, shallowRef } from "vue";
+import { reloadOnHotUpdate } from "./hotReload";
 import { uuid } from "./uuid";
 
 /* A PANEL IN A WINDOW OF ITS OWN, as ONE SHARED FACT rather than a relationship between two windows.
@@ -502,3 +503,7 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
 
     return { panel, floats, here, shows, open, dock, toggle: () => (floats.value ? dock() : open()), fit };
 };
+
+// One claim, one set of sightings and one channel per window: a hot update that re-ran this module would leave a
+// floating window beating from an instance nothing reads and reading `mine` off one nothing claimed (hotReload.ts).
+reloadOnHotUpdate(import.meta.hot);

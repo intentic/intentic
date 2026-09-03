@@ -1,3 +1,4 @@
+import { reloadOnHotUpdate } from "../hotReload";
 import { useSandbox } from "../sandbox/useSandbox";
 import type { Summons } from "./summon";
 import type { Strip } from "./tabFacts";
@@ -58,10 +59,26 @@ export const onChatNote = <K extends ChatNote["kind"]>(kind: K, read: (note: Not
 const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.chat`);
 
 /** Tell every other window. A BroadcastChannel never delivers to its own poster, so a module that also wants
- *  the note applied here applies it itself (summon.ts does; the strip echo deliberately does not). */
+ *  the note applied here applies it itself (summon.ts does; the strip echo deliberately does not).
+ *
+ *  AS JSON, which is the wire form of everything on this channel rather than a detail of how it is posted. The
+ *  browser copies a posted message by structured clone, and structured clone REFUSES A PROXY, which is what a
+ *  Vue ref hands back for any object it holds. A tab's snapshot (tabSnapshot.snapshotTab) carries the
+ *  conversation's session, its displaced pick, its stopped turn and its fork linkage exactly as the refs hold
+ *  them, so a summons for any chat with a session in it threw DataCloneError out of the click that made it,
+ *  AFTER the local apply and BEFORE any other window heard a word: every rail click in the popped-out chat did,
+ *  and the board went on ringing the chat before it; a "New agent" over a displaced draft did, and the floating
+ *  window kept showing the old conversation. The strip already crosses as parsed JSON (useChat's publish
+ *  watch); this makes it the channel's rule rather than one poster's courtesy. It is also what drops the
+ *  `undefined` keys StoredTab's optional fields are read back as absent, so a heard tab and a restored one are
+ *  the same shape. */
 export const postChatNote = (note: ChatNote): void => {
+    if (channel === undefined) {
+        return;
+    }
+    const envelope: ChatEnvelope = { sandbox: useSandbox().activeSandboxId.value, note };
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
-    channel?.postMessage({ sandbox: useSandbox().activeSandboxId.value, note } satisfies ChatEnvelope);
+    channel.postMessage(JSON.parse(JSON.stringify(envelope)) as ChatEnvelope);
 };
 
 /** Another window's note, arriving here: the ONE way in, so what a test hands over and what the channel
@@ -74,3 +91,7 @@ export const receiveChatNote = (envelope: ChatEnvelope): void => {
 };
 
 channel?.addEventListener(`message`, (event: MessageEvent<ChatEnvelope>) => receiveChatNote(event.data));
+
+// One channel and one set of readers per window: a hot update that re-ran this module would leave the browser's
+// listener on the first instance, feeding readers of a store the panel no longer renders (hotReload.ts).
+reloadOnHotUpdate(import.meta.hot);

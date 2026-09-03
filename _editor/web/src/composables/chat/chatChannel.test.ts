@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import { reactive } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEnvelope, ChatNote } from "./chatChannel";
+import type { StoredTab } from "./tabSnapshot";
 
 // The sandbox id is the envelope's own scope: every case below is about whether a note is BELIEVED, and half
 // of that is which sandbox it names. useSandbox itself reaches window.env through useApi, which no test has.
@@ -12,12 +14,14 @@ vi.mock("../sandbox/useSandbox", async () => {
 
 const posted: ChatEnvelope[] = [];
 
-// The chat's channel, and only that one: floating.ts opens a channel of its own under the same global.
+// The chat's channel, and only that one: floating.ts opens a channel of its own under the same global. It copies
+// what it is handed the way the browser does, by structured clone, which is the one thing about a BroadcastChannel
+// a fake that merely kept the reference could never fail on: a Vue proxy in a note is a DataCloneError out there.
 class FakeChannel {
     constructor(private readonly name: string) {}
     postMessage(envelope: ChatEnvelope): void {
         if (this.name === `intentic.chat`) {
-            posted.push(envelope);
+            posted.push(structuredClone(envelope));
         }
     }
     addEventListener(): void {
@@ -71,5 +75,45 @@ describe(`the chat channel`, () => {
         receiveChatNote({ sandbox: undefined, note: { kind: `roll` } });
 
         expect(heard).toEqual([]);
+    });
+
+    /* THE WIRE FORM IS JSON. A tab's snapshot carries the conversation's session, its displaced pick and its
+     * stopped turn as the refs hold them, which is as reactive proxies, and structured clone refuses a proxy: a
+     * summons for any chat with a session in it threw out of the click that made it, after the local apply and
+     * before any other window heard. Posted as JSON, the note arrives plain, and its absent fields arrive absent. */
+    it(`carries a note holding Vue-reactive state as the plain data a structured clone will take`, () => {
+        const tab: StoredTab = reactive({
+            conversationId: `cnv-1`,
+            isolated: true,
+            registered: true,
+            provider: `claude`,
+            harness: `native`,
+            session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-1` },
+            movedFrom: { provider: `codex`, value: `gpt-5-codex` },
+            title: undefined,
+            draft: ``,
+            attachments: [],
+            queued: [],
+        });
+
+        expect(() => postChatNote({ kind: `closed-drafts`, tabs: [tab] })).not.toThrow();
+
+        expect(posted[0]?.note).toStrictEqual({
+            kind: `closed-drafts`,
+            tabs: [
+                {
+                    conversationId: `cnv-1`,
+                    isolated: true,
+                    registered: true,
+                    provider: `claude`,
+                    harness: `native`,
+                    session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-1` },
+                    movedFrom: { provider: `codex`, value: `gpt-5-codex` },
+                    draft: ``,
+                    attachments: [],
+                    queued: [],
+                },
+            ],
+        });
     });
 });

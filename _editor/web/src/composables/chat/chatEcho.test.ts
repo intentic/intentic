@@ -15,12 +15,13 @@ vi.mock("../sandbox/useSandbox", async () => {
 
 const posted: ChatEnvelope[] = [];
 
-// The chat's channel, and only that one: floating.ts opens a channel of its own under the same global.
+// The chat's channel, and only that one: floating.ts opens a channel of its own under the same global. Copied by
+// structured clone as the browser does it (chatChannel.test.ts says why that matters).
 class FakeChannel {
     constructor(private readonly name: string) {}
     postMessage(envelope: ChatEnvelope): void {
         if (this.name === `intentic.chat`) {
-            posted.push(envelope);
+            posted.push(structuredClone(envelope));
         }
     }
     addEventListener(): void {

@@ -203,6 +203,34 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
+    /* A TAB WITH NO PIN IS SERVED BY WHICHEVER ACCOUNT HAS HEADROOM, and the session frame says which. That
+     * account becomes the tab's pin: the picker then highlights the account that actually ran rather than its
+     * first row, and the next send compares a pick that matches the session's binding, so it resumes instead of
+     * quietly opening a fresh session for want of a pick (Conversation.bindSession). */
+    it(`adopts the account the daemon served an unpinned turn on, so the next send resumes the session`, async () => {
+        const conversation = new Conversation(`c-unpinned`);
+        expect(conversation.account.value).toBeUndefined();
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1`, account: `with-room` }, { kind: `done` }]));
+
+        await conversation.send(`hi`, settings);
+
+        expect(conversation.session.value).toEqual({ id: `s-1`, provider: `claude`, account: `with-room`, harness: `native` });
+        expect(conversation.account.value).toBe(`with-room`);
+    });
+
+    // ...and a pin the user made is theirs: a session the daemon reports elsewhere is the switch they have not sent
+    // yet, and the divider is what says so.
+    it(`leaves a pin the user made alone when the daemon reports the session on another account`, async () => {
+        const conversation = new Conversation(`c-pinned`);
+        conversation.account.value = `acct-1`;
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1`, account: `acct-2` }, { kind: `done` }]));
+
+        await conversation.send(`hi`, { ...settings, account: `acct-1` });
+
+        expect(conversation.session.value?.account).toBe(`acct-2`);
+        expect(conversation.account.value).toBe(`acct-1`);
+    });
+
     /* The buffer's whole reason for existing: a turn's render cost is set by how many times the transcript is
      * WRITTEN, not by how many frames the daemon sent, so a burst has to cost what a single frame costs.
      *

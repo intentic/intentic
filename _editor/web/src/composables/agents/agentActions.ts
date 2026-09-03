@@ -49,7 +49,9 @@ const agentJson = <T>(at: AgentReach, path: string, init?: RequestInit): Promise
 //     pressed from an agent's screen would otherwise leave the route pointing at the agent you just left)
 //
 // A press over an existing untouched draft summons THAT draft (useChat.draftConversation), the press is about
-// the caret and the focus, and a second empty draft has nothing to be. Every window converges on the same tab
+// the caret and the focus, and a second empty draft has nothing to be. Only where the pressing window can SEE
+// that it is untouched, though: a window not drawing the chat mints a fresh one, since its copy of the strip
+// cannot tell an empty draft from one being typed into a window away. Every window converges on the same tab
 // either way: a receiving window holding its own untouched draft has it swept by the same write that seats the
 // summoned one.
 //
