@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { flyBuildMachineConfig } from "@intentic/sandbox-run/fly";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import { loadConfig } from "./config.js";
 import { createApp, deleteApp, createMachine, destroyMachine, flyBuildRole, FlyError, getMachineDetail } from "./sandbox/hosted/fly.js";
 import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./sandbox/hosted/fly-tokens.js";
@@ -128,7 +129,7 @@ const probeOverlay = (marker: string): string =>
         `RUN apt-get update \\`,
         `    && apt-get install -y --no-install-recommends gnucobol \\`,
         `    && rm -rf /var/lib/apt/lists/*`,
-        `RUN printf '%s\\n' 'IDENTIFICATION DIVISION.' 'PROGRAM-ID. SPIKE.' 'PROCEDURE DIVISION.' 'DISPLAY "${marker}".' 'STOP RUN.' > /tmp/spike.cob \\`,
+        `RUN printf '%s\\n' 'IDENTIFICATION DIVISION.' 'PROGRAM-ID. SPIKE.' 'PROCEDURE DIVISION.' ${shellQuote(`DISPLAY "${marker}".`)} 'STOP RUN.' > /tmp/spike.cob \\`,
         `    && cobc -x -free -o /usr/local/bin/spike /tmp/spike.cob \\`,
         `    && /usr/local/bin/spike`,
         ``,
