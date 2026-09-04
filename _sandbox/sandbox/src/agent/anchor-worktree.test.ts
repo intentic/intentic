@@ -13,6 +13,23 @@ const TITLE = "Agent: before this turn";
 
 const services = { agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` }, logger: { warn: vi.fn() } } as unknown as AnchorDeps;
 
+/* Which verb a call is, read git's own way: `-c <key>=<value>` pairs come BEFORE the subcommand, so the first
+ * token is not it (the staging call is `-c advice.addEmbeddedRepo=false add -A --ignore-errors`). Same rule as
+ * the runner's own subcommandOf (scaffold/exec.ts), which is not exported. */
+const subcommandOf = (args: readonly string[]): string => {
+    for (let index = 0; index < args.length; index += 1) {
+        const arg = args[index] ?? "";
+        if (arg === "-c") {
+            index += 1;
+            continue;
+        }
+        if (!arg.startsWith("-")) {
+            return arg;
+        }
+    }
+    return "";
+};
+
 /* Stands in for git: `dirty` names the repos whose checkout has something in it, `broken` the ones that throw.
  * HEAD reads back as a commit that says whether this repo was committed on the way through, which is what lets
  * the assertions below tell "we pinned what was there" from "we pinned a stale HEAD". */
@@ -23,7 +40,7 @@ const gitFake = (options: { dirty?: readonly string[]; broken?: readonly string[
         if (options.broken?.includes(repo) === true) {
             throw new Error(`no checkout at ${dir}`);
         }
-        const verb = args[0] ?? "";
+        const verb = subcommandOf(args);
         calls.push(`${verb}:${repo}`);
         if (verb === "status") {
             return { stdout: options.dirty?.includes(repo) === true ? "M file.ts\0" : "", stderr: "" };

@@ -158,6 +158,15 @@ const nestedRepo = async (work: string, repo: string): Promise<string> => {
     await sh(dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "one");
     return dir;
 };
+// The shape that froze a conversation: `git init` and nothing committed yet, so the dir is an embedded repo
+// with an unborn HEAD and no sha for root to record a gitlink from.
+const unbornRepo = async (work: string, repo: string): Promise<string> => {
+    const dir = join(work, repo);
+    await mkdir(dir, { recursive: true });
+    await sh(dir, "init", "-q", "--initial-branch=main");
+    await writeFile(join(dir, "app.ts"), "v1\n");
+    return dir;
+};
 const commitInNested = async (dir: string): Promise<string> => {
     await writeFile(join(dir, "app.ts"), "v2\n");
     await sh(dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-aq", "-m", "two");
@@ -226,6 +235,40 @@ test("a conversation's root worktree stages a nested repo but never commits one"
     expect(await sh(worktree, "ls-files")).toBe("notes.md");
     // The checkout is untouched: the repo is still there, still its own.
     expect(await readFile(join(worktree, "intent", "app.ts"), "utf8")).toBe("v1\n");
+});
+
+/* A repo the agent init'ed and has NOT COMMITTED IN, which is what an agent scaffolding a new one looks like
+ * for as long as it takes to write the files. Default `add -A` dies on it ("does not have a commit checked
+ * out") and stages NOTHING, so the whole remainder was lost and the exception took the land, the archive and
+ * the next turn's rebase down with it, leaving a card stamped error that pressing continue only reproduced. */
+test("an unborn nested repo costs its own gitlink and nothing else: the rest of the remainder still commits", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    const worktree = await agentWorktree(work, "agent-one");
+    await unbornRepo(worktree, "intent");
+    await writeFile(join(worktree, "notes.md"), "agent work\n");
+
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
+
+    // The turn's own file is on the branch; the unborn repo reached neither the index nor the commit.
+    expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\tnotes.md");
+    expect(await sh(worktree, "ls-files")).toBe("notes.md");
+    // And it is still sitting in the checkout, its own repo, untouched.
+    expect(await readFile(join(worktree, "intent", "app.ts"), "utf8")).toBe("v1\n");
+    expect(await sh(join(worktree, "intent"), "status", "--porcelain")).toBe("?? app.ts");
+});
+
+test("a NESTED repo of the composition survives an unborn repo inside it too", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    const app = await nestedRepo(work, "app");
+    await unbornRepo(app, "vendor");
+    await writeFile(join(app, "feature.ts"), "v1\n");
+
+    expect(await commitWorktreeRemainder("app", app, "Agent: one")).toBe(true);
+
+    expect(await sh(app, "ls-files")).toBe("app.ts\nfeature.ts");
 });
 
 test("a nested repo a past turn committed is dropped, and the review's span comes back clean", async () => {

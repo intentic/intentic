@@ -2,7 +2,7 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { defaultGit, gitCommitAll, gitInit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, gitCommitAll, gitInit, gitStageAll, type GitRunner } from "@intentic/scaffold";
 import { repoGitDir, rootExcludes, syncRootExcludes } from "../history/history.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
@@ -160,12 +160,18 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
  *
  * A NESTED repo of the composition commits through plain gitCommitAll, a gitlink there is a submodule of the
  * USER's repo, and dropping it would land a deletion nobody asked for.
+ *
+ * The staging is gitStageAll rather than a bare `add -A` for the case one rung below this one: a repo the agent
+ * created and has NOT COMMITTED IN. That one never reaches the index as a gitlink to be dropped, because git
+ * aborts the whole staging over it (see gitStageAll) — and this function is on the path of every land, every
+ * archive and every turn-start rebase, so the abort stopped being a staging failure and became a conversation
+ * nobody could continue.
  */
 export const commitWorktreeRemainder = async (repo: string, dir: string, message: string, git: GitRunner = defaultGit): Promise<boolean> => {
     if (repo !== "root") {
         return gitCommitAll(dir, message, AGENT_GIT_AUTHOR, git);
     }
-    await git(dir, ["add", "-A"]);
+    await gitStageAll(dir, git);
     const gitlinks = await strayGitlinks(dir, git);
     if (gitlinks.length > 0) {
         await git(dir, ["update-index", "--force-remove", "--", ...gitlinks]);
@@ -264,7 +270,9 @@ export const ensureLocalRootRepo = async (
 // Changes review starts clean and daemon-owned files don't surface as a phantom add. --allow-empty keeps HEAD
 // born even on an empty workspace, no unborn-HEAD special case for root.
 export const commitRootBaseline = async (workspace: WorkspacePaths, git: GitRunner = defaultGit): Promise<void> => {
-    await git(workspace.root, ["add", "-A"]);
+    // gitStageAll: a workspace that arrives holding an uncommitted `git init` (an upload, a restore) would
+    // otherwise abort the baseline and leave the sandbox with an unborn root on every boot after it.
+    await gitStageAll(workspace.root, git);
     await git(workspace.root, [
         "-c",
         `user.name=${AGENT_GIT_AUTHOR.name}`,

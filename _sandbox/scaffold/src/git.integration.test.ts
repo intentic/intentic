@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import type { GitRunner } from "./exec.js";
-import { gitClone, gitCommitAll, gitInit, gitStatus, gitSync } from "./git.js";
+import { gitClone, gitCommitAll, gitInit, gitStageAll, gitStatus, gitSync } from "./git.js";
 
 // A GitRunner that returns canned stdout per joined-args key and records every invocation.
 const recordingGit = (responses: Readonly<Record<string, string>>) => {
@@ -85,11 +85,23 @@ test("gitStatus on a clean tree is not dirty", async () => {
     expect(await gitStatus("/work/app", git)).toEqual({ branch: "main", dirty: false, files: [] });
 });
 
+// A GitRunner that fails every call with git's own exit code, the half of a rejection gitStageAll reads.
+const failingGit = (code: number, message: string): GitRunner => async () => {
+    throw Object.assign(new Error(message), { code, stdout: "", stderr: message });
+};
+
+/* `--ignore-errors` demotes a path git cannot stage from "the run dies" to "that path is skipped", and git
+ * marks the difference in the exit code: 1 for paths skipped, 128 for a fault that staged nothing at all. */
+test("gitStageAll swallows the skipped-path exit and rethrows a genuine git fault", async () => {
+    await expect(gitStageAll("/work/app", failingGit(1, "error: 'x/' does not have a commit checked out"))).resolves.toBeUndefined();
+    await expect(gitStageAll("/work/app", failingGit(128, "fatal: not a git repository"))).rejects.toThrow("not a git repository");
+});
+
 test("gitCommitAll stages, commits with the author identity, and reports a commit was made", async () => {
     const { git, calls } = recordingGit({ "diff --cached --name-only -z": "src/app.ts\0" });
     const committed = await gitCommitAll(`${WORKSPACE_ROOT}/app`, "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
     expect(committed).toBe(true);
-    expect(calls).toContainEqual(["/work/app", "add", "-A"]);
+    expect(calls).toContainEqual(["/work/app", "-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"]);
     // `--no-verify` is deliberate: this commit is provenance, and the repo's own hooks must not make an agent's
     // work unlandable: see gitCommitAll.
     expect(calls).toContainEqual([
@@ -111,7 +123,7 @@ test("gitCommitAll is a no-op (returns false, never commits) when staging leaves
     const { git, calls } = recordingGit({ "status --porcelain": " m nested\n", "diff --cached --name-only -z": "" });
     const committed = await gitCommitAll(`${WORKSPACE_ROOT}/app`, "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
     expect(committed).toBe(false);
-    expect(calls).toContainEqual(["/work/app", "add", "-A"]);
+    expect(calls).toContainEqual(["/work/app", "-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"]);
     expect(calls.some((call) => call.includes("commit"))).toBe(false);
 });
 

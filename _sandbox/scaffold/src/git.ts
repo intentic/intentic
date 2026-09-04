@@ -71,6 +71,38 @@ export const gitStatus = async (dir: string, git: GitRunner = defaultGit): Promi
     return { branch, dirty: files.length > 0, files };
 };
 
+/* STAGE THE WHOLE TREE, AND SURVIVE THE ONE PATH GIT REFUSES TO STAGE.
+ *
+ * `add -A` is all-or-nothing by default: it DIES on the first path it cannot record and stages nothing at all.
+ * The path that turns up in this product is an embedded repo with NO COMMIT — an agent that ran `git init` in a
+ * new directory and has not committed inside it yet. A repo dir is staged as a gitlink, a gitlink is a HEAD sha,
+ * and an unborn HEAD has none, so git says "'x/' does not have a commit checked out" and aborts the run, taking
+ * every unrelated edit in the tree down with it.
+ *
+ * That is not a corner: every step that preserves an agent's worktree stages through here (the turn anchor, the
+ * turn-start rebase, the land, the archive), so one uncommitted `git init` froze a whole conversation. The land
+ * threw, the card was stamped `error` with git's sentence on it, the turn anchor was lost, and pressing continue
+ * reproduced all of it, because nothing about pressing continue commits the repo the agent left unborn.
+ *
+ * `--ignore-errors` turns the death into a SKIP: the offending path stays out of the index, everything else is
+ * staged, and the exit code drops from 128 to 1. So exit 1 means "some paths were skipped", which is exactly the
+ * outcome this wants and the only one it swallows. Anything else — 128 for a dir that is not a repo, a locked
+ * index, a broken object store — is a genuine fault and still throws, because a remainder that could not be
+ * staged AT ALL must never pass for one that was clean.
+ *
+ * The embedded-repo advice is off because it is addressed to nobody here: nested repos are ordinary in this
+ * workspace (every repo of a composition is one) and root drops the gitlinks it stages moments later, while the
+ * hint printed a twelve-line submodule tutorial into the daemon log on every land. */
+export const gitStageAll = async (dir: string, git: GitRunner = defaultGit): Promise<void> => {
+    try {
+        await git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"]);
+    } catch (error) {
+        if ((error as { code?: unknown }).code !== 1) {
+            throw error;
+        }
+    }
+};
+
 // Stage everything and commit; returns false (no commit) when there was nothing to commit, so callers can
 // commit freely without erroring on a no-op. The gate is the INDEX after staging, never the worktree: `git
 // status` also reports dirt that `add -A` cannot stage, modified content inside a NESTED repo, whose gitlink
@@ -83,7 +115,7 @@ export const gitCommitAll = async (
     author: { readonly name: string; readonly email: string },
     git: GitRunner = defaultGit,
 ): Promise<boolean> => {
-    await git(dir, ["add", "-A"]);
+    await gitStageAll(dir, git);
     // Unborn HEAD included: with no commit to diff against, `--cached` falls back to the empty tree, so a
     // repo's first commit reports its staged files rather than reading as nothing to do.
     if ((await git(dir, ["diff", "--cached", "--name-only", "-z"])).stdout === "") {
