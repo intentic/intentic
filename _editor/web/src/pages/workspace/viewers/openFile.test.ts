@@ -1,3 +1,4 @@
+import { PLAN_DOCUMENTS_DIR, STATE_DIR } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it } from "vitest";
 import { registerViewer } from "../../../core-views/viewerRegistry";
 import { RAW_MAX_BYTES } from "../fileType";
@@ -30,6 +31,20 @@ describe(`resolveOpenFile without any viewer extension`, () => {
         // and not mojibake.
         expect(resolveOpenFile(`clip.mp4`, 1000)).toEqual({ kind: `binary` });
         expect(resolveOpenFile(`logo.png`, 1000)).toEqual({ kind: `binary` });
+    });
+});
+
+describe(`resolveOpenFile over the daemon's control plane`, () => {
+    it(`refuses the entries the file API refuses, from the path alone`, () => {
+        // Answered before anything is fetched, so a locked row never opens a tab and closes it again.
+        expect(resolveOpenFile(`${STATE_DIR}/records/sessions/claude/projects/x.jsonl`, 1000)).toEqual({ kind: `locked` });
+        expect(resolveOpenFile(`${STATE_DIR}/config/capabilities.json`, 1000)).toEqual({ kind: `locked` });
+    });
+
+    it(`opens a plan document as the document it is`, () => {
+        // The card that asks the reader to approve a plan links to its file, and that link used to land on the
+        // padlock: the plans directory sits inside the locked session store and is not itself locked.
+        expect(resolveOpenFile(`${PLAN_DOCUMENTS_DIR}/twinkly-soaring-floyd.md`, 1000)).toEqual({ kind: `markdown`, lang: `markdown` });
     });
 });
 

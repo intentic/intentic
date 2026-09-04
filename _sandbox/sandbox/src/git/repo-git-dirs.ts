@@ -59,6 +59,32 @@ const unpinWorktree = async (repoDir: string, git: GitRunner): Promise<void> => 
     await git(repoDir, ["config", "--unset", "core.worktree"]).catch(() => undefined);
 };
 
+/* NO REPO WITH A CHECKOUT CALLS ITSELF BARE, the third part of the same invariant — and the one that fails
+ * loudly rather than subtly.
+ *
+ * `core.bare` lives in the shared config too, so it is a fact about the GIT DIR rather than about any one
+ * worktree. A git dir that arrived from a `--bare` clone, or one whose checkout was hung off it with `git
+ * worktree add` afterwards, carries `true`; the pointer at `/work/<repo>/.git` then names a repository git
+ * refuses to work in. `git -C /work/<repo> status` answers `fatal: this operation must be run in a work tree`,
+ * and the Changes panel draws the repo as one it could not read with git's own sentence under it — while the
+ * files are sitting right there.
+ *
+ * LINKED worktrees are unaffected, which is what makes it easy to miss for a long time: they enter through
+ * their own admin dir under `worktrees/`, where the flag does not apply. So every agent conversation reads its
+ * repo perfectly and the owner's MAIN tree — the only one anybody reviews changes in — reports nothing at all.
+ *
+ * Every repo this step visits was discovered BY its directory under /work, so a checkout provably exists for it
+ * and `false` is the only value that can be right. Read before writing, so the steady state (which is every
+ * repo, nearly every boot) touches no config file and takes no lock. */
+const unbare = async (repoDir: string, git: GitRunner): Promise<void> => {
+    // Exits non-zero when the key is absent, which is itself the target shape: git's default is false.
+    const current = await git(repoDir, ["config", "--get", "core.bare"]).catch(() => undefined);
+    if (current?.stdout.trim() !== "true") {
+        return;
+    }
+    await git(repoDir, ["config", "core.bare", "false"]);
+};
+
 const relocateOne = async (repo: string, workspace: WorkspacePaths, historyRoot: string, logger: Logger, git: GitRunner): Promise<void> => {
     const repoDir = join(workspace.root, repo);
     if ((await gitEntryKind(repoDir)) !== "dir") {
@@ -93,10 +119,11 @@ const relocateOne = async (repo: string, workspace: WorkspacePaths, historyRoot:
     logger.info({ repo, target }, "git dirs: relocated in-tree git dir off the workspace root");
 };
 
-// Converge every workspace repo onto an out-of-tree git dir with no pinned worktree. Best-effort per repo: one
-// repo that cannot move must not stop the others, and must not stop the boot, it only loses isolation for
-// itself. The unpin runs for EVERY repo, not only the ones that move: a repo converged by an earlier boot is
-// already in the pointer shape and would otherwise keep the stale pin forever.
+// Converge every workspace repo onto an out-of-tree git dir that names no worktree of its own and does not call
+// itself bare. Best-effort per repo: one repo that cannot move must not stop the others, and must not stop the
+// boot, it only loses isolation for itself. The two config repairs run for EVERY repo, not only the ones that
+// move: a repo converged by an earlier boot is already in the pointer shape and would otherwise keep a stale
+// pin — or an unusable main checkout — forever.
 export const ensureRepoGitDirs = async (
     workspace: WorkspacePaths,
     historyRoot: string,
@@ -108,5 +135,8 @@ export const ensureRepoGitDirs = async (
             logger.warn({ err: error, repo }, "git dirs: relocation failed, repo keeps its in-tree git dir"),
         );
         await unpinWorktree(join(workspace.root, repo), git);
+        await unbare(join(workspace.root, repo), git).catch((error: unknown) =>
+            logger.warn({ err: error, repo }, "git dirs: could not clear core.bare, the main checkout stays unreadable to git"),
+        );
     }
 };

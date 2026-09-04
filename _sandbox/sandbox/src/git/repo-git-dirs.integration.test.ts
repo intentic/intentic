@@ -105,6 +105,22 @@ test("a repo converged by an earlier boot still loses a worktree pin left behind
     await expect(git(repo, "config", "--get", "core.worktree")).rejects.toThrow();
 });
 
+test("a git dir that calls itself bare gets its main checkout back", async () => {
+    const { root, historyRoot, repo } = await workspace();
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+    // What a repo cloned `--bare` and given a checkout afterwards carries, and what an already-converged repo
+    // in the field may be carrying. The flag lives in the SHARED config, so it disables the main tree while
+    // every linked worktree keeps reading fine — which is why it hid behind working agent conversations and
+    // showed up only as a Changes panel that could not read the one repo the owner reviews in.
+    await git(repo, "config", "core.bare", "true");
+    await expect(git(repo, "status", "--porcelain")).rejects.toThrow(/must be run in a work tree/);
+
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    expect(await git(repo, "config", "--get", "core.bare")).toBe("false");
+    expect(await git(repo, "status", "--porcelain")).toBe("");
+});
+
 test("an occupied target leaves the repo working rather than clobbering either git dir", async () => {
     const { root, historyRoot, repo } = await workspace();
     // Something else already parked under this id: the one case where relocation must decline.

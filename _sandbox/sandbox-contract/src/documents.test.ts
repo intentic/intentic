@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { documentOf, documentTitle, isDocumentPath, isPlanDocumentPath, PLAN_DOCUMENTS_DIR } from "./documents.js";
+import { documentOf, documentTitle, isDocumentPath, isPlanDocumentPath } from "./documents.js";
+import { PLAN_DOCUMENTS_DIR } from "./workspace-state.js";
 
 const write = (path: string, newText: string, extra: { oldText?: string; truncated?: boolean } = {}) => [
     { type: "diff" as const, path, newText, ...extra },

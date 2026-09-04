@@ -647,8 +647,9 @@
    14px at the sides matches the header's own inset, so the title, the body and the answers sit on one margin.
 
    8px on top, because the HEADER already contributes 8: the reader sees the sum, and 12+8 opened a band under
-   the title wide enough to read as a missing element — most visibly on the question card, where the thing under
-   the header is a bordered document and the empty strip above it had an edge to be measured against. 8+8 is
+   the title wide enough to read as a missing element — most visibly on the question card, where what follows
+   the header is a document's own name row and the empty strip above it had an edge to be measured against. The
+   same 8 is what .chat-card-doc-head spends, so the two stand off the header identically. 8+8 is
    the same 16 the card spends above its title (8 padding, and the title's own leading), so the header now sits
    in an even band rather than a top-heavy one.
 
@@ -669,17 +670,73 @@
 .chat-card-row {
     padding: 10px 14px;
 }
-/* The document a card is ABOUT (ChatDocumentBody), which is a bordered surface rather than prose: it takes the
-   same insets, from whichever side it is attached to the card body it accompanies. */
+/* ── THE DOCUMENT A CARD IS ABOUT ────────────────────────────────────────────────────────────────
+   (ChatDocumentBody in its `in-card` form: the plan being approved, the write-up a question is about.)
+
+   A SECTION OF THE CARD, NOT A BOX ON IT, and the change is the difference between reading the plan and
+   squinting at a quotation of it.
+
+   It used to be the transcript's boxed form — a rounded border and `bg-canvas` — dropped inside `.chat-card-body`
+   and inset 14px on each side. Three things went wrong at once, and every one of them is charged to the
+   longest-form thing in the panel:
+
+     TWO FRAMES. The card's 14px inset, the box's border and its own 12px padding is 27px a side of a docked
+     panel spent on chrome around the one block of text the card exists to show. At the column's body size that
+     is about four characters off every line of the document, on both sides, for the whole length of it.
+
+     AN INVERTED GROUND. `.chat-surface` is a light wash and `bg-canvas` is the panel's darkest surface, so the
+     document sat DARKER than the card containing it. Depth reads as recession: the plan the reader is being
+     asked to approve rendered as an attachment quoted inside the ask, which is exactly backwards.
+
+     A LETTERBOX. 22rem of a scrolling box, inside a scrolling transcript, is a plan read six lines at a time.
+
+   So: no border, no ground of its own, and the card's own 14px margin, which puts the summary above it, the
+   document, and the Approve button below it on ONE left edge. A hairline is the whole boundary — the same
+   statement the box was making, at 1px instead of a frame. The height cap is the call site's (see
+   ChatMessageView) and is viewport-relative now: a card's answers still have to be reachable under it, and how
+   much room that leaves is a fact about the window, not a number in a stylesheet.
+
+   Full-bleed rather than inset, which is what makes a hairline here a divider rather than a floating rule: it
+   spans the card, so it separates two bands of one surface instead of underlining a block sitting on it. */
 .chat-card-doc {
-    margin-left: 14px;
-    margin-right: 14px;
+    /* The card's own side inset, named once here and spent by both rows below, so the document's name row, its
+       prose, the body above it and the answers under it are provably on one margin — which is the entire claim
+       this redraw makes. The number is .chat-card-body's, and that block explains why it is 14. */
+    --chat-card-doc-inset: 14px;
 }
-.chat-card-doc-top {
-    margin-top: 8px;
+/* WHICH EDGES CARRY A HAIRLINE is the call site's, because it depends on what the document sits between.
+
+   THE BOTTOM EDGE IS THE ONE THAT MATTERS, and it is the one thing the box was genuinely doing: a document
+   longer than the cap is cut mid-sentence by the scroll, and with nothing under it but air, the plan reads as
+   having stopped there rather than as continuing past the fold. A rule says where the band ends; the scrollbar
+   inside it says there is more. Both cards take it.
+
+   The TOP edge is only ambiguous on the plan card, which runs summary → document → answers: prose under prose
+   on one ground, with no other tell, so it gets the line too. The question card runs question → document →
+   options, and its top edge is the card's own HEADER — ChatCard argues (with the reasoning) that a rule under a
+   card's title reads as a banner rather than as a boundary, and none is needed: the document's name row is 2xs,
+   muted and led by a chevron, already a different register from the sentence above it, and it stands off the
+   header by the same 16px the body does. */
+.chat-card-doc-top-rule {
+    border-top: 1px solid var(--color-line);
 }
-.chat-card-doc-bottom {
-    margin-bottom: 10px;
+.chat-card-doc-bottom-rule {
+    border-bottom: 1px solid var(--color-line);
+}
+/* The name row, at the same 8px the body spends under the header (see .chat-card-body for why that number and
+   not 12). Folded, this row IS the section and 8/8 reads even; open, the bottom 8 is the air between the
+   document's name and its first line. */
+.chat-card-doc-head {
+    padding: 8px var(--chat-card-doc-inset);
+}
+/* The prose. No top padding — the row above already spent it — and the body's own 10px at the bottom, for the
+   line-box leading that padding cannot see.
+   `overscroll-behavior: contain` because this is a scroller inside the transcript's scroller: without it,
+   reaching the end of the plan hands the wheel straight to the transcript and throws the card being read off
+   the screen. */
+.chat-card-doc-body {
+    padding: 0 var(--chat-card-doc-inset) 10px;
+    overscroll-behavior: contain;
 }
 
 /* The taken option on a DECIDED card. Quieter than the live `.ui-row-select-on` it replaces when the card

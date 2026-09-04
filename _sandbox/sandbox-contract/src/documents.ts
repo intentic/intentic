@@ -1,6 +1,6 @@
-import { STATE_DIR } from "@intentic/constants";
 import type { CardDocument, ToolCallContent } from "./events.js";
 import { planParts } from "./title.js";
+import { PLAN_DOCUMENTS_DIR } from "./workspace-state.js";
 
 /* A DOCUMENT A TURN WROTE FOR A PERSON TO READ, told apart from the files it changed for the machine.
  *
@@ -18,14 +18,6 @@ import { planParts } from "./title.js";
  * prose it is a mid-sentence slice with no heading, and the DIFF is what a reader wants from an edit anyway. So
  * a Write of a markdown file is a document, and an edit to one stays a diff. */
 
-/* WHERE THE CLI'S PLAN FILES LAND, workspace-relative.
- *
- * `~/.claude/plans` is a symlink onto this directory (sessions/session-store.ts links the SDK's conversation
- * state onto the workspace volume), which makes a plan file the one document with a HARNESS-OWNED address: no
- * guessing whether prose is a plan, no threshold on length, the path says so. That is why plan documents get
- * their own treatment while everything else rides the general markdown rule above. */
-export const PLAN_DOCUMENTS_DIR = `${STATE_DIR}/records/sessions/claude/plans`;
-
 // Prose, by extension. Deliberately short: a document is something the chat can RENDER, and markdown is what
 // the chat's prose pipeline speaks. A `.txt` report would render as an unstyled wall and reads better as the
 // plain text box it already gets.
@@ -36,8 +28,12 @@ export const isDocumentPath = (path: string): boolean => {
     return DOCUMENT_EXTENSIONS.some((extension) => lower.endsWith(extension));
 };
 
-// Whether a path is one of the CLI's plan files. Matched on the directory rather than on the name, which is a
-// mint-fresh three-word phrase (`map-of-this-wiggly-spring.md`) carrying no signal at all.
+/* Whether a path is one of the CLI's plan files, which is what earns a document the plan treatment here rather
+ * than the general markdown rule above: the harness owns that address, so there is no guessing whether prose is
+ * a plan and no threshold on length. Matched on the DIRECTORY rather than on the name, which is a mint-fresh
+ * three-word phrase (`map-of-this-wiggly-spring.md`) carrying no signal at all.
+ *
+ * The directory itself is declared in workspace-state.ts, beside the lock it is the one exception to. */
 export const isPlanDocumentPath = (path: string): boolean => path.startsWith(`${PLAN_DOCUMENTS_DIR}/`);
 
 /* What a document is CALLED. Its opening heading when it has one, which is the line the author wrote to name

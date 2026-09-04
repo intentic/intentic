@@ -236,6 +236,18 @@ const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.pla
 
 const planTitle = (request: TranscriptPlan): string => planParts(request.text).title ?? `Proposed plan`;
 
+/* Whether the document's own name row still has anything to say, once the card it is a section of is already
+ * headed with a title. The plan card usually is not: the model writes the plan to a file and summarises it in
+ * the prose beside it, and both open with the same heading — so the card says "Soft deletes for the users
+ * table", and five lines below it the section says it again, which reads as a document quoted inside another
+ * one rather than as the same one continued. The Write card that produces a document answers this the same way
+ * and for the same reason (ChatDocumentBody's `titled`); it just always knows the answer.
+ *
+ * Compared rather than assumed, because the two genuinely differ often enough to matter — a question card's
+ * title is a QUESTION, and a plan may summarise a document titled something else. When they differ the name is
+ * the most useful thing on the row. */
+const documentTitled = (cardTitle: string, carried: CardDocument): boolean => carried.title.trim() !== cardTitle.trim();
+
 /* Whether this bubble ALREADY draws the document a card is carrying, as the card of the write that produced it
  * (a markdown Write renders as prose, see toolPresentation). The question or plan card then opens FOLDED: the
  * reader has the document on screen, and a second full copy under the first is length, not emphasis.
@@ -1113,14 +1125,27 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
                 <!-- THE PLAN THE TEXT ABOVE POINTS AT. Present only when the model wrote the real plan to a file
                      and summarised it in the adjacent prose (agent.ts decides, on which of the two is longer), so
-                     approving is never a yes to a document the card did not show. -->
+                     approving is never a yes to a document the card did not show.
+
+                     `in-card`: this is the card's content, not an attachment to it (see chat.css). Ruled on
+                     BOTH edges, which is the one thing the box it replaces was really doing: a plan past the
+                     cap is cut mid-sentence by the scroll, so the band has to say where it ends or the cut
+                     reads as the plan having stopped there. The rules also put the answers strip outside the
+                     band, which is honest — you approve what is inside it.
+
+                     THE HEIGHT IS THE WINDOW'S, not a number: the cap exists so the Approve button stays
+                     reachable under the plan, and how much room that leaves is a property of the pane, which a
+                     fixed 22rem answered identically on a laptop and on a 4K display. 40rem is the ceiling
+                     because past it the measure, not the height, is what stops being readable. -->
                 <ChatDocumentBody
                     v-if="message.plan.document"
                     :document="message.plan.document"
                     foldable
+                    in-card
                     :open="!documentDrawn(message.plan.document)"
-                    max-height="22rem"
-                    class="chat-card-doc chat-card-doc-bottom"
+                    :titled="documentTitled(planTitle(message.plan), message.plan.document)"
+                    max-height="min(58dvh, 40rem)"
+                    class="chat-card-doc-top-rule chat-card-doc-bottom-rule"
                 />
                 <template v-if="message.plan.status === 'pending'" #actions>
                     <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
@@ -1148,14 +1173,20 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <!-- WHAT THE QUESTION IS ABOUT, above the options and inside the same card: the write-up this
                      turn produced (agent.ts attaches it; the model is asked for nothing). A choice between
                      options describing a document is unanswerable without the document, and by the time the card
-                     is raised that document is a folded card somewhere up the scroll. -->
+                     is raised that document is a folded card somewhere up the scroll.
+
+                     `in-card`, and ruled at the BOTTOM alone: the options follow it and need the boundary, while
+                     the edge above is the card's own header, which ChatCard keeps clear of rules (see chat.css
+                     for both halves). Same window-relative cap as the plan card — the options under it are the
+                     answer, and a document that buries them is the folded card this one replaces. -->
                 <ChatDocumentBody
                     v-if="message.question.document"
                     :document="message.question.document"
                     foldable
+                    in-card
                     :open="!documentDrawn(message.question.document)"
-                    max-height="22rem"
-                    class="chat-card-doc chat-card-doc-top"
+                    max-height="min(58dvh, 40rem)"
+                    class="chat-card-doc-bottom-rule"
                 />
                 <div class="chat-card-body flex flex-col gap-4">
                     <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">

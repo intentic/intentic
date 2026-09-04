@@ -6,6 +6,9 @@ import {
     isLockedWorkspacePath,
     isReportedManifest,
     isReviewableLockedPath,
+    LOCKED_STATE_ENTRIES,
+    lockedWorkspaceEntry,
+    PLAN_DOCUMENTS_DIR,
     REPORTED_MANIFEST_PATHS,
     SEARCHABLE_STATE_PATHS,
     SHARED_STATE_PATHS,
@@ -243,6 +246,47 @@ describe(`isLockedWorkspacePath`, () => {
     it(`reads a platform path the same as a posix one`, () => {
         expect(isLockedWorkspacePath(`.intentic\\secrets\\auth\\codex`)).toBe(true);
         expect(isLockedWorkspacePath(`./.intentic/config/capabilities.json`)).toBe(true);
+    });
+
+    it(`lets the plan documents out of the session store around them`, () => {
+        // The plan a card asks the reader to approve, whose full text that card already renders. Refusing the
+        // file left the card's one link into the workspace landing on a padlock about the document it was
+        // asking about; the transcripts it sits beside stay locked.
+        expect(isLockedWorkspacePath(`${PLAN_DOCUMENTS_DIR}/wiggly-spring.md`)).toBe(false);
+        expect(isLockedWorkspacePath(PLAN_DOCUMENTS_DIR)).toBe(false);
+        expect(isLockedWorkspacePath(`.intentic/records/sessions/claude/projects/x.jsonl`)).toBe(true);
+        expect(isLockedWorkspacePath(`.intentic/records/sessions`)).toBe(true);
+        // …and it is the directory that is exempt, not the word: a sibling store named for it is not one.
+        expect(isLockedWorkspacePath(`.intentic/records/sessions/claude/plans-backup/x.md`)).toBe(true);
+    });
+});
+
+/* WHICH entry a locked path belongs to, which is what the refusal screen says a file holds and where to manage
+ * it. Split out from the boolean so the browser can key its sentences on the daemon's own list instead of a
+ * second copy of the rule — the copy it kept drifted through the state regrouping and stranded every locked
+ * file on the generic sentence. */
+describe(`lockedWorkspaceEntry`, () => {
+    it(`names the entry a path matched, not the leaf it ends at`, () => {
+        // A locked FOLDER is one row in the explorer and never descended, so the name worth reporting is the
+        // folder's: "Cookies is kept private" is true of something the reader has never heard of.
+        expect(lockedWorkspaceEntry(`.intentic/local/browser/Default/Cookies`)).toBe(`local/browser`);
+        expect(lockedWorkspaceEntry(`.intentic/secrets/auth/codex/auth.json`)).toBe(`secrets/auth`);
+        expect(lockedWorkspaceEntry(`.intentic/config/capabilities.json`)).toBe(`config/capabilities.json`);
+        expect(lockedWorkspaceEntry(`.git/config`)).toBe(`.git`);
+    });
+
+    it(`answers undefined for everything the lock does not hold`, () => {
+        expect(lockedWorkspaceEntry(`src/app.ts`)).toBeUndefined();
+        expect(lockedWorkspaceEntry(`.intentic/config/settings.json`)).toBeUndefined();
+        expect(lockedWorkspaceEntry(`${PLAN_DOCUMENTS_DIR}/wiggly-spring.md`)).toBeUndefined();
+    });
+
+    it(`answers for every entry the lock declares`, () => {
+        // The set is the daemon's; this is what makes it addressable from the browser. An entry nobody can
+        // resolve back out is one the refusal screen could only describe generically.
+        for (const entry of LOCKED_STATE_ENTRIES) {
+            expect([entry, lockedWorkspaceEntry(`${STATE_DIR}/${entry}`)]).toEqual([entry, entry]);
+        }
     });
 });
 

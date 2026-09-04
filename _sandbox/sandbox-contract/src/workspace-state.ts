@@ -955,7 +955,7 @@ export const isReportedManifest = (relPath: string): boolean => REPORTED_MANIFES
  * and all of `identity` and `secrets` is in. That is not an accident of the grouping, it is a different question
  *, "would showing the bytes hand someone something" rather than "what kind of thing is this", so it keeps an
  * explicit list, just one that now names the folder each entry lives in. */
-const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
+export const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
     "identity/owner.json",
     "identity/members.json",
     "identity/control-tokens.json",
@@ -971,27 +971,58 @@ const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
     "claude.json",
 ]);
 
-/* Whether a workspace-root-relative path lands in that control plane, and so is shown locked rather than
- * opened. Scoped deliberately tight, matching the guard: only the ROOT `.intentic` counts (a repo's own nested
- * one is ordinary content) and only these entries within it, subtrees included, so a new provider dropped under
- * `auth/` is covered without a second edit.
+/* WHERE THE CLI'S PLAN FILES LAND, workspace-relative — and the one thing inside a locked entry that is not
+ * the sandbox's own state, which is why it is declared here rather than beside the card that draws it.
+ *
+ * `~/.claude/plans` is a symlink onto this directory (sessions/session-store.ts links the SDK's conversation
+ * state onto the workspace volume), so a plan file has a HARNESS-OWNED address: no guessing whether prose is a
+ * plan, no threshold on length, the path says so.
+ *
+ * What lands there is a DOCUMENT ADDRESSED TO THE READER. `records/sessions` is locked because it holds the
+ * provider's own conversation state; a plan is the opposite of that — the chat renders its full text into the
+ * card asking the reader to approve it, so opening the file publishes nothing the transcript had not. Locked
+ * anyway, the one link the card offers into the workspace landed on a padlock reading "it holds something only
+ * the sandbox itself uses", about a document the sandbox had just asked the reader to approve. */
+export const PLAN_DOCUMENTS_DIR = `${STATE_DIR}/records/sessions/claude/plans`;
+
+/* WHICH locked entry a workspace-root-relative path belongs to, or undefined for a path that is not in the
+ * control plane at all. Scoped deliberately tight, matching the guard: only the ROOT `.intentic` counts (a
+ * repo's own nested one is ordinary content) and only these entries within it, subtrees included, so a new
+ * provider dropped under `auth/` is covered without a second edit.
  *
  * The ROOT's own `.git` joins them. It is the pointer to the shadow history repo kept off the workspace so the
  * agent cannot rewrite its own past; a NESTED repo's `.git` is ordinary content and stays browsable.
  *
+ * The ENTRY rather than a boolean, because the screen that reports a refusal has to say what the file holds and
+ * where the thing inside it is actually managed, and it can only do that from the name of the entry the path
+ * matched — never from the leaf, which is a Chromium cookie jar or a mint-fresh session id. Keeping that lookup
+ * keyed on this function's answer is what stops the browser's sentences from drifting off the daemon's list, as
+ * they did through the regrouping: every one of them was still keyed on `sessions` and `auth` while the rule
+ * had moved to `records/sessions` and `secrets/auth`, so every locked file in the product fell through to the
+ * generic sentence and lost its way out.
+ *
  * Accepts either slash so a caller holding a platform path doesn't have to normalize first. */
-export const isLockedWorkspacePath = (relPath: string): boolean => {
+export const lockedWorkspaceEntry = (relPath: string): string | undefined => {
     const segments = relPath.split(/[\\/]/).filter((segment) => segment !== "" && segment !== ".");
     if (segments[0] === ".git") {
-        return true;
+        return ".git";
     }
     if (segments[0] !== STATE_DIR) {
-        return false;
+        return undefined;
+    }
+    const rel = segments.join("/");
+    if (rel === PLAN_DOCUMENTS_DIR || rel.startsWith(`${PLAN_DOCUMENTS_DIR}/`)) {
+        return undefined;
     }
     // Two segments, which covers both spellings in the set above: a grouped entry (`secrets/auth`) matches as
     // written, and a bare root entry (`claude.json`) joins to itself because there is no second segment to add.
-    return LOCKED_STATE_ENTRIES.has(segments.slice(1, 3).join("/"));
+    const entry = segments.slice(1, 3).join("/");
+    return LOCKED_STATE_ENTRIES.has(entry) ? entry : undefined;
 };
+
+// Whether a path lands in that control plane, and so is refused by the file API and shown locked rather than
+// opened. The question every guard asks; the entry above is for the one screen that has to name it.
+export const isLockedWorkspacePath = (relPath: string): boolean => lockedWorkspaceEntry(relPath) !== undefined;
 
 /* THE LOCKED ENTRIES THE ROOT REPO TRACKS, refused by the file API, and diffable anyway.
  *
