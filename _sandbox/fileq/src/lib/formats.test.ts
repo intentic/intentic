@@ -4,7 +4,17 @@ import { isDeriveIgnored } from "./derive.js";
 
 describe("the candidate pre-filter (what the daemon runs over every watcher batch)", () => {
     test("derivable extensions pass, case-blind", () => {
-        for (const path of ["docs/spec.docx", "a/b/Report.PDF", "photo.JPEG", "call.mp3", "deck.pptx", "page.html"]) {
+        for (const path of [
+            "docs/spec.docx",
+            "a/b/Report.PDF",
+            "photo.JPEG",
+            "call.mp3",
+            "deck.pptx",
+            "page.html",
+            "analysis.ipynb",
+            "letter.odt",
+            "book.EPUB",
+        ]) {
             expect(isCandidatePath(path), path).toBe(true);
         }
     });

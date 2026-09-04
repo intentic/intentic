@@ -41,3 +41,27 @@ login: the daemon injects two env vars into the panel process:
   a Google bearer. Keep it server-side (never expose it to the panel's browser code).
 
 Processes are not persisted: after a sandbox restart panels are stopped until started again from the sidebar.
+
+## Handing a panel (or any small web app) over as ONE file
+
+A preview URL needs the sandbox running. When the user wants to *keep* or *send* a small app — a report with
+interactive charts, a calculator, a prototype — build it into a single self-contained HTML file: no server, no
+CDN, opens from disk anywhere. For a Vite app:
+
+```sh
+pnpm add -D vite-plugin-singlefile
+```
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { viteSingleFile } from "vite-plugin-singlefile";
+export default defineConfig({ plugins: [/* your framework plugin, */ viteSingleFile()] });
+```
+
+`pnpm build` then writes `dist/index.html` with every script, style and small asset inlined. Check it the
+honest way — open it with the browser tools from `file://` and look — and hand it over by path, or copy it
+under `public/` **only** when a link was asked for, saying plainly that `public/` is served on the open
+internet. Fonts and images referenced by URL still leave; inline them (base64) or use system fonts if the
+file must work offline. A framework that cannot build to static (a server-rendered app) cannot be handed over
+this way; say so rather than shipping a file that only works next to its server.

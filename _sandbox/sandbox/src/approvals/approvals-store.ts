@@ -116,6 +116,33 @@ every platform that posts through a logged-in browser needs (see below).
   the app, which starts a short countdown they can still stop; the daemon then either does it itself or wakes
   you naming the exact files to act on. An item you mark approved yourself skips the countdown and takes the
   decision away from them.
+
+## Before you write one: the errand pattern
+
+Most actions are errands with a counterparty (a booking, a return, a cancellation, a form, an order), and
+they go wrong in the same three places. So, whatever the errand:
+
+- **Tier it, and say the tier.** Reading and researching needs no approval. An action that can be undone or
+  left unclaimed (a refill request, a reservation with free cancellation) is confirmed once, as a plan. An
+  action that cannot be undone or costs money (a cancellation, a payment, a message sent as the owner, a
+  deletion) is plan-confirm: the "details" say exactly what is lost and what it costs before anyone says yes.
+- **Gather everything the counterparty will ask for BEFORE the first contact**, from the workspace, the
+  knowledge base and the owner, and put it in "details": the account or order number, the dates, the name on
+  the account, what to do if nobody answers. An errand redone because a number was missing is the babysitting
+  the queue exists to avoid.
+- **The summary card is the approval.** "details" carries: what will happen, with whom, when, what it costs,
+  what personal information will be shared and nothing more, and what to watch for afterwards (a confirmation
+  number, a statement line). A refund or cancellation names the effective date and whether access ends now or
+  at period end.
+- **When a step fails, name the next path rather than stalling**: the portal is down → the phone line; no
+  refills left → the prescriber; the retailer wants a call → the call, as a new approval.
+- **Logins and payments are the owner's to do.** Where a flow needs their password, a code or a card, the
+  instructions hand the browser to them for that step (request_help) and continue after; you never type a
+  credential.
+- **Drafting in the owner's name reads their voice first.** If \`.agents/skills/my-writing-style/SKILL.md\`
+  exists, a post's "content" or a message in "details" is written under it; if it does not and the owner has
+  complained that drafts sound generic, the setup-writing-style skill (when installed) is the fix, not a
+  guess at their tone.
 `;
 
 // Approvals are native to every sandbox (like automations), so no capability owns this skill, the daemon

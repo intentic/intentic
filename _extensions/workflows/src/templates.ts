@@ -282,4 +282,105 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
             gate: { step: `judge`, field: `verdict`, pass: [`pass`] },
         },
     },
+    /* THE FOURTH CARD IS RESEARCH, and it is the one shape here that is about READING rather than building:
+     * a plan, three researchers that never see each other, and one writer that sees all three. It exists
+     * because the honest version of "research this" is too big for one session: the context that would hold
+     * fifteen fetched pages per angle is the same context that then has to write, and a coordinator that also
+     * researches loses the plan under its own notes. Splitting the roles is what keeps each one small.
+     *
+     * THE PLAN IS DECLARED OUTPUT because the three researchers are handed it under `### From "Plan"` and each
+     * takes ONE of its subtopics by field name: `subtopic_1` for researcher 1, and so on. Three fields rather
+     * than a list because a step is one prompt and cannot be told "take the Nth" of something whose length the
+     * template does not know. Three is the default the decomposition table converges on for a focused topic.
+     *
+     * NOTES TRAVEL AS THE CLOSING MESSAGE, not as files. Each step runs in a worktree of its own, and the
+     * writer's worktree holds none of the researchers' files; what a downstream step IS handed is its
+     * predecessors' reports. So a researcher's report is its notes in full, and the file it also writes is a
+     * courtesy copy for the branch. The writer's report is the whole document for the same reason.
+     *
+     * UNPINNED THROUGHOUT: the value here is the shape, not a second model, and a research fan-out on whatever
+     * the owner normally uses is the cheapest version of it. */
+    {
+        icon: `search`,
+        summary: `Your question becomes a plan with three angles; three researchers each take one, in parallel, and write sourced notes; one writer reads all three and delivers a report that answers the question, citations inline.`,
+        workflow: {
+            id: `research-report`,
+            name: `Research report`,
+            description: `A question decomposed into three subtopics, researched in parallel with every claim sourced, and synthesised into one report with inline citations and an honest account of what could not be found.`,
+            maxParallel: 3,
+            steps: [
+                step(`plan`, `Plan`, {
+                    goal: `The request is decomposed into three mutually exclusive subtopics that together cover it, with its constraints stated.`,
+                    prompt:
+                        `Turn the request above into a research plan. Decide what it is really asking, note any constraint it carries (a time window, a geography, a scope), and split it into THREE subtopics that are mutually exclusive and together exhaustive: distinct facets, angles, entities or regions, never three restatements of the whole. ` +
+                        `Give the research a short title in sentence case, 3 to 6 words, letters and numbers only. Write each subtopic as the brief its researcher will work from: the objective in one sentence, three to five key questions, the kinds of source to prefer. Do no research yourself.`,
+                    output: {
+                        kind: `json`,
+                        fields: [
+                            {
+                                name: `title`,
+                                type: `string`,
+                                description: `3 to 6 words, sentence case, letters and numbers only: names the report and the notes folder`,
+                                required: true,
+                            },
+                            {
+                                name: `constraints`,
+                                type: `string`,
+                                description: `the bounds every researcher must respect: time window, geography, scope, or "none"`,
+                                required: true,
+                            },
+                            {
+                                name: `subtopic_1`,
+                                type: `string`,
+                                description: `the first researcher's brief: objective, key questions, preferred sources`,
+                                required: true,
+                            },
+                            {
+                                name: `subtopic_2`,
+                                type: `string`,
+                                description: `the second researcher's brief, disjoint from the first`,
+                                required: true,
+                            },
+                            {
+                                name: `subtopic_3`,
+                                type: `string`,
+                                description: `the third researcher's brief, disjoint from the other two`,
+                                required: true,
+                            },
+                        ],
+                    },
+                }),
+                ...[1, 2, 3].map((index) =>
+                    step(`research-${index}`, `Research ${index}`, {
+                        needs: [`plan`],
+                        goal: `Subtopic ${index} of the plan is answered with cited findings, and what could not be found is named.`,
+                        prompt:
+                            `You are one of three researchers working the plan above in parallel; the others cover the other subtopics, so stay inside yours: take the brief in the plan's field subtopic_${index}, and respect its constraints. ` +
+                            `Loop: name the gap, search (short queries under five words work best; \`webq\` fetches a page as clean markdown), fetch the pages worth reading in full rather than trusting a snippet, repeat. Vary phrasing between searches. About ten tool calls is typical and fifteen is the ceiling. ` +
+                            `Prefer primary sources; treat predictions and hedged narrative as speculation, not fact; when sources conflict say so rather than picking one silently; for recent topics trust what you fetched over what you remember. ` +
+                            `Never invent a statistic, quote or citation. A claim you cannot source goes under Gaps, not under Findings. ` +
+                            `Your closing message IS your notes and is handed to the writer verbatim, so make it complete and self-contained, in exactly this shape: a top heading with the subtopic, then for each key question a "### Takeaway" (one or two sentences), "### Cited findings" (one line per fact, each ending with an inline [Source](URL); a contradiction cites both), "### Inferences" (yours, labelled as such) and "### Gaps" (what you could not answer and why). Also save the same text to research_notes/<the plan's title>/subtopic-${index}.md.`,
+                    }),
+                ),
+                step(`write`, `Write the report`, {
+                    needs: [`research-1`, `research-2`, `research-3`],
+                    goal: `A report that answers the original question exists, every major claim carrying an inline citation from the notes, and the gaps stated.`,
+                    prompt:
+                        `Read the three researchers' notes above in full and write the report that answers the original request. ` +
+                        `Shape: a title of about six words with an active verb; then one paragraph that leads with the answer and carries the significance and essential context, dense enough that a reader could stop there; then three to five sections whose headers are signposts stating the finding ("Migratory geese forage 370 extra hours a year", never "Effects on geese"), in dense narrative prose with the critical figures in bold and citations inline as ([Source](URL)) after the claims a reader would want to verify; a table where it genuinely helps; and a short conclusion that adds implications rather than repeating. ` +
+                        `Take positions the evidence supports; state plainly what is uncertain or was not found; steelman the alternative where one exists. Drop any major claim, figure or reference the notes do not source: five well-sourced claims beat twenty with half unsourced. ` +
+                        `Write the report to reports/<the plan's title>.md and make the whole report your closing message, so the run shows it and the owner can read it without opening a branch.`,
+                    output: { kind: `claim` },
+                    checks: [
+                        {
+                            kind: `judge`,
+                            rubric:
+                                `The closing message is the full report: it opens with a paragraph that answers the question directly, its section headers state findings rather than topics, and every quantitative claim or specific reference carries an inline ([Source](URL)) citation. ` +
+                                `Unsourced figures, headers that merely name a topic, or a message that only summarises the report instead of containing it mean CONTINUE.`,
+                        },
+                    ],
+                }),
+            ],
+        },
+    },
 ];

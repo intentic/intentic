@@ -382,6 +382,10 @@ reports the profile.
   dpkg's own log for apt, an mtime sweep for everything else); and an install that recurs across sessions, is
   corroborated by drift, and has a mechanical template is auto-drafted into the owner's proposal (`auto-drafts.ts`).
   Rejection tombstones the tool in the ledger so the machine never re-proposes what the owner already declined.
+- [docs/env-contract.md](docs/env-contract.md): the environment every command a turn starts receives, layer by
+  layer — the image's `ENV` block, the turn's live-derived connector credentials, extension settings and `PATH`
+  (narrowed by the persona in `personas/personas.ts`), the workload stamp — and the short list an extension
+  author may rely on. Written so the answer to "what does my CLI see" is read, not remembered.
 - [src/engines](src/engines): which version of each upstream agent program this sandbox runs, and where it came
   from. An *engine* is the program a runtime rides on — the Claude Code CLI and its SDK, the `codex` wrapper,
   `@cursor/sdk`, `opencode`, the `cli-proxy-api` translator — and until this existed the only way to move one

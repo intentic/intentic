@@ -6,9 +6,12 @@ import { STATE_DIR } from "@intentic/constants";
 import { detectFormat, type Format } from "./formats.js";
 import { deriverStamp, neutralizeDoc, type DerivedDoc, type Deriver } from "./derivers/deriver.js";
 import { docxDeriver } from "./derivers/docx.js";
+import { epubDeriver } from "./derivers/epub.js";
 import { htmlDeriver } from "./derivers/html.js";
 import { imageDeriver } from "./derivers/image.js";
+import { ipynbDeriver } from "./derivers/ipynb.js";
 import { mediaDeriver } from "./derivers/media.js";
+import { odtDeriver } from "./derivers/odt.js";
 import { pdfDeriver } from "./derivers/pdf.js";
 import { pptxDeriver } from "./derivers/pptx.js";
 import { xlsxDeriver } from "./derivers/xlsx.js";
@@ -26,6 +29,9 @@ export const DERIVERS: Record<Format, Deriver> = {
     image: imageDeriver,
     media: mediaDeriver,
     html: htmlDeriver,
+    ipynb: ipynbDeriver,
+    odt: odtDeriver,
+    epub: epubDeriver,
 };
 
 /* Above this a derivation stops being background-cheap (hashing alone reads every byte) and a file this size

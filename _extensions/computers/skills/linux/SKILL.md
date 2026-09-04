@@ -48,3 +48,16 @@ machine cannot be driven.
 ### Long-running things
 `run_command` waits for the command to exit. For anything that should outlive the call, start it detached
 (`systemd-run --user --unit=<name> <cmd>`, or `nohup <cmd> >~/log 2>&1 &`) and poll its log with a later call.
+
+### Two filesystems, and which tool for which job
+- **Their computer is not this sandbox.** A file you create here does not exist there; a path they name
+  (`~/Documents/…`) is on their machine; a command or path you put in their clipboard or type into their app
+  must exist on their side. Move bytes explicitly (`write_file`, `read_file`), never assume.
+- **Pick the tool by what the target is.** An app with its own capability card (mail, calendar, a service API)
+  is fastest and most precise; a web app goes through a browser (theirs via the chrome skill, or the sandbox's
+  own); this skill is for native desktop apps and cross-app work, which no connector reaches. A connector that
+  errors is debugged or reported, not silently retried through a slower tier.
+- **Look before asserting.** Asked what is open, what an app can do, or whether something is installed: take a
+  screenshot or run the command and answer from what you saw, not from memory. Their setup and versions differ
+  from the ones you expect, and "that app can't do that" grounded in nothing is the wrong answer more often
+  than not. Do not describe the screen, or call the machine reachable, until a call has succeeded.

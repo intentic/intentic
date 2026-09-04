@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { unzipSync } from "fflate";
 import type { DerivedDoc, Deriver } from "./deriver.js";
+import { decodeEntities } from "../xml.js";
 
 /* Presentations: text runs out of the OOXML slide parts, one `## Slide N` section each. No library carries
  * its weight here — a pptx is a zip of XML whose visible text lives entirely in `<a:t>` runs grouped into
@@ -10,16 +11,6 @@ import type { DerivedDoc, Deriver } from "./deriver.js";
 
 const SLIDE_PART = /^ppt\/slides\/slide(\d+)\.xml$/;
 const NOTES_PART = /^ppt\/notesSlides\/notesSlide(\d+)\.xml$/;
-
-const decodeEntities = (text: string): string =>
-    text
-        .replaceAll("&lt;", "<")
-        .replaceAll("&gt;", ">")
-        .replaceAll("&quot;", '"')
-        .replaceAll("&apos;", "'")
-        .replaceAll(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
-        .replaceAll(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
-        .replaceAll("&amp;", "&");
 
 // One slide part's XML → its paragraphs: `<a:t>` runs joined within each `<a:p>`, empties dropped.
 export const slideParagraphs = (xml: string): string[] =>

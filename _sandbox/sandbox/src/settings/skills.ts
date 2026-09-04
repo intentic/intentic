@@ -50,7 +50,7 @@ Notes: TypeScript/JavaScript only. Pass workspace paths.
 
 export const FILEQ_SKILL = `---
 name: fileq
-description: Read binary workspace files (docx, xlsx, pptx, pdf, images, audio) as clean budgeted markdown with the \`fileq\` CLI. Use whenever a task needs the contents of an office document, the text layer of a PDF, or the metadata of an image or recording — instead of guessing from the filename or shelling out to ad-hoc converters.
+description: Read binary workspace files (docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio) as clean budgeted markdown with the \`fileq\` CLI, and read big text-shaped files (csv, json, logs, archives) without flooding your context. Use whenever a task needs the contents of a document, the text layer of a PDF, the metadata of an image or recording, or a look inside a file too large to cat — instead of guessing from the filename or shelling out to ad-hoc converters.
 ---
 
 # fileq: binary files as markdown
@@ -62,8 +62,10 @@ sidecar copy fresh so reading twice derives once.
 \`fileq <file>\` (or \`fileq read <file> --budget 8000\`)
 - Prints a capsule (format, token cost), the content up to the budget, and \`saved:\` — the sidecar path
   carrying the whole thing. Over budget, the cut is announced with that exact path to Read.
-- Formats: docx, xlsx (capped tables), pptx (slides + speaker notes), pdf (text layer), png/jpg/gif/webp
-  (dimensions + EXIF), mp3/wav/flac/mp4/… (duration + tags), html.
+- Formats: docx and odt (headings, lists, tables), xlsx (capped tables), pptx (slides + speaker notes),
+  pdf (text layer; a scan is OCR'd when the image carries tesseract, and the note says the words are
+  recognised, not exact), epub (chapters in reading order), ipynb (cells, fenced code, capped outputs),
+  png/jpg/gif/webp (dimensions + EXIF), mp3/wav/flac/mp4/… (duration + tags), html.
 
 ## Check the sidecar first
 A file may already have a shadow at \`.intentic/local/cache/derived/<path>.md\` — front matter says which
@@ -71,12 +73,32 @@ source hash it was derived from. \`fileq read\` checks freshness for you, so pre
 shadow's age by eye.
 
 ## What it refuses, and why
-- A scanned PDF answers "no usable text layer … OCR is not part of this tier" rather than an empty page;
-  images say "no visual description". Treat those notes as "not generated", never as "nothing there".
-- Plain text (md, csv, txt, code) is not fileq's business: Read it directly.
+- A scanned PDF on an image without tesseract answers "no usable text layer … OCR is not part of this tier"
+  rather than an empty page; images say "no visual description". Treat those notes as "not generated",
+  never as "nothing there". An extension that ships tesseract (paperwork, office) turns the first into OCR.
+- Plain text (md, csv, txt, code) is not fileq's business: Read it directly — but see below for the big ones.
 - Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
 
 Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
+
+## Text-shaped files that are too big to cat
+The commonest way to lose a context window is \`cat\` on a file you have not sized. Stat first, then read
+the shape, then only what the question needs:
+- **Size first**: \`wc -c <file>\`. Under ~20 KB, Read it whole. Over, \`head -100\` and \`tail -100\` to
+  orient, \`rg\` for what the task actually asks about, the whole file only if you genuinely need all of it.
+- **CSV / TSV**: never \`head -n 5\` blindly — a 50 KB quoted cell in row 1 wrecks it. \`head -c 4000\` for
+  a glance; for the shape, python with \`csv\` and a row cap, or \`fileq\` after converting to xlsx is
+  overkill: \`python3 -c 'import csv,sys; r=csv.reader(open(sys.argv[1])); print(next(r)); print(sum(1 for _ in r))' <file>\`
+  gives header and row count without loading it all.
+- **JSON**: structure before content — \`jq 'type' <file>\`, then \`jq 'if type=="array" then length elif type=="object" then keys else . end'\`
+  (guarded: \`keys\` errors on a scalar root). Drill only into what was asked. **JSONL**: never \`jq\` the
+  whole file; \`head -3 <file> | jq .\` and \`wc -l\`.
+- **Logs**: the end is what matters — \`tail -200\`, then \`rg\` for the error text.
+- **Archives (zip, tar.*)**: list, never auto-extract — \`unzip -l\`, \`tar -tf\` (auto-detects compression).
+  Extract one member with \`unzip -p <zip> <path>\` or \`tar -xOf <tar> <path>\`. A single \`.gz\` has no
+  listing: \`zcat <file> | head -50\`.
+- **Unknown extension**: \`file <path>\` then \`xxd <path> | head -5\`; if the bytes mean nothing to you,
+  ask rather than guess.
 `;
 
 // skill name → SKILL.md body. The settings `skills` array selects which of these are written to disk.

@@ -6,7 +6,8 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
-import { neutralizeDoc } from "../lib/derivers/deriver.js";
+import { errorMessage } from "@intentic/base/errors";
+import { neutralizeDoc, type DerivedDoc } from "../lib/derivers/deriver.js";
 import { detectFormat } from "../lib/formats.js";
 import { DERIVERS, ensureSidecar, type Outcome } from "../lib/derive.js";
 import { defaultOutDir, tokensOf, workspaceRoot } from "../lib/env.js";
@@ -24,7 +25,10 @@ export const readCommand = buildCommand({
             budget: { kind: "parsed", parse: numberParser, default: "4000", brief: "Max stdout tokens; 0 prints only the capsule" },
             json: { kind: "boolean", default: false, brief: "Machine-readable result on stdout" },
         },
-        positional: { kind: "tuple", parameters: [{ parse: String, brief: "The file to read (relative paths resolve against the cwd)", placeholder: "file" }] },
+        positional: {
+            kind: "tuple",
+            parameters: [{ parse: String, brief: "The file to read (relative paths resolve against the cwd)", placeholder: "file" }],
+        },
     },
     async func(this: CommandContext, flags: ReadFlags, file: string) {
         const absPath = resolve(file);
@@ -101,11 +105,24 @@ const readOutsideWorkspace = async (absPath: string): Promise<ReadResult | undef
         process.stdout.write(`fileq: cannot read ${absPath}: unsupported or missing\n`);
         return undefined;
     }
-    const doc = neutralizeDoc(await DERIVERS[format].derive(absPath));
+    // The same outcome a corrupt file gets inside a workspace (ensureSidecar's loud skip): a notebook that is
+    // not JSON, a docx that is not a zip, answers with the reason and exit 1, never a stack trace.
+    let doc: DerivedDoc;
+    try {
+        doc = neutralizeDoc(await DERIVERS[format].derive(absPath));
+    } catch (error) {
+        process.stdout.write(`fileq: cannot read ${absPath}: derive-failed (${format}): ${errorMessage(error).split("\n")[0]}\n`);
+        return undefined;
+    }
     const outDir = defaultOutDir();
     await mkdir(outDir, { recursive: true });
     const hash = createHash("sha256").update(absPath).digest("hex").slice(0, 8);
-    const savedPath = join(outDir, `${basename(absPath).toLowerCase().replaceAll(/[^a-z0-9.]+/g, "-")}-${hash}.md`);
+    const savedPath = join(
+        outDir,
+        `${basename(absPath)
+            .toLowerCase()
+            .replaceAll(/[^a-z0-9.]+/g, "-")}-${hash}.md`,
+    );
     await writeFile(savedPath, `${doc.markdown}\n`);
     return { format, body: doc.markdown, tokens: tokensOf(doc.markdown), savedPath, source: "derived", title: doc.title, notes: doc.notes };
 };

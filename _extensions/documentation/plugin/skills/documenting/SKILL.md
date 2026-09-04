@@ -142,6 +142,18 @@ page that arrived with one (or a repository that writes its diagrams that way) r
 to be converted. For a figure you are WRITING here, prefer `dag`: it is data the app lays out, so it cannot
 drift into a hand-positioned picture, and it looks the same on every page in the set.
 
+## The reader test
+
+A page reads fine to the person who wrote it, because they know what it leaves out. Before publishing a page
+that matters (a repo map, a README somebody will onboard from, a decision doc), test it on a reader who does
+not: predict five to ten questions someone would bring to this document ("where do I start to change X?",
+"why is Y not done the obvious way?"), then spawn a child agent (`agents spawn`) with ONLY the document's
+text and those questions, and ask it to answer each, to name what was ambiguous, and to list what the page
+assumed a reader already knows. What it gets wrong or cannot answer is the page's gap, not the reader's;
+fix those sections and test again. When a fresh reader answers the questions correctly and surfaces no new
+assumptions, the page is done. Contradictions between two pages of a set show up the same way: hand both to
+the reader and ask where they disagree.
+
 ## When you are generating a whole set
 
 The map comes first and is one job: `repo.json` + `repo.md`, deciding the components, the glossary and the

@@ -1,6 +1,6 @@
 # @intentic/fileq
 
-Agent-native file reading: any binary workspace file — docx, xlsx, pptx, pdf, images, audio — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.
+Agent-native file reading: any binary workspace file — docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.
 
 `fileq` is to workspace files what `webq` is to the web and `iq` is to code: the tool an agent reaches for
 when the answer is inside a format it cannot open as text. `fileq read` prints a capsule (name, format,
@@ -17,10 +17,15 @@ The interesting decisions:
 - **Freshness is content, not clocks.** A sidecar's front matter carries the source's sha256 and the
   deriver's version stamp; it is fresh exactly when both still match. Mtimes lie across git checkouts,
   hashes do not, and bumping a deriver's version is how a fixed bug reaches every existing shadow.
-- **The deterministic tier only.** Everything here runs without a model and without money: office formats
-  and pdf text layers become prose, images become dimensions + EXIF, audio becomes duration + tags. What a
-  model-backed tier would add (OCR for scans, whisper transcripts, image captions) is *announced as absent*
-  in each sidecar's notes rather than silently missing — an empty shadow must never read as an empty file.
+- **The deterministic tier, plus what the image happens to carry.** Everything here runs without a model
+  and without money: office and OpenDocument formats, EPUB chapters, notebook cells and pdf text layers
+  become prose, images become dimensions + EXIF, audio becomes duration + tags. A scanned pdf is OCR'd
+  when `tesseract` and `pdftoppm` are on PATH (an extension's image layer puts them there; the core image
+  does not), capped at twenty pages and labelled *recognised, not exact*; the pdf deriver's sidecar stamp
+  names that capability (`pdf+ocr` vs `pdf`), so a shadow written before the layer arrived re-derives the
+  next time it is touched. What a model-backed tier would add (whisper transcripts, image captions) is
+  *announced as absent* in each sidecar's notes rather than silently missing — an empty shadow must never
+  read as an empty file.
 - **Honesty over completeness** (webq's rule, inherited whole): row caps, page caps, scan detection and
   conversion warnings all surface as notes in the capsule and the front matter.
 - **Neutralization is in the bytes.** A sidecar is read back by a plain `Read`, which the daemon's
@@ -48,10 +53,13 @@ agent it serves. The `fileq` skill (settings/skills.ts, on by default) is what t
 exists; the `sidecars` setting (Settings → Agent, off by default) is what turns the eager background pass
 on. Deriving reuses webq's DOM→markdown writer (`@intentic/webq/markdown`) rather than growing a second one.
 
-Later tiers extend the same shape, not the same commit: OCR (tesseract), transcripts (whisper-cli, already
-in the image's feature pack for voice), and captions (a vision model, costing real money) would each be a
-deriver whose absence today is already named in the sidecars it will one day fill. An extension-contributed
-deriver registry (a `derivers` manifest point) is the natural end state; nothing here precludes it.
+Later tiers extend the same shape, not the same commit: transcripts (whisper-cli, already in the image's
+feature pack for voice) and captions (a vision model, costing real money) would each be a deriver whose
+absence today is already named in the sidecars it will one day fill, the way OCR was until an image layer
+carried tesseract. An extension-contributed deriver registry (a `derivers` manifest point) is the natural
+end state; nothing here precludes it. The zip-of-XML derivers (pptx, odt, epub) share `src/lib/xml.ts` —
+entity decoding and attribute reading over machine-written markup — rather than a parser, and `src/lib/tools.ts`
+is the one place a deriver asks whether a binary is on PATH.
 
 ## Conventions & gotchas
 

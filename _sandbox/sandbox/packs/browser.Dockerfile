@@ -25,9 +25,14 @@
 # The ms-playwright cache is NOT mounted, deliberately: the browser it holds is the payload, and it has to land
 # in a layer. Only the npm side is cached (the playwright package `npx` fetches to do the installing), which is
 # also why `npm cache clean` is gone — a mounted cache is never committed, so there is nothing left to clean.
+# fonts-noto-color-emoji and fonts-liberation ride the same layer because the browser is the only thing here
+# that draws text: `--with-deps` pulls a Latin fallback and nothing else, so every screenshot of a page with an
+# emoji in it rendered tofu boxes, and a page set in Arial/Times fell back to DejaVu at different widths (the
+# metric-compatible Liberation family is what makes a layout screenshot trustworthy). Together ~12 MB. CJK is
+# deliberately NOT here — fonts-noto-cjk is ~100 MB and belongs in an owner's overlay fragment.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.npm \
     npx --yes playwright@1.62.1 install --with-deps chromium \
-    && apt-get update && apt-get install -y --no-install-recommends xvfb ffmpeg xdotool \
+    && apt-get update && apt-get install -y --no-install-recommends xvfb ffmpeg xdotool fonts-noto-color-emoji fonts-liberation \
     && rm -rf /root/.cache/ms-playwright/chromium_headless_shell-*
