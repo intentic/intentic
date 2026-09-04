@@ -265,3 +265,52 @@ test("recurrence is counted per branch", () => {
     expect(recurring).toHaveLength(1);
     expect(recurring[0]).toMatchObject({ branch: "main", runs: 2 });
 });
+
+/* TAG REFS: release dispatch runs use the tag as head_branch (v1.245.0, not main), which would otherwise create
+ * pseudo-branches that auto-open stale npm-publish runs. These should not participate in auto-open logic. */
+
+test("a running run on a tag ref does not auto-open", () => {
+    // GitHub workflow_dispatch runs triggered from a release tag carry the tag as head_branch.
+    const tagRun = run(1, "running", 50, "v1.245.0", "cee7a1d");
+    const mainRun = run(2, "running", 40, "main", "abc1234");
+    const open = runningOnHead([tagRun, mainRun]);
+    // The tag ref is excluded from auto-open, but the regular branch run opens.
+    expect(open.has(tagRun)).toBe(false);
+    expect(open.has(mainRun)).toBe(true);
+});
+
+test("a failed run on a tag ref does not auto-open", () => {
+    const tagRun = run(1, "failed", 50, "v1.245.0", "cee7a1d");
+    const mainRun = run(2, "failed", 40, "main", "abc1234");
+    const open = openFailures([tagRun, mainRun]);
+    // The tag ref failure is excluded, but the regular branch failure opens.
+    expect(open.has(tagRun)).toBe(false);
+    expect(open.has(mainRun)).toBe(true);
+});
+
+test("arrivesOpen excludes both running and failed tag ref runs", () => {
+    const tagRunning = run(1, "running", 60, "v2.0.0", "sha1");
+    const tagFailed = run(2, "failed", 50, "v1.245.0", "sha2");
+    const mainRunning = run(3, "running", 40, "main", "sha3");
+    const open = arrivesOpen([tagRunning, tagFailed, mainRunning]);
+    // Tag refs are excluded entirely from auto-open.
+    expect(open.has(tagRunning)).toBe(false);
+    expect(open.has(tagFailed)).toBe(false);
+    // Regular branches still auto-open.
+    expect(open.has(mainRunning)).toBe(true);
+});
+
+test("tag ref detection matches semver patterns", () => {
+    // Various semver tag formats should all be excluded.
+    const tags = ["v1.0.0", "v1.245.0", "v0.0.1", "v10.20.30", "v1.0.0-alpha", "v2.0.0-beta.1"];
+    for (const tag of tags) {
+        const tagRun = run(1, "running", 50, tag);
+        expect(runningOnHead([tagRun]).size).toBe(0);
+    }
+    // Non-tag branches should still work.
+    const branches = ["main", "feat/v1-migration", "release-v1", "v1-branch", "version-1.0.0"];
+    for (const branch of branches) {
+        const branchRun = run(1, "running", 50, branch);
+        expect(runningOnHead([branchRun]).size).toBe(1);
+    }
+});

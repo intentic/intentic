@@ -44,6 +44,12 @@ const isTerminal = (run: PipelineRun): boolean => run.status === `failed` || run
 
 const branchKey = (run: PipelineRun): string => `${run.repo}\n${run.branch}`;
 
+/* A branch that looks like a semver version tag: v1.2.3, v1.245.0, v0.0.1-alpha, etc. GitHub workflow_dispatch
+ * runs triggered from a release tag carry the TAG as head_branch (not the actual branch the tag points at),
+ * creating pseudo-branches that should not participate in auto-open logic, a running or failed npm-publish on
+ * v1.245.0 is not the user's current work, and opening it buries the board under stale release runs. */
+const isTagRef = (branch: string): boolean => /^v\d+\.\d+\.\d+/.test(branch);
+
 // One commit's verdict on one branch: what every derivation below walks.
 interface BranchCommit {
     readonly sha: string;
@@ -120,7 +126,10 @@ export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<Pipeline
     const open = new Set<PipelineRun>();
     for (const [head] of commitsByBranch(runs)) {
         for (const failure of head?.failed ?? []) {
-            open.add(failure);
+            // Tag refs (v1.2.3) are release dispatch runs, not the user's current work: see isTagRef.
+            if (!isTagRef(failure.branch)) {
+                open.add(failure);
+            }
         }
     }
     return open;
@@ -155,7 +164,7 @@ export const runningOnHead = (runs: readonly PipelineRun[]): ReadonlySet<Pipelin
             heads.set(key, run);
         }
     }
-    return new Set(runs.filter((run) => run.status === `running` && heads.get(branchKey(run))?.sha === run.sha));
+    return new Set(runs.filter((run) => run.status === `running` && heads.get(branchKey(run))?.sha === run.sha && !isTagRef(run.branch)));
 };
 
 /* WHAT THE BOARD OPENS FOR YOU (PipelineRunRow's `autoOpen`): everything the newest commit on a branch has to
