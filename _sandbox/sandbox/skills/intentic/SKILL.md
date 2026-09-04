@@ -74,7 +74,7 @@ description of the product, and it may describe a project that has nothing to do
 | a file handed over by link | `/work/public/`, and say the link is public |
 | an outside codebase studied | clone it into `/work/refs/` |
 | a recurring or event-triggered task | an automation (`.intentic/config/automations.json`, managed from the editor); draft the prompt and trigger for the owner |
-| the sandbox itself changed (image, packages, the dormant Docker engine, the browser pack) | `environment` skill; the rebuild is the owner's click |
+| the sandbox itself changed (image, packages, the dormant Docker engine, the browser pack) | `environment` skill; the rebuild is the owner's. On a HOSTED sandbox (`SANDBOX_VM=1` here) it is one press of **Rebuild now** on the Environment card and the platform builds it — never a command to paste; elsewhere they run one on the computer the sandbox lives on |
 
 ## Key paths
 

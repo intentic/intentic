@@ -116,11 +116,11 @@ const settlingMachine = (id: string, options: { replacingFor?: number } = {}) =>
 // looks like without hard-coding a hash anybody would have to update by hand.
 const INSTANCE = hostedInstanceId(config());
 // A Fly machine as the orphan sweep reads it: whose it is, and when it was made.
-const flyMachine = (over: { platform?: string; ageMinutes?: number } = {}) => ({
+const flyMachine = (over: { platform?: string; ageMinutes?: number; role?: string } = {}) => ({
     id: `m1`,
     state: `stopped`,
     created_at: new Date(Date.now() - (over.ageMinutes ?? 120) * 60_000).toISOString(),
-    config: { metadata: over.platform === undefined ? {} : { intentic_role: `warm`, intentic_platform: over.platform } },
+    config: { metadata: over.platform === undefined ? {} : { intentic_role: over.role ?? `warm`, intentic_platform: over.platform } },
 });
 
 afterEach(() => {
@@ -592,6 +592,25 @@ describe(`reapHostedOrphans`, () => {
         // Never even asked about: the prefix is still the jurisdiction, and a stranger's app outside it is
         // not this platform's business to read, let alone destroy.
         expect(calls.some((entry) => entry.url.includes(`unrelated-app`))).toBe(false);
+    });
+
+    /* A BUILDER CARRIES THE STAMP TOO, and the sweep must read it. An overlay build puts a SECOND machine in a
+     * sandbox's own app for the minutes it runs (hosted-build.ts), stamped `build` rather than `sandbox`, and
+     * an app can end up holding nothing but that one: a sandbox deleted while its build was in flight, a
+     * provision that failed after its builder was made. Ownership is read off whatever machines an app has, so
+     * a rule that believed only the `sandbox` and `warm` stamps would answer `unknown` here and leave a machine
+     * the platform is paying for standing forever, in an app nothing can ever prove is its own — the same
+     * "unprovable, therefore immortal" shape the empty-app case below exists to close. */
+    it(`reads an app holding only a builder as its own: a build stamp proves ownership like any other`, async () => {
+        const calls = stubFetch([
+            appList(`intentic-sbx-leftover-builder`),
+            machinesOf({ "intentic-sbx-leftover-builder": [flyMachine({ platform: INSTANCE, role: `build` })] }),
+            deleteRoute,
+        ]);
+        await reapHostedOrphans(knownRows as never, config(), logger);
+        const deleted = deletedApps(calls);
+        expect(deleted).toHaveLength(1);
+        expect(deleted[0]).toContain(`intentic-sbx-leftover-builder`);
     });
 
     /* A cold provision is app → volume → machine → row, minutes end to end, and for every one of them the app

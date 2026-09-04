@@ -251,7 +251,8 @@ export const configSchema = z.object({
              * mostly a package manager waiting on the network. `buildTimeoutMinutes` is enforced twice, by the
              * script itself and by the reconcile that destroys what outlives it. `buildsPerDay` is per owner
              * (0 turns the feature off); `buildConcurrency` and `buildMinutesPerDay` are platform-wide, the
-             * latter the circuit breaker the health watch mails about. Builder minutes are also charged to the
+             * latter the circuit breaker whose refusal the rebuild route logs at error level, because a day
+             * whose builds are spent is either a busy day or somebody farming. Builder minutes are also charged to the
              * owner's month like awake minutes (HOSTED_MONTHLY_HOURS), which is what makes a free account's
              * builds self-limiting. HOSTED_BUILDER_IMAGE, HOSTED_BUILDER_CPU_KIND, HOSTED_BUILDER_CPUS,
              * HOSTED_BUILDER_MEMORY_MB, HOSTED_BUILD_TIMEOUT_MINUTES, HOSTED_BUILDS_PER_DAY,
