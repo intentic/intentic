@@ -8,6 +8,7 @@ import { refreshAcross } from "../composables/sandbox/fleetAcross";
 import { useRole } from "../composables/sandbox/useRole";
 import OriginMark from "../components/OriginMark.vue";
 import UnsentMark from "../components/UnsentMark.vue";
+import UnfinishedMark from "../components/UnfinishedMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";
 import {
@@ -615,6 +616,13 @@ const grab = (event: PointerEvent): void => {
                  and what its hover carries — lives in UnsentMark, which the chat rail's row draws too: the same
                  fact drawn twice by hand is how the two surfaces came to say it in two different shapes. -->
             <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
+
+            <!-- WHAT THE LAST TURN LEFT OPEN (AgentSummary.unfinished), directly under the unsent chip and for
+                 the mirror-image reason: that one is the reader's own unfinished business, this one is the
+                 agent's. The daemon only sends it for a card at rest, so no status check belongs here either —
+                 a running turn is working through the very list this would count (agents-registry's
+                 reportedUnfinished). Everything it knows is in UnfinishedMark. -->
+            <UnfinishedMark v-if="agent.unfinished !== undefined" :work="agent.unfinished" :now="now" />
 
             <!-- WHY IT DIED. The daemon carries this only while the card still reads as failed (AgentSummary's
                  `failure`), so no state check belongs here: its presence IS the state. Above provenance and

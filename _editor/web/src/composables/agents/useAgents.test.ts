@@ -870,6 +870,31 @@ describe("the finished fold", () => {
                 .map((entry) => entry.id),
         ).toEqual([`a6`, `a7`, `a8`]);
     });
+
+    /* AND BETWEEN THEM, THE WORK THAT STOPPED SHORT (AgentSummary.unfinished). Three kinds of card in this lane
+     * are owed something, and they sort in the order of how easily each is lost: an unsent message lives in
+     * this window and nowhere else, an unfinished session's work is on a branch that keeps but wears the same
+     * settled face as a session that finished, and a card ready to land is an offer the daemon repeats for as
+     * long as the branch exists. Recency decides the rest, and here it argues against all three: the card that
+     * owes nothing is the newest one. */
+    it("orders unfinished cards under the unsent ones and above the ones ready to land", () => {
+        const writing = new Conversation(`a1`);
+        writing.registered.value = true;
+        writing.draft.value = `picking this back up:`;
+        useChat().conversations.value = [...useChat().conversations.value, writing];
+
+        setAgents(
+            [
+                landed(`a0`, 3_000),
+                landed(`a1`, 1_000),
+                { ...landed(`a2`, 2_000), status: `ready` },
+                { ...landed(`a3`, 1_500), unfinished: { at: 900, steps: { open: 2, total: 5, next: `Cover it with tests` } } },
+            ],
+            1,
+        );
+
+        expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`, `a3`, `a2`, `a0`]);
+    });
 });
 
 /* CARDS THAT WOULD NOT SIT STILL: the reported bug, and the argument for the tiebreaker every lane order now

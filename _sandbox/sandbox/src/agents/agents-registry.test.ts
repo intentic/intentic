@@ -1310,6 +1310,145 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.activity).toEqual({ tool: "Edit", target: "src/app.ts", todo: "current thing" });
     });
 
+    /* WHAT THE TURN LEFT OPEN, from the two things the turn itself measured and nothing else: the checklist the
+     * agent kept, and the verdict of the workspace's own end-of-turn check. No model is asked and no agent is
+     * told to declare anything, which is what makes this answer available on a card nobody watched finish. */
+    describe("unfinished work", () => {
+        const list = (...items: [string, "pending" | "in_progress" | "completed"][]): AgentEvent => ({
+            kind: "todos",
+            items: items.map(([content, status]) => ({ content, status })),
+        });
+
+        it("counts what the last turn left on its own list, and names what it would have done next", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]));
+            await registry.finish("c1", 2_000);
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 2, total: 3, next: "Draw the mark" } });
+        });
+
+        // Nothing left on the list is the ordinary ending, and it must leave NOTHING on the card: a mark every
+        // finished session wears is a mark nobody reads.
+        it("says nothing about a turn that finished its own list", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "completed"]));
+            await registry.finish("c1", 2_000);
+            expect(registry.get("c1")?.unfinished).toBeUndefined();
+        });
+
+        /* AND THE NEXT TURN CLEARS IT, which is the whole reason this is re-measured per turn rather than
+         * stamped once: the session that goes back and finishes the work stops reporting that it did not. */
+        it("clears once a later turn completes the list", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "in_progress"]));
+            await registry.finish("c1", 2_000);
+            expect(registry.get("c1")?.unfinished?.steps).toEqual({ open: 1, total: 1, next: "Draw the mark" });
+
+            await registry.begin(turn({ prompt: "carry on" }), 3_000);
+            registry.observe("c1", list(["Draw the mark", "completed"]));
+            await registry.finish("c1", 4_000);
+            expect(registry.get("c1")?.unfinished).toBeUndefined();
+        });
+
+        // And a turn that DOES touch the list and still leaves something on it has left the work there anew,
+        // so the age restarts: this is not the same abandonment as the one before it.
+        it("re-stamps when a turn moves the list and still leaves something on it", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]));
+            await registry.finish("c1", 2_000);
+
+            await registry.begin(turn({ prompt: "carry on" }), 3_000);
+            registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "in_progress"]));
+            await registry.finish("c1", 4_000);
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 4_000, steps: { open: 1, total: 2, next: "Cover it with tests" } });
+        });
+
+        /* SILENCE IS NOT AN EMPTY LIST. A conversation resumed after the daemon restarted says nothing about its
+         * tasks until it next touches them, and every turn begins with a fresh runtime state, so treating "no
+         * `todos` frame this turn" as "nothing left" would wipe the mark off every card a restart passed under
+         * — and off any card whose next turn was a one-line question. */
+        it("keeps what it knew through a turn that never touched the list", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]));
+            await registry.finish("c1", 2_000);
+
+            await registry.begin(turn({ prompt: "what does this file do?" }), 3_000);
+            await registry.finish("c1", 4_000);
+            // Still stamped at the turn that MEASURED it. A turn that only answered a question has learned
+            // nothing about where the work stands, and a mark whose clock restarts every time the conversation
+            // is touched cannot tell a job broken off ten minutes ago from one abandoned on Tuesday.
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 2, total: 2, next: "Draw the mark" } });
+        });
+
+        /* THE OTHER HALF: the workspace's own end-of-turn check, red on the way out. A turn gets two rounds to
+         * repair what a check reports and may then end regardless (rules/turn-ending.ts), so this is the one
+         * fact about a settled card that nothing else on the board could say. It needs no checklist behind it —
+         * a conversation that kept no list still leaves a red tree behind it. */
+        it("marks a turn that ended with its own check still failing", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.noteCheck("c1", { label: "Verify before you finish", failed: true });
+            await registry.finish("c1", 2_000);
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, check: "Verify before you finish" });
+        });
+
+        // Last run wins, which is what the follow-up loop exists to produce: the check that went red, was
+        // repaired, and passed on the re-run is a turn whose work passed.
+        it("takes the repaired re-run as the verdict", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.noteCheck("c1", { label: "Verify before you finish", failed: true });
+            registry.noteCheck("c1", { label: "Verify before you finish", failed: false });
+            await registry.finish("c1", 2_000);
+            expect(registry.get("c1")?.unfinished).toBeUndefined();
+        });
+
+        // A verdict is one measurement of one tree, and the turn after it edits that tree. Unlike the checklist
+        // above, it is spent with the turn that earned it rather than carried into the next one.
+        it("does not carry a red check into the next turn", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.noteCheck("c1", { label: "Verify before you finish", failed: true });
+            await registry.finish("c1", 2_000);
+
+            await registry.begin(turn({ prompt: "carry on" }), 3_000);
+            await registry.finish("c1", 4_000);
+            expect(registry.get("c1")?.unfinished).toBeUndefined();
+        });
+
+        /* NOT WHILE A TURN IS RUNNING. The card is in the Active lane and the agent is working through the very
+         * list this counts, so the mark would be reporting the turn's own subject back at it. The entry keeps
+         * the fact throughout; only what the card SAYS is held back, and the finish publishes it again. */
+        it("holds the mark back while a turn is in flight and reports it again once the turn settles", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "pending"]));
+            await registry.finish("c1", 2_000);
+            const left = { open: 1, total: 1, next: "Draw the mark" };
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: left });
+
+            await registry.begin(turn({ prompt: "carry on" }), 3_000);
+            expect(registry.get("c1")?.unfinished).toBeUndefined();
+            expect(registry.entry("c1")?.unfinished).toEqual({ at: 2_000, steps: left });
+
+            await registry.finish("c1", 4_000);
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: left });
+        });
+    });
+
     it("subscribe delivers an immediate snapshot and change broadcasts", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();

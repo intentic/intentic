@@ -95,6 +95,45 @@ export const AgentAttentionSchema = z.object({
     conflict: z.boolean().describe("Its work cannot be merged without somebody resolving a clash."),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
+/* WHAT THE LAST TURN LEFT OPEN, as the turn itself measured it at the moment it ended.
+ *
+ * Every other "needs you" on this card is a turn PARKED on somebody (AgentAttentionSchema): the agent is still
+ * there, waiting, and the board can say so because the pause is live. This is the opposite shape and the reason
+ * it is a field of its own: the turn is over, nobody is waiting, and the work stopped short anyway. That card
+ * reads `idle` beside a hundred others that finished what they were asked, which is how a session with three of
+ * seven steps still open goes back onto the board looking exactly like a session that is done.
+ *
+ * DERIVED, NEVER DECLARED, and that is the whole design constraint. Nothing here asks a model anything or asks
+ * an agent to report on itself: both readings are taken from frames the daemon already receives on every
+ * harness, once, at the finish that flushes the turn's tokens and tool counts. An agent cannot flatter this
+ * field, and a harness that never learned about it still fills it.
+ *
+ * Absent for the ordinary card, which is most of them: a turn that ends with its list clear and its check green
+ * has nothing to say here, and neither has one that kept no list and stood under no check. */
+export const UnfinishedWorkSchema = z.object({
+    // When the turn that left it this way ended, ms since epoch. What the mark's "…, 2h ago" is measured from,
+    // and NOT `updatedAt`: a card touched since (a land, a rename) has moved without the work moving.
+    at: z.number().describe("When the turn that left this ended, in milliseconds."),
+    /* THE AGENT'S OWN CHECKLIST, as of that turn's last word on it (the `todos` frames). `open` counts every
+     * item not marked completed, `total` the whole list, and `next` names the one it would have done next, the
+     * in-progress item if there is one, else the first still pending.
+     *
+     * It is the agent's own account of the job, so a count here is not an inference about what it meant: it is
+     * the list it wrote, with items on it nobody crossed off. Absent when the conversation kept no list. */
+    steps: z
+        .object({
+            open: z.number().describe("Items on it that were never completed."),
+            total: z.number().describe("Items on the whole list."),
+            next: z.string().optional().describe("The one it would have done next: what it was working through, or the first still waiting."),
+        })
+        .optional()
+        .describe("The agent's own checklist where that turn left it. Absent for a conversation that kept no list."),
+    // The name of the `turn.ending` check that ran red on the way out, when one did (rules/turn-ending.ts). A
+    // turn gets two rounds to repair what a check reports and can then end regardless, so this is the workspace's
+    // own gate saying the work is not done, in a place nothing but the land used to read.
+    check: z.string().optional().describe("The end-of-turn check that was still failing when the turn ended, by name."),
+});
+export type UnfinishedWork = z.infer<typeof UnfinishedWorkSchema>;
 /* WHAT A LANDING IS CALLED, the commit message drafted from the landed diff (agents/landed-subject.ts), and
  * the whole of it: a subject, and the two trailer sentences a repo that keeps a changelog gets.
  *
@@ -414,6 +453,12 @@ export const AgentSummarySchema = z.object({
             "When somebody last opened it, in milliseconds. Newer activity than this is what makes it unread. Kept by the sandbox rather than by a browser, so clearing site data or picking up a phone does not resurrect every badge.",
         ),
     attention: AgentAttentionSchema.describe("Which kinds of waiting-for-you it is doing."),
+    /* What the last turn left open, when it left anything (UnfinishedWorkSchema). Beside `attention` because a
+     * reader asks both questions in the same glance, and apart from it because the answers have opposite
+     * shapes: attention is a turn parked and waiting, this is a turn gone with the job half done. */
+    unfinished: UnfinishedWorkSchema.optional().describe(
+        "What its last turn left open: steps it never completed, a check still failing. Absent for a turn that finished what it started.",
+    ),
     // Completed turns and lifetime tool calls, the card's msgs/tools counters.
     turns: z.number().optional().describe("Turns it has finished."),
     toolUses: z.number().optional().describe("Tools it has used, over its whole life."),

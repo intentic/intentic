@@ -1194,11 +1194,25 @@ export const planHarnessTurn = async (
             ...(turnEndingRules.length > 0
                 ? {
                       turnEndingRules,
-                      // The verdict the land reads (agent/turn-checks.ts). Keyed by conversation, so a turn with
-                      // none behind it (the bench) records nothing and nothing later can read it.
+                      /* The verdict, to its two readers. Keyed by conversation, so a turn with none behind it
+                       * (the bench) records nothing and nothing later can read it.
+                       *
+                       * THE LAND reads it through agent/turn-checks.ts, once, and TAKES it as it reads.
+                       * THE CARD reads it through the registry, at the finish that happens after that take, so
+                       * a board can say a session ended on a red check rather than leaving that between the
+                       * land and the model. Told to both here rather than one forwarding to the other: they
+                       * want the same fact at two moments, and the first one to want it destroys it. */
                       ...(conversation === undefined
                           ? {}
-                          : { onCheckRun: (rule: Rule, run: RuleCommandRun) => recordCheckVerdict(conversation, rule, run) }),
+                          : {
+                                onCheckRun: (rule: Rule, run: RuleCommandRun) => {
+                                    recordCheckVerdict(conversation, rule, run);
+                                    // Only a settled failure counts: `error` never ran and `cancelled` was cut
+                                    // short, and neither measured the work (turn-checks.ts landingOutcome makes
+                                    // the same distinction for the same reason).
+                                    services.agents.noteCheck(conversation, { label: rule.label, failed: run.status === "failed" });
+                                },
+                            }),
                       /* A rule that spoke here CONTINUED a turn the model had finished, which is the answer to
                        * "why is this still going" and the one thing about this moment nobody can see from the
                        * outside. Stamped for the settings list and written to the feed, both best-effort: a

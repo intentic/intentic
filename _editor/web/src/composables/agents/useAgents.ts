@@ -776,19 +776,28 @@ export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, Fle
             Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
-    /* UNSENT FIRST, then ready-to-land, then recency. Both exceptions are the same argument, made about the
-     * fold: this lane windows to a handful (FINISHED_WINDOW), and recency alone lets whatever finished a minute
-     * ago push either kind of card behind it, where "waiting for you" quietly becomes "forgotten".
+    /* UNSENT FIRST, then work the agent left open, then ready-to-land, then recency. All three exceptions are
+     * the same argument, made about the fold: this lane windows to a handful (FINISHED_WINDOW), and recency
+     * alone lets whatever finished a minute ago push any of them behind it, where "waiting for you" quietly
+     * becomes "forgotten".
      *
      * A ready card is owed a press. An UNSENT one is owed a sentence, and it goes first because it is the more
      * easily lost of the two: the press is on a card the daemon will keep offering for as long as the branch
      * exists, while the half-written message lives in this window alone. Ordering them this way is also what
      * makes the promise cheap to keep, a card holding words the user wrote can only fall behind the fold when
      * MORE THAN A WINDOW'S WORTH of such cards exist, at which point they are hiding each other rather than
-     * being hidden by unrelated work. */
+     * being hidden by unrelated work.
+     *
+     * AN UNFINISHED CARD GOES BETWEEN THEM, and it is the one card in this lane whose own status argues against
+     * it: `idle` and `landed` are what a finished conversation looks like, so a session that stopped three
+     * steps into its own list is filed here wearing exactly the face of one that finished. It sorts under the
+     * unsent chip because a message nobody sent is still the more perishable of the two — the work is on a
+     * branch and will keep — and above the ready card because a press on work that stopped short lands work
+     * that stopped short. */
     grouped.finished.sort(
         (a, b) =>
             Number(b.unsent) - Number(a.unsent) ||
+            Number(b.unfinished !== undefined) - Number(a.unfinished !== undefined) ||
             Number(b.status === `ready`) - Number(a.status === `ready`) ||
             b.updatedAt - a.updatedAt ||
             byId(a, b),

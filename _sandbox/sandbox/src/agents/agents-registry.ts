@@ -6,8 +6,11 @@ import {
     deriveTitle,
     type LandedMessageDraft,
     planParts,
+    type TodoItem,
+    type UnfinishedWork,
 } from "@intentic/sandbox-contract";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../agent/failure-sentences.js";
+import { opt } from "../agent/opt.js";
 import { subagentCountsOf } from "../agent/subagents.js";
 import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
 import { watchProjection } from "../agent/watch-state.js";
@@ -152,6 +155,23 @@ interface RuntimeState {
     // The children this turn has started so far. Flushed like the rest, so a delegating turn costs one write at
     // its end rather than one per child, and the card still counts them as they are born (see summaryOf).
     pendingSubagents: number;
+    /* THE AGENT'S OWN CHECKLIST, whole, as of the last `todos` frame (the list itself, where `activity.todo`
+     * keeps only the one line the card is showing right now). Held for the finish, which is the only reader:
+     * what is on the list matters live, and what is STILL on it matters once the turn is over.
+     *
+     * Undefined means this process has not seen the list, which is not the same as an empty one and is treated
+     * as such at finish: a conversation resumed after a restart says nothing about its tasks until it touches
+     * them, and reading that silence as "nothing left" would wipe the mark off every card a restart passed
+     * under. */
+    checklist: readonly TodoItem[] | undefined;
+    /* HOW THE TURN'S OWN END-OF-TURN CHECK WENT, last run wins (rules/turn-ending.ts runs it at the Stop, and
+     * again after a repair). Recorded through the registry as well as turn-checks.ts because the two readers
+     * want it at different moments and the other one CONSUMES it: the land takes the verdict and clears it
+     * (agent.routes.ts) a beat before finish runs, so a finish reading that store would find it already gone.
+     *
+     * Not carried across turns, unlike the checklist beside it: a checklist is state the harness keeps, a
+     * verdict is one measurement of one tree, and the turn that follows it edits that tree. */
+    check: { label: string; failed: boolean } | undefined;
 }
 
 const freshRuntime = (): RuntimeState => ({
@@ -177,6 +197,8 @@ const freshRuntime = (): RuntimeState => ({
     pendingOutputTokens: 0,
     pendingToolUses: 0,
     pendingSubagents: 0,
+    checklist: undefined,
+    check: undefined,
 });
 
 /* IS SOMETHING BRINGING THIS TURN BACK SOON ENOUGH THAT THE CARD SHOULD GO ON READING AS WORK IN PROGRESS?
@@ -216,6 +238,56 @@ const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Pick<RuntimeS
     };
 };
 
+/* WHAT THIS TURN LEAVES OPEN BEHIND IT, read at the finish out of the two things the turn itself measured: the
+ * agent's own checklist, and the verdict of the workspace's own end-of-turn check.
+ *
+ * NEITHER READING ASKS ANYBODY ANYTHING. No model is spent on the question and no agent is told to report on
+ * itself, which is the point: an instruction to declare unfinished work is an instruction the turn that ran out
+ * of room is least likely to follow, and a model asked afterwards is a model guessing about a transcript. Both
+ * facts here already arrive as frames, on every harness, for free.
+ *
+ * THE TWO SILENCES ARE NOT THE SAME SILENCE, and that asymmetry is the whole of the carry rule below:
+ *   · A CHECKLIST is state the harness keeps across turns. This process not having seen it (a conversation
+ *     resumed after a restart, which says nothing about its tasks until it next touches them) is ignorance, not
+ *     an empty list, so what was known before stands.
+ *   · A CHECK is one measurement of one tree, and the turn that follows it edits that tree. A turn that ran no
+ *     check has not confirmed the last one, so the old verdict is dropped rather than carried.
+ *
+ * Pure and outside the closure, like failureOf above: this is a rule worth stating and testing on its own. */
+const openSteps = (list: readonly TodoItem[]): UnfinishedWork["steps"] => {
+    const open = list.filter((item) => item.status !== "completed");
+    if (open.length === 0) {
+        return undefined;
+    }
+    // What it would have picked up next: the one it had in hand, else the first still waiting.
+    const next = (open.find((item) => item.status === "in_progress") ?? open[0])?.content;
+    return { open: open.length, total: list.length, ...(next !== undefined ? { next } : {}) };
+};
+
+// The end-of-turn check's own verdict, and only when it ran and went red: a check that passed, was cancelled,
+// or never ran at all leaves nothing behind (rules/turn-ending.ts, agent/turn-checks.ts).
+const failedCheck = (state: RuntimeState | undefined): string | undefined => (state?.check?.failed === true ? state.check.label : undefined);
+
+/* WHEN THE WORK WAS LEFT THIS WAY: the moment of the MEASUREMENT, not of the write.
+ *
+ * A finish that observed neither the list nor a check has learned nothing about where the work stands, and
+ * several of them happen: a turn that only answered a question, a manual land (which finishes outside any turn
+ * at all), the first turn after a restart. Stamping those `now` would restart the mark's clock every time the
+ * conversation was touched, so a job abandoned on Tuesday would read as broken off just now — which is exactly
+ * the distinction the age is carried for. */
+const leftAt = (entry: PersistedAgent, state: RuntimeState | undefined, now: number): number =>
+    state?.checklist === undefined && state?.check === undefined ? (entry.unfinished?.at ?? now) : now;
+
+const unfinishedOf = (entry: PersistedAgent, state: RuntimeState | undefined, now: number): UnfinishedWork | undefined => {
+    // Observed this turn, else what the last finish that DID observe it wrote (see the note above on silence).
+    const steps = state?.checklist === undefined ? entry.unfinished?.steps : openSteps(state.checklist);
+    const check = failedCheck(state);
+    if (steps === undefined && check === undefined) {
+        return undefined;
+    }
+    return { at: leftAt(entry, state, now), ...(steps !== undefined ? { steps } : {}), ...(check !== undefined ? { check } : {}) };
+};
+
 /* WHAT A CARD IS CURRENTLY REPORTING ABOUT ITS LAST DEATH: the sentence, the code that says which KIND of
  * death it was, and, for the one kind that comes back on a clock, when the window reopens and whether the turn
  * is held for a press.
@@ -239,6 +311,18 @@ const reportedFailure = (
               ...(entry.limitHeld === true ? { limitHeld: true } : {}),
               ...(entry.limitScheduled === true ? { limitScheduled: true } : {}),
           };
+
+/* WHAT THE CARD SAYS THE LAST TURN LEFT OPEN, which is what the entry says, EXCEPT WHILE A TURN IS RUNNING.
+ *
+ * A live turn is the answer to the question this asks. The card is in the Active lane, the agent is working
+ * through the very list that is short, and "3 steps left" printed beside a turn spending itself on those three
+ * steps is noise on the one card that needs none. It comes back the moment the turn settles, saying whatever
+ * that finish measured, so nothing is hidden and nothing stale is shown.
+ *
+ * Takes the runtime state rather than a boolean read at the call site, for the reason reportedFailure above
+ * takes the whole entry: the guard belongs with the fact it guards, where it can be read in one place. */
+const reportedUnfinished = (entry: PersistedAgent, state: RuntimeState | undefined): Partial<Pick<AgentSummary, "unfinished">> =>
+    state?.running === true ? {} : opt("unfinished", entry.unfinished);
 
 /* AND WHAT A FINISH WRITES THROUGH from it: the whole account of the failure, or nothing at all. The four
  * fields move as one because the finish that clears them is the same finish that writes them, and a card
@@ -488,6 +572,14 @@ export interface AgentsRegistry {
     readonly markLandingAbsorbed: (id: string, repo: string, landedHead: string, landedTip: string, size: number) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
+    /* How this turn's end-of-turn check went, from the Stop that ran it (rules/turn-ending.ts, bound in
+     * turn-plan.ts). Last run wins, which is what makes a repaired tree a passing turn: the check that went red
+     * at the first Stop and green after the repair ends green.
+     *
+     * Told to the registry rather than read from turn-checks.ts because that store is CONSUMED by the land a
+     * beat before finish runs (agent.routes.ts takes and clears it), so the finish that writes the card's
+     * account of the turn would find nothing there. No broadcast: nothing on a card moves until the finish. */
+    readonly noteCheck: (id: string, check: { label: string; failed: boolean }) => void;
     /* THE USER ENDED THIS TURN and the abort has landed, recorded NOW, ahead of the unwind.
      *
      * The whole point is the gap it closes. /agent/stop aborts the provider and then waits for the generator to
@@ -639,6 +731,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // shape of the original bug in miniature: a faithful projection over a stale input is stale.
                 conflict: status === "conflict",
             },
+            ...reportedUnfinished(entry, state),
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
             // Only while the card still READS as failed. A branch whose standing has moved on (the work landed
             // by another road, the delta went away) is answered by `landing` above, and an explanation left
@@ -998,16 +1091,24 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                  * again redraws them, which is why this only ever bit the turns that landed NOTHING, a question
                  * answered, a check that found nothing to change, and those are the turns most likely to be
                  * followed by the commit that needed the sentence. */
-                ...(existing?.landedSubject !== undefined ? { landedSubject: existing.landedSubject } : {}),
-                ...(existing?.landedNote !== undefined ? { landedNote: existing.landedNote } : {}),
-                ...(existing?.landedBreaking !== undefined ? { landedBreaking: existing.landedBreaking } : {}),
+                ...opt("landedSubject", existing?.landedSubject),
+                ...opt("landedNote", existing?.landedNote),
+                ...opt("landedBreaking", existing?.landedBreaking),
                 // Lifetime counters + diffstat survive the per-turn entry rebuild.
-                ...(existing?.turns !== undefined ? { turns: existing.turns } : {}),
-                ...(existing?.toolUses !== undefined ? { toolUses: existing.toolUses } : {}),
-                ...(existing?.subagents !== undefined ? { subagents: existing.subagents } : {}),
-                ...(existing?.diffFiles !== undefined ? { diffFiles: existing.diffFiles } : {}),
-                ...(existing?.diffInsertions !== undefined ? { diffInsertions: existing.diffInsertions } : {}),
-                ...(existing?.diffDeletions !== undefined ? { diffDeletions: existing.diffDeletions } : {}),
+                ...opt("turns", existing?.turns),
+                ...opt("toolUses", existing?.toolUses),
+                ...opt("subagents", existing?.subagents),
+                ...opt("diffFiles", existing?.diffFiles),
+                ...opt("diffInsertions", existing?.diffInsertions),
+                ...opt("diffDeletions", existing?.diffDeletions),
+                /* WHAT THE LAST TURN LEFT OPEN survives the rebuild, for the "an omission is a deletion" reason
+                 * `tier` above gives, and because the turn beginning here is the one most likely to be ABOUT it:
+                 * a checklist is the harness's own state and outlives any number of turns, while this process's
+                 * copy of it does not (the fresh runtime state below is empty until the agent next touches its
+                 * list). Dropping it here would mean a card lost its mark to the very message sent to clear the
+                 * work, and got it back only if that turn happened to touch the checklist. The finish at the end
+                 * of this turn rewrites or clears it on what it actually observed. */
+                ...opt("unfinished", existing?.unfinished),
             });
             const state = freshRuntime();
             state.running = true;
@@ -1301,6 +1402,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 case "todos": {
                     const current = event.items.find((item) => item.status === "in_progress")?.content;
                     state.activity = { ...state.activity, ...(current !== undefined ? { todo: current } : {}) };
+                    // And the list WHOLE, for the finish that has to say what was left on it. Every frame
+                    // carries the entire checklist (never a patch), on every harness that has one, so the last
+                    // frame of a turn is that turn's last word on the subject by construction.
+                    state.checklist = event.items;
                     break;
                 }
                 /* THE AGENTS THIS ONE STARTED. A birth is the only place the lifetime count can be taken, the
@@ -1389,6 +1494,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
              * the fleet: one other agent's frame lost the bet and published the in-between anyway. */
             broadcast();
         },
+        noteCheck: (id, check) => {
+            // runtimeOf, not get: a check can only run inside a live turn, but the entry it belongs to may have
+            // been rebuilt under it, and a verdict with nowhere to land would be a red tree nothing reports.
+            runtimeOf(id).check = check;
+        },
         finish: async (id, now) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
@@ -1416,9 +1526,24 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // shape recordLanded clears `conflicts` with, and for the same reason: this finish is the one
                 // that decides how the turn ended, so an explanation it did not write is one for a death that
                 // is no longer being reported.
-                const { failure: _ended, failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, limitScheduled: _booked, ...carried } = entry;
+                const {
+                    failure: _ended,
+                    failureCode: _coded,
+                    limitResetsAt: _reopens,
+                    limitHeld: _held,
+                    limitScheduled: _booked,
+                    // Dropped from the carried entry for the same reason as the four above it: this finish is
+                    // the one that decides what the turn left behind, so the previous answer must not survive
+                    // its own re-measurement. What is genuinely still true is carried by unfinishedOf itself,
+                    // which reads the old value where the new turn observed nothing.
+                    unfinished: _open,
+                    ...carried
+                } = entry;
                 replace({
                     ...carried,
+                    // What this turn leaves open, from the checklist it kept and the check it ran (unfinishedOf).
+                    // The one field here that can be true of a turn that ended perfectly cleanly.
+                    ...opt("unfinished", unfinishedOf(entry, state, now)),
                     /* How the turn ENDED, which is all this field says now: an observed error frame, the user's
                      * own Stop, else the clean ending that hands the question to standing.ts. A stop outranks
                      * nothing, the abort's own unwind no longer reaches here as an error (see agent.routes'
@@ -1454,6 +1579,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.limitResetsAt = undefined;
                     state.limitHeld = false;
                     state.limitScheduled = false;
+                    // The verdict is spent with the turn that earned it: it measured THAT tree, and anything
+                    // that runs next changes it. The checklist beside it is deliberately left alone, being the
+                    // harness's own state rather than this turn's measurement (see unfinishedOf).
+                    state.check = undefined;
                 }
                 await persist();
             }

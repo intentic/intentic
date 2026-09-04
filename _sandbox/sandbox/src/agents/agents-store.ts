@@ -6,6 +6,7 @@ import {
     ForkedFromSchema,
     LandConflictSchema,
     type LandedMessage,
+    UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
@@ -223,6 +224,17 @@ export const PersistedAgentSchema = z.object({
     // land time (a `workspace` row names uncommitted edits the user clears by committing, which no land
     // observes), so what surfaces read is re-derived from it, never replayed (land.ts outstandingConflicts).
     conflicts: z.array(LandConflictSchema).optional(),
+    /* What the last turn left open (see UnfinishedWorkSchema), written by the finish that measured it.
+     *
+     * Persisted for the reason `failure` above it is, and more sharply: the reader this exists for is the one
+     * who comes back TOMORROW to a board of settled cards, having long since closed the tab that watched the
+     * turn end. A fact held only in the turn's runtime state would be gone by then, which is exactly when it
+     * is worth anything.
+     *
+     * Rewritten only by a finish that OBSERVED the checklist, never cleared for want of evidence: a resumed
+     * conversation whose daemon restarted emits no `todos` until it touches the list again, and treating that
+     * silence as an empty list would wipe the mark off every card the restart passed under. */
+    unfinished: UnfinishedWorkSchema.optional(),
     costUsd: z.number(),
     inputTokens: z.number(),
     outputTokens: z.number(),

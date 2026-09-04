@@ -4,7 +4,7 @@
  * does that once the whole turn settles). */
 import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../claude/claude-sdk.js";
-import type { AgentEvent, FastModeState, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
+import type { AgentEvent, FastModeState, PermissionMode, TodoItem, UsageWindow } from "@intentic/sandbox-contract";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { screenshotImage } from "../browser/browser-artifacts.js";
 import { browserServerOfTool } from "../browser/browser-sessions.js";
@@ -326,6 +326,9 @@ class TurnFold {
     // so the result path suppresses their cards too, the list IS their render.
     private readonly checklist = new TaskChecklist();
     private readonly checklistToolIds = new Set<string>();
+    // Of those, the ones a SUBAGENT made (see onChecklistCall): their cards are suppressed like any other
+    // checklist verb, and their results are kept away from this conversation's list.
+    private readonly foreignChecklistToolIds = new Set<string>();
     // Context-window fill for the turn: the latest message_start reports the request's input size (grows
     // monotonically within a turn); the result reports the model's contextWindow. Paired into one
     // context_usage frame at the result so the UI can warn as the chat nears auto-compaction.
@@ -469,7 +472,7 @@ class TurnFold {
         // The checklist, which renders as its own live list rather than as tool cards, one card per task
         // creation and per status flip would bury the transcript.
         if (block.name === "TaskCreate" || block.name === "TaskList" || block.name === "TaskUpdate") {
-            yield* this.onChecklistCall(block);
+            yield* this.onChecklistCall(block, parent);
             return;
         }
         // The agent moving itself into planning. Nothing else reports it, there is no mode-change SDK
@@ -500,8 +503,19 @@ class TurnFold {
 
     // A create can only render from its RESULT (that is where it learns its task id); an update names the id
     // in its input, so the list moves the instant the agent says so; a TaskList renders from its result alone.
-    private *onChecklistCall(block: ToolUseBlock): Generator<AgentEvent> {
+    private *onChecklistCall(block: ToolUseBlock, parent: string | undefined): Generator<AgentEvent> {
+        // Remembered whoever made the call, because no tool card was emitted for it: an id missing from here
+        // sends its result down the ordinary path, which updates a card that never existed.
         this.checklistToolIds.add(block.id);
+        /* A CHILD'S LIST IS NOT ITS PARENT'S. Under `parent` this verb came from a subagent working inside a
+         * tool call, and its tasks were folding into the list this conversation shows — and, since the same
+         * list is what the finish reads, into what the card says the turn left open. A delegation that keeps
+         * three tasks of its own could take over its parent's checklist, and one that finished them could
+         * report the parent's work as done. The child's own transcript draws its list from its own stream. */
+        if (parent !== undefined) {
+            this.foreignChecklistToolIds.add(block.id);
+            return;
+        }
         if (block.name === "TaskCreate") {
             this.checklist.created(block.id, block.input);
             return;
@@ -512,6 +526,19 @@ class TurnFold {
                 yield { kind: "todos", items };
             }
         }
+    }
+
+    /* WHAT A CHECKLIST VERB'S RESULT DOES TO THE LIST: a create learns its task id here ("Task #1 created
+     * successfully"), and a TaskList result is the authoritative set, which is how tasks made before this turn
+     * attached are adopted.
+     *
+     * Nothing at all for a child's verb (onChecklistCall). That authority is exactly the danger: a delegation's
+     * TaskList answers with ITS tasks, and applied here it would replace this conversation's list wholesale. */
+    private checklistFrom(toolUseId: string, content: unknown): TodoItem[] | undefined {
+        if (this.foreignChecklistToolIds.has(toolUseId)) {
+            return undefined;
+        }
+        return this.checklist.resolved(toolUseId, content) ?? this.checklist.listed(content);
     }
 
     private *onBashCall(block: ToolUseBlock, sessionId: unknown): Generator<AgentEvent> {
@@ -593,7 +620,7 @@ class TurnFold {
         // task id from this result ("Task #1 created successfully"), and a TaskList result is the
         // authoritative set, it adopts tasks made before this turn attached.
         if (this.checklistToolIds.has(toolUseId)) {
-            const items = this.checklist.resolved(toolUseId, content) ?? this.checklist.listed(content);
+            const items = this.checklistFrom(toolUseId, content);
             if (items !== undefined) {
                 yield { kind: "todos", items };
             }
