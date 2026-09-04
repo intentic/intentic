@@ -238,6 +238,15 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         Sync agent running
                     </span>
                     <span v-if="watcher.pid !== undefined" class="font-mono text-2xs text-subtle">pid {{ watcher.pid }}</span>
+                    <!-- Working, and working from an agent this machine has already replaced. Not a badge: nothing
+                         is broken, every row below is true, and the only thing owed is a restart. But it is said
+                         on the same line as the version people read off this block, because "I updated the agent
+                         and the number never moved" is where this ends up otherwise. -->
+                    <span v-if="watcher.staleBuild !== undefined" class="text-xs text-warning">
+                        on <span class="font-mono">{{ watcher.staleBuild.running }}</span>, while
+                        <span class="font-mono">{{ watcher.staleBuild.installed }}</span> is installed here — it keeps the build it started with, so
+                        restart it with <span class="font-mono">intentic-machine run --stop</span> then <span class="font-mono">intentic-machine run</span>
+                    </span>
                 </template>
                 <template v-else>
                     <StatusBadge variant="warning" :dot="true" size="xs" label="sync agent stopped" />

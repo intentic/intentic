@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { type Computer, type MachineCommand, type MachineSandboxOp, type MachineWatcher, watcherStalled } from "@intentic/sandbox-contract";
+import {
+    type Computer,
+    type MachineCommand,
+    type MachineSandboxOp,
+    type MachineWatcher,
+    watcherBuildSkew,
+    watcherStalled,
+} from "@intentic/sandbox-contract";
 import {
     Button,
     ConfirmDialog,
@@ -232,7 +239,7 @@ interface ComputerRow {
      *  reported. Derived HERE rather than in the template, where `{ ...watcher, stalled }` was a fresh object
      *  every render and re-rendered the whole of <MachineDetail> beneath it for a fact that changes about once
      *  a minute. */
-    readonly watcher: (MachineWatcher & { readonly stalled: boolean }) | undefined;
+    readonly watcher: (MachineWatcher & { readonly stalled: boolean; readonly staleBuild?: { running: string; installed: string } }) | undefined;
 }
 
 /* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
@@ -260,6 +267,10 @@ const rows = computed<ComputerRow[]>(() =>
         const groups = machineGroups(computer);
         const { facts, warnings } = computerSummary(computer, groups, now.value);
         const watcher = computer.report?.watcher;
+        /* Whether this machine is serving an older agent than the one installed on it — the same comparison the
+         * terminal makes (watcherBuildSkew), carried onto the watcher so <MachineDetail> can say it beside the
+         * pid. A machine that has never reported has no watcher and nothing to compare. */
+        const staleBuild = computer.report === undefined ? undefined : watcherBuildSkew(computer.report);
         return {
             computer,
             groups,
@@ -268,7 +279,10 @@ const rows = computed<ComputerRow[]>(() =>
             open: groups
                 .filter((group) => isSelf(computer, group) || (needle.value !== `` && groupMatches(group, needle.value)))
                 .map((group) => group.sandboxId),
-            watcher: watcher === undefined ? undefined : { ...watcher, stalled: watcherStalled(watcher, now.value) },
+            watcher:
+                watcher === undefined
+                    ? undefined
+                    : { ...watcher, stalled: watcherStalled(watcher, now.value), ...(staleBuild === undefined ? {} : { staleBuild }) },
         };
     }),
 );

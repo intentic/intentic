@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isProcessAlive, livePid, pidFileBody, spawnDetached } from "./detached.js";
+import { isProcessAlive, livePid, livePidRecord, pidFileBody, spawnDetached } from "./detached.js";
 
 /* The contract these cover is the one a user reads as a sentence: "connected in the background (pid N)". It was
  * false on Windows for every release that spawned the loop without `detached`: the pid was real, the process
@@ -107,5 +107,34 @@ describe("livePid", () => {
         expect(await livePid(path)).toBeUndefined();
         writeFileSync(path, "not-a-pid id:abc");
         expect(await livePid(path)).toBeUndefined();
+    });
+
+    /* THE NOTE, which is how a loop says WHICH BUILD is holding the file. Nothing else can: replacing the binary
+     * leaves the process running the code it started with, so without this a machine can hold a current agent and
+     * serve a months-old one with every readable version agreeing on the wrong number. */
+    it("carries back the note the writer stamped beside the pid", async () => {
+        const path = pidFile();
+        const { pid, stop } = alive();
+        try {
+            writeFileSync(path, await pidFileBody(pid, "1.233.0"));
+
+            expect(await livePidRecord(path)).toEqual({ pid, note: "1.233.0" });
+        } finally {
+            stop();
+        }
+    });
+
+    // A writer that stamps nothing is not a writer that broke the file: the pid still answers, the note is simply
+    // not known, which is what an agent too old to stamp its build looks like to every reader.
+    it("answers a record with no note at all", async () => {
+        const path = pidFile();
+        const { pid, stop } = alive();
+        try {
+            writeFileSync(path, await pidFileBody(pid));
+
+            expect(await livePidRecord(path)).toEqual({ pid });
+        } finally {
+            stop();
+        }
     });
 });

@@ -1,6 +1,6 @@
 import type { HostScopes, MachinePort, MachineReport } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
-import { watcherStalled } from "@intentic/sandbox-contract";
+import { watcherBuildSkew, watcherStalled } from "@intentic/sandbox-contract";
 import { auditPath, readLinks } from "./computer/config.js";
 import { runLogPath } from "./config.js";
 import { readResidentPid } from "./resident.js";
@@ -50,6 +50,14 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
     }
     if (sync.pairings.length > 0 && watcherStalled(sync.watcher, now)) {
         return `STALLED · ${halves.join(" · ")}`;
+    }
+    /* Working, from an agent this machine has already replaced. It ranks below the two failures and above the
+     * quiet line, because nothing is broken and something is owed: a restart, which is the whole of the remedy.
+     * Named on the tray's one line too — the alternative is a user who updated the agent, saw the same number
+     * everywhere for weeks, and concluded the update had not worked. */
+    const skew = watcherBuildSkew(sync);
+    if (skew !== undefined) {
+        return `OLD BUILD RUNNING (${skew.running}, ${skew.installed} installed) · ${halves.join(" · ")}`;
     }
     return halves.join(" · ");
 };
@@ -140,6 +148,19 @@ export const watcherLine = (watcher: MachineReport["watcher"], now: number): str
         : `Agent: running (pid ${watcher.pid}), last sync pass ${Math.round(since / 1000)}s ago`;
 };
 
+/* THE LOOP IS FINE AND IT IS THE WRONG BUILD, which is a sentence this output had no way to write: the version
+ * on the first line is the file's, the loop's own build was nowhere, and a machine that had been updated but
+ * never restarted therefore printed a clean bill of health with the old agent's behaviour underneath it.
+ *
+ * Separate from watcherLine because it is a different question with a different remedy, and because it is
+ * printed while everything watcherLine talks about is working. */
+export const buildSkewLine = (report: MachineReport): string | undefined => {
+    const skew = watcherBuildSkew(report);
+    return skew === undefined
+        ? undefined
+        : `Agent: running ${skew.running}, but ${skew.installed} is installed on this machine — the loop keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
+};
+
 const printReport = (report: MachineReport, out: (message: string) => void): void => {
     out(`Paired sandboxes (${report.pairings.length}):`);
     for (const pairing of report.pairings) {
@@ -150,6 +171,10 @@ const printReport = (report: MachineReport, out: (message: string) => void): voi
      * merely "new ports stop appearing". Said plainly, because a softer wording invited a reader to leave it
      * stopped. */
     out(watcherLine(report.watcher, Date.now()));
+    const skew = buildSkewLine(report);
+    if (skew !== undefined) {
+        out(skew);
+    }
     out(`Ports (${report.ports.length}):`);
     for (const port of report.ports) {
         out(portLine(port));

@@ -28,7 +28,7 @@ export {
     type AutostartSpec,
     type LaunchAgentSpec,
 } from "./autostart.js";
-export { isProcessAlive, livePid, pidFileBody, spawnDetached } from "./detached.js";
+export { isProcessAlive, livePid, livePidRecord, type PidRecord, pidFileBody, spawnDetached } from "./detached.js";
 export { agentException } from "./text.js";
 export {
     asLabel,

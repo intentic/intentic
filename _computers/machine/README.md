@@ -73,12 +73,32 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 - The process exits — and takes the login entry with it — only when **both** halves have nothing to serve.
 - On a signal it exits `128+signal`, never 0: a supervisor must restart what it did not stop, and the incident
   that bought that rule is written out in [src/sync/mirror.ts](src/sync/mirror.ts).
+- It stamps **the build it is running** into its pidfile (`pid boot build`). Nothing else knows it: replacing the
+  binary does not touch the process, so a machine can hold a current agent and keep serving a months-old one.
+
+### Installed vs running
+
+Two facts, and every surface now carries both. `agents.sync` in the machine report is the **file** at
+`bin/intentic-machine` ([src/installed.ts](src/installed.ts)); `watcher.build` is the **loop** running from it.
+They drift whenever a binary lands without a restart — a card's one-liner re-run, a copy dropped in, an upgrade
+in one environment while the loop runs in another — and the gap used to be invisible: whichever process built the
+report stamped its own version into the one field, so the same machine answered its running build to the sandbox
+its loop posts to and its installed build to one reading over a `host` capability.
+
+- `intentic-machine status` says which is which, and the summary the tray reads leads with `OLD BUILD RUNNING`.
+- The Computers row says it beside the pid, with the two commands that close it.
+- `intentic-machine upgrade` restarts a loop that is behind the installed binary even when there is nothing to
+  download, and after a swap it verifies that the loop which came up **is** the new build rather than that some
+  process is alive — the check the old agent passed just as well as the new one.
+- A loop already on the installed build is never bounced, and a loop that is stopped is never started: `run
+  --stop` is a thing people do on purpose.
 
 ## Key files
 
 - [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall|updates`, `sync setup|pause|resume|mirror|uninstall`, shared `run|status|version|upgrade|uninstall`.
 - [src/install.ts](src/install.ts) — what every `setup` runs first: self-update (then re-exec), PATH repair, the Windows launcher stub. Everything the install scripts used to decide, decided once here.
-- [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step.
+- [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step, and a restart when the file is current but the loop is not.
+- [src/installed.ts](src/installed.ts) — which build the *file* at `bin/intentic-machine` is, as opposed to the one running: free while the two agree, one probe per swap after they stop.
 - [src/daemon-base.ts](src/daemon-base.ts) — where a sandbox's daemon is dialled, for both halves: loopback first when `/health` proves it is ours, the public URL as the floor.
 - [src/resident.ts](src/resident.ts) — the one loop, its pidfile, and `reconcileResidency`.
 - [src/computer/auto-prepare.ts](src/computer/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.

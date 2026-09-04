@@ -578,6 +578,37 @@ it(`says nothing about updating a computer that is already current`, () => {
     expect(text).not.toContain(`intentic-machine upgrade`);
 });
 
+/* THE OTHER WAY A MACHINE IS BEHIND, and the one the chip above cannot see: the agent on the machine is current
+ * and the loop SERVING it is not. Replacing the binary leaves the running process exactly as it was, so a user
+ * who upgraded watched the row keep printing the old number and reasonably concluded the update had not worked. */
+it(`says when a computer is running an older build than the one installed on it`, () => {
+    const row = behind();
+    const text =
+        mount([
+            {
+                ...row,
+                report: { ...row.report!, agents: { sync: `1.183.0` }, watcher: { running: true, pid: 4242, build: `0.1.0` } },
+            },
+        ]).textContent ?? ``;
+    expect(text).toContain(`0.1.0`);
+    expect(text).toContain(`1.183.0`);
+    expect(text).toContain(`intentic-machine run --stop`);
+});
+
+// A loop already on the installed build is left alone, for the same reason the chip is: a row that nags at a
+// machine with nothing to do is a row people learn to read past.
+it(`says nothing about restarting a computer whose loop is on the installed build`, () => {
+    const row = behind();
+    const text =
+        mount([
+            {
+                ...row,
+                report: { ...row.report!, agents: { sync: `1.183.0` }, watcher: { running: true, pid: 4242, build: `1.183.0` } },
+            },
+        ]).textContent ?? ``;
+    expect(text).not.toContain(`intentic-machine run --stop`);
+});
+
 // And a sandbox that has never reached the registry has no yardstick, so it makes no claim about anyone's agent.
 it(`makes no claim when this sandbox doesn't know the latest release`, () => {
     latest.value = undefined;

@@ -244,6 +244,12 @@ export type MachinePort = z.infer<typeof MachinePortSchema>;
 export const MachineWatcherSchema = z.object({
     running: z.boolean(),
     pid: z.number().int().optional(),
+    /* WHICH BUILD IS ACTUALLY SERVING, stamped into the pidfile by the loop that claimed it, which is the only
+     * place the fact exists: replacing the binary does not touch the running process, so a machine can hold a
+     * current agent and go on serving a months-old one indefinitely. `agents.sync` is the file, this is the
+     * process, and the two differing is a restart somebody is owed (see watcherBuildSkew). Absent when no loop
+     * is running, and when the one running predates the stamp. */
+    build: z.string().optional(),
     /* When the watcher last FINISHED a pass, the field that makes `running` mean something. The agent holds its
      * SSH transport listeners on its own event loop, so a failure that escapes the loop leaves a process that is
      * alive and a loop that is gone: pid present, unit "active", mirroring and the git bridge stopped. Absent
@@ -268,10 +274,18 @@ export const MachineReportSchema = z.object({
      * the same box, so it is what dedupes them into a single row. */
     hostname: z.string(),
     os: z.string(),
-    // Which of this machine's agents are installed, and at what version, a machine running an old build is
-    // visible rather than mysteriously lacking a field. Same argument as HostSummary.version. `host` is filled
-    // by the daemon at merge time (it already knows it from the socket), not by the sync agent, which would have
-    // to go reading another agent's config to guess at it.
+    /* Which agents this machine has, and at what version, so one on an old build is visible rather than
+     * mysteriously lacking a field. Same argument as HostSummary.version.
+     *
+     * `sync` is the agent INSTALLED here — the file on disk — and `watcher.build` beside it is the loop running
+     * from that file. It used to be neither: whichever process happened to build the report stamped its own
+     * version here, so the same machine answered its running build to a sandbox its loop posted to and its
+     * installed build to one that ran `status --json` over a host capability. One field, two meanings, and the
+     * gap between them — a machine updated but never restarted — invisible in both.
+     *
+     * `host` is what the live socket announced (so: what is running), filled by the daemon at merge time from
+     * the hello frame it already holds, never by the sync agent, which would have to go reading another agent's
+     * config to guess at it. */
     agents: z.object({ sync: z.string().optional(), host: z.string().optional() }),
     // Filled by the READER, never the agent (see above). Empty is the resting state: no Docker on the machine,
     // or nothing has looked. Neither is an error, and neither means "no sandboxes exist".
@@ -284,6 +298,27 @@ export const MachineReportSchema = z.object({
     capturedAt: z.number(),
 });
 export type MachineReport = z.infer<typeof MachineReportSchema>;
+
+/* THE AGENT THIS MACHINE INSTALLED AND THE ONE IT IS RUNNING, when they are not the same build — the whole of
+ * "you updated the agent and nothing changed", as a value.
+ *
+ * It is one comparison, and it lives HERE for the same reason watcherStalled does: the terminal (`intentic-machine
+ * status`) and the browser (the Computers row) both answer this question, and a machine that is behind in one and
+ * fine in the other is worse than either answer alone. The remedy is the same in both: restart the loop.
+ *
+ * Silent whenever either half is unknown, which covers a loop that is stopped (nothing is serving, and the row
+ * already says so in louder words), an agent too old to stamp its build, and a machine with no installed agent to
+ * compare against — none of which is a skew, and each of which would otherwise nag about a difference nobody can
+ * act on. */
+export const watcherBuildSkew = (report: MachineReport): { readonly running: string; readonly installed: string } | undefined => {
+    const running = report.watcher.build;
+    const installed = report.agents.sync;
+    if (!report.watcher.running || running === undefined || installed === undefined || running === installed) {
+        return undefined;
+    }
+    return { running, installed };
+};
+
 // Why a computer that is plainly THERE has no report to show. Each is a different errand for the reader, which is
 // the whole reason they are not collapsed into one "unavailable".
 export const ComputerGapSchema = z.enum([

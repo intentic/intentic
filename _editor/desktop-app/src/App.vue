@@ -6,6 +6,7 @@ import {
     MachineRunLog,
     type MachineSandboxGroup,
     type MachineSandboxRow,
+    type MachineWatcherState,
     Notice,
     type SandboxVerb,
     SandboxVerbs,
@@ -329,6 +330,24 @@ const sandboxRows = computed<MachineSandboxRow[]>(() =>
         ...(sandbox.tunnelRunning === null ? {} : { tunnelRunning: sandbox.tunnelRunning }),
     })),
 );
+
+/* THE AGENT'S OWN STATE, with the one comparison the shared view cannot make for itself: the loop keeps the
+ * build it started with, so a machine whose binary was replaced (by `upgrade`, by re-running setup, by this very
+ * app) goes on serving the old one until it is restarted. The window says which, in the same words the browser
+ * and `intentic-machine status` use (watcherBuildSkew in the sandbox contract, which this app deliberately does
+ * not depend on — it mirrors the shapes it reads). */
+const machineWatcher = computed<MachineWatcherState | undefined>(() => {
+    const watcher = status.value?.sync.watcher;
+    if (watcher === undefined) {
+        return undefined;
+    }
+    const running = watcher.build;
+    const installed = status.value?.sync.agents.sync;
+    if (!watcher.running || running === undefined || installed === undefined || running === installed) {
+        return watcher;
+    }
+    return { ...watcher, staleBuild: { running, installed } };
+});
 
 // The docker row behind one of the view's groups, which is what every verb below needs and the group carries.
 const slugOf = (group: MachineSandboxGroup): string | undefined => group.sandbox?.slug;
@@ -1177,7 +1196,7 @@ onUnmounted(() => {
                      they belong ON the sandbox they are for rather than under a heading of their own. -->
             <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                 <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-                <MachineDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :watcher="status?.sync.watcher">
+                <MachineDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :watcher="machineWatcher">
                     <!-- What the list is, and the state of the agent behind it, on one line: the watcher is
                              a fact about the MACHINE rather than about any row under it. -->
                     <template #heading>

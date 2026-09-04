@@ -74,10 +74,14 @@ export type CloseAction = `tray` | `quit`;
 export interface MachineReport {
     hostname: string;
     os: string;
+    /** The agent INSTALLED on this machine — the file. What is running is `watcher.build`, and the two drift. */
     agents: { sync?: string };
     pairings: MachineFolderRow[];
     ports: MachinePortRow[];
-    watcher: MachineWatcherState;
+    /* `build` is the report's own field (the build the loop is running) rather than the view's `staleBuild`,
+     * which is the comparison against `agents.sync` above — made where the report is read, beside every other
+     * derivation this app makes for the shared view. */
+    watcher: MachineWatcherState & { build?: string };
     // When the agent took the reading. This app asks on demand, so it is always moments old, carried because the
     // shape is the contract's, and a reader that ignores it is not a reader that may drop it.
     capturedAt: number;

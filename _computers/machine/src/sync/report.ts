@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { hostname, platform } from "node:os";
-import { livePid } from "@intentic/local-agent";
+import { livePidRecord } from "@intentic/local-agent";
 import type { MachinePairing, MachinePort, MachineReport } from "@intentic/sandbox-contract";
 import { runPidPath } from "../config.js";
-import { MACHINE_VERSION } from "../version.js";
+import { installedBuild } from "../installed.js";
 import { mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
 import { backupSessionName, readSessionState, sessionName } from "./mutagen.js";
 
@@ -41,9 +41,13 @@ const lastTick = async (): Promise<number | undefined> => {
     return Number.isFinite(stamped) && stamped > 0 ? stamped : undefined;
 };
 
+/* The loop's own record, read the same way from every process: its pid, and the BUILD it stamped beside it when
+ * it claimed the file. The build is the fact nothing could state before — a binary replaced under a live loop
+ * leaves the process running the old code, so "which agent is on this machine" and "which agent is serving it"
+ * are two questions, and every version anyone could read answered only the first (see ../installed.ts). */
 const watcherState = async (): Promise<MachineReport["watcher"]> => {
-    const [pid, lastTickAt] = await Promise.all([livePid(runPidPath), lastTick()]);
-    return { running: pid !== undefined, pid, lastTickAt };
+    const [resident, lastTickAt] = await Promise.all([livePidRecord(runPidPath), lastTick()]);
+    return { running: resident !== undefined, pid: resident?.pid, build: resident?.note, lastTickAt };
 };
 
 const pairingReport = (mutagen: string | undefined, pairing: Pairing): MachinePairing => {
@@ -102,10 +106,20 @@ const portRows = (pairing: Pairing): MachinePort[] => [
  * has no Mutagen (or does not want to pay for the per-session spawns) still gets the pairings, folders, ports and
  * watcher, which is most of the answer. `capturedAt` is stamped here because this is where the reading happens;
  * everything downstream ages the report against it rather than against its own arrival time. */
-export const buildReport = (state: SyncState, mutagen: string | undefined, watcher: MachineReport["watcher"], capturedAt: number): MachineReport => ({
+export const buildReport = (
+    state: SyncState,
+    mutagen: string | undefined,
+    watcher: MachineReport["watcher"],
+    capturedAt: number,
+    /* The build INSTALLED on this machine, passed in rather than read here, because it is the one fact in this
+     * shape that costs a syscall (and, after a swap, a spawn) and the one a test has any reason to vary. It used
+     * to be this process's own compiled version, which is a different thing whenever the two have drifted: see
+     * ../installed.ts, and `watcher.build` beside it for what is actually running. */
+    installed: string | undefined,
+): MachineReport => ({
     hostname: hostname(),
     os: platform(),
-    agents: { sync: MACHINE_VERSION },
+    agents: { sync: installed },
     sandboxes: [],
     pairings: state.pairings.map((pairing) => pairingReport(mutagen, pairing)),
     ports: state.pairings.flatMap(portRows),
@@ -115,7 +129,7 @@ export const buildReport = (state: SyncState, mutagen: string | undefined, watch
 
 // The report for this machine right now, the one entry point every carrier uses.
 export const machineReport = async (mutagen: string | undefined): Promise<MachineReport> =>
-    buildReport(await readState(), mutagen, await watcherState(), Date.now());
+    buildReport(await readState(), mutagen, await watcherState(), Date.now(), installedBuild());
 
 /* One pairing's slice, for POSTing to the sandbox that pairing belongs to. This is the disclosure rule as code:
  * a report crossing the network to a sandbox carries THAT sandbox's pairing and ports, never its siblings', and

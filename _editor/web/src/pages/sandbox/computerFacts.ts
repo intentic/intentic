@@ -65,8 +65,9 @@ export const machineFacts = (computer: Computer): string[] => {
  * 0.1.0", six facts of three kinds, one grey, one size, one separator, and the reader had to know which was
  * which to get anything out of it. Only desktop sync earns a chip now: the computer connection is implicit in
  * every row that can act, and a second chip for it was noise. The chip rides beside the name, after the OS, and
- * carries the sync agent's version so a machine running an old build is visible rather than mysteriously lacking
- * a field. */
+ * carries the version of the agent INSTALLED on that machine, so one holding an old build is visible rather than
+ * mysteriously lacking a field. What is actually RUNNING is a different fact and lives where it is acted on: the
+ * watcher line inside the row, which says so only when the two differ (watcherBuildSkew). */
 /* And whether a newer release has passed the agent behind that door, the version and its staleness as one chip,
  * because they are one thought. "desktop sync 0.1.0" was already on the row and was already the answer to a
  * question nobody knew to ask: a machine ran a five-day-old agent through a bug that agent had a fix for, and

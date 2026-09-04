@@ -1,11 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { agentPath, runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
+import { agentPath } from "./installed.js";
+import { runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 
 /* A scripted UpgradeExec that records what happened in order. The ORDER is the whole subject of these tests: an
  * upgrade is a sequence of steps chosen so that everything reversible happens before the one thing that is not,
- * and a rearrangement that still passes a "did it install?" assertion is exactly how this stops being safe. */
-const scripted = (overrides: Partial<UpgradeExec> & { readonly downloaded?: string | undefined } = {}) => {
+ * and a rearrangement that still passes a "did it install?" assertion is exactly how this stops being safe.
+ *
+ * The three scripted VERSIONS are the other subject, and they are three because the machine has three: what
+ * downloaded, what the loop is running right now, and what it comes up on after a restart. Collapsing them is
+ * how "upgraded" came to mean "the bytes are on disk" — the case this fake now makes it possible to fail. */
+interface Scripted {
+    /** What the probe says landed. Undefined is a download that is not an agent at all. */
+    readonly downloaded?: string | undefined;
+    /** What the loop holding the pidfile is running before anything happens. Undefined is nothing running. */
+    readonly running?: string | undefined;
+    /** What comes up when the loop is started. Defaults to what was installed; undefined is nothing came up. */
+    readonly came?: string | undefined;
+}
+
+const scripted = (overrides: Partial<UpgradeExec> & Scripted = {}) => {
     const steps: string[] = [];
+    const downloaded = "downloaded" in overrides ? overrides.downloaded : "2.0.0";
     const exec: UpgradeExec = {
         // Unresolvable by default, which is the shape every test below was written against: nothing is skipped
         // on the strength of a tag, the download happens, and what it downloaded is what decides.
@@ -16,8 +31,7 @@ const scripted = (overrides: Partial<UpgradeExec> & { readonly downloaded?: stri
         },
         probe: (binary) => {
             steps.push(`probe ${binary}`);
-            const version = "downloaded" in overrides ? overrides.downloaded : "2.0.0";
-            return version === undefined ? { kind: "unusable" } : { kind: "version", version };
+            return downloaded === undefined ? { kind: "unusable" } : { kind: "version", version: downloaded };
         },
         swap: async (from, to) => {
             steps.push(`swap ${from}→${to}`);
@@ -27,11 +41,15 @@ const scripted = (overrides: Partial<UpgradeExec> & { readonly downloaded?: stri
             steps.push(`stop`);
             return await Promise.resolve(4242);
         },
+        // A healthy machine comes up on what was just installed, which is what makes the post-swap check pass
+        // here for the same reason it passes in the field.
         startWatcher: async () => {
             steps.push(`start`);
-            return await Promise.resolve();
+            return await Promise.resolve("came" in overrides ? overrides.came : downloaded);
         },
-        watcherAlive: async () => await Promise.resolve(true),
+        // Nothing running unless a test says otherwise: an assumed loop would quietly satisfy the very check
+        // these tests exist to hold.
+        runningBuild: async () => await Promise.resolve(overrides.running),
         discard: async (path) => {
             steps.push(`discard ${path}`);
             return await Promise.resolve();
@@ -100,7 +118,7 @@ describe("runUpgrade", () => {
      * machine. Without the rollback an upgrade would turn a merely out-of-date computer into one with no working
      * sync at all, which is the outcome that would make the whole command not worth running. */
     it("restores the previous agent and restarts it when the new one won't stay up", async () => {
-        const { steps, exec } = scripted({ watcherAlive: () => Promise.resolve(false) });
+        const { steps, exec } = scripted({ came: undefined });
         const installed = "1.0.0";
         const outcome = await upgrade(exec, installed);
         expect(outcome.kind).toBe("failed");
@@ -117,6 +135,80 @@ describe("runUpgrade", () => {
     it("doesn't start a watcher that wasn't running before", async () => {
         const { steps, exec } = scripted({ stopWatcher: () => Promise.resolve(undefined) });
         expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "upgraded", from: "1.0.0", to: "2.0.0" });
+        expect(steps).not.toContain("start");
+    });
+
+    /* THE SWAP LANDED AND SOMETHING ELSE IS STILL SERVING — reported as a completed upgrade for as long as the
+     * check after the restart was "is a process alive", which the agent being replaced answers perfectly well.
+     * Not a rollback: the bytes are in place and undoing that would throw away work that succeeded. */
+    it("names the build still serving when the loop that came up isn't the one installed", async () => {
+        const { steps, exec } = scripted({ came: "1.0.0" });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "loop-behind", installed: "2.0.0", running: "1.0.0" });
+        expect(steps).not.toContain(`swap ${agentPath}.previous→${agentPath}`);
+        expect(steps).toContain(`discard ${agentPath}.previous`);
+    });
+});
+
+/* UPGRADE IS ABOUT WHAT IS RUNNING, not about what is on disk — the half of this command that did not exist.
+ *
+ * A binary can land without the loop noticing (a card's one-liner re-run, a copy dropped into ~/.intentic/bin, an
+ * upgrade whose restart did not take), and the loop keeps the build it started with for as long as it lives. Every
+ * version anyone could read was the file's, so the machine reported the old build to its sandboxes indefinitely
+ * while this command answered "Already on the current agent. Nothing to do." */
+describe("runUpgrade reconciles the running loop", () => {
+    it("restarts a loop that is behind the installed binary, without downloading anything", async () => {
+        const { steps, exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "0.9.0", came: "1.0.0" });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "restarted", from: "0.9.0", to: "1.0.0" });
+        expect(steps).toEqual(["start"]);
+        expect(upgradeMessage({ kind: "restarted", from: "0.9.0", to: "1.0.0" })).toContain("still running 0.9.0");
+    });
+
+    // The rule that keeps the command cheap enough to run on a whim, and the reason this is a comparison rather
+    // than an unconditional bounce.
+    it("leaves a loop already on the installed build strictly alone", async () => {
+        const { steps, exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "1.0.0" });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "current", version: "1.0.0" });
+        expect(steps).toEqual([]);
+    });
+
+    // Nothing running is not a skew: `run --stop` is a thing people do on purpose, and an upgrade that starts
+    // what somebody deliberately stopped is one they stop trusting.
+    it("starts nothing when no loop is running at all", async () => {
+        const { steps, exec } = scripted({ published: () => Promise.resolve("1.0.0") });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "current", version: "1.0.0" });
+        expect(steps).toEqual([]);
+    });
+
+    it("says which build is still serving when the restart doesn't take", async () => {
+        const { exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "0.9.0", came: "0.9.0" });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome).toEqual({ kind: "loop-behind", installed: "1.0.0", running: "0.9.0" });
+        expect(upgradeMessage(outcome)).toContain("intentic-machine run --stop");
+    });
+
+    // The other way a restart ends badly: the old loop went down and nothing replaced it. A machine with nothing
+    // serving is not a machine "running another build", and telling its owner to stop what is already stopped is
+    // the kind of instruction that sends someone looking for a process that isn't there.
+    it("says nothing came back when the restart leaves the machine unserved", async () => {
+        const { exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "0.9.0", came: undefined });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome).toEqual({ kind: "loop-behind", installed: "1.0.0" });
+        expect(upgradeMessage(outcome)).toContain("didn't come back up");
+        expect(upgradeMessage(outcome)).not.toContain("run --stop");
+    });
+
+    /* The same reconciliation after a download that turned out not to be newer — the path taken when the release
+     * channel could not be read at all. The two verdicts that carry a note are deliberately not on it: each is
+     * about a machine that is off the release lane on purpose. */
+    it("reconciles the loop after a download that installs nothing", async () => {
+        const { steps, exec } = scripted({ downloaded: "1.0.0", running: "0.9.0", came: "1.0.0" });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "restarted", from: "0.9.0", to: "1.0.0" });
+        expect(steps).toContain("start");
+    });
+
+    it("leaves a build made from source unbounced", async () => {
+        const { steps, exec } = scripted({ downloaded: "1.183.0", running: "1.183.0" });
+        expect((await upgrade(exec, "0.0.0")).kind).toBe("current");
         expect(steps).not.toContain("start");
     });
 });

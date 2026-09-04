@@ -6,10 +6,11 @@ import { pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { type Log, WINDOWS_LAUNCH_STUB } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
-import { readResidentPid, reconcileResidency, stopResident } from "./resident.js";
+import { agentPath } from "./installed.js";
+import { readResidentBuild, readResidentPid, reconcileResidency, stopResident } from "./resident.js";
 import { binDir } from "./sync/config.js";
 import { archToken, download } from "./sync/mutagen.js";
-import { agentPath, assetUrl, realUpgradeExec, runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
+import { assetUrl, realUpgradeExec, runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
 /* EVERYTHING AN INSTALLER USED TO DECIDE, DECIDED HERE INSTEAD — once, in the language the tests run in.
@@ -34,13 +35,22 @@ export const SELF_UPDATE_GUARD_ENV = "INTENTIC_MACHINE_NO_SELF_UPDATE";
 const RESIDENT_START_TIMEOUT_MS = 10_000;
 const RESIDENT_START_POLL_MS = 200;
 
-export const residentCameUp = (): Promise<boolean> =>
-    pollUntil(async () => (await readResidentPid()) !== undefined, { intervalMs: RESIDENT_START_POLL_MS, timeoutMs: RESIDENT_START_TIMEOUT_MS });
+/* Restart the loop and answer WHICH BUILD came up, which is the only answer that proves an upgrade landed: the
+ * agent being replaced satisfies "a process is alive" exactly as well as the one replacing it.
+ *
+ * The wait is for the pidfile rather than for the build, because the two arrive together — the loop writes one
+ * line, pid and build (resident.ts) — and a loop that never comes up must not spend the whole window being asked
+ * a second question about a file that is not there. Undefined therefore covers both nothing started and it
+ * started too slowly to say so, which are one situation to the caller. */
+const restartResident = async (): Promise<string | undefined> => {
+    await reconcileResidency(() => undefined);
+    await pollUntil(async () => (await readResidentPid()) !== undefined, { intervalMs: RESIDENT_START_POLL_MS, timeoutMs: RESIDENT_START_TIMEOUT_MS });
+    return await readResidentBuild();
+};
 
 // The one wiring of the upgrade machinery to this machine's resident loop, shared by `upgrade` and the
 // self-update below so the two cannot drift apart.
-export const machineUpgradeExec = (out: Log): UpgradeExec =>
-    realUpgradeExec(stopResident, async () => await reconcileResidency(() => undefined), residentCameUp, out);
+export const machineUpgradeExec = (out: Log): UpgradeExec => realUpgradeExec(stopResident, restartResident, readResidentBuild, out);
 
 // Whether this process IS the installed agent — as opposed to a dev run (`node dist/cli.js`, AGENT_BIN) or a
 // binary somebody is trying out from Downloads. Only the installed agent self-updates or edits the machine.

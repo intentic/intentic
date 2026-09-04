@@ -4,7 +4,7 @@ import {
     type CliLauncher,
     cliLauncher,
     isProcessAlive,
-    livePid,
+    livePidRecord,
     type Log,
     pidFileBody,
     registerAutostart,
@@ -47,7 +47,20 @@ import { MACHINE_VERSION } from "./version.js";
 export const machineLauncher = (): CliLauncher => cliLauncher("intentic-machine");
 
 // The pid in the shared pidfile, if the loop that wrote it is still running in this boot.
-export const readResidentPid = async (): Promise<number | undefined> => await livePid(runPidPath);
+export const readResidentPid = async (): Promise<number | undefined> => (await livePidRecord(runPidPath))?.pid;
+
+/* WHICH BUILD IS ACTUALLY SERVING — what the loop stamped into the pidfile when it claimed it, which is the only
+ * place that fact exists.
+ *
+ * The binary at ~/.intentic/bin can be replaced under a running loop, by `upgrade`, by re-running a card's
+ * one-liner, by a copy somebody dropped in, and NOTHING about the process changes when it is: it goes on running
+ * the code it started with, while every version anyone can read (`intentic-machine version`, the report a fresh
+ * CLI builds, the number the Computers row prints) is the new file's. The skew is invisible without this, and it
+ * has already cost a machine several releases: the row showed the running build with no way to know a newer one
+ * was installed, and `upgrade` answered "already current" because the only version it compared was the file's.
+ *
+ * Undefined when no loop holds the pidfile, and when the one holding it predates the stamp. */
+export const readResidentBuild = async (): Promise<string | undefined> => (await livePidRecord(runPidPath))?.note;
 
 // How long to wait for a signalled loop to actually exit, and how often to look. It spends its life asleep
 // between polls, so it answers a signal in milliseconds; this bound only covers one wedged in a fetch.
@@ -145,7 +158,9 @@ export const runForeground = async (log: Log): Promise<void> => {
         log(`a machine agent is already running (pid ${holder}): leaving it alone. Stop it with \`intentic-machine run --stop\` first.`);
         return;
     }
-    await writeSecretFile(runPidPath, baseDir, await pidFileBody());
+    // Stamped with the build claiming it, so every other process can tell what is SERVING from what is installed
+    // (readResidentBuild). It costs one word on one line and it is the only record of the difference.
+    await writeSecretFile(runPidPath, baseDir, await pidFileBody(process.pid, MACHINE_VERSION));
 
     const [links, state] = await Promise.all([readLinks(), readState()]);
     if (links.length === 0 && state.pairings.length === 0) {

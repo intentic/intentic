@@ -4,7 +4,10 @@ import type { Pairing, SyncState } from "./config.js";
 import { skippedPortsOf } from "./mirror.js";
 import { buildReport, scopedReport } from "./report.js";
 
-const WATCHER = { running: true, pid: 4242 };
+// A loop running the same build that is installed below: the resting state, so nothing in these tests is quietly
+// asserting against a machine that is behind itself.
+const WATCHER = { running: true, pid: 4242, build: "1.2.0" };
+const INSTALLED = "1.2.0";
 
 const pairing = (overrides: Partial<Pairing> & Pick<Pairing, "sandboxId">): Pairing => ({
     sandboxUrl: `https://${overrides.sandboxId}.example.dev`,
@@ -14,7 +17,7 @@ const pairing = (overrides: Partial<Pairing> & Pick<Pairing, "sandboxId">): Pair
 
 // No Mutagen passed anywhere here: the session reads spawn a binary, and everything these assert about, which
 // folder, which ports, who is withheld from whom: is decided before one is consulted.
-const report = (state: SyncState) => buildReport(state, undefined, WATCHER, 1_700_000_000_000);
+const report = (state: SyncState) => buildReport(state, undefined, WATCHER, 1_700_000_000_000, INSTALLED);
 
 describe("buildReport", () => {
     it("names the folder each paired sandbox syncs into", () => {
@@ -66,7 +69,23 @@ describe("buildReport", () => {
 
     it("carries the watcher, because everything else is only true while it runs", () => {
         expect(report({ pairings: [] }).watcher).toEqual(WATCHER);
-        expect(buildReport({ pairings: [] }, undefined, { running: false }, 1).watcher).toEqual({ running: false });
+        expect(buildReport({ pairings: [] }, undefined, { running: false }, 1, INSTALLED).watcher).toEqual({ running: false });
+    });
+
+    /* THE FILE AND THE PROCESS ARE TWO FACTS, and this shape used to carry one number for both: whichever process
+     * built the report stamped its own version into `agents.sync`, so the same machine answered its RUNNING build
+     * to the sandbox its loop posted to and its INSTALLED build to one that ran `status --json` over a host
+     * capability. The gap between them — a machine updated but never restarted — was invisible in both. */
+    it("reports the installed agent and the running loop as separate builds", () => {
+        const built = buildReport({ pairings: [] }, undefined, { running: true, pid: 4242, build: "1.1.0" }, 1, "1.2.0");
+        expect(built.agents.sync).toBe("1.2.0");
+        expect(built.watcher.build).toBe("1.1.0");
+    });
+
+    // A machine with no installed agent to ask (a dev run, an npx one) says so rather than borrowing whatever
+    // version the process building the report happens to be.
+    it("leaves the installed agent unstated when there is none to read", () => {
+        expect(buildReport({ pairings: [] }, undefined, WATCHER, 1, undefined).agents.sync).toBeUndefined();
     });
 });
 

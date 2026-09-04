@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
+import { agentPath } from "./installed.js";
 import { binDir } from "./sync/config.js";
 import { archToken, download, exe, osToken } from "./sync/mutagen.js";
 
@@ -19,14 +20,22 @@ import { archToken, download, exe, osToken } from "./sync/mutagen.js";
  * chosen so that every step before the swap is reversible and the swap itself is the last thing that happens:
  *
  *   download beside the target → ask the NEW binary what it is → stop the resident loop → swap, keeping the old one →
- *   start it again → confirm it is alive → on any failure, put the old binary back and start it again.
+ *   start it again → confirm the loop that came up IS the new build → on any failure, put the old binary back and
+ *   start it again.
+ *
+ * That last confirmation used to be "is a process alive", which the loop being replaced answers just as well, so
+ * a swap that failed to displace it was reported as a completed upgrade while the machine went on serving the old
+ * agent. The loop stamps its build into its pidfile now (resident.ts), which is what makes the honest check
+ * possible — and what lets this command do the other thing its name promises: restart a loop that is behind the
+ * installed binary even when there is nothing to download (reconcileLoop).
  *
  * The binary being replaced is the one the resident watcher RUNS, which is why it is renamed rather than
  * overwritten: Windows refuses to unlink or overwrite a running executable but does allow renaming one, and the
  * install script has always relied on the same move. */
 
-// Where the install one-liner puts the agent, and therefore what the watcher runs and what this replaces.
-export const agentPath = join(binDir, `intentic-machine${exe}`);
+/* Where the install one-liner puts the agent, and therefore what the watcher runs and what this replaces. It
+ * lives in installed.ts because that module is the one that answers what the FILE there is, a question this
+ * command is only half of: the other half is asked on every report the agent builds. */
 
 /* The published asset for THIS machine, the same URL, built the same way, that computer.sh/sync.sh resolve.
  *
@@ -80,10 +89,17 @@ const probeVersion = (binary: string): Probe => {
     return { kind: result.status === 0 ? "unusable" : "no-version-command" };
 };
 
-// What an upgrade did, as a value, so the command prints it and a test asserts it without reading prose.
+/* What an upgrade did, as a value, so the command prints it and a test asserts it without reading prose.
+ *
+ * Two of these are about the LOOP rather than the file, because "upgrade" means the new agent is the one running,
+ * and this command used to end the moment the right bytes were on disk. `restarted` is the machine that already
+ * had them and was still serving the old build; `loop-behind` is the one where the swap landed and the process
+ * that came up is somehow not it — an outcome worth naming rather than reporting as a success. */
 export type UpgradeOutcome =
     | { readonly kind: "current"; readonly version: string; readonly note?: string }
+    | { readonly kind: "restarted"; readonly from: string; readonly to: string }
     | { readonly kind: "upgraded"; readonly from: string; readonly to: string }
+    | { readonly kind: "loop-behind"; readonly installed: string; readonly running?: string }
     | { readonly kind: "failed"; readonly reason: string };
 
 // The effects the upgrade has, behind one seam, so the ORDER above, which is the part worth getting right, is
@@ -94,8 +110,13 @@ export interface UpgradeExec {
     readonly probe: (binary: string) => Probe;
     readonly swap: (from: string, to: string) => Promise<void>;
     readonly stopWatcher: () => Promise<number | undefined>;
-    readonly startWatcher: () => Promise<void>;
-    readonly watcherAlive: () => Promise<boolean>;
+    /* Start the loop and answer the BUILD that came up, undefined when nothing did. It used to answer "is a
+     * process alive", which the loop this command was replacing answers just as well: a swap that failed to
+     * displace a running agent, or a start that raced a supervisor into restarting the old one, passed that
+     * check and was reported as a completed upgrade. A version is the only answer that can tell those apart. */
+    readonly startWatcher: () => Promise<string | undefined>;
+    /** What the loop holding the pidfile right now is running, undefined when nothing holds it. */
+    readonly runningBuild: () => Promise<string | undefined>;
     readonly discard: (path: string) => Promise<void>;
 }
 
@@ -159,6 +180,34 @@ const stagingFor = (published: string | undefined): { readonly path: string; rea
         ? { path: `${agentPath}.new`, says: `Downloading the current agent…` }
         : { path: `${agentPath}.new-${published}`, says: `Downloading the current agent (${published})…` };
 
+/* THE BINARY IS CURRENT; THE LOOP MAY NOT BE — the half of "upgrade" that had no code at all until now.
+ *
+ * Replacing the file does not touch the process. The swap below restarts the loop, but every OTHER way a binary
+ * lands (re-running a card's one-liner, a copy dropped into ~/.intentic/bin, an upgrade whose restart did not
+ * take, an agent installed in one environment while the loop runs in another) leaves the machine holding a new
+ * agent and serving an old one — and this command, the one a user runs precisely when they want the new agent to
+ * BE the one running, answered "Already on the current agent. Nothing to do." while the old process went on
+ * posting its own version to every sandbox it syncs.
+ *
+ * Still not a bounce for its own sake, which was the original rule and remains right: a loop already on the
+ * installed build is left strictly alone, and so is a machine with no loop running at all. `run --stop` is a
+ * thing people do on purpose, and an upgrade that quietly starts what somebody deliberately stopped is one they
+ * stop trusting. Only the skew earns the restart. */
+const reconcileLoop = async (exec: UpgradeExec, installed: string, log: Log): Promise<UpgradeOutcome> => {
+    const running = await exec.runningBuild();
+    if (running === undefined || running === installed) {
+        return { kind: "current", version: installed };
+    }
+    log(`The background loop is still running ${running}: restarting it on ${installed}.`);
+    // No stop of our own: starting IS a reconcile, and its first act is to stop whatever is holding the pidfile
+    // (resident.ts). A second stop here would be a no-op with a two-second timeout attached to it.
+    const came = await exec.startWatcher();
+    if (came === installed) {
+        return { kind: "restarted", from: running, to: installed };
+    }
+    return { kind: "loop-behind", installed, ...(came === undefined ? {} : { running: came }) };
+};
+
 /* Whether the watcher has to be running when this is over. It is running for almost everybody (it is registered
  * at login), but "not running" is a legitimate state, `--stop`, a mirror-only machine between reboots, and an
  * upgrade must not quietly start a background process the user had deliberately stopped. So the rule is: put it
@@ -177,7 +226,9 @@ export const runUpgrade = async (
      * says what is. This is an optimisation of the same decision, never a second, weaker version of it. */
     const published = await exec.published();
     if (published !== undefined && installed !== DEV_VERSION && !isNewer(published, installed)) {
-        return { kind: "current", version: installed };
+        // Nothing to download, which is not the same as nothing to do: the loop may still be serving an older
+        // build than the file this very command is running from (reconcileLoop).
+        return await reconcileLoop(exec, installed, log);
     }
     const { path: staged, says } = stagingFor(published);
     const previous = `${agentPath}.previous`;
@@ -198,7 +249,12 @@ export const runUpgrade = async (
     const verdict = verdictFor(exec.probe(staged), installed, force);
     if (!verdict.install) {
         await exec.discard(staged);
-        return verdict.outcome;
+        /* Nothing was installed — but "the published agent is not newer than mine" is the same situation the
+         * short-circuit above handles, reached after a download because the release channel could not be read.
+         * The two verdicts that carry a NOTE are left alone deliberately: each is about a machine deliberately
+         * off the release lane (a build from source, an agent older than `version`), and bouncing that user's
+         * loop onto something they did not ask for is not this command's business. */
+        return verdict.outcome.kind === "current" && verdict.outcome.note === undefined ? await reconcileLoop(exec, installed, log) : verdict.outcome;
     }
     const candidate = verdict.version;
     const wasRunning = (await exec.stopWatcher()) !== undefined;
@@ -209,10 +265,19 @@ export const runUpgrade = async (
         await exec.discard(previous);
         return { kind: "upgraded", from: installed, to: candidate };
     }
-    await exec.startWatcher();
-    if (await exec.watcherAlive()) {
+    const came = await exec.startWatcher();
+    if (came === candidate) {
         await exec.discard(previous);
         return { kind: "upgraded", from: installed, to: candidate };
+    }
+    /* A LOOP CAME UP AND IT IS NOT THE ONE WE JUST INSTALLED. The bytes are in place (so this is not a failed
+     * upgrade, and rolling back would undo work that succeeded), but something is still serving another build:
+     * a process that survived the stop because its pidfile was unreadable from here, a supervisor that restarted
+     * the old one, a second install on the same machine. Named rather than smoothed over — it is the exact shape
+     * that used to be reported as a completed upgrade while the old agent kept running. */
+    if (came !== undefined) {
+        await exec.discard(previous);
+        return { kind: "loop-behind", installed: candidate, running: came };
     }
     /* THE ROLLBACK. The new agent answered `version` and then could not stay up, a shape no smoke test catches,
      * because it is about this machine (a config it cannot read, a port it cannot bind) rather than about the
@@ -259,8 +324,8 @@ const downloadProgress = (log: Log): ((received: number, total: number) => void)
 // displaced on Windows, and what makes every step here undoable by renaming back.
 export const realUpgradeExec = (
     stopWatcher: () => Promise<number | undefined>,
-    startWatcher: () => Promise<void>,
-    alive: () => Promise<boolean>,
+    startWatcher: () => Promise<string | undefined>,
+    runningBuild: () => Promise<string | undefined>,
     log: Log,
 ): UpgradeExec => ({
     published: publishedVersion,
@@ -281,7 +346,7 @@ export const realUpgradeExec = (
     swap: async (from, to) => await rename(from, to),
     stopWatcher,
     startWatcher,
-    watcherAlive: alive,
+    runningBuild,
     discard: async (path) => await rm(path, { force: true }).catch(() => undefined),
 });
 
@@ -292,6 +357,18 @@ export const upgradeMessage = (outcome: UpgradeOutcome): string => {
     }
     if (outcome.kind === "upgraded") {
         return `Upgraded the agent: ${outcome.from} → ${outcome.to}.`;
+    }
+    // Both loop outcomes say which build is SERVING, because that is the number every other surface shows and
+    // the one a user came here to change.
+    if (outcome.kind === "restarted") {
+        return `Already on the current agent (${outcome.to}), but the background loop was still running ${outcome.from}: restarted it, so ${outcome.to} is what's serving now.`;
+    }
+    if (outcome.kind === "loop-behind") {
+        // Two different machines: one still serving an older build, and one left with nothing serving at all.
+        // The second only reaches here from a restart that was asked for, so it names the command that undoes it.
+        return outcome.running === undefined
+            ? `The agent on this machine is ${outcome.installed}, but the background loop didn't come back up. Start it with \`intentic-machine run\` and check its log.`
+            : `The agent on this machine is ${outcome.installed}, but the background loop is running ${outcome.running}. Stop it with \`intentic-machine run --stop\`, then start it with \`intentic-machine run\`.`;
     }
     return `Upgrade didn't happen: ${outcome.reason}`;
 };

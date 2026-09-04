@@ -69,16 +69,29 @@ const sameBoot = (written: string, current: string): boolean => {
     return Math.abs(Number(written.slice(3)) - Number(current.slice(3))) <= SAME_BOOT_MS;
 };
 
-/* What every writer puts in its pidfile: the process, and the boot it belongs to. One producer so `livePid` has
- * one shape to parse. The pid is a parameter only so a test can write a record for a stand-in process it
- * spawned; every real caller writes its own. */
-export const pidFileBody = async (pid: number = process.pid): Promise<string> => `${pid} ${await bootToken()}`;
+/* What every writer puts in its pidfile: the process, the boot it belongs to, and optionally ONE WORD ABOUT THE
+ * LOOP ITSELF. One producer so `livePidRecord` has one shape to parse. The pid is a parameter only so a test can
+ * write a record for a stand-in process it spawned; every real caller writes its own.
+ *
+ * The note is what a pidfile could not say before: WHICH BUILD is holding it. A running loop is the only thing
+ * that knows its own version — the binary on disk can be replaced under it without the process noticing — so a
+ * loop that does not write its build down leaves every other process (an `upgrade` deciding whether a restart is
+ * owed, a `status` reporting what is actually serving) unable to tell a fresh agent from one that has been
+ * running since three releases ago. Whitespace-free by contract: it rides as the third field of one line. */
+export const pidFileBody = async (pid: number = process.pid, note?: string): Promise<string> =>
+    `${pid} ${await bootToken()}${note === undefined ? "" : ` ${note}`}`;
 
-// The pid in the file, if the file was written by THIS boot and that pid is still running. Undefined covers
-// every other case, no file, a half-written one, one left behind by an earlier boot, a pid that has since
-// exited, because they all mean the same thing to every caller: there is no loop to reach.
-export const livePid = async (pidPath: string): Promise<number | undefined> => {
-    const [written = "", stamp = ""] = (await readFile(pidPath, "utf8").catch(() => "")).trim().split(/\s+/);
+/* THE LOOP BEHIND A PIDFILE: its pid, and whatever it stamped beside it. Undefined covers every case where there
+ * is nothing to reach, no file, a half-written one, one left behind by an earlier boot, a pid that has since
+ * exited, because they all mean the same thing to every caller. */
+export interface PidRecord {
+    readonly pid: number;
+    /** What the writer stamped beside the pid, when it stamped one: the machine agent writes the build it runs. */
+    readonly note?: string;
+}
+
+export const livePidRecord = async (pidPath: string): Promise<PidRecord | undefined> => {
+    const [written = "", stamp = "", note] = (await readFile(pidPath, "utf8").catch(() => "")).trim().split(/\s+/);
     const pid = Number(written);
     if (!Number.isInteger(pid) || pid <= 0) {
         return undefined;
@@ -86,8 +99,15 @@ export const livePid = async (pidPath: string): Promise<number | undefined> => {
     if (!sameBoot(stamp, await bootToken())) {
         return undefined;
     }
-    return isProcessAlive(pid) ? pid : undefined;
+    if (!isProcessAlive(pid)) {
+        return undefined;
+    }
+    return { pid, ...(note === undefined || note === "" ? {} : { note }) };
 };
+
+// The pid alone, for the callers that only ever ask "is there a loop to reach" (the VPN and exit-node pidfiles,
+// which stamp no note at all).
+export const livePid = async (pidPath: string): Promise<number | undefined> => (await livePidRecord(pidPath))?.pid;
 
 /* How the loop outlives the command that started it, `detached` on every platform, for two different reasons.
  *

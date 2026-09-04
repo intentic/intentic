@@ -1,6 +1,6 @@
-import { type MachinePairing, WATCHER_STALL_AFTER_MS } from "@intentic/sandbox-contract";
+import { type MachinePairing, type MachineReport, WATCHER_STALL_AFTER_MS } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { pairingLine, watcherLine } from "../status.js";
+import { buildSkewLine, pairingLine, statusSummary, watcherLine } from "../status.js";
 import { enrollKey, selectPairings } from "./commands.js";
 import type { Pairing, SyncState } from "./config.js";
 
@@ -231,5 +231,59 @@ describe("watcherLine", () => {
         const running = watcherLine({ running: true, pid: 4242, lastTickAt: NOW - 7000 }, NOW);
         expect(stopped).not.toBe(running);
         expect(stopped).toContain("NOT running");
+    });
+});
+
+/* THE MACHINE IS UPDATED AND STILL SERVING THE OLD AGENT, which this output had no way to say: the version on its
+ * first line is the FILE's, the loop keeps whatever build it started with, and a machine that was upgraded
+ * without a restart therefore printed a clean bill of health with the old agent's behaviour underneath it. */
+describe("buildSkewLine and the status summary", () => {
+    const NOW = 1_700_000_000_000;
+    const report = (watcher: MachineReport["watcher"], installed: string | undefined): MachineReport => ({
+        hostname: "radarsu-rog",
+        os: "linux",
+        agents: { sync: installed },
+        sandboxes: [],
+        pairings: [{ sandboxId: "work", mode: "sync", localDir: "/home/me/work", mirroring: "on" }],
+        ports: [],
+        watcher,
+        capturedAt: NOW,
+    });
+    const serving = { running: true, pid: 4242, build: "1.233.0", lastTickAt: NOW - 5000 };
+
+    it("names both builds and the restart that closes the gap", () => {
+        const line = buildSkewLine(report(serving, "1.240.0"));
+        expect(line).toContain("1.233.0");
+        expect(line).toContain("1.240.0");
+        expect(line).toContain("intentic-machine run --stop");
+    });
+
+    it("says nothing when the loop is already on the installed build", () => {
+        expect(buildSkewLine(report({ ...serving, build: "1.240.0" }, "1.240.0"))).toBeUndefined();
+    });
+
+    /* Silence on every kind of not-knowing, which is the same rule the version chip follows: an agent too old to
+     * stamp its build, and a machine with no installed agent to compare against, are not skews, and a nag nobody
+     * can act on is worse than the fact being absent. */
+    it("says nothing when either build is unknown", () => {
+        expect(buildSkewLine(report({ running: true, pid: 4242 }, "1.240.0"))).toBeUndefined();
+        expect(buildSkewLine(report(serving, undefined))).toBeUndefined();
+    });
+
+    // A stopped loop is not serving an old build, it is not serving anything, and the line above it says so in
+    // louder words.
+    it("says nothing about a loop that is not running", () => {
+        expect(buildSkewLine(report({ running: false, build: "1.233.0" }, "1.240.0"))).toBeUndefined();
+    });
+
+    /* The tray reads the summary and nothing else, so the skew has to reach that one line too — otherwise the app
+     * whose whole premise is not needing a terminal is the one surface that cannot tell you. */
+    it("ranks the skew above a healthy line and below the two failures", () => {
+        const skewed = report(serving, "1.240.0");
+        expect(statusSummary(4242, 0, skewed, NOW)).toContain("OLD BUILD RUNNING");
+        expect(statusSummary(4242, 0, report({ ...serving, build: "1.240.0" }, "1.240.0"), NOW)).not.toContain("OLD BUILD");
+        // A stalled loop outranks it: nothing is being served at all, whichever build is doing the not-serving.
+        expect(statusSummary(4242, 0, report({ ...serving, lastTickAt: NOW - WATCHER_STALL_AFTER_MS - 60_000 }, "1.240.0"), NOW)).toContain("STALLED");
+        expect(statusSummary(undefined, 0, skewed, NOW)).toContain("NOT RUNNING");
     });
 });

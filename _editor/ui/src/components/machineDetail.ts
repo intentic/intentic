@@ -49,6 +49,12 @@ export interface MachineWatcherState {
     running: boolean;
     stalled?: boolean | undefined;
     pid?: number | undefined;
+    /* The build that is SERVING and the newer one sitting installed beside it, when a machine is holding an agent
+     * it has not picked up: replacing the binary leaves the running process exactly as it was, so a computer can
+     * be updated and go on serving a months-old loop with nothing on any screen to say so. Decided by the CALLER
+     * (watcherBuildSkew in the sandbox contract), for the same reason `stalled` is: the rule belongs beside the
+     * field it judges so the terminal and the browser cannot disagree about one machine. */
+    staleBuild?: { readonly running: string; readonly installed: string } | undefined;
 }
 
 /* One sandbox CONTAINER on the machine, the docker half of the same sandbox the two lists above describe. */
