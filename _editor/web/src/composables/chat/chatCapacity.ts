@@ -1,7 +1,7 @@
-import type { AgentProvider } from "@intentic/sandbox-contract";
+import { type AgentProvider, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
 import { providerDisplayLabel } from "./providerCatalog";
-import { type PlanLimitGroup, planLimitGroups, type PlanLimitRow, planLimitRows, poolPeriod, poolScope, SPENT_PERCENT } from "./usageStatus";
+import { type PlanLimitGroup, planLimitGroups, type PlanLimitPool, type PlanLimitRow, planLimitRows, poolPeriod, poolScope } from "./usageStatus";
 
 /* WHAT CAN I START THE NEXT TASK ON, as a column narrow enough to stand beside a transcript.
  *
@@ -13,15 +13,27 @@ import { type PlanLimitGroup, planLimitGroups, type PlanLimitRow, planLimitRows,
  *
  * Three rules follow from that, and each of them is why this is not planLimitRows in a narrow box:
  *
- *   1. A SPENT ACCOUNT IS NOT ON THE LIST. The list is offers, and an account at 97% is not one. But it is not
- *      silently dropped either: a provider with nothing left is named on the footnote with the instant it comes
- *      back, because "Claude isn't here" and "Claude is spent until Sunday" are opposite states and the absence
- *      of a row cannot tell them apart.
+ *   1. AN EXHAUSTED ACCOUNT IS NOT ON THE LIST, and nothing short of exhausted comes off it. The list is
+ *      offers, and a pool with nothing left in it has none to make. It is not silently dropped either: a
+ *      provider with nothing left is named on the footnote with the instant it comes back, because "Claude
+ *      isn't here" and "Claude is spent until Sunday" are opposite states and the absence of a row cannot tell
+ *      them apart.
+ *      TWO THINGS "SPENT" MUST NOT MEAN HERE, each of which cost the reader an account that was working. The
+ *      app's red line is 90% (usageStatus' SPENT_PERCENT), and that is a warning about starting a long turn
+ *      rather than a reason to hide anything — a plan with a tenth of its week left runs the next task fine, and
+ *      a rail headed "Ready to run" that has dropped it is answering a question nobody asked. And an account's
+ *      headline percentage is its TIGHTEST allowance, which on a plan that meters a model separately is
+ *      routinely a slice standing in front of one model: a full weekly Fable pool read as a spent account and
+ *      took a sign-in with days of Sonnet in it off the list, while the Usage tab beside it showed that
+ *      account's 5-hour session and all-models week both wide open. Both are settled below, by openPercent and
+ *      spentOutright.
  *   2. SPENT IS NOT THE ONLY WAY TO BE UNUSABLE. A dead credential publishes full pools right up to the moment
  *      it turns every turn away, and an organization that has switched the harness off for a seat publishes
  *      them forever. Either would draw a confident green bar over an account that cannot serve anything, which
- *      is the exact defect the composer's own account rows were built to end. So a standing refusal and a
- *      needs-reconnecting flag hold an account off the list as firmly as a full pool does.
+ *      is the exact defect the composer's own account rows were built to end. So a needs-reconnecting flag and
+ *      a standing refusal of the two kinds no reading can answer hold an account off the list as firmly as a
+ *      full pool does — while a refusal that merely reports a spent allowance is left to the pool it pinned,
+ *      because that pool is the whole of what it knows (refusedAccounts).
  *   3. AN ACCOUNT IS AS MANY ALLOWANCES AS IT PUBLISHES, and every one of them is drawn. A subscription is not
  *      one pool: it is a 5-hour session AND a week, and on some plans a per-model slice of that week besides.
  *      They run out independently and they come back at completely different times, so a single number — the
@@ -76,9 +88,12 @@ export interface CapacityRow {
      * line, because at this width there is one line: a label the user chose is what they asked to see, and the
      * email behind it is what answers "which one is that" when the label turns out not to. */
     readonly identity: string | undefined;
-    /* WHAT RANKS THIS ROW: the binding pool's figure, the tightest of the lanes below, since an account is as
-     * constrained as its worst allowance. Undefined ⇒ no reading at all, and then there are no lanes either:
-     * an empty track and a measured 0% are opposite claims, and `note` says which kind of nothing this is. */
+    /* WHAT RANKS THIS ROW: the room it has for the roomiest thing it could run (openPercent), which is the
+     * tightest of the lanes that gate every model rather than the tightest lane on the row. An account is as
+     * constrained as its worst allowance only if that allowance stands in front of everything, and a per-model
+     * slice does not: this is a column of offers, and the offer is "there is a turn left in this".
+     * Undefined ⇒ no reading at all, and then there are no lanes either: an empty track and a measured 0% are
+     * opposite claims, and `note` says which kind of nothing this is. */
     readonly percent: number | undefined;
     // One per allowance that can gate a turn, shortest window first. Empty ⇒ nothing was measured.
     readonly lanes: readonly CapacityLane[];
@@ -127,6 +142,53 @@ export interface ChatCapacity {
     readonly measuredAt: number | undefined;
 }
 
+/* HOW MUCH ROOM THIS ACCOUNT HAS FOR THE ROOMIEST THING IT COULD RUN, which is not its tightest pool.
+ *
+ * The row's own percentage is its BINDING pool (the contract's bindingWindow): the fullest allowance that gates
+ * anything at all, which is what "how constrained is this account" means and what the Usage tab orders itself
+ * by. This column asks a different question — is there ANY turn left in it — and the two answers part company
+ * on every plan that meters a model separately. A scoped pool stands in the way of the models it names and of
+ * nothing else: a spent weekly Fable slice stops Fable, while the 5-hour session and the all-models week beneath
+ * it go on serving Sonnet all week.
+ *
+ * So the pools that gate EVERYTHING are the floor, and the tightest of them is the answer: a spent 5-hour
+ * session really does stop every turn, whatever the per-model slices say. A scoped pool is read only where
+ * there is no such floor — Google meters Gemini and the Claude/GPT models as two separate weeks off one
+ * sign-in and publishes no undivided pool at all — and then the ROOMIEST scope is the answer, because every
+ * model that sign-in serves sits inside one of them and which one is the reader's to pick.
+ *
+ * Undefined ⇒ nothing was measured, the same thing the row's percentage means by it, and unknown is not
+ * exhausted. Gates are the contract's vocabulary (plan-pools.ts); this is the one question in the app asked
+ * across models rather than about one, which is why it is read here rather than there. */
+const openPercent = (pools: readonly PlanLimitPool[]): number | undefined => {
+    const gating = pools.filter((pool) => pool.gates !== `none`);
+    const everything = gating.filter((pool) => pool.gates === `all`).map((pool) => pool.percent);
+    if (everything.length > 0) {
+        return Math.max(...everything);
+    }
+    const scoped = gating.map((pool) => pool.percent);
+    return scoped.length === 0 ? undefined : Math.min(...scoped);
+};
+
+/* SPENT FOR EVERYTHING IT COULD RUN, the only reading of "spent" a list of offers may act on, and it is drawn
+ * at EXHAUSTION rather than at the app's warning line.
+ *
+ * 90% (usageStatus' SPENT_PERCENT) is where every surface in this app turns a percentage red, and that is the
+ * right place for a warning: it says "don't start a long turn here". It is the wrong place to HIDE something. A
+ * plan with a tenth of its week left runs the next task perfectly well, and dropping it out of a column headed
+ * "Ready to run" answers the reader's question with a different one — the complaint this rail was built to end,
+ * arriving from the other direction: an account gone from the list, its usage tab saying it has room, and no way
+ * to tell that absence apart from a provider that was never connected.
+ *
+ * So the line here is the wire's own, the contract's SPENT_UTILIZATION, which is also the one the daemon steers
+ * a turn off an account by: the point past which a call is certain to be refused, rather than unwise. A
+ * pool between the two lines keeps its row and wears the red the tone scale gives it, which is the whole of what
+ * a warning has to do — the reader can see 96% and decide, which is more than a hidden row ever told them. */
+const spentOutright = (row: PlanLimitRow): boolean => {
+    const open = openPercent(row.pools);
+    return open !== undefined && open >= SPENT_UTILIZATION;
+};
+
 /* WHICH ACCOUNTS A REFUSAL TAKES OFF THE LIST, which is not always the one it names.
  *
  * A native turn names the account it was serving, and only that one is out. A ROUTED turn names nobody, and
@@ -137,18 +199,27 @@ export interface ChatCapacity {
  *
  * Only while the refusal STANDS. `refusalNote` has already read it against everything measured since, and an
  * answered refusal is history: holding an account off the list over a 401 that three later readings disproved
- * is the same error from the other end. */
+ * is the same error from the other end.
+ *
+ * AND ONLY A REFUSAL NO READING CAN CONTRADICT, which is to say not a spent allowance. A `limit` refusal is a
+ * statement about ONE POOL and is already read as one everywhere in the app: usageStatus' spentByRefusal pins
+ * that pool — the one binding the model the refused turn ran — to a full 100, so it reaches the test below as
+ * the full pool it describes, and whether a full pool stops every turn is precisely what openPercent has just
+ * answered. Taking the account off the list on top of that re-decides it, wrongly and in the one direction that
+ * costs the reader an offer: a Fable turn refused on Tuesday says nothing whatever about Sonnet. What survives
+ * here is the pair a reading genuinely cannot answer — a rejected credential and a withdrawn seat, which
+ * publish roomy pools for as long as they refuse everything asked of them. */
 interface Refused {
     readonly all: boolean;
     readonly one: string | undefined;
 }
 
 const refusedAccounts = (group: PlanLimitGroup): Refused => {
-    if (group.refusal?.current !== true) {
+    const refusal = providerRefusals.value[group.provider];
+    if (group.refusal?.current !== true || refusal === undefined || refusal.kind === `limit`) {
         return { all: false, one: undefined };
     }
-    const named = providerRefusals.value[group.provider]?.account;
-    return named === undefined ? { all: true, one: undefined } : { all: false, one: group.refusedRow?.id };
+    return refusal.account === undefined ? { all: true, one: undefined } : { all: false, one: group.refusedRow?.id };
 };
 
 /* CAN THIS ACCOUNT SERVE THE NEXT TURN. Four ways to be unusable, and they are genuinely different facts: a
@@ -161,16 +232,19 @@ const canServe = (row: PlanLimitRow, refused: Refused): boolean => {
     if (row.needsReauth || row.cooling !== undefined || refused.all || refused.one === row.id) {
         return false;
     }
-    return row.percent === undefined || row.percent < SPENT_PERCENT;
+    return !spentOutright(row);
 };
 
 // Most room first, and a row with no reading after every row that has one: unknown is not headroom, so it must
-// not outrank a measured 4%. Ties by name, so the column holds still between readings.
+// not outrank a measured 4%. Ties by name, so the column holds still between readings. On the room the account
+// has for the roomiest model it can serve, the same figure that decided it belonged here at all: ranked by the
+// binding pool instead, a sign-in whose Opus slice was full sank below siblings with less of the week left.
 const byRoom = (left: PlanLimitRow, right: PlanLimitRow): number => {
-    if (left.percent === undefined || right.percent === undefined) {
-        return left.percent === right.percent ? left.label.localeCompare(right.label) : left.percent === undefined ? 1 : -1;
+    const [leftRoom, rightRoom] = [openPercent(left.pools), openPercent(right.pools)];
+    if (leftRoom === undefined || rightRoom === undefined) {
+        return leftRoom === rightRoom ? left.label.localeCompare(right.label) : leftRoom === undefined ? 1 : -1;
     }
-    return left.percent - right.percent || left.label.localeCompare(right.label);
+    return leftRoom - rightRoom || left.label.localeCompare(right.label);
 };
 
 /* WHAT TO CALL A ROW WHEN ITS NAME NAMES NOTHING. A label starts life as whatever the provider offered and is
@@ -236,7 +310,7 @@ const capacityRow = (row: PlanLimitRow, label: string | undefined): CapacityRow 
     label,
     // Only when it adds something: a row already printing the identity must not repeat it on the hover.
     identity: row.identity === label ? undefined : row.identity,
-    percent: row.percent,
+    percent: openPercent(row.pools),
     lanes: capacityLanes(row),
     note: row.readable ? UNREAD : NO_LIMITS,
     stale: row.stale,
@@ -265,7 +339,9 @@ const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[])
  * useful content of this line. A dead credential is reported separately anyway (`needsReauth`), so a provider
  * that is spent AND holds one broken sign-in still reads as spent, and the count below says the rest. */
 const outReason = (group: PlanLimitGroup, refused: Refused): string => {
-    if (group.rows.some((row) => row.percent !== undefined && row.percent >= SPENT_PERCENT)) {
+    // The same reading of "spent" the list above judged by, so the footnote cannot call a provider spent over a
+    // per-model slice that never held a turn back — and, on the provider it just dropped, always can.
+    if (group.rows.some(spentOutright)) {
         return `spent`;
     }
     if (group.rows.every((row) => row.needsReauth)) {
@@ -281,11 +357,15 @@ const outReason = (group: PlanLimitGroup, refused: Refused): string => {
  * them. Every account publishes a 5-hour window alongside its weekly one, and the 5-hour window reopens within
  * the hour whether or not it is the pool that ran out — so "reopens in 40 minutes" beside a weekly allowance
  * spent until Sunday is a promise the plan will not keep. Past instants are ignored rather than reported: a
- * window whose time has passed describes a pool that has already reopened. */
+ * window whose time has passed describes a pool that has already reopened.
+ *
+ * FULL on the same line the list hid the provider behind (spentOutright's), because these two are one sentence:
+ * a pool at 94% is one this rail is still offering, and dating its reset would promise the return of something
+ * that never went away. */
 const reopensAt = (group: PlanLimitGroup, now: number): number | undefined => {
     const upcoming = group.rows.flatMap((row) => [
         ...row.pools.flatMap((pool) =>
-            pool.percent >= SPENT_PERCENT && pool.resetsAt !== undefined && pool.resetsAt * 1000 > now ? [pool.resetsAt] : [],
+            pool.percent >= SPENT_UTILIZATION && pool.resetsAt !== undefined && pool.resetsAt * 1000 > now ? [pool.resetsAt] : [],
         ),
         // The translator's own retry instant for a benched credential, the same kind of promise a reset is.
         ...(row.cooling?.until !== undefined && row.cooling.until * 1000 > now ? [row.cooling.until] : []),

@@ -72,7 +72,7 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
         [],
         {
             ...NO_ROUTED,
-            gemini: [4, 44, 91, 30, 12, 7].map((percent, index) => ({
+            gemini: [4, 44, 100, 30, 12, 7].map((percent, index) => ({
                 name: `gemini-${index}`,
                 label: `radarsuspam${index}@gmail.com`,
                 usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] },
@@ -85,7 +85,8 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
     // And not one address among them: the reader cannot pick between these, so naming one would read as
     // "this account is what you have".
     expect(el.textContent).not.toContain(`radarsuspam`);
-    // The depth of the pool is what the count carries instead. Five of six: 91% is spent.
+    // The depth of the pool is what the count carries instead. Five of six: one credential is exhausted, which
+    // is the only reading of "spent" that takes a sign-in off this column (chatCapacity's spentOutright).
     expect(el.textContent).toContain(`5/6`);
 });
 
@@ -114,7 +115,7 @@ it(`does not claim a pool has the most room when nothing in it was measured`, ()
 
 it(`names a provider that has fallen off the list, and when it comes back`, () => {
     const el = mount([
-        { id: `a`, label: `spent@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000, gates: `all` }] } },
+        { id: `a`, label: `spent@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, resetsAt: 1_700_090_000, gates: `all` }] } },
     ]);
 
     // No offer, so no bar: an empty track over a spent account is the claim this rail exists not to make.
@@ -123,6 +124,20 @@ it(`names a provider that has fallen off the list, and when it comes back`, () =
     expect(el.textContent).toContain(`Claude Code`);
     // The absence is dated rather than merely stated: waiting is the whole of what there is to do about it.
     expect(el.querySelector(`[aria-label="Plan headroom"]`)?.textContent).toMatch(/Nothing has room right now/);
+});
+
+/* AND WHAT STANDS IN FOR THE HIDING THAT USED TO HAPPEN HERE. An account past the app's red line but not yet
+ * exhausted keeps its row, so the steering is done by the TONE rather than by an absence — 96% in danger red,
+ * on a rail that is still offering it, says both true things at once: you can start this, and not for long.
+ * Dropping it said neither, and read on screen as an account that had gone missing. */
+it(`draws an account that is nearly spent in the danger tone rather than dropping it`, () => {
+    const el = mount([
+        { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000, gates: `all` }] } },
+    ]);
+
+    expect(barWidths(el)).toEqual([`96%`]);
+    expect(el.textContent).not.toContain(`Unavailable`);
+    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.className).toContain(`text-danger`);
 });
 
 it(`spells out for a screen reader what the bar says by its width`, () => {

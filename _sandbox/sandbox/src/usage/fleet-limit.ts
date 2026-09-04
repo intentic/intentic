@@ -1,4 +1,4 @@
-import { type AccountUsage, gatingWindows, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
+import { type AccountUsage, gatingWindows, type ModelRef, SPENT_UTILIZATION, type UsageWindow } from "@intentic/sandbox-contract";
 
 /* WHAT THE RECORDED QUOTA SAYS ABOUT A PROVIDER'S FLEET FOR ONE MODEL, the single rule behind every daemon
  * decision that used to have its own: which routed turn's refusal names a reset (translator.ts turnLimit),
@@ -47,10 +47,6 @@ export interface TurnLimit {
     // reading taken since: a reading older than the refusal it is asked to contradict says nothing.
     readonly roomMeasuredAt?: number;
 }
-
-// Utilization at or past which the daemon treats a pool as spent. 100, not the browser's 90: the browser is
-// steering a person away from a long turn, the daemon is deciding whether a call is certain to be refused.
-export const SPENT_UTILIZATION = 100;
 
 // One spent thing, with the instant it reopens where one is known, and the pool to name where there is one.
 interface Exhausted {

@@ -13,6 +13,16 @@ import type { AccountUsage, UsageWindow, WindowGates } from "./schemas/plan-limi
  * chosen a model yet is asking. Pools gated to `none` are left out of that too: a code-review limit is the
  * account's to see, never the thing that decides whether a chat turn can run. */
 
+/* WHEN A POOL HAS NOTHING LEFT IN IT, on the wire's own scale, read the same way by both sides.
+ *
+ * 100, and deliberately not the browser's 90 (usageStatus' SPENT_PERCENT): the two thresholds answer different
+ * questions. 90 is a WARNING — the point at which a surface stops recommending an account for a long turn, and
+ * what the rings and the bands take their red from. This is EXHAUSTION: the point past which a call is certain
+ * to be refused, which is what the daemon needs before it steers a turn elsewhere and the only line a list of
+ * offers may hide an account behind. A subscription with a tenth of its week left can still run the next task,
+ * and dropping it off a rail titled "Ready to run" answers the reader's question with the wrong one. */
+export const SPENT_UTILIZATION = 100;
+
 export interface ModelRef {
     // The wire id ("claude-opus-4-6", "gemini-3-pro").
     readonly id: string;
