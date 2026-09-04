@@ -23,6 +23,9 @@ const repo = (name: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSu
     repo: name,
     hasPanel: false,
     running: false,
+    // What the daemon answers for a repo it is not starting: nothing runnable has nothing to install for
+    // (panels.routes.ts), and the one repo below that does ship a panel is left un-started anyway.
+    installed: true,
     healthy: false,
     servers: [],
     deployConfig: false,

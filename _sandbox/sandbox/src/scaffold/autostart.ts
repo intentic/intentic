@@ -67,10 +67,15 @@ export interface AutostartOutcome {
     readonly skipped: readonly { readonly key: string; readonly why: string }[];
 }
 
+// The three seams a boot step needs to put an app up: where the workspace is, what URL its previews answer
+// on, and the manager that runs it. Named rather than taken whole because this module hands `services` to
+// nothing (composition.ts "WHAT A MODULE SHOULD TAKE OF IT"), and a test of it should stand up three members.
+export type AutostartDeps = Pick<Services, "config" | "processes" | "workspace">;
+
 /* Start everything the file names. Same spec builder, same zone and sandbox id as the Start button and the
  * apps routes, so a server this step starts is byte-for-byte the one a click would have started. Per-entry
  * failures are reported, never thrown: one app that cannot start must not keep the rest down. */
-export const runAutostart = async (services: Services): Promise<AutostartOutcome> => {
+export const runAutostart = async (services: AutostartDeps): Promise<AutostartOutcome> => {
     const root = services.workspace.root;
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);

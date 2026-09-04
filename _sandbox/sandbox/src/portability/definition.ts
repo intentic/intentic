@@ -95,7 +95,9 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     },
     { path: ".intentic/config/templates.json", note: "Scaffold template choices; they point at repos the definition's own sections name." },
     {
-        path: ".intentic/config/autostart.json",
+        // Through the table's own type, for the reason the safety row below spells out: a row added after the
+        // rule landed is one the compiler can hold against WORKSPACE_STATE_FILES, so it costs nothing to.
+        path: stateRelPath(".intentic/config/autostart.json"),
         note: "Which apps the daemon starts at boot, by repo and app folder; an entry whose folder the target lacks is one skipped log line per boot, nothing more.",
     },
     { path: ".intentic/config/skills/", note: "Locally-authored skills. Which skills are ON is a setting; the files are these." },

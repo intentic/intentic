@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
-import type { ArrivalItem } from "@intentic/sandbox-contract";
+import { type ArrivalItem, STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { defaultGit, observeGitCommands } from "@intentic/scaffold";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -83,6 +83,8 @@ import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { seedStarterSite } from "./scaffold/starter-site.js";
 import { runAutostart } from "./scaffold/autostart.js";
 import { arrivedPrewarmed, finishPrewarm } from "./platform/prewarm.js";
+import { answers } from "./ports/port-probe.js";
+import { appPanelKey } from "./workspace/app-previews.js";
 import { readCpuThrottle } from "./platform/cpu-throttle.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
@@ -1350,7 +1352,16 @@ const main = async (): Promise<void> => {
      * volume, and take the same graceful exit SIGTERM takes, which is what stops the machine. After every
      * handler above is installed on purpose: the exit must be the ordinary one, marker stamped and all. */
     if (prewarm) {
-        void finishPrewarm({ historyRoot: config.historyRoot, image: config.sandbox.image, processes: services.processes, logger })
+        void finishPrewarm({
+            historyRoot: config.historyRoot,
+            image: config.sandbox.image,
+            processes: services.processes,
+            logger,
+            // Named here rather than imported down there: platform sits under both of these subsystems, and
+            // this file is the one place above all three (platform/prewarm.ts `StarterProbe` says why).
+            starterKey: appPanelKey(STARTER_REPO, STARTER_APP),
+            answers: (port) => answers("http", port),
+        })
             .catch((error: unknown) => logger.error({ err: error }, "prewarm: could not finish; the claimed boot prepares whatever is missing"))
             .finally(stop);
     }

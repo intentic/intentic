@@ -2,13 +2,11 @@ import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sleep } from "@intentic/base/async";
-import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
+import { STARTER_REPO } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
-import { answers } from "../ports/port-probe.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { writeJsonFile } from "../store/json-file.js";
-import { appPanelKey } from "../workspace/app-previews.js";
 
 /* PREWARM: the boot a pool machine runs before anybody owns it (SANDBOX_PREWARM=1, env.config.ts).
  *
@@ -81,21 +79,33 @@ export const arrivedPrewarmed = async (root: string, historyRoot: string): Promi
 const WARMUP_MAX_MS = 120_000;
 const WARMUP_POLL_MS = 2_000;
 
+/* THE TWO THINGS THIS WARM-UP IS HANDED INSTEAD OF IMPORTING, and why that is the shape rather than ceremony:
+ * `platform` sits UNDER `ports` and `workspace` in the daemon's import graph — port-scan.ts reaches down here
+ * for proc-stat, workspace-setup.ts for on-path — so importing a panel-key builder and a dial back up would tie
+ * all three into one knot and make none of them liftable without the others (daemon-boundaries.mjs holds this).
+ * main.ts sits above all three and already knows both, so it names them at the one call site. */
+export interface StarterProbe {
+    // The process-manager key the starter's dev server runs under (workspace/app-previews.ts `appPanelKey`).
+    readonly starterKey: string;
+    // Whether anything is answering HTTP on a local port (ports/port-probe.ts `answers`).
+    readonly answers: (port: number) => Promise<boolean>;
+}
+
 /* Wait until the starter's dev server answers on its assigned port, once. The point is the side effect: a
  * framework's first `dev` writes its pre-bundled dependencies next to node_modules, and that write is what a
  * claimed boot would otherwise pay. False when nothing was started (a seed that skipped), when the server died
  * (the manager untracks a dead session), or when the deadline passed. */
-export const warmUpStarter = async (processes: ManagedProcesses, logger: Logger): Promise<boolean> => {
-    const key = appPanelKey(STARTER_REPO, STARTER_APP);
+export const warmUpStarter = async (deps: StarterProbe & { readonly processes: ManagedProcesses; readonly logger: Logger }): Promise<boolean> => {
+    const { starterKey: key, logger } = deps;
     const deadline = Date.now() + WARMUP_MAX_MS;
     while (Date.now() < deadline) {
-        const port = processes.portOf(key);
+        const port = deps.processes.portOf(key);
         if (port === undefined) {
             logger.info({ key }, "prewarm: the starter's dev server is not running, nothing to warm up");
             return false;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- a poll is the shape of this wait
-        if (await answers("http", port)) {
+        if (await deps.answers(port)) {
             return true;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop
@@ -107,13 +117,15 @@ export const warmUpStarter = async (processes: ManagedProcesses, logger: Logger)
 
 /* The prewarm's last act: warm the starter, stamp the volume, and let the caller stop the daemon. The marker
  * goes last on purpose (see the module note): a volume is prepared when it says so, and never before. */
-export const finishPrewarm = async (deps: {
-    readonly historyRoot: string;
-    readonly image: string;
-    readonly processes: ManagedProcesses;
-    readonly logger: Logger;
-}): Promise<void> => {
-    const warmedUp = await warmUpStarter(deps.processes, deps.logger);
+export const finishPrewarm = async (
+    deps: StarterProbe & {
+        readonly historyRoot: string;
+        readonly image: string;
+        readonly processes: ManagedProcesses;
+        readonly logger: Logger;
+    },
+): Promise<void> => {
+    const warmedUp = await warmUpStarter(deps);
     const marker: PrewarmMarker = { image: deps.image, warmedUp, at: new Date().toISOString() };
     await writeJsonFile(join(deps.historyRoot, PREWARM_MARKER), marker);
     deps.logger.info({ warmedUp, image: deps.image }, "prewarm: volume prepared, stopping so the machine can be claimed");

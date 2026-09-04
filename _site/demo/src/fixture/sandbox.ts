@@ -32,6 +32,10 @@ export const demoPanels = (): PanelSummary[] => [
         repo: `web`,
         hasPanel: true,
         running: false,
+        // The recorded workspace is one somebody has already worked in, so its tree is installed and the Start
+        // screen would promise seconds rather than an install. `api` has nothing runnable, which reads as
+        // installed for the same reason the daemon says so (panels.routes.ts).
+        installed: true,
         healthy: false,
         servers: [],
         deployConfig: false,
@@ -47,6 +51,7 @@ export const demoPanels = (): PanelSummary[] => [
         repo: `api`,
         hasPanel: false,
         running: false,
+        installed: true,
         healthy: false,
         servers: [],
         deployConfig: false,
