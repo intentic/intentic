@@ -105,28 +105,41 @@ export const fileKeyedStore = (input: {
         await writeFile(temp, `${JSON.stringify(account, undefined, 2)}\n`, { mode: 0o600 });
         await rename(temp, path);
     };
+    /* CONNECTS RUN ONE AT A TIME, because the stamp a connect takes is read from what is already on disk. Two
+     * connects in flight together would both read the same newest row and both land on the same tick, which is
+     * the tie the stamp exists to prevent — and "in flight together" is not exotic here: connect is an HTTP
+     * handler, and a double-submitted form is two of them at once. The queue makes read-then-write one step.
+     * Only connect needs it; a rename keeps the stamp it found and a disconnect removes a file by name. */
+    let queue: Promise<unknown> = Promise.resolve();
+    const serialized = <T>(step: () => Promise<T>): Promise<T> => {
+        // Both arms are `step`, so one caller's rejection does not cancel the next one's turn.
+        const next = queue.then(step, step);
+        queue = next.catch(() => undefined);
+        return next;
+    };
     return {
         list: async () => (await readKeyedCredentials(dir)).map((stored) => toKeyedAccount(stored, providerName)),
         credentials: () => readKeyedCredentials(dir),
-        connect: async ({ apiKey, label }) => {
-            /* A PASTE TAKES NO TIME, so two connects land in the same millisecond routinely (a form submitted
-             * twice, a script seeding both keys of a plan). Equal stamps leave "oldest first" to whatever order
-             * readdir hands back for two random UUID filenames, which is arbitrary — and the account list, and
-             * the tiebreak harness-credentials uses to pick between equal accounts, both read that order. So a
-             * new key is stamped at least one tick past the newest one already stored: the connect order stays
-             * recoverable from the files alone, without inventing a sub-millisecond clock.
-             * Ordered oldest first, so the last row is the newest stamp. */
-            const newest = (await readKeyedCredentials(dir)).at(-1)?.connectedAt ?? 0;
-            const account: StoredKeyAccount = {
-                id: randomUUID(),
-                apiKey: apiKey.trim(),
-                connectedAt: Math.max(Date.now(), newest + 1),
-                ...(label !== undefined && label.trim() !== "" ? { label: label.trim() } : {}),
-            };
-            await write(account);
-            input.logger.info({ provider: input.provider, account: account.id }, "keyed provider connected");
-            return toKeyedAccount(account, providerName);
-        },
+        connect: ({ apiKey, label }) =>
+            serialized(async () => {
+                /* A PASTE TAKES NO TIME, so two connects land in the same millisecond routinely (a form submitted
+                 * twice, a script seeding both keys of a plan). Equal stamps leave "oldest first" to whatever order
+                 * readdir hands back for two random UUID filenames, which is arbitrary — and the account list, and
+                 * the tiebreak harness-credentials uses to pick between equal accounts, both read that order. So a
+                 * new key is stamped at least one tick past the newest one already stored: the connect order stays
+                 * recoverable from the files alone, without inventing a sub-millisecond clock.
+                 * Ordered oldest first, so the last row is the newest stamp. */
+                const newest = (await readKeyedCredentials(dir)).at(-1)?.connectedAt ?? 0;
+                const account: StoredKeyAccount = {
+                    id: randomUUID(),
+                    apiKey: apiKey.trim(),
+                    connectedAt: Math.max(Date.now(), newest + 1),
+                    ...(label !== undefined && label.trim() !== "" ? { label: label.trim() } : {}),
+                };
+                await write(account);
+                input.logger.info({ provider: input.provider, account: account.id }, "keyed provider connected");
+                return toKeyedAccount(account, providerName);
+            }),
         rename: async (id, label) => {
             const stored = await readCredential(dir, id);
             if (stored === undefined) {
