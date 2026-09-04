@@ -83,7 +83,7 @@ export const fileCredentialGates = (path: string): CredentialGatesStore => {
             if ((error as NodeJS.ErrnoException).code === "ENOENT") {
                 return [];
             }
-            throw new Error(`the credential gate policy at ${path} could not be read`);
+            throw new Error(`the credential gate policy at ${path} could not be read`, { cause: error });
         }
         // The parse is inside the refusal too, not only the read: unparseable JSON and a JSON document that
         // is not a policy are the same state to a caller — content we cannot act on — and letting

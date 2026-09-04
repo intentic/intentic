@@ -88,7 +88,7 @@ const nameApprovers = (approvers: readonly string[]): string => {
     if (approvers.length === 1) {
         return approvers[0] ?? "";
     }
-    return `${approvers.slice(0, -1).join(", ")} or ${approvers[approvers.length - 1] ?? ""}`;
+    return `${approvers.slice(0, -1).join(", ")} or ${approvers.at(-1) ?? ""}`;
 };
 
 const clipped = (text: string | undefined): string | undefined => {
