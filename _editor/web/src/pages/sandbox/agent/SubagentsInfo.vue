@@ -5,6 +5,9 @@ import { InfoDialog, InfoTable } from "@intentic/ui";
  * dialog's whole job is to say which question each one answers and where you meet it: the wall you hit tells
  * you which row to move, and without that all three read as the same setting spelled three ways.
  *
+ * The posture above them is named but not explained at length: "may it delegate at all" is legible from its own
+ * four labels, and the reason this dialog exists is that the three numbers are not.
+ *
  * Defaults quoted here come from SandboxSettingsSchema: 20 / 200 / 3, which are the Claude Code CLI's own. */
 
 const WHICH_CAP = [
@@ -18,7 +21,8 @@ const WHICH_CAP = [
     <InfoDialog title="Subagents">
         <p class="text-sm text-muted">
             The assistant can hand a piece of work to another agent: a search across the whole repo, a second opinion, a long build it doesn't need
-            to watch. Each one runs on its own and reports back. These three numbers bound how many of them there can be.
+            to watch. Each one runs on its own and reports back. The first row decides whether it may do that at all; the three numbers under it
+            bound how many there can be.
         </p>
 
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Which one you've hit</h3>

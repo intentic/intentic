@@ -7,7 +7,6 @@ import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings
 import AiAccountSection from "./AiAccountSection.vue";
 import AgentChangelog from "./agent/AgentChangelog.vue";
 import AgentChecks from "./agent/AgentChecks.vue";
-import AgentChildAgents from "./agent/AgentChildAgents.vue";
 import AgentCodeSearch from "./agent/AgentCodeSearch.vue";
 import AgentCommandOutput from "./agent/AgentCommandOutput.vue";
 import AgentDependencies from "./agent/AgentDependencies.vue";
@@ -23,61 +22,73 @@ import AgentSafetyPolicy from "./agent/AgentSafetyPolicy.vue";
 import AgentSkills from "./agent/AgentSkills.vue";
 import AgentSubagents from "./agent/AgentSubagents.vue";
 
-/* The Sandbox hub's "Agent" tab: the home for everything about the AI the sandbox runs. The provider accounts
- * it authenticates as, and then one group per question the owner might be here to answer: which models get spent
- * when nobody is at the composer, what the assistant is told, how it searches, how much shell output it is
- * handed, how much of the work it may hand to other agents, what proves its work, what happens when it finishes,
- * every other standing instruction it has been given, and who picks a turn back up when it breaks.
- * Accounts and memory live INSIDE the sandbox, never on the platform, which is why this is a sandbox tab.
+/* The Sandbox hub's "Agent" tab: everything about the AI this sandbox runs. Accounts and memory live INSIDE the
+ * sandbox, never on the platform, which is why this is a sandbox tab rather than a personal setting.
  *
  * Every group reads and writes the SAME settings object through useSandboxSettings: a vue-query cache, so they
  * share one read and one optimistic write path without this file threading anything down. What stays here is
  * only what is true of the page as a whole: which category is showing, why the controls are inert, and that the
  * daemon dropped a field.
  *
- * THE GROUPS ARE CATEGORISED, and the strip is what this file mostly is now. Stacked, they ran to thirteen
- * sections: one of which (AI account) is a page in its own right, with a provider switcher, a row per
- * connection and a live sign-in that unfolds inside it. That is not a long form, it is four different errands
- * sharing a scrollbar: who the agent signs in as and what gets spent, what it is told, how a turn actually
- * runs, and what happens to the work when it is done. Four is what a <SegmentedControl> is FOR: a few exclusive views
- * of one subject, and four short labels come to well under half the body column, which is the measurement that
- * matters here: the hub's own index left this strip for a column at twelve destinations because twelve pills
- * overflowed. The same control at four is the case it was built for, not a repeat of that failure. */
+ * THE CATEGORIES ARE ONE AXIS, and keeping them on one is the point. Eighteen groups stacked in a single scroll
+ * were unusable, but the first split was made on two axes at once: three categories named a SUBJECT (accounts,
+ * instructions, safety) and two named a PHASE of a turn ("How it runs", "Landing work"). Nothing tells a reader
+ * which axis their question is on, so a setting was found by sweeping all five. Worse, two of the five had no
+ * subject at all — "How it runs" held code search, registry checks, output trimming, delegation ceilings and
+ * outage recovery, which share only that they happen while a turn is going.
+ *
+ * So every category now names a PART OF THE AGENT, and each one is a question somebody arrives with:
+ *
+ *   MODELS      which AI does which job, and on whose account. The account list leads it because signing in is
+ *               a step toward picking a model, never the errand itself: a pin cannot name a provider this
+ *               sandbox has no credential for, so the order on the page IS the dependency. This is also the
+ *               only place a model is chosen — including the safety judge's, which used to sit three tabs away
+ *               and made "where do I set a model" a question with two answers.
+ *   INSTRUCTIONS what it is told, in widening scope.
+ *   TOOLS       what it may reach for during a turn, and how much comes back. Delegation is here rather than
+ *               under Safety, and as ONE group rather than two: whether a turn may start agents of its own and
+ *               how many it may run were a switch on the Safety tab and three numbers on the phase tab, which
+ *               is one concept under two names on two screens. Starting an agent costs money; it does not
+ *               destroy anything, which is what the gate next door is for.
+ *   SAFETY      what it may do without stopping to ask. These rules are consulted per command, bind on every
+ *               runtime, and are the only settings here whose wrong value is unrecoverable rather than annoying.
+ *   FINISHING   what happens when a turn ends, either way it ends: what proves the work, what carries it to the
+ *               user, and what picks the turn up when it breaks instead.
+ *
+ * Checks moved into Finishing from the old phase category because that is when they run: a check that proves
+ * work before it is handed over belongs beside what happens to the work, not beside the search tool.
+ *
+ * Five short labels come to well under half the body column, which is the measurement that matters: the hub's
+ * own index left this strip for a column at twelve destinations because twelve pills overflowed. */
 
 const SECTIONS = [
-    // "How it runs" holds the mechanics of a turn INCLUDING the one that fails: a turn that breaks is still a
-    // turn running, where "Landing work" is only ever about work that finished.
-    { label: `Accounts`, value: `accounts` },
+    { label: `Models`, value: `models` },
     { label: `Instructions`, value: `instructions` },
-    { label: `How it runs`, value: `running` },
-    /* …and "Safety" is what it may DO, which is a different question from how a turn works: these rules are
-     * consulted per command, they bind on every runtime, and they are the only settings here whose wrong value
-     * is unrecoverable rather than merely annoying. It sits between the two for that reason — after the turn
-     * mechanics, before what happens to finished work. */
+    { label: `Tools`, value: `tools` },
     { label: `Safety`, value: `safety` },
-    { label: `Landing work`, value: `landing` },
+    { label: `Finishing`, value: `finishing` },
 ] as const;
 type Section = (typeof SECTIONS)[number][`value`];
-const DEFAULT: Section = `accounts`;
+const DEFAULT: Section = `models`;
 
 const route = useRoute();
 const router = useRouter();
 
-/* THE CATEGORY LIVES IN THE ADDRESS, and it has to: three places already link into this page aimed at one
- * setting: the composer's connect gate, and Usage's two experiment cards, and with the page split they would
- * otherwise land on a category that doesn't hold what they promised. Derived from the query rather than mirrored
- * into a ref, so there is one direction of flow. The default writes no param, so no category has two URLs.
+/* THE CATEGORY LIVES IN THE ADDRESS, and it has to: several places link into this page aimed at one setting —
+ * the composer's connect gate, its "turn it off for every chat" link, Usage's experiment cards — and with the
+ * page split they would otherwise land on a category that doesn't hold what they promised. Derived from the
+ * query rather than mirrored into a ref, so there is one direction of flow. The default writes no param, so no
+ * category has two URLs, and `/sandbox/agent#models` still lands on the Models group with no query at all.
  *
  * A `?connect=` link OUTRANKS the param outright: it is a request to sign an account in, and the group that
- * does it is Accounts whatever the address last remembered. Picking a category by hand therefore clears it:
+ * does it leads Models whatever the address last remembered. Picking a category by hand therefore clears it:
  * otherwise the getter would keep pulling the page back and the pills would read as dead. */
 const section = computed<Section>({
     get: () => {
         if (typeof route.query[`connect`] === `string`) {
-            return `accounts`;
+            return `models`;
         }
-        const asked = route.query[`section`] ?? (route.query[`security`] === `safety` ? `safety` : undefined);
-        return SECTIONS.find((entry) => entry.value === asked)?.value ?? DEFAULT;
+        return SECTIONS.find((entry) => entry.value === route.query[`section`])?.value ?? DEFAULT;
     },
     // Pushed, not replaced: these are destinations like the hub's own sections, so Back should return to the
     // category you came from rather than out of the page entirely.
@@ -124,9 +135,9 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
              rather than as a sandbox that predates the setting. Page-level because any group can trip it. -->
         <Notice v-if="settingsDropped" tone="warning">{{ settingsDropped }}</Notice>
 
-        <!-- Who the agent is and what it spends. The accounts it signs in as, and: directly under them,
-             because it is a choice OVER them, which models get spent when nobody is at the composer. -->
-        <template v-if="section === `accounts`">
+        <!-- Which AI does which job. The accounts first, because every model choice under them is a choice
+             OVER them and cannot name a provider that isn't signed in. -->
+        <template v-if="section === `models`">
             <AiAccountSection />
             <AgentModels />
         </template>
@@ -142,33 +153,34 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentMemory />
         </template>
 
-        <!-- The mechanics of a turn: how it finds things, how much of what it runs comes back, how much of the
-             job it may hand to other agents, and who picks the turn up when it breaks. -->
-        <template v-else-if="section === `running`">
+        <!-- What it may reach for, and how much comes back: how it finds things, what it checks a dependency
+             against, how much of a command's output it is handed, and then the biggest tool of all — how much
+             of the job it may hand to agents of its own. -->
+        <template v-else-if="section === `tools`">
             <AgentCodeSearch />
             <AgentDependencies />
             <AgentCommandOutput />
             <AgentSubagents />
-            <AgentRecovery />
         </template>
 
-        <!-- What it may do without stopping to ask: whether anything is judging at all and on which model,
-             the document that judge applies, and whether it may start child agents of its own.
-             The log of recent decisions sits at the end of the section so its longer, expandable activity
-             feed does not bury the standing controls above it. -->
+        <!-- What it may do without stopping to ask: whether anything is judging at all, and the document that
+             judge applies. The log of recent decisions sits at the end so its longer, expandable activity feed
+             does not bury the standing controls above it — and it is here rather than anywhere else because a
+             policy whose effects you cannot see is a policy you cannot write. -->
         <template v-else-if="section === `safety`">
             <AgentSafetyJudge />
             <AgentSafetyPolicy />
-            <AgentChildAgents />
             <AgentSafetyLog />
         </template>
 
-        <!-- What happens to work once it is done, in the order it happens to it: it gets proved, it gets
-             applied to the workspace, and the commit recording it says what it meant for a user. -->
+        <!-- The end of a turn, both ways it can end. First the good one, in the order it happens to the work:
+             it gets proved, it gets applied to the workspace, and the commit recording it says what it meant
+             for a user. Then the other one, last, because it is the exception rather than the path. -->
         <template v-else>
             <AgentChecks />
             <AgentFinishedWork />
             <AgentChangelog />
+            <AgentRecovery />
         </template>
     </div>
 </template>

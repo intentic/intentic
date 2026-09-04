@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 //
-// THE SWITCH OVER THE SAFETY JUDGE, and the model it runs on. Two settings that did not exist while the judge
-// did, which left the one tier of the safety design that spends money and interrupts people with no controls at
-// all: an owner whose gate asked about the wrong things could edit prose and hope, and nothing else.
+// THE SWITCH OVER THE SAFETY JUDGE, and the fact — not the control — of what it is running on. The switch did
+// not exist while the judge did, which left the one tier of the safety design that spends money and interrupts
+// people with nothing an owner could do about it: a gate asking about the wrong things could be answered by
+// editing prose and hoping, and by nothing else.
 //
-// What is under test is the round trip a person performs on the group — read the state, move the switch, add a
-// model, take it out — because each of those happens in the component's own handler, and because a control that
-// drew a value it did not write is the worst version of a safety setting there is.
+// The MODEL is chosen on the Models tab now, not here. That is the claim half this file exists to hold: this
+// group must keep naming which model is applying the policy, because somebody deciding whether to trust the
+// document below has exactly that question about it — and it must not grow a second way to change it, because
+// "where do I choose a model" having two answers is what moved the picker in the first place.
 import type { SandboxSettings } from "@intentic-app/api-contract";
 import { SandboxSettingsSchema } from "@intentic-app/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = vi.fn((fields: Partial<SandboxSettings>) => {
@@ -22,8 +25,8 @@ vi.mock(`../../../composables/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
-// Two connected accounts, so the empty-list row has a real chain to name: what this row must say while nothing
-// is pinned is WHICH account the verdicts are billed to, not the word "Auto".
+// Two connected accounts, so the row that names the fallback has a real chain to name: what this row must say
+// while nothing is pinned is WHICH account the verdicts are billed to, not the word "Auto".
 const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
     codex: [{ value: `gpt-5.6`, label: `GPT 5.6 Luna` }],
     claude: [{ value: `claude-haiku-4-5`, label: `Claude Haiku 4.5` }],
@@ -38,25 +41,16 @@ vi.mock(`../../../composables/chat/providerCatalog`, () => ({
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
 }));
 
-// The picker is the app's whole model catalog behind one panel; what these tests are about is the wiring
-// between the row and the list it writes, so it is stubbed down to "which entry was it opened over, and where
-// does its answer land".
-let opened: { readonly pin?: unknown; readonly taken?: unknown } | undefined;
-let answer: { pick: (pin: unknown) => void } | undefined;
-vi.mock(`./ModelPinPicker.vue`, () => ({
-    __esModule: true,
-    default: defineComponent({
-        props: { open: Boolean, anchor: Object, pin: Object, knobs: Boolean, taken: Array },
-        emits: [`update:open`, `pick`, `configure`],
-        setup(props, { emit }) {
-            opened = props;
-            answer = { pick: (pin) => emit(`pick`, pin) };
-            return () => h(`div`, { class: `pin-picker` });
-        },
-    }),
-}));
-
 const { default: AgentSafetyJudge } = await import("./AgentSafetyJudge.vue");
+
+// The group links back to the Models tab, so it needs a router to resolve one against. The hub's route alone:
+// the app's own carries guards that have nothing to do with what is under test here.
+const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) }],
+});
+await router.push({ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } });
+await router.isReady();
 
 let app: App | undefined;
 
@@ -65,6 +59,7 @@ const mount = (): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(AgentSafetyJudge) });
     app.use(PrimeVue);
+    app.use(router);
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
     app.directive(`tooltip`, {});
     app.mount(host);
@@ -77,19 +72,11 @@ afterEach(() => {
     document.body.innerHTML = ``;
     settings.value = SandboxSettingsSchema.parse({});
     connected.value = [`codex`, `claude`];
-    opened = undefined;
-    answer = undefined;
     patch.mockClear();
 });
 
 const pill = (host: HTMLElement, label: string): HTMLElement =>
     [...host.querySelectorAll<HTMLElement>(`button, [role="radio"], [role="tab"]`)].find((element) => element.textContent?.trim() === label)!;
-
-const rowButton = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.getAttribute(`aria-label`) === label)!;
-
-const orderOnScreen = (host: HTMLElement): string[] =>
-    [...host.querySelectorAll(`ol li`)].map((row) => row.querySelector(`span.flex-1`)?.textContent?.trim() ?? ``).filter((text) => text !== ``);
 
 // The default, read off the schema rather than transcribed: a workspace nobody has configured judges commands,
 // which is what every other part of this design assumes.
@@ -122,48 +109,53 @@ test("the states that stop holding commands say what still asks", async () => {
     }
 });
 
-// While the list is empty the verdicts run on the sandbox's quick chain, and the row names it in full: which
-// account a card is billed to is the fact this row exists to make readable.
+/* WHICH MODEL IS APPLYING THE POLICY, which is the question this group answers about the model and the only one.
+ * Named in full rather than as "Auto" or "your quick model" on its own: a verdict is billed to one of these
+ * accounts, and reading a policy without knowing what reads it back is the state this row exists to prevent. */
+
 test("names the quick chain in order while no judge model is pinned", () => {
     const host = mount();
     expect(settings.value.commandJudgeModels).toEqual([]);
-    expect(host.textContent).toContain(`Your quick model`);
+    expect(host.textContent).toContain(`Judged by`);
     expect(host.textContent).toContain(`Claude Haiku 4.5`);
     expect(host.textContent).toContain(`GPT 5.6 Luna`);
-    expect(orderOnScreen(host)).toEqual([]);
 });
 
-test("a pinned model is drawn as the list and written back to its own setting", async () => {
-    settings.value = { ...settings.value, commandJudgeModels: [`codex:gpt-5.6`] };
-    const host = mount();
-    await nextTick();
-    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
-
-    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
-    await nextTick();
-    // Its own key, never the quick model's: the two lists are separate settings and emptying one is how it gets
-    // back to the other.
-    expect(patch).toHaveBeenCalledWith({ commandJudgeModels: [] });
-});
-
-test("adding a model appends it to the order, and the picker knows what is already taken", async () => {
+test("a model pinned on the Models tab is the one this row names", async () => {
     settings.value = { ...settings.value, commandJudgeModels: [`codex:gpt-5.6`] };
     const host = mount();
     await nextTick();
 
-    rowButton(host, `Add a model for the safety judge`).click();
-    await nextTick();
-    expect(opened?.taken).toEqual([`codex:gpt-5.6`]);
-
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-    expect(patch).toHaveBeenCalledWith({ commandJudgeModels: [`codex:gpt-5.6`, `claude:claude-haiku-4-5`] });
+    expect(host.textContent).toContain(`Judged by`);
+    expect(host.textContent).toContain(`CODEX · GPT 5.6 Luna`);
+    // The pin replaces the chain rather than joining it: what runs is the list the owner wrote, and naming the
+    // fallback beside it would read as two models judging one command.
+    expect(host.textContent).not.toContain(`Claude Haiku 4.5`);
 });
 
-// Nothing to point a model at: the row that adds one goes inert rather than staying live and writing a setting
-// with no reader.
-test("the add control is disabled while the judge is off", async () => {
+// Nothing to point a model at: the row says the model is not in use rather than naming one that never runs.
+test("names no model in use while the judge is off", async () => {
     settings.value = { ...settings.value, commandJudge: `off` };
     const host = mount();
     await nextTick();
-    expect(rowButton(host, `Add a model for the safety judge`).disabled).toBe(true);
+
+    expect(host.textContent).toContain(`no model is in use`);
+    expect(host.textContent).not.toContain(`Judged by`);
+});
+
+/* THE PICKER IS NOT HERE, and that is a claim rather than an absence: this group used to hold the whole four
+ * gesture list editor, and putting one back would restore the split it was moved to end. The row offers exactly
+ * one press, and it goes to the tab that owns every model in the sandbox. */
+test("offers no way to edit the model, only the address of the one that does", () => {
+    const host = mount();
+
+    expect(host.querySelector(`ol li`)).toBeNull();
+    expect([...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).not.toContain(
+        `Add a model for the safety judge`,
+    );
+
+    const link = host.querySelector<HTMLAnchorElement>(`a[href]`);
+    expect(link?.textContent?.trim()).toBe(`Change in Models`);
+    // The Models category is the tab's default, so its address carries no section param at all.
+    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent`);
 });

@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 //
-// jsdom because the subject is WHICH GROUPS ARE ON SCREEN. The Agent tab used to stack thirteen sections in one
+// jsdom because the subject is WHICH GROUPS ARE ON SCREEN. The Agent tab used to stack eighteen sections in one
 // scroll; it now shows one category of them at a time, and everything worth pinning is about the seam between
 // the strip and the address:
 //
-//   · the category has to survive a reload and a shared link, because three places already link into this page
-//     aimed at ONE setting: the composer's connect gate, and Usage's two experiment cards. A link that lands on
-//     a category not holding what it promised is worse than the long scroll it replaced.
+//   · the category has to survive a reload and a shared link, because several places already link into this page
+//     aimed at ONE setting: the composer's connect gate, its "turn it off for every chat" link, and Usage's
+//     experiment cards. A link that lands on a category not holding what it promised is worse than the long
+//     scroll it replaced.
 //   · a `?connect=` sign-in link has to win over a remembered category, and pressing a pill has to be able to
 //     get out from under it again: otherwise the strip reads as dead.
 //
@@ -41,12 +42,15 @@ vi.mock(`./agent/AgentRecovery.vue`, () => stub(`When a turn breaks`));
 vi.mock(`./agent/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
 vi.mock(`./agent/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
 vi.mock(`./agent/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
-vi.mock(`./agent/AgentChildAgents.vue`, () => stub(`Child agents`));
 vi.mock(`./agent/AgentChecks.vue`, () => stub(`Checks`));
 vi.mock(`./agent/AgentFinishedWork.vue`, () => stub(`Finished work`));
 vi.mock(`./agent/AgentChangelog.vue`, () => stub(`Changelog`));
 
-// The eighteen names above, for the test that every one of them lands in exactly one category.
+// Every category the strip offers, in the order it draws them: the coverage test walks this rather than a
+// transcribed copy, so a category added without groups fails here instead of quietly holding nothing.
+const EVERY_SECTION = [`models`, `instructions`, `tools`, `safety`, `finishing`];
+
+// The seventeen names above, for the test that every one of them lands in exactly one category.
 const EVERY_GROUP = [
     `AI account`,
     `Models`,
@@ -62,7 +66,6 @@ const EVERY_GROUP = [
     `Safety judge`,
     `Safety policy`,
     `Recent decisions`,
-    `Child agents`,
     `Checks`,
     `Finished work`,
     `Changelog`,
@@ -105,15 +108,20 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-// The default, and the reason the split is worth anything: twelve of the thirteen groups are NOT on the page.
-it(`opens on the accounts category alone`, async () => {
+/* The default, and the reason the split is worth anything: sixteen of the eighteen groups are NOT on the page.
+ *
+ * MODELS IS THE DEFAULT rather than a category named for the accounts it leads with. Signing in is a step toward
+ * picking a model, never the errand itself, and `/sandbox/agent#models` — the composer's "turn it off for every
+ * chat" link — is a bare fragment with no query behind it, so the group carrying that anchor has to be the one a
+ * paramless address draws. */
+it(`opens on the models category alone`, async () => {
     const { el } = await mount();
     expect(shown(el)).toEqual([`AI account`, `Models`]);
 });
 
 it(`puts each group in exactly one category`, async () => {
     const seen: string[] = [];
-    for (const section of [`accounts`, `instructions`, `running`, `safety`, `landing`]) {
+    for (const section of EVERY_SECTION) {
         const { el } = await mount({ section });
         seen.push(...shown(el));
         app?.unmount();
@@ -126,37 +134,49 @@ it(`puts each group in exactly one category`, async () => {
 
 // A link that names a category, end to end: the category opens and the setting it promised is drawn.
 it(`opens the category a link named`, async () => {
-    const { el } = await mount({ section: `running` });
+    const { el } = await mount({ section: `tools` });
     expect(shown(el)).toContain(`Code search`);
     expect(shown(el)).not.toContain(`AI account`);
 });
 
 // A stale or hand-typed name lands on the default rather than on a page with nothing on it: there is no row in
 // the strip to get back from a blank one.
-it(`falls back to accounts when the address names a category that does not exist`, async () => {
+it(`falls back to models when the address names a category that does not exist`, async () => {
     const { el } = await mount({ section: `nonsense` });
     expect(shown(el)).toEqual([`AI account`, `Models`]);
 });
 
 /* Safety is the one category whose groups write the daemon's own gates rather than a preference, and it is
  * reached by the same address the other four are. Pinned separately from the coverage test above because a
- * `v-else-if` chain that fell through would put its three groups on the LANDING page (the chain's `v-else`)
- * rather than nowhere, and a coverage assertion counting names cannot tell those two apart. */
+ * `v-else-if` chain that fell through would put its groups on the FINISHING page (the chain's `v-else`) rather
+ * than nowhere, and a coverage assertion counting names cannot tell those two apart. */
 it(`opens the safety category with the gate rules alone`, async () => {
     const { el } = await mount({ section: `safety` });
     // Standing rules and controls first, followed by the decision log.
-    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Child agents`, `Recent decisions`]);
+    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Recent decisions`]);
 });
 
-it(`opens the safety category when security=safety is in the query`, async () => {
-    const { el } = await mount({ security: `safety` });
-    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Child agents`, `Recent decisions`]);
+/* DELEGATION IS ONE GROUP ON ONE CATEGORY, which is the whole reason Tools exists under that name. Whether a
+ * turn may start agents of its own was a group called "Child agents" under Safety, while the numbers bounding
+ * them were a group called "Subagents" one category away: one concept, two names, two screens. Both halves are
+ * now rows of Subagents (agentSubagents.test.ts holds that), so what this pins is the category they landed in —
+ * a coverage assertion counting names would pass just as happily with the switch back under the gate rules. */
+it(`holds delegation under tools, not under the gate rules`, async () => {
+    const { el } = await mount({ section: `tools` });
+    expect(shown(el)).toContain(`Subagents`);
+    expect(shown(el)).not.toContain(`Safety policy`);
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+
+    const { el: safety } = await mount({ section: `safety` });
+    expect(shown(safety)).not.toContain(`Subagents`);
 });
 
 // The composer's connect gate wins over whatever the address last remembered: it is a request to sign an account
-// in, and the group that does that is Accounts.
+// in, and the group that does that leads Models.
 it(`shows accounts for a sign-in link even while another category is named`, async () => {
-    const { el } = await mount({ section: `landing`, connect: `anthropic` });
+    const { el } = await mount({ section: `finishing`, connect: `anthropic` });
     expect(shown(el)).toContain(`AI account`);
     expect(shown(el)).not.toContain(`Checks`);
 });
@@ -165,11 +185,13 @@ it(`shows accounts for a sign-in link even while another category is named`, asy
 // the address and reads the page back off it, which is the whole reason a reload keeps the category.
 it(`writes the picked category to the address, and the default writes no param`, async () => {
     const { el, router } = await mount();
-    pill(el, `Landing work`).click();
-    await vi.waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`landing`));
-    expect(shown(el)).toEqual([`Checks`, `Finished work`, `Changelog`]);
+    pill(el, `Finishing`).click();
+    await vi.waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
+    // Checks are here rather than beside the search tool because this is when they run: work is proved, then it
+    // reaches the user, then the exception — the turn that broke instead — comes last.
+    expect(shown(el)).toEqual([`Checks`, `Finished work`, `Changelog`, `When a turn breaks`]);
 
-    pill(el, `Accounts`).click();
+    pill(el, `Models`).click();
     await vi.waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());
     expect(shown(el)).toEqual([`AI account`, `Models`]);
 });

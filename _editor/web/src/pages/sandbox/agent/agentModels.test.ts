@@ -17,6 +17,7 @@ import { SandboxSettingsSchema } from "@intentic-app/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 
 // Same import-time browser globals the sibling suite stands in for (@intentic/ui's useDevice reads
 // window.matchMedia; environment.ts reads window.env).
@@ -81,6 +82,15 @@ vi.mock(`./ModelPinPicker.vue`, () => ({
 
 const { default: AgentModels } = await import("./AgentModels.vue");
 
+// The safety-judge row links to the Safety tab when the judge is switched off, so the page needs a router to
+// resolve that against. The hub's route alone: the app's own carries guards irrelevant to these rows.
+const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) }],
+});
+await router.push({ name: `sandbox`, params: { tab: `agent` } });
+await router.isReady();
+
 let app: App | undefined;
 
 const mount = (): HTMLElement => {
@@ -88,6 +98,7 @@ const mount = (): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(AgentModels) });
     app.use(PrimeVue);
+    app.use(router);
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
     app.directive(`tooltip`, {});
     app.mount(host);
@@ -177,6 +188,70 @@ test("keeps a pin whose account went away on screen, and says why it is greyed",
     expect(orderOnScreen(host)).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Claude Haiku 4.5`]);
     const disconnected = host.querySelector(`ol li`) as HTMLElement;
     expect(disconnected?.className).toMatch(/opacity|subtle|disabled/i);
+});
+
+/* THE SAFETY JUDGE'S MODEL IS ONE OF THESE ROWS, and that is the point of the row rather than a detail of it.
+ * It used to be a fourth list editor on the Safety tab, which left this page — whose whole subject is which AI
+ * does which job — quietly missing one, and left "where do I choose a model" with two answers. What these pin is
+ * that it behaves like its neighbours and writes its OWN setting: a judge row that wrote `quickModel` would
+ * silently re-point every commit message in the sandbox. */
+
+test("the judge row writes its own setting, never the quick list it falls back to", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    addButton(host, `Add a model for the safety judge`).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+
+    expect(patch).toHaveBeenCalledWith({ commandJudgeModels: [`claude:claude-haiku-4-5`] });
+    expect(patch).not.toHaveBeenCalledWith(expect.objectContaining({ quickModel: expect.anything() }));
+});
+
+test("a pinned judge model is drawn as written, and removing it hands the job back to the quick chain", async () => {
+    settings.value = { ...settings.value, commandJudgeModels: [`codex:gpt-5.6`] };
+    const host = mount();
+    await Promise.resolve();
+
+    // The only list with anything in it, so the page's rows read as one order.
+    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
+
+    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
+    expect(patch).toHaveBeenCalledWith({ commandJudgeModels: [] });
+});
+
+// Its floor is the row directly above it, which is why the two sit together: the fallback is legible from the
+// page rather than asserted by a sentence.
+test("names the quick chain as the judge's floor while nothing is pinned", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    expect(settings.value.commandJudgeModels).toEqual([]);
+    expect(host.textContent).toContain(`Your quick model`);
+    expect(host.textContent).toContain(`Claude Haiku 4.5`);
+});
+
+/* THE ONE ROW WHOSE FEATURE HAS AN OFF SWITCH SOMEWHERE ELSE. A control that goes dead with no explanation is
+ * indistinguishable from a broken page, and the switch is a tab away, so the row has to both refuse the press
+ * and say where the press that matters lives. */
+test("goes inert with the judge, and says where the switch is", async () => {
+    settings.value = { ...settings.value, commandJudge: `off` };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(addButton(host, `Add a model for the safety judge`).disabled).toBe(true);
+    const link = [...host.querySelectorAll<HTMLAnchorElement>(`a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
+    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?section=safety`);
+});
+
+test("the judge row stays live while the judge is merely watching", async () => {
+    // Watch records verdicts without holding anything, so a model is still being spent on every flagged command
+    // and the row that picks it must stay pressable.
+    settings.value = { ...settings.value, commandJudge: `watch` };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(addButton(host, `Add a model for the safety judge`).disabled).toBe(false);
 });
 
 /* EACH AGENT-RUN ENTRY CARRIES ITS OWN RUN SETTINGS, which is what this page was rebuilt for: the effort used

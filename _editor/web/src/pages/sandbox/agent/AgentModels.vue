@@ -13,13 +13,13 @@ import { pinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
 
-/* WHICH MODEL SPENDS THIS SANDBOX'S MONEY WHEN NOBODY IS AT THE COMPOSER: the two tiers of that, in the order
- * they escalate. It sits directly under the AI accounts because both rows are a choice OVER them: a model
- * pinned here can never name a provider this sandbox has no credential for, which is exactly the promise a
- * cross-sandbox preference in personal Settings could not make.
+/* EVERY MODEL CHOICE THIS SANDBOX MAKES, in one place, because "where do I set a model" may only have one
+ * answer. It sits directly under the AI accounts because every row is a choice OVER them: a model pinned here
+ * can never name a provider this sandbox has no credential for, which is exactly the promise a cross-sandbox
+ * preference in personal Settings could not make.
  *
- * The tiers are split by what the model is asked to DO, not by which feature calls it, because that is the only
- * axis on which the right answer differs:
+ * The rows are split by what the model is asked to DO, not by which feature calls it, because that is the only
+ * axis on which the right answer differs. The two one-shot jobs lead, then the two that touch real work:
  *
  *   QUICK MODEL: no conversation, no tools, one string back (a commit message, a session title). An ORDERED
  *   LIST, walked top to bottom until one answers, because the failure this row actually has is a connected
@@ -29,6 +29,14 @@ import ModelPinPicker from "./ModelPinPicker.vue";
  *   cheapest tier first, free channel before a paid one, every connected provider in that order), so connecting
  *   an account tomorrow improves the answer by itself. Cheapest wins BECAUSE the job is small; being frontier
  *   here is not generosity, it is the wrong tool.
+ *
+ *   SAFETY JUDGE: the one-shot that reads a flagged command against your policy and decides whether it runs.
+ *   Directly under the quick model because that chain is literally what answers while this list is empty — the
+ *   fallback is legible from the row above rather than asserted. It used to live on the Safety tab beside the
+ *   policy, on the argument that which model judges a command is a safety question. True, and it still cost
+ *   more than it bought: a page whose subject is "which AI does which job" that quietly excludes one job
+ *   teaches nobody where to look, and the Safety tab now names the model it is using in a line instead. This
+ *   is the only row here that has an off switch somewhere else, so it says where.
  *
  *   AGENT RUNS: a full isolated session with tools and a worktree, started by a surface rather than by a person
  *   typing: Fix with agent on a pipeline or a deployment, a Maintenance chore, a Documentation or Acceptance
@@ -110,7 +118,24 @@ const runs = pinnedList({
     knobs: true,
 });
 
-/* THE THIRD ROW IS ABOUT THE CHAT, which the two above deliberately are not, and it is the only one that can
+/* THE MODEL THAT READS YOUR SAFETY POLICY, stored in its own key and edited by the same four gestures as the
+ * quick list above. Its floor is that list, which is why it sits under it.
+ *
+ * No knobs, for the same reason the quick row has none: a verdict is a one-shot the daemon runs with thinking
+ * disabled and no effort at all (agent/one-shot.ts), so a reasoning control here would be a switch with nothing
+ * behind it. */
+const judge = pinnedList({
+    read: () => settings.value?.commandJudgeModels ?? [],
+    write: (keys) => patch({ commandJudgeModels: [...keys] }),
+    decode: (key) => parsePinned(key),
+    encode: (pin) => quickModelKey(pin),
+});
+
+// Whether anything reads this list at all. The switch is on the Safety tab, so a row that went inert with no
+// explanation would read as broken rather than as unused.
+const judgeOff = computed(() => settings.value?.commandJudge === `off`);
+
+/* THE LAST ROW IS ABOUT THE CHAT, which the three above deliberately are not, and it is the only one that can
  * change what a model the user picked themselves actually runs. So it says so, and its default says nothing at
  * all: "Measure" judges every turn, records the verdict beside what the turn really cost, and moves nothing. */
 const fast = pinnedList({
@@ -125,7 +150,7 @@ const fast = pinnedList({
  * open belongs to a trigger the user has already moved away from. `index` absent means ADDING, and an add draws
  * no knobs — there is nothing to configure until the entry exists, and the row it lands on opens this same
  * panel with them in it. */
-const LISTS = { quick, runs, fast };
+const LISTS = { quick, judge, runs, fast };
 const editing = shallowRef<{ id: keyof typeof LISTS; index: number | undefined; anchor: HTMLElement } | undefined>(undefined);
 const openPicker = (id: keyof typeof LISTS, index: number | undefined, anchor: HTMLElement): void => {
     editing.value = { id, index, anchor };
@@ -210,6 +235,62 @@ const eagernessOptions = [
                 <!-- Nothing connected: the helpers are inert, which on its own reads as a broken control
                      rather than a missing account. -->
                 <p v-else-if="settings !== undefined" class="text-2xs text-muted">Connect an AI account above to enable the one-click helpers.</p>
+            </template>
+        </Row>
+
+        <!-- THE OTHER ONE-SHOT, and the reason it is here rather than on Safety: this page is where a model is
+             chosen, without exceptions, or it is not a place anybody learns to look. Directly under the quick
+             row because that row is its floor, spelled out below in the same words. -->
+        <Row icon="shield" title="Safety judge" description="Which model reads your safety policy.">
+            <template #control>
+                <AddModelButton
+                    label="Add a model for the safety judge"
+                    :disabled="settings === undefined || judgeOff"
+                    @open="(anchor: HTMLElement) => openPicker(`judge`, undefined, anchor)"
+                />
+            </template>
+            <template #below>
+                <div class="flex flex-col gap-2">
+                    <ModelPinList
+                        v-if="judge.entries.value.length > 0"
+                        :entries="judge.entries.value"
+                        @promote="judge.promote"
+                        @remove="judge.remove"
+                        @edit="(index: number, anchor: HTMLElement) => openPicker(`judge`, index, anchor)"
+                    />
+                    <!-- The floor, named in full rather than as the word "Auto": these verdicts are billed to
+                         one of your accounts, and which one is the fact this row exists to make readable. The
+                         invitation to change it is dropped while the judge is off, because the control that
+                         would do it is disabled an inch away and a row may not ask for a press it just
+                         refused. -->
+                    <p v-else-if="autoOrder.length > 0" class="text-2xs text-muted">
+                        <span class="text-content">Your quick model</span>: {{ autoOrder.join(`, then `) }}.<template v-if="!judgeOff">
+                            Add a model to judge commands on a different one.</template
+                        >
+                    </p>
+                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">
+                        Connect an AI account above to give the judge something to run on. Until then every flagged command falls back to the
+                        standing rule alone.
+                    </p>
+
+                    <!-- Where the switch is. This is the only row on the page whose feature can be off from
+                         somewhere else, and a disabled control with no explanation is the thing a settings
+                         page owes an answer for. -->
+                    <p v-if="judgeOff" class="text-2xs text-subtle">
+                        Nothing is judging commands at the moment, so this is not in use.
+                        <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }" class="text-link hover:underline"
+                            >Turn the judge on</RouterLink
+                        >
+                        under Safety.
+                    </p>
+                    <!-- The one thing worth saying about the choice, and it is not "pick a cheap one": this is
+                         the only automatic job whose input may have been written by whoever the agent was
+                         reading. -->
+                    <p v-else class="text-2xs text-subtle">
+                        Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in
+                        something from outside, that text may be arguing for its own approval.
+                    </p>
+                </div>
             </template>
         </Row>
 

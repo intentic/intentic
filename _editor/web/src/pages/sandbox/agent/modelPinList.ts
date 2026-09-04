@@ -16,9 +16,11 @@ import { type DescribedPin, describePin } from "../../../composables/chat/modelP
  * stopped drawing it would look like the app had eaten it. (Every resolver drops it at run time, which is the
  * right answer THERE: no feature may fail on a credential the sandbox no longer has.)
  *
- * IT LIVES IN A MODULE OF ITS OWN rather than inside the page that first needed it, because the lists are no
- * longer all on one page: Sandbox ▸ Agent ▸ Models holds three, and Safety holds the one that picks the model
- * judging commands. */
+ * IT LIVES IN A MODULE OF ITS OWN rather than inside the component that first needed it. All four lists are
+ * drawn by Sandbox ▸ Agent ▸ Models — including the safety judge's, which used to sit on the Safety tab and made
+ * "where do I choose a model" a question with two answers — but they are four separate settings with four
+ * different floors, and one editor over all of them is what keeps those four rows agreeing about what "already
+ * in the order" means. */
 
 // One row of a list, exactly as <ModelPinList> takes it: the pin as the user wrote it, described for the screen,
 // with its place in the order and whatever this list has to say about how that entry runs.
