@@ -7,7 +7,7 @@ are the contract; everything here is the machinery that keeps them true.
 ## The promises (the circle)
 
 1. **The user's files are never touched by an update.** `/work` and `/history` survive update, rollback, and
-   rebuild. Drilled nightly against real published images: `_tools/scripts/verify-update-survival.sh`.
+   rebuild. Drilled nightly against real published images: `_tools/scripts/image/verify-update-survival.sh`.
 2. **Updates are offered, never forced.** The update card (`/info`'s `latest`/`updateAvailable`) is
    non-blocking; nothing recreates a sandbox without the owner acting.
 3. **The worst outcome of an update is the sandbox the user already had.** The recreate engine parks the old

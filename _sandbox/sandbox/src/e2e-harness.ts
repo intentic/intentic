@@ -22,7 +22,7 @@ const SOURCE_IMAGE_TAG = "intentic-sandbox-e2e:local";
 // from-source build does (prepare-image-trees.sh must have run).
 const buildSourceImage = async (): Promise<void> => {
     const dockerfile = join(root, ".image-out/Dockerfile.standard");
-    writeFileSync(dockerfile, execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "standard"], { cwd: root }));
+    writeFileSync(dockerfile, execFileSync("node", ["_tools/scripts/image/compose-image-dockerfile.mjs", "standard"], { cwd: root }));
     await new Promise<void>((resolve, reject) => {
         const build = spawn("docker", ["build", "--build-context", "trees=.image-out", "-f", dockerfile, "-t", SOURCE_IMAGE_TAG, "."], { cwd: root });
         let output = "";

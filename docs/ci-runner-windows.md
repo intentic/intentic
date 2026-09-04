@@ -47,10 +47,10 @@ So it is a property of how the runner was REGISTERED, and registering is a scrip
 
 ```powershell
 # From an ELEVATED PowerShell on the runner. Token from Settings > Actions > Runners > New self-hosted runner.
-./_tools/scripts/setup-windows-runner.ps1 -Url https://github.com/intentic -Token <registration-token>
+./_tools/scripts/ci/setup-windows-runner.ps1 -Url https://github.com/intentic -Token <registration-token>
 
 # On a box that exists to be this runner and nothing else, add both switches — see "what each costs" below.
-./_tools/scripts/setup-windows-runner.ps1 -Url https://github.com/intentic -Token <token> -AutoLogon -KeepAwake
+./_tools/scripts/ci/setup-windows-runner.ps1 -Url https://github.com/intentic -Token <token> -AutoLogon -KeepAwake
 ```
 
 Run it on a machine somebody already registered as a service and it takes the service out and puts the logon
@@ -61,7 +61,7 @@ command when it fails, so this is also the answer to a runner that mysteriously 
 
 ```powershell
 # From an ELEVATED PowerShell on the runner. Pass -RunnerRoot only if it is somewhere this cannot find.
-./_tools/scripts/setup-windows-runner.ps1 -Repair
+./_tools/scripts/ci/setup-windows-runner.ps1 -Repair
 ```
 
 **It refuses while a job is running**, and `-Force` is how you override that. Repairing a busy runner takes the

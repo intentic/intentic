@@ -26,7 +26,7 @@ test("removing the CONTENTS of a mirror root is the sanctioned operation and is 
     // The inode survives all three of these, which is the whole distinction the check is built on.
     expect(replacedMirrorRoots("rm -rf ./dist/*")).toEqual([]);
     expect(replacedMirrorRoots("find ./dist -mindepth 1 -delete")).toEqual([]);
-    expect(replacedMirrorRoots("node ../../_tools/scripts/clean-outputs.mjs ./generated ./dist ./.cache")).toEqual([]);
+    expect(replacedMirrorRoots("node ../../_tools/scripts/build/clean-outputs.mjs ./generated ./dist ./.cache")).toEqual([]);
 });
 
 test("a removal that cannot take a directory at all is not a replacement", () => {

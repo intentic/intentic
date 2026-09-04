@@ -1,19 +1,19 @@
 # The CORE sandbox image — the floor: what the daemon and its web workspace need to function, nothing else.
 # Everything heavier (Chromium, Docker Engine, provider CLIs, semantic-search models, messaging gateways) is a
-# FEATURE PACK: a checked-in fragment under packs/ that _tools/scripts/compose-image-dockerfile.mjs splices at
+# FEATURE PACK: a checked-in fragment under packs/ that _tools/scripts/image/compose-image-dockerfile.mjs splices at
 # the two marker lines below to build a published profile (packs/profiles.json — `standard` is what
 # ghcr.io/intentic/sandbox:stable ships), and that the daemon composes into the environment overlay when a
 # capability needs it on demand (src/environment/packs.ts). Same fragment files both ways, so the baked and
 # on-demand paths cannot drift; a splice stamps /opt/packs/<name> so the daemon knows what its base carries.
 #
-# The monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the baked packages
+# The monorepo is compiled OUTSIDE Docker: _tools/scripts/image/prepare-image-trees.sh builds the baked packages
 # (turbo, warm cache) and prunes their production trees into .image-out/, which enters this build as the named
 # context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a cheap tree COPY, so a
 # source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless container. Build from the
 # REPO ROOT (the main context still carries the source-copied bits — iq plugin, skills, bin scripts,
 # entrypoint, connectors):
-#   bash _tools/scripts/prepare-image-trees.sh
-#   node _tools/scripts/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard
+#   bash _tools/scripts/image/prepare-image-trees.sh
+#   node _tools/scripts/image/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard
 #   docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t ghcr.io/intentic/sandbox .
 # (or build this file directly for the bare core profile). At run time connect.sh / the workspace provider
 # inject agent credentials (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at

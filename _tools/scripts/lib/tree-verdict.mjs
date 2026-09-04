@@ -17,14 +17,10 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { git } from "./git.mjs";
 
 // A verdict older than this is re-measured even for an identical tree: node_modules is not in the hash.
 export const VERDICT_TTL_MS = 12 * 60 * 60_000;
-
-const git = (root, ...args) => {
-    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
-    return result.status === 0 ? result.stdout : undefined;
-};
 
 // A hash of the working tree's CONTENT. Undefined when git cannot answer (an unmerged index, a scratch dir
 // that cannot be made), which reads as "no verdict" and re-measures.

@@ -21,9 +21,9 @@
  *
  * WHAT IT READS, and where it stops. Every `scripts` entry of every workspace manifest and of the root manifest
  * (that is what `turbo run build` and `pnpm <script>` execute against the checkout, and it is where the incident
- * was), plus every tracked shell script (`_tools/scripts/*.sh`, the hooks, the installers: the other place a
+ * was), plus every tracked shell script (all of `_tools/scripts`, the hooks, the installers: the other place a
  * removal is written as a shell command someone runs in the checkout). A Node script that has to clear an output
- * directory does not spell the removal itself — it calls _tools/scripts/clean-outputs.mjs, which implements the
+ * directory does not spell the removal itself — it calls _tools/scripts/build/clean-outputs.mjs, which implements the
  * rule rather than restating it, and which is also the fix this check tells you to apply.
  *
  * A staging tree is not the checkout, and this can tell: `rm -rf "$out/sandbox"` and
@@ -81,7 +81,7 @@ finish(
         [
             "these remove a directory that every isolated turn has mounted as an overlay lower root, which empties it\n" +
                 "  for every live agent at once (see @intentic/constants/mirror-roots). Empty it instead:\n" +
-                "  `node _tools/scripts/clean-outputs.mjs <paths>`, which keeps the inode and drops everything in it",
+                "  `node _tools/scripts/build/clean-outputs.mjs <paths>`, which keeps the inode and drops everything in it",
             findings.map(({ where, target }) => `${where} removes ${target}`),
         ],
     ],

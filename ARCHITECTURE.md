@@ -504,7 +504,7 @@ graph ──► resources ──► engine ──► providers
 
 The libs + the CLI publish to npm; **`sandbox` ships as a Docker image** to GHCR
 (`ghcr.io/intentic/sandbox`): published by
-[_tools/scripts/publish-images.sh](_tools/scripts/publish-images.sh) (which also publishes the `dind-host` test-host
+[_tools/scripts/image/publish-images.sh](_tools/scripts/image/publish-images.sh) (which also publishes the `dind-host` test-host
 image): `latest` + commit SHA on push to main, `<version>` + the moving `stable` tag on release.
 [`images.ts`](_deploy/state-resolver/src/lib/images.ts) records it at `:stable`: the deliberate unpinned
 exception among the otherwise digest-pinned deployed images (never `:latest`), so released sandboxes

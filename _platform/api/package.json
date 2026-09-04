@@ -10,7 +10,7 @@
         "fleet": "bun --env-file=../../.env ./src/fleet.ts",
         "spike:build": "bun --env-file=../../.env ./src/spike-hosted-build.ts",
         "typecheck": "tsgo --noEmit",
-        "docker:release": "bash ../../_tools/scripts/docker-release.sh api --prune",
+        "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh api --prune",
         "test": "vitest run"
     },
     "dependencies": {

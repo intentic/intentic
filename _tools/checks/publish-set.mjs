@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* THE PUBLISH SET IS CLOSED AND ORDERED, checked where breaking it costs milliseconds rather than a release.
  *
- * PUB in _tools/scripts/packages.sh is hand-maintained, and every package split re-litigates it by hand. The
+ * PUB in _tools/scripts/lib/packages.sh is hand-maintained, and every package split re-litigates it by hand. The
  * failure it invites is quiet until publish day: a listed package depending on an unlisted workspace package
  * packs a version specifier nothing on npm satisfies, and the release either 403s mid-way (half-published, the
  * worst outcome) or ships a package nobody can install. Three gaps existed the day this was written.
@@ -19,7 +19,7 @@ import { root } from "./lib/repo.mjs";
 
 // `PUB=( a b \ c )` in packages.sh: the array body, continuation backslashes folded, split on whitespace.
 const pubFromScript = () => {
-    const text = readFileSync(join(root, "_tools/scripts/packages.sh"), "utf8");
+    const text = readFileSync(join(root, "_tools/scripts/lib/packages.sh"), "utf8");
     const match = /^PUB=\(([\s\S]*?)\)/m.exec(text);
     if (match === null) {
         return undefined;
@@ -33,7 +33,7 @@ const pubFromScript = () => {
 const given = process.argv.slice(2).filter((arg) => arg !== "--");
 const dirs = given.length > 0 ? given : pubFromScript();
 if (dirs === undefined) {
-    console.error("publish set: could not read PUB out of _tools/scripts/packages.sh, the shape changed and this check needs updating");
+    console.error("publish set: could not read PUB out of _tools/scripts/lib/packages.sh, the shape changed and this check needs updating");
     process.exit(1);
 }
 
@@ -55,6 +55,6 @@ for (const dir of dirs) {
     }
 }
 
-finish([["The publish set (PUB in _tools/scripts/packages.sh) is broken", problems]], [
+finish([["The publish set (PUB in _tools/scripts/lib/packages.sh) is broken", problems]], [
     `publish set: ${dirs.length} packages, dependency-closed, topologically ordered`,
 ]);

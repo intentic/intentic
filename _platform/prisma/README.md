@@ -32,7 +32,7 @@ The **database layer**: the Prisma schema, the generated client, and the migrati
   never got the column, and every desktop sign-in answered an unhandled 500 for a week while CI: whose
   databases are all built fresh from the edited file: stayed green throughout. To change a schema, add a
   migration. Two things now enforce that, and both will fail rather than let it recur:
-  [check-migrations.sh](../../_tools/scripts/check-migrations.sh) in the `migrations` CI job (the history is
+  [check-migrations.sh](../../_tools/scripts/verify/check-migrations.sh) in the `migrations` CI job (the history is
   append-only, every new entry can apply to a database that has rows, and replaying it into an empty database
   reproduces `schema.prisma` exactly), and the api image, which diffs its own database against this schema at
   boot and refuses to serve if they disagree ([Dockerfile](../api/Dockerfile)).
@@ -57,7 +57,7 @@ The **database layer**: the Prisma schema, the generated client, and the migrati
   repair supplies what the name promised, and the boot-time schema diff is what proves the result before the api
   serves a request. `20260901190000_tunnel_id_backfill` is the worked example.
 - Run the CI check locally before pushing a schema change: it is the same script:
-  `pnpm db:up && MIGRATION_CHECK_DATABASE_URL=postgresql://app:app@localhost:5440/app bash _tools/scripts/check-migrations.sh`
+  `pnpm db:up && MIGRATION_CHECK_DATABASE_URL=postgresql://app:app@localhost:5440/app bash _tools/scripts/verify/check-migrations.sh`
   (any empty, disposable Postgres will do; it gets every migration replayed into it).
 - After any schema change, run `migrate:dev` (or at least `generate` when no migration is needed) **and** `pnpm build` before the API runs under `tsx`.
 - One `SandboxConnection` per user (`userId @unique`); its `token` seeds the deterministic tunnel hostname and is the daemon's first-bind secret. `daemonUrl` is the only sandbox state the platform stores: written by the browser, never used for liveness (the browser probes the daemon directly).

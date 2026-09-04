@@ -11,7 +11,7 @@
         "tauri:build": "tauri build",
         "generate:icons": "node scripts/icons.mjs",
         "stage:downloads": "bash scripts/stage-local-downloads.sh",
-        "stage:scripts": "bash ../../_tools/scripts/stage-desktop-scripts.sh",
+        "stage:scripts": "bash ../../_tools/scripts/desktop/stage-desktop-scripts.sh",
         "typecheck": "vue-tsc --noEmit -p tsconfig.json",
         "test": "vitest run",
         "test:watch": "vitest",

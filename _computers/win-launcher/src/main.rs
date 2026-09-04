@@ -17,7 +17,7 @@
  *     THIS: GUI-subsystem parent → child with CREATE_NO_WINDOW         nothing, ever
  *
  * `-WindowStyle Hidden` is the one that surprises, and it is worth writing down because it is what everyone
- * reaches for first (this repo included — `_tools/scripts/setup-windows-runner.ps1` rested on it): it hides
+ * reaches for first (this repo included — `_tools/scripts/ci/setup-windows-runner.ps1` rested on it): it hides
  * the console the PowerShell host owns, but under Windows Terminal the window belongs to WindowsTerminal.exe,
  * a different process that does not take the hint. The same fact rules out the other tempting shortcut,
  * hiding the console from inside the agent through `bun:ffi` ShowWindow: the window that would have to be

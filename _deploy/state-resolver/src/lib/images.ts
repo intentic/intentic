@@ -93,8 +93,8 @@ export const IMAGES = Object.freeze({
     // mints a per-app bucket + access key via `docker exec … garage`. renovate: datasource=docker depName=dxflrs/garage
     garage: "dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690",
     // The first-party intentic image built from _sandbox/sandbox (the AI-agent workspace), published to the repo's
-    // GHCR by _tools/scripts/publish-images.sh. Deliberately NOT digest-pinned like the entries above: it tracks the
-    // moving `stable` tag, which only a release moves (_tools/scripts/release-images.sh, as part of the publish),
+    // GHCR by _tools/scripts/image/publish-images.sh. Deliberately NOT digest-pinned like the entries above: it tracks the
+    // moving `stable` tag, which only a release moves (_tools/scripts/release/release-images.sh, as part of the publish),
     // so it always resolves to the newest RELEASED version, our own component, current, with no pin to bump.
     // Never `:latest`: that tag is the continuous push-to-main build carrying internal version 0.0.0 (unpublished),
     // so a scaffolded intent repo's `pnpm install` of ~0.0.0 deps fails and `intentic deploy init` can't resolve

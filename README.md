@@ -213,7 +213,7 @@ optional): then `pnpm --filter @intentic/sandbox dev`.
   (Turbo) or per-package `vitest`.
 - **`pnpm verify` is the gate: run it before you finish, including from an agent worktree.** It is
   `pnpm typecheck` and then `pnpm test`, across every package in the workspace. Both emit every dependency's
-  dist with `tsgo -b` first (`_tools/scripts/emit-declarations.mjs`), so neither needs `pnpm build`, which cannot run
+  dist with `tsgo -b` first (`_tools/scripts/build/emit-declarations.mjs`), so neither needs `pnpm build`, which cannot run
   under worktree isolation. It is also what CI decides main's health on, so a green run here is a green run
   there.
 - **Tests are type-checked too, by `pnpm typecheck`, not by `pnpm build`.** A package that emits to `dist`
@@ -240,7 +240,7 @@ capabilities and known limits are documented separately in **[docs/deploy-engine
 **One repository ([github.com/intentic/intentic](https://github.com/intentic/intentic)) and nothing is
 exported anywhere else.** A release is a tag on the commit CI already built, and two things hang off it:
 
-- **[GitHub Releases](https://github.com/intentic/intentic/releases)**: `_tools/scripts/publish-github.sh`,
+- **[GitHub Releases](https://github.com/intentic/intentic/releases)**: `_tools/scripts/release/publish-github.sh`,
   semantic-release's `publishCmd`, runs once the `v<version>` tag is on the remote and attaches the desktop
   installers and machine-agent binaries. That Release is the anonymous download channel behind
   `curl https://intentic.dev/sync | sh`.
@@ -249,7 +249,7 @@ exported anywhere else.** A release is a tag on the commit CI already built, and
   publishing. There is no npm token in this repo's CI at all.
 
 The latter is *dispatched* at the tag rather than triggered by it: GitHub deliberately starts no workflow
-from an event the built-in token created, so `_tools/scripts/dispatch-publish.sh` asks for it by name once
+from an event the built-in token created, so `_tools/scripts/release/dispatch-publish.sh` asks for it by name once
 the tag exists. A new publishing target joins a release by being listed there.
 
 ## Contributing

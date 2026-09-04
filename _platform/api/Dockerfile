@@ -3,7 +3,7 @@
 #
 # Deliberately a pure COPY wrapper: the tree is built and pruned OUTSIDE Docker by the `docker:release` turbo
 # task (dependsOn build → workspace deps' dist exist, warm cache; then `pnpm deploy --prod ./deploy` flattens
-# the api + its deps — see _tools/scripts/docker-release.sh). The pruned tree IS the build context, so there
+# the api + its deps — see _tools/scripts/platform/docker-release.sh). The pruned tree IS the build context, so there
 # is no .dockerignore and nothing else can leak in:
 #   pnpm --filter=@intentic-app/api deploy --prod ./deploy && docker build -f Dockerfile -t …/api ./deploy
 #

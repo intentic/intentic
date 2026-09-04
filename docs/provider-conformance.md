@@ -72,7 +72,7 @@ Two halves, because they are different failures:
   the last bump, or a stale global install shadowing it. Absent is not a failure; *wrong* is. Without this the
   conformance tier can pass against a version nobody ships.
 
-`_tools/scripts/install-provider-clis.sh` reads the pins from the pack Dockerfiles rather than keeping a copy, so
+`_tools/scripts/ci/install-provider-clis.sh` reads the pins from the pack Dockerfiles rather than keeping a copy, so
 there is no third place for the number to be wrong. `--latest` is the canary's mode.
 
 ## What the wire actually says

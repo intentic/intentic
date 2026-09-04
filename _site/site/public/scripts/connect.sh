@@ -190,7 +190,7 @@ fi
 # fixed `../../../..` is only right while both stay exactly four deep; a walk is right wherever it is served
 # from, and survives being copied, moved or symlinked. Everything below still GATES on finding the specific
 # file it needs, so an unrelated checkout that happens to be a pnpm workspace falls through exactly as before.
-# CANNOT be shared with _tools/scripts/repo-root.sh: this file is downloaded and run on its own.
+# CANNOT be shared with _tools/scripts/lib/repo-root.sh: this file is downloaded and run on its own.
 checkout_root() {
     case "$0" in
         */*) _dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || return 0 ;;
@@ -217,8 +217,8 @@ case "${SANDBOX_IMAGE:-}" in
         repo_root="$CHECKOUT"
         if [ -n "$repo_root" ] && [ -f "$repo_root/_sandbox/sandbox/Dockerfile" ]; then
             step pulling-image "building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…"
-            if ! (cd "$repo_root" && bash _tools/scripts/prepare-image-trees.sh &&
-                node _tools/scripts/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard &&
+            if ! (cd "$repo_root" && bash _tools/scripts/image/prepare-image-trees.sh &&
+                node _tools/scripts/image/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard &&
                 docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t "$SANDBOX_IMAGE" .); then
                 if docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then
                     echo "intentic: building ${SANDBOX_IMAGE} failed (see the docker output above) — continuing with the PREVIOUS local build, which does NOT include your latest changes." >&2

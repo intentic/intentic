@@ -12,7 +12,7 @@ export const APP_IDENTIFIER = `dev.intentic.desktop`;
 /** The scheme the whole channel from the SPA into the app rides on. */
 export const SCHEME = `intentic`;
 
-/* The scheduled task `_tools/scripts/setup-windows-runner.ps1` registers, by the name it registers it under.
+/* The scheduled task `_tools/scripts/ci/setup-windows-runner.ps1` registers, by the name it registers it under.
  * Written down in both places and nowhere else: the doctor reads this task to tell a runner that will survive a
  * reboot from one somebody started by hand, and if the two names drift the doctor reports every properly
  * provisioned machine as hand-started. */

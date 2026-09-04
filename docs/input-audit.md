@@ -189,8 +189,8 @@ columns.
 
 ## What keeps it
 
-`pnpm check:inputs` (`_tools/scripts/input-tiers.mjs`), in the shape of `check:buttons` and wired into
-`pnpm check`. It refuses six things: a field wearing none of the design system's classes; a hand-written focus
+The `inputs` check (`_tools/checks/input-tiers.mjs`), in the shape of `buttons` and on the checks manifest, so
+`pnpm checks` runs it everywhere the list is read. It refuses six things: a field wearing none of the design system's classes; a hand-written focus
 answer; a bare `outline-none`; **a focus ring that paints outside the border box**; a call site restating the
 field's own geometry; and a type size off the scale.
 

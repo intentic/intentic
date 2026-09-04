@@ -16,11 +16,11 @@ once.
 | --- | --- |
 | Build → `dist/` (three bundles, static files, stamped manifest) | `package.json` `build` |
 | `dist/` → `dist.zip`, reproducible, no `zip` binary needed | `scripts/pack.mjs` |
-| Manifest version derived from the release version | `scripts/stamp-manifest.mjs`, `_tools/scripts/packages.sh` |
+| Manifest version derived from the release version | `scripts/stamp-manifest.mjs`, `_tools/scripts/lib/packages.sh` |
 | Icons, rendered from the shared lotus in `_site/site/src/components/ornaments.ts` | `scripts/render-icons.mjs` → `static/icons/` |
 | Required 440×280 promotional tile, from the same lotus | `scripts/render-store-assets.mjs` → `assets/store/` |
-| V2 upload + status polling + retry-safe submit | `_tools/scripts/publish-webstore.mjs` |
-| Runs on every release | `.github/workflows/webstore-publish.yml`, listed in `_tools/scripts/dispatch-publish.sh` |
+| V2 upload + status polling + retry-safe submit | `_tools/scripts/release/publish-webstore.mjs` |
+| Runs on every release | `.github/workflows/webstore-publish.yml`, listed in `_tools/scripts/release/dispatch-publish.sh` |
 | Listing copy, field by field | [STORE-LISTING.md](STORE-LISTING.md) |
 | Privacy policy the listing must link | `_site/site-content/src/legal.ts`, section *The browser extension* |
 | The page the listing links to | `_site/site/src/pages/docs/your-browser.astro` |

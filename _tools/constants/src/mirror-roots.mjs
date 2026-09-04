@@ -36,7 +36,7 @@
  * those same subdirectories through the MERGED view first, which leaves an opaque upper directory the stale
  * lower can no longer reach. Only the mount root has no such repair, which is exactly where this rule sits.
  *
- * So: EMPTY A MIRRORED DIRECTORY, NEVER REPLACE IT. _tools/scripts/clean-outputs.mjs is what does that, and
+ * So: EMPTY A MIRRORED DIRECTORY, NEVER REPLACE IT. _tools/scripts/build/clean-outputs.mjs is what does that, and
  * _tools/checks/mirror-roots.mjs refuses the shape wherever a shell command in this repository spells it.
  *
  * Hand-written JavaScript rather than compiled TypeScript for the reason node.mjs gives: the checkout gate that

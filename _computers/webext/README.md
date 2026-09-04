@@ -108,7 +108,7 @@ picks the code up on its own.
 
 A locally built extension reports version **0.0.0.1**: Chrome rejects the workspace's all-zero sentinel, and
 this deliberately low valid version is what creates the listing on its first manual upload. Release versions
-live on git tags (`_tools/scripts/packages.sh`), and `scripts/stamp-manifest.mjs` derives the manifest number
+live on git tags (`_tools/scripts/lib/packages.sh`), and `scripts/stamp-manifest.mjs` derives the manifest number
 from the stamped package in CI. After that first upload, do not hand-publish another zip — every store version
 must be strictly newer, and the release pipeline owns the sequence.
 

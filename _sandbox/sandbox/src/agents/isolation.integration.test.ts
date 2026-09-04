@@ -308,7 +308,7 @@ test("a nested repo's dirs belong to its own worktree, not the parent's", async 
  * That is what `_platform/prisma`'s `rm -rf ./generated` did to every open conversation at once: a `client.ts`
  * that `prisma generate` had just written, sitting in a directory `readdir` swore was empty, so the tsconfig's
  * `./generated/**` include matched nothing and the declarations emit failed TS6307 on the turn-ending check of
- * every agent, whatever it had changed. `_tools/scripts/clean-outputs.mjs` is the remedy and is driven here
+ * every agent, whatever it had changed. `_tools/scripts/build/clean-outputs.mjs` is the remedy and is driven here
  * rather than imitated: this test fails if that script ever starts replacing what it is supposed to empty.
  *
  * THE MODE: a real mount namespace with a real overlayfs, which needs CAP_SYS_ADMIN, and an upperdir on a
@@ -357,7 +357,7 @@ test.skipIf(OVERLAY_SCRATCH === undefined)("emptying a mirror root keeps the tur
     tempDirs.push(dir);
     const lower = `${dir}/lower/dist`;
     const merged = `${dir}/merged`;
-    const clean = join(repoRoot(import.meta.url), "_tools/scripts/clean-outputs.mjs");
+    const clean = join(repoRoot(import.meta.url), "_tools/scripts/build/clean-outputs.mjs");
     const result = spawnSync(
         "unshare",
         [

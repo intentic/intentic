@@ -28,7 +28,7 @@ fi
 # fixed `../../../..` is only right while both stay exactly four deep; a walk is right wherever it is served
 # from, and survives being copied, moved or symlinked. The use below still GATES on finding the specific file
 # it needs, so an unrelated checkout that happens to be a pnpm workspace falls through exactly as before.
-# CANNOT be shared with _tools/scripts/repo-root.sh: this file is downloaded and run on its own.
+# CANNOT be shared with _tools/scripts/lib/repo-root.sh: this file is downloaded and run on its own.
 checkout_root() {
     case "$0" in
         */*) _dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || return 0 ;;

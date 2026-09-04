@@ -5,7 +5,7 @@
 # prefers these same asset paths too, so nothing forks between envs.
 #
 # These keep the plain names while a RELEASE artifact is Intentic-<version>-x64-setup.exe
-# (_tools/scripts/desktop-artifacts.sh). Not an oversight and not a second scheme: a working-tree build has no
+# (_tools/scripts/lib/desktop-artifacts.sh). Not an oversight and not a second scheme: a working-tree build has no
 # version to put in a name — it carries the 0.0.0 "not a release" sentinel that version-check.ts and
 # upgrade.ts already read as "built from source" — and a name claiming 0.0.0 would be a version statement that
 # is false rather than absent. A fixed name is also what the dev server needs, having no worker to resolve one.
@@ -34,7 +34,7 @@ for arg in "$@"; do
 done
 
 # The checkout, found by walking up to the workspace marker. Inline rather than sourced from
-# _tools/scripts/repo-root.sh, because reaching that file from here would itself need the counted `../../..`
+# _tools/scripts/lib/repo-root.sh, because reaching that file from here would itself need the counted `../../..`
 # this is removing — and every path below is named from the root, so none depends on this script's depth.
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/pnpm-workspace.yaml" ]; do ROOT="$(dirname "$ROOT")"; done
@@ -44,7 +44,7 @@ WIN_BUNDLES="$APP/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
 STAGE="$ROOT/_site/site/public/desktop"
 
 # A configured updater pubkey makes `tauri build` demand the private key — local builds skip
-# updater artifacts unless the signing env is present (same guard as _tools/scripts/build-desktop.sh).
+# updater artifacts unless the signing env is present (same guard as _tools/scripts/desktop/build-desktop.sh).
 CONFIG='{}'
 if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
     CONFIG='{"bundle":{"createUpdaterArtifacts":false}}'

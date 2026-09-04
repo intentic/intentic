@@ -117,8 +117,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/build-desktop.sh 0.0.0 --linux-only
-      - run: bash _tools/scripts/verify-desktop-setup.sh
+      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --linux-only
+      - run: bash _tools/scripts/desktop/verify-desktop-setup.sh
 
   # Desktop verification tier 3b: does the app move ITSELF onto the release that was published?
   #
@@ -153,7 +153,7 @@ jobs:
           clean: false
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/verify-desktop-update.sh
+      - run: bash _tools/scripts/desktop/verify-desktop-update.sh
 
   # The Windows artifacts this file's Windows tiers run, cross-built on Linux exactly as ci.yml's
   # desktop-windows-build does and for the same two reasons — the installer has always been cross-built, and
@@ -182,12 +182,12 @@ jobs:
           clean: false
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/build-desktop.sh 0.0.0 --windows-only
-      - run: bash _tools/scripts/build-ic.sh windows-x64
+      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
+      - run: bash _tools/scripts/build/build-ic.sh windows-x64
       # Staged flat for the reason ci.yml's desktop-windows-build spells out: a multi-path upload is rooted at
       # the paths' common ancestor, and the tiers below ask for these two by name.
       - run: |
-          . _tools/scripts/desktop-artifacts.sh
+          . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
           cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -250,7 +250,7 @@ jobs:
         with:
           persist-credentials: false
           clean: false
-      - run: bash _tools/scripts/verify-images-public.sh
+      - run: node _tools/scripts/image/verify-images-public.mjs
 
   # THE VENDOR CANARY: the conformance tier again, but against each provider's NEWEST CLI instead of the
   # version the packs pin.
@@ -286,7 +286,7 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/install-provider-clis.sh --latest
+      - run: bash _tools/scripts/ci/install-provider-clis.sh --latest
       # The versions that were actually tested, printed into the log: a red canary is only actionable if the
       # run says which release it was red against.
       - run: pnpm e2e:providers
@@ -324,7 +324,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: bash _tools/scripts/verify-update-survival.sh
+      - run: bash _tools/scripts/image/verify-update-survival.sh
 
   # THE STORE SHELLS, on the schedule as well as on their path filter. Both jobs prove a project a pinned
   # external generator writes from a checked-in manifest, and that pair drifts with no commit of ours: a
@@ -355,6 +355,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: node _tools/scripts/ci-audit.mjs --runs 100 --logs >> "$GITHUB_STEP_SUMMARY"
+      - run: node _tools/scripts/ci/ci-audit.mjs --runs 100 --logs >> "$GITHUB_STEP_SUMMARY"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -44,7 +44,7 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
 - [src/pages/docs/search.json.ts](src/pages/docs/search.json.ts): the docs search index, section by section.
 - [src/lib/registry.ts](src/lib/registry.ts): the extension registry the marketplace pages read; the public gallery includes only exact sources carrying current deterministic-scan and agent-audit evidence.
 - [src/lib/changelog.ts](src/lib/changelog.ts): the published GitHub Releases `/changelog/` reads, and the
-  parser for the "What's new" section `_tools/scripts/publish-github.sh` writes into each release body.
+  parser for the "What's new" section `_tools/scripts/release/publish-github.sh` writes into each release body.
 - [src/lib/desktop-downloads.ts](src/lib/desktop-downloads.ts): the desktop builds, named once, so the download
   page and the landing page's download button can never point at different files.
 - [src/components/DownloadCta.astro](src/components/DownloadCta.astro): the download button, which names the

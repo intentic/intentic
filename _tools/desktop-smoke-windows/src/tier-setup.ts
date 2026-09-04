@@ -1,6 +1,6 @@
 /* TIER 2, does the setup the app runs actually GO THROUGH, on a real Windows machine?
  *
- * The counterpart of `_tools/scripts/verify-desktop-setup.sh`, and it splits the setup journey the same way
+ * The counterpart of `_tools/scripts/desktop/verify-desktop-setup.sh`, and it splits the setup journey the same way
  * that file does:
  *
  *   • WHAT THE APP PASSES, the argv and env assembly, including the sh-positional / ps1-named divergence that

@@ -41,7 +41,7 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
                 `The runner is installed as a Windows service. It has to run in a logged-in user session instead, which is a\n` +
                 `property of how it was REGISTERED: the one thing about this machine a job cannot repair from inside itself,\n` +
                 `since the job IS the runner. From an elevated PowerShell on the runner:\n` +
-                `  _tools/scripts/setup-windows-runner.ps1 -Repair`,
+                `  _tools/scripts/ci/setup-windows-runner.ps1 -Repair`,
         );
     }
 
@@ -57,13 +57,13 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
     } else if (supervision.kind === `no-watchdog`) {
         harness.pass(
             `the runner is the logon task's, but nothing re-checks it: it comes back at the next sign-in and not before. ` +
-                `_tools/scripts/setup-windows-runner.ps1 -Repair adds the watchdog`,
+                `_tools/scripts/ci/setup-windows-runner.ps1 -Repair adds the watchdog`,
         );
     } else {
         harness.pass(
             `THE RUNNER WAS STARTED BY HAND, not by the logon task: it dies with that console window, with the sign-out and ` +
                 `with the reboot, and nothing brings it back. This run is fine; the next one may find no runner at all. ` +
-                `_tools/scripts/setup-windows-runner.ps1 -Repair makes it unattended`,
+                `_tools/scripts/ci/setup-windows-runner.ps1 -Repair makes it unattended`,
         );
     }
 

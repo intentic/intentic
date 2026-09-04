@@ -54,7 +54,7 @@ Two callers want opposite lifetimes, which is the whole of `--wait`:
 
 - **An agent's Run value** wants this process gone at once. It exits after starting the loop and prints the
   loop's pid on stdout, for the caller that has a pipe on it (`spawnDetached`) and to nowhere at logon.
-- **A Task Scheduler action** ([`setup-windows-runner.ps1`](../../_tools/scripts/setup-windows-runner.ps1))
+- **A Task Scheduler action** ([`setup-windows-runner.ps1`](../../_tools/scripts/ci/setup-windows-runner.ps1))
   wants the opposite: a task counts as *running* only while its action process does, which is what makes
   `-MultipleInstances IgnoreNew` swallow watchdog repetitions and `Stop-ScheduledTask` reach what it started.
   `--wait` holds until the child exits and passes its exit code through.
@@ -65,7 +65,7 @@ than an absence.
 
 ## How it ships
 
-Built by [`build-win-launcher.sh`](../../_tools/scripts/build-win-launcher.sh) with the same cargo-xwin
+Built by [`build-win-launcher.sh`](../../_tools/scripts/build/build-win-launcher.sh) with the same cargo-xwin
 toolchain as `ic`, Authenticode-signed like every other Windows artifact, attached to the GitHub release as
 `intentic-launch-windows-amd64.exe`, and downloaded next to the agent by `computer.ps1` / `sync.ps1`. The agents
 find it as a **sibling of their own executable** and nowhere else — never on `PATH`, which is not ours to trust

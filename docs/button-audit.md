@@ -146,7 +146,7 @@ the exclusion costs no specificity and the plaque's own bevel still wins.
 ## 4. Size was a free choice
 
 **What it was.** 271 `size="small"` against 103 default, picked per call site. `<RowGroup>`'s density taxonomy
-is the same lesson one control over, and `_tools/scripts/row-tiers.mjs` records what that cost.
+is the same lesson one control over, and `_tools/checks/row-tiers.mjs` records what that cost.
 
 **Now.** Size is the surface's answer:
 
@@ -230,8 +230,8 @@ a toolbar glyph.
 
 ## What keeps it
 
-`pnpm check:buttons` (`_tools/scripts/button-tiers.mjs`), in the shape of `check:rows` and wired into
-`pnpm check`. It refuses nine things: a bare `<button>` drawn as an action button; a hand-drawn pill;
+The `buttons` check (`_tools/checks/button-tiers.mjs`), in the shape of `rows` and on the checks manifest, so
+`pnpm checks` runs it everywhere the list is read. It refuses nine things: a bare `<button>` drawn as an action button; a hand-drawn pill;
 a hand-sized icon affordance; a hand-written disabled fade; a hardcoded solid accent; a `<Button>` that
 overrides its own tier's geometry; a `<Button>` in a row cluster that is not `small`; two `<Button>` siblings
 that disagree about size; and a retired spelling.

@@ -27,7 +27,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                             installer it just produced, and a verifier that skips when its tool is missing
 #                             reports "verified" for a bundle nobody opened
 #   xz-utils                  tar shells out to it, and the zig tarball below is the only .tar.xz here
-#   osslsigncode              Authenticode signing FROM LINUX (_tools/scripts/sign-windows.sh). The Windows
+#   osslsigncode              Authenticode signing FROM LINUX (_tools/scripts/build/sign-windows.sh). The Windows
 #                             installer is cross-built here, so `signtool.exe` does not exist and never will;
 #                             this is the tool that signs from a .pfx. The other supported signer is `jsign`,
 #                             for a key that lives in a cloud service (Azure Trusted Signing and friends) —

@@ -10,7 +10,7 @@ const config: UserConfig = {
          *
          * The trailer cap is the one that had to go. A `Release-Note:` / `Breaking-Note:` value is harvested
          * back out line by line (`git log --format='%(trailers:key=Release-Note,valueonly)'`, see
-         * _tools/scripts/publish-github.sh) and each line becomes ONE changelog bullet, so a note wrapped to
+         * _tools/scripts/release/publish-github.sh) and each line becomes ONE changelog bullet, so a note wrapped to
          * fit the cap ships as two half-sentences, and one sentence describing what a user will notice runs
          * past 100 characters often enough that the cap was refusing good notes rather than long ones.
          *

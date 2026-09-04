@@ -411,7 +411,7 @@ reports the profile.
   read at the Stop over every test file the tree says the turn touched. Two measurements: the assertion ratchet
   (the file's exact matchers, loose matchers and pinned literal text against the same file at HEAD, reporting a
   downgrade or a narrowing; the same measure the push gate refuses an undeclared weakening with,
-  `_tools/scripts/assertion-measure.mjs`, and the two are held to each other by a test), and the fault check
+  `_tools/constants/src/assertion-measure.mjs`, and the two are held to each other by a test), and the fault check
   below. The first test file a turn edits is also told the two rules that apply at that moment, once. Reports,
   never refuses: a refactor from prose to structure and a test written ahead of its implementation both pass
   honestly.
@@ -1118,7 +1118,7 @@ conversation's worktree instead of a path that still reaches the shared checkout
   killed the daemon on boot (hence `@intentic/extension-api/protocol`, the vue-free entry point host code
   imports). The rule that follows: **daemon code importing a package that also ships browser modules takes a
   node-safe entry point, never the root barrel**: type-only imports from the root are fine, they are erased.
-  `_tools/scripts/smoke-image.sh` is the gate. It boots each freshly built half on the arch that produced it
+  `_tools/scripts/image/smoke-image.sh` is the gate. It boots each freshly built half on the arch that produced it
   and requires `/health` to report `ok` with `boot.ready` and no failed step, before `images-merge` stitches
   `latest` and before the release can move `stable`: so a daemon that cannot start now fails the pipeline that
   built it rather than the nightly a day later.

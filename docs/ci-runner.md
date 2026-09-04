@@ -253,7 +253,7 @@ WSL reads `.wslconfig` only when the VM starts, so the setting is inert until th
 # On the Windows host, from an ordinary PowerShell (no administrator needed). Idempotent; this is also the
 # repair. -Restart is what makes a newly-written vmIdleTimeout take effect, and it refuses while a job is
 # executing.
-./_tools/scripts/setup-wsl-fleet.ps1 -Restart
+./_tools/scripts/ci/setup-wsl-fleet.ps1 -Restart
 ```
 
 It writes `vmIdleTimeout=-1` into `%USERPROFILE%\.wslconfig` (leaving the operator's memory, swap and
@@ -425,7 +425,7 @@ Nothing else in the pipeline pushes: `publish-action.sh` clones with its own PAT
 than through git.
 
 `zizmor` reports the general case as `artipacked`; the two exceptions above are why it runs at
-`--min-confidence high` rather than gating on that audit (`_tools/scripts/lint-workflows.sh`).
+`--min-confidence high` rather than gating on that audit (`_tools/scripts/verify/lint-workflows.sh`).
 
 ### The two host jobs, and the ownership hazard they carry
 

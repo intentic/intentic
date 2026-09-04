@@ -18,7 +18,7 @@
 **/pnpm-debug.log*
 
 # desktop (Tauri): the Rust build tree, tauri-build's codegen, the launcher scripts staged out of the commit
-# for the bundlers (_tools/scripts/stage-desktop-scripts.sh), and installers staged into the site for a
+# for the bundlers (_tools/scripts/desktop/stage-desktop-scripts.sh), and installers staged into the site for a
 # local download test (_editor/desktop-app/scripts/stage-local-downloads.sh).
 _editor/desktop-app/src-tauri/target
 _editor/desktop-app/src-tauri/gen

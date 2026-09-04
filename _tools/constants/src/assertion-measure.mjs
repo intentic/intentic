@@ -1,6 +1,6 @@
 /* HOW STRONG A TEST FILE'S ASSERTIONS ARE, as three numbers, and whether a second version of the file is weaker.
  *
- * The pure half of the assertion ratchet, shared by the push gate (_tools/scripts/assertion-ratchet.mjs, which
+ * The pure half of the assertion ratchet, shared by the push gate (_tools/scripts/verify/assertion-ratchet.mjs, which
  * runs it over a commit range or the working tree, importing this file by relative path because a pre-push hook
  * runs on a clone that may never have installed) and by the daemon's turn-ending check
  * (_sandbox/sandbox/src/agent/agent-tests.ts, importing it as @intentic/constants/assertion-measure), which asks

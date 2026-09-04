@@ -3,7 +3,7 @@
 #
 # Deliberately a pure COPY wrapper, the same shape as _platform/api/Dockerfile: the tree is built and pruned
 # OUTSIDE Docker by the `docker:release` turbo task (dependsOn build → workspace deps' dist exist, warm cache;
-# then `pnpm deploy --prod ./deploy` flattens this app + its deps — see _tools/scripts/docker-release.sh). The
+# then `pnpm deploy --prod ./deploy` flattens this app + its deps — see _tools/scripts/platform/docker-release.sh). The
 # pruned tree IS the build context, so there is no .dockerignore and nothing else can leak in.
 #
 # THERE IS NO BOOT CHAIN HERE, and the contrast with the api's is the point: no migrations to apply, no schema

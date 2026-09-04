@@ -3,12 +3,12 @@
 The image that meets a desktop installer the way a user's machine does.
 
 A bare Debian with a virtual display and **no GUI libraries pre-installed**, driven by
-`_tools/scripts/verify-desktop-install.sh`.
+`_tools/scripts/desktop/verify-desktop-install.sh`.
 
 ```sh
 pnpm --filter @intentic/desktop-app stage:downloads          # build the artifacts
-bash _tools/scripts/verify-desktop-bundle.sh                 # what is INSIDE them (seconds, no Docker)
-bash _tools/scripts/verify-desktop-install.sh                # that they INSTALL and RUN (needs Docker)
+bash _tools/scripts/desktop/verify-desktop-bundle.sh                 # what is INSIDE them (seconds, no Docker)
+bash _tools/scripts/desktop/verify-desktop-install.sh                # that they INSTALL and RUN (needs Docker)
 ```
 
 ## What the bare image is for

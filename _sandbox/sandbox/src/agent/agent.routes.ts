@@ -819,7 +819,7 @@ async function* runConversationTurn(
                  * having moved under it, a turn on a runtime with no Stop hook at all, is answered here, once,
                  * serialized through the heavy-command pool (verify-deps.ts). A red verdict is an edge the fix
                  * chore wakes on with THIS land as the named cause; a green one is recorded against the tree so
-                 * the push gate that follows replays it and runs only the build (_tools/scripts/verify.mjs).
+                 * the push gate that follows replays it and runs only the build (_tools/scripts/verify/verify.mjs).
                  *
                  * Every landed repo that carries a check, not only the ones already red: the closure re-check
                  * this replaces ran only while a project's light was red, which is exactly the arrangement under

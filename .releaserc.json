@@ -7,9 +7,9 @@
         [
             "@semantic-release/exec",
             {
-                "prepareCmd": "bash _tools/scripts/release-prepare.sh ${nextRelease.version}",
-                "publishCmd": "bash _tools/scripts/publish-github.sh ${nextRelease.version} && bash _tools/scripts/release-images.sh ${nextRelease.version} && bash _tools/scripts/ship-stable.sh ${nextRelease.version}",
-                "successCmd": "bash _tools/scripts/mark-release-cut.sh ${nextRelease.version} && { bash _tools/scripts/post-release-discord.sh ${nextRelease.version} || true; }"
+                "prepareCmd": "bash _tools/scripts/release/release-prepare.sh ${nextRelease.version}",
+                "publishCmd": "bash _tools/scripts/release/publish-github.sh ${nextRelease.version} && bash _tools/scripts/release/release-images.sh ${nextRelease.version} && bash _tools/scripts/release/ship-stable.sh ${nextRelease.version}",
+                "successCmd": "bash _tools/scripts/release/mark-release-cut.sh ${nextRelease.version} && { node _tools/scripts/release/post-release-discord.mjs ${nextRelease.version} || true; }"
             }
         ]
     ]

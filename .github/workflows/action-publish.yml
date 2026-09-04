@@ -72,4 +72,4 @@ jobs:
       - name: Sync to the public action repository
         env:
           GATE_ACTION_TOKEN: ${{ secrets.GATE_ACTION_TOKEN }}
-        run: bash _tools/scripts/publish-action.sh "${GITHUB_REF_NAME#v}"
+        run: bash _tools/scripts/release/publish-action.sh "${GITHUB_REF_NAME#v}"

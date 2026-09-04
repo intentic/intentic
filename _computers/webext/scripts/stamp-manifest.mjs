@@ -4,7 +4,7 @@ import { join } from "node:path";
 /* Write dist/manifest.json with THIS build's version in it.
  *
  * Every first-party package.json in this repo stays at 0.0.0 in git and is stamped transiently in CI
- * (_tools/scripts/set-versions.sh, packages.sh says why). An extension's version lives somewhere else — its
+ * (_tools/scripts/release/set-versions.sh, packages.sh says why). An extension's version lives somewhere else — its
  * manifest — and a store cares about it more than npm does: the Chrome Web Store refuses an upload whose
  * version is not strictly greater than the one already published. So the manifest's version is DERIVED from
  * the package's rather than kept beside it, and the derivation happens here, at build time.

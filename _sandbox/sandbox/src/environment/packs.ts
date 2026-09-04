@@ -5,7 +5,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
 /* Feature packs, the single unit of image growth. A pack is a checked-in Dockerfile fragment
  * (packs/<name>.Dockerfile in this package): the SAME file is spliced into a published image by
- * _tools/scripts/compose-image-dockerfile.mjs when a profile bakes it (packs/profiles.json), and composed into
+ * _tools/scripts/image/compose-image-dockerfile.mjs when a profile bakes it (packs/profiles.json), and composed into
  * the environment overlay by a capability/provider that needs it on demand, one source, so the baked and
  * on-demand paths cannot drift.
  *

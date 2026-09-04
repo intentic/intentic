@@ -45,7 +45,7 @@ jobs:
         with:
           persist-credentials: false
           clean: false
-      - run: bash _tools/scripts/rollback-stable.sh "$ROLLBACK_VERSION"
+      - run: bash _tools/scripts/release/rollback-stable.sh "$ROLLBACK_VERSION"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}

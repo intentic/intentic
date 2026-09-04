@@ -86,7 +86,7 @@
         // no type checker ever reads.
         //
         // The declarations these checks resolve their workspace imports through are emitted by the prepass that
-        // the root `typecheck` and `test` scripts both run FIRST (_tools/scripts/emit-declarations.mjs). It is `tsgo -b` rather than a
+        // the root `typecheck` and `test` scripts both run FIRST (_tools/scripts/build/emit-declarations.mjs). It is `tsgo -b` rather than a
         // `^build` dependency because `build` goes through pnpm, and pnpm's `syncInjectedDepsAfterScripts`
         // hardlinks into `node_modules` after it: a different filesystem in an agent worktree, so a `^build`
         // dependency died EXDEV (exit 238) for every agent in the fleet, leaving the check that catches a fake
@@ -185,7 +185,7 @@
         // THE PROVIDER CONFORMANCE TIER, and the only e2e task here that GATES a release.
         //
         // Named apart from `e2e` for the reason the two tasks below are: it asks for a provisioning of its own,
-        // the provider CLIs at their pinned versions (_tools/scripts/install-provider-clis.sh). What it does
+        // the provider CLIs at their pinned versions (_tools/scripts/ci/install-provider-clis.sh). What it does
         // NOT ask for is a credential or a network: each turn drives the real CLI against a local scripted
         // model (@intentic/fake-model), so it is deterministic, costs nothing, and cannot be reddened by a
         // vendor's outage. That is precisely what makes it safe to block a release on, where the tiers that

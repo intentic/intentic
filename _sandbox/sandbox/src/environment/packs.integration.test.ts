@@ -178,7 +178,7 @@ test("a provider CLI present on this machine reports the version its pack pins",
  * read as "not baked", re-proposing packs it already carries. Also pins the placement the layer-cache
  * argument depends on: pre-trees packs above the daemon tree COPY, post-trees packs below it. */
 test("compose-image-dockerfile.mjs stamps the hashes this module computes, in the right halves", async () => {
-    const composed = execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "standard"], { cwd: repoRoot, encoding: "utf8" });
+    const composed = execFileSync("node", ["_tools/scripts/image/compose-image-dockerfile.mjs", "standard"], { cwd: repoRoot, encoding: "utf8" });
     // The PROFILE's packs, not every shipped pack: llamacpp-cuda is deliberately overlay-only (hundreds of MB
     // of CUDA runtime only a GPU-granted sandbox can use), so a stamp for it would be a lie the recompose
     // reads as "already baked" and the GPU option would silently never install its build.
@@ -199,6 +199,6 @@ test("compose-image-dockerfile.mjs stamps the hashes this module computes, in th
     expect(composed.indexOf("# ---- pack: messaging ----")).toBeGreaterThan(treesCopy);
     expect(composed.indexOf("# ---- pack: semantic ----")).toBeGreaterThan(treesCopy);
     // The core profile is the Dockerfile untouched: the minimal image is not a variant, it IS the file.
-    const core = execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "core"], { cwd: repoRoot, encoding: "utf8" });
+    const core = execFileSync("node", ["_tools/scripts/image/compose-image-dockerfile.mjs", "core"], { cwd: repoRoot, encoding: "utf8" });
     expect(core).toBe(readFileSync(join(sandboxRoot, "Dockerfile"), "utf8"));
 });

@@ -1,6 +1,6 @@
 #!/bin/sh
 # THE LAST THING BETWEEN THIS CHECKOUT AND main. Wired by the root `prepare` script (core.hooksPath=.githooks)
-# alongside commit-msg. It runs _tools/scripts/verify-push.mjs, the same script the app's "Check before you push"
+# alongside commit-msg. It runs _tools/scripts/verify/verify-push.mjs, the same script the app's "Check before you push"
 # rule runs (`pnpm verify:push`), with git's ref lines on stdin so the script knows which range is leaving.
 #
 # What that script does, cheapest first, stopping at the first refusal: every check the manifest lists
@@ -12,4 +12,4 @@
 #
 # No dependency guard: this needs node, which is the thing running the repo; the heavy tier needs pnpm and says so
 # when it is missing. `git push --no-verify` when you genuinely mean to push a tree that does not pass.
-exec node _tools/scripts/verify-push.mjs --hook
+exec node _tools/scripts/verify/verify-push.mjs --hook

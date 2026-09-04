@@ -71,7 +71,7 @@ jobs:
       - id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node _tools/scripts/release-plan.mjs >> "$GITHUB_OUTPUT"
+        run: node _tools/scripts/release/release-plan.mjs >> "$GITHUB_OUTPUT"
 
   # The versioned candidate. This is the only build of the Windows installer in the release lifecycle; the
   # publish job downloads and stages it instead of asking cargo-xwin for a similar second file.
@@ -116,8 +116,8 @@ jobs:
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
       # Match release-prepare's transient package state before the UI is compiled into the candidate.
-      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
-      - run: bash _tools/scripts/build-desktop.sh "$RELEASE_VERSION" --windows-only
+      - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
+      - run: bash _tools/scripts/desktop/build-desktop.sh "$RELEASE_VERSION" --windows-only
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release-candidate
@@ -168,15 +168,15 @@ jobs:
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: pnpm install --frozen-lockfile
-      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
-      - run: bash _tools/scripts/prepare-image-trees.sh
-      - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
+      - run: bash _tools/scripts/image/prepare-image-trees.sh
+      - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh
       # THE RELEASE GATE: this version's arm64 half is booted before anything moves onto it. `publish` needs
       # this job to succeed, so a daemon that cannot start means no tag, no GitHub Release, no npm publish and
       # — the one that reaches users — no `stable`. Version-tagged halves are all that exist at this point, so
       # a red step orphans two tags nothing references and leaves every consumer on the previous release.
       # SMOKE_RMI for the hosted runner's disk, as ci.yml's arm64 half does.
-      - run: SMOKE_RMI=1 bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-arm64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-arm64"
+      - run: SMOKE_RMI=1 bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-arm64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-arm64"
 
   # The amd64 halves of the released images, on the fleet, while Windows verifies — the exact counterpart of
   # sandbox-arm64, and the ~11 minutes that used to run INSIDE the publish job's publishCmd, serialized after
@@ -221,13 +221,13 @@ jobs:
             .image-out/iq-models
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
-      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
-      - run: bash _tools/scripts/prepare-image-trees.sh
-      - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
+      - run: bash _tools/scripts/image/prepare-image-trees.sh
+      - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh
       # The amd64 half of the same release gate — see sandbox-arm64 above. Before dind-host, so the cheapest
       # thing that can stop a broken release stops it first.
-      - run: bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-amd64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-amd64"
-      - run: TAGS="$RELEASE_VERSION" IMAGES=dind-host bash _tools/scripts/publish-images.sh
+      - run: bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-amd64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-amd64"
+      - run: TAGS="$RELEASE_VERSION" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
 
   # The release's Linux-side artifacts, while Windows verifies: the Linux desktop bundles — installed and
   # launched on a bare Debian HERE, before they are uploaded — and the cross-compiled machine agents. These
@@ -289,26 +289,26 @@ jobs:
       - name: Build the published closure
         shell: bash
         run: |
-          source _tools/scripts/packages.sh
+          source _tools/scripts/lib/packages.sh
           filters=()
           for d in "${PUB[@]}"; do filters+=("--filter=./$d"); done
           pnpm turbo run build "${filters[@]}"
-      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
+      - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
       # The one machine-side agent (computer links + desktop sync), for every platform either capability's card
       # can land on: the sync half has always covered macOS, the computer half rides along there.
-      - run: bash _tools/scripts/build-agent-binaries.sh _computers/machine intentic-machine linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
+      - run: bash _tools/scripts/build/build-agent-binaries.sh _computers/machine intentic-machine linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
       # The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims
       # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
       # image, with no Apple SDK anywhere in it (build-ic.sh header).
-      - run: bash _tools/scripts/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      - run: bash _tools/scripts/build/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
       # The Windows launcher stub, which is what the machine agent above actually registers at logon: without it
       # in the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
       # console window on the desktop at every boot. Same xwin toolchain as the ic build above; ~200 KB.
-      - run: bash _tools/scripts/build-win-launcher.sh windows-x64
-      - run: bash _tools/scripts/build-desktop.sh "$RELEASE_VERSION" --linux-only
+      - run: bash _tools/scripts/build/build-win-launcher.sh windows-x64
+      - run: bash _tools/scripts/desktop/build-desktop.sh "$RELEASE_VERSION" --linux-only
       # …and prove those exact bytes install and run before anything ships them: installs the .deb and the
       # AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open intentic:// at it.
-      - run: bash _tools/scripts/verify-desktop-install.sh
+      - run: bash _tools/scripts/desktop/verify-desktop-install.sh
       # Several paths, deliberately: an upload of several paths is rooted at their COMMON ANCESTOR — the repo
       # root here — so the artifact stores each dist-bin under its repo-relative path, and the publish job's
       # download reconstructs the exact tree publish-github.sh and the attestation read. (ci.yml's Windows
@@ -374,10 +374,10 @@ jobs:
       actions: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Read by post-release-discord.sh, which .releaserc.json's successCmd runs once a release has actually
+      # Read by post-release-discord.mjs, which .releaserc.json's successCmd runs once a release has actually
       # shipped: user-facing highlights to the community server's #announcements. Optional — unset, the script
       # says it skipped and the release is unaffected. The channel and this webhook were created by
-      # _tools/scripts/discord-community-setup.mjs.
+      # _tools/scripts/release/discord-community-setup.mjs.
       DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
       # Not for signing — that happened where the installers were built. The assemble step reads it as the
       # switch that says "this release is signed", requiring both .sig files and writing latest.json.
@@ -468,7 +468,7 @@ jobs:
       # run — and before the attestation below, which is about a different set of artifacts entirely.
       - name: Publish to npm and the GitHub Marketplace
         if: ${{ steps.release.outputs.released == 'true' }}
-        run: bash _tools/scripts/dispatch-publish.sh "$PLANNED_RELEASE_VERSION"
+        run: bash _tools/scripts/release/dispatch-publish.sh "$PLANNED_RELEASE_VERSION"
 
       # --- provenance -------------------------------------------------------------------------------------
       # Everything below binds what we just published to the commit it was built from, in a public
@@ -503,7 +503,7 @@ jobs:
         shell: bash
         env:
           BUNDLE_PATH: ${{ steps.attest-assets.outputs.bundle-path }}
-        run: bash _tools/scripts/attach-provenance.sh "${PLANNED_RELEASE_VERSION}" "${BUNDLE_PATH}"
+        run: bash _tools/scripts/release/attach-provenance.sh "${PLANNED_RELEASE_VERSION}" "${BUNDLE_PATH}"
 
       # The images are named by digest rather than by tag because a tag is a pointer and provenance about a
       # pointer proves nothing — `stable` moves on the next release. imagetools reads the digest the merge

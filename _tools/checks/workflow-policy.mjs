@@ -154,7 +154,7 @@ for (const file of workflowFiles()) {
             tagTriggered.push(
                 `.github/workflows/${file}: \`on: push: tags\` is a trigger this repository can never fire, semantic-release ` +
                     `pushes its tags with GITHUB_TOKEN, and GitHub starts no workflow from that token's events. Use ` +
-                    `\`on: workflow_dispatch\` and add this file to WORKFLOWS in _tools/scripts/dispatch-publish.sh, which ` +
+                    `\`on: workflow_dispatch\` and add this file to WORKFLOWS in _tools/scripts/release/dispatch-publish.sh, which ` +
                     `dispatches it AT THE TAG so the checkout and \`GITHUB_REF_NAME\` are what a tag push would have given it`,
             );
         }

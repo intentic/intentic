@@ -5,7 +5,7 @@
 #
 # Deliberately a pure COPY wrapper: ./dist is built OUTSIDE Docker by the `docker:release` turbo task
 # (dependsOn build — vue-tsc + vite + the deployment env bundle, warm cache; see
-# _tools/scripts/docker-release.sh). The context is this app dir; .dockerignore keeps only dist, nginx.conf
+# _tools/scripts/platform/docker-release.sh). The context is this app dir; .dockerignore keeps only dist, nginx.conf
 # and entrypoint.sh:
 #   pnpm --filter=@intentic-app/web build && docker build -t …/web _editor/web
 FROM nginx:1.30.4-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46

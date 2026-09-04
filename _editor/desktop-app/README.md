@@ -187,7 +187,7 @@ needs, and say what it is doing to a window instead of a terminal
 | The machine-agent panel | `intentic-machine status --json` (its own install under `~/.intentic/machine/bin` first, then PATH) |
 
 The scripts are **bundled as resources** from `_site/site/public/scripts/`, by way of a staging directory:
-[`_tools/scripts/stage-desktop-scripts.sh`](../../_tools/scripts/stage-desktop-scripts.sh) empties
+[`_tools/scripts/desktop/stage-desktop-scripts.sh`](../../_tools/scripts/desktop/stage-desktop-scripts.sh) empties
 `src-tauri/staged-scripts/` and refills it from `git archive HEAD` before every build, and `tauri.conf.json`
 globs *that*: so a script added to the site is bundled by construction, and a file the commit does not carry
 cannot be, however long the runner has kept its checkout. The trade is that an **uncommitted** edit to a
@@ -503,7 +503,7 @@ report anything.
 ## Release & update
 
 The release workflow computes the version, cross-builds its Windows NSIS candidate once, and executes that file
-on Windows before publication. `release-prepare.sh` then runs `_tools/scripts/build-desktop.sh` for the Linux
+on Windows before publication. `release-prepare.sh` then runs `_tools/scripts/desktop/build-desktop.sh` for the Linux
 `deb`/`rpm`/AppImage and stages the already-tested Windows candidate beside them; it does not rebuild it.
 `latest.json` and the artifacts land in `dist-bin/`, and `publish-github.sh` attaches them to the **GitHub
 Release**, exactly like `intentic-machine`.
@@ -534,7 +534,7 @@ its problems are worth naming because neither is cosmetic.
 binary it cannot attribute to anybody, and no amount of testing retires that — SmartScreen wants an
 Authenticode signature from a certificate issued to a verified legal entity. Everything to use one is already
 here: `bundle.windows.signCommand` points at
-[`_tools/scripts/sign-windows.sh`](../../_tools/scripts/sign-windows.sh), which signs through jsign or
+[`_tools/scripts/build/sign-windows.sh`](../../_tools/scripts/build/sign-windows.sh), which signs through jsign or
 osslsigncode, no-ops silently when its variables are unset, and is documented in
 [`docs/windows-code-signing.md`](../../docs/windows-code-signing.md). **The only missing piece is a purchased
 certificate.** Until there is one, every download ends at a scare dialog, and it is the largest single drop in
@@ -620,21 +620,21 @@ fact: **this app is cross-built on Linux and its Windows conventions first execu
 | Tier | Runs | Proves |
 | --- | --- | --- |
 | `cargo test` | per PR (`desktop-check`) | the argv/env each flow assembles: for **both** hosts, since `Host` is a value rather than a `cfg!` read, so the `.ps1` named-parameter conventions are covered on a Linux runner |
-| `_tools/scripts/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical **to the ones the commit carries** (not to the working tree, which on a runner shared by six jobs can drift under a six-minute build), and the `.desktop` entry both registers `intentic://` and carries the `%u` that delivers it. Reads the deb, rpm, AppImage **and the NSIS installer**: the only automated look inside the Windows artifact |
-| `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop-verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` (with the app running *and* with it closed, which are different mechanisms) see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
+| `_tools/scripts/desktop/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical **to the ones the commit carries** (not to the working tree, which on a runner shared by six jobs can drift under a six-minute build), and the `.desktop` entry both registers `intentic://` and carries the `%u` that delivers it. Reads the deb, rpm, AppImage **and the NSIS installer**: the only automated look inside the Windows artifact |
+| `_tools/scripts/desktop/verify-desktop-install.sh` | main + nightly (`desktop-verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` (with the app running *and* with it closed, which are different mechanisms) see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
 | `@intentic/desktop-smoke-windows install` | desktop changes on main + every release candidate | the real NSIS installer runs on Windows; the installed app handles cold and warm OS links, renders loopback WebView content, and uninstalls while running. A release publishes the same installer bytes this tier passed |
-| `_tools/scripts/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
-| `_tools/scripts/verify-desktop-update.sh` | nightly | the app **replaces itself**: two AppImages of its own at two versions, a throwaway key, a loopback release endpoint — it checks, downloads and verifies with nobody pressing anything, installs on close, and comes back on the new bytes reporting itself current. The tier that would have caught the whole of the section above |
+| `_tools/scripts/desktop/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
+| `_tools/scripts/desktop/verify-desktop-update.sh` | nightly | the app **replaces itself**: two AppImages of its own at two versions, a throwaway key, a loopback release endpoint — it checks, downloads and verifies with nobody pressing anything, installs on close, and comes back on the new bytes reporting itself current. The tier that would have caught the whole of the section above |
 | `@intentic/desktop-smoke-windows setup` | nightly | the installed `connect.ps1`, Windows PowerShell 5.1 conventions, Docker Desktop's Linux-container mode, and a sandbox answering health |
 | `@intentic/desktop-smoke-windows agents` | nightly when the account volume exists | the host loopback route and control-token gate, followed by one real model reply read from that conversation's transcript |
-| `_tools/scripts/verify-images-public.sh` | nightly | the images those scripts pull are readable **without a credential**. The only tier that runs logged out, the setup tiers carry the runner's `ghcr.io` login, so a package published private is invisible to them and surfaces first as a user's install dying at `error from registry: unauthorized` |
+| `_tools/scripts/image/verify-images-public.mjs` | nightly | the images those scripts pull are readable **without a credential**. The only tier that runs logged out, the setup tiers carry the runner's `ghcr.io` login, so a package published private is invisible to them and surfaces first as a user's install dying at `error from registry: unauthorized` |
 
 Run the last two locally against your own build:
 
 ```sh
 pnpm --filter @intentic/desktop-app stage:downloads
-bash _tools/scripts/verify-desktop-bundle.sh _site/site/public/desktop
-bash _tools/scripts/verify-desktop-install.sh _site/site/public/desktop   # needs Docker
+bash _tools/scripts/desktop/verify-desktop-bundle.sh _site/site/public/desktop
+bash _tools/scripts/desktop/verify-desktop-install.sh _site/site/public/desktop   # needs Docker
 ```
 
 **Not covered:** the setup-code claim round trip, which needs a Cloudflare pool and so belongs with the gated

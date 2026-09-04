@@ -183,7 +183,7 @@ jobs:
           # being right and the regex being coarse or blind.
           #
           # --explain puts the reasoning on stderr (visible in this log); stdout is job-output syntax.
-          node _tools/scripts/affected.mjs "$base" "$HEAD_SHA" --explain >> "$GITHUB_OUTPUT"
+          node _tools/scripts/verify/affected.mjs "$base" "$HEAD_SHA" --explain >> "$GITHUB_OUTPUT"
 
           # THE TWO CI IMAGES, which the graph cannot answer: they are Dockerfiles for the containers the jobs
           # run in, so nothing in the workspace depends on them, and they have a SECOND trigger — the tag they
@@ -259,7 +259,7 @@ jobs:
       # each tool is for, why they are pinned by sha256 rather than baked into ci-base, and which findings this
       # repository suppresses on purpose (.github/zizmor.yml, each with its reason and what would retire it).
       - shell: bash
-        run: bash _tools/scripts/lint-workflows.sh
+        run: bash _tools/scripts/verify/lint-workflows.sh
 
   # THE THINGS ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, that every
   # new entry on it can apply to a database which already holds rows, and that replaying the lot produces
@@ -357,7 +357,7 @@ jobs:
           else
             base="$BASE_PUSH"
           fi
-          bash _tools/scripts/check-migrations.sh "$base"
+          bash _tools/scripts/verify/check-migrations.sh "$base"
 
   # The CI job image itself. Runs only when _tools/ci-base changes — every other pipeline skips it. It cannot
   # run inside ci-base (building that is the point), so it runs on the host runner directly.
@@ -562,7 +562,7 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       # At the PACK's pins, never `@latest`: the tier's claim is that it exercises the shipped article, and the
       # newest CLI is by definition not what the image runs. The canary that does ask for latest is nightly.
-      - run: bash _tools/scripts/install-provider-clis.sh
+      - run: bash _tools/scripts/ci/install-provider-clis.sh
       - run: pnpm e2e:providers
 
   # The marketing site and the content/integration libs behind it. It gates no deploy — the site publishes from
@@ -618,7 +618,7 @@ jobs:
       # The launcher scripts, staged out of the commit (stage-desktop-scripts.sh). tauri-build resolves the
       # resource glob while CARGO builds, so the three bare cargo steps below need it as much as a bundle does
       # — and the desktop-app `build` above, which stages on its own, is a turbo task that a cache hit skips.
-      - run: bash _tools/scripts/stage-desktop-scripts.sh
+      - run: bash _tools/scripts/desktop/stage-desktop-scripts.sh
       - run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
       - run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
@@ -728,8 +728,8 @@ jobs:
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
       # A fixed 0.0.0: nothing here is published, and the version only names the bundle files.
-      - run: bash _tools/scripts/build-desktop.sh 0.0.0 --linux-only
-      - run: bash _tools/scripts/verify-desktop-install.sh
+      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --linux-only
+      - run: bash _tools/scripts/desktop/verify-desktop-install.sh
 
   # What the Windows runner is handed. Built HERE, on Linux, because that is where the Windows installer has
   # always been built — cargo-xwin cross-compiles it, and this job is deliberately the same script the release
@@ -771,8 +771,8 @@ jobs:
           clean: false
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/build-desktop.sh 0.0.0 --windows-only
-      - run: bash _tools/scripts/build-ic.sh windows-x64
+      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
+      - run: bash _tools/scripts/build/build-ic.sh windows-x64
       # Staged into one directory rather than uploaded as two paths, because an upload of several paths is
       # rooted at their COMMON ANCESTOR — for two different dist-bin directories that is the repo root, and the
       # installer arrives under `_editor/desktop-app/dist-bin/` instead of at the top level the Windows tier
@@ -781,7 +781,7 @@ jobs:
       # run whose build failed after staging — which prepare-workspace above now removes as a matter of rule,
       # `windows-artifacts` being outside its allowlist, rather than as a line each staging step remembers.
       - run: |
-          . _tools/scripts/desktop-artifacts.sh
+          . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
           cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -917,11 +917,11 @@ jobs:
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
 
-      - run: bash _tools/scripts/prepare-image-trees.sh
+      - run: bash _tools/scripts/image/prepare-image-trees.sh
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
       # The sandbox pushes per-arch tags (this runner is the amd64 half; images-arm64 is the other) and the
       # merge job publishes the plain multi-arch tags; dind-host stays single-arch (publish-images.sh says why).
-      - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh
         shell: bash
       # THE HALVES MUST BOOT BEFORE ANY MOVING TAG POINTS AT THEM. Everything upstream of this job ran in the
       # development install; the image runs a `pnpm deploy --prod` tree, and a daemon that dies on an import
@@ -929,7 +929,7 @@ jobs:
       # is the first and only per-push step that starts the artifact. It runs against the SHA tags just pushed
       # — the published bytes, not a local build — and a red step means images-merge never stitches `latest`,
       # so consumers stay on the previous good pair.
-      - run: bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:sha-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-sha-${GITHUB_SHA::8}-amd64"
+      - run: bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:sha-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-sha-${GITHUB_SHA::8}-amd64"
         shell: bash
       # NO `latest` HERE, deliberately — the immutable SHA tag only. dind-host has no halves to stitch, so it
       # used to get its moving tag written right here, in the same step that built it, while sandbox:latest
@@ -938,7 +938,7 @@ jobs:
       # sandbox:latest — a pair nothing had tested together, and the pair nightly's tiers, verify-images-public
       # and the shipped connect-host.ps1 all reference by name. images-merge promotes this tag once both
       # sandbox halves are in, so the two images move together or neither does.
-      - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/publish-images.sh
+      - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
         shell: bash
 
   # The sandbox image's arm64 half, natively built — GitHub's hosted arm runners rather than the x86 fleet,
@@ -987,14 +987,14 @@ jobs:
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: pnpm install --frozen-lockfile
-      - run: bash _tools/scripts/prepare-image-trees.sh
-      - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      - run: bash _tools/scripts/image/prepare-image-trees.sh
+      - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh
         shell: bash
       # The arm64 half's own boot gate — the counterpart of the amd64 one above, and the reason it runs HERE
       # rather than once somewhere central: an image can only be booted on the architecture it was built for,
       # so each half is proven on the runner that produced it. SMOKE_RMI because this is a GitHub-hosted runner
       # with a hosted runner's disk (smoke-image.sh says why the pull is a second copy).
-      - run: SMOKE_RMI=1 bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:sha-${GITHUB_SHA::8}-arm64" "ghcr.io/intentic/sandbox:core-sha-${GITHUB_SHA::8}-arm64"
+      - run: SMOKE_RMI=1 bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:sha-${GITHUB_SHA::8}-arm64" "ghcr.io/intentic/sandbox:core-sha-${GITHUB_SHA::8}-arm64"
         shell: bash
 
   # Stitch the two halves into the plain tags — two manifest calls per tag, no bytes moved. Until this runs,
@@ -1031,11 +1031,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: bash _tools/scripts/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}" core-latest "core-sha-${GITHUB_SHA::8}"
+      - run: bash _tools/scripts/image/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}" core-latest "core-sha-${GITHUB_SHA::8}"
         shell: bash
       # The single-arch half of the same promise: point dind-host's `latest` at the SHA tag the `images` job
       # pushed. Last, so a failed sandbox stitch leaves both images on the previous pair rather than one of each.
-      - run: bash _tools/scripts/promote-image-tag.sh dind-host "sha-${GITHUB_SHA::8}" latest
+      - run: bash _tools/scripts/image/promote-image-tag.sh dind-host "sha-${GITHUB_SHA::8}" latest
         shell: bash
 
   # Platform image publishing: build + push web + api on every push to main that touches the platform, then
@@ -1094,7 +1094,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web --filter=@intentic/ingress
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
-      - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/deploy-platform.sh
+      - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/platform/deploy-platform.sh
         shell: bash
 
       # AND THEN CHECK THAT A STRANGER CAN STILL SIGN IN, which nothing else here does.

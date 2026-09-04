@@ -20,7 +20,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
  *   matchers, loose matchers, and the characters of literal text the matchers pin down, and reports a file that
  *   got weaker in either of two shapes: a DOWNGRADE (fewer exact, more loose) or a NARROWING (the asserted text
  *   shrank by more than a quarter with no test removed). The measure is @intentic/constants/assertion-measure,
- *   the one copy the push gate applies to a commit range (_tools/scripts/assertion-ratchet.mjs, which says why
+ *   the one copy the push gate applies to a commit range (_tools/scripts/verify/assertion-ratchet.mjs, which says why
  *   the vocabulary is what it is); there it refuses an undeclared weakening, here it tells the model while the
  *   model can still act, which is the cheaper moment by a whole push.
  *

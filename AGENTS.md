@@ -60,7 +60,7 @@ the work lands: a red first run with a green second is a turn that passed, a tur
 held on its branch as "Ready to land".
 
 Neither this nor the land check goes through `pnpm build`, which dies EXDEV under worktree isolation: the
-emit (`_tools/scripts/emit-declarations.mjs`, `tsgo -b`) writes every package's dist, and the tests run with
+emit (`_tools/scripts/build/emit-declarations.mjs`, `tsgo -b`) writes every package's dist, and the tests run with
 `--only`, off turbo's `^build` edge. The dist each suite imports was compiled from the tree you are looking
 at, seconds ago.
 
@@ -78,12 +78,12 @@ refused.
 
 ## Before it leaves the machine
 
-The push is the one gate nothing routes around, and it runs `_tools/scripts/verify-push.mjs`: from the app's
+The push is the one gate nothing routes around, and it runs `_tools/scripts/verify/verify-push.mjs`: from the app's
 "Check before you push" rule (`pnpm verify:push`), in a terminal the owner can watch, and again from
 `.githooks/pre-push` for any BRANCH push git makes from the checkout — a tag push is a pointer move onto
 commits a branch push already measured (the release tag, `stable`), so it stands down. Cheapest first: every check the manifest lists
 (`_tools/checks/run.mjs`, under two seconds, needing nothing installed), the assertion ratchet over the
-range's test files (`_tools/scripts/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
+range's test files (`_tools/scripts/verify/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
 only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the
 linter; then `cargo fmt --check` on any Rust crate the push touches; then the three steps CI's verify groups
 run. The two cheap tiers collect — a push wrong in four readable ways is told about four — and the boundary

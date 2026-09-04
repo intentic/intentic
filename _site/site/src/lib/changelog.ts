@@ -5,7 +5,7 @@ import { githubReleasesUrl } from "@intentic-dev/site-content/site";
  *
  * THE RELEASE BODY IS THE SOURCE, and that is the whole design rather than an implementation detail. Notes are
  * written into commits as `Release-Note:` trailers, harvested into the Release at publish time
- * (_tools/scripts/publish-github.sh) and read back here. Nothing is reviewed before it goes out, so the one
+ * (_tools/scripts/release/publish-github.sh) and read back here. Nothing is reviewed before it goes out, so the one
  * property that has to hold is that a bad line can be FIXED in a single place afterwards: editing the Release
  * body on GitHub corrects this page on the next build and the sandbox's update card immediately, because both
  * quote the same text. A copy vendored into this repo would have been a second place to fix, and the one

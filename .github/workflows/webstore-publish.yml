@@ -63,7 +63,7 @@ jobs:
 
       # Before the build, so the manifest the packer seals carries the released version.
       - name: Stamp the release version
-        run: bash _tools/scripts/set-versions.sh "${GITHUB_REF_NAME#v}"
+        run: bash _tools/scripts/release/set-versions.sh "${GITHUB_REF_NAME#v}"
 
       # `--filter` pulls the dependency closure through turbo's ^build edge: the extension inlines the
       # contract's and the browser vocabulary's dist.
@@ -81,4 +81,4 @@ jobs:
           CHROME_WEBSTORE_REFRESH_TOKEN: ${{ secrets.CHROME_WEBSTORE_REFRESH_TOKEN }}
           CHROME_WEBSTORE_PUBLISHER_ID: ${{ vars.CHROME_WEBSTORE_PUBLISHER_ID }}
           CHROME_WEBSTORE_ITEM_ID: ${{ vars.CHROME_WEBSTORE_ITEM_ID }}
-        run: node _tools/scripts/publish-webstore.mjs "${GITHUB_REF_NAME#v}"
+        run: node _tools/scripts/release/publish-webstore.mjs "${GITHUB_REF_NAME#v}"

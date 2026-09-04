@@ -81,7 +81,5 @@
     "_search/iq-engine/src/host/client.ts": 1,
     "_search/lsp/src/checker.integration.test.ts": 1,
     "_site/demo/src/fixture/browserShots.ts": 1,
-    "_site/site/src/lib/api-examples.ts": 1,
-    "_tools/scripts/install-provider-clis.sh": 1,
-    "_tools/scripts/publish-webstore.mjs": 1
+    "_site/site/src/lib/api-examples.ts": 1
 }

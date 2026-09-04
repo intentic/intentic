@@ -29,13 +29,13 @@ on:
     paths:
       - "_editor/ios-app/**"
       - "_editor/android-app/**"
-      - "_tools/scripts/mobile-android-sdk.sh"
+      - "_tools/scripts/ci/mobile-android-sdk.sh"
       - ".github/workflows/mobile.yml"
   pull_request:
     paths:
       - "_editor/ios-app/**"
       - "_editor/android-app/**"
-      - "_tools/scripts/mobile-android-sdk.sh"
+      - "_tools/scripts/ci/mobile-android-sdk.sh"
       - ".github/workflows/mobile.yml"
   workflow_dispatch:
   # Called by nightly.yml, so the same two jobs are the schedule's answer as well as the push's. A second copy
@@ -67,7 +67,7 @@ jobs:
           java-version: "17"
       - name: Point Bubblewrap at the runner's toolchains
         working-directory: .
-        run: bash _tools/scripts/mobile-android-sdk.sh
+        run: bash _tools/scripts/ci/mobile-android-sdk.sh
       # A validation build must sign with SOMETHING (the manifest names a keystore), and it must never be the
       # real one: a key minted inside the run proves the signing path works and can leak nothing.
       - name: Mint a throwaway signing key

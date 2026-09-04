@@ -73,7 +73,7 @@ jobs:
           java-version: "17"
       - name: Point Bubblewrap at the runner's toolchains
         working-directory: .
-        run: bash _tools/scripts/mobile-android-sdk.sh
+        run: bash _tools/scripts/ci/mobile-android-sdk.sh
       - name: Restore the upload keystore
         run: printf '%s' "$KEYSTORE_BASE64" | base64 -d > ./android.keystore
         env:

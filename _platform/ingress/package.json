@@ -8,7 +8,7 @@
         "dev": "bun --watch --env-file=../../.env ./src/main.ts",
         "start": "bun ./src/main.ts",
         "typecheck": "tsgo --noEmit",
-        "docker:release": "bash ../../_tools/scripts/docker-release.sh ingress --prune",
+        "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh ingress --prune",
         "test": "vitest run && bun scripts/runtime-smoke.ts"
     },
     "dependencies": {

@@ -7,7 +7,7 @@
 //
 // SOURCE IS THE PUBLISHED GITHUB RELEASE, deliberately, and not the npm packument version-check.ts reads: the
 // notes are written into commits as `Release-Note:` trailers and harvested into the Release body at publish
-// time (_tools/scripts/publish-github.sh), so the Release is where they exist. It is also the one copy anybody
+// time (_tools/scripts/release/publish-github.sh), so the Release is where they exist. It is also the one copy anybody
 // can FIX after the fact, nothing reviews these lines before they ship, and editing the Release body on GitHub
 // corrects this card on its next refresh and the website on its next build.
 //

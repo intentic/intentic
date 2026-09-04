@@ -64,7 +64,7 @@ download the daemon cannot infer.
 5. **Mount the build caches — this is the one rule with teeth.** Every `RUN` that installs with apt must
    carry both apt cache mounts, and must NOT delete `/var/lib/apt/lists` (see below for why). Every `RUN`
    that compiles with cmake must mount ccache and route the compilers through it. The published packs are
-   held to the same rule by `_tools/scripts/build-cache-mounts.mjs`; copy the shapes below verbatim.
+   held to the same rule by `_tools/checks/build-cache-mounts.mjs`; copy the shapes below verbatim.
 
 ### Why the mounts matter more than they look
 

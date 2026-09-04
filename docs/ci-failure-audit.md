@@ -16,7 +16,7 @@ decision rather than a change.
 **Applied:** 1, the release no longer reports a skipped release as a failure. 2, the workflow-lint exceptions
 moved onto their steps. 3, all 41 packages now name a test budget, held by prepass invariant 13. 4, the rule is
 stated and the template gate reaches the push. 6, the store shells run nightly. 7(b), the push gate now runs what
-CI runs (`_tools/scripts/verify-push.mjs`, from both the app's push check and the git hook); the note at 7(b)
+CI runs (`_tools/scripts/verify/verify-push.mjs`, from both the app's push check and the git hook); the note at 7(b)
 records what a second hundred pipelines showed and why the gate is unfiltered rather than scoped.
 
 **Applied after the second hundred (2026-09-02), on the loops that let the reds be written rather than merely
@@ -29,7 +29,7 @@ on the SDK's re-entry flag; a red check holds the turn's work on its branch (`ou
 prepass invariant 14 reads allow-list package mocks (Class B) against the imports of the code under test; mutation
 testing is configured weekly over the daemon's steering hooks, `rules/` and the contract's chores, with one
 vitest-scoping step still outstanding (`stryker.conf.mjs` says which); and
-`_tools/scripts/ci-audit.mjs` produces this document's table as a nightly job summary. Its first run found the
+`_tools/scripts/ci/ci-audit.mjs` produces this document's table as a nightly job summary. Its first run found the
 red of the day: three verify groups failing `prepass.mjs` with `@intentic/base/async has no exported member
 'pollUntil'`, because fifteen emitted packages depended on `@intentic/base` or `@intentic/constants` without a
 tsconfig `references` edge, so `tsgo -b` built them against the stale dist a persistent runner keeps. The edges
@@ -51,7 +51,7 @@ durations for a process to start — a 5s rendezvous bound and a 400ms sleep bef
 both are now rendezvous with a 30s bound, one against a marker the held command itself writes.
 
 **And one red that belonged to no run at all (2026-09-04).** Every agent turn's ending check was failing
-`_tools/scripts/emit-declarations.mjs` with `TS6307: File '.../_platform/prisma/generated/client.ts' is not
+`_tools/scripts/build/emit-declarations.mjs` with `TS6307: File '.../_platform/prisma/generated/client.ts' is not
 listed within the file list of project`, on a file `prisma generate` had written seconds earlier and `stat`
 could still open. The tsconfig was right and the codegen was right; the DIRECTORY was unreadable. Each turn
 mounts `node_modules`, `dist` and `generated` as overlays whose lowerdir is the main checkout's copy, an
@@ -61,7 +61,7 @@ view of it went permanently empty — upper layer included. This document's own 
 have said so first") has a sharper form here, because the failing gate was not measuring the turn at all: a
 gate that goes red for a reason no change caused teaches everyone reading it that red means nothing. The
 build scripts now empty those directories instead of replacing them
-(`_tools/scripts/clean-outputs.mjs`), `@intentic/constants/mirror-roots` holds the rule as one copy the
+(`_tools/scripts/build/clean-outputs.mjs`), `@intentic/constants/mirror-roots` holds the rule as one copy the
 daemon's isolation and the gates share, and `_tools/checks/mirror-roots.mjs` refuses the shape anywhere a
 shell command in the repository spells it.
 
@@ -127,7 +127,7 @@ and exits 0. The very next step runs unconditionally:
 
 ```yaml
 - name: Publish to npm and the GitHub Marketplace
-  run: bash _tools/scripts/dispatch-publish.sh "$PLANNED_RELEASE_VERSION"
+  run: bash _tools/scripts/release/dispatch-publish.sh "$PLANNED_RELEASE_VERSION"
 ```
 
 `PLANNED_RELEASE_VERSION` is `needs.plan.outputs.version`, computed by the `plan` job **77 minutes earlier**
@@ -478,7 +478,7 @@ file that did not compile, an adapter test whose fake had drifted, and `_sandbox
 `pnpm test`: tests only, on a tree CI then type-checked first, and a test file with a type error runs fine under
 vitest. The git hook behind it ran only the ~70ms invariants, so a push from a terminal was measured by nothing.
 
-`_tools/scripts/verify-push.mjs` is now what both run. It executes verify.yml's three steps (`prepass`,
+`_tools/scripts/verify/verify-push.mjs` is now what both run. It executes verify.yml's three steps (`prepass`,
 `turbo run typecheck`, `turbo run build test`) on the whole graph, with turbo's cache as the filter rather than
 a `--filter=...[origin/main]` this file would have to keep in step with `affected.mjs`; runs `cargo fmt
 --check` on any crate the push touches (rustfmt is on the image, clippy is not runnable there); and records the

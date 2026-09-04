@@ -97,7 +97,7 @@ Four companions, each observing a relationship the repository already documents 
 | `agent` | Every turn live longer than the grace has a journal entry | The journal write is best-effort and its failure is swallowed by design; the bill arrives at the next container recreate as a run that did not come back |
 | `agents` | Every live turn reads as running on the fleet board | The turn path and the fleet registry each keep their own `running` flag and nothing reconciles them: a card at rest while the turn behind it spends the owner's allowance |
 
-The gate (`_tools/scripts/verify-invariants.mjs`, wired into `pnpm check`) refuses five things: a
+The gate (`_tools/checks/invariant-registry.mjs`, on the checks manifest) refuses five things: a
 subsystem directory with neither a companion nor a backlog entry; a companion with no checks and no
 written reason; checks that never call `fail`; a companion nobody imports; and a backlog entry naming a
 directory that no longer exists. It was verified to fail on the first two, not merely to pass.

@@ -28,10 +28,10 @@ Everything except the certificate.
 
 | Piece | Where |
 | --- | --- |
-| The signer | `_tools/scripts/sign-windows.sh`: one binary in, signed in place |
+| The signer | `_tools/scripts/build/sign-windows.sh`: one binary in, signed in place |
 | The app exe, installer and uninstaller | `bundle.windows.signCommand` in `src-tauri/tauri.conf.json` calls it per binary |
-| `ic.exe` | `_tools/scripts/build-ic.sh` calls it after each Windows target |
-| `intentic-machine.exe` | `_tools/scripts/build-agent-binaries.sh`, same |
+| `ic.exe` | `_tools/scripts/build/build-ic.sh` calls it after each Windows target |
+| `intentic-machine.exe` | `_tools/scripts/build/build-agent-binaries.sh`, same |
 | The guard | `verify-desktop-bundle.sh` fails the release if signing was configured and an artifact came out unsigned |
 | The secrets | `WINDOWS_SIGN_*` in `.github/workflows/release.yml`, on all three desktop jobs |
 
@@ -105,7 +105,7 @@ Optional everywhere: `WINDOWS_SIGN_TIMESTAMP_URL` (defaults to DigiCert's), `WIN
 ## Checking it worked
 
 ```bash
-bash _tools/scripts/sign-windows.sh --check path/to/file.exe   # exit 0 = carries a signature
+bash _tools/scripts/build/sign-windows.sh --check path/to/file.exe   # exit 0 = carries a signature
 ```
 
 It reads the PE's Certificate Table directly, so it needs no Windows tooling. It answers "is there a

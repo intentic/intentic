@@ -7,7 +7,7 @@
  * for exactly one location and is checked by nothing, so moving a file resolves it somewhere else in silence:
  * no import fails, no type breaks, and you find out when a config loader reads no .env and hands back empty
  * credentials. `repoRoot()` / `packageRoot()` from @intentic/constants/node walk up to a marker instead, which
- * has no such coupling. In shell, `_tools/scripts/repo-root.sh` does the same.
+ * has no such coupling. In shell, `_tools/scripts/lib/repo-root.sh` does the same.
  *
  * SPELLING. `/work`, `/history`, `.intentic` and `/opt/intentic` were typed out by hand in hundreds of places
  * with nothing linking the copies, so a rename fixed some and orphaned the rest. @intentic/constants names each
@@ -51,7 +51,7 @@ const MAY_SPELL_A_ROOT = new Set([
     `_tools/constants/src/index.ts`, // where the names are defined
     `_tools/constants/src/node.mjs`, // the walker itself
     `_tools/checks/path-literals.mjs`, // this file: the patterns below are the check
-    `_tools/scripts/repo-root.sh`, // the shell walker
+    `_tools/scripts/lib/repo-root.sh`, // the shell walker
     `_site/site/public/scripts/connect.sh`, // downloaded and run standalone
     `_site/site/public/scripts/recreate.sh`, // downloaded and run standalone
     `_extensions/documentation/bin/intentic-docs`, // ships as a raw dir on the agent's PATH, no node_modules
@@ -174,7 +174,7 @@ for (const path of tracked) {
                 findings.push({
                     at,
                     why: shell
-                        ? `counts its way to the repo root: source _tools/scripts/repo-root.sh and call repo_root`
+                        ? `counts its way to the repo root: source _tools/scripts/lib/repo-root.sh and call repo_root`
                         : `counts its way to a root, use repoRoot()/packageRoot() from @intentic/constants/node`,
                 });
                 break;

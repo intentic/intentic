@@ -35,7 +35,7 @@
 # are a hosted runner or an unattested tarball, so: ubuntu-24.04, cold caches and all (publish-npm.sh asserts
 # the same fact before it packs anything, and the workflow-policy check keeps the pairing from drifting back).
 #
-# A release that half-published this way is repaired with _tools/scripts/publish-catchup.sh from an
+# A release that half-published this way is repaired with `publish-npm.sh <version> --interactive` from an
 # authenticated maintainer machine, or by re-running this workflow: publish-npm.sh skips versions already up.
 name: npm publish
 
@@ -88,7 +88,7 @@ jobs:
       # assertion in publish-npm.sh demands it, and a build that embeds a version must embed this one. Same
       # call release.yml's build jobs make, so both halves of a release describe themselves identically.
       - name: Stamp the release version
-        run: bash _tools/scripts/set-versions.sh "${GITHUB_REF_NAME#v}"
+        run: bash _tools/scripts/release/set-versions.sh "${GITHUB_REF_NAME#v}"
 
       # Only the published closure, in the same shape release-prepare.sh builds it — the desktop app and the
       # extensions are in this tree but are not npm artifacts, and building them here buys nothing.
@@ -96,10 +96,10 @@ jobs:
         # `shell: bash` said out loud, because `source` and the arrays below are syntax errors in anything else.
         shell: bash
         run: |
-          source _tools/scripts/packages.sh
+          source _tools/scripts/lib/packages.sh
           filters=()
           for d in "${PUB[@]}"; do filters+=("--filter=./$d"); done
           pnpm turbo run build "${filters[@]}"
 
       - name: Publish
-        run: bash _tools/scripts/publish-npm.sh "${GITHUB_REF_NAME#v}"
+        run: bash _tools/scripts/release/publish-npm.sh "${GITHUB_REF_NAME#v}"

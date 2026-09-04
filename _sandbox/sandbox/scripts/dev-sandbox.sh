@@ -20,7 +20,7 @@ set -eu
 SCRIPT_DIR="$(dirname "$0")"
 
 # The checkout, found by walking up to the workspace marker. Inline rather than sourced from
-# _tools/scripts/repo-root.sh, because reaching that file from here would itself need the counted `../../../`
+# _tools/scripts/lib/repo-root.sh, because reaching that file from here would itself need the counted `../../../`
 # this is removing. Everything below is then named from the root, so no path depends on how deep this script
 # sits. (A sibling like dev-mounts.mjs stays $SCRIPT_DIR-relative — same directory is not a depth claim.)
 ROOT="$(cd "$SCRIPT_DIR" && pwd)"

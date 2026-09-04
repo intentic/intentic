@@ -102,7 +102,7 @@ volume self-initializes and an image bump self-migrates: no manual db step.
 ## Continuous deploy via Komodo (optional)
 
 Run this compose as a **Komodo stack** named `intentic-platform` and every main push redeploys itself:
-`images-platform` ends with [deploy-platform.sh](../../scripts/deploy-platform.sh), which calls Komodo's
+`images-platform` ends with [deploy-platform.sh](../../scripts/platform/deploy-platform.sh), which calls Komodo's
 `DeployStack`, the stack's services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI
 just pushed. The stack name is set in the job's `env` (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
 defaults to `https://komodo.radarsu.com`, leaving one thing to configure: the api key, as GitHub Actions

@@ -149,7 +149,7 @@ carries.
 
 **Severity: medium. FIXED.** The `images` job now pushes `dind-host` under the immutable SHA
 tag only, and `images-merge` promotes it to `latest` with the new
-`_tools/scripts/promote-image-tag.sh`: a one-source `imagetools create`, the single-arch
+`_tools/scripts/image/promote-image-tag.sh`: a one-source `imagetools create`, the single-arch
 counterpart of `merge-image-manifests.sh`. Both images are behind the same `needs`, so they
 move together or neither moves. `release-images.sh` and `rollback-stable.sh` still spell the
 same promotion inline; folding them onto the script is a follow-up, deliberately not done as a
@@ -182,7 +182,7 @@ not at all.
 **Severity: medium, the failure mode is silent under-testing, which is the worst kind. APPLIED,
 and it found a live defect on the way.**
 
-`_tools/scripts/affected.mjs` now answers the four product triggers by walking the workspace
+`_tools/scripts/verify/affected.mjs` now answers the four product triggers by walking the workspace
 dependency graph (every `package.json`'s `workspace:` edges, the same graph turbo reads) from
 the changed files up through every package that transitively depends on one. The image payload
 is read out of `prepare-image-trees.sh`'s own `TREES`/`BUNDLES`, so the list that file already
@@ -351,7 +351,7 @@ is safe by default instead of dangerous by default.
 
 ### B3. `prepass.mjs` is a home-grown workflow linter where two standard ones exist
 
-**Status: APPLIED.** `_tools/scripts/lint-workflows.sh` runs both tools from `preflight`, at
+**Status: APPLIED.** `_tools/scripts/verify/lint-workflows.sh` runs both tools from `preflight`, at
 pinned versions checked against a sha256 before unpacking, cached in `/ci-cache` (~1s warm,
 ~65ms of actual linting). `.github/actionlint.yaml` declares the three self-hosted labels:
 without it every fleet job reported "label is unknown", 40 identical non-findings, which is

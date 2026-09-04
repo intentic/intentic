@@ -27,8 +27,8 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 ## How it fits
 
 Who reads the list: CI's `preflight` job (before any install), the pre-push hook's first tier
-(`_tools/scripts/verify-push.mjs`), the turn-ending check (`_tools/scripts/verify-turn.mjs`), `pnpm prepass`
-(the checks, then `_tools/scripts/emit-declarations.mjs`), and `pnpm checks` by hand.
+(`_tools/scripts/verify/verify-push.mjs`), the turn-ending check (`_tools/scripts/verify/verify-turn.mjs`), `pnpm prepass`
+(the checks, then `_tools/scripts/build/emit-declarations.mjs`), and `pnpm checks` by hand.
 
 Every check works on a bare checkout, which decides how they are written: a relative import of
 `@intentic/constants`' hand-written JavaScript rather than a bare specifier, a line scanner over
