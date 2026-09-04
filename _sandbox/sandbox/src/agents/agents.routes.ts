@@ -145,7 +145,16 @@ export const createAgentsRoutes = (services: Services) => {
                 ...(summary.limitScheduled === true ? { scheduled: true } : {}),
             };
         }
-        return summary.failureCode === "provider-outage" ? { reason: "outage" } : undefined;
+        if (summary.failureCode === "provider-outage") {
+            return { reason: "outage" };
+        }
+        /* UNCODED ERRORS ARE STOPPED WORK, not repairs: the harness died mid-run, the agent stopped answering,
+         * a turn ended in a subtype nobody has a sentence for ("agent did not complete"), or OpenCode went
+         * silent until the watchdog fired ("turn timed out waiting for OpenCode"). Nothing is broken that the
+         * user could go and fix, the session is intact, and the only thing between the work and its finish is
+         * somebody saying carry on — which is exactly what `{ reason: "stopped" }` offers (turnFailures.ts arms
+         * the same pick-up when `code === undefined`). Named codes above are excluded on purpose. */
+        return summary.failureCode === undefined ? { reason: "stopped" } : undefined;
     };
     // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
     // literal is structurally fine while missing a route, so a handler deleted in passing (which is how

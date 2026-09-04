@@ -339,6 +339,31 @@ test("the transcript reports a spent allowance as a held ending, so a window tha
     expect(Object.keys(transcript.ending!)).toEqual(["reason", "held"]);
 });
 
+/* THE ENDING AN UNCODED FAILURE LEAVES BEHIND, for the turn that died without a code the daemon could act on:
+ * a harness crash, an agent that stopped answering, a watchdog timeout ("turn timed out waiting for OpenCode").
+ * The stream that watched it die arms the continue press (turnFailures.ts, `code === undefined`); every other way
+ * of arriving at the same session had nothing until the record could say so too. Named failures that name a
+ * repair (a dead credential, a seat nobody enabled) deliberately stay silent here — a press that re-fails is
+ * worse than no press. */
+test("the transcript reports an uncoded error as stopped, so a window that never saw it can offer the press", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "session", sessionId: "sess-timeout" };
+                    yield { kind: "error", message: "Google turn timed out waiting for OpenCode." };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "rewrite the reconcile engine", conversationId: "conv-timeout" });
+
+    const transcript = await client.agents.transcript({ id: "conv-timeout" });
+    expect(transcript.ending).toEqual({ reason: "stopped" });
+});
+
 test("agents.search reads the daemon transcript for a provider with no SDK prompt store", async () => {
     const codexSearchTranscript = (id: string) =>
         id === "codex-search"
