@@ -118,13 +118,13 @@ const firedOf = (rule: Rule): string => {
 
             <Row v-else :icon="momentOf(rule.moment).icon" :title="rule.label" :class="{ 'opacity-60': !rule.enabled }">
                 <template #description>
-                    <span class="flex flex-wrap items-center gap-x-2 gap-y-1.5 pt-0.5 text-xs">
-                        <span class="inline-flex shrink-0 items-center rounded border border-line-subtle bg-overlay px-1.5 py-0.5 text-2xs font-medium text-muted">
+                    <span class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-2xs">
+                        <span class="inline-flex shrink-0 items-center rounded border border-line-subtle bg-overlay px-2 py-0.5 font-medium text-muted">
                             {{ momentOf(rule.moment).label }}
                         </span>
-                        <span v-if="commandOf(rule) !== undefined" class="inline-flex min-w-0 max-w-full items-center gap-1">
+                        <span v-if="commandOf(rule) !== undefined" class="inline-flex min-w-0 max-w-full items-center gap-1.5">
                             <span class="shrink-0 text-subtle">run</span>
-                            <span class="min-w-0 max-w-full truncate rounded border border-line-subtle bg-canvas/80 px-1.5 py-0.5">
+                            <span class="min-w-0 max-w-full truncate rounded border border-line-subtle bg-canvas/80 px-2 py-0.5">
                                 <RuleCommand :command="commandOf(rule)!" />
                             </span>
                         </span>
@@ -136,12 +136,12 @@ const firedOf = (rule: Rule): string => {
                         </span>
                         <!-- The narrowing, as the globs it is. Written out rather than summarised as "2 paths":
                              which paths is the whole question a reader has about a rule that has one. -->
-                        <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 text-2xs text-muted">
+                        <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-muted">
                             <span class="shrink-0 text-subtle">only when touching</span>
                             <span
                                 v-for="glob in rule.when?.paths"
                                 :key="glob"
-                                class="max-w-48 truncate rounded border border-line-subtle bg-overlay px-1.5 py-0.5 font-mono text-content"
+                                class="max-w-48 truncate rounded border border-line-subtle bg-overlay px-2 py-0.5 font-mono text-content"
                                 :title="glob"
                             >
                                 {{ glob }}
