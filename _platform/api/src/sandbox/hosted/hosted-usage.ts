@@ -59,8 +59,10 @@ export const hostedBudgetOf = async (prisma: PrismaClient, config: Config, userI
 };
 
 // Add a settled stretch to its owner's month. Atomic upsert on (userId, month), two settlements racing (a
-// wake and the daily sweep landing together) both increment rather than one overwriting the other.
-const chargeMinutes = async (prisma: PrismaClient, userId: string, month: string, minutes: number): Promise<void> => {
+// wake and the daily sweep landing together) both increment rather than one overwriting the other. Exported
+// for the one other thing that spends an owner's month: an overlay build's minutes (hosted-build.ts), charged
+// once when the build ends, so a free account's builds draw on the same hours its sandbox does.
+export const chargeMinutes = async (prisma: PrismaClient, userId: string, month: string, minutes: number): Promise<void> => {
     if (minutes <= 0) {
         return;
     }

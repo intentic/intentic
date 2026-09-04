@@ -126,11 +126,14 @@ Keep going with the task: drafting is not a blocking handover. Use a workaround 
 plainly which parts stay unavailable until the rebuild rather than pretending they work.
 
 Tell the owner to review and approve the change on the platform's **Sandbox page → Environment card**.
-You cannot approve or apply it yourself; the rebuild runs outside this container (the owner pastes a
-rebuild command locally, or it applies on the next `intentic deploy apply` for server-managed sandboxes). Until
-the rebuild, the new tools are not available: say so instead of retrying. A capability that extends the
-image (VPN, a browser connector, Docker) composes its own fragment automatically: never propose an overlay
-for those, just point the owner at the same rebuild.
+You cannot approve or apply it yourself; the rebuild runs outside this container. On a sandbox the owner runs
+themselves they paste a rebuild command locally (or it applies on the next `intentic deploy apply` for a
+server-managed sandbox); on a HOSTED sandbox (a machine the platform runs, `SANDBOX_VM=1` in this
+container's env) the owner presses **Rebuild now** on that card and the platform builds it on a machine of its
+own, which takes a few minutes and counts against the sandbox's awake hours. Until the rebuild, the new tools
+are not available: say so instead of retrying. A capability that extends the image (VPN, a browser connector,
+Docker) composes its own fragment automatically: never propose an overlay for those, just point the owner at
+the same rebuild.
 
 ## Docker Engine problems are the Docker capability's options, not an overlay
 

@@ -20,6 +20,7 @@ import {
     refreshHosted,
     wakeHosted,
 } from "./hosted/hosted.js";
+import { HostedBuildRefused, type HostedBuildRefusal, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/hosted-build.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
@@ -34,6 +35,19 @@ const os = implement(apiContract).$context<OrpcContext>();
 // How long a minted setup code stays claimable. Long enough to install Docker mid-run and retry a failed
 // command; short enough that a leaked pasted command goes stale quickly.
 const SETUP_CODE_TTL_MS = 30 * 60 * 1000;
+
+// How each way a build can be refused (hosted-build.ts) is answered on the wire. Nothing here is a fault of
+// the platform's: the two NOT_FOUNDs are a lane or a machine that does not exist, the rest are the brakes.
+const REFUSAL_CODES = {
+    off: `NOT_FOUND`,
+    "no-machine": `NOT_FOUND`,
+    mismatch: `CONFLICT`,
+    invalid: `BAD_REQUEST`,
+    busy: `TOO_MANY_REQUESTS`,
+    daily: `TOO_MANY_REQUESTS`,
+    ceiling: `TOO_MANY_REQUESTS`,
+    budget: `PAYMENT_REQUIRED`,
+} as const satisfies Record<HostedBuildRefusal, string>;
 
 // The machine states the browser knows how to narrate, taken FROM the contract so the two can never drift.
 // Anything Fly answers that isn't in here (a state they add, a shape we don't model) becomes `unknown`, which
@@ -163,10 +177,7 @@ const toSummary = (
         setupReport: report.success ? report.data : null,
         bootReport: boot.success ? boot.data : null,
         announceRefusal: refusal.success ? refusal.data : null,
-        hosted:
-            sandbox.hosted === null || sandbox.hosted === undefined
-                ? null
-                : { region: sandbox.hosted.region, warm: sandbox.hosted.warm },
+        hosted: sandbox.hosted === null || sandbox.hosted === undefined ? null : { region: sandbox.hosted.region, warm: sandbox.hosted.warm },
         token: decryptSecret(context.config, sandbox.token),
         role,
         providedAddress: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
@@ -483,11 +494,58 @@ export const sandboxRoutes = {
             // exists), so opening a stretch again here would start the meter twice for one boot.
             if (!rebuilt) {
                 await openHostedStretch(context.prisma, hosted.id);
+                // The restart kept the overlay the machine had; if the platform's base image has moved past
+                // the one it was built on, the same recipe goes through a build on the new base, in the
+                // background and under the owner's limits, never as part of this call's answer.
+                await rebuildOnMovedBase(context.prisma, context.config, context.logger, hosted, { id: user.id, email: user.email.toLowerCase() });
             }
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
         }
         return { ok: true };
+    }),
+    /* BUILD THE APPROVED OVERLAY INTO THIS SANDBOX'S IMAGE, the hosted lane's `ic sandbox rebuild`
+     * (hosted-build.ts carries the design and every brake). Owner only, from a session, never the connect
+     * token: an agent can draft and wait for the owner, and that is all. The content arrives with the hash the
+     * owner approved and is re-hashed there; every refusal is answered before anything is spent, in the code
+     * the card can act on: a limit is TOO_MANY_REQUESTS, spent hours PAYMENT_REQUIRED (the same word the wake
+     * gate uses, so the editor offers the membership the same way), a changed overlay CONFLICT (re-read and
+     * approve again, exactly as `ic` says on a docker host). */
+    hostedRebuild: os.sandbox.hostedRebuild.handler(async ({ context, input }) => {
+        const user = requireUser(context);
+        if (!hostedEnabled(context.config)) {
+            throw new ORPCError(`NOT_FOUND`, { message: `hosted sandboxes are not enabled on this platform` });
+        }
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        try {
+            return await requestHostedBuild(context.prisma, context.config, context.logger, {
+                sandboxId: sandbox.id,
+                ownerId: user.id,
+                ownerEmail: user.email.toLowerCase(),
+                hash: input.hash,
+                content: input.content,
+                requestedBy: user.email.toLowerCase(),
+            });
+        } catch (error) {
+            if (error instanceof HostedBuildRefused) {
+                if (error.code === `ceiling`) {
+                    // The platform-wide brake, said at error level: a day whose builds are spent is either a
+                    // busy day or somebody farming, and an operator wants to know which.
+                    context.logger.error({ sandboxId: sandbox.id, ownerId: user.id }, `hosted build: the platform's daily build ceiling was reached`);
+                }
+                throw new ORPCError(REFUSAL_CODES[error.code], { message: error.message });
+            }
+            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `starting the build failed` });
+        }
+    }),
+    // The build the Environment card is watching, and what the platform last booted this machine with.
+    hostedBuildStatus: os.sandbox.hostedBuildStatus.handler(async ({ context, input }) => {
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id }, select: { id: true } });
+        if (hosted === null) {
+            return { build: null, applied: null };
+        }
+        return hostedBuildStatus(context.prisma, hosted.id);
     }),
     /* Power a hosted sandbox's machine back on, the idle-stop's other half, called by any browser (owner or
      * accepted member) that finds the daemon unreachable. Idempotent: waking a running machine is a no-op, so

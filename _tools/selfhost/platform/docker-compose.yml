@@ -141,6 +141,16 @@ services:
             # Who this deployment is to Fly: every machine it makes is stamped with it, and its orphan sweep
             # destroys nothing carrying anyone else's. Empty derives it from API_URL + the database.
             HOSTED_INSTANCE_ID: ${HOSTED_INSTANCE_ID:-}
+            # The overlay builder (api hosted-build.ts): shape, timeout, and the per-owner and platform-wide
+            # brakes on what a build may cost. Defaults in config.ts; HOSTED_BUILDS_PER_DAY=0 turns it off.
+            HOSTED_BUILDER_IMAGE: ${HOSTED_BUILDER_IMAGE:-}
+            HOSTED_BUILDER_CPU_KIND: ${HOSTED_BUILDER_CPU_KIND:-}
+            HOSTED_BUILDER_CPUS: ${HOSTED_BUILDER_CPUS:-}
+            HOSTED_BUILDER_MEMORY_MB: ${HOSTED_BUILDER_MEMORY_MB:-}
+            HOSTED_BUILD_TIMEOUT_MINUTES: ${HOSTED_BUILD_TIMEOUT_MINUTES:-}
+            HOSTED_BUILDS_PER_DAY: ${HOSTED_BUILDS_PER_DAY:-}
+            HOSTED_BUILD_CONCURRENCY: ${HOSTED_BUILD_CONCURRENCY:-}
+            HOSTED_BUILD_MINUTES_PER_DAY: ${HOSTED_BUILD_MINUTES_PER_DAY:-}
             # The free trial's model keys (comma-separated, tried in order — several are a pool). Empty
             # disables the trial outright: the routes 404 and Google sign-in is the chat's whole front door.
             TRIAL_KEYS: ${TRIAL_KEYS:-}

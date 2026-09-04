@@ -240,6 +240,30 @@ export const configSchema = z.object({
              * to another. Two deployments sharing this value share a fleet, including the right to destroy
              * each other's machines. HOSTED_INSTANCE_ID. */
             instanceId: z.string().default(``),
+            /* THE OVERLAY BUILDER (hosted-build.ts): the machine the platform creates inside a sandbox's own app
+             * to build its owner-approved environment overlay, the hosted lane's `ic sandbox rebuild`. Its
+             * minutes are the platform's money spent on whatever RUN steps the recipe carries, so every knob
+             * here is a brake as much as a shape, and the brakes come in pairs: a per-owner limit and a
+             * platform-wide ceiling behind it, because sign-in is Google and accounts are free to make.
+             *
+             * `builderImage` is buildkit, pinned; `builderCpuKind` is SHARED by default, a fraction of the
+             * price and worth nothing to anyone who approved a recipe in order to mine on it, a build being
+             * mostly a package manager waiting on the network. `buildTimeoutMinutes` is enforced twice, by the
+             * script itself and by the reconcile that destroys what outlives it. `buildsPerDay` is per owner
+             * (0 turns the feature off); `buildConcurrency` and `buildMinutesPerDay` are platform-wide, the
+             * latter the circuit breaker the health watch mails about. Builder minutes are also charged to the
+             * owner's month like awake minutes (HOSTED_MONTHLY_HOURS), which is what makes a free account's
+             * builds self-limiting. HOSTED_BUILDER_IMAGE, HOSTED_BUILDER_CPU_KIND, HOSTED_BUILDER_CPUS,
+             * HOSTED_BUILDER_MEMORY_MB, HOSTED_BUILD_TIMEOUT_MINUTES, HOSTED_BUILDS_PER_DAY,
+             * HOSTED_BUILD_CONCURRENCY, HOSTED_BUILD_MINUTES_PER_DAY. */
+            builderImage: z.string().default(`docker.io/moby/buildkit:v0.20.2`),
+            builderCpuKind: z.enum([`shared`, `performance`]).default(`shared`),
+            builderCpus: z.coerce.number().int().positive().default(4),
+            builderMemoryMb: z.coerce.number().int().positive().default(4096),
+            buildTimeoutMinutes: z.coerce.number().int().positive().default(30),
+            buildsPerDay: z.coerce.number().int().nonnegative().default(5),
+            buildConcurrency: z.coerce.number().int().positive().default(4),
+            buildMinutesPerDay: z.coerce.number().int().nonnegative().default(600),
         })
         .prefault({}),
     /* THE FREE-TRIAL POOL, intentic's OWN model keys, and the SECOND documented exception to the secret-free

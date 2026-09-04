@@ -23,6 +23,7 @@ import {
     proposalPath,
     readEnvironment,
     rejectEnvironment,
+    withoutRuntimeDirectives,
 } from "./environment.js";
 
 /* THE MODE EVERY COMPOSE BELOW MEANS: a base image that bakes NO feature pack, so a capability naming one
@@ -450,4 +451,15 @@ test("a drift snapshot from a container that no longer exists is not reported", 
     // bornAt 1970 can never be within jitter of the running container's birth.
     await services.runtimeInstalls.saveDrift({ bornAt: 1_000, at: 2_000, apt: ["xdg-utils"], paths: [] });
     expect((await readEnvironment(services)).drift).toBeUndefined();
+});
+
+/* A VM honours no runtime directive: the hosted lane's machine is already root over the whole box, so a
+ * fragment that is only a `# intentic:runtime` comment (the docker capability on a standard image) must not
+ * compose into an overlay the card then reports as pending. A real install beside such a line still rides. */
+test("withoutRuntimeDirectives drops the directive lines and any fragment with no instruction left", () => {
+    const directiveOnly = "# docker capability: this directive grants dockerd the privileges it needs\n# intentic:runtime --privileged";
+    const install =
+        "# vpn tools\nRUN apt-get install -y openconnect\n# intentic:runtime --cap-add=NET_ADMIN\n# intentic:runtime --device=/dev/net/tun";
+    expect(withoutRuntimeDirectives([directiveOnly, install])).toEqual(["# vpn tools\nRUN apt-get install -y openconnect"]);
+    expect(withoutRuntimeDirectives([])).toEqual([]);
 });

@@ -7,6 +7,7 @@ import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
 import { startPoolCycle } from "./pool/pool-cycle-job.js";
 import { seedDemoService } from "./pool/pool-demo.js";
+import { startHostedBuilds } from "./sandbox/hosted/hosted-build.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
@@ -41,6 +42,9 @@ startRetention(prisma, config, logger);
 startPoolCycle(prisma, config, logger);
 // Keeps warm hosted machines built ahead of demand (and drains them when the pool is off), see hosted-pool.ts.
 startHostedPool(prisma, config, logger);
+// Ends the environment builds whose builder never reported, destroys builders past their timeout, and keeps
+// every building app to one sandbox machine and one builder (hosted-build.ts).
+startHostedBuilds(prisma, config, logger);
 // Watches the hosted lane against Fly and says so when the two disagree (hosted-health.ts). Reads only: it is
 // the alarm the sweeps above never had, and the reason a fleet destroyed under its rows was found by a user.
 startHostedHealth(prisma, config, logger);

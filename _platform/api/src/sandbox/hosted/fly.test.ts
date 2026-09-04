@@ -51,11 +51,16 @@ describe(`fly`, () => {
         });
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
-            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `mach_1`, state: `created` }) },
+            {
+                match: (method, url) => method === `POST` && url.includes(`/machines`),
+                respond: () => json({ id: `mach_1`, state: `created`, instance_id: `inst_1` }),
+            },
         ]);
         expect(await createVolume(`tok`, `intentic-sbx-abc`, `iad`, 20)).toEqual({ volumeId: `vol_1` });
+        // The instance id is the version this create made: what a build row records to tell its builder's run apart.
         expect(await createMachine(`tok`, `intentic-sbx-abc`, { name: `intentic-sbx-abc`, region: `iad`, config })).toEqual({
             machineId: `mach_1`,
+            instanceId: `inst_1`,
         });
         expect(calls[0]?.body).toEqual({ name: `data`, region: `iad`, size_gb: 20 });
         const machineBody = calls[1]?.body as { config: { mounts: unknown } };

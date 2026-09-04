@@ -42,6 +42,13 @@ export const flySandboxRole = (sandboxId: string, instance: string): Record<stri
     intentic_sandbox: sandboxId,
     [FLY_META_PLATFORM]: instance,
 });
+// A builder (hosted-build.ts): the second machine a sandbox's app ever holds, for the minutes of one overlay
+// build. Stamped like the sandbox so the reaper and the health watch read the app as ours throughout.
+export const flyBuildRole = (sandboxId: string, instance: string): Record<string, string> => ({
+    [FLY_META_ROLE]: `build`,
+    intentic_sandbox: sandboxId,
+    [FLY_META_PLATFORM]: instance,
+});
 
 /* The operator misconfigured the platform (bad/expired token, wrong org), nothing a user can fix, and the
  * route surfaces it as a gateway failure. Named so hosted.ts can log it apart from capacity weather.
@@ -172,13 +179,76 @@ export const createVolume = async (token: string, app: string, region: string, s
     return { volumeId: parsed.id };
 };
 
+// `instance_id` is the version of the machine this create made: what a later `wait?state=stopped` would have
+// to name, and what the build row records so a reconcile can tell this builder's run from any other.
+const createdSchema = z.object({ id: z.string(), state: z.string(), instance_id: z.string().optional() });
+
 export const createMachine = async (
     token: string,
     app: string,
     args: { name: string; region: string; config: FlyMachineConfig },
-): Promise<{ machineId: string }> => {
-    const parsed = machineSchema.parse(await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines`, args));
-    return { machineId: parsed.id };
+): Promise<{ machineId: string; instanceId: string }> => {
+    const parsed = createdSchema.parse(await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines`, args));
+    return { machineId: parsed.id, instanceId: parsed.instance_id ?? `` };
+};
+
+/* A machine's exit and image, the two facts a builder's stopped machine still carries. The exit code sits in
+ * the machine's event log (`events[].request.exit_event`), newest first, and the digest in `image_ref`, which
+ * Fly resolves when the machine boots; both optional because Fly is free to grow or trim the shape, and a
+ * builder whose exit nobody can read is one that reported, or failed, some other way. */
+const machineDetailSchema = z.object({
+    id: z.string(),
+    state: z.string(),
+    image_ref: z.object({ digest: z.string().optional() }).optional(),
+    events: z
+        .array(
+            z.object({
+                type: z.string().optional(),
+                timestamp: z.number().optional(),
+                request: z.object({ exit_event: z.object({ exit_code: z.number().optional(), oom_killed: z.boolean().optional() }).optional() }).optional(),
+            }),
+        )
+        .optional(),
+});
+
+export interface FlyMachineDetail {
+    readonly state: string;
+    readonly imageDigest: string | undefined;
+    readonly exitCode: number | undefined;
+    readonly oomKilled: boolean;
+}
+
+export const getMachineDetail = async (token: string, app: string, machineId: string): Promise<FlyMachineDetail> => {
+    const parsed = machineDetailSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`));
+    const exit = [...(parsed.events ?? [])]
+        .toSorted((left, right) => (right.timestamp ?? 0) - (left.timestamp ?? 0))
+        .map((event) => event.request?.exit_event)
+        .find((event) => event !== undefined);
+    return {
+        state: parsed.state,
+        imageDigest: parsed.image_ref?.digest,
+        exitCode: exit?.exit_code,
+        oomKilled: exit?.oom_killed === true,
+    };
+};
+
+// Destroy one machine, leaving its app and everything else in it. `force` kills a running one, the reconcile's
+// answer to a builder past its timeout. Gone already (404) is success: the contract is "not there anymore".
+export const destroyMachine = async (token: string, app: string, machineId: string, options: { force?: boolean } = {}): Promise<void> => {
+    const query = options.force === true ? `?force=true` : ``;
+    const response = await flyFetch(`DELETE`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}${query}`, {
+        headers: { authorization: `Bearer ${token}` },
+    });
+    if (response.ok || response.status === 404) {
+        return;
+    }
+    const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
+    throw new FlyError(
+        failure.success
+            ? `Fly refused DELETE machine ${machineId} in ${app}: ${failure.data.error}`
+            : `Fly DELETE machine ${machineId} in ${app} failed with HTTP ${response.status}`,
+        response.status,
+    );
 };
 
 export const getMachine = async (token: string, app: string, machineId: string): Promise<{ state: string; updatedAt?: Date }> => {

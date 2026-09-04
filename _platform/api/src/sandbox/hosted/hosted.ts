@@ -137,14 +137,27 @@ export interface HostedProvisionArgs {
  * The metadata stamp rides on the same "one composer" property: whatever the machine was a second ago, a
  * machine holding this config is somebody's sandbox and says so to Fly, which is what tells stock from a
  * person's machine in the console now that both are named alike. The sandbox ID and not the owner's address:
- * metadata is casually visible provider-side, and the ID joins to the platform's own rows. */
-const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) => {
+ * metadata is casually visible provider-side, and the ID joins to the platform's own rows.
+ *
+ * THE OVERLAY IS THE ONE THING THAT VARIES between two machines holding this config (hosted-build.ts). A
+ * machine whose approved environment overlay the platform has built boots that image, pinned by digest, and
+ * carries the overlay's hash as SANDBOX_ENVIRONMENT_HASH, which is how its daemon reports the overlay as
+ * applied; the base stays the official tag, so the daemon keeps composing FROM it. `null` on both is the
+ * stock image, which is every warm claim and every cold provision. */
+export interface HostedOverlay {
+    readonly image: string | null;
+    readonly environmentHash: string | null;
+}
+export const STOCK_OVERLAY: HostedOverlay = { image: null, environmentHash: null };
+
+export const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string, overlay: HostedOverlay = STOCK_OVERLAY) => {
     const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
     return {
         ...flyMachineConfig({
             name: machineName,
-            image: config.hosted.image,
+            image: overlay.image ?? config.hosted.image,
             baseImage: config.hosted.image,
+            ...(overlay.image !== null && overlay.environmentHash !== null ? { environmentHash: overlay.environmentHash } : {}),
             guest: { cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb },
             volumeId,
             env: [
@@ -393,13 +406,17 @@ export const provisionHosted = async (prisma: PrismaClient, config: Config, logg
 export const refreshHosted = async (
     config: Config,
     args: HostedProvisionArgs,
-    hosted: { appName: string; machineId: string; volumeId: string },
+    hosted: { appName: string; machineId: string; volumeId: string; image?: string | null; environmentHash?: string | null },
 ): Promise<void> => {
+    // A restart keeps the overlay the machine runs: the tools an owner had baked in must not vanish because
+    // they pressed "start it over". A base image that moved under it is the route's business (a rebuild on
+    // the new base, hosted-build.ts), never this call's, which must stay one config replacement.
+    const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
     await updateMachine(
         config.hosted.flyApiToken,
         hosted.appName,
         hosted.machineId,
-        hostedMachineConfig(config, args, hosted.appName, hosted.volumeId),
+        hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay),
     );
     await startAfterUpdate(config, hosted);
 };

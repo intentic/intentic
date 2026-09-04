@@ -203,7 +203,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     yield {
                         kind: "log",
                         message:
-                            "This capability extends the sandbox image: a one-time rebuild is needed. Open the Sandbox page's Environment card for the command.",
+                            "This capability extends the sandbox image: a one-time rebuild is needed. Open the Sandbox page's Environment card to rebuild.",
                     };
                 }
                 yield { kind: "result", ok: true };

@@ -23,6 +23,9 @@ const environment: Environment = {
     container: `intentic-sandbox-demo`,
 };
 
+// An approved overlay not yet built, the state whose executor differs per lane; undefined for the ordinary
+// applied state above.
+const pending = ref<Environment[`approved`] | undefined>(undefined);
 vi.mock(`../../composables/sandbox/useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
@@ -33,7 +36,7 @@ vi.mock(`../../composables/sandbox/useEnvironment`, () => ({
         // for as long as it was a live ref (and therefore permanently truthy) in the browser.
         isFetching: ref(false),
         proposal: ref(undefined),
-        pending: ref(undefined),
+        pending,
         applied: ref(environment.approved),
         recurring: ref([]),
         serverManaged: ref(false),
@@ -53,8 +56,10 @@ vi.mock(`../../composables/sandbox/useEnvironmentContents`, () => ({
         refresh: () => {},
     }),
 }));
+// The active sandbox as the platform's row describes it; `hosted` is what picks the rebuild's executor.
+const active = ref<{ id: string; role: string; hosted?: { region: string; warm: boolean } | null }>({ id: `sb1`, role: `owner` });
 vi.mock(`../../composables/sandbox/useSandbox`, () => ({
-    useSandbox: () => ({ active: ref({ role: `owner` }), daemonUrl: ref(undefined), reachable: ref(true) }),
+    useSandbox: () => ({ active, daemonUrl: ref(undefined), reachable: ref(true) }),
     sandboxKey: (name: string) => [name],
 }));
 vi.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {} }) }));
@@ -68,7 +73,9 @@ vi.mock(`../../composables/agents/agentActions`, () => ({ startAgent: () => `` }
 // The diff viewer and the rebuild one-liner each reach the daemon on their own; this mounts the card.
 vi.mock(`../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`../../components/HostRecreate.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+// Each executor as a marker, so a test can say which one the card chose without mounting either for real.
+vi.mock(`../../components/HostRecreate.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }) }));
+vi.mock(`../../components/HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
 
 const { default: EnvironmentCard } = await import("./EnvironmentCard.vue");
 
@@ -85,6 +92,8 @@ const mount = (): HTMLElement => {
 
 afterEach(() => {
     unsupported.value = false;
+    pending.value = undefined;
+    active.value = { id: `sb1`, role: `owner` };
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -112,4 +121,22 @@ it(`falls back to the recipe on a daemon that predates the contents route, and s
     // Never the raw refusal the generic error path would have drawn.
     expect(el.textContent).not.toContain(`404`);
     expect(el.textContent).not.toContain(`Could not read what the sandbox has installed`);
+});
+
+/* WHICH EXECUTOR A PENDING OVERLAY GETS. A sandbox on the owner's own computer rebuilds by a command or a
+ * button that runs `ic` there; a hosted sandbox is a machine the platform runs and has no such computer, so
+ * it gets the button the platform answers instead. The card decides by the platform's own row. */
+it(`hands a pending overlay to the host executor on a sandbox the owner runs`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    const el = mount();
+    expect(el.querySelector(`[data-executor="host"]`)).not.toBeNull();
+    expect(el.querySelector(`[data-executor="hosted"]`)).toBeNull();
+});
+
+it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    active.value = { id: `sb1`, role: `owner`, hosted: { region: `iad`, warm: true } };
+    const el = mount();
+    expect(el.querySelector(`[data-executor="hosted"]`)).not.toBeNull();
+    expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
 });

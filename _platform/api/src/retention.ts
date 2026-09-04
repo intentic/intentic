@@ -4,6 +4,7 @@ import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
 import { expireOffers } from "./mcp/mcp-offer.js";
 import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
+import { sweepHostedBuilds } from "./sandbox/hosted/hosted-build.js";
 import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
 import { settleHostedStretches } from "./sandbox/hosted/hosted-usage.js";
 import type { Config } from "./config.js";
@@ -145,6 +146,12 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
             logger.info(await reapIdleHosted(prisma, config, logger), `hosted idle sweep completed`);
         } catch (error) {
             logger.error({ err: error }, `hosted idle sweep failed`);
+        }
+        // Old environment build rows (their logs are the bulk), keeping the one each machine currently runs.
+        try {
+            logger.info({ dropped: await sweepHostedBuilds(prisma) }, `hosted build sweep completed`);
+        } catch (error) {
+            logger.error({ err: error }, `hosted build sweep failed`);
         }
         /* The admin panel's history and its morning mail, last so the day it records reflects the sweeps
          * above. The rollup freezes yesterday into admin_daily_stat (counts only, retention never touches

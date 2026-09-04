@@ -332,10 +332,65 @@ model HostedMachine {
     // coming back cancels the notice and a later absence earns a fresh one — the stamp is what stops the
     // warning arriving every morning of the week it covers.
     idleWarnedAt DateTime?
+    /* THE ENVIRONMENT OVERLAY THIS MACHINE RUNS (hosted-build.ts), all null on the stock image. `image` is the
+     * digest-pinned registry ref the machine was last booted with, `baseImage` the official tag that image was
+     * built FROM (a restart that finds the platform's image moved past it rebuilds), and `environmentHash` the
+     * approved overlay's sha256: what SANDBOX_ENVIRONMENT_HASH carries into the machine and what the daemon
+     * then reports as applied. `buildingId` names the build in flight and IS the one-build-at-a-time guard:
+     * won by a conditional update from null, the pool claim's pattern, so a second click cannot start a
+     * second builder. */
+    image           String?
+    baseImage       String?
+    environmentHash String?
+    buildingId      String?
+    builds          HostedBuild[]
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
     @@map("hosted_machine")
+}
+
+/* ONE OVERLAY BUILD for a hosted machine: the platform's `ic sandbox rebuild`, run on a builder machine inside
+ * the sandbox's own Fly app (hosted-build.ts). `content` is the approved overlay exactly as the owner reviewed
+ * it, `hash` its sha256 (re-hashed on arrival, the same guarantee the rebuild command's argument gives on a
+ * docker host), `baseImage` the official tag the platform pinned the FROM to. Kept after the build so a later
+ * base image update can rebuild the same recipe without the owner's browser.
+ *
+ * `state` is `building` from the builder's creation until its report or the reconcile's verdict, then `built`
+ * or `failed`. The builder authenticates its report with a secret only it and this row (hashed) hold. `minutes`
+ * is what the build cost, charged to the owner's month like awake minutes. `log` is the builder's tail, the one
+ * thing an owner needs from a failed RUN. Rows are disposable: retention drops old ones, keeping what a machine
+ * currently runs. */
+model HostedBuild {
+    id                String        @id @default(cuid())
+    hostedMachineId   String
+    machine           HostedMachine @relation(fields: [hostedMachineId], references: [id], onDelete: Cascade)
+    hash              String
+    baseImage         String
+    content           String
+    state             String
+    // The tag the builder pushes to and the digest it reports; the machine boots the digest, never the tag.
+    image             String
+    digest            String?
+    builderMachineId  String
+    builderInstanceId String
+    secretHash        String
+    // The Fly id of the app-scoped deploy token minted for this build, revoked once the builder has reported.
+    tokenId           String?
+    // Who asked: the owner's email, or `platform` for a rebuild a base image update triggered.
+    requestedBy       String
+    exitCode          Int?
+    log               String?
+    error             String?
+    minutes           Int?
+    createdAt         DateTime      @default(now())
+    updatedAt         DateTime      @updatedAt
+    finishedAt        DateTime?
+
+    // The reconcile reads every building row; the status route reads a machine's latest; retention by age.
+    @@index([state])
+    @@index([hostedMachineId, createdAt])
+    @@map("hosted_build")
 }
 
 /* THE WARM POOL — machines built before anyone asks for one, so claiming the free sandbox takes the seconds

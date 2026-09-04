@@ -90,9 +90,26 @@ const writeComposed = async (services: Services, path: string, content: string):
 // (boot converges fragment drift: a daemon update that changes a fragment flips the derived state to "pending
 // rebuild" with no new state). ponytail: races the store's read-modify-write under concurrent adds, a stale
 // compose self-heals on the next capability event or boot.
+/* A VM HONOURS NO RUNTIME DIRECTIVE. `# intentic:runtime …` lines are what a docker-run executor turns into
+ * container privileges (recreate.rs), and a hosted machine is a microVM that is already root over the whole
+ * box: the docker capability starts its engine there with no privilege to grant. Left in, a fragment made of
+ * nothing but that directive composes an overlay whose only content is a comment, which the card reads as
+ * `pending rebuild` and the hosted builder would build for nothing. So on a VM the lines go, and a fragment
+ * with no instruction left goes with them. Everything else (a real install) still rides. */
+export const withoutRuntimeDirectives = (fragments: readonly string[]): string[] =>
+    fragments
+        .map((fragment) =>
+            fragment
+                .split("\n")
+                .filter((line) => !line.trim().startsWith("# intentic:runtime"))
+                .join("\n")
+                .trim(),
+        )
+        .filter((fragment) => fragment.split("\n").some((line) => line.trim() !== "" && !line.trim().startsWith("#")));
+
 export const composeEnvironment = async (services: Services): Promise<string | undefined> => {
     const capabilities = await services.capabilities.list();
-    const fragments = [
+    const contributed = [
         ...new Set([
             ...(await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat(),
             ...(await workspaceExtensionFragments(services)),
@@ -101,6 +118,7 @@ export const composeEnvironment = async (services: Services): Promise<string | u
             ...(await providerPackFragments(services)),
         ]),
     ].toSorted();
+    const fragments = services.config.sandbox.vm ? withoutRuntimeDirectives(contributed) : contributed;
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
     // The base this container was built from, so a rebuild is version-preserving rather than a silent rollback.
     const base = baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image);

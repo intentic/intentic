@@ -9,6 +9,8 @@ import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useEnvironmentContents } from "../../composables/sandbox/useEnvironmentContents";
 import { useRole } from "../../composables/sandbox/useRole";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
+import HostedRebuild from "../../components/HostedRebuild.vue";
 import HostRecreate from "../../components/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
 import RuntimeInstalls from "./RuntimeInstalls.vue";
@@ -43,6 +45,13 @@ const { canShip: canOperate } = useRole();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
 const { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug } = useEnvironment();
+
+/* WHICH EXECUTOR THIS SANDBOX HAS. A hosted sandbox is a machine the platform runs and has no host to run
+ * `ic` on, so its rebuild is a button the platform answers (HostedRebuild) rather than a command for a
+ * computer the owner is at (HostRecreate). Read off the platform's row for the active sandbox, the same fact
+ * the wake reflex keys on. */
+const { active } = useSandbox();
+const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
 
 /* Which of the two reads is on screen. "Recipe" rather than "Source" because it says what you are switching TO,
  * and "Contents" rather than "Simplified" because the plain view is not the lesser one: naming it that way
@@ -102,78 +111,84 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
              inside <EnvironmentContents>, and those are separated by gap-5. One rhythm down the whole card, or
              the fourth section reads as an afterthought stapled under the third. -->
         <RowNote variant="block" class="flex flex-col gap-5">
-        <!-- What the sandbox has, in plain language. Leads in every state: including a pending proposal, whose
+            <!-- What the sandbox has, in plain language. Leads in every state: including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
-        <EnvironmentContents v-if="shown === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
+            <EnvironmentContents v-if="shown === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
 
-        <!-- A proposal awaiting the owner's decision: the diff against the approved custom section (capability
+            <!-- A proposal awaiting the owner's decision: the diff against the approved custom section (capability
              fragments are daemon-owned and not up for review here). -->
-        <template v-else-if="proposal">
-            <div class="flex h-72 flex-col overflow-hidden rounded-lg border border-line">
-                <DiffToolbar path="environment.custom.Dockerfile" />
-                <DiffView
-                    :key="proposal.hash"
-                    :before="state?.custom?.content ?? ''"
-                    :after="proposal.content"
-                    path="environment.custom.Dockerfile"
-                    class="min-h-0 flex-1"
-                />
-            </div>
-        </template>
+            <template v-else-if="proposal">
+                <div class="flex h-72 flex-col overflow-hidden rounded-lg border border-line">
+                    <DiffToolbar path="environment.custom.Dockerfile" />
+                    <DiffView
+                        :key="proposal.hash"
+                        :before="state?.custom?.content ?? ''"
+                        :after="proposal.content"
+                        path="environment.custom.Dockerfile"
+                        class="min-h-0 flex-1"
+                    />
+                </div>
+            </template>
 
-        <!-- Approved, not yet built into the running container. What you paste to rebuild pins this content's
+            <!-- Approved, not yet built into the running container. What you paste to rebuild pins this content's
              hash, so what is shown here is exactly what gets built. -->
-        <Code v-else-if="pending" :code="pending.content" lang="docker" label="Approved overlay (pending rebuild)" />
+            <Code v-else-if="pending" :code="pending.content" lang="docker" label="Approved overlay (pending rebuild)" />
 
-        <!-- The active overlay the running container was built from. -->
-        <Code v-else-if="applied" :code="applied.content" lang="docker" label="Active overlay" />
+            <!-- The active overlay the running container was built from. -->
+            <Code v-else-if="applied" :code="applied.content" lang="docker" label="Active overlay" />
 
-        <!-- Said once, quietly, and only to somebody whose sandbox could show more than it is showing: the reason
+            <!-- Said once, quietly, and only to somebody whose sandbox could show more than it is showing: the reason
              there is no contents list is the sandbox's age, not a fault. It names an UPDATE rather than a rebuild
              deliberately: an environment rebuild builds on top of the image this sandbox already runs, so it is
              the one action that would NOT bring this, and sending someone to it would waste a whole rebuild. -->
-        <p v-if="unsupported" class="text-2xs text-subtle">
-            This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.
-        </p>
+            <p v-if="unsupported" class="text-2xs text-subtle">
+                This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.
+            </p>
 
-        <!-- What sessions keep installing at RUNTIME — the daemon's cross-session memory, drift-corroborated.
+            <!-- What sessions keep installing at RUNTIME — the daemon's cross-session memory, drift-corroborated.
              The mechanically fixable entries are usually already drafted into the proposal above ("proposed");
              the rest wait for a person, and <RuntimeInstalls> is where that person now has something to press.
              Lives under both views because it is a fact about the environment's state, like the decision below. -->
-        <RuntimeInstalls
-            v-if="recurring.length"
-            :entries="recurring"
-            :can-operate="canOperate"
-            :busy="busy"
-            @decide="(tool, decision) => decide(`/environment/runtime-install`, { tool, decision })"
-        />
+            <RuntimeInstalls
+                v-if="recurring.length"
+                :entries="recurring"
+                :can-operate="canOperate"
+                :busy="busy"
+                @decide="(tool, decision) => decide(`/environment/runtime-install`, { tool, decision })"
+            />
 
-        <!-- THE DECISION, under both views: it is about the environment's state, not about how it is displayed. -->
-        <template v-if="proposal">
-            <div v-if="canOperate" class="flex items-center justify-end gap-2">
-                <Button label="Reject" size="small" severity="danger" :text="true" :loading="busy" @click="reject">
-                    <template #icon><Icon name="times" /></template>
-                </Button>
-                <Button label="Approve" size="small" :loading="busy" @click="approve">
-                    <template #icon><Icon name="check" /></template>
-                </Button>
-            </div>
-            <p v-else class="text-2xs text-subtle">Only the sandbox owner can approve or reject this change.</p>
-        </template>
-
-        <template v-if="pending">
-            <template v-if="serverManaged">
-                <p class="text-2xs text-subtle">
-                    Applies on the next <span class="font-mono">intentic deploy apply</span> against this sandbox's host.
-                </p>
+            <!-- THE DECISION, under both views: it is about the environment's state, not about how it is displayed. -->
+            <template v-if="proposal">
+                <div v-if="canOperate" class="flex items-center justify-end gap-2">
+                    <Button label="Reject" size="small" severity="danger" :text="true" :loading="busy" @click="reject">
+                        <template #icon><Icon name="times" /></template>
+                    </Button>
+                    <Button label="Approve" size="small" :loading="busy" @click="approve">
+                        <template #icon><Icon name="check" /></template>
+                    </Button>
+                </div>
+                <p v-else class="text-2xs text-subtle">Only the sandbox owner can approve or reject this change.</p>
             </template>
-            <template v-else-if="slug">
-                <p class="text-xs font-medium text-content">To finish, rebuild your sandbox:</p>
-                <HostRecreate :slug="slug" :hash="pending.hash" action="Rebuild" />
-            </template>
-        </template>
 
-        <Notice v-if="actionNotice" :of="actionNotice" />
+            <template v-if="pending">
+                <!-- The platform builds it: no command, no computer of the owner's involved. Owner-gated on the
+                 platform side, so a member sees the state of the build but has no button. -->
+                <template v-if="hosted">
+                    <HostedRebuild v-if="canOperate" :sandbox-id="hosted" :hash="pending.hash" :content="pending.content" />
+                    <p v-else class="text-2xs text-subtle">Only the sandbox owner can rebuild it.</p>
+                </template>
+                <template v-else-if="serverManaged">
+                    <p class="text-2xs text-subtle">
+                        Applies on the next <span class="font-mono">intentic deploy apply</span> against this sandbox's host.
+                    </p>
+                </template>
+                <template v-else-if="slug">
+                    <p class="text-xs font-medium text-content">To finish, rebuild your sandbox:</p>
+                    <HostRecreate :slug="slug" :hash="pending.hash" action="Rebuild" />
+                </template>
+            </template>
+
+            <Notice v-if="actionNotice" :of="actionNotice" />
         </RowNote>
     </RowGroup>
 </template>

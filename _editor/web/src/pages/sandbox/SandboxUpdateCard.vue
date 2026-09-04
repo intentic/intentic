@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { Button, RowGroup, RowNote, StatusBadge, useOsPreference } from "@intentic/ui";
+import { Button, Notice, RowGroup, RowNote, StatusBadge, useOsPreference } from "@intentic/ui";
+import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import HostRecreate from "../../components/HostRecreate.vue";
 import { turnInFlight } from "../../composables/agents/agentStatus";
 import { useAgents } from "../../composables/agents/useAgents";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
+import { apiClient } from "../../composables/useApi";
 
 /* "Update available": the non-blocking prompt on the /sandbox hub when a newer sandbox image has shipped. The
  * daemon reports installed vs latest on /info; the update runs on the host (the sandbox holds no host Docker
@@ -33,6 +36,21 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 const { installed, latest, updateAvailable, updateNotes, moreUpdateNotes, breakingNotes, updateStaged, stagedBehind, info, serverManaged, slug } =
     useSandboxVersion();
 const { cmdOs } = useOsPreference();
+
+/* A HOSTED SANDBOX HAS NO HOST TO HAND A COMMAND TO. Its machine is the platform's: a restart replaces the
+ * machine's config with the image the platform currently runs (and keeps any environment overlay the
+ * machine had, rebuilding it on the new base in the background), so "update" here is one button that asks the
+ * platform, not a one-liner for a computer nobody is at. Rollback is not offered: the platform keeps no
+ * previous image for a hosted machine. */
+const { active } = useSandbox();
+const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
+const { busy: restarting, notice: restartNotice, run: runRestart } = useAsyncAction();
+const restartHosted = (): Promise<void> =>
+    runRestart(async () => {
+        if (hosted.value !== undefined) {
+            await apiClient.sandbox.hostedRestart({ sandboxId: hosted.value });
+        }
+    }, `Could not restart the sandbox.`);
 
 /* A BREAKING UPDATE MUST NOT LOOK ROUTINE. When the gap carries breaking notes the card changes character:
  * danger badge, the breaking lines first, and the update command stays behind one explicit click: consent to
@@ -99,8 +117,8 @@ const updateHeading = computed(() => {
             <div class="flex flex-col gap-4">
                 <p v-if="breaking || updateAvailable" class="text-xs text-muted">
                     <template v-if="breaking">
-                        This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are kept
-                        either way, and you can roll back afterwards:
+                        This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are
+                        kept either way, and you can roll back afterwards:
                         <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content"
                             >what updates never break</a
                         >.
@@ -118,20 +136,20 @@ const updateHeading = computed(() => {
                     </template>
                 </p>
 
-        <!-- WHAT STOPS WORKING, before anything else on the card and never truncated: a warning that fell off
+                <!-- WHAT STOPS WORKING, before anything else on the card and never truncated: a warning that fell off
              the end of a capped list is a breaking update taken unwarned. Each line was written in the commit
              that made the break, telling the user what changes for them and what to do about it. -->
-        <div v-if="breaking" class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3">
-            <p class="text-xs font-medium text-danger">What changes</p>
-            <ul class="flex flex-col gap-1">
-                <li v-for="note in breakingNotes" :key="note" class="flex gap-2 text-2xs text-content">
-                    <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-danger" />
-                    <span>{{ note }}</span>
-                </li>
-            </ul>
-        </div>
+                <div v-if="breaking" class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3">
+                    <p class="text-xs font-medium text-danger">What changes</p>
+                    <ul class="flex flex-col gap-1">
+                        <li v-for="note in breakingNotes" :key="note" class="flex gap-2 text-2xs text-content">
+                            <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-danger" />
+                            <span>{{ note }}</span>
+                        </li>
+                    </ul>
+                </div>
 
-        <!-- WHAT YOU WOULD GET, above the warning about what it costs and above the button that does it. That
+                <!-- WHAT YOU WOULD GET, above the warning about what it costs and above the button that does it. That
              order is the whole point of this section: this card asks the reader to weigh an update against
              interrupting work that is running right now, and until these lines existed it put the cost and the
              button on screen with nothing at all on the other side of the scale.
@@ -140,95 +158,107 @@ const updateHeading = computed(() => {
              changelog carries, not a second description written here. Absent whenever there is nothing to
              say (a release nobody outside the project would notice, a cold cache, no route to GitHub), and the
              card then reads exactly as it did before. -->
-        <div v-if="updateAvailable && updateNotes.length > 0" class="mt-3 flex flex-col gap-1.5">
-            <p class="text-xs font-medium text-content">What's new</p>
-            <ul class="flex flex-col gap-1">
-                <li v-for="note in updateNotes" :key="note" class="flex gap-2 text-2xs text-muted">
-                    <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-primary-500" />
-                    <span>{{ note }}</span>
-                </li>
-            </ul>
-            <!-- The tail of a long gap, as a count rather than fifty more bullets: a sandbox nobody has
+                <div v-if="updateAvailable && updateNotes.length > 0" class="mt-3 flex flex-col gap-1.5">
+                    <p class="text-xs font-medium text-content">What's new</p>
+                    <ul class="flex flex-col gap-1">
+                        <li v-for="note in updateNotes" :key="note" class="flex gap-2 text-2xs text-muted">
+                            <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-primary-500" />
+                            <span>{{ note }}</span>
+                        </li>
+                    </ul>
+                    <!-- The tail of a long gap, as a count rather than fifty more bullets: a sandbox nobody has
                  recreated in weeks would otherwise bury the rest of this page. -->
-            <p v-if="moreUpdateNotes > 0" class="text-2xs text-subtle">
-                …and {{ moreUpdateNotes }} more:
-                <a href="https://intentic.dev/changelog/" target="_blank" rel="noopener" class="underline hover:text-content">read the changelog</a>
-            </p>
-        </div>
+                    <p v-if="moreUpdateNotes > 0" class="text-2xs text-subtle">
+                        …and {{ moreUpdateNotes }} more:
+                        <a href="https://intentic.dev/changelog/" target="_blank" rel="noopener" class="underline hover:text-content"
+                            >read the changelog</a
+                        >
+                    </p>
+                </div>
 
-        <!-- The restart is what costs a turn, and it is now the only part that does, so the way out of this
+                <!-- The restart is what costs a turn, and it is now the only part that does, so the way out of this
              warning is no longer "come back later", it is the button above that downloads without restarting.
              Shown at this level only when an update is on offer: on a card showing nothing but a collapsed
              rollback, the warning belongs inside that disclosure, next to the one action it cautions about. -->
-        <p v-if="midTurn > 0 && updateAvailable" class="text-2xs text-warning">
-            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, restarting the sandbox interrupts
-            {{ midTurn === 1 ? `its` : `their` }} work.
-            <template v-if="!updateStaged">
-                Downloading it now costs {{ midTurn === 1 ? `it` : `them` }} nothing, and the restart can wait.
-            </template>
-            <template v-else>Wait for the fleet to settle, or continue if that is acceptable.</template>
-        </p>
+                <p v-if="midTurn > 0 && updateAvailable" class="text-2xs text-warning">
+                    {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, restarting the sandbox interrupts
+                    {{ midTurn === 1 ? `its` : `their` }} work.
+                    <template v-if="!updateStaged">
+                        Downloading it now costs {{ midTurn === 1 ? `it` : `them` }} nothing, and the restart can wait.
+                    </template>
+                    <template v-else>Wait for the fleet to settle, or continue if that is acceptable.</template>
+                </p>
 
-        <!-- A prepared update a newer release has overtaken. Rare, and worth a sentence anyway: applying now
+                <!-- A prepared update a newer release has overtaken. Rare, and worth a sentence anyway: applying now
              hands over the older one, and a card that stayed silent would be promising the newer. -->
-        <p v-if="updateAvailable && stagedBehind" class="text-2xs text-muted">
-            {{ stagedBehind }} is already downloaded here, but {{ latest }} has been released since. Updating now gives you {{ stagedBehind }}, or
-            download the newer one first.
-        </p>
+                <p v-if="updateAvailable && stagedBehind" class="text-2xs text-muted">
+                    {{ stagedBehind }} is already downloaded here, but {{ latest }} has been released since. Updating now gives you
+                    {{ stagedBehind }}, or download the newer one first.
+                </p>
 
-        <template v-if="serverManaged">
-            <p class="text-2xs text-subtle">
-                This sandbox updates on the next <span class="font-mono">intentic deploy apply</span> against its host.
-            </p>
-        </template>
-        <template v-else-if="slug">
-            <!-- The acknowledgment gate: for a breaking update the command appears only after one explicit
+                <template v-if="serverManaged">
+                    <p class="text-2xs text-subtle">
+                        This sandbox updates on the next <span class="font-mono">intentic deploy apply</span> against its host.
+                    </p>
+                </template>
+                <template v-else-if="slug">
+                    <!-- The acknowledgment gate: for a breaking update the command appears only after one explicit
                  click. Not a legal ritual: the point is that the reader's eyes crossed the list above before
                  the copy-paste reflex could fire. -->
-            <template v-if="breaking && !acknowledged">
-                <Button label="I've read what changes: show me the update" size="small" severity="secondary" @click="acknowledged = true" />
-            </template>
-            <!-- ONE OFFER WHEN THE IMAGE IS HERE, TWO WHEN IT IS NOT. The pair is not clutter: it is the
+                    <template v-if="breaking && !acknowledged">
+                        <Button label="I've read what changes: show me the update" size="small" severity="secondary" @click="acknowledged = true" />
+                    </template>
+                    <!-- ONE OFFER WHEN THE IMAGE IS HERE, TWO WHEN IT IS NOT. The pair is not clutter: it is the
                  decision this card exists to put in front of someone, and until the download could be taken on
                  its own there was only ever the expensive half of it. The card already renders two blocks side
                  by side when a rollback is offered alongside an update, so the shape is the established one. -->
-            <template v-else-if="updateAvailable && updateStaged">
-                <p class="text-xs font-medium text-content">Apply it: this restarts your sandbox:</p>
-                <HostRecreate :slug="slug" action="Update" ready />
-            </template>
-            <template v-else-if="updateAvailable">
-                <p class="text-xs font-medium text-content">Download it now: nothing restarts until you say so:</p>
-                <HostRecreate :slug="slug" action="Download" />
-                <p class="text-xs font-medium text-content">Or do both now, downloading and restarting in one go:</p>
-                <HostRecreate :slug="slug" action="Update" />
-            </template>
-            <!-- Offered alongside an available update too: "this one broke it, put it back" is exactly as
+                    <template v-else-if="updateAvailable && hosted">
+                        <p class="text-xs font-medium text-content">
+                            Restart to update: the platform boots your sandbox onto the new image, files kept.
+                        </p>
+                        <!-- In its own block so the column's stretch does not draw a small button at full width. -->
+                        <div>
+                            <Button label="Restart and update" size="small" :loading="restarting" @click="restartHosted" />
+                        </div>
+                        <Notice v-if="restartNotice" :of="restartNotice" />
+                    </template>
+                    <template v-else-if="updateAvailable && updateStaged">
+                        <p class="text-xs font-medium text-content">Apply it: this restarts your sandbox:</p>
+                        <HostRecreate :slug="slug" action="Update" ready />
+                    </template>
+                    <template v-else-if="updateAvailable">
+                        <p class="text-xs font-medium text-content">Download it now: nothing restarts until you say so:</p>
+                        <HostRecreate :slug="slug" action="Download" />
+                        <p class="text-xs font-medium text-content">Or do both now, downloading and restarting in one go:</p>
+                        <HostRecreate :slug="slug" action="Update" />
+                    </template>
+                    <!-- Offered alongside an available update too: "this one broke it, put it back" is exactly as
                  likely to be the reason someone opened this card as "give me the new one". A LINE OF TEXT WITH
                  A LINK IN IT, not a row with a chevron: a row is a place the eye stops and reads as something
                  the card wants taken, and a rollback offered at that weight on a healthy sandbox reads as "we
                  expect this to break". The way back must be findable by someone who came looking for it, and
                  invisible to everyone else. -->
-            <p v-if="rollbackTo" class="text-2xs text-subtle">
-                <!-- The space before the link is written out: Vue drops a whitespace-only text node that
+                    <p v-if="rollbackTo && !hosted" class="text-2xs text-subtle">
+                        <!-- The space before the link is written out: Vue drops a whitespace-only text node that
                      spans a newline, and without it the question runs straight into the link. -->
-                <template v-if="updateAvailable">Rather go back?&#32;</template>
-                <template v-else>Something wrong since the last update?&#32;</template>
-                <button type="button" class="underline hover:text-content" @click="toggleRollback">Roll back to the previous image</button>
-            </p>
-            <div v-if="rollbackTo && rollbackOpen" class="flex flex-col gap-2">
-                <!-- The mid-turn warning lives HERE in the all-clear state: it cautions about a restart, and
+                        <template v-if="updateAvailable">Rather go back?&#32;</template>
+                        <template v-else>Something wrong since the last update?&#32;</template>
+                        <button type="button" class="underline hover:text-content" @click="toggleRollback">Roll back to the previous image</button>
+                    </p>
+                    <div v-if="rollbackTo && !hosted && rollbackOpen" class="flex flex-col gap-2">
+                        <!-- The mid-turn warning lives HERE in the all-clear state: it cautions about a restart, and
                      the collapsed card proposes none. -->
-                <p v-if="midTurn > 0 && !updateAvailable" class="text-2xs text-warning">
-                    {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, rolling back interrupts
-                    {{ midTurn === 1 ? `its` : `their` }} work.
-                </p>
-                <p class="text-2xs text-subtle">
-                    Rolls back to <span class="font-mono">…{{ rollbackDigest }}</span
-                    >. Your files (in /work) are kept either way.
-                </p>
-                <HostRecreate :slug="slug" action="Roll back" />
-            </div>
-        </template>
+                        <p v-if="midTurn > 0 && !updateAvailable" class="text-2xs text-warning">
+                            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, rolling back interrupts
+                            {{ midTurn === 1 ? `its` : `their` }} work.
+                        </p>
+                        <p class="text-2xs text-subtle">
+                            Rolls back to <span class="font-mono">…{{ rollbackDigest }}</span
+                            >. Your files (in /work) are kept either way.
+                        </p>
+                        <HostRecreate :slug="slug" action="Roll back" />
+                    </div>
+                </template>
             </div>
         </RowNote>
     </RowGroup>

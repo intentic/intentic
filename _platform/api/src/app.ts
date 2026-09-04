@@ -4,6 +4,7 @@ import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
 import { type Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
@@ -15,6 +16,8 @@ import { buildOrpcContext, type OrpcContext } from "./context.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { decryptSecret } from "./crypto.js";
+import { reportHostedBuild } from "./sandbox/hosted/hosted-build.js";
+import { LOG_TAIL_BYTES, REPORT_HEADERS } from "./sandbox/hosted/hosted-build-script.js";
 import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
@@ -296,6 +299,37 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return c.json({ ok: true });
     });
 
+    /* A BUILDER MACHINE'S REPORT (hosted-build.ts): the exit code and image digest in headers, the log's tail
+     * as a text body, authenticated by the per-build secret only that builder and the build row (hashed) hold.
+     * The one thing this route can do is END a build: an unknown id, a wrong secret and a build already
+     * finished each answer without touching anything, and the body is capped twice (the middleware refuses a
+     * larger one, the store keeps the tail) so an abusive caller buys nothing but a 413. */
+    app.post(`/sandbox/hosted-build-report/:buildId`, bodyLimit({ maxSize: 2 * LOG_TAIL_BYTES }), async (c) => {
+        const secret = c.req.header(REPORT_HEADERS.secret);
+        if (secret === undefined || secret === ``) {
+            return c.text(`error: missing build secret`, 400);
+        }
+        const exitHeader = c.req.header(REPORT_HEADERS.exitCode) ?? ``;
+        const exitCode = /^-?\d+$/.test(exitHeader) ? Number(exitHeader) : undefined;
+        const digest = c.req.header(REPORT_HEADERS.digest) ?? ``;
+        const log = await c.req.text().catch(() => ``);
+        const answer = await reportHostedBuild(prisma, config, c.get(`logger`), c.req.param(`buildId`), secret, {
+            exitCode,
+            digest: /^sha256:[0-9a-f]{64}$/.test(digest) ? digest : undefined,
+            log,
+        });
+        switch (answer) {
+            case `unknown`:
+                return c.text(`error: unknown build`, 404);
+            case `forbidden`:
+                return c.text(`error: wrong build secret`, 403);
+            case `stale`:
+                return c.text(`error: this build has already ended`, 409);
+            default:
+                return c.json({ ok: true });
+        }
+    });
+
     /* THE DAEMON'S BOOT REPORT, the announce's other half, and the half that was missing. An announce says
      * "I started"; this says "and my public address answers", which the box establishes by asking that address
      * itself from the inside. They are separate routes because they are separate claims and they fail
@@ -367,7 +401,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (!/^[0-9a-f]{12}$/.test(sandboxId)) {
             return c.json({ error: `not a sandbox id` }, 404);
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tunnelId: sandboxId }, select: { id: true, hosted: { select: { appName: true } } } });
+        const sandbox = await prisma.sandbox.findUnique({
+            where: { tunnelId: sandboxId },
+            select: { id: true, hosted: { select: { appName: true } } },
+        });
         if (sandbox === null) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
