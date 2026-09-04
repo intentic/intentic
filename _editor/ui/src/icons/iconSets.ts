@@ -12,7 +12,6 @@
 // runtime Iconify API fetch. Regenerate (pnpm --filter @intentic/ui generate:icons) whenever these change.
 
 export type IconName =
-    | "account-box"
     | "align-left"
     | "angle-right"
     | "arrow-circle-up"
@@ -136,10 +135,6 @@ export type IconName =
     | "wrench";
 
 export const ICONS: Record<IconName, string> = {
-    /* A NAMED IDENTITY the box wears when it acts outside: the Personas hub row, and the paired opposite of
-     * `shield` on Access above it (who may use the box versus who it speaks as). A card silhouette reads at
-     * rail size where a second user glyph did not. */
-    "account-box": "ri:account-box-line",
     "align-left": "ri:align-left",
     "angle-right": "ri:arrow-right-s-line",
     "arrow-circle-up": "ri:arrow-up-circle-line",

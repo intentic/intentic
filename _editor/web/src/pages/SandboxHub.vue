@@ -74,7 +74,7 @@ const reachRows = (contendedPorts: number): readonly HubTab[] => [
      * deliberately not under Configuration beside `agent`. Those two rows are one letter apart in English and
      * opposite in consequence (which subscription pays for a turn, versus whose name is on what it posts), and
      * neighbouring them is how someone eventually pins a nightly job to the right billing and the wrong Reddit. */
-    { slug: `personas`, label: `Personas`, icon: `account-box` },
+    { slug: `personas`, label: `Personas`, icon: `user` },
     // "Computers", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
     // enrollment this tab used to be named after is one property of one of them.
     {
