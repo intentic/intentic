@@ -27,19 +27,28 @@ vi.mock(`./PickerAccounts.vue`, () => ({
                 h(`button`, { onClick: () => emit(`selectAccount`, `second-account`) }, `Switch account`),
     }),
 }));
-// The meter is the composer's own control and is tested there; what this file is about is what the panel does
-// with the rung it emits.
+/* The meter's own drawing is the composer's control and is tested there; this stub keeps the one thing this file
+ * is about — WHICH rungs the panel hands it, and what the panel does with the one it emits — by drawing a button
+ * per rung under the tier's own name. */
 vi.mock(`./EffortMeter.vue`, () => ({
     default: defineComponent({
+        props: { efforts: { type: Array, default: () => [] } },
+        emits: [`pick`],
         setup:
-            (_props, { emit }) =>
+            (props, { emit }) =>
             () =>
-                h(`button`, { onClick: () => emit(`pick`, `xhigh`) }, `Pick effort`),
+                h(
+                    `span`,
+                    (props.efforts as { label: string; value: string }[]).map((option) =>
+                        h(`button`, { key: option.value, onClick: () => emit(`pick`, option.value) }, option.label),
+                    ),
+                ),
     }),
 }));
 vi.mock(`../composables/chat/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
 
 const { requestModelPick, settleModelPick } = await import("../composables/chat/hostModelPicker");
+const { providerModels } = await import("../composables/chat/providerCatalog");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
 
 let app: App | undefined;
@@ -51,11 +60,16 @@ const mount = (): HTMLElement => {
     return element;
 };
 
+// The rung the panel offered, by the word the app puts on it.
+const rung = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
+    [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent === label);
+
 afterEach(() => {
     settleModelPick(undefined);
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    providerModels.value = { ...providerModels.value, claude: [] };
 });
 
 it(`keeps an account switch open and carries it into the eventual model pick`, async () => {
@@ -95,18 +109,42 @@ it(`keeps an effort pick open and carries it into the eventual model pick`, asyn
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseEffort: true });
     void result.then(settled);
     const element = mount();
-    const [pickModel, , pickEffort] = element.querySelectorAll<HTMLButtonElement>(`button`);
 
-    pickEffort!.click();
+    rung(element, `X-High`)!.click();
     await nextTick();
     expect(settled).not.toHaveBeenCalled();
 
-    pickModel!.click();
+    element.querySelector<HTMLButtonElement>(`button`)!.click();
     await expect(result).resolves.toEqual({
         provider: `claude`,
         model: `claude-opus-4-6`,
         label: `Claude Opus 4.6`,
         effort: `xhigh`,
+    });
+});
+
+/* THE TOP RUNG IS REACHABLE HERE, which is the whole reason this panel draws the row: a run started from a red
+ * pipeline has no composer beside it to switch extended thinking on with. It used to read this selection's
+ * absent thinking as thinking switched OFF, which is the one pair Anthropic refuses, so Max was missing from
+ * every "Fix with agent" caret while the model's own catalog published it. */
+it(`offers the model's top tier to a run that pinned no thinking to refuse it`, async () => {
+    providerModels.value = {
+        ...providerModels.value,
+        claude: [{ label: `Claude Opus 4.6`, value: `claude-opus-4-6`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }],
+    };
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseEffort: true });
+    const element = mount();
+
+    rung(element, `Max`)!.click();
+    await nextTick();
+    element.querySelector<HTMLButtonElement>(`button`)!.click();
+
+    await expect(result).resolves.toEqual({
+        provider: `claude`,
+        model: `claude-opus-4-6`,
+        label: `Claude Opus 4.6`,
+        effort: `max`,
     });
 });
 

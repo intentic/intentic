@@ -247,15 +247,26 @@ export const modelsFor = (provider: AgentProvider): CatalogOption[] => {
     return [];
 };
 
-// Whether a reasoning-effort tier is actually sendable for this provider with this thinking setting. 'max' is
-// the only constrained tier and it fails two ways: no non-Claude scale HAS it, and Claude's API rejects it
-// outright when extended thinking is disabled ("effort 'max' is not supported when thinking is disabled on this
-// model", a 400 that kills the turn before the model sees it, surfacing only as the SDK's `unknown` error
-// category). It is the one rule a MODEL's published tier list can't express, the daemon reports what a model
-// accepts without knowing this turn's thinking setting, so the consumer that assembles the offered scale
-// (effortsFor, web-side) filters through here, and the clamp over that scale makes the pair unreachable.
-export const effortAllowed = (effort: string, provider: AgentProvider, thinking: boolean): boolean =>
-    effort !== "max" || (provider === "claude" && thinking);
+/* WHETHER A REASONING TIER IS SENDABLE for this provider with this thinking setting: the one rule a model's
+ * published tier list cannot express, applied OVER that list rather than in place of it.
+ *
+ * IT IS ABOUT ONE PAIR, NOT ABOUT WHO HAS `max`. This used to read "only Claude, and only with thinking on",
+ * which was two claims and the first was never ours to make: Kimi K3 publishes `max` on its own catalog rows,
+ * Cursor publishes whatever its model's dial declares, and a configured endpoint publishes the upstream's
+ * thinking levels. Filtering those away offered a shorter ladder than the provider had already told us about,
+ * which is the opposite of respecting a catalog we go to the trouble of reading.
+ *
+ * WHAT IS REAL is Anthropic's own refusal: `max` with extended thinking DISABLED is a 400 that kills the turn
+ * before the model sees it ("output_config.effort 'max' is not supported when thinking is disabled on this
+ * model", surfacing only as the SDK's `unknown` error category). That pair alone is filtered.
+ *
+ * ABSENT IS NOT OFF, and reading it as off is what hid the tier from every surface with no thinking control of
+ * its own. A run started from a red pipeline pins no thinking, so the turn goes out without the field and the
+ * model's own default answers, which on every model that offers `max` is adaptive thinking. sendableThinking
+ * below is the other half of that promise: it makes the pair explicit on the way to the API rather than leaving
+ * the picker to hope. */
+export const effortAllowed = (effort: string, provider: AgentProvider, thinking: boolean | undefined): boolean =>
+    effort !== "max" || provider !== "claude" || thinking !== false;
 
 /* The tier to actually SEND, which is the same rule applied as a repair rather than as a filter.
  *
@@ -266,11 +277,24 @@ export const effortAllowed = (effort: string, provider: AgentProvider, thinking:
  * model as "web search is broken" and cost it the answer it was sent to find.
  *
  * So the daemon repairs the pair at the last gate before the API, taking the API's own advice ("use effort
- * 'high' or below, or enable thinking") rather than reporting it. The TIER is the half that moves: thinking is
- * a deliberate per-turn choice that changes what the turn costs, and silently switching it on would answer a
- * 400 by spending the user's money. */
+ * 'high' or below, or enable thinking") rather than reporting it. The TIER is the half that moves HERE, because
+ * this is the case where the user said both things and they contradict: thinking off is a deliberate per-turn
+ * choice that changes what the turn costs, and answering a 400 by switching it back on would spend their money
+ * on the one thing they turned down. */
 export const sendableEffort = (effort: string | undefined, thinking: boolean | undefined): string | undefined =>
-    effort === "max" && thinking !== true ? "high" : effort;
+    effort === "max" && thinking === false ? "high" : effort;
+
+/* The thinking to send WITH that tier, and the case sendableEffort deliberately does not cover: a turn that
+ * asked for `max` and said nothing about thinking at all, which is every run a surface starts (a Fix button
+ * pins a model and a tier, never a thinking setting).
+ *
+ * Left alone, the field is absent and the model's own default decides — adaptive on Opus 5 and Fable, OFF on
+ * Opus 4.7/4.8, so the same pick runs at max on one model and 400s on the next. Naming it is what makes the
+ * tier the picker offered the tier that runs. Nothing is being decided for the user here: `max` IS the request
+ * to think as hard as the model can, so the reasoning it needs comes with it, and a user who turned thinking
+ * off keeps that answer (their setting is not undefined, and sendableEffort moves the tier instead). */
+export const sendableThinking = (effort: string | undefined, thinking: boolean | undefined): boolean | undefined =>
+    effort === "max" && thinking === undefined ? true : thinking;
 
 /* WHETHER FAST SPEED CAN BE OFFERED for a provider/harness/model triple, the picker-side filter, the same
  * shape and the same reason as effortAllowed: the composer must not show a control that does nothing.

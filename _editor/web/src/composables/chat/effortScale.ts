@@ -2,9 +2,9 @@ import { type AgentProvider, type CatalogOption, effortAllowed, NATIVE_PROVIDERS
 import { providerModels } from "./providerCatalog";
 
 /* WHICH REASONING TIERS A MODEL OFFERS, AND WHAT A PICK RUNS AT ON IT. A tier scale is a property of the MODEL,
- * not of the provider. Kimi K3 stops at 'high' while Claude goes to 'max', and 'max' leaves Claude's own scale
- * the moment thinking is switched off, so a pick made on one model is routinely off-scale on the next. Both
- * halves of the answer live here: what the segments OFFER, and what a selection actually RUNS at.
+ * not of the provider. Kimi K2.7 stops at 'high' where Kimi K3 runs to 'max', Claude's own scale loses 'max' the
+ * moment thinking is switched OFF, so a pick made on one model is routinely off-scale on the next. Both halves
+ * of the answer live here: what the segments OFFER, and what a selection actually RUNS at.
  *
  * Read at every use (the composer's segments, Conversation.effort) rather than written back over the user's
  * pick, so a trip through a smaller model never ratchets the choice down. */
@@ -15,22 +15,34 @@ const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, 
 // here; it is what lets a clamp say "the strongest tier this model has that is no stronger than the pick".
 const EFFORT_SCALE: readonly string[] = [`minimal`, `low`, `medium`, `high`, `xhigh`, `max`];
 
-// The scale a model is offered on when its provider published none, the four tiers every non-Claude runtime
-// has historically accepted. 'max' rides the same effortAllowed filter as a live scale's would.
-const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`, `max`];
+/* The scale a model is offered on when its provider published none: the four tiers every runtime has
+ * historically accepted, and DELIBERATELY NOT 'max'.
+ *
+ * The top rung is one a provider has to claim for itself. It used to sit in this list for everybody and be taken
+ * away again by a filter that believed only Claude had it — right about Codex for the wrong reason, and wrong
+ * about every catalog that publishes 'max' honestly (Kimi K3, a Cursor dial, an endpoint's thinking levels),
+ * whose own top rung was unreachable in the picker that had just read it.
+ *
+ * CLAUDE'S FLOOR IS THE LONGER ONE, and it is the same compile-time claim about the same vendor that this repo
+ * already keeps (CLAUDE_SEED_MODELS): Anthropic's effort scale runs to 'max'. Without it a Claude row the live
+ * catalog described nothing about — a family whose tier the CLI publishes no alias for, or any model read before
+ * the catalog answers — would be told it stops at X-High, which is the tier going missing all over again. */
+const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`];
+const CLAUDE_EFFORTS: readonly string[] = [...STATIC_EFFORTS, `max`];
+const floorFor = (provider: AgentProvider): readonly string[] => (provider === `claude` ? CLAUDE_EFFORTS : STATIC_EFFORTS);
 
 // Reasoning effort levels for a provider+model: the live catalog's per-model tiers when the daemon reported
-// them (Claude's and Kimi's catalogs carry each model's supported levels), else the static scale above.
-// Model-aware so a release with a different scale adjusts the picker with no code change. `thinking` filters
-// the top tier the same way effortAllowed does, the daemon reports a model's tiers without knowing this turn's
-// thinking setting, so the filter applies to BOTH the live list and the static fallback. Empty only for an ACP
-// provider, which owns its own reasoning settings and has no scale to offer.
-export const effortsFor = (provider: AgentProvider, modelId: string | undefined, thinking: boolean): CatalogOption[] => {
+// them (Claude's, Kimi's and Cursor's catalogs carry each model's supported levels), else the provider's floor
+// above. Model-aware so a release with a different scale adjusts the picker with no code change. `thinking` is
+// this selection's setting where it HAS one and undefined where nothing was pinned, which is a third state and
+// not a synonym for off: it is what every run button sends, and effortAllowed reads it that way.
+// Empty only for an ACP provider, which owns its own reasoning settings and has no scale to offer.
+export const effortsFor = (provider: AgentProvider, modelId: string | undefined, thinking: boolean | undefined): CatalogOption[] => {
     if (!NATIVE_PROVIDERS.includes(provider as NativeProvider)) {
         return [];
     }
     const published = (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.efforts;
-    const scale = published !== undefined && published.length > 0 ? published : STATIC_EFFORTS;
+    const scale = published !== undefined && published.length > 0 ? published : floorFor(provider);
     return scale.filter((value) => effortAllowed(value, provider, thinking)).map((value) => ({ label: EFFORT_LABELS[value] ?? value, value }));
 };
 
@@ -38,7 +50,7 @@ export const effortsFor = (provider: AgentProvider, modelId: string | undefined,
 // offers it, else the strongest weaker tier it does offer (the weakest it has, if the pick is below all of
 // them). An off-scale effort both leaves the composer's segments with nothing lit and sends a tier the runtime
 // never accepted.
-export const clampEffort = (effort: string, provider: AgentProvider, modelId: string | undefined, thinking: boolean): string => {
+export const clampEffort = (effort: string, provider: AgentProvider, modelId: string | undefined, thinking: boolean | undefined): string => {
     const offered = effortsFor(provider, modelId, thinking).map((option) => option.value);
     if (offered.length === 0 || offered.includes(effort)) {
         return effort;
@@ -58,7 +70,7 @@ export const effortLabelOf = (
     effort: string | undefined,
     provider: AgentProvider,
     modelId: string | undefined,
-    thinking: boolean,
+    thinking: boolean | undefined,
 ): string | undefined => {
     if (effort === undefined || effort === ``) {
         return undefined;

@@ -21,6 +21,7 @@ const { useAgentRunPick } = await import("@intentic/ui");
 const { queryClient } = await import("../queryPersistence");
 const { SANDBOX_SETTINGS } = await import("../queryKeys");
 const { providerAccounts } = await import("./providerAccounts");
+const { providerModels } = await import("./providerCatalog");
 const { agentRunChoice, shellModelPicking } = await import("./shellModelPicking");
 
 // No VueQueryPlugin anywhere in this file, on purpose: an app that never provides the client is the sharpest
@@ -89,23 +90,38 @@ test(`re-reading it never adds a second reader of the settings`, async () => {
  * started at "Default" would make every override drop the tier its owner pinned, since the daemon fills a pin's
  * knobs in only for a turn that named no model.
  *
- * `max` is the case worth pinning down. It is a legal pin BESIDE extended thinking, and a run pick carries no
- * thinking setting at all, so the daemon repairs the pair to `high` before it sends (sendableEffort). The button
- * has to say what will actually run, not what the setting reads. */
-test(`the standing choice names the pinned tier the run will actually use`, () => {
+ * `max` is the case worth pinning down, and it is read against THE PIN'S OWN THINKING, because a turn that named
+ * no model takes the whole entry (turn-resume.ts). An entry that pinned Max keeps Max; the one that also
+ * switched thinking off is the pair the API refuses, and the daemon drops that tier to `high` before it sends
+ * (sendableEffort). The button has to say what will actually run, not what the setting reads. */
+const pinned = (pin: Record<string, unknown>): void => {
     // The chain drops a pin whose provider this sandbox holds no credential for, so the account list is what
     // makes the pin reachable at all: the same fact the daemon's own resolver reads.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc`, label: `Claude` }] as never };
-    queryClient.setQueryData(SANDBOX_SETTINGS.of(), {
-        agentRunModels: [{ provider: `claude`, model: `claude-sonnet-4-6`, effort: `max`, thinking: true }],
-    });
+    providerModels.value = {
+        ...providerModels.value,
+        claude: [{ label: `Claude Sonnet 4.6`, value: `claude-sonnet-4-6`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }],
+    };
+    queryClient.setQueryData(SANDBOX_SETTINGS.of(), { agentRunModels: [pin] });
+};
+
+test(`the standing choice keeps the pinned top tier, and names it`, () => {
+    pinned({ provider: `claude`, model: `claude-sonnet-4-6`, effort: `max`, thinking: true });
 
     const choice = agentRunChoice();
 
     expect({ provider: choice.provider, model: choice.model, effort: choice.effort, effortLabel: choice.effortLabel }).toEqual({
         provider: `claude`,
         model: `claude-sonnet-4-6`,
-        effort: `high`,
-        effortLabel: `High`,
+        effort: `max`,
+        effortLabel: `Max`,
     });
+});
+
+test(`the standing choice names the tier the run will actually use when the pin refuses its own`, () => {
+    pinned({ provider: `claude`, model: `claude-sonnet-4-6`, effort: `max`, thinking: false });
+
+    const choice = agentRunChoice();
+
+    expect({ effort: choice.effort, effortLabel: choice.effortLabel }).toEqual({ effort: `high`, effortLabel: `High` });
 });

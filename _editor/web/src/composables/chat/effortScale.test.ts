@@ -7,8 +7,8 @@ import { providerModels } from "./providerCatalog";
 // environment in behind it.
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 
-/* The reasoning-effort scale, which belongs to the MODEL and not to the provider: Kimi K3 stops at 'high' where
- * Claude runs to 'max', so a pick carried across a model switch is routinely off-scale. Every read of a
+/* The reasoning-effort scale, which belongs to the MODEL and not to the provider: Kimi K2.7 stops at 'high'
+ * where K3 runs to 'max', so a pick carried across a model switch is routinely off-scale. Every read of a
  * conversation's effort goes through the clamp, because an off-scale tier both leaves the composer's segments
  * with nothing lit and sends the runtime a level it never published. */
 describe(`the effort scale`, () => {
@@ -17,17 +17,36 @@ describe(`the effort scale`, () => {
     beforeEach(() => {
         providerModels.value = {
             ...providerModels.value,
-            claude: [{ label: `Opus 5`, value: `claude-opus-5` }],
+            claude: [{ label: `Opus 5`, value: `claude-opus-5`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }],
             kimi: [{ label: `Kimi K3`, value: `kimi-k3`, efforts: [`low`, `high`, `max`] }],
         };
     });
 
-    it(`offers Max only to Claude, and only with thinking on`, () => {
+    /* THE TOP RUNG IS WHAT THE CATALOG PUBLISHED, and the only thing that takes it away again is the one pair
+     * Anthropic refuses. Read as "only Claude, and only with thinking on", it went missing from both ends: from
+     * Kimi, whose own rows publish it, and from every run pick, which pins no thinking at all. */
+    it(`takes Max away only where the API refuses it: Claude with thinking switched off`, () => {
         expect(values(effortsFor(`claude`, `claude-opus-5`, true))).toContain(`max`);
+        // The run-button case: nothing pinned the thinking, so nothing has been turned off.
+        expect(values(effortsFor(`claude`, `claude-opus-5`, undefined))).toContain(`max`);
         expect(values(effortsFor(`claude`, `claude-opus-5`, false))).not.toContain(`max`);
-        expect(values(effortsFor(`codex`, `gpt-5-codex`, true))).not.toContain(`max`);
         // Dropping the top rung must not disturb the rest of the scale.
         expect(values(effortsFor(`claude`, `claude-opus-5`, false))).toEqual([`low`, `medium`, `high`, `xhigh`]);
+        // Another vendor's published scale is that vendor's business, thinking setting or not.
+        expect(values(effortsFor(`kimi`, `kimi-k3`, false))).toEqual([`low`, `high`, `max`]);
+    });
+
+    /* A provider that published nothing gets the tiers every runtime accepts, and 'max' is not one of them: it
+     * is a rung a provider has to claim for itself, and putting it in everybody's floor is what left the filter
+     * above having to take it away again.
+     *
+     * Claude's floor is the documented exception and carries it, so a model the live catalog has said nothing
+     * about — a family with no tier alias, or any model read before the catalog answers — is not told that
+     * Anthropic's scale stops at X-High. */
+    it(`invents no top rung for a provider that has not published one, and keeps Claude's`, () => {
+        expect(values(effortsFor(`codex`, `gpt-5-codex`, true))).toEqual([`low`, `medium`, `high`, `xhigh`]);
+        expect(values(effortsFor(`grok`, `grok-5`, undefined))).toEqual([`low`, `medium`, `high`, `xhigh`]);
+        expect(values(effortsFor(`claude`, `claude-unlisted-model`, undefined))).toEqual([`low`, `medium`, `high`, `xhigh`, `max`]);
     });
 
     // The daemon reports a model's tiers without knowing this turn's thinking setting, so the live list needs
@@ -47,9 +66,10 @@ describe(`the effort scale`, () => {
     it(`drops a pick to the strongest tier the model actually offers`, () => {
         // The bug this exists for: 'xhigh' carried onto Kimi, whose scale is low/high, lit no segment at all.
         expect(clampEffort(`xhigh`, `kimi`, `kimi-k3`, true)).toBe(`high`);
-        expect(clampEffort(`max`, `kimi`, `kimi-k3`, true)).toBe(`high`);
         expect(clampEffort(`medium`, `kimi`, `kimi-k3`, true)).toBe(`low`);
-        // A tier the model publishes rides untouched, and one below its whole scale takes the weakest rung.
+        // A tier the model publishes rides untouched, K3's own top rung included, and one below its whole scale
+        // takes the weakest.
+        expect(clampEffort(`max`, `kimi`, `kimi-k3`, true)).toBe(`max`);
         expect(clampEffort(`low`, `kimi`, `kimi-k3`, true)).toBe(`low`);
         expect(clampEffort(`minimal`, `kimi`, `kimi-k3`, true)).toBe(`low`);
     });

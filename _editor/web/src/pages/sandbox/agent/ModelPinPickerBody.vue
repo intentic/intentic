@@ -72,18 +72,19 @@ const harness = computed<AgentHarness>(() => pin?.harness ?? `native`);
 
 const capabilities = computed(() => capabilitiesOf(provider.value, harness.value));
 
-/* THINKING IS ABSENT UNTIL IT IS PINNED, and 'max' rides on it: Claude's API refuses that tier outright with
- * thinking disabled, and the daemon reads an unpinned `thinking` as off when it repairs the pair
- * (sendableEffort). Offering max here on the strength of a field nobody set would be offering the one
- * combination that 400s. */
-const thinkingOn = computed(() => pin?.thinking === true);
-const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinkingOn.value) : []));
+/* THINKING HAS THREE STATES HERE and the scale is read against all three, not two. Claude's API refuses 'max'
+ * with thinking DISABLED, so an entry whose thinking chip says Off loses the rung; an entry that pinned nothing
+ * keeps it, because the turn then goes out with no thinking field and the daemon names the reasoning that tier
+ * needs on the way (sendableThinking). Collapsing absent onto off, which this used to do, hid the top tier
+ * behind a chip nobody had touched. */
+const thinkingPin = computed(() => pin?.thinking);
+const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinkingPin.value) : []));
 
 /* CLAMPED FOR DISPLAY, never written back, the composer's own rule (effortScale.ts). Switching thinking off, or
  * re-pointing the entry at a model with a shorter scale, would otherwise leave a stored 'max' lighting no rung
  * at all and reading as an unset control. The user's own pick stays stored for the day the longer scale is back. */
 const effort = computed(() =>
-    pin?.effort === undefined || pin.effort === `` ? `` : clampEffort(pin.effort, provider.value, model.value, thinkingOn.value),
+    pin?.effort === undefined || pin.effort === `` ? `` : clampEffort(pin.effort, provider.value, model.value, thinkingPin.value),
 );
 
 // Fast speed exists only where the runtime, the route AND the model's own catalog row allow it, so the control

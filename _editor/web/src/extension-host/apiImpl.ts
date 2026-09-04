@@ -52,8 +52,9 @@ export interface HostBindings {
  * has been disconnected is exactly what a caller needs to be able to notice.
  *
  * The TIER is named the same way and for the same reason (effortLabelOf): clamped to what this model actually
- * offers, read with thinking off because a run pick carries no thinking setting, and left unnamed where the
- * runtime publishes no scale at all. */
+ * offers, read with thinking UNSET because a run pick carries no thinking setting (which is not the same as one
+ * that turned it off, and reading it as off would rename a Max run "X-High"), and left unnamed where the runtime
+ * publishes no scale at all. */
 const named = (selection: {
     readonly provider: AgentProvider;
     readonly model: string;
@@ -63,7 +64,7 @@ const named = (selection: {
 }): PickedModel => {
     const { provider, model, account, harness, effort } = selection;
     const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
-    const effortLabel = effortLabelOf(effort, provider, model, false);
+    const effortLabel = effortLabelOf(effort, provider, model, undefined);
     return {
         provider,
         model,

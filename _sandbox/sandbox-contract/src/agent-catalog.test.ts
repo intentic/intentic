@@ -14,6 +14,7 @@ import {
     modesFor,
     PROVIDERS,
     sendableEffort,
+    sendableThinking,
 } from "./agent-catalog.js";
 import type { AgentCapabilities } from "./agent-runtimes.js";
 import type { AgentHarness, AgentProvider, PermissionMode } from "./schemas/agent.js";
@@ -264,22 +265,38 @@ test("the Claude Code loop offers every PermissionMode the wire has", () => {
 
 /* `max` + thinking-off is a 400 that kills the turn before the model sees it, and a session met it as "every
  * web search fails". The picker cannot be the only guard: a route, an extension or a restored tab assembles a
- * turn without ever passing through it. */
+ * turn without ever passing through it. What the rule is NOT is a claim about who HAS the tier, and reading it
+ * as one took Max off every surface that pins no thinking of its own. */
 describe("the max-effort rule", () => {
-    it("is unreachable in a picker: only Claude with extended thinking may offer it", () => {
+    it("takes the top rung from one pair only: Claude with extended thinking switched off", () => {
         expect(effortAllowed("max", "claude", true)).toBe(true);
         expect(effortAllowed("max", "claude", false)).toBe(false);
-        expect(effortAllowed("max", "codex", true)).toBe(false);
+        // Nothing pinned, which is what every run button sends. Absent is not off: the turn carries no thinking
+        // field, the model's own default answers, and sendableThinking names it on the way out.
+        expect(effortAllowed("max", "claude", undefined)).toBe(true);
+        // Another vendor's scale is that vendor's business. Kimi K3 publishes 'max' on its own catalog rows, so
+        // filtering it here would offer a shorter ladder than the provider already told us about.
+        expect(effortAllowed("max", "kimi", false)).toBe(true);
         // Every other tier is a property of the model's own scale, and nothing here constrains it.
         expect(effortAllowed("high", "kimi", false)).toBe(true);
     });
 
     it("is repaired, not refused, on the way to the API: the tier drops, the user's thinking choice does not", () => {
         expect(sendableEffort("max", false)).toBe("high");
-        expect(sendableEffort("max", undefined)).toBe("high");
         expect(sendableEffort("max", true)).toBe("max");
+        // A turn that said nothing about thinking is not the refused pair, so the tier the user picked survives.
+        expect(sendableEffort("max", undefined)).toBe("max");
         expect(sendableEffort("high", false)).toBe("high");
         expect(sendableEffort(undefined, false)).toBeUndefined();
+    });
+
+    it("names the reasoning a max turn needs where the run pinned none, and overrides nothing that was pinned", () => {
+        expect(sendableThinking("max", undefined)).toBe(true);
+        expect(sendableThinking("max", false)).toBe(false);
+        expect(sendableThinking("max", true)).toBe(true);
+        // Every other tier is sendable either way, so there is nothing to name.
+        expect(sendableThinking("xhigh", undefined)).toBeUndefined();
+        expect(sendableThinking(undefined, undefined)).toBeUndefined();
     });
 });
 

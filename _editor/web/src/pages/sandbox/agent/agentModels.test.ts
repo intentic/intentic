@@ -204,14 +204,24 @@ test("an agent-run entry names its own tier, and one left at the provider's defa
 });
 
 test("a tier off the model's own scale is drawn as the one that will actually run", async () => {
-    // Claude's API refuses `max` with thinking disabled, and an unpinned `thinking` is read as disabled, so the
-    // row must not promise a rung this run cannot use. The stored pick is left alone underneath.
-    settings.value = { ...settings.value, agentRunModels: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max` }] };
+    // Claude's API refuses `max` with thinking disabled, and THIS entry disabled it, so the row must not promise
+    // a rung this run cannot use. The stored pick is left alone underneath.
+    settings.value = { ...settings.value, agentRunModels: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: false }] };
     const host = mount();
     await Promise.resolve();
 
     expect(host.querySelector(`ol li`)?.textContent).toContain(`X-High`);
     expect(settings.value.agentRunModels[0]?.effort).toBe(`max`);
+});
+
+// …while an entry that pinned no thinking at all is not that pair: the turn goes out with no thinking field and
+// the daemon names the reasoning the tier needs, so the row says the tier the entry actually spends.
+test("an entry that pinned no thinking keeps the top tier it asked for", async () => {
+    settings.value = { ...settings.value, agentRunModels: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max` }] };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(host.querySelector(`ol li`)?.textContent).toContain(`Max`);
 });
 
 test("pressing an agent-run row opens the picker over that entry, with its knobs", async () => {

@@ -34,7 +34,7 @@ let unpickable: ((entry: { provider: string; value: string }) => boolean) | unde
 vi.mock(`../../../composables/chat/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
 // An empty live catalog puts every model on the static effort scale and publishes no `fast` badge, which is the
 // state a fresh sandbox is in; the badge case gets its own catalog below.
-const catalog = ref<Record<string, readonly { value: string; label: string; badges?: readonly string[] }[]>>({});
+const catalog = ref<Record<string, readonly { value: string; label: string; badges?: readonly string[]; efforts?: readonly string[] }[]>>({});
 vi.mock(`../../../composables/chat/providerCatalog`, () => ({
     providerModels: catalog,
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
@@ -142,27 +142,41 @@ test("thinking keeps its three stops apart: absent sends nothing, off sends off"
     expect(written).toEqual([{ provider: `claude`, model: `claude-haiku-4-5` }]);
 });
 
-test("the top tier is offered only once thinking is on, because the API refuses the other pair", async () => {
-    // `effort: max` with thinking disabled is a 400 that kills the turn before the model sees it, and an
-    // unpinned `thinking` is read as disabled (sendableEffort), so the rung must not be reachable here.
-    const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5` }, knobs: true });
-    await nextTick();
-    const rungs = (): string[] =>
+/* THE TOP RUNG IS THE MODEL'S TO PUBLISH, and the entry's own thinking chip is the only thing that can take it
+ * away again: `effort: max` with thinking DISABLED is a 400 that kills the turn before the model sees it. The
+ * chip's Default position is not that pair — the turn goes out with no thinking field and the daemon names the
+ * reasoning the tier needs (sendableThinking) — and collapsing the two is what hid Max behind a chip nobody had
+ * touched. */
+test("the top tier follows the entry's own thinking: only switching it off takes Max away", async () => {
+    catalog.value = { claude: [{ value: `claude-opus-5`, label: `Claude Opus 5`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }] };
+    const rungs = (host: HTMLElement): string[] =>
         [...(row(host, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button[aria-label]`) ?? [])].map(
             (button) => button.getAttribute(`aria-label`) ?? ``,
         );
 
-    expect(rungs()).not.toContain(`Max`);
+    const unpinned = mount({ pin: { provider: `claude`, model: `claude-opus-5` }, knobs: true });
+    await nextTick();
+    expect(rungs(unpinned)).toEqual([`Low`, `Medium`, `High`, `X-High`, `Max`]);
 
     app?.unmount();
     document.body.innerHTML = ``;
-    const thinking = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5`, thinking: true }, knobs: true });
+    const off = mount({ pin: { provider: `claude`, model: `claude-opus-5`, thinking: false }, knobs: true });
     await nextTick();
+    expect(rungs(off)).toEqual([`Low`, `Medium`, `High`, `X-High`]);
+});
+
+// …and a provider that published no scale is never GIVEN the top rung: its floor is the tiers every runtime
+// accepts, and `max` is one a provider has to claim for itself (Claude's floor is the documented exception,
+// pinned in effortScale's own suite).
+test("an entry on a provider that published no scale gets a floor with no Max in it", async () => {
+    const host = mount({ pin: { provider: `codex`, model: `gpt-5.6` }, knobs: true });
+    await nextTick();
+
     expect(
-        [...(row(thinking, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button[aria-label]`) ?? [])].map((button) =>
+        [...(row(host, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button[aria-label]`) ?? [])].map((button) =>
             button.getAttribute(`aria-label`),
         ),
-    ).toContain(`Max`);
+    ).toEqual([`Low`, `Medium`, `High`, `X-High`]);
 });
 
 test("a codex entry is offered the harness axis, and picking a chip writes it", async () => {

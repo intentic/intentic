@@ -24,6 +24,7 @@ import {
     type PermissionMode,
     type Rule,
     sendableEffort,
+    sendableThinking,
     type SystemPromptMode,
     type TurnNote,
     type UsageWindow,
@@ -553,12 +554,21 @@ export type OauthRecoveryOptions = Options & {
     getOAuthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
 };
 
-// The two reasoning knobs, together, because the API refuses one combination of them and the picker's filter
-// (effortAllowed) only covers turns that came from the picker. sendableEffort holds the rule and the reason.
-const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinking?: { type: "adaptive" | "disabled" } } => ({
-    ...opt("effort", sendableEffort(request.effort, request.thinking) as EffortLevel | undefined),
-    ...opt("thinking", request.thinking === undefined ? undefined : { type: request.thinking ? ("adaptive" as const) : ("disabled" as const) }),
-});
+/* The two reasoning knobs, together, because the API refuses one combination of them and accepts another only
+ * when both are named. The picker's filter (effortAllowed) only covers turns that came FROM the picker; the
+ * contract's two rules hold what happens to every other one, and why.
+ *
+ * A `max` turn that pinned no thinking setting is the case worth naming here: it is what every Fix-with-agent
+ * run is (a model and a tier, no thinking), and left as-is the field is absent and the model's own default
+ * decides, which differs by model. sendableThinking makes it explicit so the tier the user picked is the tier
+ * that runs; sendableEffort moves the TIER instead for the one user who said thinking off and max together. */
+const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinking?: { type: "adaptive" | "disabled" } } => {
+    const thinking = sendableThinking(request.effort, request.thinking);
+    return {
+        ...opt("effort", sendableEffort(request.effort, request.thinking) as EffortLevel | undefined),
+        ...opt("thinking", thinking === undefined ? undefined : { type: thinking ? ("adaptive" as const) : ("disabled" as const) }),
+    };
+};
 
 /* Whether the routed browser has anyone behind it this turn. The same account→owner map the session observer
  * resolves calls with, asked as a yes/no: it decides whether the browser sentence names that server at all.

@@ -36,30 +36,34 @@ const { hasContent } = usePickerAccounts(
 /* WHICH RUNGS THIS SELECTION OFFERS, and whether it is asked at all: `chooseEffort` is the caller saying it
  * carries a tier (every run button does; the chat, the automations form and a workflow step do not).
  *
- * Thinking is not part of a run pick, so the scale is read with it OFF, which is the same reading the daemon
- * will make of a turn that says nothing about thinking (sendableEffort): Claude's `max` is not offered here,
- * because it is the one pair the API refuses outright. A runtime that owns its own reasoning settings (ACP,
- * OpenCode) publishes no scale and draws no row either. */
+ * THINKING IS NOT PART OF A RUN PICK, and the scale is read with it UNSET rather than off, which is the same
+ * reading the daemon will make of a turn that says nothing about thinking. Passing `false` here is what used to
+ * take Claude's top rung off this panel: `max` is refused only alongside thinking that was explicitly turned
+ * OFF, and a run started from a red pipeline turns nothing off — it pins a model and a tier, and the daemon
+ * names the reasoning that tier needs on the way out (sendableThinking). A runtime that owns its own reasoning
+ * settings (ACP, OpenCode) publishes no scale and draws no row either. */
 const efforts = computed(() => {
     const held = request.value;
     if (held?.chooseEffort !== true || !capabilitiesOf(held.provider, held.harness ?? `native`).effort) {
         return [];
     }
-    return effortsFor(held.provider, held.model, false);
+    return effortsFor(held.provider, held.model, undefined);
 });
 
-/* THE TIER THIS RUN IS ON, repaired the one way the daemon will repair it: a run pick carries no thinking
- * setting, and `max` without thinking is the pair the API refuses, so the daemon sends `high` instead
- * (sendableEffort). Reading it here rather than only on the way out is what keeps the meter honest — a panel
- * lighting a rung the turn will not use is the failure this control exists to prevent. */
-const staged = computed(() => sendableEffort(request.value?.effort, false));
+/* THE TIER THIS RUN IS ON, read the one way the daemon will read it (sendableEffort over the same unset
+ * thinking): nothing is repaired for a pick that turned nothing off, so a run pinned at Max opens on Max.
+ * Reading it here rather than only on the way out is what keeps the meter honest — a panel lighting a rung the
+ * turn will not use is the failure this control exists to prevent. */
+const staged = computed(() => sendableEffort(request.value?.effort, undefined));
 
 /* CLAMPED FOR DISPLAY on top of that, never written back, the composer's own rule (effortScale.ts): a tier
  * carried over from a model with a longer scale would otherwise light no rung at all and read as an unset
  * control. What the run SENDS stays the repaired pick, for the day they re-point it at a longer scale again. */
 const effort = computed(() => {
     const held = request.value;
-    return staged.value === undefined || staged.value === `` || held === undefined ? `` : clampEffort(staged.value, held.provider, held.model, false);
+    return staged.value === undefined || staged.value === `` || held === undefined
+        ? ``
+        : clampEffort(staged.value, held.provider, held.model, undefined);
 });
 
 const footerVisible = computed(() => hasContent.value || efforts.value.length > 0);

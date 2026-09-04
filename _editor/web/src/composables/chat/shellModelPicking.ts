@@ -23,8 +23,9 @@ import { useChat } from "./useChat";
  *
  * THE TIER IS NAMED HERE TOO, by the same argument: a run button that says "Opus 4.6" and spends X-High has told
  * the reader half of what the click costs, and the scale a tier is named against is the shell's (effortScale),
- * which neither the kit nor an extension can see. Read with thinking OFF, because a run pick carries no thinking
- * setting: that is exactly the reading the daemon will make of the turn. */
+ * which neither the kit nor an extension can see. Read with thinking UNSET, because a run pick carries no
+ * thinking setting at all: that is exactly the reading the daemon will make of the turn, and it is not the same
+ * as reading it as off, which would take Max off a scale the run can genuinely spend. */
 const namedChoice = (selection: {
     readonly provider: AgentProvider;
     readonly model: string;
@@ -33,7 +34,7 @@ const namedChoice = (selection: {
     readonly effort?: string | undefined;
 }): AgentRunChoice => {
     const { provider, model, account, harness, effort } = selection;
-    const label = effortLabelOf(effort, provider, model, false);
+    const label = effortLabelOf(effort, provider, model, undefined);
     return {
         provider,
         model,
@@ -74,17 +75,19 @@ const agentRunModel = (): AgentRunModel => (runModel ??= appScope.run(useAgentRu
  *
  * ITS EFFORT COMES ALONG, so the caret opens on the tier the run would actually have used rather than on
  * "Default", and so a reader who only re-points the MODEL keeps the tier their setting asked for. `sendableEffort`
- * with thinking off is the repair the daemon will make anyway: a pin written at `max` beside `thinking: on` runs
- * at High once it rides a pick that carries no thinking, and the meter has to say High rather than light a rung
- * the run will not use. The composer floor contributes none: an empty list means nobody chose a tier for
- * unwatched work, and the chat's own effort is an answer about the turn in front of you. */
+ * is read against THE PIN'S OWN THINKING, because that is what the daemon will read: the whole entry rides onto
+ * a turn that named no model (turn-resume.ts), so an entry written at `max` beside `thinking: off` runs at High
+ * and the meter has to say High rather than light a rung the run will not use — while one that pinned no
+ * thinking keeps Max, which is what it will actually spend. The composer floor contributes none: an empty list
+ * means nobody chose a tier for unwatched work, and the chat's own effort is an answer about the turn in front
+ * of you. */
 export const agentRunChoice = (): AgentRunChoice => {
     const head = agentRunModel().choice.value;
     const chat = useChat();
     return namedChoice({
         provider: (head?.provider ?? chat.provider.value) as AgentProvider,
         model: head?.model ?? chat.model.value,
-        effort: sendableEffort(head?.effort, false),
+        effort: sendableEffort(head?.effort, head?.thinking),
     });
 };
 

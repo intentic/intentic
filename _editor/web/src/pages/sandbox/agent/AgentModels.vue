@@ -67,7 +67,7 @@ const pct = (part: number, whole: number): string => `${Math.round((part / whole
  * stored `max` on a model whose scale stops at `high`, or on one whose thinking the same pin switched off,
  * would otherwise name a rung this run cannot use. The user's own pick stays stored either way, for the day the
  * longer-scaled model leads again. */
-const effortLabel = (pin: AgentRunPin): string | undefined => effortLabelOf(pin.effort, pin.provider, pin.model, pin.thinking === true);
+const effortLabel = (pin: AgentRunPin): string | undefined => effortLabelOf(pin.effort, pin.provider, pin.model, pin.thinking);
 
 /* WHAT AN ENTRY SAYS ABOUT HOW IT RUNS, in one line beside its name. Only the fields actually pinned are named,
  * so an entry left at the provider's own defaults reads as just a model: the point of the line is that a
