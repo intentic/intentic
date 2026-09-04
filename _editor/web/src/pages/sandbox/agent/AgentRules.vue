@@ -6,6 +6,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useRules } from "../../../composables/sandbox/useRules";
 import { useSandboxOutline } from "../../../composables/sandbox/useSandboxOutline";
+import RuleCommand from "./RuleCommand.vue";
 import RuleForm from "./RuleForm.vue";
 import RulesInfo from "./RulesInfo.vue";
 import { momentOf, type RuleDraft } from "./ruleWords";
@@ -117,20 +118,34 @@ const firedOf = (rule: Rule): string => {
 
             <Row v-else :icon="momentOf(rule.moment).icon" :title="rule.label" :class="{ 'opacity-60': !rule.enabled }">
                 <template #description>
-                    <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                        <span class="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{ momentOf(rule.moment).label }}</span>
-                        <span v-if="commandOf(rule) !== undefined" class="min-w-0 max-w-full truncate">
-                            run <span class="font-mono text-content">{{ commandOf(rule) }}</span>
+                    <span class="flex flex-wrap items-center gap-x-2 gap-y-1.5 pt-0.5 text-xs">
+                        <span class="inline-flex shrink-0 items-center rounded border border-line-subtle bg-overlay px-1.5 py-0.5 text-2xs font-medium text-muted">
+                            {{ momentOf(rule.moment).label }}
                         </span>
-                        <span v-else-if="textOf(rule) !== undefined" class="min-w-0 max-w-full truncate">say: {{ textOf(rule) }}</span>
-                        <span v-else-if="verdictOf(rule) !== undefined" class="min-w-0 max-w-full truncate">{{ verdictOf(rule) }}</span>
+                        <span v-if="commandOf(rule) !== undefined" class="inline-flex min-w-0 max-w-full items-center gap-1">
+                            <span class="shrink-0 text-subtle">run</span>
+                            <span class="min-w-0 max-w-full truncate rounded border border-line-subtle bg-canvas/80 px-1.5 py-0.5">
+                                <RuleCommand :command="commandOf(rule)!" />
+                            </span>
+                        </span>
+                        <span v-else-if="textOf(rule) !== undefined" class="min-w-0 max-w-full truncate text-muted">
+                            <span class="text-subtle">say:</span> {{ textOf(rule) }}
+                        </span>
+                        <span v-else-if="verdictOf(rule) !== undefined" class="min-w-0 max-w-full truncate font-medium text-content">
+                            {{ verdictOf(rule) }}
+                        </span>
                         <!-- The narrowing, as the globs it is. Written out rather than summarised as "2 paths":
                              which paths is the whole question a reader has about a rule that has one. -->
-                        <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="flex min-w-0 flex-wrap items-center gap-1">
-                            <span class="shrink-0">only when touching</span>
-                            <span v-for="glob in rule.when?.paths" :key="glob" class="rounded bg-overlay px-1 py-px font-mono text-content">{{
-                                glob
-                            }}</span>
+                        <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 text-2xs text-muted">
+                            <span class="shrink-0 text-subtle">only when touching</span>
+                            <span
+                                v-for="glob in rule.when?.paths"
+                                :key="glob"
+                                class="max-w-48 truncate rounded border border-line-subtle bg-overlay px-1.5 py-0.5 font-mono text-content"
+                                :title="glob"
+                            >
+                                {{ glob }}
+                            </span>
                         </span>
                     </span>
                 </template>
