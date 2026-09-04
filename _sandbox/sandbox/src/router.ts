@@ -1,5 +1,6 @@
 import { createActivityRoutes } from "./activity/activity.routes.js";
 import { createAgentRoutes } from "./agent/agent.routes.js";
+import { createKeysRoutes } from "./keyed/keys.routes.js";
 import { createProvidersRoutes } from "./agent/providers.routes.js";
 import { createAgentsRoutes } from "./agents/agents.routes.js";
 import { createTranslatorRoutes } from "./agent/translator.routes.js";
@@ -75,6 +76,7 @@ export const createRouter = (services: Services) => ({
     ports: createPortsRoutes(services),
     public: createPublicRoutes(services),
     prepush: createPrepushRoutes(services),
+    keys: createKeysRoutes(services),
     providers: createProvidersRoutes(services),
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),

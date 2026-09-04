@@ -1,7 +1,6 @@
 import { describe, expect, it, test } from "vitest";
 import {
     accessFor,
-    type AgentCapabilities,
     capabilitiesOf,
     clampMode,
     effortAllowed,
@@ -16,6 +15,7 @@ import {
     PROVIDERS,
     sendableEffort,
 } from "./agent-catalog.js";
+import type { AgentCapabilities } from "./agent-runtimes.js";
 import type { AgentHarness, AgentProvider, PermissionMode } from "./schemas/agent.js";
 
 /* THE MATRIX GUARD.

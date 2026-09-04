@@ -356,6 +356,11 @@ export const landingContent: LandingContent = {
             // bearing: a free Cursor account signs in and still cannot run a turn, because the agent behind
             // this row is gated to the paid tiers.
             { name: "Cursor", logo: "cursor", detail: "Composer and the frontier models, on your Cursor Pro plan" },
+            // The two rows connected by pasting a key rather than by signing in. Said in the detail line,
+            // because "bring your own account" is the band's whole claim and a key is a different act from a
+            // sign-in: the reader should know which one this row is asking of them before they click.
+            { name: "Z.ai", logo: "zai", detail: "GLM, on your Coding Plan key" },
+            { name: "Meta", logo: "meta", detail: "Muse Spark, on your Model API key" },
         ],
         points: [
             "We never meter your tokens or add a markup.",

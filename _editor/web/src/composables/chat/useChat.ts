@@ -16,6 +16,7 @@ import {
     type PermissionMode,
     providerLabel,
     type ProviderRefusals,
+    providerSpec,
     type TranscriptRow,
     TRIAL_LABEL,
     TRIAL_PROVIDER,
@@ -32,6 +33,7 @@ import { Conversation, type PendingAttachment } from "./conversation";
 import type { PickUp } from "./pickUp";
 import {
     accountsLoaded,
+    noTranslatorAccounts,
     providerAccounts,
     providerRefusals,
     rememberedAccountFor,
@@ -865,7 +867,15 @@ const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(manag
 // them out (subscriptionOnly) before anything here is reached.
 // Catalogs are deliberately NOT here: they are the one question every provider answers identically, so they
 // come off a single parameterized route (modelsPath below).
-const providerBase = (p: AgentProvider): string => (p === `grok` ? `/grok` : p === `cursor` ? `/cursor` : `/claude`);
+/* Where a provider's ACCOUNT rows live. Every base below serves the same three paths (`/accounts`,
+ * `/account/rename`, `/account/disconnect`), which is what lets one set of helpers read, rename and disconnect
+ * an account without knowing whose it is.
+ *
+ * A keyed provider's base is `/keys/<provider>`, one route family for all of them (keys.contract.ts), so this
+ * is the last line that has to know they exist. Claude's is the fallback because it is the default provider,
+ * and the two named bases are providers with a store of their own. */
+const providerBase = (p: AgentProvider): string =>
+    providerSpec(p)?.auth.kind === `key` ? `/keys/${p}` : p === `grok` ? `/grok` : p === `cursor` ? `/cursor` : `/claude`;
 
 /* Where a native sign-in BEGINS, which is the one account path that is not uniform. Claude and Grok both mint
  * their handshake at `<base>/oauth/start`; Cursor's is `/cursor/login/start`, because what it starts is not an
@@ -880,13 +890,14 @@ const modelsPath = (p: AgentProvider): string => {
     const endpointId = endpointIdOf(p);
     return endpointId !== undefined ? `/endpoints/${encodeURIComponent(endpointId)}/models` : `/providers/${encodeURIComponent(p)}/models`;
 };
-// Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
-// card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent,
-// it has both a native xAI account and a routed subscription, and which one gates depends on the harness.
-// The providers with no account of their own: their turns authenticate through a subscription the bundled
-// translator holds, which is why they have no row in an account picker. CLIProxyAPI balances across every
-// auth file it has, so WHICH one serves a turn is not a choice anyone makes.
-export const subscriptionOnly = (p: AgentProvider): p is "codex" | "kimi" | "gemini" => p === `codex` || p === `kimi` || p === `gemini`;
+/* Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
+ * card shows the routed row alone and there is nothing for `startConnect` to arm. Their turns authenticate
+ * through a subscription the bundled translator holds, which is why they have no row in an account picker:
+ * CLIProxyAPI balances across every auth file it has, so WHICH one serves a turn is not a choice anyone makes.
+ *
+ * Read off the spec's auth mechanism, with Grok subtracted by name because it is the one provider holding BOTH
+ * (a native xAI account and a routed subscription), and which one gates depends on the harness. */
+export const subscriptionOnly = (p: AgentProvider): p is KeyedProvider => p !== `grok` && providerSpec(p)?.auth.kind === `translator`;
 
 // Which account the manage/connect card acts on, decoupled from the chat-turn provider so connecting or
 // disconnecting one account never mutates the active conversation's provider.
@@ -957,8 +968,10 @@ const accountBusy = ref<string | undefined>(undefined);
 const translatorKey = (target: AgentProvider, name?: string): string => `translator:${target}${name === undefined ? `` : `:${name}`}`;
 let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
 
-const translatorProviderLabel = (target: KeyedProvider): string =>
-    target === `codex` ? `ChatGPT` : target === `grok` ? `SuperGrok` : target === `kimi` ? `Kimi Code` : `Google`;
+// What an expired sign-in names itself in the sentence that reports it. The provider's own account label, not a
+// fourth chain of ternaries: the one this replaced fell through to "Google" for anything it did not name, so a
+// routed provider added tomorrow would have reported its own timeout as Google's.
+const translatorProviderLabel = (target: KeyedProvider): string => providerSpec(target)?.accountLabel ?? target;
 
 const refreshTranslatorAccounts = (): Promise<void> =>
     readOrKeep<TranslatorAccounts>(`/translator/accounts`, (listing) => {
@@ -1431,7 +1444,7 @@ export const resetChat = (): void => {
     clearTimeout(translatorPollTimer);
     translatorConnectFlow.value = undefined;
     accountBusy.value = undefined;
-    translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
+    translatorAccounts.value = noTranslatorAccounts();
     // Nor its headroom: the map is keyed by ids the outgoing daemon minted.
     usageByAccount.value = {};
     // The outgoing sandbox's totals are not an answer about the incoming one, so its rows wait again.
@@ -2319,6 +2332,45 @@ const startConnect = async (): Promise<void> => {
     }
 };
 
+/* CONNECT A PROVIDER BY PASTING ITS KEY, the third connect mechanism beside the native handshakes above and the
+ * translator's subscription logins, and by far the shortest, because there is no handshake at all: the user
+ * already holds the credential.
+ *
+ * So there is no flow to arm, nothing to poll and no deadline. The key goes to the daemon, the account list is
+ * re-read, and the row is connected — which is why this returns whether it worked rather than parking a flow
+ * the panel would have to watch.
+ *
+ * The key is never held in module state and never echoed back: the caller's field is cleared by the panel on
+ * success, and every route on that contract answers with an account shape that has no field a key could ride
+ * in. */
+const connectKey = async (target: AgentProvider, apiKey: string, label: string): Promise<boolean> => {
+    if (accountBusy.value !== undefined) {
+        return false;
+    }
+    accountBusy.value = target;
+    error.value = null;
+    const path = `${providerBase(target)}/connect`;
+    try {
+        const response = await sandboxRequest(
+            path,
+            jsonBody(`POST`, { apiKey: apiKey.trim(), ...(label.trim() === `` ? {} : { label: label.trim() }) }),
+        );
+        if (!response.ok) {
+            error.value = (await sandboxError(response, { method: `POST`, path })).message;
+            return false;
+        }
+        // Re-read rather than trusting the answer into the list: the same round-trip every other connect ends
+        // with, and it is what makes a second tab's row appear here too.
+        await refreshAccounts(target, false);
+        return true;
+    } catch (err) {
+        error.value = errorMessage(err, `Could not connect that key: is your sandbox online?`);
+        return false;
+    } finally {
+        accountBusy.value = undefined;
+    }
+};
+
 /* Point the account card at the provider the active conversation would send to, what it shows when it opens.
  * Skipped while a sign-in is in flight: that handshake (a device poll can outlive the card being closed and the
  * reachable-flash remounting it) owns what the card is looking at, and moving to another provider's rows would
@@ -2650,6 +2702,7 @@ export function useChat() {
         showActiveProvider,
         loadUsage,
         startConnect,
+        connectKey,
         completeConnect,
         cancelConnect,
         renameAccount,

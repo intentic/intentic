@@ -11,6 +11,7 @@ import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { ControlScope } from "./auth/control-tokens.js";
 import { createMediaTickets } from "./auth/media-tickets.js";
+import { type KeyedStore, type StoredKeyAccount, toKeyedAccount } from "./keyed/keyed-credentials.js";
 import { createWsTickets } from "./auth/ws-tickets.js";
 
 import { createORPCClient } from "@orpc/client";
@@ -319,9 +320,51 @@ export interface WideSeamOverrides {
 }
 export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
 
+/* One keyed provider's store, in memory, starting empty. A REAL implementation of the seam rather than a stub
+ * that throws, because the thing a suite most often wants from it is to connect a key and then ask what a turn
+ * resolves — and a double that refuses the first half forces every such test to hand-build a store, which is
+ * how doubles drift from the contract they stand in for.
+ *
+ * Empty is still the default state, which matters: no guard depends on these providers, so the honest starting
+ * point is a sandbox where nobody has pasted a key. */
+export const memoryKeyedStore = (providerName: string): KeyedStore => {
+    let accounts: StoredKeyAccount[] = [];
+    const row = (stored: StoredKeyAccount) => toKeyedAccount(stored, providerName);
+    return {
+        list: async () => accounts.map(row),
+        credentials: async () => accounts,
+        connect: async ({ apiKey, label }) => {
+            const stored: StoredKeyAccount = {
+                id: `${providerName}-${accounts.length + 1}`,
+                apiKey,
+                connectedAt: accounts.length + 1,
+                ...(label !== undefined && label.trim() !== "" ? { label: label.trim() } : {}),
+            };
+            accounts = [...accounts, stored];
+            return row(stored);
+        },
+        rename: async (id, label) => {
+            const stored = accounts.find((account) => account.id === id);
+            if (stored === undefined) {
+                return undefined;
+            }
+            const { label: _dropped, ...rest } = stored;
+            const renamed = label.trim() === "" ? rest : { ...rest, label: label.trim() };
+            accounts = accounts.map((account) => (account.id === id ? renamed : account));
+            return row(renamed);
+        },
+        disconnect: async (id) => {
+            accounts = accounts.filter((account) => account.id !== id);
+        },
+    };
+};
+
 // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model. Exported
-// because `providerCatalogs` is one field holding five rows: a test that needs ONE provider to answer
-// differently spreads this and replaces its row, rather than restating four it does not care about.
+// because `providerCatalogs` is one field holding a row per provider: a test that needs ONE provider to answer
+// differently spreads this and replaces its row, rather than restating the ones it does not care about.
+//
+// ENUMERATED on purpose, unlike the registry these stand in for: a test double is a claim about behaviour, and
+// deriving the claims would be testing the derivation. The compiler names any provider missing a row.
 export const testProviderCatalogs: Services["providerCatalogs"] = {
     claude: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
     codex: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }) },
@@ -329,7 +372,30 @@ export const testProviderCatalogs: Services["providerCatalogs"] = {
     grok: { models: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }) },
     kimi: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
     gemini: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
+    meta: { models: async () => ({ models: [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }], default: "muse-spark-1.2" }) },
+    zai: { models: async () => ({ models: [{ id: "glm-5.3", label: "GLM-5.3" }], default: "glm-5.3" }) },
 };
+
+/* The keyed providers' slice, with no key connected: the ordinary state of a test sandbox, and the one a turn
+ * on Meta or Z.ai is refused from. A FACTORY, not a constant, because the stores below hold state: two suites
+ * sharing one instance would have the first suite's connected key still present in the second.
+ *
+ * A test that wants a connected provider calls `store.connect` on the sandbox it built, which is the same call
+ * the route makes — rather than hand-building a store, which is how a double stops resembling the thing it
+ * stands in for. */
+export const testKeyedSlices = (): Services["keyed"] => ({
+    meta: {
+        store: memoryKeyedStore("Meta"),
+        catalog: {
+            models: async () => ({ models: [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }], default: "muse-spark-1.2" }),
+            forget: () => {},
+        },
+    },
+    zai: {
+        store: memoryKeyedStore("Z.ai"),
+        catalog: { models: async () => ({ models: [{ id: "glm-5.3", label: "GLM-5.3" }], default: "glm-5.3" }), forget: () => {} },
+    },
+});
 
 export const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
@@ -559,6 +625,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             }),
         },
         kimiModels: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
+        // The keyed providers' stores and catalogs. Nothing connected, for the same reason Cursor's double
+        // below holds nothing: no guard depends on them, so the honest default is a sandbox where they were
+        // never set up, and the suites that exercise them say so.
+        keyed: testKeyedSlices(),
         /* NOTHING CONNECTED by default, which is the opposite of the Claude double above and deliberately so.
          * Claude's is populated because the /agent guard short-circuits every turn without it, so an empty one
          * would break suites that are not about accounts at all. Nothing guards on Cursor, so the honest

@@ -102,7 +102,9 @@ const limitSentence = (vendor: string, limit: TurnLimit | undefined): string => 
 // terminal path calls it a limit. `named` is what the failure ITSELF said about when to come back, see the two
 // call sites, which have different things to offer and neither of which is always right on its own.
 export const rateLimitFrame = async (allowance: TurnAllowance | undefined, named: number | undefined): Promise<ErrorEvent> => {
-    const limit = await allowance?.limit();
+    // `limit` is absent for a provider that publishes no quota surface at all (a keyed one), which lands on the
+    // same sentence as no allowance: the vendor is named, and nothing is claimed about pools nobody measured.
+    const limit = await allowance?.limit?.();
     return {
         kind: "error",
         code: "rate_limit",

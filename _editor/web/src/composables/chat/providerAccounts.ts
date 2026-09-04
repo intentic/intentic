@@ -1,4 +1,11 @@
-import type { AccountUsage, AgentProvider, OauthAccount, ProviderRefusal, TranslatorAccounts } from "@intentic/sandbox-contract";
+import {
+    type AccountUsage,
+    type AgentProvider,
+    KeyedProviderSchema,
+    type OauthAccount,
+    type ProviderRefusal,
+    type TranslatorAccounts,
+} from "@intentic/sandbox-contract";
 import { computed, ref, watch, type WritableComputedRef } from "vue";
 import { type AccountPicks, accountPicks } from "./accountPreference";
 import { perProvider } from "./providerCatalog";
@@ -28,9 +35,20 @@ export const selectedAccountId: WritableComputedRef<AccountPicks> = computed({
     },
 });
 
-// Which SUBSCRIPTIONS the bundled translator holds (codex/grok/kimi/gemini), the other half of "can this
-// provider run", since these authenticate through the translator rather than through a daemon-stored account.
-export const translatorAccounts = ref<TranslatorAccounts>({ codex: [], grok: [], kimi: [], gemini: [] });
+/* Which SUBSCRIPTIONS the bundled translator holds, the other half of "can this provider run", since these
+ * authenticate through the translator rather than through a daemon-stored account.
+ *
+ * One empty slot per routed provider, built over the contract's own list rather than typed out: `providerReady`
+ * reads `translatorAccounts.value[provider].length` without checking the slot exists, so a provider the wire
+ * knows and this seed does not is a TypeError thrown at the exact moment somebody asks whether they can send. */
+export const noTranslatorAccounts = (): TranslatorAccounts => {
+    const seeded: Partial<TranslatorAccounts> = {};
+    for (const provider of KeyedProviderSchema.options) {
+        seeded[provider] = [];
+    }
+    return seeded as TranslatorAccounts;
+};
+export const translatorAccounts = ref<TranslatorAccounts>(noTranslatorAccounts());
 
 /* When each provider last REFUSED a turn, a spent plan or a credential the API would not take (see
  * ProviderRefusalSchema). Keyed by provider, because that is the resolution the daemon has for a routed turn.

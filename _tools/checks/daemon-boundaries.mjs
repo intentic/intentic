@@ -86,6 +86,7 @@ const MUTUAL_PAIRS = new Set([
     "agent <-> gemini",
     "agent <-> grok",
     "agent <-> guard",
+    "agent <-> keyed",
     "agent <-> kimi",
     "agent <-> pi",
     "agent <-> platform",

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { AgentTurn } from "@intentic/sandbox-contract";
+import { type AgentTurn, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../agent/adapter.js";
 import { withAttachments } from "../agent/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../agent/provider-module.js";
@@ -26,7 +26,11 @@ export interface GeminiSlice {
     readonly geminiAgent: Services["agent"];
 }
 
-export const createGeminiSlice = (input: { readonly config: Config; readonly authRoot: string; readonly openCode: OpenCodeService }): GeminiSlice => ({
+export const createGeminiSlice = (input: {
+    readonly config: Config;
+    readonly authRoot: string;
+    readonly openCode: OpenCodeService;
+}): GeminiSlice => ({
     geminiModels: createGeminiCatalog(input.config, join(input.authRoot, "gemini", "models.json")),
     // One warm OpenCode server serves Grok and Gemini both, so the runner is the same shape; only the model
     // backend the prompt names differs (opencode.ts registers it as an OpenAI-compatible provider on the
@@ -52,7 +56,11 @@ export const planGeminiTurn = async (services: Services, input: AgentTurn, conte
         };
     }
     if ((await services.cliProxy.accounts()).gemini.length === 0) {
-        return { ok: false, message: "Connect your Google account in Sandbox ▸ Agent to run Gemini here." };
+        // The requirement comes off the provider's own spec row, so this refusal names the same thing the
+        // connect prompt, the badge and the picker do. It said "Google account" here while every surface a
+        // user could act on said "Google sign-in", which is a sentence sending somebody to look for a
+        // control that is not on the page.
+        return { ok: false, message: `Connect your ${PROVIDER_ACCESS.gemini.requirement} in Sandbox ▸ Agent to run Gemini here.` };
     }
     // Never empty (discovery → persisted → seed floor), so this always resolves: keep the pinned model while the
     // catalog still offers it, else take the catalog's default, the same rule routedModel applies.
@@ -85,7 +93,7 @@ const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
             return healthUnknown();
         }
         if (accounts.gemini.length === 0) {
-            return healthUnavailable("Connect your Google account in Sandbox ▸ Agent.");
+            return healthUnavailable(`Connect your ${PROVIDER_ACCESS.gemini.requirement} in Sandbox ▸ Agent.`);
         }
         return (await onPath("opencode")) ? healthReady() : healthUnavailable(openCodeBinaryMissing("Google"));
     },

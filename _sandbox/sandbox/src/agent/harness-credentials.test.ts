@@ -1,5 +1,13 @@
-import { type ProviderRefusal, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import {
+    KEY_PROVIDERS,
+    keyEndpointOf,
+    PROVIDER_ACCESS,
+    PROVIDER_VENDOR,
+    type ProviderRefusal,
+    TRIAL_ENDPOINT_ID,
+    TRIAL_MODEL_ID,
+} from "@intentic/sandbox-contract";
+import { describe, expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import type { SeatRefusal } from "../claude/claude-seats.js";
 import { memoryCapabilitiesStore, services, withTranslator } from "../route-testing.js";
@@ -192,4 +200,54 @@ test("a named account is still the account that runs, refused or not", async () 
         "refused",
     );
     expect(result.ok && result.credentials.account).toBe("refused");
+});
+
+/* A KEYED PROVIDER'S TURN, on the wire, for every keyed provider in the spec table.
+ *
+ * This is the assertion the conformance tests cannot make: a spec row that names the general Z.ai entitlement
+ * instead of the Coding Plan one, or a base URL carrying a version segment the harness then doubles, is
+ * type-correct and passes every table walk. What it is not is a turn that reaches a model. */
+describe.each(KEY_PROVIDERS.map((provider) => ({ provider })))("a $provider turn", ({ provider }) => {
+    const withKey = async () => {
+        const sandbox = services({});
+        await sandbox.keyed[provider].store.connect({ apiKey: "vendor-key", label: "Mine" });
+        return sandbox;
+    };
+
+    test("points the harness at the vendor's own Anthropic endpoint with the pasted key", async () => {
+        const result = await resolveHarnessCredentials(await withKey(), { agent: provider });
+        expect(result.ok).toBe(true);
+        const endpoint = result.ok ? result.credentials.endpoint : undefined;
+        expect(endpoint?.baseUrl).toBe(keyEndpointOf(provider)?.anthropicBase);
+        expect(endpoint?.authToken).toBe("vendor-key");
+        // The harness appends `/v1/messages` itself, so a base that already carried one would be a 404 the
+        // user only meets mid-conversation.
+        expect(endpoint?.baseUrl).not.toMatch(/\/v\d+$/);
+        // The vendor is named so a 429 from these hosts does not report itself as Claude's; no `limit`,
+        // because neither publishes a quota surface a stored key can read.
+        expect(result.ok && result.credentials.allowance?.vendor).toBe(PROVIDER_VENDOR[provider]);
+        expect(result.ok && result.credentials.allowance?.limit).toBeUndefined();
+    });
+
+    test("carries no Claude subscription token into the vendor's environment", async () => {
+        const result = await resolveHarnessCredentials(await withKey(), { agent: provider });
+        const env = harnessEnv(result.ok ? { ...result.credentials.endpoint } : {});
+        expect(env["ANTHROPIC_AUTH_TOKEN"]).toBe("vendor-key");
+        expect(env["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
+    });
+
+    test("resolves a model the catalog actually offers, whatever the picker held", async () => {
+        const sandbox = await withKey();
+        const catalog = await sandbox.keyed[provider].catalog.models();
+        const result = await resolveHarnessCredentials(sandbox, { agent: provider, model: "a-model-the-vendor-retired" });
+        // A pick the catalog no longer offers falls to its default rather than being sent and refused.
+        expect(result.ok && result.credentials.endpoint?.model).toBe(catalog.default);
+    });
+
+    test("with no key connected, refuses by naming what to connect rather than falling through to Claude", async () => {
+        const result = await resolveHarnessCredentials(services({}), { agent: provider });
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.code).toBe("subscription-required");
+        expect(!result.ok && result.message).toContain(PROVIDER_ACCESS[provider].requirement);
+    });
 });

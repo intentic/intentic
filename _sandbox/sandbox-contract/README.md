@@ -57,12 +57,26 @@ mismatch is a type error rather than a runtime surprise.
   that document to the question or plan card the turn parks on (so a choice can be read beside the write-up it
   is about), and the browser draws the write's own card as prose rather than as a diff stat. Two copies of the
   rule would let a card carry a document the transcript never drew.
-- [src/agent-catalog.ts](src/agent-catalog.ts): what each (provider, harness) pair can actually DO, as one
-  record per runtime: its permission axis, its MCP reach, whether it steers, and how much of the owner's system
-  prompt it will take (`instructions`: replace, add, or nothing at all), plus whether it discovers loaded
-  skills natively or needs their catalogue in its opening prompt. Shared because both sides act on it: the
-  daemon composes a turn's instructions and skill discovery against it and the browser both discloses what a
-  pair cannot do (`limitationsOf`) and names which models the system-prompt setting reaches.
+- The provider vocabulary, three modules, bottom-up, and the arrow between them only points one way:
+  - [src/agent-runtimes.ts](src/agent-runtimes.ts): what each agentic LOOP can do, one record per runtime: its
+    permission axis, its MCP reach, whether it steers, and how much of the owner's system prompt it will take
+    (`instructions`: replace, add, or nothing at all), plus whether it discovers loaded skills natively or
+    needs their catalogue in its opening prompt. It names no providers at all.
+  - [src/provider-specs.ts](src/provider-specs.ts): **one row per provider**, and the source every other list
+    of providers in this repo derives from — the wire vocabulary (`NATIVE_PROVIDERS`), the picker's labels, the
+    access and vendor tables, the plan-limit list, the routed-provider enum and its accounts schema, the
+    daemon's CLIProxyAPI id map, and the web's account tabs and readiness rules. A row carries the two axes it
+    deliberately keeps apart: what a turn COSTS (`access`) and what the user CONNECTS (`auth`: an OAuth account
+    this daemon stores, a subscription the bundled translator holds, or an API key pasted into a field).
+    `brand` is typed against the marks in `@intentic/constants`, so a provider added without a logo does not
+    compile. **Adding a provider is a row here**, its brand path, and (daemon-side) one line in the provider
+    registry; `provider-specs.test.ts` walks the table rather than a list, so the guard covers a provider the
+    day it is added.
+  - [src/agent-catalog.ts](src/agent-catalog.ts): the shapes each surface reads that table in, plus the rules
+    that are about something other than a provider (the trial, the endpoint namespace, the effort and fast-mode
+    gates). Shared because both sides act on it: the daemon composes a turn's instructions and skill discovery
+    against it and the browser both discloses what a pair cannot do (`limitationsOf`) and names which models
+    the system-prompt setting reaches.
 - [src/chores](src/chores), the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
 - [src/approvals-execution.ts](src/approvals-execution.ts): how an approved item gets done, the hold every

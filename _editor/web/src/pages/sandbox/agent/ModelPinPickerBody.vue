@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { type AgentHarness, type AgentProvider, type AgentRunPin, capabilitiesOf, fastAllowed, limitationsOf } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type AgentRunPin,
+    capabilitiesOf,
+    fastAllowed,
+    harnessChoosable as contractHarnessChoosable,
+    limitationsOf,
+} from "@intentic/sandbox-contract";
 import { InfoHint, SegmentedControl, ui } from "@intentic/ui";
 import EffortMeter from "../../../chat/EffortMeter.vue";
 import ModelPicker from "../../../chat/ModelPicker.vue";
@@ -88,9 +96,11 @@ const fastOffered = computed(() =>
     ),
 );
 
-// The harness axis, for the two providers that have one: the same subscription model ids run under the
-// provider's own loop or under Claude Code. Both chips NAME the runtime they select.
-const harnessChoosable = computed(() => provider.value === `codex` || provider.value === `grok`);
+// The harness axis, for the providers that have one: the same subscription model ids run under the provider's
+// own loop or under Claude Code. Both chips NAME the runtime they select. WHICH providers those are is the
+// contract's answer (a spec whose two harnesses name one runtime has nothing to choose), not a list kept here
+// and in the chat picker separately — they had the same list twice, which is one edit away from disagreeing.
+const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));
 const harnessOptions = computed(() => [
     { label: providerDisplayLabel(provider.value), value: `native` },
     { label: `Claude Code`, value: `claude-code` },

@@ -20,6 +20,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES } from "@intentic/testing/vitest";
 import type { TranscriptAgent } from "../sessions/agent-transcript.js";
+import { testKeyedSlices } from "../route-testing.js";
 import { fileTranscriptRecord } from "../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
 import { resolveRequest } from "./agent-requests.js";
@@ -170,6 +171,11 @@ const withProviders = (services: Services, connected: readonly string[]): Servic
     }),
     // No model endpoints configured: the sandbox's own providers are the whole picture here.
     capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+    /* The keyed providers, with no key pasted. Present rather than omitted because the readiness sweep this
+     * fixture drives iterates EVERY provider module (that is the point of the registry), so a missing slice is
+     * a thrown TypeError rather than a provider that reads as unavailable. Nothing here connects one: this
+     * fixture's `connected` list is about which subscriptions answer, and a keyed provider has none. */
+    keyed: testKeyedSlices(),
 });
 
 const ranWith = async (

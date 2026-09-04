@@ -239,11 +239,16 @@ test("keeps the ACTIVE provider first even when it is the locked one", () => {
 test("leads the locked band with the provider that costs nothing", () => {
     const sections = pickerSections(MIXED, `codex`, undefined, readyOnly(`claude`));
 
-    // The active one, then the connected one, then free (a Google sign-in) ahead of the paid subscriptions,
-    // which keep PROVIDERS order among themselves: equal cost, so nothing here has an opinion about them.
-    // `grok` and `cursor` ride along with no rows of their own: an empty section still renders its header and
-    // state row, which is how a provider nobody has connected is discovered at all.
-    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`]);
+    /* The active one, then the connected one, then free (a Google sign-in) ahead of the paid subscriptions,
+     * which keep PROVIDERS order among themselves: equal cost, so nothing here has an opinion about them.
+     * `grok`, `cursor` and `zai` ride along with no rows of their own: an empty section still renders its
+     * header and state row, which is how a provider nobody has connected is discovered at all.
+     *
+     * `meta` is LAST, and that is the third cost tier finally being used by something. Its access kind is
+     * `key`, metered per call, which ACCESS_COST has always ranked below a subscription the user has already
+     * paid for; until this provider existed nothing occupied that rung, so this line is the first evidence the
+     * ordering rule has all three. */
+    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`, `zai`, `meta`]);
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {

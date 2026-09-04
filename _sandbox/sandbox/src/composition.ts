@@ -154,6 +154,7 @@ import { type CodexSlice, createCodexSlice } from "./codex/codex-provider.js";
 import { createCursorSlice, type CursorSlice } from "./cursor/cursor-provider.js";
 import { createGeminiSlice, type GeminiSlice } from "./gemini/gemini-provider.js";
 import { createGrokSlice, type GrokSlice } from "./grok/grok-provider.js";
+import { createKeyedSlice, type KeyedSlice } from "./keyed/keyed-provider.js";
 import { createKimiSlice, type KimiSlice } from "./kimi/kimi-provider.js";
 import { type ProviderCatalog, providerCatalogsOf } from "./agent/provider-registry.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
@@ -252,7 +253,7 @@ import { createDependencyCoordinator, type DependencyCoordinator } from "./works
  * point) beside the code that implements them, and composition merely spreads the slices in. Adding a
  * provider therefore adds an `extends` clause and a spread here, never a block of members whose docs live a
  * package away from their owners (agent/provider-module.ts is the seam). */
-export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlice, GeminiSlice, KimiSlice {
+export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlice, GeminiSlice, KimiSlice, KeyedSlice {
     readonly config: Config;
     readonly logger: Logger;
     /* The sink for what the BROWSER reports about itself (logs/client.jsonl), separate from `logger` above
@@ -913,6 +914,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const cursor = createCursorSlice({ authRoot, logger });
     const grok = createGrokSlice(openCode);
     const kimi = createKimiSlice(cliProxy);
+    // One slice covering every keyed provider (Meta, Z.ai): a store and a catalog each, built from the spec
+    // table rather than named here, so adding one is a contract row and not a line in this file.
+    const keyed = createKeyedSlice({ authRoot, logger });
 
     // Hoisted: the members below that measure themselves (the worktree op chains, the git routes' Changes scan)
     // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
@@ -1345,6 +1349,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...grok,
         ...gemini,
         ...kimi,
+        ...keyed,
         accountUsage,
         headroom,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),

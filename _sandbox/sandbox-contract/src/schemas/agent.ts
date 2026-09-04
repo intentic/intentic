@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KEY_PROVIDERS, NATIVE_PROVIDERS } from "../provider-specs.js";
 import { AgentPlacementSchema } from "../runner-protocol.js";
 import { entryId } from "./internal.js";
 // The agent runtimes the daemon can serve, the vocabulary every surface that picks an agent shares (chat
@@ -8,16 +9,23 @@ import { entryId } from "./internal.js";
 // ACP (Agent Client Protocol).
 // Kept as a bare string on the wire (not an enum) so an unknown id is a clean error frame from the agent
 // route, the same bet RepoParamSchema makes, and adding an ACP agent needs no contract change.
-export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi", "gemini", "cursor"] as const;
-export type NativeProvider = (typeof NATIVE_PROVIDERS)[number];
+//
+// NATIVE_PROVIDERS itself is DERIVED from the one row-per-provider table (provider-specs.ts) and imported
+// here rather than written out again, so the wire vocabulary cannot name a provider the product does not
+// describe, or miss one it does.
 export const AgentProviderSchema = z.string().min(1);
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 // The provider naming a catalog in the one route every native provider shares (providers.contract.ts). An ENUM
 // rather than the bare-string schema above, and deliberately so: the open vocabulary exists because an ACP agent
 // or an endpoint can be added without a contract change, but neither has a daemon-held catalog, this route's
-// subjects are exactly the five the daemon keeps one for. Closing it here is what makes an unknown id a 400 from
+// subjects are exactly the ones the daemon keeps one for. Closing it here is what makes an unknown id a 400 from
 // the contract instead of a registry lookup that reads back `undefined` and serves an empty list.
 export const NativeProviderParamSchema = z.object({ provider: z.enum(NATIVE_PROVIDERS) });
+// The provider naming an account on the routes that connect one by pasting a key (keys.contract.ts). Closed the
+// same way and for the same reason as the catalog param above, narrowed to the providers whose credential this
+// daemon actually stores as a key: pasting one at a provider that authenticates some other way is a 400 from
+// the contract rather than a handler discovering there is no store to write to.
+export const KeyProviderParamSchema = z.object({ provider: z.enum(KEY_PROVIDERS) });
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. See AgentTurnSchema.harness.
 export const AgentHarnessSchema = z.enum(["native", "claude-code"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;

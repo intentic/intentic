@@ -26,6 +26,7 @@ import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
 import { prepushContract } from "./contracts/prepush.contract.js";
+import { keysContract } from "./contracts/keys.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
@@ -76,6 +77,7 @@ export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { prepushContract } from "./contracts/prepush.contract.js";
+export { keysContract } from "./contracts/keys.contract.js";
 export { providersContract } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { safetyContract } from "./contracts/safety.contract.js";
@@ -110,6 +112,12 @@ export * from "./workspace-state.js";
 export * from "./runtime-state.js";
 export * from "./state-portability.js";
 export * from "./history-state.js";
+/* THE PROVIDER VOCABULARY, bottom-up: what each agentic loop can do (agent-runtimes), the one row-per-provider
+ * table built on those records (provider-specs), and the shapes each surface reads that table in
+ * (agent-catalog). Exported as three modules rather than folded into one, because the arrow between them only
+ * points one way and saying so here is what stops it curling back. */
+export * from "./agent-runtimes.js";
+export * from "./provider-specs.js";
 export * from "./agent-catalog.js";
 export * from "./agent-run-model.js";
 export * from "./capability-env.js";
@@ -234,6 +242,7 @@ export const sandboxContract = {
     ports: portsContract,
     public: publicContract,
     prepush: prepushContract,
+    keys: keysContract,
     providers: providersContract,
     push: pushContract,
     secrets: secretsContract,

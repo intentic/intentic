@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentProvider } from "@intentic/sandbox-contract";
+import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
 import { Button, ui, CopyButton } from "@intentic/ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useChat } from "../../composables/chat/useChat";
@@ -26,9 +26,10 @@ import ProviderLogo from "../../chat/ProviderLogo.vue";
  * sign-in: see AiAccountSection's row and ChatAccountPanel's strip. useChat is a module singleton, so this
  * reads the live handshake with nothing threaded through props but which row it is unfolding under. */
 
-const { kind, provider } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider }>();
+const { kind, provider } = defineProps<{ kind: `native` | `routed` | `keyed`; provider: AgentProvider }>();
 
-const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator } = useChat();
+const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator, connectKey } =
+    useChat();
 
 // This flow's own key in the account-write ledger: the two mechanisms of one provider (Grok's xAI account and
 // its SuperGrok subscription) are separate connections, so "Finish" must spin for one and not the other.
@@ -47,16 +48,11 @@ const flow = computed(() =>
 );
 
 // Where the sign-in actually happens, the destination, not the provider's product name: a user about to leave
-// this page wants to recognize the site they land on.
-const DESTINATION: Record<string, string> = {
-    claude: `Anthropic`,
-    codex: `ChatGPT`,
-    grok: `x.ai`,
-    kimi: `Kimi Code`,
-    gemini: `Google`,
-    cursor: `Cursor`,
-};
-const destination = computed(() => DESTINATION[provider] ?? provider);
+// this page wants to recognize the site they land on. The provider's own spec row says which
+// (ProviderSpec.destination), so a provider added to the contract cannot end up with a button reading "Open
+// zai" — which is what the fallback below is, and it should only ever be reached by an id that names no
+// provider at all.
+const destination = computed(() => providerSpec(provider)?.destination ?? provider);
 
 /* Whether this is a NO-PASTE sign-in: the provider (or the daemon) finishes it out of band and this panel is
  * read-only, as against one that hands the user something to bring back.
@@ -223,10 +219,65 @@ watch(flow, (live) => {
         wentToProvider.value = false;
     }
 });
+
+/* ---- the third mechanism: a key you already hold ----------------------------------------------------------
+ *
+ * No handshake, so none of the machinery above applies: nothing to open and come back from, nothing to poll,
+ * no clipboard to watch. The panel is a field and a button, plus a link to the one page that issues the key,
+ * because "paste your API key" is only actionable if you know which of a vendor's consoles mints it.
+ *
+ * The field is a PASSWORD field. Not because the DOM makes it safer — the value is in memory either way — but
+ * because this is the one connect flow where the credential is on screen in full, in a settings page somebody
+ * may well be sharing, and the other two never put one there at all. It is cleared on success, and nothing here
+ * ever reads a key back: the account rows the daemon answers with have no field one could arrive in. */
+const keyValue = ref(``);
+const keyLabel = ref(``);
+const namingKey = ref(false);
+const keyConsole = computed(() => {
+    const auth = providerSpec(provider)?.auth;
+    return auth?.kind === `key` ? auth.console : undefined;
+});
+const saveKey = async (): Promise<void> => {
+    if (keyValue.value.trim() === ``) {
+        return;
+    }
+    if (await connectKey(provider, keyValue.value, keyLabel.value)) {
+        keyValue.value = ``;
+        keyLabel.value = ``;
+        namingKey.value = false;
+    }
+};
 </script>
 
 <template>
-    <div v-if="flow" class="flex flex-col gap-2.5">
+    <!-- THE KEYED PANEL IS ALWAYS OPEN, unlike the two below it, and that is the mechanism showing through
+         rather than an inconsistency: those unfold under a handshake the user started and fold away when it
+         ends, while here there is nothing to start. The row asked for a key; the field is the row. -->
+    <div v-if="kind === `keyed`" class="flex flex-col gap-2.5">
+        <div class="flex gap-2">
+            <input
+                v-model="keyValue"
+                type="password"
+                name="providerApiKey"
+                autocomplete="off"
+                :placeholder="`Paste your ${destination} API key…`"
+                :class="ui.inputSm(`min-w-0 flex-1`)"
+                @keydown.enter="saveKey"
+            />
+            <Button label="Connect" size="small" :disabled="keyValue.trim().length === 0" :loading="accountBusy === provider" @click="saveKey" />
+        </div>
+        <div class="flex items-center gap-3">
+            <a v-if="keyConsole" :class="ui.textAction(`text-2xs text-subtle`)" :href="keyConsole" target="_blank" rel="noopener">
+                Get a key from {{ destination }}<Icon name="external-link" class="ml-1" />
+            </a>
+            <!-- Same fold as the native flows': a name is a rename, not a step, and leading with it would make
+                 every connect look like a form to fill in before anything happens. It matters more here, though
+                 — a pasted key carries no identity at all, so two of them are indistinguishable without one. -->
+            <button v-if="!namingKey" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingKey = true">Name this key…</button>
+        </div>
+        <input v-if="namingKey" v-model="keyLabel" name="keyLabel" placeholder="Key name" :class="ui.inputSm(`min-w-0`)" />
+    </div>
+    <div v-else-if="flow" class="flex flex-col gap-2.5">
         <!-- `self-start`: in a column the button would stretch edge to edge, which reads as a banner rather than
              as the first step of three. -->
         <Button as="a" class="self-start" size="small" :href="flow.url" target="_blank" rel="noopener" @click="wentToProvider = true">

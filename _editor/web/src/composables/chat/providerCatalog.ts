@@ -9,6 +9,7 @@ import {
     modelsFor,
     NATIVE_PROVIDERS,
     type NativeProvider,
+    PROVIDER_SPECS,
     providerLabel,
     type TrialHealth,
 } from "@intentic/sandbox-contract";
@@ -228,13 +229,15 @@ export const modelLabelFor = (provider: AgentProvider, modelId: string): string 
     return modelId === `` ? providerDisplayLabel(provider) : modelId;
 };
 
-// The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
-// Labels differ from the internal ids (codex → "ChatGPT").
-export const providerTabs: readonly { value: AgentProvider; label: string }[] = [
-    { value: `claude`, label: `Claude` },
-    { value: `codex`, label: `ChatGPT` },
-    { value: `grok`, label: `Grok` },
-    { value: `kimi`, label: `Kimi Code` },
-    { value: `gemini`, label: `Google` },
-    { value: `cursor`, label: `Cursor` },
-];
+/* The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
+ * Labels differ from the internal ids (codex → "ChatGPT") and from the model picker's (claude → "Claude", not
+ * "Claude Code"), because this list answers "whose account is this" and the picker answers "which runtime is
+ * this": ProviderSpec.accountLabel is the first of those, and its comment says why the two are separate fields.
+ *
+ * DERIVED, and that is the point: this was the last hand-kept list of providers on this side of the wire, so a
+ * provider added to the contract appeared in the model picker and in the rail and simply had no tab to connect
+ * it on — visible, unrunnable, and nothing failing anywhere to say so. */
+export const providerTabs: readonly { value: AgentProvider; label: string }[] = PROVIDER_SPECS.map((spec) => ({
+    value: spec.id,
+    label: spec.accountLabel,
+}));

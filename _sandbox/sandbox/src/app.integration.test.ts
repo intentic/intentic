@@ -809,7 +809,10 @@ test("agent.run gates a Gemini turn with no Google account connected", async () 
     const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
 
     expect(nativeCalled).toBe(false);
-    expect(facts.some((fact) => fact.kind === "error" && /Connect your Google account/.test(String(fact.message)))).toBe(true);
+    // The requirement is the provider's own spec row now (PROVIDER_ACCESS.requirement), so the refusal names
+    // the same thing the connect prompt does. It used to say "Google account" here and "Google sign-in"
+    // everywhere else, which sent the reader looking for a control that is not on the page.
+    expect(facts.some((fact) => fact.kind === "error" && /Connect your Google sign-in/.test(String(fact.message)))).toBe(true);
 });
 
 /* A GEMINI TURN THAT NAMES NO HARNESS TAKES THE NATIVE RUNTIME: the default flipped when Gemini got one, and

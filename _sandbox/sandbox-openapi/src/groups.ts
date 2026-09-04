@@ -314,6 +314,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "Every built-in provider's catalogue is one fixed route, because there is one of each. Endpoints are user-created and unbounded, so the id rides in the address and the answer is whatever the configured server says about itself. The trial belongs here because the trial is an endpoint — the one the daemon provisions rather than you.",
     },
     {
+        name: "keys",
+        shelf: "models",
+        label: "Key-based providers",
+        summary: "Providers connected by pasting an API key you already hold",
+        description:
+            "Some vendors publish an Anthropic Messages endpoint of their own, so a turn on them is an ordinary Claude Code turn pointed at a different host, authenticated with a key rather than a sign-in. These routes store, name and remove those keys; one provider can hold several side by side. A key travels in and never back out: every answer here is an account row, which has no field a credential could ride in.",
+    },
+    {
         name: "providers",
         shelf: "models",
         label: "Providers",

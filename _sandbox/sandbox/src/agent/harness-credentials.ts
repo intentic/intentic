@@ -1,9 +1,12 @@
 import {
     type AgentProvider,
     endpointIdOf,
-    type KeyedProvider,
+    keyEndpointOf,
+    type KeyProvider,
     type NativeProvider,
+    PROVIDER_ACCESS,
     PROVIDER_VENDOR,
+    providerLabel,
     TRIAL_ENDPOINT_ID,
     TRIAL_MODEL_ID,
 } from "@intentic/sandbox-contract";
@@ -63,7 +66,15 @@ export interface HarnessEndpoint {
  * on a subscription limit it sets the retry delay to the closed window's remaining lifetime. */
 export interface TurnAllowance {
     readonly vendor: string;
-    readonly limit: () => Promise<TurnLimit>;
+    /* How full the pools were, for the sentence a refusal prints. OPTIONAL, because the two halves of this
+     * shape answer to different things: the VENDOR is knowable for every routed turn (it is whose credential
+     * was spent), while a READING only exists where the provider publishes a quota surface the daemon can ask.
+     *
+     * A keyed provider publishes none, so it names its vendor and omits this. The refusal then reads "Meta
+     * usage limit reached. Send again once it resets." — right about who refused, silent about pools and
+     * resets nobody measured. Folding the two would have forced a choice between naming the wrong vendor and
+     * inventing a denominator, and limitSentence already had the sentence for exactly this state. */
+    readonly limit?: () => Promise<TurnLimit>;
 }
 
 export interface HarnessCredentials {
@@ -183,14 +194,13 @@ export type HarnessCredentialsResult =
     | { readonly ok: true; readonly credentials: HarnessCredentials }
     | { readonly ok: false; readonly code?: "subscription-required" | "claude-reauth" | "trial-unavailable"; readonly message: string };
 
-// The label a routed provider's missing subscription is named by, the vendor's own noun, matching the connect
-// prompts (PROVIDER_ACCESS.requirement).
-const ROUTED_REQUIREMENT: Record<KeyedProvider, string> = {
-    codex: "ChatGPT subscription",
-    grok: "SuperGrok subscription",
-    kimi: "Kimi Code subscription",
-    gemini: "Google account",
-};
+/* The label a missing credential is named by, the vendor's own noun, which is PROVIDER_ACCESS.requirement and
+ * is now READ from there rather than kept as a fourth copy of the same four strings.
+ *
+ * The copy had already drifted, which is the whole argument: this file said "Google account" while every
+ * connect prompt, badge and pitch in the product said "Google sign-in", so the refusal a user met mid-turn
+ * named a thing they could not find on the page it sent them to. */
+const requirementOf = (provider: NativeProvider): string => PROVIDER_ACCESS[provider].requirement;
 
 // The upstream model id a routed turn hands the translator, which maps it to its provider. Unlike native Codex
 // (which uses the ChatGPT account default and omits the model), the router requires an explicit id, and the only
@@ -380,6 +390,49 @@ export const resolveHarnessCredentials = async (
             message: "Cursor doesn't run under the Claude Code harness. It runs on its own runtime instead.",
         };
     }
+    /* A KEYED PROVIDER'S TURN, and it is the shortest branch in this function for the reason those providers
+     * were worth adding at all: they publish an Anthropic Messages endpoint, so the harness is pointed straight
+     * at it with the user's key and there is nothing to translate. Structurally the `protocol: "anthropic"`
+     * half of resolveEndpointCredentials above, with the base URL coming from the provider's spec row instead
+     * of from a capability the user filled in.
+     *
+     * The base drops any version segment because the harness appends `/v1/messages` itself, and the key rides
+     * as ANTHROPIC_AUTH_TOKEN, which the CLI sends as `Authorization: Bearer` — the header both vendors
+     * document. Setting `endpoint` at all is what makes agent.ts drop CLAUDE_CODE_OAUTH_TOKEN, so a Claude
+     * subscription can never travel to either of these hosts.
+     *
+     * NO HARNESS BRANCH, because these providers have no native runtime: `capabilitiesOf` hands both harnesses
+     * to the Claude Code loop, so every one of their turns arrives here. */
+    const keyEndpoint = input.agent === undefined ? undefined : keyEndpointOf(input.agent);
+    if (keyEndpoint !== undefined) {
+        const provider = input.agent as KeyProvider;
+        const accounts = await services.keyed[provider].store.credentials();
+        // The user's explicit pick when it is still connected, else the first account, which is the same rule
+        // every account-keyed reader in this daemon follows.
+        const picked = accounts.find((account) => account.id === input.account) ?? accounts[0];
+        if (picked === undefined) {
+            return {
+                ok: false,
+                code: "subscription-required",
+                message: `Connect your ${requirementOf(provider)} in Sandbox ▸ Agent to run ${providerLabel(provider)}.`,
+            };
+        }
+        // Validated against the provider's own live catalog exactly as a routed pick is: a model the vendor has
+        // retired falls to the catalog default rather than being sent and refused. The catalog is never empty
+        // (its seed floor is the last rung), so there is always a default to fall to.
+        const catalog = await services.keyed[provider].catalog.models();
+        return {
+            ok: true,
+            credentials: {
+                endpoint: { baseUrl: unversionedBase(keyEndpoint.anthropicBase), authToken: picked.apiKey, model: routedModel(catalog, input.model) },
+                account: picked.id,
+                // Whose allowance the turn spends, so a 429 from these hosts names the right vendor instead of
+                // the harness's own guess of "Claude". No `limit`: neither vendor publishes a quota surface a
+                // stored key can read (the spec's planLimits says so), and an invented one would be worse.
+                allowance: { vendor: PROVIDER_VENDOR[provider] },
+            },
+        };
+    }
     if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi") {
         if (services.config.translator.url === "") {
             // Codex/Grok can fall back to their own runtime; Kimi has none, so for it this can only be an image
@@ -397,7 +450,7 @@ export const resolveHarnessCredentials = async (
             return {
                 ok: false,
                 code: "subscription-required",
-                message: `Connect your ${ROUTED_REQUIREMENT[input.agent]} in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
+                message: `Connect your ${requirementOf(input.agent)} in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
             };
         }
         // The routed pick is validated against the provider's OWN live catalog, the same table the native paths

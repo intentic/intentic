@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../provider-specs.js";
 import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "./agent.js";
 // Declared ABOVE both account shapes because both carry it: headroom is one idea in this product, not a Claude
 // idea that other providers imitate. A native account (OauthAccount) and a routed subscription
@@ -132,16 +133,21 @@ export const TranslatorAccountSchema = z.object({
         .optional(),
 });
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
-// Which routed-provider subscriptions are connected in the translator, per provider, a LIST per provider, not
-// a flag: CLIProxyAPI holds any number of auth files per provider side by side and balances requests across
-// them, so connecting a second ChatGPT or Google account is more headroom, and each is disconnectable on its
-// own. Drives the account rows in Sandbox ▸ Agent.
-export const TranslatorAccountsSchema = z.object({
-    codex: z.array(TranslatorAccountSchema),
-    grok: z.array(TranslatorAccountSchema),
-    kimi: z.array(TranslatorAccountSchema),
-    gemini: z.array(TranslatorAccountSchema),
-});
+/* Which routed-provider subscriptions are connected in the translator, per provider, a LIST per provider, not
+ * a flag: CLIProxyAPI holds any number of auth files per provider side by side and balances requests across
+ * them, so connecting a second ChatGPT or Google account is more headroom, and each is disconnectable on its
+ * own. Drives the account rows in Sandbox ▸ Agent.
+ *
+ * ONE KEY PER TRANSLATOR PROVIDER, built over the derived list rather than typed out, because this object and
+ * the enum beside it (KeyedProviderSchema) are the same fact twice and the browser reads a provider's slot
+ * without checking it exists: a provider present in the enum and missing here is `undefined.length`, at the
+ * exact moment somebody is asking whether they can send. */
+export const TranslatorAccountsSchema = z.object(
+    Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, z.array(TranslatorAccountSchema)] as const)) as Record<
+        TranslatorProvider,
+        z.ZodArray<typeof TranslatorAccountSchema>
+    >,
+);
 export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 // The side-channel body that un-parks a turn waiting on the user. Every interactive card, plan approval,
 // clarifying questions, a per-tool permission prompt, parks on the SAME registry keyed by `requestId`, so

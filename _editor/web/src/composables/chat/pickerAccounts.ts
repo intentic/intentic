@@ -1,4 +1,11 @@
-import { type AgentHarness, type AgentProvider, type KeyedProvider, type ModelRef, reportsPlanLimits } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    harnessChoosable as contractHarnessChoosable,
+    type KeyedProvider,
+    type ModelRef,
+    reportsPlanLimits,
+} from "@intentic/sandbox-contract";
 import { computed, type Ref, ref } from "vue";
 import { relativeTime } from "./catalog";
 import { providerDisplayLabel } from "./providerCatalog";
@@ -106,8 +113,13 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
      * announces itself in every request and Google's channel refuses on the announcement, whatever account pays.
      * A chip whose only outcome is a refusal is worse than no chip, it reads as a working alternative someone
      * might reasonably pick when the other one is slow. Gemini runs its own loop, and the contract now says so
-     * for every surface at once (capabilitiesOf), so there is nothing here to choose. */
-    const harnessChoosable = computed(() => provider.value === `codex` || provider.value === `grok`);
+     * for every surface at once (capabilitiesOf), so there is nothing here to choose.
+     *
+     * WHICH is now read from the contract rather than named here: a provider whose spec points both harnesses at
+     * the same runtime has nothing to choose, and one that points them at two has. That covers Gemini's refusal,
+     * Cursor's SDK-only route, and every provider with no native runtime at all (Kimi, Meta, Z.ai) with one
+     * rule, instead of a list this file had to be told to grow. */
+    const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));
 
     /* THE SUBSCRIPTIONS THIS SELECTION WOULD RUN ON INSTEAD, for the three providers that own no account and for
      * Grok under the Claude Code harness. They are not a picker: CLIProxyAPI holds every auth file and balances

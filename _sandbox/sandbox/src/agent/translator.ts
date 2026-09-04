@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createBackoff } from "@intentic/base/async";
 import {
+    cliProxyIdOf,
     type KeyedProvider,
     KeyedProviderSchema,
     type Model,
@@ -30,11 +31,18 @@ import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "
  * The config is static (port + auth-dir + the local bearer); accounts are added/removed at runtime through the
  * Management API (see createCliProxyClient), so no config reconverge/restart is needed on a connect. */
 
-// CLIProxyAPI's provider ids for the routed providers. Only `codex` matches ours: the app says "grok" where
-// CLIProxyAPI says "xai", and "gemini" where it says "antigravity". Antigravity is Google's own agent product,
-// and its channel is the one CLIProxyAPI serves Gemini models on from a plain Google-account sign-in. The app
-// surfaces the model the user picks, not the Google product that vends it.
-const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok: "xai", kimi: "kimi", gemini: "antigravity" };
+/* CLIProxyAPI's provider ids for the routed providers. Only `codex` matches ours: the app says "grok" where
+ * CLIProxyAPI says "xai", and "gemini" where it says "antigravity". Antigravity is Google's own agent product,
+ * and its channel is the one CLIProxyAPI serves Gemini models on from a plain Google-account sign-in. The app
+ * surfaces the model the user picks, not the Google product that vends it.
+ *
+ * DERIVED from each provider's spec row rather than written out here, because this map and the enum that says
+ * which providers are routed at all are the same fact: a provider added to one and not the other reads back
+ * `undefined` and addresses the Management API at the URL `…/model-definitions/undefined`. The row is where the
+ * proxy's name for a provider lives (ProviderAuth's `cliProxy`), so the record cannot be short a key. */
+const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = Object.fromEntries(
+    KeyedProviderSchema.options.map((provider) => [provider, cliProxyIdOf(provider) ?? provider] as const),
+) as Record<KeyedProvider, string>;
 
 // The subscription-token store (survives sandbox rebuilds alongside the other AI-provider credentials).
 export const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");

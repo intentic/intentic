@@ -4,7 +4,9 @@ import {
     type AgentHarness,
     type AgentProvider,
     isTrialProvider,
+    type KeyedProvider,
     type ProviderAccess,
+    providerSpec,
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "./providerAccounts";
@@ -34,17 +36,26 @@ const accountsOf = (provider: AgentProvider) => providerAccounts.value[provider]
 const isAcp = (provider: AgentProvider): boolean => acpProviders.value.some((agent) => agent.id === provider);
 const isEndpoint = (provider: AgentProvider): boolean => endpointProviders.value.some((endpoint) => endpoint.id === provider);
 
-// Whether a provider can serve a fresh conversation. Mirrors the daemon's own gate (agent.routes): codex and
-// kimi and gemini authenticate ONLY through the translator's subscription, grok through either its native xAI account or
-// the translator, everything else through a daemon-stored account. Harness-independent on purpose, this answers
-// "is this provider usable at all", which is what a model row needs; `providerReadyOn` below narrows it to the
-// one harness the active conversation is actually set to, and IS the composer's gate.
+/* Whether a provider can serve a fresh conversation. Mirrors the daemon's own gate (agent.routes), and reads
+ * the same fact the daemon reads: HOW this provider's credential is held (ProviderSpec.auth), never which
+ * provider it happens to be.
+ *
+ * That is the whole difference from the chain this replaced, which named codex, kimi and gemini in one branch
+ * and grok in another and fell through to "a daemon-stored account" for everything else. A provider added to
+ * the contract fell through that last branch, so it reported "connected" the moment any account existed and
+ * the composer opened onto a turn the daemon would refuse.
+ *
+ * Grok remains the one provider served BOTH ways, and it is a fact about grok rather than about a mechanism:
+ * its native runtime takes an xAI account this daemon stores, and routed under Claude Code it rides the
+ * translator's SuperGrok subscription. Either is enough to answer "usable at all", which is what a model row
+ * needs; `providerReadyOn` below narrows it to the one harness the active conversation is set to, and IS the
+ * composer's gate. */
 export const providerReady = (provider: AgentProvider): boolean => {
-    if (provider === `codex` || provider === `kimi` || provider === `gemini`) {
-        return translatorAccounts.value[provider].length > 0;
-    }
-    if (provider === `grok`) {
-        return accountsOf(provider).length > 0 || translatorAccounts.value.grok.length > 0;
+    const spec = providerSpec(provider);
+    if (spec?.auth.kind === `translator`) {
+        const routed = translatorAccounts.value[provider as KeyedProvider].length > 0;
+        // Grok's native xAI account counts too: the picker's question is whether this provider can run at all.
+        return routed || accountsOf(provider).length > 0;
     }
     /* THE TRIAL IS THE ONE ENDPOINT WHOSE EXISTENCE IS NOT ITS READINESS. Every other endpoint carries a
      * credential that works until the user changes it; this one carries a daily meter, and a spent meter cannot
@@ -57,18 +68,29 @@ export const providerReady = (provider: AgentProvider): boolean => {
     if (isTrialProvider(provider)) {
         return isEndpoint(provider) && trialStatus.value.available && trialStatus.value.remaining > 0;
     }
-    // A configured endpoint is runnable by existing: whatever it needs to authenticate was configured with
-    // it, so there is no second connection step the way there is for an account-backed provider.
+    /* Everything else is ready when this daemon holds an account for it, which covers both remaining auth
+     * mechanisms without distinguishing them: an `oauth` provider's tokens and a `key` provider's pasted key
+     * are stored the same way and listed on the same route, because from here the only question is whether a
+     * credential exists.
+     *
+     * A configured endpoint or an installed ACP agent is runnable by EXISTING: whatever it needs to
+     * authenticate was configured with it, so there is no second connection step the way there is for an
+     * account-backed provider. */
     return accountsOf(provider).length > 0 || isAcp(provider) || isEndpoint(provider);
 };
 
 /* Whether a provider can serve THIS conversation, `providerReady` narrowed by the one axis it ignores.
  *
- * Grok is the only provider whose credential depends on the harness: its native runtime takes an xAI account,
- * and routed under Claude Code it rides the translator's SuperGrok subscription. So "you hold a SuperGrok
- * subscription" and "this native-Grok chat can send" are different answers, and any surface that offers to
- * SWITCH a conversation onto a provider needs the second one, a press that re-points the chat and leaves the
- * connect gate standing exactly where it was is the one press a user cannot learn anything from. */
+ * Grok is the only provider whose credential depends on the harness: its native runtime takes an xAI account
+ * this daemon stores, and routed under Claude Code it rides the translator's SuperGrok subscription. So "you
+ * hold a SuperGrok subscription" and "this native-Grok chat can send" are different answers, and any surface
+ * that offers to SWITCH a conversation onto a provider needs the second one, a press that re-points the chat
+ * and leaves the connect gate standing exactly where it was is the one press a user cannot learn anything from.
+ *
+ * NAMED rather than derived, and that is not the drift the rest of this file just lost. Every other provider's
+ * two harnesses spend the SAME credential (Codex's native runtime rides the translator too; Gemini and the
+ * keyed providers have one runtime on both), so grok is not an instance of a mechanism, it is the only provider
+ * that holds two. A spec field for it would describe one row and be dead weight on every other. */
 export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness): boolean => {
     if (provider === `grok`) {
         return harness === `claude-code` ? translatorAccounts.value.grok.length > 0 : accountsOf(provider).length > 0;

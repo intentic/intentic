@@ -7,6 +7,7 @@ import {
     type OauthAccount,
     type TranslatorAccount,
     providerLabel,
+    providerSpec,
 } from "@intentic/sandbox-contract";
 import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -14,7 +15,7 @@ import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
 import { providerTabs } from "../../composables/chat/providerCatalog";
-import { refreshConnections, useChat } from "../../composables/chat/useChat";
+import { refreshConnections, subscriptionOnly, useChat } from "../../composables/chat/useChat";
 import { isSpent, liveUsage, type PlanHeadroom, planHeadroom } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
@@ -82,9 +83,7 @@ const chatNotice = computed<NoticeModel | undefined>(() =>
 // has no row: it IS the Claude Code harness. A provider can hold several subscription accounts, the translator
 // balances turns across them, so each renders as a row of its own.
 const routedProvider = computed<KeyedProvider | undefined>(() =>
-    managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `kimi` || managedProvider.value === `gemini`
-        ? managedProvider.value
-        : undefined,
+    providerSpec(managedProvider.value)?.auth.kind === `translator` ? (managedProvider.value as KeyedProvider) : undefined,
 );
 const ROUTED_ROW: Record<KeyedProvider, { title: string }> = {
     codex: { title: `ChatGPT subscription` },
@@ -93,8 +92,15 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string }> = {
     gemini: { title: `Google account` },
 };
 
-// Codex, Kimi and Gemini own no native account: the subscription row IS their connection.
-const hasNativeAccounts = computed(() => managedProvider.value !== `codex` && managedProvider.value !== `kimi` && managedProvider.value !== `gemini`);
+// Codex, Kimi and Gemini own no native account: the subscription row IS their connection. Read off the same
+// rule the composer's gate uses, so a provider is never offered an account row it has no store behind.
+const hasNativeAccounts = computed(() => !subscriptionOnly(managedProvider.value));
+/* A KEY, NOT A HANDSHAKE. Meta and Z.ai are connected by pasting a credential the user already holds, so the
+ * three-step sign-in this card is built around collapses to a field: there is nothing to open, nothing to come
+ * back from and nothing to cancel. The row therefore carries no Connect button at all — the panel below it has
+ * one, next to the field it belongs to, because a button that only reveals another button is a step nobody
+ * needed. */
+const isKeyed = computed(() => providerSpec(managedProvider.value)?.auth.kind === `key`);
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
 // Whether a sign-in is unfolding under this provider's native / routed row right now. Both flows carry the
@@ -206,9 +212,7 @@ const accountRows = computed<readonly AccountRow<OauthAccount>[]>(() =>
 );
 
 const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
-    routedProvider.value === undefined
-        ? []
-        : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], (account) => account.name),
+    routedProvider.value === undefined ? [] : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], (account) => account.name),
 );
 
 /* --- Collapsing long lists -----------------------------------------------------------------------------------
@@ -435,14 +439,16 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :note="nativeFlowLive ? `signing in…` : `not connected`"
                     :note-busy="nativeFlowLive"
                 >
-                    <template #control>
+                    <template v-if="!isKeyed" #control>
                         <Button v-if="nativeFlowLive" label="Cancel" size="small" severity="secondary" :text="true" @click="cancelConnect" />
                         <!-- Filled: with no account at all, this is the one thing the group is asking for. -->
                         <Button v-else label="Connect" size="small" :loading="accountBusy === managedProvider" @click="startConnect">
                             <template #icon><Icon name="link" /></template>
                         </Button>
                     </template>
-                    <template v-if="nativeFlowLive" #below><ConnectFlow kind="native" :provider="managedProvider" /></template>
+                    <template v-if="nativeFlowLive || isKeyed" #below>
+                        <ConnectFlow :kind="isKeyed ? `keyed` : `native`" :provider="managedProvider" />
+                    </template>
                 </ConnectionRow>
 
                 <!-- Adding a SECOND account is a different act from having none: its own quiet row at the end of
@@ -453,13 +459,15 @@ onUnmounted(() => clearTimeout(ringTimer));
                     state="add"
                     :note="nativeFlowLive ? `signing in…` : undefined"
                     :note-busy="nativeFlowLive"
-                    :interactive="!nativeFlowLive"
-                    @click="!nativeFlowLive && startConnect()"
+                    :interactive="!nativeFlowLive && !isKeyed"
+                    @click="!nativeFlowLive && !isKeyed && startConnect()"
                 >
                     <template v-if="nativeFlowLive" #control>
                         <Button label="Cancel" size="small" severity="secondary" :text="true" @click.stop="cancelConnect" />
                     </template>
-                    <template v-if="nativeFlowLive" #below><ConnectFlow kind="native" :provider="managedProvider" /></template>
+                    <template v-if="nativeFlowLive || isKeyed" #below>
+                        <ConnectFlow :kind="isKeyed ? `keyed` : `native`" :provider="managedProvider" />
+                    </template>
                 </ConnectionRow>
             </template>
 

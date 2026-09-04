@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type AgentCapabilities, capabilitiesOf, limitationsOf } from "./agent-catalog.js";
+import { capabilitiesOf, limitationsOf } from "./agent-catalog.js";
+import type { AgentCapabilities } from "./agent-runtimes.js";
 
 /* THE CAPABILITY LEDGER, which claims in the record are backed by machinery, and which by prose.
  *
@@ -118,9 +119,10 @@ describe("a descriptive claim reaches the user", () => {
         // A boolean's floor is `false` and needs no entry; every other descriptive field has to name its own.
         // Asserted against the KEYS of DIMINISHED so the failure prints the floors that do exist, which is what
         // tells "this field was never added" apart from "this field was renamed and its entry left behind".
-        expect(boolean ? [field] : Object.keys(DIMINISHED), `${field} is descriptive and not a boolean: add its weakest value to DIMINISHED above`).toContain(
-            field,
-        );
+        expect(
+            boolean ? [field] : Object.keys(DIMINISHED),
+            `${field} is descriptive and not a boolean: add its weakest value to DIMINISHED above`,
+        ).toContain(field);
         const floor = boolean ? false : DIMINISHED[field];
 
         const lacking: AgentCapabilities = { ...CEILING, [field]: floor };

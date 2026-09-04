@@ -1,4 +1,5 @@
-import { ACCESS_COST, accessFor, modelsFor, PROVIDERS } from "./agent-catalog.js";
+import { accessFor, modelsFor, PROVIDERS } from "./agent-catalog.js";
+import { ACCESS_COST } from "./provider-specs.js";
 import { compareCheapestFirst, familyOf, tierRankOf } from "./model-order.js";
 import type { AgentProvider } from "./schemas/agent.js";
 
