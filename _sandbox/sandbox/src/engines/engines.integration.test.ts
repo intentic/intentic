@@ -149,3 +149,30 @@ test("a floor nothing published satisfies is refused rather than approximated", 
     await expect(updateEngine(host(workspace), "opencode", { floor: "2.0.0" }, install)).rejects.toThrow("at or above 2.0.0");
     expect(install.calls).toEqual([]);
 });
+
+test("the view reports when an install is in flight", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    let finishInstall: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+        finishInstall = resolve;
+    });
+    const install: EngineInstaller = vi.fn(async (_id, version) => {
+        await pending;
+        writeStoreCopy(version);
+        await activateVersion("opencode", version);
+        return { ok: true as const, version, reused: false };
+    });
+
+    const updatePromise = updateEngine(host(workspace), "opencode", undefined, install);
+
+    const viewWhileInstalling = await enginesView(host(workspace));
+    const rowWhileInstalling = viewWhileInstalling.engines.find((engine) => engine.id === "opencode");
+    expect(rowWhileInstalling?.installing).toBe(true);
+
+    finishInstall();
+    await updatePromise;
+
+    const viewAfter = await enginesView(host(workspace));
+    const rowAfter = viewAfter.engines.find((engine) => engine.id === "opencode");
+    expect(rowAfter?.installing).toBeUndefined();
+});

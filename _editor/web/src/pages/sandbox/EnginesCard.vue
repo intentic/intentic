@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import { type EngineRow, EnginesViewSchema } from "@intentic-app/api-contract";
-import { BrandMark, Button, Notice, type NoticeModel, Picker, type PickerOption, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
-import { useQueryClient } from "@tanstack/vue-query";
-import { computed } from "vue";
-import { jsonBody } from "../../composables/sandbox/jsonBody";
-import { sandboxJson } from "../../composables/sandbox/sandboxClient";
-import { ENGINES_KEY, useEngines } from "../../composables/sandbox/useEngines";
+import type { EngineRow } from "@intentic-app/api-contract";
+import { BrandMark, Button, Notice, Picker, type PickerOption, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
+import { useEngines } from "../../composables/sandbox/useEngines";
 import { useRole } from "../../composables/sandbox/useRole";
 import { engineVisual } from "./engineVisual";
 
@@ -26,16 +21,24 @@ import { engineVisual } from "./engineVisual";
  * Owner-only, like the environment decisions above it: this installs code that every turn in this sandbox then
  * runs. A viewer still sees the versions, which is the half that answers "why did my turn fail". */
 
-const queryClient = useQueryClient();
-const { busy, notice, run } = useAsyncAction();
 const { canShip: canOperate } = useRole();
-const { engines, view, updatable, query, isFetching } = useEngines();
-
-const actionNotice = computed<NoticeModel | undefined>(() =>
-    notice.value?.detail === `not a sandbox maintainer`
-        ? { tone: `warning`, title: `Only a sandbox maintainer can change which agent engines this sandbox runs.` }
-        : notice.value,
-);
+const {
+    engines,
+    view,
+    updatable,
+    query,
+    isFetching,
+    isAnyBusy,
+    updatingAll,
+    actionNotice,
+    isEngineUpdating,
+    isEngineReverting,
+    isEngineBusy,
+    setChannel,
+    update,
+    revert,
+    updateAll,
+} = useEngines();
 
 const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>[] = [
     {
@@ -53,38 +56,20 @@ const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>
     { label: `Pinned`, value: `pinned`, icon: `lock`, hint: `Freeze the running version.` },
     { label: `Image`, value: `image`, icon: `box`, hint: `Image copy only.` },
 ];
-
-// Every write answers with the whole view, so the card never has to guess what the daemon did with a request.
-const post = (path: string, body: object): Promise<void> =>
-    run(async () => {
-        const answer = (await sandboxJson(path, jsonBody(`POST`, body))) as { engines: unknown };
-        queryClient.setQueryData(ENGINES_KEY, EnginesViewSchema.parse(answer.engines));
-    }, `Could not change this engine.`);
-
-/* Pinning needs a version, and the honest one to pin is what is running right now — that is what an owner
- * means by "hold it here" when a newer release has just broken something for them. A row with nothing running
- * cannot be pinned at all, so the option is refused rather than sent as a pin to nothing. */
-const setChannel = (engine: EngineRow, kind: `blessed` | `latest` | `pinned` | `image`): Promise<void> => {
-    if (kind === `pinned` && engine.running.version === undefined) {
-        return post(`/engines/channel`, { id: engine.id, kind: `image` });
-    }
-    return post(`/engines/channel`, {
-        id: engine.id,
-        kind,
-        ...(kind === `pinned` ? { version: engine.running.version } : {}),
-    });
-};
-
-const update = (engine: EngineRow): Promise<void> => post(`/engines/update`, { id: engine.id });
-const revert = (engine: EngineRow): Promise<void> => post(`/engines/revert`, { id: engine.id });
-
-const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} MB`;
 </script>
 
 <template>
     <RowGroup label="Agent engines">
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                    v-if="updatable.length > 0"
+                    size="small"
+                    :loading="updatingAll"
+                    :disabled="isAnyBusy || !canOperate"
+                    label="Update all"
+                    @click="updateAll"
+                />
                 <StatusBadge
                     v-if="updatable.length"
                     variant="warning"
@@ -122,7 +107,7 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
                         :model-value="engine.channel.kind"
                         :options="CHANNELS"
                         variant="ghost"
-                        :disabled="busy || !canOperate"
+                        :disabled="isEngineBusy(engine) || !canOperate"
                         class="shrink-0"
                         :aria-label="`Where ${engine.label} gets its version`"
                         :header="`${engine.label} version source`"
@@ -130,20 +115,21 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1_000_000)} M
                     />
                     <Button
                         v-if="engine.offered"
-                        size="sm"
-                        :disabled="busy || !canOperate"
+                        size="small"
+                        :loading="isEngineUpdating(engine)"
+                        :disabled="isEngineBusy(engine) || !canOperate"
                         :label="`Update to ${engine.offered.version}`"
                         @click="update(engine)"
                     />
                     <Button
                         v-if="engine.previous || engine.running.source === `store`"
-                        size="sm"
-                        variant="ghost"
-                        :disabled="busy || !canOperate"
+                        size="small"
+                        severity="secondary"
+                        :loading="isEngineReverting(engine)"
+                        :disabled="isEngineBusy(engine) || !canOperate"
                         :label="engine.previous ? `Back to ${engine.previous}` : `Back to the image's copy`"
                         @click="revert(engine)"
                     />
-                    <span v-if="engine.diskBytes > 0" class="text-xs text-muted">{{ megabytes(engine.diskBytes) }} kept</span>
                 </template>
                 <template v-if="engine.quarantined.length > 0" #below>
                     <p v-for="refused in engine.quarantined" :key="refused.version" class="text-xs break-words text-muted">

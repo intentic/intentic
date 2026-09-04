@@ -82,6 +82,7 @@ export const EngineRowSchema = z.object({
     previous: z.string().optional().describe("The version kept one step back, which is what going back means."),
     quarantined: z.array(EngineQuarantineSchema).describe("Versions the store installed and then refused, with the reason."),
     diskBytes: z.number().int().nonnegative().describe("What this engine's kept versions cost on the daemon's volume."),
+    installing: z.boolean().optional().describe("Whether this engine is currently being installed in the background."),
 });
 export type EngineRow = z.infer<typeof EngineRowSchema>;
 

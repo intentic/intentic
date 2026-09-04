@@ -6,7 +6,7 @@ import type { BootRole } from "../agent/provider-module.js";
 import { refreshClaudeSdk } from "../claude/claude-sdk.js";
 import { blessedEntry, blessedList, blessedListReadAt, blessedListSource, lowestSatisfying, targetVersion } from "./engine-channel.js";
 import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
-import { type EngineInstallOutcome, installEngine } from "./engine-install.js";
+import { type EngineInstallOutcome, installEngine, isEngineInstalling } from "./engine-install.js";
 import { engineChannel, readEngineChannels, setEngineChannel, DEFAULT_CHANNEL } from "./engine-policy.js";
 import { forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
 import {
@@ -46,6 +46,8 @@ export interface EngineHost {
  * decided not to install" from "it installed something quickly". */
 export type EngineInstaller = (id: EngineId, version: string) => Promise<EngineInstallOutcome>;
 
+const updating = new Set<EngineId>();
+
 const rowOf = async (root: string, id: EngineId): Promise<EngineRow> => {
     const descriptor = engineDescriptor(id);
     const [baked, state, resolved, channel, blessed, disk] = await Promise.all([
@@ -72,6 +74,7 @@ const rowOf = async (root: string, id: EngineId): Promise<EngineRow> => {
         ),
         ...opt("blessed", blessed),
         ...opt("previous", state.previous),
+        ...opt("installing", updating.has(id) || isEngineInstalling(id) ? true : undefined),
         quarantined: [...state.quarantined],
         diskBytes: disk,
     };
@@ -140,21 +143,26 @@ export const updateEngine = async (
     target?: { version?: string; floor?: string },
     install: EngineInstaller = installEngine,
 ): Promise<EngineApplied | undefined> => {
-    if (target?.version !== undefined) {
-        return apply(host, id, target.version, install);
-    }
-    if (target?.floor !== undefined) {
-        const version = await versionForFloor(id, target.floor);
-        if (version === undefined) {
-            // Nothing published satisfies it, or the registry could not be reached. Either way there is no
-            // version to install, and saying so beats installing the newest thing available and hoping.
-            throw new Error(`no published ${id} version is at or above ${target.floor}`);
+    updating.add(id);
+    try {
+        if (target?.version !== undefined) {
+            return await apply(host, id, target.version, install);
         }
-        const applied = await apply(host, id, version, install);
-        await assertFloorCleared(host, id, version, target.floor);
-        return applied;
+        if (target?.floor !== undefined) {
+            const version = await versionForFloor(id, target.floor);
+            if (version === undefined) {
+                // Nothing published satisfies it, or the registry could not be reached. Either way there is no
+                // version to install, and saying so beats installing the newest thing available and hoping.
+                throw new Error(`no published ${id} version is at or above ${target.floor}`);
+            }
+            const applied = await apply(host, id, version, install);
+            await assertFloorCleared(host, id, version, target.floor);
+            return applied;
+        }
+        return await convergeEngine(host, id, install);
+    } finally {
+        updating.delete(id);
     }
-    return convergeEngine(host, id, install);
 };
 
 /* THE CHECK THAT THE FLOOR WAS ACTUALLY CLEARED, run after an install that was chosen to clear one.

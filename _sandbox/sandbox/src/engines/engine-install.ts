@@ -112,6 +112,8 @@ const findFile = async (dir: string, name: string): Promise<string | undefined> 
 // and share its answer. A failed one clears, so Retry really retries instead of inheriting a rejection.
 const installing = new Map<EngineId, Promise<EngineInstallOutcome>>();
 
+export const isEngineInstalling = (id: EngineId): boolean => installing.has(id);
+
 /* Put a version on the volume and make it the one turns use, or say why not.
  *
  * The order is the whole design: download → verify → move the pointer. Nothing between those steps can leave
