@@ -39,6 +39,22 @@ describe(`what counts as weaker`, () => {
         expect(weakened(before, after)).toBe("downgrade");
     });
 
+    /* THE OPPOSITE MOVE, which the rule read as the same one until it was told to look at the text. `toEqual({})`
+     * is an exact matcher that pins NOTHING — it says the result is empty — so trading it for
+     * `toMatchObject({ permissionDecision: "deny" })` moves a matcher into the loose column and pins a value the
+     * old assertion could not see. The command gate's own suite made exactly that trade while gaining five tests
+     * and 247 characters of expectation, and the push was refused for it. */
+    test(`a file that ends up pinning more text is not a downgrade`, () => {
+        const before = measure(`test("a", () => { expect(out).toEqual({}); });`);
+        const after = measure(`test("a", () => { expect(out).toMatchObject({ permissionDecision: "deny" }); });
+test("b", () => { expect(out.logged).toMatchObject([{ outcome: "refused" }]); });`);
+        expect(before).toEqual({ exact: 1, loose: 0, chars: 0, tests: 1 });
+        // One exact matcher lost, two loose ones gained: the first two clauses of the rule both hold, and the
+        // eleven characters of "deny" and "refused" are the whole reason this is not a weakening.
+        expect(after).toEqual({ exact: 0, loose: 2, chars: 11, tests: 2 });
+        expect(weakened(before, after)).toBeUndefined();
+    });
+
     test(`asserted text cut past a quarter with the same tests is a narrowing`, () => {
         const before = measure(`test("x", () => { expect(t).toBe("Start your first agent"); });`);
         const after = measure(`test("x", () => { expect(t).toBe("first agent"); });`);

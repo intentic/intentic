@@ -20,9 +20,26 @@
  * the characters of literal text the assertions pin down (every string, regex and template run inside a
  * matcher's argument list, comments excluded). A file is weaker in either of two shapes:
  *
- *   · a DOWNGRADE: fewer exact matchers and more loose ones, the `toEqual` → `toMatchObject` move;
+ *   · a DOWNGRADE: fewer exact matchers and more loose ones AND no more asserted text than before, the
+ *     `toEqual` → `toMatchObject` move. That third clause is what tells the move from its opposite. The move
+ *     always SHEDS pinned text — it replaces a whole expected object with a fragment of one — so a file that
+ *     ends up pinning more text than it did is doing something else, whatever its matcher mix did. Without the
+ *     clause the rule read absolute counts with no sense of scale, and a suite that grew by five tests and 247
+ *     characters of expectation was refused for turning one `toEqual({})` — an exact matcher asserting that a
+ *     result is EMPTY — into `toMatchObject({ permissionDecision: "deny" })`, which pins a value the old
+ *     assertion could not see. One matcher moved from the exact column to the loose one and the file got
+ *     stronger. Over the 400 commits before this clause was written it changes exactly one verdict, and that
+ *     one was wrong.
  *   · a NARROWING: the asserted text shrinks by more than a quarter while the file keeps as many tests as it had,
  *     the "first agent" move. Tests removed with their text are not a narrowing, and the test count says so.
+ *     Deliberately left on absolute ratio with no floor and no exemption for a file whose matcher mix improved:
+ *     both were tried against the same 400 commits and both cost more than they bought. A floor big enough to
+ *     excuse an 85→52 character file exempts 60% of the repository's test files, because the median test file
+ *     pins only 110 characters; and exempting "the exact count went up while the loose count went down" lets a
+ *     commit gut six text assertions and buy the exemption with one added `toBe`, which is a real commit
+ *     (daf77486) this would then have missed. Of the 62 narrowings in that range, 60 sit on commits whose own
+ *     subject says they relaxed assertions. The two that do not are a `toEqual({…})` replaced by
+ *     `toBeUndefined()` and a 33-character trim — both worth a reviewer's eye, which is all a flag asks for.
  *
  * A HEURISTIC, AND SAID TO BE ONE. A refactor that replaces twenty `toBe` lines with one `toEqual` of a whole
  * object reads as fewer exact matchers; a suite that switches from asserting prose to asserting structure reads
@@ -211,7 +228,9 @@ export const weakened = (before, after) => {
     if (before === undefined) {
         return undefined;
     }
-    if (after.exact < before.exact && after.loose > before.loose) {
+    // The third clause is the scale the first two have none of: see the header. A file that pins MORE text than
+    // it did is not making the `toEqual` → `toMatchObject` move, whichever way its matcher counts went.
+    if (after.exact < before.exact && after.loose > before.loose && after.chars <= before.chars) {
         return "downgrade";
     }
     if (before.chars > 0 && after.chars < before.chars * NARROWING && after.tests >= before.tests) {

@@ -35,6 +35,21 @@ red of the day: three verify groups failing `prepass.mjs` with `@intentic/base/a
 tsconfig `references` edge, so `tsgo -b` built them against the stale dist a persistent runner keeps. The edges
 are added and prepass invariant 15 refuses the shape.
 
+**Applied after the third hundred (2026-09-04), and the finding is that the rule at the top of this document had
+an unstated premise.** "A class visible to the 60-minute job gets a detector in the seconds-long one" assumes the
+seconds-long job can SEE the class. Read across 131 runs on main, **55% of every job-failure sits in a job no
+local gate can run** — image builds, registry pushes, the Windows installer smoke test, a postgres service
+container — and over the most recent 60 runs it is 76%. Tightening the push cannot move that half, which is why
+tightening it kept feeling like the answer and kept not working. `ci-audit.mjs` now computes the split as a
+`gate reach` column (`local` / `partial` / `ci-only`) and a line under the table, so the next argument about
+which gate to build starts from what a gate could reach. Two things came out of the same read and are fixed:
+the assertion ratchet's DOWNGRADE rule read absolute matcher counts with no sense of scale and refused a suite
+that had grown by five tests and 247 characters of expectation, so it now also requires the file to have shed
+asserted text (`assertion-measure.mjs`; over 400 commits the clause changes exactly one verdict, and that one
+was wrong); and `queue-run.integration.test.ts`, the only test file still failing CI in September, waited fixed
+durations for a process to start — a 5s rendezvous bound and a 400ms sleep before a slot was assumed held — so
+both are now rendezvous with a 30s bound, one against a marker the held command itself writes.
+
 **Withdrawn:** 5. The sweep it proposed is the wrong change, and Class B says why with the failing output.
 
 **Left to the team:** 7(c), branch protection. It is a decision about how the repository is worked, not a code

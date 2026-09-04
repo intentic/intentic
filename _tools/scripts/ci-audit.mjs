@@ -33,6 +33,24 @@ const asJson = args.includes("--json");
 const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
 
 const INFRA_STEP = /^(Set up job|Set up runner|Initialize containers|Stop containers|Complete job|Post .*)$/;
+
+/* WHETHER A LOCAL GATE COULD EVER HAVE CAUGHT IT, which is the column that decides whether "build a cheaper
+ * detector" is even the right answer to a row.
+ *
+ * The rule this script exists to serve — a class visible to the 60-minute job gets a detector in the
+ * seconds-long one — silently assumes the seconds-long job CAN see the class. For most of this pipeline it
+ * cannot. `verify-push.mjs` runs the checks, typecheck, build and test; it does not build images, push to a
+ * registry, run a Windows installer smoke test, or stand up a postgres service container, and no gate running
+ * on a developer's checkout could. Measured over 131 runs on main: 61 job-failures in jobs the push gate
+ * reproduces, 8 in jobs it half-reproduces (rustfmt, but not clippy or the compile behind it), and 84 — 55% of
+ * every job-failure — in jobs it structurally cannot run. Reading a red pipeline without that split is how
+ * "make the push gate stricter" keeps looking like the answer to a fleet that drops its docker daemon.
+ *
+ * By JOB rather than by step: it is the job that decides what work happens, and the step names inside the
+ * verify groups are the very commands the push gate shells out to. */
+const GATE_REACHES = /^(verify-core|verify-site|verify-platform|preflight)\b/;
+const GATE_PARTLY = /^(ic-check|desktop-check)\b/;
+const reachOf = (job) => (GATE_REACHES.test(job) ? "local" : GATE_PARTLY.test(job) ? "partial" : "ci-only");
 const ERROR_LINE = /error TS\d+|\bFAIL\b|✗|✘|Error:|error\[E\d+\]|rustfmt|Diff in|ERR_PNPM|exit code \d+/;
 const LOG_LINES = 3_000;
 
@@ -87,7 +105,7 @@ const failedSteps = async (run) => {
                 // Expired logs (older than the retention window) read as no signature, not as a failure of this.
             }
         }
-        found.push({ job: job.name, step, infra: INFRA_STEP.test(step), signature });
+        found.push({ job: job.name, step, infra: INFRA_STEP.test(step), reach: reachOf(job.name), signature });
     }
     return found;
 };
@@ -98,7 +116,7 @@ const rows = new Map();
 for (const run of failed) {
     for (const found of await failedSteps(run)) {
         const key = `${run.name} :: ${found.job} :: ${found.step}`;
-        const row = rows.get(key) ?? { key, infra: found.infra, runs: [], signatures: new Map() };
+        const row = rows.get(key) ?? { key, infra: found.infra, reach: found.reach, runs: [], signatures: new Map() };
         row.runs.push(run.head_sha.slice(0, 9));
         if (found.signature !== undefined) {
             row.signatures.set(found.signature, (row.signatures.get(found.signature) ?? 0) + 1);
@@ -135,13 +153,24 @@ console.log(
 );
 if (table.length > 0) {
     console.log("");
-    console.log("| runs | workflow :: job :: step | kind | seen in |");
-    console.log("|---:|---|---|---|");
+    console.log("| runs | workflow :: job :: step | kind | gate reach | seen in |");
+    console.log("|---:|---|---|---|---|");
     for (const row of table) {
         console.log(
-            `| ${row.runs.length} | ${row.key} | ${row.infra ? "infra" : "code"} | ${row.runs.slice(0, 6).join(", ")}${row.runs.length > 6 ? ", …" : ""} |`,
+            `| ${row.runs.length} | ${row.key} | ${row.infra ? "infra" : "code"} | ${row.reach} | ` +
+                `${row.runs.slice(0, 6).join(", ")}${row.runs.length > 6 ? ", …" : ""} |`,
         );
     }
+    // The split the table above cannot show by reading down it, and the one that says whether another local
+    // gate is worth building at all.
+    const reached = (which) => table.filter((one) => one.reach === which).reduce((sum, one) => sum + one.runs.length, 0);
+    const [local, partial, ciOnly] = [reached("local"), reached("partial"), reached("ci-only")];
+    const all = local + partial + ciOnly;
+    console.log("");
+    console.log(
+        `Of ${all} job-failures: **${local}** in jobs \`pnpm verify:push\` reproduces, ${partial} it half-reproduces (rustfmt only), ` +
+            `**${ciOnly} (${all === 0 ? 0 : Math.round((100 * ciOnly) / all)}%)** in jobs no local gate can run.`,
+    );
     if (logs) {
         console.log("");
         console.log("First error line per step, where the log still exists:");
@@ -157,5 +186,7 @@ if (table.length > 0) {
 console.log("");
 console.log(
     `The rule (docs/ci-failure-audit.md): a class visible to the 60-minute job gets a detector in the seconds-long one. ` +
-        `The top code row is the next gate; an infra row is the fleet's.`,
+        `The top code row whose reach is \`local\` is the next gate; an infra row is the fleet's; and a \`ci-only\` row is ` +
+        `neither — no gate on a checkout can build an image or drive a Windows installer, so those are answered by making ` +
+        `the job itself sturdier, not by tightening the push.`,
 );

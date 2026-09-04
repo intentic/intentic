@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -73,11 +73,50 @@ const peakConcurrency = async (log: string): Promise<number> => {
  * The wait is bounded, so it weakens nothing: a body kept out by a slot that should not have held it waits out
  * the bound, leaves alone, and the peak stays at 1 — the failure the test is there to report. The `sleep` after
  * the rendezvous is the other half, the window in which a limit that is NOT enforced shows up as a peak above
- * what was asked for. */
+ * what was asked for.
+ *
+ * THE BOUND IS THIRTY SECONDS AND NOT FIVE, which is the whole of one CI failure. `separate pools do not
+ * contend` reported a peak of 1 on a green tree: both bodies were admitted, as the queue promises, but the
+ * second process did not reach its first line inside the old five-second bound, so the first gave up waiting
+ * for it and the marks read +,-,+,-. That is the bound being an assertion about how fast a loaded runner forks,
+ * which is the one assertion this file's header says it does not make. Raising it costs nothing on a machine
+ * that is not loaded — the loop breaks on the count, not on the clock, so the fast path is unchanged — and the
+ * only thing a longer bound can do to a REAL failure is make the suite take half a minute to report it. */
+const RENDEZVOUS_SECONDS = 30;
+const POLL_SECONDS = 0.05;
 const body = (log: string, { together = 1, ms = 300 }: { together?: number; ms?: number } = {}): string =>
     `echo + >> ${log}; ` +
-    `for _ in $(seq 1 100); do [ "$(grep -c '^+$' ${log})" -ge ${together} ] && break; sleep 0.05; done; ` +
+    `for _ in $(seq 1 ${Math.round(RENDEZVOUS_SECONDS / POLL_SECONDS)}); do [ "$(grep -c '^+$' ${log})" -ge ${together} ] && break; sleep ${POLL_SECONDS}; done; ` +
     `sleep ${ms / 1000}; echo - >> ${log}`;
+
+/* A process that HOLDS the pool's only slot, which does not return until it demonstrably does.
+ *
+ * The three tests below need a slot already taken before they ask for it, and each used to spawn a holder and
+ * sleep 400ms. That sleep is a guess about how long bash takes to start and `flock` to be granted, and on a
+ * loaded runner it is the wrong guess: `runs anyway once the deadline passes` failed on CI with an EMPTY
+ * stderr, which is what the waiter prints when it never had to wait — the holder had not taken the slot yet, so
+ * the waiter walked straight in and the test asked a question about waiting that nothing had answered.
+ *
+ * The marker is written by the held COMMAND, so it appears only after queue-run has the lock and exec'd: there
+ * is no window in which the file exists and the slot is not held. Bounded, and a bound that expires is an
+ * explicit failure rather than a confusing assertion further down. */
+const holdSlot = async (queue: string, args: readonly string[], seconds: number): Promise<ChildProcess> => {
+    const held = join(queue, "held");
+    const child = spawn("bash", [QUEUE_RUN, ...args, "--", "bash", "-c", `echo held > ${held}; sleep ${seconds}`], {
+        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1" },
+    });
+    const deadline = Date.now() + RENDEZVOUS_SECONDS * 1000;
+    while (Date.now() < deadline) {
+        try {
+            await readFile(held, "utf8");
+            return child;
+        } catch {
+            await new Promise((resolve) => setTimeout(resolve, POLL_SECONDS * 1000));
+        }
+    }
+    child.kill("SIGKILL");
+    throw new Error(`the holder never took the slot in ${RENDEZVOUS_SECONDS}s, so nothing below is testing what it says`);
+};
 
 test("runs the command, passing through its output and its real exit code", async () => {
     const run = await queueRun(await dir(), ["--pool", "p", "--limit", "2"], "echo hello; exit 7");
@@ -135,10 +174,7 @@ test("a KILLED command frees its slot, which is the case a lease would get wrong
     /* The reason the slot is a kernel lock. A daemon-side counter releases on a callback the killed process
      * never reaches, so this slot would stay held until some TTL expired — and the sandbox would be one slot
      * poorer for every command anyone ever interrupted. */
-    const killed = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", "sleep 30"], {
-        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1" },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    const killed = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
     killed.kill("SIGKILL");
     await new Promise((resolve) => killed.on("close", resolve));
 
@@ -150,10 +186,7 @@ test("a KILLED command frees its slot, which is the case a lease would get wrong
 
 test("runs anyway once the deadline passes, rather than blocking forever", async () => {
     const queue = await dir();
-    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", "sleep 10"], {
-        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1" },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 10);
     try {
         /* A queue that can block forever turns one stuck suite into a dead sandbox. The command runs, says in
          * the pane that it gave up waiting, and the exit code is still the command's own. */
@@ -169,10 +202,10 @@ test("runs anyway once the deadline passes, rather than blocking forever", async
 
 test("says in the pane that it is waiting, then that it started", async () => {
     const queue = await dir();
-    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--label", "vitest", "--", "bash", "-c", "sleep 1.5"], {
-        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1" },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    // Long enough that the holder is still in the slot when the second command asks for it and polls once at
+    // INTENTIC_QUEUE_POLL=1, and short enough that the test waits that out rather than the full deadline: the
+    // old 1.5s was measured against a 400ms sleep, and once the wait became a rendezvous it had no margin left.
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1", "--label", "vitest"], 5);
     // The person watching a pane where nothing is happening is owed a reason; silence here reads as a hang.
     const second = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "30", "--label", "vitest"], "echo second");
     expect(second.stderr).toContain('pool "p"');
