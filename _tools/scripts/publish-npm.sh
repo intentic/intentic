@@ -34,6 +34,10 @@ VERSION="${1:?usage: publish-npm.sh <version>}"
 . "$(dirname "$0")/repo-root.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
+# Every publish below goes through npm_publish_retry: the transparency log every tarball is signed into
+# refuses a request it has already answered, and 1.243.0 died half-published on exactly that.
+# npm-publish-retry.sh says the rest.
+. "$DIR/npm-publish-retry.sh"
 cd "$(repo_root)"
 
 # Versions live in the tag, not in git — every package.json reads 0.0.0 on disk until set-versions.sh stamps
@@ -109,5 +113,5 @@ for i in "${!PUB[@]}"; do
   cp LICENSE "${PUB[$i]}/LICENSE"
   pnpm --dir "${PUB[$i]}" pack --pack-destination "$out"
   rm -f "${PUB[$i]}/LICENSE"
-  npm publish "$out"/*.tgz --access public --provenance
+  npm_publish_retry "${names[$i]}" "$VERSION" "$out"/*.tgz --access public --provenance
 done
