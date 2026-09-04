@@ -109,10 +109,18 @@ export const fileKeyedStore = (input: {
         list: async () => (await readKeyedCredentials(dir)).map((stored) => toKeyedAccount(stored, providerName)),
         credentials: () => readKeyedCredentials(dir),
         connect: async ({ apiKey, label }) => {
+            /* A PASTE TAKES NO TIME, so two connects land in the same millisecond routinely (a form submitted
+             * twice, a script seeding both keys of a plan). Equal stamps leave "oldest first" to whatever order
+             * readdir hands back for two random UUID filenames, which is arbitrary — and the account list, and
+             * the tiebreak harness-credentials uses to pick between equal accounts, both read that order. So a
+             * new key is stamped at least one tick past the newest one already stored: the connect order stays
+             * recoverable from the files alone, without inventing a sub-millisecond clock.
+             * Ordered oldest first, so the last row is the newest stamp. */
+            const newest = (await readKeyedCredentials(dir)).at(-1)?.connectedAt ?? 0;
             const account: StoredKeyAccount = {
                 id: randomUUID(),
                 apiKey: apiKey.trim(),
-                connectedAt: Date.now(),
+                connectedAt: Math.max(Date.now(), newest + 1),
                 ...(label !== undefined && label.trim() !== "" ? { label: label.trim() } : {}),
             };
             await write(account);
