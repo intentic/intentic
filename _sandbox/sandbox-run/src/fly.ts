@@ -98,12 +98,6 @@ export interface FlyMachineConfig {
     // idle exit stops the machine, which is the whole point of the hosted lane's economics.
     readonly restart: { readonly policy: "on-failure"; readonly max_retries: number };
     readonly auto_destroy: false;
-    /* Replace what the image would run. `flyMachineConfig` never sets it, a sandbox machine runs the image's
-     * own entrypoint, but the warm pool's first boot does: a no-op exec pulls the image onto the host and
-     * exits clean, so the machine stops holding a warm rootfs and nothing sandbox-shaped ever ran without an
-     * identity. Machine updates REPLACE the whole config, so the claim's config (built by flyMachineConfig,
-     * no init) is also what erases the override. */
-    readonly init?: { readonly exec: readonly string[] };
     /* Fly's own key/value bag on a Machine, the only label the provider can be ASKED about, since an app
      * cannot be renamed and a Machine's name is fixed at birth. `flyMachineConfig` never sets it; the hosted
      * lane writes what the machine currently is (warm stock vs. somebody's sandbox) and, because updates

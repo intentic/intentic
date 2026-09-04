@@ -38,6 +38,7 @@ import type {
     LogFileEntrySchema,
     LogReadSchema,
     MarketplaceSchema,
+    PanelLaunchSchema,
     PanelSummarySchema,
     PushConfigSchema,
     RepoAppSchema,
@@ -160,6 +161,7 @@ export {
     LogReadSchema,
     LogsListSchema,
     MarketplaceSchema,
+    PanelLaunchSchema,
     PanelsListSchema,
     PanelSummarySchema,
     PushConfigSchema,
@@ -241,6 +243,7 @@ export type SafetyPolicy = z.infer<typeof SafetyPolicySchema>;
 export type SafetyLogEntry = z.infer<typeof SafetyLogEntrySchema>;
 export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 export type PanelSummary = z.infer<typeof PanelSummarySchema>;
+export type PanelLaunch = z.infer<typeof PanelLaunchSchema>;
 export type TemplateSummary = z.infer<typeof TemplateSummarySchema>;
 export type TemplatesList = z.infer<typeof TemplatesListSchema>;
 export type RepoApp = z.infer<typeof RepoAppSchema>;
@@ -549,6 +552,21 @@ export const BootReportSchema = z.object({
     reach: z.enum(["checking", "reachable", "unreachable"]),
     // Why, for `unreachable`, already in the user's terms, rendered verbatim like a setup failure's problem.
     detail: z.string().max(2000).optional(),
+    /* Where the daemon's BOOT CHAIN stands (its main.ts steps, the same list the workspace's own warm-up gate
+     * draws), so the setup wait can hold and narrate ONE wait instead of handing over to a second card. `ready`
+     * is the readiness gate; `step` names the running step while there is one. Absent from a daemon older than
+     * this, which the wait treats exactly as it did before. */
+    boot: z
+        .object({
+            ready: z.boolean(),
+            step: z.string().max(200).optional(),
+            done: z.number().int().nonnegative(),
+            total: z.number().int().nonnegative(),
+        })
+        .optional(),
+    /* How much of the machine's time the host took back so far (the daemon's platform/cpu-throttle.ts): the one
+     * number that tells a slow first boot that was the daemon's work from one that was the host's quota. */
+    cpu: z.object({ throttledMs: z.number().nonnegative(), throttledPeriods: z.number().int().nonnegative() }).optional(),
     at: z.string(),
 });
 export type BootReport = z.infer<typeof BootReportSchema>;
@@ -644,6 +662,17 @@ export type HostedOffer = z.infer<typeof HostedOfferSchema>;
  * lane cannot finish on it, and the wizard must say so BEFORE it draws it. Asking the mint was the only way to
  * find out, which meant offering the lane first and retracting it a round-trip later. */
 export const AddressOfferSchema = z.object({ enabled: z.boolean() });
+
+/* THE PLATFORM'S WORD FOR WHO OWNS A HOSTED SANDBOX (sandbox-contract's owner-ticket.ts): a short-lived signed
+ * claim the browser spends on that sandbox's daemon for a session, so signing in to the platform is the only
+ * sign-in a hosted user makes. Minted only for the owner, only for a sandbox on a machine the platform runs,
+ * and only where the platform can sign at all; everywhere else the route 404s and the browser asks Google. */
+export const OwnerTicketSchema = z.object({
+    ticket: z.string(),
+    // ISO, the moment the ticket stops verifying; the browser spends it at once and never stores it.
+    expiresAt: z.string(),
+});
+export type OwnerTicket = z.infer<typeof OwnerTicketSchema>;
 export type AddressOffer = z.infer<typeof AddressOfferSchema>;
 
 export const SandboxSummarySchema = z.object({

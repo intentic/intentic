@@ -12,11 +12,17 @@ import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 /* THE WARM POOL'S LIFECYCLE, everything except the claim, which lives beside provisionHosted (hosted.ts)
  * because a claim's product is a HostedMachine.
  *
- * The minutes of a hosted first boot are almost entirely one thing: pulling the sandbox image onto the Fly
- * host. Everything else, app, volume, machine, the daemon's own boot, is seconds. So the pool pays the pull
- * ahead of demand: a machine is built with the REAL image but its first boot runs a no-op (`init.exec`
- * replaces the entrypoint), which forces the pull and then exits clean, leaving a stopped machine with a warm
- * rootfs. It never runs the sandbox and costs only its volume while it waits.
+ * The minutes of a hosted first boot used to be read as one thing, pulling the sandbox image onto the Fly
+ * host, and the pool paid that pull ahead of demand with a no-op first boot. Measured against a real sign-up
+ * the pull was only the first of the minutes: the daemon's own first boot then copied the starter site and
+ * its dependencies onto an empty volume, initialised its repo, took the baselines and started the dev server,
+ * on a shared CPU whose burst allowance is spent five seconds in. None of that names an owner. So a pool
+ * machine's one boot is the daemon's PREWARM (`SANDBOX_PREWARM=1`, the daemon's platform/prewarm.ts): the
+ * real image and the real entrypoint, running the ordinary boot chain onto the volume, warming the starter's
+ * dev server once, then exiting 0, which stops the machine. Nothing identity-bearing runs, because the env
+ * names no owner, no token and no platform URL. What waits in the pool is a stopped machine whose volume
+ * already holds everything a first boot would have built, costing its volume and nothing else; the claim
+ * replaces its whole config (identity in, prewarm flag out) and the owner's first boot finds every step done.
  *
  * IT DOES HAVE AN IDENTITY, held in its row and nowhere near the machine: a connect token minted at build,
  * whose 12-hex digest names the app (`<prefix>-<id>`, exactly what a built-to-order machine is called). The
@@ -31,18 +37,19 @@ import { hostedEnabled, hostedInstanceId } from "./hosted.js";
  * everything when the pool is switched off. It runs on the shared advisory lock so replicas never
  * double-build, and every action is one row's, a failure logs and moves on, the next tick retries. */
 
-// The no-op the pool machine's first boot runs instead of the sandbox: the pull happens before exec does, and
-// a clean exit stops the machine (the same restart policy that lets the daemon's idle exit stop a real one).
-export const WARM_BOOT_EXEC = [`/bin/true`] as const;
+// The one env var a pool machine's boot carries beyond the run contract's own: the daemon's prewarm switch. A
+// clean exit stops the machine (the same restart policy that lets the daemon's idle exit stop a real one).
+export const PREWARM_ENV: readonly (readonly [string, string])[] = [[`SANDBOX_PREWARM`, `1`]];
 
-// A build observed `building` for this long is stuck (image pulls finish in minutes), torn down and rebuilt.
+// A build observed `building` for this long is stuck (an image pull plus the prewarm boot finish in minutes),
+// torn down and rebuilt.
 const BUILD_TIMEOUT_MS = 30 * 60 * 1000;
 // A `claimed` row this old is a claim that crashed between winning the row and committing the hand-off.
 const CLAIM_TIMEOUT_MS = 15 * 60 * 1000;
 const TICK_MS = 5 * 60 * 1000;
 
-// Build one pool machine: app → volume → machine whose boot is the no-op. The row is stamped `building`; the
-// reconcile flips it `ready` once Fly reports the no-op boot stopped. Cleanup mirrors provisionHosted's: a
+// Build one pool machine: app → volume → machine whose boot is the prewarm. The row is stamped `building`; the
+// reconcile flips it `ready` once Fly reports the prewarm boot stopped. Cleanup mirrors provisionHosted's: a
 // failure deletes the app, and anything that slips through is an app with no row, reaper food.
 const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Logger, region: string): Promise<void> => {
     const { flyApiToken, flyOrg, image, cpus, memoryMb, volumeGb } = config.hosted;
@@ -53,13 +60,13 @@ const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Lo
     await createApp(flyApiToken, flyOrg, appName);
     try {
         const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
-        /* The no-op boot is what makes it warm; the metadata is what makes it READABLE as warm, this app's
-         * name says `pool` whether or not anybody owns it yet, and Fly will never let that name change. The
-         * platform stamp rides in the same bag from the machine's first second, which is what keeps a second
-         * deployment sharing this org from reading our stock as litter (hosted.ts's reaper). */
+        /* The prewarm boot is what makes it warm; the metadata is what makes it READABLE as warm, this app is
+         * named like an owner's whether or not anybody owns it yet, and Fly will never let that name change.
+         * The platform stamp rides in the same bag from the machine's first second, which is what keeps a
+         * second deployment sharing this org from reading our stock as litter (hosted.ts's reaper). No front
+         * door: nothing routes to a machine nobody owns, and the prewarm needs nobody to reach it. */
         const warm = {
-            ...flyMachineConfig({ name: appName, image, baseImage: image, guest: { cpus, memoryMb }, volumeId, env: [] }),
-            init: { exec: [...WARM_BOOT_EXEC] },
+            ...flyMachineConfig({ name: appName, image, baseImage: image, guest: { cpus, memoryMb }, volumeId, env: PREWARM_ENV }),
             metadata: flyWarmRole(hostedInstanceId(config)),
         };
         const { machineId } = await createMachine(flyApiToken, appName, { name: appName, region, config: warm });
@@ -89,7 +96,7 @@ const destroyPoolMachine = async (prisma: PrismaClient, config: Config, row: { i
  * reconcile built no replacement for it, AND claims take the oldest row first, so the dead one was handed out
  * FIRST: one vanished machine quietly cost the next arrival the exact cold build the pool exists to spare.
  *
- *   • `warm`  the machine is there and claimable: our no-op boot leaves it stopped, and Fly may suspend a
+ *   • `warm`  the machine is there and claimable: its prewarm boot leaves it stopped, and Fly may suspend a
  *             long-idle one later, which starts again just as fast on the same warm rootfs
  *   • `dead`  Fly says there is no such machine (or reports it failed/destroyed): the row is stock that
  *             isn't, and the slot is worth more empty than occupied

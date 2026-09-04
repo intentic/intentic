@@ -33,6 +33,7 @@ documentation.activate(registerApi, { extensionId: `intentic.documentation`, sub
 // A PanelSummary with everything false: override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
     hasPanel: false,
+    installed: true,
     running: false,
     healthy: false,
     servers: [],

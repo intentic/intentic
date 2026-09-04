@@ -1014,7 +1014,9 @@ const check = async (): Promise<void> => {
          * silent wait with no reason attached is precisely the thing being fixed here; moving one from the
          * workspace onto a step that cannot narrate it would not be a fix, it would be a relocation. The other
          * lanes hand over on the check-in exactly as they always have. */
-        const holding = hostedRow.value !== null && hostedWait.value.reachable === false;
+        // …or its daemon says its boot chain is still converging: handing over then lands on a second progress
+        // card, and this one already names the step.
+        const holding = hostedRow.value !== null && (hostedWait.value.reachable === false || hostedWait.value.booting);
         if (seen !== null && seen !== baseline.value && !holding) {
             // Onboarding's make-or-break milestone: the pasted command produced a live daemon.
             track(`sandbox_connected`, { resuming: resuming.value });
@@ -1485,6 +1487,7 @@ const arrive = async (): Promise<void> => {
         if ((found.hosted ?? null) !== null) {
             machine.value = `hosted`;
             hostedSince.value = Date.now();
+            void warmSandboxCredential();
         }
     }
     /* A RUNG THE READER PICKED BEFORE THIS PAGE outranks whatever the arrival would have chosen, in both
@@ -1527,7 +1530,9 @@ const arrive = async (): Promise<void> => {
         machine.value = `hosted`;
         if (!(await provisionHosted())) {
             arrival.value = `choose`;
+            return;
         }
+        void warmSandboxCredential();
         return;
     }
     // The app's answer is this computer, and the handoff below fires it the moment there is a code to hand.
@@ -1765,6 +1770,22 @@ watch(commandReady, (ready) => {
         void warmIdToken();
     }
 });
+
+/* THE HOSTED LANE'S VERSION OF THE SAME WARMING, and the reason it was missing is the whole of the second
+ * Google prompt on that lane: the watcher above fires on `commandReady`, and a browser handed a machine never
+ * renders a command, so nothing warmed anything and the workspace's first daemon call asked Google on arrival.
+ *
+ * Here the reader is watching a machine boot, which is the one moment a One Tap can appear without costing
+ * anyone anything, so this goes one step further than the hydration above: with nothing cached it makes one
+ * SILENT attempt (a returning user renews without a click; a fresh account is skipped and nothing is shown),
+ * never the full gate. Whatever it yields is what the workspace finds in hand when the daemon reports in, and
+ * on a hosted machine the platform's own ticket covers the rest (sandboxSession.ts). */
+const warmSandboxCredential = async (): Promise<void> => {
+    await warmIdToken();
+    if ((await getIdToken({ interactive: false })) === undefined) {
+        await getIdToken({ silent: true });
+    }
+};
 </script>
 
 <template>

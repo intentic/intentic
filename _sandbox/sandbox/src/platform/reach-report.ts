@@ -1,6 +1,8 @@
 import type { Logger } from "pino";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../env.config.js";
+import type { BootTracker } from "./boot.js";
+import { readCpuThrottle } from "./cpu-throttle.js";
 import { postToPlatform } from "./platform-post.js";
 
 /* CAN ANYBODY ACTUALLY REACH THIS SANDBOX, the question the announce next door does not answer and was read
@@ -89,13 +91,33 @@ export const probeSelf = async (publicUrl: string, expectedId: string | undefine
     return { ok: true };
 };
 
-export const createReachReporter = (config: Config, logger: Logger): ReachReporter => {
+/* `bootOf` is the boot tracker, fetched at call time because the reporter is composed in the same literal the
+ * tracker is (composition.ts). Two things ride the report because of it: where the chain stands, so the
+ * setup wait can hold and narrate one wait instead of handing over to a second card; and the machine's CPU
+ * throttling so far (cpu-throttle.ts), so a slow first boot can be read against the host's quota. Both are
+ * optional on the wire and absent from a daemon older than this. */
+export const createReachReporter = (config: Config, logger: Logger, bootOf: () => BootTracker | undefined = () => undefined): ReachReporter => {
     let timer: NodeJS.Timeout | undefined;
     let deadline = 0;
     let backoff = 3_000;
     let status: ReachState = { state: "off" };
+    let unsubscribeBoot: (() => void) | undefined;
     const publicUrl = config.sandbox.publicUrl;
     const expectedId = sandboxIdFromToken(config.connectToken);
+
+    const bootSnapshot = (): { ready: boolean; step?: string; done: number; total: number } | undefined => {
+        const progress = bootOf()?.progress();
+        if (progress === undefined) {
+            return undefined;
+        }
+        const running = progress.steps.find((step) => step.state === "running");
+        return {
+            ready: progress.ready,
+            ...(running === undefined ? {} : { step: running.label }),
+            done: progress.steps.filter((step) => step.state === "done" || step.state === "failed").length,
+            total: progress.steps.length,
+        };
+    };
 
     // Telling the platform is best-effort by construction: this is narration for a screen, and a platform that
     // cannot be reached right now is the announce's problem to report, not this one's to duplicate.
@@ -103,10 +125,35 @@ export const createReachReporter = (config: Config, logger: Logger): ReachReport
         if (reach === "off") {
             return;
         }
-        const answer = await postToPlatform(config, "/sandbox/boot-report", { reach, ...(detail === undefined ? {} : { detail }) });
+        const boot = bootSnapshot();
+        const cpu = readCpuThrottle();
+        const answer = await postToPlatform(config, "/sandbox/boot-report", {
+            reach,
+            ...(detail === undefined ? {} : { detail }),
+            ...(boot === undefined ? {} : { boot }),
+            ...(cpu === undefined ? {} : { cpu }),
+        });
         if ("error" in answer) {
             logger.debug({ err: answer.error }, "reachability report could not be delivered");
         }
+    };
+
+    /* The chain converging is its own event to report: the reach verdict may have landed minutes earlier, and
+     * a wait holding on `boot.ready` would otherwise learn it only from the next unrelated post, which is never.
+     * One re-post of whatever the verdict currently is, then the subscription is spent. */
+    const reportWhenConverged = (): void => {
+        const tracker = bootOf();
+        if (tracker === undefined || tracker.progress().ready) {
+            return;
+        }
+        unsubscribeBoot = tracker.subscribe((progress) => {
+            if (!progress.ready) {
+                return;
+            }
+            unsubscribeBoot?.();
+            unsubscribeBoot = undefined;
+            void tell(status.state, status.detail);
+        });
     };
 
     const attempt = async (): Promise<void> => {
@@ -132,12 +179,17 @@ export const createReachReporter = (config: Config, logger: Logger): ReachReport
         start: () => {
             deadline = Date.now() + REACH_GIVE_UP_MS;
             status = { state: "checking", at: Date.now() };
+            reportWhenConverged();
             /* Say "checking" BEFORE the first probe resolves. That first word is the whole difference between
              * a wait that is silent and one that has started: it tells the page a daemon exists and is testing
              * itself, which is already more than the spinner it replaces ever managed to say. */
             void tell("checking").then(() => attempt());
         },
-        stop: () => clearTimeout(timer),
+        stop: () => {
+            clearTimeout(timer);
+            unsubscribeBoot?.();
+            unsubscribeBoot = undefined;
+        },
         status: () => status,
     };
 };

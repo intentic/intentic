@@ -40,7 +40,7 @@ import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 
 const router = useRouter();
 // Mounted ⇔ opened (PoppablePanels), so the panel's own lifetime gates the per-monorepo apps fan-out.
-const { targets, settled, start, stop, forward } = usePreviewTargets(previewOpened);
+const { targets, settled, start, stop, forward, refresh } = usePreviewTargets(previewOpened);
 const target = computed(() => pickTarget(targets.value, previewSelectedId.value));
 
 const { floats } = usePreviewFloating();
@@ -275,8 +275,57 @@ const startHint = computed<string | undefined>(() => {
     }
     const what =
         entry.app === undefined ? `${entry.repo}'s own dev server (its operator/ panel, or its dev script)` : `the ${entry.app} app's dev server`;
-    return `Runs ${what} in the sandbox, installing its dependencies first if they're missing. It appears in the terminal ${startSession.value}, and a first start can take a few minutes.`;
+    // What it COSTS is read off the tree, not assumed: the starter site arrives installed, and "a few minutes"
+    // over it was the sentence that made a two-second start read as something to go and wait out.
+    const cost = entry.installed
+        ? `Its dependencies are installed, so it's up in a few seconds.`
+        : `Its dependencies aren't installed yet, so they install first, which can take a few minutes.`;
+    return `Runs ${what} in the sandbox. It appears in the terminal ${startSession.value}. ${cost}`;
 });
+
+/* WHAT THE STARTING SCREEN SAYS, off the daemon's own account of where the start has got to (PanelLaunch)
+ * rather than a fixed sentence about installs. `exited` is the one that matters most: a dev command that died
+ * on its first line used to sit behind "Preparing the preview…" for as long as anyone cared to wait. */
+const launchHint = computed<string | undefined>(() => {
+    const entry = target.value;
+    if (entry === undefined) {
+        return undefined;
+    }
+    switch (entry.launch) {
+        case `launching`:
+            return `Opening its terminal.`;
+        case `installing`:
+            return `Installing its dependencies first, which can take a few minutes: its terminal shows the install live.`;
+        case `starting`:
+            return `Its dev server is starting; the preview opens the moment it answers.`;
+        case `exited`:
+            return `Its dev server exited before it served anything. Its terminal has the reason.`;
+        default:
+            return probeSlow.value ? `The address is taking a while to answer: its terminal shows the dev server live.` : undefined;
+    }
+});
+
+/* THE WAIT'S OWN FALLBACK. The daemon pushes the flip from starting to serving, and this panel re-probes when
+ * the pushed list carries the address; a frame dropped across a reconnect left both waiting for ever. While a
+ * start is being watched, ask again every few seconds. Cheap (one invalidation of two shared entries), and it
+ * stops the moment the wait does. */
+const STARTING_POLL_MS = 10_000;
+let startingPoll: ReturnType<typeof setInterval> | undefined;
+const stopStartingPoll = (): void => {
+    clearInterval(startingPoll);
+    startingPoll = undefined;
+};
+watch(
+    () => target.value?.running === true && previewSrc.value === undefined && reach.value?.outcome !== `unreachable`,
+    (waiting) => {
+        stopStartingPoll();
+        if (waiting) {
+            startingPoll = setInterval(() => void refresh().catch(() => undefined), STARTING_POLL_MS);
+        }
+    },
+    { immediate: true },
+);
+onUnmounted(stopStartingPoll);
 </script>
 
 <template>
@@ -519,12 +568,10 @@ const startHint = computed<string | undefined>(() => {
             <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one
                  place that says which. Also covers the wait on a freshly minted name. -->
             <div v-else-if="probing || target.running" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-                <Icon name="spinner" class="text-muted" spin />
-                <p class="text-sm text-muted">Preparing the preview…</p>
-                <p v-if="probeSlow || target.running" class="max-w-sm text-2xs text-subtle">
-                    A first start can take a few minutes while dependencies install and the address propagates: the terminal shows the dev server
-                    live.
-                </p>
+                <Icon v-if="target.launch === `exited`" name="exclamation-triangle" class="text-2xl text-subtle" />
+                <Icon v-else name="spinner" class="text-muted" spin />
+                <p class="text-sm text-muted">{{ target.launch === `exited` ? `Its dev server stopped.` : `Preparing the preview…` }}</p>
+                <p v-if="launchHint" class="max-w-sm text-2xs text-subtle">{{ launchHint }}</p>
                 <Button
                     v-if="target.session"
                     label="Open its terminal"

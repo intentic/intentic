@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract";
+import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
@@ -137,6 +138,19 @@ export interface Caller extends VerifiedIdentity {
     readonly role: MemberRole;
 }
 
+/* THE PLATFORM'S OWNER TICKET, accepted as a sign-in proof on HOSTED machines only (sandbox-contract's
+ * owner-ticket.ts carries the trust argument). Built from the public key the provisioner put in this machine's
+ * env and this sandbox's own id: a ticket verifies only if the platform signed it, it names THIS sandbox, and it
+ * has not expired. The email it names is then held to every rule a Google proof is held to (the expected owner
+ * on first-bind, the roster afterwards), so the platform can vouch for an identity and still cannot pick one
+ * the sandbox was not created for. Undefined for every other bearer, so nothing else changes shape. */
+export const ownerTicketVerifier =
+    (publicKeyPem: string, sandboxId: string) =>
+    (bearer: string): VerifiedIdentity | undefined => {
+        const ticket = verifyOwnerTicket(publicKeyPem, bearer, Date.now());
+        return ticket !== undefined && ticket.sandboxId === sandboxId ? { email: ticket.email } : undefined;
+    };
+
 export interface Authorizer {
     // Verify a request's bearer, a daemon-minted session (auth/session.ts) or a Google ID token, and enforce
     // access. The FIRST authenticated request binds its email as the owner (TOFU) and must be a fresh Google
@@ -189,6 +203,10 @@ export const createAuthorizer = (deps: {
     readonly expectedOwner?: string;
     // Permanent account-deletion marker. Optional for direct/test compositions; production always supplies it.
     readonly browserAccess?: { readonly enabled: () => Promise<boolean> };
+    // The platform's owner ticket as a sign-in proof (ownerTicketVerifier), present on hosted machines only. A
+    // ticket satisfies the connect-token gate on first-bind by itself: the platform that minted it is the same
+    // one that put the token in this machine's env.
+    readonly ownerTicket?: (bearer: string) => VerifiedIdentity | undefined;
 }): Authorizer => {
     const requireBrowserAccess = async (): Promise<void> => {
         if (deps.browserAccess !== undefined && !(await deps.browserAccess.enabled())) {
@@ -218,13 +236,20 @@ export const createAuthorizer = (deps: {
                 throw new Error("missing bearer token");
             }
             const owner = await deps.owner.read();
-            if (owner !== undefined) {
-                return enforce(await identify(bearer), owner);
+            /* A ticket SELECTS its own verification and commits the request to it (the same rule grants.ts
+             * states for every credential that stands in for the bearer): a bearer shaped like a ticket that
+             * does not verify is refused here, never handed on to the Google verifier to fail more slowly. */
+            const vouched = isOwnerTicket(bearer) ? deps.ownerTicket?.(bearer) : undefined;
+            if (isOwnerTicket(bearer) && vouched === undefined) {
+                throw new Error("owner ticket refused: not for this sandbox, expired, or not the platform's");
             }
-            // First-bind takes a fresh Google proof only, a session lingering from a wiped owner file (a
-            // recreated workspace under the same sandbox id) must never seed ownership.
-            const identity = await deps.verify(bearer);
-            if (deps.connectToken !== undefined && (firstBind === undefined || !tokenEquals(firstBind, deps.connectToken))) {
+            if (owner !== undefined) {
+                return enforce(vouched ?? (await identify(bearer)), owner);
+            }
+            // First-bind takes a fresh Google proof (or the platform's ticket) only, a session lingering from a
+            // wiped owner file (a recreated workspace under the same sandbox id) must never seed ownership.
+            const identity = vouched ?? (await deps.verify(bearer));
+            if (vouched === undefined && deps.connectToken !== undefined && (firstBind === undefined || !tokenEquals(firstBind, deps.connectToken))) {
                 throw new Error("first-bind requires the connection token");
             }
             // Identity gate AFTER the connect-token gate: a missing token is a setup problem (401), a wrong

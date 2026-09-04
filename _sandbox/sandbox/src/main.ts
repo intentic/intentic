@@ -81,6 +81,9 @@ import { restoreAuthorizedKeys } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { seedStarterSite } from "./scaffold/starter-site.js";
+import { runAutostart } from "./scaffold/autostart.js";
+import { arrivedPrewarmed, finishPrewarm } from "./platform/prewarm.js";
+import { readCpuThrottle } from "./platform/cpu-throttle.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { recordNewestRun } from "./store/newest-run.js";
@@ -112,8 +115,10 @@ const BOOT_STEPS = [
     { key: "claudeState", label: "Linking conversation state" },
     { key: "sshHosts", label: "Linking ssh hosts" },
     { key: "vaultSecrets", label: "Securing stored credentials" },
+    { key: "staleSessions", label: "Sweeping stale sessions" },
     { key: "rootRepo", label: "Preparing the workspace repo" },
     { key: "starterSite", label: "Putting your starter site in place" },
+    { key: "autostart", label: "Starting your apps" },
     { key: "referenceShelf", label: "Ensuring the reference shelf" },
     { key: "staleExports", label: "Sweeping interrupted exports and arrivals" },
     { key: "repoGitDirs", label: "Healing repository git dirs" },
@@ -121,7 +126,6 @@ const BOOT_STEPS = [
     { key: "agentsRegistry", label: "Loading conversations" },
     { key: "skills", label: "Converging agent skills" },
     { key: "baseline", label: "Taking the workspace baseline" },
-    { key: "staleSessions", label: "Sweeping stale sessions" },
     { key: "agentToken", label: "Writing the agent token" },
 ] as const;
 
@@ -255,6 +259,14 @@ const main = async (): Promise<void> => {
     const role = traits.convergeHome
         ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
         : { container: false, roots: true };
+    /* A POOL MACHINE PREPARING ITS VOLUME FOR A FUTURE OWNER (platform/prewarm.ts). Nothing below branches on
+     * it except the very end: the chain runs exactly as it would for an owner, and every identity-bearing
+     * subsystem is already off by its own gate because the env names no owner. Container role only: a guest
+     * daemon or a local folder has no volume to prepare. */
+    const prewarm = config.sandbox.prewarm && role.container;
+    if (prewarm) {
+        logger.info({ image: config.sandbox.image }, "prewarm boot: preparing this volume, then stopping");
+    }
     /* The last invariant companion, wired here rather than in composition because its subject is the answer just
      * computed: everything downstream trusts this role forever, and the claim it rests on is a file a second
      * daemon's boot overwrites (platform/invariant.ts). */
@@ -586,6 +598,47 @@ const main = async (): Promise<void> => {
         }
     });
 
+    // Panel/agent/job tmux sessions outlive a daemon restart (the tmux server is container-scoped), kill
+    // leftovers so "panels are stopped after a restart" holds and no orphan dev server squats an untracked
+    // port. EXCEPT a live infra apply (killing it would truncate the host mutation mid-run, orphan the host
+    // apply lock for its TTL, and report the run complete, when the event log records a started-but-not-exited
+    // run and its session survives, re-adopt it; the web reattaches through the same event log) and a live
+    // dockerd (panel-docker keeps serving containers across daemon restarts, adopt it back). The sweep is
+    // ORDERED before the gate opens so the capability restores below can't race a kill of the session they
+    // just started, and BEFORE ANY STEP THAT STARTS A PROCESS OF ITS OWN: it kills every panel-* session it
+    // finds, and when it ran after the starter-site seed it killed the dev server that seed had just started,
+    // so every fresh sandbox opened on "site isn't running" (main-boot-order.test.ts holds the order).
+    await boot.step("staleSessions", async () => {
+        // Container-wide: the tmux server is shared, so these sessions belong to whoever owns the container.
+        if (!role.container) {
+            return;
+        }
+        const applyLive =
+            (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
+            (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
+        const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
+        // A live llama-server is adopted for the dockerd reason, with a heavier price for getting it wrong:
+        // killing one throws away a loaded model, and reloading a large one costs minutes of dead picker.
+        const modelKeys = (await services.capabilities.list().catch(() => [])).flatMap((capability) =>
+            capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : [],
+        );
+        const modelsAlive: string[] = [];
+        for (const key of modelKeys) {
+            if (await services.processes.adopt(key, {}).catch(() => false)) {
+                modelsAlive.push(panelSession(key));
+            }
+        }
+        await killStaleManagedSessions([
+            ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
+            ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
+            ...modelsAlive,
+        ]).catch(() => undefined);
+        // Service children (extension gateways) of a daemon that died WITHOUT unwinding: they live in their
+        // own process groups, so they survived it, holding provider connections the restore below would
+        // duplicate. A clean shutdown already stopped them; this only ever finds crash leftovers.
+        await killOrphanServiceProcesses(logger).catch(() => undefined);
+    });
+
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
     // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down, a
     // failure reads as "not fresh" so we skip the baseline commit below.
@@ -631,6 +684,25 @@ const main = async (): Promise<void> => {
          * a sandbox that opened empty because of a wrong verdict looks identical to one that opened empty
          * because the user brought their own code. */
         logger.info({ why: outcome.skipped }, "starter site not seeded, the workspace opens as it arrived");
+    });
+
+    /* START WHAT THE WORKSPACE SAYS SHOULD BE RUNNING (scaffold/autostart.ts): the starter's dev server on a
+     * first boot, and on every boot after it. Panels do not survive a restart (the sweep above kills them on
+     * purpose), so without this a woken hosted machine and a pool volume the platform prepared ahead of demand
+     * both opened on "isn't running" with a Start button. After the seed, which writes the first entry, and
+     * after the sweep, which would kill what this starts. Idempotent: a key the manager already tracks is a
+     * no-op, and an entry whose folder is gone is one log line. */
+    await boot.step("autostart", async () => {
+        if (!role.roots || !traits.ownsWorkspaceConfig) {
+            return;
+        }
+        const outcome = await runAutostart(services).catch((error: unknown) => {
+            logger.warn({ err: error }, "autostart: the list could not be read, nothing started");
+            return undefined;
+        });
+        if (outcome !== undefined && (outcome.started.length > 0 || outcome.skipped.length > 0)) {
+            logger.info(outcome, "autostart: workspace apps");
+        }
     });
 
     // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic, its presence
@@ -686,7 +758,12 @@ const main = async (): Promise<void> => {
      * env can never run it over work, and by ownsWorkspaceConfig for the same reason every config write above
      * is. Log-and-continue like every boot step: a bad seed costs its report, never the daemon. */
     await boot.step("definitionSeed", async () => {
-        if (!role.roots || !traits.ownsWorkspaceConfig || config.sandbox.definitionSeed === "" || !services.workspaceArrivedEmpty) {
+        if (!role.roots || !traits.ownsWorkspaceConfig || config.sandbox.definitionSeed === "") {
+            return;
+        }
+        // A prewarmed pool volume holds the starter and nothing of the user's, which is as empty as this gate
+        // means (platform/prewarm.ts): the seed is still the fleet door's first and only chance.
+        if (!services.workspaceArrivedEmpty && !(await arrivedPrewarmed(config.workspaceRoot, config.historyRoot))) {
             return;
         }
         try {
@@ -741,44 +818,6 @@ const main = async (): Promise<void> => {
         }
     });
 
-    // Panel/agent/job tmux sessions outlive a daemon restart (the tmux server is container-scoped), kill
-    // leftovers so "panels are stopped after a restart" holds and no orphan dev server squats an untracked
-    // port. EXCEPT a live infra apply (killing it would truncate the host mutation mid-run, orphan the host
-    // apply lock for its TTL, and report the run complete, when the event log records a started-but-not-exited
-    // run and its session survives, re-adopt it; the web reattaches through the same event log) and a live
-    // dockerd (panel-docker keeps serving containers across daemon restarts, adopt it back). The sweep is
-    // ORDERED before the gate opens so the capability restores below can't race a kill of the session they
-    // just started.
-    await boot.step("staleSessions", async () => {
-        // Container-wide: the tmux server is shared, so these sessions belong to whoever owns the container.
-        if (!role.container) {
-            return;
-        }
-        const applyLive =
-            (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
-            (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
-        const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
-        // A live llama-server is adopted for the dockerd reason, with a heavier price for getting it wrong:
-        // killing one throws away a loaded model, and reloading a large one costs minutes of dead picker.
-        const modelKeys = (await services.capabilities.list().catch(() => [])).flatMap((capability) =>
-            capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : [],
-        );
-        const modelsAlive: string[] = [];
-        for (const key of modelKeys) {
-            if (await services.processes.adopt(key, {}).catch(() => false)) {
-                modelsAlive.push(panelSession(key));
-            }
-        }
-        await killStaleManagedSessions([
-            ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
-            ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
-            ...modelsAlive,
-        ]).catch(() => undefined);
-        // Service children (extension gateways) of a daemon that died WITHOUT unwinding: they live in their
-        // own process groups, so they survived it, holding provider connections the restore below would
-        // duplicate. A clean shutdown already stopped them; this only ever finds crash leftovers.
-        await killOrphanServiceProcesses(logger).catch(() => undefined);
-    });
     // A previous boot's check runs left per-run event files behind (their streams died with the daemon).
     if (role.roots) {
         void rm(checkEventsDir(config.historyRoot), { recursive: true, force: true });
@@ -854,6 +893,9 @@ const main = async (): Promise<void> => {
     // The state the data routes serve is converged, open the gate. Everything below is background machinery
     // that no queued request depends on.
     boot.finish();
+    // With the host's throttling so far beside it: on a shared-CPU machine a slow chain is usually the quota's
+    // doing, not the steps', and this is the line that tells the two apart (platform/cpu-throttle.ts).
+    logger.info({ ms: Date.now() - boot.progress().startedAt, cpu: readCpuThrottle() }, "boot: chain converged");
 
     /* THE PARENT LINK, when this container is a runner (or ever was: an identity on /history outlives a
      * rebuild that stripped the env). After the gate on purpose: the first thing a parent does with a live
@@ -1302,6 +1344,16 @@ const main = async (): Promise<void> => {
     };
     process.on("SIGTERM", stop);
     process.on("SIGINT", stop);
+
+    /* A POOL MACHINE'S BOOT ENDS HERE. The chain above prepared the volume and the autostart step started the
+     * starter; the machine has nothing else to be until somebody claims it. Warm the server once, stamp the
+     * volume, and take the same graceful exit SIGTERM takes, which is what stops the machine. After every
+     * handler above is installed on purpose: the exit must be the ordinary one, marker stamped and all. */
+    if (prewarm) {
+        void finishPrewarm({ historyRoot: config.historyRoot, image: config.sandbox.image, processes: services.processes, logger })
+            .catch((error: unknown) => logger.error({ err: error }, "prewarm: could not finish; the claimed boot prepares whatever is missing"))
+            .finally(stop);
+    }
 };
 
 void main();

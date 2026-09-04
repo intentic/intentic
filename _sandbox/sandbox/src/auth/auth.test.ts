@@ -1,5 +1,16 @@
+import { generateKeyPairSync } from "node:crypto";
+import { mintOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { describe, expect, test } from "vitest";
-import { authorizeMaintainer, createAuthorizer, ForbiddenError, type IdTokenVerifier, type Member, type MembersStore, type OwnerStore } from "./auth.js";
+import {
+    authorizeMaintainer,
+    createAuthorizer,
+    ForbiddenError,
+    type IdTokenVerifier,
+    type Member,
+    type MembersStore,
+    type OwnerStore,
+    ownerTicketVerifier,
+} from "./auth.js";
 
 // In-memory owner store so the TOFU branching is exercised without touching disk.
 const memOwner = (initial?: string): OwnerStore => {
@@ -252,5 +263,65 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
         expect(await owner.read()).toBeUndefined();
         await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
         expect(await owner.read()).toBe("a@x.com");
+    });
+});
+
+/* THE PLATFORM'S OWNER TICKET (sandbox-contract's owner-ticket.ts), the hosted lane's way past the second Google
+ * prompt. Held to every rule a Google proof is: it names THIS sandbox, the expected owner on first-bind, and the
+ * roster afterwards, and it satisfies the connect-token gate by itself, because the platform that signed it is
+ * the platform that put the token in the machine's env. */
+describe("owner ticket", () => {
+    const pair = generateKeyPairSync("ed25519");
+    const privatePem = pair.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+    const publicPem = pair.publicKey.export({ type: "spki", format: "pem" }) as string;
+    const ticketFor = (email: string, sandboxId = "0123456789ab"): string =>
+        mintOwnerTicket(privatePem, { sandboxId, email, issuedAtMs: Date.now() });
+
+    test("first-binds the expected owner without a connect token, and drives the sandbox as owner afterwards", async () => {
+        const owner = memOwner();
+        const authz = createAuthorizer({
+            verify: verifierFor({}),
+            owner,
+            members: memMembers(),
+            connectToken: "secret",
+            expectedOwner: "a@x.com",
+            ownerTicket: ownerTicketVerifier(publicPem, "0123456789ab"),
+        });
+        await expect(authz.authorize(ticketFor("A@x.com"), undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
+        expect(await owner.read()).toBe("a@x.com");
+        // Bound: a later ticket for the owner is the owner; one for a stranger is refused by the roster.
+        await expect(authz.authorize(ticketFor("a@x.com"), undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
+        await expect(authz.authorize(ticketFor("b@x.com"), undefined)).rejects.toBeInstanceOf(ForbiddenError);
+    });
+
+    test("cannot pick an owner the sandbox was not created for", async () => {
+        const owner = memOwner();
+        const authz = createAuthorizer({
+            verify: verifierFor({}),
+            owner,
+            members: memMembers(),
+            expectedOwner: "a@x.com",
+            ownerTicket: ownerTicketVerifier(publicPem, "0123456789ab"),
+        });
+        await expect(authz.authorize(ticketFor("b@x.com"), undefined)).rejects.toBeInstanceOf(ForbiddenError);
+        expect(await owner.read()).toBeUndefined();
+    });
+
+    test("refuses a ticket for another sandbox, another key, or a daemon with no key, and never falls through to Google", async () => {
+        const otherKey = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+        const verify = verifierFor({ "tok-a": "a@x.com" });
+        const withKey = createAuthorizer({
+            verify,
+            owner: memOwner(),
+            members: memMembers(),
+            ownerTicket: ownerTicketVerifier(publicPem, "0123456789ab"),
+        });
+        await expect(withKey.authorize(ticketFor("a@x.com", "ffffffffffff"), undefined)).rejects.toThrow(/owner ticket refused/);
+        await expect(
+            withKey.authorize(mintOwnerTicket(otherKey, { sandboxId: "0123456789ab", email: "a@x.com", issuedAtMs: Date.now() }), undefined),
+        ).rejects.toThrow(/owner ticket refused/);
+        // Every non-hosted daemon: no key in its env, so a ticket-shaped bearer is refused outright.
+        const withoutKey = createAuthorizer({ verify, owner: memOwner(), members: memMembers() });
+        await expect(withoutKey.authorize(ticketFor("a@x.com"), undefined)).rejects.toThrow(/owner ticket refused/);
     });
 });

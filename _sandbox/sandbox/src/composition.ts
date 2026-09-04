@@ -17,7 +17,7 @@ import type {
     WorkspaceChildren,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
-import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import {
     type GitCloneOptions,
     type GitStatus,
@@ -78,6 +78,7 @@ import {
     fileOwnerStore,
     type MembersStore,
     type VerifiedIdentity,
+    ownerTicketVerifier,
 } from "./auth/auth.js";
 import { fileBrowserAccess } from "./auth/browser-access.js";
 import { createAuthConnections, type AuthConnections } from "./auth/connections.js";
@@ -885,6 +886,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
                   browserAccess,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
                   ...(config.owner.email !== "" ? { expectedOwner: config.owner.email } : {}),
+                  // Hosted machines only: the provisioner is the one thing that sets the platform's public key,
+                  // and a ticket is only ever checked against THIS sandbox's id (auth.ts ownerTicketVerifier).
+                  ...(config.platform.publicKey !== "" && config.connectToken !== ""
+                      ? { ownerTicket: ownerTicketVerifier(config.platform.publicKey, sandboxIdFromToken(config.connectToken) ?? "") }
+                      : {}),
               })
             : undefined;
     const auth = authorizer
@@ -1246,7 +1252,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // for a test or the host-internal preview has nothing to wait for.
         boot: createBootTracker(logger),
         announcer: createAnnouncer(config, logger),
-        reach: createReachReporter(config, logger),
+        // The tracker is a sibling in this literal, so the reporter reads it through the holder at call time.
+        reach: createReachReporter(config, logger, () => servicesHolder.current?.boot),
         workspace,
         // Read HERE, at composition, and read once: this is the last moment /work still looks the way the user
         // handed it over. Everything after this line, the boot chain, the detached setup seeds and capability

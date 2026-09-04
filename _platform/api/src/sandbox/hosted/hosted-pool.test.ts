@@ -1,7 +1,7 @@
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
-import { reconcileHostedPool, WARM_BOOT_EXEC } from "./hosted-pool.js";
+import { reconcileHostedPool } from "./hosted-pool.js";
 import { hostedInstanceId } from "./hosted.js";
 
 /* THE POOL'S PROMISES, pinned: a warm machine never runs the sandbox (its one boot is a no-op), the stock
@@ -95,7 +95,7 @@ afterEach(() => {
 });
 
 describe(`reconcileHostedPool`, () => {
-    it(`builds toward the target in BOTH regions, and the warm boot is a no-op over the real image`, async () => {
+    it(`builds toward the target in BOTH regions, and the warm boot is the daemon's prewarm over the real image`, async () => {
         const create = vi.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         await reconcileHostedPool(fakePrisma({ hostedPoolMachine: { create } }), config(), logger);
@@ -104,12 +104,15 @@ describe(`reconcileHostedPool`, () => {
         expect(machines).toHaveLength(2);
         const regions = machines.map((entry) => (entry.body as { region: string }).region).toSorted();
         expect(regions).toEqual([`arn`, `iad`]);
-        // The pull is the point; the sandbox must not run: real image, no-op exec, and no identity at all.
+        // The pull AND the prepared volume are the point; the sandbox runs its own entrypoint (no exec
+        // override) in prewarm mode, with no identity at all.
         const posted = machines[0]?.body as {
-            config: { image: string; init: { exec: string[] }; env: Record<string, string>; metadata: Record<string, string> };
+            config: { image: string; init?: unknown; env: Record<string, string>; metadata: Record<string, string> };
         };
         expect(posted.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
-        expect(posted.config.init).toEqual({ exec: [...WARM_BOOT_EXEC] });
+        expect(posted.config.init).toBeUndefined();
+        expect(posted.config.env[`SANDBOX_PREWARM`]).toBe(`1`);
+        expect(posted.config.env[`SANDBOX_VM`]).toBe(`1`);
         // …and it says so to Fly, which is the only place the truth survives: this app is named `pool` for
         // life, claimed or not, so the console's app list can never be the answer. The platform stamp is on
         // it from its first second, so no other deployment sharing this org reads our stock as litter.
@@ -156,7 +159,7 @@ describe(`reconcileHostedPool`, () => {
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.endsWith(`/apps/${poolRow().appName}`))).toBe(true);
     });
 
-    it(`flips a build to ready once its no-op boot is observed stopped`, async () => {
+    it(`flips a build to ready once its prewarm boot is observed stopped`, async () => {
         const update = vi.fn().mockResolvedValue({});
         stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `stopped` }) },

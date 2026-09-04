@@ -84,7 +84,7 @@ beforeEach(() => {
     provider.value = TRIAL_PROVIDER;
     reachable.value = true;
     streaming.value = false;
-    trialStatus.value = { available: true, allowance: 10, used: 2, remaining: 8, health: `healthy` };
+    trialStatus.value = { available: true, allowance: 10, used: 6, remaining: 4, health: `healthy` };
     resume.mockClear();
     loadTrialStatus.mockClear();
 });
@@ -103,7 +103,7 @@ it(`reports a pool that answered as a working trial, whatever it went through to
 
     const element = mount();
 
-    expect(element.textContent).toContain(`8 free messages left today`);
+    expect(element.textContent).toContain(`4 free messages left today`);
     expect(element.textContent).toContain(`Last answer: gemini-flash-lite-latest`);
     expect(element.textContent).toContain(`Trial capacity is tight right now`);
     // The two claims that were false over an answered turn: that a message failed, and that there is something
@@ -117,9 +117,33 @@ it(`reports a pool that answered as a working trial, whatever it went through to
 it(`says nothing about the pool while it is answering cleanly`, () => {
     const element = mount();
 
-    expect(element.textContent).toContain(`8 free messages left today`);
+    expect(element.textContent).toContain(`4 free messages left today`);
     expect(element.textContent).not.toContain(`Trial capacity is tight`);
     expect(named(element, `Retry`)).toBeUndefined();
+});
+
+/* THE FIRST SCREEN OF A NEW ACCOUNT. A count and a "Connect Google" over a chat that has answered nothing yet
+ * reads as a limit about to be hit, so while more than half the day is left the strip stays down; it comes up
+ * at the halfway mark, when the number has become something to plan around. */
+it(`stays down while more than half the allowance is left, and comes up at the halfway mark`, () => {
+    trialStatus.value = { ...trialStatus.value, used: 2, remaining: 8 };
+    let element = mount();
+    expect(element.textContent).not.toContain(`free messages left`);
+    expect(named(element, `Connect Google`)).toBeUndefined();
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    trialStatus.value = { ...trialStatus.value, used: 5, remaining: 5 };
+    element = mount();
+    expect(element.textContent).toContain(`5 free messages left today`);
+    expect(named(element, `Connect Google`)).toEqual(expect.any(Object));
+});
+
+// A strained pool is worth a line at any count: somebody watching a slow answer wants it explained.
+it(`says the pool is strained even while most of the allowance is left`, () => {
+    trialStatus.value = { ...trialStatus.value, used: 1, remaining: 9, health: `degraded` };
+    const element = mount();
+    expect(element.textContent).toContain(`Trial capacity is tight right now`);
 });
 
 /* The state that IS an interruption. The turn is held below (turnFailures holds it and the platform refunds

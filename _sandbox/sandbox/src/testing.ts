@@ -69,7 +69,7 @@ export const testConfig: Config = {
     hostPlatform: "",
     hostLabel: "",
     webOrigin: "",
-    platform: { url: "" },
+    platform: { url: "", publicKey: "" },
     intenticAgentTools: "",
     claudeCodeOauthToken: "",
     anthropicApiKey: "",
@@ -91,6 +91,7 @@ export const testConfig: Config = {
         channel: "",
         previousImage: "",
         definitionSeed: "",
+        prewarm: false,
     },
     // No edge to dial: a test daemon is loopback-only, which is a supported posture rather than a gap.
     ingress: { url: "" },

@@ -248,6 +248,19 @@ const STATE_FILES = [
         portability: "derived",
         note: "The target starts its own record of what it decided.",
     },
+    /* Which of the workspace's apps the daemon starts on EVERY boot (scaffold/autostart.ts). The starter-site
+     * seed writes the first entry; the `autostart` boot step reads it, which is what puts the starter's dev
+     * server up on a first boot, on a boot over a prewarmed pool volume (where the seed has nothing to do), and
+     * after every wake of a hosted machine (panels are stopped by a restart, so without this a returning user
+     * met "isn't running" every time). `carry`: an exported workspace should arrive with the same things
+     * running. Invalidates nothing: the browser reads what is running off /panels, never off this file. */
+    {
+        path: ".intentic/config/autostart.json",
+        invalidates: [],
+        why: "The browser reads what is running off /panels; this file only tells the daemon what to start at boot.",
+        portability: "carry",
+        versioned: true,
+    },
     /* Which agent commands are heavy enough to take turns, and how many may run at once (the daemon reads it
      * per Bash command: platform/heavy-commands.ts).
      *

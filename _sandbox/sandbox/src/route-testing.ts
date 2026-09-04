@@ -252,6 +252,8 @@ export const fakeProcesses = (
             },
             running: (repo) => repo in ports,
             portOf: (repo) => ports[repo],
+            // A stubbed panel is never mid-start: the routes drop the field, which is also the common case.
+            launchOf: () => undefined,
             stopAll: () => {},
         }),
         { started, stopped },

@@ -62,6 +62,17 @@
                 "default": "./dist/ingress-contract.js"
             }
         },
+        "./owner-ticket": {
+            "types": "./dist/owner-ticket.d.ts",
+            "import": {
+                "@intentic/src": "./src/owner-ticket.ts",
+                "default": "./dist/owner-ticket.js"
+            },
+            "require": {
+                "@intentic/src": "./src/owner-ticket.ts",
+                "default": "./dist/owner-ticket.js"
+            }
+        },
         "./ingress-protocol": {
             "types": "./dist/ingress-protocol.d.ts",
             "import": {

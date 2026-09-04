@@ -63,6 +63,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 channel: "",
                 previousImage: "",
                 definitionSeed: "",
+                prewarm: false,
             },
             extensionsDir: EXTENSIONS_DIR,
             // Read by the provider-pack fragment source (codexConnected) on every compose, empty: no provider.

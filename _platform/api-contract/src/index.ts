@@ -3,6 +3,7 @@ import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
     AddressOfferSchema,
+    OwnerTicketSchema,
     AdminActionResultSchema,
     AdminAttentionSchema,
     AdminCostsSchema,
@@ -128,6 +129,10 @@ export const sandboxContract = {
      * draws them: a platform with no tunnel fabric cannot offer the pasted command, and its reader belongs in
      * the attach lane from the first frame rather than after a mint 404s. */
     addressOffer: oc.route({ method: "GET", path: "/sandbox/address-offer" }).output(AddressOfferSchema),
+    /* A signed way into a HOSTED sandbox for its owner (OwnerTicketSchema), so the sign-in that just happened
+     * here is the only one. Owner-only, hosted-only, 404 where the platform cannot sign; the browser falls back
+     * to a Google proof on any refusal, which is what every other lane uses unchanged. */
+    ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(OwnerTicketSchema),
     setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput).output(SetupCodeSchema),
     emailSetupLink: oc
         .route({ method: "POST", path: "/sandbox/email-setup-link" })

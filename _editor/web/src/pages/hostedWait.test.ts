@@ -162,3 +162,33 @@ describe(`hostedWaitView`, () => {
         expect(hostedWaitView(wait({ boot: boot(`reachable`) })).reachable).toBe(true);
     });
 });
+
+/* ONE WAIT, NOT TWO. The daemon announces before its boot chain runs, so the handover used to land the reader on
+ * the workspace's own warm-up card straight after this one. With the chain riding the report, this card holds
+ * on it, names the running step, and lets go only once the daemon says it is converged. A daemon that reports
+ * no chain (an older image) behaves exactly as before. */
+describe(`the boot chain on the card`, () => {
+    const chained = (ready: boolean, step?: string): BootReport => ({
+        ...boot(`reachable`),
+        boot: { ready, done: ready ? 15 : 6, total: 15, ...(step === undefined ? {} : { step }) },
+    });
+
+    it(`holds on a reachable daemon whose chain is still running, and names the step`, () => {
+        const view = hostedWaitView(wait({ machine: `started`, announced: true, boot: chained(false, `Putting your starter site in place`) }));
+        expect(view.booting).toBe(true);
+        expect(view.steps.find((step) => step.state === `active`)?.key).toBe(`booting`);
+        expect(view.steps.find((step) => step.key === `booting`)?.label).toBe(`Starting your sandbox: Putting your starter site in place`);
+    });
+
+    it(`lets go once the chain has converged`, () => {
+        const view = hostedWaitView(wait({ machine: `started`, announced: true, boot: chained(true) }));
+        expect(view.booting).toBe(false);
+        expect(view.steps.find((step) => step.state === `active`)?.key).toBe(`ready`);
+        expect(view.steps.find((step) => step.key === `booting`)?.label).toBe(`Starting your sandbox`);
+    });
+
+    it(`reads a report with no chain as the hand-over-on-announce it always was`, () => {
+        expect(hostedWaitView(wait({ machine: `started`, announced: true, boot: boot(`reachable`) })).booting).toBe(false);
+        expect(hostedWaitView(wait()).booting).toBe(false);
+    });
+});

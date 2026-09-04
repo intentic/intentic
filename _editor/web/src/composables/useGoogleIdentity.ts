@@ -153,42 +153,70 @@ const ensureInitialized = async (): Promise<void> => {
     }
 };
 
+// The gate's own event, loaded when it fires rather than imported: the analytics module reads the page's
+// environment as it loads, and this module runs in places with no page (the session tests, every worker).
+const reportGate = (properties: Record<string, unknown>): void => {
+    void import("./analytics").then(({ track }) => track(`sandbox_signin_gate`, properties)).catch(() => undefined);
+};
+
 // If the silent attempt reports nothing by then (FedCM removed the "not displayed" moment; some browsers
 // block the FedCM UI without any moment firing), raise the button gate. Benign if it fires mid-One-Tap,
 // both surfaces feed the same credential callback.
 const SILENT_GUARD_MS = 5000;
 
-// First attempt of a mint: FedCM One Tap / auto re-authentication (auto_select). Raise the rendered-button
-// gate when the prompt is skipped (cooldown / no session), dismissed without a credential, or silent past the
-// guard. Returns the guard timer so mint() clears it once the credential (or a cancel) settles.
-const trySilent = (gate: boolean): ReturnType<typeof setTimeout> | undefined => {
-    const raiseGate = (): void => {
-        if (settle !== undefined && gate) {
+/* WHAT A MINT DOES WHEN THE SILENT ATTEMPT FAILS, the one thing its callers differ on:
+ *   gate     raise the shared full-screen Google button; the caller is a person waiting on a sandbox call
+ *   button   nothing; the caller is already showing a Google button of its own (the desktop-auth page)
+ *   silent   give up, quietly: the caller was warming a credential ahead of need (the setup page, while a
+ *            hosted machine boots) and has no standing to put anything on the screen
+ * Module state rather than a closure, because one mint is shared by everyone who asks while it is in flight,
+ * and a person arriving mid-silent-attempt has standing the warmer did not: their ask upgrades the mode. */
+type MintMode = "gate" | "button" | "silent";
+let mintMode: MintMode = "gate";
+
+// First attempt of a mint: FedCM One Tap / auto re-authentication (auto_select). When the prompt is skipped
+// (cooldown / no session), dismissed without a credential, or silent past the guard, do what the mode says,
+// and COUNT IT with its reason: a second sign-in reaching the screen was invisible in the numbers until now,
+// and which of these paths it usually takes decides what to fix next. Returns the guard timer so mint()
+// clears it once the credential (or a cancel) settles.
+const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
+    const silentFailed = (reason: "skipped" | "dismissed" | "guard-timeout" | "webview"): void => {
+        if (settle === undefined) {
+            return;
+        }
+        reportGate({ reason, mode: mintMode });
+        if (mintMode === `gate`) {
             needsSignIn.value = true;
+        } else if (mintMode === `silent`) {
+            settle(undefined);
         }
     };
     /* The desktop webview has no silent attempt to make. Google will not talk to it at all, so the five
      * seconds the guard exists to wait out are five seconds of certain failure. Raise the gate now; what it
      * offers there is the hand-off to the real browser, which is the only sign-in this window can complete. */
     if (desktopVersion() !== undefined) {
-        raiseGate();
+        silentFailed(`webview`);
         return undefined;
     }
     // No guard when the caller shows its own button: the timer exists only to raise the shared overlay, and a
     // caller that is ALREADY showing a Google button would be made to wait five seconds for a second one.
-    const guard = gate ? setTimeout(raiseGate, SILENT_GUARD_MS) : undefined;
+    const guard = mintMode === `button` ? undefined : setTimeout(() => silentFailed(`guard-timeout`), SILENT_GUARD_MS);
     window.google?.accounts?.id?.prompt((moment) => {
-        if (moment.isSkippedMoment() || (moment.isDismissedMoment() && moment.getDismissedReason() !== `credential_returned`)) {
+        if (moment.isSkippedMoment()) {
             clearTimeout(guard);
-            raiseGate();
+            silentFailed(`skipped`);
+        } else if (moment.isDismissedMoment() && moment.getDismissedReason() !== `credential_returned`) {
+            clearTimeout(guard);
+            silentFailed(`dismissed`);
         }
     });
     return guard;
 };
 
 // One mint: init GIS (wires the shared credential callback + whichever button is rendered), try the silent
-// prompt, fall back to the gate when this mint owns one, and wait for the credential via `settle`.
-const mint = async (gate: boolean): Promise<string | undefined> => {
+// prompt, do what the mode says when it fails, and wait for the credential via `settle`.
+const mint = async (mode: MintMode): Promise<string | undefined> => {
+    mintMode = mode;
     try {
         await ensureInitialized();
     } catch {
@@ -199,7 +227,7 @@ const mint = async (gate: boolean): Promise<string | undefined> => {
         settle = resolve;
     });
     acceptingCredential = true;
-    const guard = trySilent(gate);
+    const guard = trySilent();
     const result = await minted;
     clearTimeout(guard);
     settle = undefined;
@@ -238,6 +266,10 @@ const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
  * The consequence is that a suppressed prompt leaves this pending until that button is clicked, which is only
  * safe because its one caller, the desktop-auth page, is a whole window with no other caller in it.
  *
+ * `silent` says the caller is WARMING a credential for later and may show nothing: One Tap is tried (a
+ * returning user renews without a click), and if it is skipped, dismissed or silent the mint resolves to
+ * undefined instead of raising the gate. A person who asks while that attempt is in flight upgrades it.
+ *
  * `usableFor` is how long the caller needs the token to still be good, and it exists because one caller does
  * not spend it here: the desktop hand-off ships it to another process, which cannot use it until a daemon
  * exists to exchange it, sometimes a whole setup later. A cached token one minute from death satisfies every
@@ -247,6 +279,7 @@ const getIdToken = async (options?: {
     readonly gate?: boolean;
     readonly usableFor?: number;
     readonly interactive?: boolean;
+    readonly silent?: boolean;
 }): Promise<string | undefined> => {
     const valid = cached(options?.usableFor ?? NEAR_EXPIRY_MS);
     if (valid !== undefined) {
@@ -255,7 +288,16 @@ const getIdToken = async (options?: {
     if (options?.interactive === false) {
         return inflight;
     }
-    inflight ??= mint(options?.gate ?? true);
+    const mode: MintMode = options?.silent === true ? `silent` : options?.gate === false ? `button` : `gate`;
+    if (inflight !== undefined) {
+        // Somebody with more standing joins a quiet attempt: a person waiting must get the gate a warmer would
+        // not have raised. Never the other way round, a warmer joining a person's mint changes nothing.
+        if (mintMode === `silent` && mode !== `silent`) {
+            mintMode = mode;
+        }
+        return inflight;
+    }
+    inflight = mint(mode);
     return inflight;
 };
 

@@ -206,13 +206,38 @@ const daemonAnswers = async (target: SandboxTarget): Promise<boolean> => {
     return token === undefined || token === `` ? true : healthAnswers(target.base, await sandboxIdOf(token));
 };
 
+/* THE PLATFORM'S WORD, where it has one (sandboxTarget's `ownerVouched`): a hosted sandbox's owner gets a signed
+ * ticket the daemon takes in place of a Google proof (the contract's owner-ticket.ts), which is what makes the
+ * platform sign-in the only one. Asked only when no Google proof is in hand, and any refusal (a platform that
+ * cannot sign, a daemon too old to verify) simply falls through to Google, exactly as before. Never stored:
+ * it is spent in the next call and expires in minutes anyway. */
+const ownerTicketFor = async (target: SandboxTarget): Promise<string | undefined> => {
+    if (target.ownerVouched !== true || target.sandboxId === undefined) {
+        return undefined;
+    }
+    try {
+        // Loaded here rather than at the top: the platform client reads the page's environment when its module
+        // loads, and this module is imported by code that runs where there is no page (the session tests, and
+        // every reader that never reaches a hosted sandbox).
+        const { apiClient } = await import("../useApi");
+        return (await apiClient.sandbox.ownerTicket({ sandboxId: target.sandboxId })).ticket;
+    } catch {
+        return undefined;
+    }
+};
+
 /* The proof this exchange will spend. A cached one costs nothing and is what the steady state uses; minting a
  * fresh one is an interruption, so it belongs only to a caller somebody is waiting on, and only once the
- * daemon has been shown to be answering. */
+ * daemon has been shown to be answering. The platform's ticket sits between the two: free of interruption like
+ * the cache, so a foreground caller tries it before it would put Google on the screen. */
 const proveIdentity = async (target: SandboxTarget, background: boolean): Promise<string | undefined> => {
     const held = await getIdToken({ interactive: false });
     if (held !== undefined || background) {
         return held;
+    }
+    const vouched = await ownerTicketFor(target);
+    if (vouched !== undefined) {
+        return vouched;
     }
     return (await daemonAnswers(target)) ? getIdToken() : undefined;
 };
@@ -229,8 +254,11 @@ const establish = (target: SandboxTarget & { readonly sandboxId: string }, backg
         }
         let minted = await exchange(target, idToken);
         if (minted === `unauthorized` && !background) {
-            // A definitive verifier rejection means the cached Google proof is dead or malformed. Forget it
-            // and let this same user action drive the interactive recovery once, rather than looping on it.
+            // A definitive verifier rejection means the cached Google proof is dead or malformed (or the
+            // platform's ticket was refused). Forget it and let this same user action drive the interactive
+            // recovery once, rather than looping on it. Counted: this is one of the ways a second sign-in
+            // reaches the screen, and until it was counted nobody could say which way it usually was.
+            void import("../analytics").then(({ track }) => track(`sandbox_signin_gate`, { reason: `daemon-401` })).catch(() => undefined);
             clearCredential();
             const replacement = await getIdToken();
             if (replacement === undefined) {
@@ -335,10 +363,7 @@ const establishShared = (target: SandboxTarget & { readonly sandboxId: string },
 /* The bearer for a sandbox: a valid session (renewed in the background when due) or a freshly established one.
  * Undefined when there is none to be had without asking Google — the user dismissed the gate, or this is a
  * `background` read, which is never allowed to ask (see the header). */
-const getSessionToken = async (
-    target = currentSandboxTarget(),
-    options?: { readonly background?: boolean },
-): Promise<SandboxBearer | undefined> => {
+const getSessionToken = async (target = currentSandboxTarget(), options?: { readonly background?: boolean }): Promise<SandboxBearer | undefined> => {
     const background = options?.background === true;
     if (target === undefined || target.sandboxId === undefined) {
         return googleBearer(background);

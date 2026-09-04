@@ -17,6 +17,7 @@ import { aimOf, useTargets } from "./useTargets";
 // Every field the contract requires, so the parse below is a real check rather than a shape this file invented.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
     hasPanel: true,
+    installed: true,
     running: false,
     healthy: false,
     servers: [],

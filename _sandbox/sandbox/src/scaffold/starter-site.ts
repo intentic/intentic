@@ -1,17 +1,16 @@
 import { execFile } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { STARTER_APP, STARTER_REPO, zoneFromUrl } from "@intentic/sandbox-contract";
+import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { gitCommitAll, gitInit } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
-import { appPanelKey, buildAppSpec } from "../workspace/app-previews.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
+import { recordAutostart } from "./autostart.js";
 
 const exec = promisify(execFile);
 
@@ -22,9 +21,14 @@ const exec = promisify(execFile);
  * was nothing to change. So a fresh sandbox now opens with a real, running one-page site: something on screen
  * that is theirs, that the agent can edit, and that reloads while they watch.
  *
+ * THE SEED PUTS THE SITE IN PLACE AND RECORDS THAT IT SHOULD RUN; the `autostart` boot step (autostart.ts)
+ * starts it, on this boot and on every later one. Starting from inside the seed was what made the dev server a
+ * property of the first boot only: a woken hosted machine, a restarted daemon and a pool volume the platform
+ * prepared ahead of demand (platform/prewarm.ts) all found the site on disk and nothing running.
+ *
  * IT IS COPIED, NEVER BUILT HERE. The image bakes the whole monorepo — the same `intentic scaffold monorepo` +
  * `add-app landing` the Add-app button runs, node_modules and all (see the sandbox Dockerfile) — so this step
- * is a file copy and a dev-server start, not a template clone and a `pnpm install`. That is the difference
+ * is a file copy, not a template clone and a `pnpm install`. That is the difference
  * between a preview that is up before the user has finished reading the welcome and one that lands two minutes
  * later: an install cannot be made fast, so it is paid at image build time, once, for everybody.
  *
@@ -74,19 +78,8 @@ export const workspaceArrivedEmpty = (root: string): boolean => {
 export type StarterSkipped = "no baked starter in this image" | "a site repo is already there" | "the workspace arrived with content";
 export type StarterOutcome = { readonly repo: string } | { readonly skipped: StarterSkipped };
 
-// The `pnpm --filter` target: the baked app package's real name, which belongs to the template's scope and is
-// the one thing here that must be read rather than assumed.
-const starterPackage = (appDir: string): string | undefined => {
-    try {
-        const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf8")) as { name?: string };
-        return pkg.name;
-    } catch {
-        return undefined;
-    }
-};
-
-/* Put the baked starter into the workspace and start it. Answers the repo name when a site was seeded and the
- * reason when it was not, so the one boot where this matters says which of the three it was.
+/* Put the baked starter into the workspace and record it for autostart. Answers the repo name when a site was
+ * seeded and the reason when it was not, so the one boot where this matters says which of the three it was.
  *
  * Failures are the caller's to log and swallow: a sandbox with no starter site is a working sandbox with an
  * empty workspace, which is where every sandbox stood before this existed. Nothing here may take the boot
@@ -127,25 +120,10 @@ export const seedStarterSite = async (services: Services, bakedDir: string = STA
     // existed. Re-converge them here, exactly as a clone does (git.routes.ts), or root's baseline commit, taken
     // moments from now, swallows the whole site as a gitlink and the Changes review opens on a phantom.
     await syncRootExcludes(services.config.historyRoot, await discoverRepos(services.workspace.root));
-
-    const appDir = join(target, "_apps", STARTER_APP);
-    const pkg = starterPackage(appDir);
-    if (pkg === undefined) {
-        return { repo: STARTER_REPO };
+    // Only when the app is there to start: a baked tree without it is a site with nothing to run, and an
+    // autostart entry for it would be one skipped line per boot for ever.
+    if (existsSync(join(target, "_apps", STARTER_APP, "package.json"))) {
+        await recordAutostart(services.workspace.root, { repo: STARTER_REPO, app: STARTER_APP, dev: STARTER_DEV });
     }
-    await services.processes.start(
-        appPanelKey(STARTER_REPO, STARTER_APP),
-        buildAppSpec({
-            repo: STARTER_REPO,
-            repoDir: target,
-            pkg,
-            app: STARTER_APP,
-            preview: { dev: STARTER_DEV },
-            // Same pair the apps routes build preview URLs from. The landing template declares no env, so
-            // nothing here reads them today; passing them keeps this start byte-identical to the button's.
-            zone: services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl),
-            sandboxId: sandboxIdFromToken(services.config.connectToken),
-        }),
-    );
     return { repo: STARTER_REPO };
 };

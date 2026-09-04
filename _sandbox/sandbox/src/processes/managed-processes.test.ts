@@ -212,3 +212,26 @@ test("a launch failure propagates to the caller and leaves nothing tracked", asy
     await expect(panels.start("app", SPEC)).rejects.toThrow("tmux failed");
     expect(panels.running("app")).toBe(false);
 });
+
+/* WHERE A START HAS GOT TO, narrated off the pane's foreground command. The screen watching a start used to have
+ * one sentence for the whole wait; these are the four states it can now say, and `exited` is the one that turns
+ * a spinner into a verdict. One-shot jobs stay out of it: their completion is their own story. */
+test("launchOf narrates a start: launching until the command is seen, starting while it runs, exited once it returns to a prompt", async () => {
+    vi.useFakeTimers();
+    const { runner, cmd } = fakeRunner();
+    const panels = createManagedProcesses(runner, { onPromptWatch: () => () => undefined });
+    // The fake runner reports the job command from the first sweep on; before any sweep nothing has been seen.
+    await panels.start("app", SPEC);
+    expect(panels.launchOf("app")).toBe("launching");
+    await vi.advanceTimersByTimeAsync(2_000);
+    // SPEC's cwd has no node_modules on this machine, and the install's completion file is absent: installing.
+    expect(panels.launchOf("app")).toBe("installing");
+    cmd.set("panel-app", "zsh");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(panels.launchOf("app")).toBe("exited");
+    // Not running at all, and a one-shot job, both answer nothing.
+    expect(panels.launchOf("site")).toBeUndefined();
+    await panels.start("job", { ...SPEC, oneShot: true });
+    expect(panels.launchOf("job")).toBeUndefined();
+    panels.stopAll();
+});

@@ -874,7 +874,7 @@ const emptyHint = computed(() => {
     if (awaiting.value !== undefined) {
         // The wait is still standing: it has only stopped holding the panel empty. Saying so is the difference
         // between "be patient" and the spinner that used to sit there with nothing behind it.
-        return `No terminal has appeared for it yet. It may still be starting, and this panel will show it the moment it does.`;
+        return `It hasn't appeared yet: the sandbox is probably still starting it. This panel keeps looking and shows it the moment it's listed.`;
     }
     if (answer.value === `refused`) {
         // The one case where the panel knows it is not the sandbox that is empty, but the asking that failed.

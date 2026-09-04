@@ -49,5 +49,8 @@ export function usePanels() {
         isLoading: query.isLoading,
         start,
         stop,
+        // Ask again, for the one surface that has to be able to: the preview's wait on a start it is watching,
+        // which the push normally settles and a dropped frame otherwise leaves standing (PreviewPanel.vue).
+        invalidate,
     };
 }

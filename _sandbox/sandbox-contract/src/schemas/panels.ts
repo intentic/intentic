@@ -5,12 +5,32 @@ import { z } from "zod";
 // preview-<panelKey>-<sandboxId>.<zone> to it) PLUS content facts, evidence the web app's extensions run their
 // detect() over, computed daemon-side in one pass so the browser never scans /work file-by-file.
 
+/* WHERE A START THE SANDBOX IS RUNNING HAS GOT TO, between the click and the first byte served. The process
+ * manager watches the pane's foreground command every couple of seconds (processes/managed-processes.ts), and
+ * these four words are what that sampling can honestly say: the shell is still coming up; the install that
+ * runs first when node_modules is missing is still going; the dev command is running but nothing listens yet;
+ * or the command has already exited back to a prompt, which is the one a person needs told at once, because
+ * the "Preparing the preview…" it would otherwise sit behind never ends. Absent once the preview proxy has
+ * something to serve, and absent for anything the sandbox is not starting. */
+export const PanelLaunchSchema = z.enum(["launching", "installing", "starting", "exited"]);
+export type PanelLaunch = z.infer<typeof PanelLaunchSchema>;
+
 export const PanelSummarySchema = z.object({
     // The repo id: its root-relative dir under /work (slashes become `--` in the preview subdomain label).
     repo: z.string().describe("Which repository."),
     // Whether the repo ships a runnable dev server (a package.json `dev` script at operator/ or the root).
     hasPanel: z.boolean().describe("Whether it has anything runnable at all."),
     running: z.boolean().describe("Whether the sandbox has it running."),
+    /* Whether its dependencies are on disk, a node_modules at the directory Start runs in. What decides what a
+     * Start COSTS: seconds when true, an install first when false, and the Start screen's copy says which
+     * instead of promising "a few minutes" over a tree that is already installed (the starter site's is: the
+     * image bakes it). True for a repo with nothing runnable, which has nothing to install for. */
+    installed: z
+        .boolean()
+        .describe("Whether its dependencies are installed, which is what decides whether a start takes seconds or an install first."),
+    launch: PanelLaunchSchema.optional().describe(
+        "Where a start the sandbox is running has got to: its shell coming up, installing, its dev command running with nothing listening yet, or exited back to a prompt. Absent when nothing is starting and once it serves.",
+    ),
     // Whether anything this repo owns is answering, see `servers`. Not the same question as `running`: a panel
     // whose install is still going is running and not yet healthy, and a dev server someone started in their own
     // terminal is healthy without the daemon running it.

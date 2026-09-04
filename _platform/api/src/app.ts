@@ -310,8 +310,14 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (token === undefined || token === ``) {
             return c.text(`error: missing token`, 400);
         }
-        const body = (await c.req.json().catch(() => undefined)) as { reach?: unknown; detail?: unknown } | undefined;
-        const report = BootReportSchema.safeParse({ reach: body?.reach, detail: body?.detail, at: new Date().toISOString() });
+        const body = (await c.req.json().catch(() => undefined)) as { reach?: unknown; detail?: unknown; boot?: unknown; cpu?: unknown } | undefined;
+        const report = BootReportSchema.safeParse({
+            reach: body?.reach,
+            detail: body?.detail,
+            boot: body?.boot,
+            cpu: body?.cpu,
+            at: new Date().toISOString(),
+        });
         if (!report.success) {
             return c.text(`error: malformed report`, 400);
         }

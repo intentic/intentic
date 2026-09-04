@@ -1,4 +1,4 @@
-import type { PanelSummary, RepoApp } from "@intentic-app/api-contract";
+import type { PanelSummary, RepoApp, PanelLaunch } from "@intentic-app/api-contract";
 import type { PortSummary, PublicFile } from "@intentic/sandbox-contract";
 
 /* EVERYTHING THE WORKSPACE CAN SHOW LIVE, as one flat list the Preview area's switcher renders:
@@ -52,6 +52,13 @@ export interface PreviewTarget {
     // Whether Start/Stop mean anything here, a port, the public page and a typed address have no process
     // this app owns.
     readonly startable: boolean;
+    /* What a Start costs, and where one that is running has got to (PanelSummary.installed / .launch). The
+     * first decides the Start screen's sentence: "a few seconds" over an installed tree, "installs first" over
+     * a bare one, instead of one sentence promising minutes to both. The second is what the starting screen
+     * narrates, and `exited` is the state that turns its spinner into a verdict. True / undefined for the
+     * targets nothing here starts. */
+    readonly installed: boolean;
+    readonly launch: PanelLaunch | undefined;
 }
 
 export const repoTargetId = (repo: string): string => `repo:${repo}`;
@@ -104,6 +111,8 @@ export const repoTargets = (panels: readonly PanelSummary[]): PreviewTarget[] =>
             // script and no operator/ panel is listed (its apps may be startable) and refuses one, which used
             // to be a button that could only ever answer "no runnable panel".
             startable: panel.hasPanel,
+            installed: panel.installed,
+            launch: panel.launch,
         }));
 
 // One app instance's target id. Named because a second caller now builds one without the list in hand: the
@@ -126,6 +135,8 @@ export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarge
         healthy: app.healthy,
         session: app.running ? `panel-${repo}--${app.app}` : undefined,
         startable: true,
+        installed: app.installed,
+        launch: app.launch,
     }));
 
 // One forwarded port's target id. Named for the same reason the repo's and the app's are: the panel forwards a
@@ -156,6 +167,8 @@ export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
             healthy: true,
             session: port.session,
             startable: false,
+            installed: true,
+            launch: undefined,
         }));
 
 /* The outbox's page, when one is SERVED, read off the listing rather than off anyone's account of it, so a
@@ -179,6 +192,8 @@ export const publicTarget = (files: readonly PublicFile[]): PreviewTarget | unde
               healthy: true,
               session: undefined,
               startable: false,
+              installed: true,
+              launch: undefined,
           };
 };
 
@@ -219,6 +234,8 @@ export const addressTarget = (typed: string | undefined): PreviewTarget | undefi
         healthy: true,
         session: undefined,
         startable: false,
+        installed: true,
+        launch: undefined,
     };
 };
 

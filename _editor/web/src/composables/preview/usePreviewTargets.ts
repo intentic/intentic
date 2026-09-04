@@ -18,7 +18,7 @@ import { previewAddress } from "./previewSurface";
  * change (contract runtime-state.ts), and the outbox rides the file watcher's `public` push. */
 export function usePreviewTargets(active: Ref<boolean>) {
     const queryClient = useQueryClient();
-    const { panels, settled: panelsSettled, start: startRepo, stop: stopRepo } = usePanels();
+    const { panels, settled: panelsSettled, start: startRepo, stop: stopRepo, invalidate: invalidatePanels } = usePanels();
     const { files: publicFiles, settled: publicSettled } = usePublicOutbox();
     // The forwarded ports the shell already reads for its exposure indicator, this adds no request.
     const { forwarded } = usePorts();
@@ -78,6 +78,15 @@ export function usePreviewTargets(active: Ref<boolean>) {
         return previewUrl === undefined ? undefined : portTargetId(port);
     };
 
+    /* THE FALLBACK BEHIND THE PUSH. Both lists here are pushed by the daemon and polled by nobody, which is the
+     * right steady state and the wrong only state: the panel that is WAITING on a start has one frame to wait
+     * for, and a frame dropped across a reconnect (likelier on the throttled first boot the wait is about) left
+     * "Preparing the preview…" standing over a server that had been serving for minutes. This is the ask-again
+     * that wait falls back on; it invalidates rather than fetches so it lands in the same shared entries. */
+    const refresh = async (): Promise<void> => {
+        await Promise.all([invalidatePanels(), queryClient.invalidateQueries({ queryKey: APPS.every })]);
+    };
+
     return {
         targets,
         // Both always-on reads have answered (or definitively failed), what the empty state waits on before
@@ -86,5 +95,6 @@ export function usePreviewTargets(active: Ref<boolean>) {
         start,
         stop,
         forward,
+        refresh,
     };
 }

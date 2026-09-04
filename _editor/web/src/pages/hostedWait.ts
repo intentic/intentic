@@ -67,10 +67,15 @@ export interface HostedWaitView {
     // built to order: minutes of image pull), plus, once a minute is on the clock, how long it has been.
     // The one sentence the clock is allowed to shape, and only ever toward patience, never toward diagnosis.
     readonly note: string;
-    // Whether the sandbox is confirmed usable from outside, the ONLY thing the handover is allowed to turn
-    // on. Undefined means the sandbox has not said (an image older than the report, or a lane that never
+    // Whether the sandbox is confirmed usable from outside, one of the two things the handover may turn on.
+    // Undefined means the sandbox has not said (an image older than the report, or a lane that never
     // probes), and undefined must behave exactly as this page behaved before any of this existed.
     readonly reachable: boolean | undefined;
+    /* The other: the daemon says its boot chain has NOT converged yet. Handing over here lands the reader on
+     * the workspace's own warm-up gate, a second progress card after this one; holding keeps the whole wait
+     * on this card, which names the running step. False when the daemon says nothing (older images), which is
+     * exactly the hand-over-on-announce this page did before the report carried a chain. */
+    readonly booting: boolean;
 }
 
 export interface HostedWaitInput {
@@ -256,8 +261,17 @@ const stalledFailure = (input: HostedWaitInput): Stall | undefined => {
     return undefined;
 };
 
+// The daemon's own account of its chain, when it gave one and the chain is still running.
+const converging = (input: HostedWaitInput): { readonly step: string | undefined } | undefined =>
+    input.boot?.boot !== undefined && !input.boot.boot.ready ? { step: input.boot.boot.step } : undefined;
+
 // The healthy readings, in order. Each is a fact somebody established, never elapsed time.
 const healthyStep = (input: HostedWaitInput, reachable: boolean | undefined): WaitStep => {
+    // A reachable box still converging its workspace is still booting, as far as the reader is concerned:
+    // handing over now would put them on a second card saying the same thing.
+    if (converging(input) !== undefined) {
+        return `booting`;
+    }
     if (reachable === true) {
         return `ready`;
     }
@@ -270,11 +284,19 @@ const healthyStep = (input: HostedWaitInput, reachable: boolean | undefined): Wa
 
 export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
     const reachable = input.boot === null ? undefined : input.boot.reach === `reachable`;
-    // The step labels this origin earns, and the caption under them, both origin-first, clock-second.
-    const steps = input.warm === false ? coldSteps(STEPS) : STEPS;
+    const chain = converging(input);
+    // The step labels this origin earns, and the caption under them, both origin-first, clock-second. While
+    // the daemon names the step it is on, the booting row says it too: the same words the workspace's own gate
+    // would have shown, on the card the reader is already watching.
+    const origin = input.warm === false ? coldSteps(STEPS) : STEPS;
+    const steps =
+        chain?.step === undefined
+            ? origin
+            : origin.map((step) => (step.key === `booting` ? { ...step, label: `Starting your sandbox: ${chain.step}` } : step));
     const note = noteFor(input.warm, input.waitedMs);
     const stall = finalFailure(input) ?? stalledFailure(input);
+    const booting = chain !== undefined;
     return stall === undefined
-        ? { steps: at(steps, healthyStep(input, reachable)), note, failure: undefined, reachable }
-        : { steps: at(steps, stall.step), note, failure: stall.failure, reachable };
+        ? { steps: at(steps, healthyStep(input, reachable)), note, failure: undefined, reachable, booting }
+        : { steps: at(steps, stall.step), note, failure: stall.failure, reachable, booting };
 };

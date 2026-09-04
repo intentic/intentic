@@ -26,6 +26,7 @@ import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
+import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
 import { ensureReachability, ingressEnabled } from "./reachability.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
@@ -351,6 +352,29 @@ export const sandboxRoutes = {
         kickHostedPool(context.prisma, context.config, context.logger);
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
         return toSummary(fresh, `owner`, context);
+    }),
+    /* THE PLATFORM VOUCHING FOR THE OWNER OF A HOSTED SANDBOX (sandbox-contract's owner-ticket.ts, which carries
+     * the trust argument in full). Hosted only, because only there does the platform already hold everything
+     * the ticket could reach: it created the machine, keeps its power and disk, and wrote OWNER_EMAIL into its
+     * env. Owner only: a member's way in stays the Google proof the daemon's roster is checked against. Signed
+     * with the reachability key, verified offline by the daemon against the public half its env carries, and
+     * good for minutes: spent once, on the daemon's session exchange. */
+    ownerTicket: os.sandbox.ownerTicket.handler(async ({ context, input }) => {
+        const user = requireUser(context);
+        if (!hostedEnabled(context.config)) {
+            throw new ORPCError(`NOT_FOUND`, { message: `hosted sandboxes are not enabled on this platform` });
+        }
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id }, select: { id: true } });
+        if (hosted === null) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this sandbox does not run on a machine the platform hosts` });
+        }
+        const sandboxId = sandboxIdFromToken(decryptSecret(context.config, sandbox.token)) ?? ``;
+        const issuedAtMs = Date.now();
+        return {
+            ticket: mintOwnerTicket(context.config.ingress.signingKey, { sandboxId, email: user.email.toLowerCase(), issuedAtMs }),
+            expiresAt: new Date(issuedAtMs + OWNER_TICKET_TTL_MS).toISOString(),
+        };
     }),
     /* The way back out of the hosted lane: destroy the machine, keep the sandbox. This is the wizard's
      * lane-switch (someone tries "we host it", then decides to run it on their own machine after all), which

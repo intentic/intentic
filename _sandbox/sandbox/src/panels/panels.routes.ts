@@ -136,6 +136,14 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                         assignedAnswers: port !== undefined && servers.some((server) => server.port === port),
                     });
                     const url = key !== undefined && upstream.state === "serving" ? previewUrl(key, zone, sandboxId) : undefined;
+                    // What a Start would cost, read off the directory it runs in (the same one `start` runs
+                    // in): dependencies on disk means seconds, their absence means an install first. A repo
+                    // with nothing runnable has nothing to install for, and must not read as "needs an install".
+                    const runDir = hasPanel ? await panelRunDir(services.workspace, repo) : undefined;
+                    const installed = runDir === undefined ? true : existsSync(join(runDir, "node_modules"));
+                    // Where a start the daemon runs has got to, only until the proxy has something to serve:
+                    // from then on the iframe is the state, and "starting" beside it would be a contradiction.
+                    const launch = key !== undefined && upstream.state !== "serving" ? services.processes.launchOf(key) : undefined;
                     // Content facts, computed in one pass so the browser never N+1-scans /work: each extension
                     // decides its own presence from this evidence (see the web app's extensions/extension.ts).
                     const summary = {
@@ -148,6 +156,8 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                         // the very ports it pinned.
                         healthy: servers.length > 0,
                         servers,
+                        installed,
+                        ...(launch === undefined ? {} : { launch }),
                         deployConfig: existsSync(join(dir, CONFIG_FILE)),
                         desiredState: existsSync(join(dir, ARTIFACT_FILE)),
                         directoryUi: existsSync(join(dir, STATE_DIR, "ui", "index.html")),

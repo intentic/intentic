@@ -62,12 +62,17 @@ const json = (payload: unknown, status = 200) => new Response(JSON.stringify(pay
 
 // The whole provider surface one canary run touches: the hub's namespace and account, then Fly's cold build,
 // then the teardown.
-const stubProviders = (over: { machine?: () => Response } = {}) => {
+const stubProviders = (over: { machine?: () => Response; starter?: () => Response } = {}) => {
     const calls: { method: string; url: string }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
         const method = init?.method ?? `GET`;
         const target = String(url);
         calls.push({ method, url: target });
+        // The starter site's preview address, asked through the edge the way a browser would (the daemon's
+        // preview-probe path); serving unless a test says otherwise.
+        if (target.includes(`/__intentic/preview-probe`)) {
+            return Promise.resolve((over.starter ?? (() => json({ proxy: `intentic-preview`, target: `panel`, state: `serving` })))());
+        }
         if (target.endsWith(`/api/v2/namespaces`)) {
             return Promise.resolve(json([{ namespaceToken: `ns-1`, name: `public`, open: true }]));
         }
@@ -101,9 +106,28 @@ describe(`the provisioning canary`, () => {
         const prisma = prismaWith(new Date());
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(true);
+        // Green means the whole thing a person meets: the daemon checked in AND the starter answered at its
+        // preview address, timed from the provision.
+        expect(result.starterServingInMs).toEqual(expect.any(Number));
+        expect(calls.some((entry) => entry.url.startsWith(`https://preview-site--landing-`) && entry.url.includes(`/__intentic/preview-probe`))).toBe(
+            true,
+        );
         // The teardown is not optional: a canary that leaks machines costs more than the outage it watches for.
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
+    });
+
+    /* THE OTHER FAILURE PEOPLE MET: a machine that checked in perfectly and opened on "site isn't running". The
+     * platform's rows and the announce both read healthy; only asking the starter's own address finds it. */
+    it(`fails when the daemon checks in but the starter never serves`, async () => {
+        stubProviders({ starter: () => json({ proxy: `intentic-preview`, target: `panel`, state: `starting` }) });
+        const prisma = prismaWith(new Date());
+        const result = await runHostedCanary(prisma, config(), logger, nap);
+        expect(result.ok).toBe(false);
+        expect(result.announcedInMs).toEqual(expect.any(Number));
+        expect(result.starterServingInMs).toBeUndefined();
+        expect(result.detail).toContain(`starter site never served`);
+        expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 
     /* THE FAILURE THIS EXISTS TO CATCH: provisioning succeeds, Fly is happy, the row is written, and the

@@ -94,6 +94,10 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         note: "Extension code, authored here. It arrives switched off; the owner enables what they trust.",
     },
     { path: ".intentic/config/templates.json", note: "Scaffold template choices; they point at repos the definition's own sections name." },
+    {
+        path: ".intentic/config/autostart.json",
+        note: "Which apps the daemon starts at boot, by repo and app folder; an entry whose folder the target lacks is one skipped log line per boot, nothing more.",
+    },
     { path: ".intentic/config/skills/", note: "Locally-authored skills. Which skills are ON is a setting; the files are these." },
     {
         path: ".intentic/config/capability-dismissals.json",

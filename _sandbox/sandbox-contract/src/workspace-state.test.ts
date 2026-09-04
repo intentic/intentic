@@ -325,6 +325,8 @@ describe(`VERSIONED_STATE_PATHS`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
             `${STATE_DIR}/config/approvals/`,
             `${STATE_DIR}/config/automations.json`,
+            // Which apps the daemon starts at boot: the starter site on a fresh box, and whatever the owner adds.
+            `${STATE_DIR}/config/autostart.json`,
             /* The connections themselves, and the entry that took the longest to earn its place: it was classed
              * `secret` on the strength of holding each capability's credential, which stopped being true when the
              * vault took the values out and left the shape behind. Connecting a deployment orchestrator, or

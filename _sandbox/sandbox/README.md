@@ -88,7 +88,7 @@ reports the profile.
   declines to hand back one that has since been revoked.
 - Open a brand-new sandbox with something running in it. A fresh workspace used to arrive empty, so the first
   screen of a product whose claim is "say what you want changed and watch it change" had nothing to change; the
-  first boot now seeds a one-page starter site as its own repo and starts its dev server
+  first boot now seeds a one-page starter site as its own repo and records it in `.intentic/config/autostart.json`, which the `autostart` boot step starts on every boot (a wake, a restart, a prewarmed pool volume); `SANDBOX_PREWARM=1` (`platform/prewarm.ts`) runs the same chain onto a pool machine's volume ahead of any owner and exits
   ([src/scaffold/starter-site.ts](src/scaffold/starter-site.ts)), and the browser puts that preview on screen on
   the first visit. It is a file COPY, not a scaffold: the image bakes the whole monorepo with its dependencies
   already installed, so the wait is a few seconds rather than the minute or two an install costs. Fresh

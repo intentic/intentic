@@ -84,6 +84,12 @@ const configSchema = z.object({
     platform: z
         .object({
             url: z.string().default(""),
+            /* The platform's Ed25519 public key (SPKI PEM), the whole of what accepting its OWNER TICKET takes
+             * (auth/auth.ts, sandbox-contract's owner-ticket.ts): a signed, minutes-long claim that the bearer
+             * is this sandbox's owner, which the browser spends for a session instead of a second Google
+             * sign-in. Set ONLY by the hosted provisioner, on the machines the platform already holds the power
+             * and disk of; empty everywhere else, and an empty key verifies nothing. PLATFORM_PUBLIC_KEY. */
+            publicKey: z.string().default(""),
         })
         .prefault({}),
     // The ACME directory the LOOPBACK CERTIFICATE is ordered from (see platform/local-cert.ts). Empty ⇒ Let's
@@ -223,6 +229,18 @@ const configSchema = z.object({
              * re-run it over work; and applying it keeps the definition's consent shape, the overlay lands as
              * a proposal for the owner, never as an approved build. */
             definitionSeed: z.string().default(""),
+            /* PREWARM (SANDBOX_PREWARM=1): boot as a pool machine nobody owns yet (platform/prewarm.ts). The
+             * daemon runs its ordinary boot chain onto the volume, the workspace repo, the starter site and its
+             * dependencies, the baseline, the skills, starts the starter's dev server once so its caches land
+             * on the volume too, stamps /history/prewarm.json and EXITS 0, which under the hosted restart
+             * policy stops the machine. Nothing that names an owner runs: a pool machine's env carries no token,
+             * owner, grant or platform URL, so every identity-bearing subsystem is off by its own gate. Set only
+             * by the platform's pool builder (hosted-pool.ts); a claim replaces the machine's whole env, so it is
+             * never present on a machine somebody owns. */
+            prewarm: z
+                .string()
+                .default("")
+                .transform((value) => value === "true" || value === "1"),
         })
         .prefault({}),
     /* THE EDGE THIS SANDBOX DIALS to become reachable (@intentic/ingress). One address, outbound, presented

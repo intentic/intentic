@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
@@ -32,6 +33,22 @@ export interface ProcessSpec {
 // (service-processes.ts), which is the right shape for a service and the wrong one for these interactive and
 // daemon-restart-surviving surfaces.
 export const PANEL_SESSION_PREFIX = "panel-";
+
+/* WHERE A START HAS GOT TO, as far as a tmux pane's foreground command can say (the contract's PanelLaunch):
+ *   launching   the session exists and its shell has not run the command yet (oh-my-zsh on a cold volume, a
+ *               throttled CPU: this can be seconds)
+ *   installing  the command is running and node_modules was missing when it started, so `pnpm install` goes
+ *               first; ends when the package manager writes its completion file
+ *   starting    the dev command is running and nothing has bound a port yet (the panels route, which sees
+ *               the listeners, drops the state entirely once the preview proxy has something to serve)
+ *   exited      the command returned to a prompt without the session ending: a dev server that crashed on
+ *               start, the one case a person must be told at once rather than left on a spinner */
+export type PanelLaunch = "launching" | "installing" | "starting" | "exited";
+
+// The file the package manager writes LAST: pnpm's current lockfile, npm's hidden lockfile. node_modules itself
+// appears within the install's first second, so its presence says nothing about whether the install finished.
+const installFinished = (cwd: string): boolean =>
+    existsSync(join(cwd, "node_modules", ".pnpm", "lock.yaml")) || existsSync(join(cwd, "node_modules", ".package-lock.json"));
 export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
 
 // The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every panel pane's
@@ -166,6 +183,9 @@ export interface ManagedProcesses {
     readonly running: (repo: string) => boolean;
     // The port the running panel was assigned (undefined when not running), the preview proxy's forward target.
     readonly portOf: (repo: string) => number | undefined;
+    // Where a running dev-server panel's start has got to (see PanelLaunch); undefined when not running, and for
+    // one-shot jobs, whose completion is their own story (`running`).
+    readonly launchOf: (repo: string) => PanelLaunch | undefined;
     // SIGTERM shutdown path, kill every managed panel.
     readonly stopAll: () => void;
 }
@@ -178,7 +198,21 @@ export interface ManagedProcesses {
 // attachable, output in scrollback above a live prompt.
 export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, options: ManagedProcessesOptions = {}): ManagedProcesses => {
     const watchPrompts = options.onPromptWatch ?? watchPromptSignals;
-    const current = new Map<string, { port: number; oneShot: true | undefined; startedAt: number; sawJob: boolean; promptStreak: number }>();
+    const current = new Map<
+        string,
+        {
+            port: number;
+            oneShot: true | undefined;
+            startedAt: number;
+            sawJob: boolean;
+            promptStreak: number;
+            // For the launch state: where the command runs, whether its dependencies were there when it was
+            // typed, and the pane's foreground command as of the last sweep.
+            cwd: string;
+            installed: boolean;
+            lastCommand: string | undefined;
+        }
+    >();
     let timer: NodeJS.Timeout | undefined;
     let unwatchPrompts: (() => void) | undefined;
 
@@ -219,6 +253,16 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 untrack(key);
                 continue;
             }
+            // The launch state's inputs, for every kind of panel: the first non-shell sighting is the command
+            // starting, a later shell sighting is it having exited. A change is pushed so the screen watching
+            // a start moves with it rather than on the next unrelated frame.
+            if (command !== SHELL) {
+                entry.sawJob = true;
+            }
+            if (entry.lastCommand !== command) {
+                entry.lastCommand = command;
+                publishRuntimeChange("panels");
+            }
             if (entry.oneShot === undefined) {
                 continue;
             }
@@ -234,10 +278,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
              * can read as zsh between forks. */
             entry.promptStreak += 1;
             const graceOk = Date.now() - entry.startedAt > ONE_SHOT_GRACE_MS;
-            if (
-                (fromPrompt && entry.sawJob && entry.promptStreak >= 1) ||
-                (entry.promptStreak >= 2 && (entry.sawJob || graceOk))
-            ) {
+            if ((fromPrompt && entry.sawJob && entry.promptStreak >= 1) || (entry.promptStreak >= 2 && (entry.sawJob || graceOk))) {
                 untrack(key);
             }
         }
@@ -257,7 +298,16 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 return;
             }
             await runner.launch(panelSession(key), { ...spec, port });
-            current.set(key, { port, oneShot: spec.oneShot, startedAt: Date.now(), sawJob: false, promptStreak: 0 });
+            current.set(key, {
+                port,
+                oneShot: spec.oneShot,
+                startedAt: Date.now(),
+                sawJob: false,
+                promptStreak: 0,
+                cwd: spec.cwd,
+                installed: existsSync(join(spec.cwd, "node_modules")),
+                lastCommand: undefined,
+            });
             // The session exists now; it is not SERVING yet. This frame draws the row as starting, and the port
             // sampler's frame, seconds later, when the dev server actually binds, is what turns it healthy.
             publishRuntimeChange("panels", "terminals");
@@ -271,7 +321,17 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             if (!current.has(key)) {
                 // sawJob from the live pane: a job currently in the foreground counts as observed, so a
                 // shell-at-prompt sighting after it finishes completes the one-shot without the boot grace.
-                current.set(key, { port: 0, oneShot: spec.oneShot, startedAt: Date.now(), sawJob: command !== SHELL, promptStreak: 0 });
+                // Adopted mid-life: no cwd to read an install off, and nothing of its start left to narrate.
+                current.set(key, {
+                    port: 0,
+                    oneShot: spec.oneShot,
+                    startedAt: Date.now(),
+                    sawJob: command !== SHELL,
+                    promptStreak: 0,
+                    cwd: "",
+                    installed: true,
+                    lastCommand: command,
+                });
                 publishRuntimeChange("panels", "terminals");
                 ensureWatching();
             }
@@ -287,6 +347,19 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
         },
         running: (key) => current.has(key),
         portOf: (key) => current.get(key)?.port,
+        launchOf: (key) => {
+            const entry = current.get(key);
+            if (entry === undefined || entry.oneShot !== undefined) {
+                return undefined;
+            }
+            if (!entry.sawJob) {
+                return "launching";
+            }
+            if (entry.lastCommand === SHELL) {
+                return "exited";
+            }
+            return entry.installed || entry.cwd === "" || installFinished(entry.cwd) ? "starting" : "installing";
+        },
         stopAll: () => {
             for (const key of current.keys()) {
                 runner.kill(panelSession(key));

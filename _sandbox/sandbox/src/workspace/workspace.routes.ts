@@ -313,6 +313,9 @@ export const createWorkspaceRoutes = (services: Services) => {
             const repo = monorepoOf(input.repo);
             const repoDir = join(services.workspace.root, repo);
             const manifest = await loadManifest(services);
+            // Apps install at their monorepo's root (the whole workspace, see the panels route's Start), so one
+            // read answers for every row.
+            const installed = existsSync(join(repoDir, "node_modules"));
             const apps = await Promise.all(
                 discoverApps(repoDir, manifest).map(async ({ app, kind }) => {
                     const port = services.processes.portOf(appPanelKey(repo, app));
@@ -323,10 +326,17 @@ export const createWorkspaceRoutes = (services: Services) => {
                     // dev server is not up yet costs the probe's full three-second timeout every single time.
                     const healthy = port !== undefined && (await cachedScheme(port)) !== undefined;
                     const url = previewUrl(appPanelKey(repo, app), zone, sandboxId);
-                    // `kind` and `previewUrl` are both optional on the wire, an app whose type nothing
-                    // identified, and a loopback sandbox with no preview host, each just omit theirs.
-                    const summary = { app, running: port !== undefined, healthy };
-                    return Object.assign(summary, kind !== undefined ? { kind } : {}, url !== undefined ? { previewUrl: url } : {});
+                    // Where its start has got to, until it answers; the same rule as the panels route.
+                    const launch = healthy ? undefined : services.processes.launchOf(appPanelKey(repo, app));
+                    // `kind`, `previewUrl` and `launch` are all optional on the wire, an app whose type nothing
+                    // identified, a loopback sandbox with no preview host, an app not mid-start, each just omit theirs.
+                    const summary = { app, running: port !== undefined, healthy, installed };
+                    return Object.assign(
+                        summary,
+                        kind !== undefined ? { kind } : {},
+                        url !== undefined ? { previewUrl: url } : {},
+                        launch !== undefined ? { launch } : {},
+                    );
                 }),
             );
             return { apps };

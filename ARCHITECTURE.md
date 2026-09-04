@@ -106,7 +106,12 @@ flowchart TB
   exchanges it at `system.session` for a **daemon-minted session** (HMAC-signed with a secret that
   never leaves the sandbox, [session.ts](_sandbox/sandbox/src/auth/session.ts)) and presents that on
   every call, renewing it silently: Google reappears only for a first visit, an account switch, or a
-  long-idle return. First-bind always takes a fresh Google proof, never a session. Additional
+  long-idle return. First-bind always takes a fresh Google proof, never a session, with one lane's exception
+  below: on a HOSTED machine the daemon also takes the platform's **owner ticket**
+  ([owner-ticket.ts](_sandbox/sandbox-contract/src/owner-ticket.ts)), a minutes-long Ed25519 claim signed
+  with the reachability key and verified offline against the public half the provisioner put in the machine's
+  env, naming this sandbox's id and the owner `OWNER_EMAIL` already names, so the platform sign-in is the only
+  one a hosted user makes. It adds no power the hosted exception below does not already grant. Additional
   collaborators are granted via `/work/.intentic/identity/members.json`, and owner/membership are re-checked
   per request, so revoking a member kills their live sessions too. The platform never holds or forges
   either credential, so a platform breach can read the stored URL but **cannot drive any sandbox**:

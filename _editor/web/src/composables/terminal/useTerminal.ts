@@ -496,6 +496,34 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         return next;
     };
 
+    /* THE STANDING WAIT'S OWN CLOCK, slow and bounded. `focus` waits for the daemon's `terminals` frame to list
+     * the session it was asked for, and that is right: the frame is exact and free. It is also one frame, and
+     * a frame dropped across a reconnect (the first boot of a throttled machine is exactly when reconnects
+     * happen) left the panel promising a terminal it had stopped asking about. So while a name is awaited the
+     * panel also asks on its own, every few seconds, for a couple of minutes: far slower than the polls the
+     * push replaced, and gone the moment the session is listed or the panel is. */
+    const PENDING_RELIST_MS = 5_000;
+    const PENDING_RELIST_MAX_MS = 120_000;
+    let pendingRelist: ReturnType<typeof setInterval> | undefined;
+    const stopPendingRelist = (): void => {
+        clearInterval(pendingRelist);
+        pendingRelist = undefined;
+    };
+    watch(pending, (name) => {
+        stopPendingRelist();
+        if (name === undefined) {
+            return;
+        }
+        const since = Date.now();
+        pendingRelist = setInterval(() => {
+            if (container === undefined || Date.now() - since > PENDING_RELIST_MAX_MS) {
+                stopPendingRelist();
+                return;
+            }
+            void refresh().catch(() => undefined);
+        }, PENDING_RELIST_MS);
+    });
+
     // Sandbox switch while mounted: the sessions are already disposed, drop the stale tab state and relist
     // against the new daemon. (createTerminalTabs runs in component setup, so the watcher dies with the surface.)
     watch(epoch, () => {

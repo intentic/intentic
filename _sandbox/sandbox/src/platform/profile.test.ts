@@ -44,7 +44,7 @@ test("the local floor refuses every env that contradicts a loopback-only daemon,
     const complaints = localContractComplaints(
         withSandbox(
             { profile: "local", host: "192.168.1.10", publicUrl: "https://sandbox-x.example.dev" },
-            { connectToken: "ict_x", platform: { url: "https://platform.example.dev" } },
+            { connectToken: "ict_x", platform: { url: "https://platform.example.dev", publicKey: "" } },
         ),
     );
     expect(complaints).toHaveLength(4);

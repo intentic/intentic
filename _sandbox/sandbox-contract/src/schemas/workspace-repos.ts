@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PanelLaunchSchema } from "./panels.js";
 // Every discovered repo's id (root-relative dir under /work), sorted, roles included.
 export const ReposListSchema = z.object({
     repos: z
@@ -82,6 +83,14 @@ export const RepoAppSchema = z.object({
     previewUrl: z.string().optional().describe("Where to open it. Absent when this sandbox has no outside address."),
     running: z.boolean().describe("Whether its dev server is up."),
     healthy: z.boolean().describe("Whether it is actually answering."),
+    // The same two facts a repository's panel row carries (PanelSummarySchema), for the same screens: an app
+    // installs at its monorepo's root, so `installed` is the root's node_modules.
+    installed: z
+        .boolean()
+        .describe("Whether its dependencies are installed, which is what decides whether a start takes seconds or an install first."),
+    launch: PanelLaunchSchema.optional().describe(
+        "Where a start the sandbox is running has got to: its shell coming up, installing, its dev command running with nothing listening yet, or exited back to a prompt. Absent when nothing is starting and once it serves.",
+    ),
 });
 export type RepoApp = z.infer<typeof RepoAppSchema>;
 export const AppsListSchema = z.object({ apps: z.array(RepoAppSchema).describe("The apps in this repository.") });

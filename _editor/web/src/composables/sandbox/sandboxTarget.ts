@@ -1,3 +1,4 @@
+import type { SandboxSummary } from "@intentic-app/api-contract";
 import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
 
@@ -8,7 +9,15 @@ export interface SandboxTarget {
     readonly sandboxId: string | undefined;
     readonly base: string;
     readonly connectToken: string | undefined;
+    /* The platform can VOUCH for this reader to this daemon: the sandbox runs on a machine the platform hosts
+     * and the reader owns it, so `sandbox.ownerTicket` will answer with a signed proof the daemon accepts in
+     * place of a Google one (sandboxSession.ts). Present only when true, so every other target keeps its shape. */
+    readonly ownerVouched?: true;
 }
+
+// Whether the platform's owner ticket applies: a hosted machine, read by its owner (the contract's rule).
+const vouchedFor = (sandbox: SandboxSummary | undefined): { readonly ownerVouched: true } | Record<never, never> =>
+    sandbox !== undefined && sandbox.hosted !== null && sandbox.hosted !== undefined && sandbox.role === `owner` ? { ownerVouched: true } : {};
 
 export const currentSandboxTarget = (): SandboxTarget | undefined => {
     const { active, activeSandboxId } = useSandbox();
@@ -17,7 +26,7 @@ export const currentSandboxTarget = (): SandboxTarget | undefined => {
     if (base === undefined || base === ``) {
         return undefined;
     }
-    return { sandboxId: activeSandboxId.value, base, connectToken: active.value?.token };
+    return { sandboxId: activeSandboxId.value, base, connectToken: active.value?.token, ...vouchedFor(active.value) };
 };
 
 /* The same destination for a sandbox this browser is NOT pointed at, what the surfaces that read across
@@ -46,5 +55,5 @@ export const targetFor = (sandboxId: string): SandboxTarget | undefined => {
     if (sandbox === undefined || base === null || base === undefined || base === ``) {
         return undefined;
     }
-    return { sandboxId, base, connectToken: sandbox.token };
+    return { sandboxId, base, connectToken: sandbox.token, ...vouchedFor(sandbox) };
 };

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
+import { ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
@@ -124,7 +125,7 @@ export interface HostedProvisionArgs {
 
 /* THE machine config a sandbox runs under, wherever the machine came from. Cold provision creates a machine
  * with it; the warm pool's claim REPLACES a pool machine's config with it, which is both how the sandbox's
- * identity gets in and how the pool's no-op boot override gets erased (updates replace the whole config).
+ * identity gets in and how the pool's prewarm flag gets erased (updates replace the whole config).
  * One composer, so the two origins cannot drift: a machine claimed from the pool is byte-for-byte the machine
  * that would have been built to order. OWNER_EMAIL is in the env before the daemon ever runs, so the
  * first-bind trust story (only this Google identity may claim ownership) is origin-independent too.
@@ -153,6 +154,11 @@ const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineN
                 [`WEB_ORIGIN`, config.webOrigin],
                 [`SANDBOX_PUBLIC_URL`, `https://${hostname}`],
                 [`PLATFORM_URL`, config.api.url],
+                /* The public half of the platform's signing key, which is what lets THIS machine's daemon accept
+                 * the platform's owner ticket (sandbox-contract's owner-ticket.ts) and spare its owner a second
+                 * Google sign-in. Hosted machines only, by construction: no other lane's env carries it, so no
+                 * other daemon verifies a ticket. Public material, hence not among the secrets here. */
+                [ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf(config.ingress.signingKey)],
                 [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
             ],
             frontDoor: { hostname },
@@ -437,10 +443,7 @@ const appOwner = (machines: { metadata: Record<string, string> }[], instance: st
 /* Everything about an unknown app the sweep needs, or `undefined` when Fly stopped answering about it (a
  * concurrent teardown, a bad minute), which is read as "not now" rather than as a verdict. The age is the
  * OLDEST resource in the app: a machine replaced a minute ago inside an app from last week is not new. */
-const appEvidence = async (
-    config: Config,
-    app: string,
-): Promise<{ owner: AppOwner; oldestAt: Date | undefined; machines: number } | undefined> => {
+const appEvidence = async (config: Config, app: string): Promise<{ owner: AppOwner; oldestAt: Date | undefined; machines: number } | undefined> => {
     try {
         const machines = await listMachines(config.hosted.flyApiToken, app);
         const volumes = machines.length > 0 ? [] : await listVolumes(config.hosted.flyApiToken, app);

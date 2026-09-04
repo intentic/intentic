@@ -65,7 +65,7 @@ afterEach(async () => {
 });
 
 describe("seedStarterSite", () => {
-    it("lands the baked site as its own repo and starts its dev server", async () => {
+    it("lands the baked site as its own repo and records it for autostart", async () => {
         expect(await seedStarterSite(services(), baked)).toEqual({ repo: "site" });
 
         const repo = join(root, "site");
@@ -82,12 +82,12 @@ describe("seedStarterSite", () => {
         // later, in the same boot) from swallowing it as a gitlink.
         expect(readFileSync(join(history, "gits", "root", "info", "exclude"), "utf8")).toContain("/site/");
 
-        // Started under the process manager's own key, from the repo root, filtered to the app's REAL package
-        // name (the template's scope, read off disk, never assumed).
-        expect(started).toHaveLength(1);
-        expect(started[0]?.key).toBe("site--landing");
-        expect(started[0]?.spec.cwd).toBe(repo);
-        expect(started[0]?.spec.command).toContain("pnpm --filter @app_/landing dev");
+        // Recorded for the autostart step rather than started here, so every later boot (a wake, a restart, a
+        // prewarmed volume) starts it too; the seed itself touches no process.
+        expect(started).toEqual([]);
+        expect(JSON.parse(readFileSync(join(root, ".intentic", "config", "autostart.json"), "utf8"))).toEqual({
+            apps: [{ repo: "site", app: "landing", dev: "pnpm --filter {pkg} dev" }],
+        });
     });
 
     it("does nothing on a workspace that already has one: a boot must never re-seed over the user's work", async () => {

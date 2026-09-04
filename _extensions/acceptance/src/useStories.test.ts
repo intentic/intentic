@@ -33,6 +33,7 @@ const routes = (json: Readonly<Record<string, unknown>>): IntenticApi =>
                 {
                     repo: `app`,
                     hasPanel: true,
+                    installed: true,
                     userStories: true,
                     deployConfig: false,
                     desiredState: false,

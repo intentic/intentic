@@ -53,8 +53,8 @@ test("panels.list enumerates every repo with its operator panel + runtime status
     const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false, userStories: false, docs: false };
     expect(await client.list()).toEqual({
         panels: [
-            { repo: "app", hasPanel: true, running: true, healthy: false, servers: [], port: 1, role: "app", ...facts },
-            { repo: "desired-state", hasPanel: false, running: false, healthy: false, servers: [], role: "desired-state", ...facts },
+            { repo: "app", hasPanel: true, installed: false, running: true, healthy: false, servers: [], port: 1, role: "app", ...facts },
+            { repo: "desired-state", hasPanel: false, installed: true, running: false, healthy: false, servers: [], role: "desired-state", ...facts },
         ],
     });
 });
@@ -114,6 +114,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
             {
                 repo: "extra",
                 hasPanel: false,
+                installed: true,
                 running: false,
                 healthy: false,
                 servers: [],
@@ -139,6 +140,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback: no
             {
                 repo: "app",
                 hasPanel: true,
+                installed: false,
                 running: false,
                 healthy: false,
                 servers: [],

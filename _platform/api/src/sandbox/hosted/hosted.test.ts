@@ -251,7 +251,7 @@ describe(`provisionHosted`, () => {
     });
 
     /* A warm machine matching the caller's region: ITS identity written in (the SAME composer the cold path
-     * uses, so nothing can drift), no-op override written out, machine started, hour meter opened at claim.
+     * uses, so nothing can drift), prewarm flag written out, machine started, hour meter opened at claim.
      * The pool machine was named after a token minted when it was built; secrets.key is empty in these
      * fixtures, so the stored token is the plaintext one. */
     const POOL_TOKEN = `p00l-t0k3n`;
@@ -291,7 +291,7 @@ describe(`provisionHosted`, () => {
         expect(result).toEqual({ appName: POOL_APP, region: `iad`, warm: true });
         // The row was WON, not just read: the guarded update is what keeps two claimers off one machine.
         expect(updateMany).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
-        // The identity goes in before the machine ever runs the sandbox, and the no-op boot override goes out.
+        // The identity goes in before the machine ever runs the sandbox, and the prewarm flag goes out.
         const update = calls.find((entry) => entry.url.endsWith(`/machines/m7`))?.body as {
             config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[]; metadata: Record<string, string> };
             skip_launch?: boolean;

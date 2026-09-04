@@ -96,6 +96,16 @@ const trialNotice = computed(() => {
         return `Free trial isn't answering right now. Failed messages are not counted.`;
     }
     const remaining = trialStatus.value.remaining;
+    /* NOT A WARNING UNTIL IT IS ONE. This strip went up on the first message of every new account, a count and
+     * a "Connect Google" over a chat that had answered nothing yet, and it read as the limit it was about to
+     * hit rather than as the ten free turns it had. While more than half the day's allowance is left and the
+     * pool is answering cleanly there is nothing to act on, so nothing is said; the picker's badge still names
+     * the trial for whoever wants to know. The strained state stays visible at any count, because a slow
+     * answer is a thing a person watching one wants explained. */
+    const allowance = trialStatus.value.allowance;
+    if (allowance > 0 && remaining > allowance / 2 && trialStatus.value.health !== `degraded`) {
+        return undefined;
+    }
     const left = `${remaining} free ${remaining === 1 ? `message` : `messages`} left today`;
     /* WHICH MODEL ANSWERED, once one has. The trial publishes a single row and picks a real model per message
      * (the platform's trial-ladder.ts), so without this the user cannot tell a weak answer from a fallback rung
@@ -131,10 +141,7 @@ const activeAccountReauth = computed(() => {
          rather than raising an alarm. It carries the one thing no other surface could tell the user in time:
          that sending from here un-archives the agent, and the press that does it deliberately, without sending
          anything. -->
-    <div
-        v-if="activeArchived !== undefined"
-        class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted"
-    >
+    <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted">
         <Icon name="box" class="shrink-0" />
         <span class="min-w-0 flex-1">Archived: off the board. Sending a message restores it.</span>
         <Button

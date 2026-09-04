@@ -22,6 +22,7 @@ import {
 const panel = (over: Partial<PanelSummary>): PanelSummary => ({
     repo: `shop`,
     hasPanel: true,
+    installed: true,
     running: false,
     healthy: false,
     servers: [],
@@ -104,8 +105,8 @@ describe(`repoTargets`, () => {
 describe(`appTargets`, () => {
     it(`gives each app its own target under its repo, with the process manager's session name`, () => {
         const targets = appTargets(`mono`, [
-            { app: `web`, running: true, healthy: true, previewUrl: `https://preview-mono--web-s.zone` },
-            { app: `api`, running: false, healthy: false },
+            { app: `web`, running: true, healthy: true, installed: true, previewUrl: `https://preview-mono--web-s.zone` },
+            { app: `api`, running: false, healthy: false, installed: true },
         ]);
         expect(targets.map((target) => target.id)).toEqual([`app:mono/web`, `app:mono/api`]);
         expect(targets[0]?.session).toBe(`panel-mono--web`);
@@ -172,7 +173,7 @@ describe(`mergeTargets`, () => {
     });
 
     it(`replaces it with its apps once it has some: one row per thing, never a vague row beside precise ones`, () => {
-        const apps = appTargets(`mono`, [{ app: `web`, running: true, healthy: true }]);
+        const apps = appTargets(`mono`, [{ app: `web`, running: true, healthy: true, installed: true }]);
         expect(mergeTargets(monorepo, apps, [], undefined, undefined).map((target) => target.id)).toEqual([`app:mono/web`]);
     });
 
@@ -185,8 +186,8 @@ describe(`mergeTargets`, () => {
 describe(`pickTarget`, () => {
     const targets = [
         ...appTargets(`mono`, [
-            { app: `web`, running: false, healthy: false },
-            { app: `api`, running: true, healthy: false },
+            { app: `web`, running: false, healthy: false, installed: true },
+            { app: `api`, running: true, healthy: false, installed: true },
         ]),
         ...repoTargets([panel({ healthy: true, running: true })]),
         publicTarget([file({})])!,
