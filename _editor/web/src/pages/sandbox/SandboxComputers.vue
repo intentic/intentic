@@ -1010,28 +1010,28 @@ const runRevoke = async (): Promise<void> => {
                              on something else on this laptop" — where the per-pairing ones answer the finer
                              question, and a computer running four sandboxes should not cost four clicks in four
                              unfolded rows to say one thing.
-                             Aligned in one label column, like every other block of small facts in this view. -->
-                        <div v-if="switchable(row, syncHalf(row)) || switchable(row, mirrorHalf(row))" class="flex flex-col gap-1.5">
-                            <div v-for="half in machineSwitches(row)" :key="half.label" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                <span class="w-[6.5rem] shrink-0 text-2xs text-subtle">{{ half.label }}</span>
-                                <!-- The STATE, in the machine's own terms and uncoloured: somebody threw these
-                                     switches on purpose, so neither position is a fault. A mixed one says which
-                                     pairings disagree, because that is the only reason two buttons appear. -->
-                                <span class="shrink-0 text-xs text-muted">{{ half.note ?? half.word }}</span>
-                                <span class="-ml-1 flex flex-wrap items-center gap-x-1 gap-y-1">
+                             Rendered as distinct compact control pairs with consistent secondary buttons. -->
+                        <div v-if="switchable(row, syncHalf(row)) || switchable(row, mirrorHalf(row))" class="flex flex-col gap-2 rounded-lg bg-content/2 px-3 py-2 border border-line-subtle/50">
+                            <div v-for="half in machineSwitches(row)" :key="half.label" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-medium text-content">{{ half.label }}</span>
+                                    <span class="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-medium" :class="half.state === 'off' ? 'bg-content/5 text-subtle' : 'bg-success/10 text-success'">
+                                        {{ half.note ?? half.word }}
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1.5">
                                     <Button
                                         v-for="action in half.actions"
                                         :key="action.command"
                                         size="small"
                                         severity="secondary"
-                                        :text="true"
                                         :label="action.label"
                                         :loading="syncBusy?.key === machineKey(row.computer) && syncBusy.command === action.command"
                                         :disabled="working"
                                         v-tooltip.top="action.hint"
                                         @click="void runSync(row.computer, machineKey(row.computer), undefined, action.command)"
                                     />
-                                </span>
+                                </div>
                             </div>
                             <!-- The machine's own answer to a machine-level click, where the click was. The
                                  pairing rows below have their own footer for theirs. -->
