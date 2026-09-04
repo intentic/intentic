@@ -341,12 +341,12 @@ const machineWatcher = computed<MachineWatcherState | undefined>(() => {
     if (watcher === undefined) {
         return undefined;
     }
-    const running = watcher.build;
+    const runningBuild = watcher.build;
     const installed = status.value?.sync.agents.sync;
-    if (!watcher.running || running === undefined || installed === undefined || running === installed) {
+    if (!watcher.running || runningBuild === undefined || installed === undefined || runningBuild === installed) {
         return watcher;
     }
-    return { ...watcher, staleBuild: { running, installed } };
+    return { ...watcher, staleBuild: { running: runningBuild, installed } };
 });
 
 // The docker row behind one of the view's groups, which is what every verb below needs and the group carries.
