@@ -47,3 +47,22 @@ export const clampEffort = (effort: string, provider: AgentProvider, modelId: st
     const ranked = offered.toSorted((left, right) => EFFORT_SCALE.indexOf(left) - EFFORT_SCALE.indexOf(right));
     return ranked.findLast((value) => EFFORT_SCALE.indexOf(value) <= wanted) ?? ranked[0]!;
 };
+
+/* WHAT TO CALL THE TIER A SELECTION RUNS AT, the two rules above read as one word: clamp to what this model
+ * actually offers, then name the rung. Undefined for a selection that pinned no tier, which is a state its own
+ * caller words ("Default" beside a meter, nothing at all on a run button), not a word this file invents.
+ *
+ * Shared because three surfaces now name the same fact and none of them holds the scale: the settings row beside
+ * a pinned entry, the caret on every run button, and the extension API's `describe`. */
+export const effortLabelOf = (
+    effort: string | undefined,
+    provider: AgentProvider,
+    modelId: string | undefined,
+    thinking: boolean,
+): string | undefined => {
+    if (effort === undefined || effort === ``) {
+        return undefined;
+    }
+    const running = clampEffort(effort, provider, modelId, thinking);
+    return effortsFor(provider, modelId, thinking).find((option) => option.value === running)?.label ?? running;
+};

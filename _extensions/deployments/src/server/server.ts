@@ -208,7 +208,8 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
              * declared daemon call it always morally was. Registering on the run map is what gives the fix an
              * ordinary fleet card the UI can navigate to; `unattended` lets the sandbox's agent-run list answer
              * for a click nobody chose a model for, unless they did, using the caret beside the button, in
-             * which case the pair rides on here and the daemon's fill step leaves it alone. */
+             * which case the pair and the tier it was picked at ride on here and the daemon's fill step leaves
+             * them alone. */
             await api.daemon
                 .json(`/agent`, {
                     method: "POST",
@@ -217,7 +218,13 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                         conversationId,
                         isolated: true,
                         unattended: true,
-                        ...(input.pick !== undefined ? { agent: input.pick.agent, model: input.pick.model } : {}),
+                        ...(input.pick !== undefined
+                            ? {
+                                  agent: input.pick.agent,
+                                  model: input.pick.model,
+                                  ...(input.pick.effort === undefined ? {} : { effort: input.pick.effort }),
+                              }
+                            : {}),
                         title: `Fix deployment: ${resource.name}`.slice(0, TITLE_MAX),
                     }),
                 })

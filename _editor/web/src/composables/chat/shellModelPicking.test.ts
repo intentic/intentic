@@ -20,6 +20,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref, watch } from "v
 const { useAgentRunPick } = await import("@intentic/ui");
 const { queryClient } = await import("../queryPersistence");
 const { SANDBOX_SETTINGS } = await import("../queryKeys");
+const { providerAccounts } = await import("./providerAccounts");
 const { agentRunChoice, shellModelPicking } = await import("./shellModelPicking");
 
 // No VueQueryPlugin anywhere in this file, on purpose: an app that never provides the client is the sharpest
@@ -82,4 +83,29 @@ test(`re-reading it never adds a second reader of the settings`, async () => {
     app.unmount();
 
     expect([afterFirst, afterFive]).toEqual([1, 1]);
+});
+
+/* THE TIER IS PART OF THE STANDING ANSWER, and the run button and its picker both open on it: a caret that
+ * started at "Default" would make every override drop the tier its owner pinned, since the daemon fills a pin's
+ * knobs in only for a turn that named no model.
+ *
+ * `max` is the case worth pinning down. It is a legal pin BESIDE extended thinking, and a run pick carries no
+ * thinking setting at all, so the daemon repairs the pair to `high` before it sends (sendableEffort). The button
+ * has to say what will actually run, not what the setting reads. */
+test(`the standing choice names the pinned tier the run will actually use`, () => {
+    // The chain drops a pin whose provider this sandbox holds no credential for, so the account list is what
+    // makes the pin reachable at all: the same fact the daemon's own resolver reads.
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc`, label: `Claude` }] as never };
+    queryClient.setQueryData(SANDBOX_SETTINGS.of(), {
+        agentRunModels: [{ provider: `claude`, model: `claude-sonnet-4-6`, effort: `max`, thinking: true }],
+    });
+
+    const choice = agentRunChoice();
+
+    expect({ provider: choice.provider, model: choice.model, effort: choice.effort, effortLabel: choice.effortLabel }).toEqual({
+        provider: `claude`,
+        model: `claude-sonnet-4-6`,
+        effort: `high`,
+        effortLabel: `High`,
+    });
 });

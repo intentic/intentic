@@ -3,7 +3,7 @@ import { type AgentRunPin, parsePinned, quickModelKey } from "@intentic/sandbox-
 import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { computed, shallowRef } from "vue";
 import { useAgentRunModel } from "../../../composables/chat/agentRunModel";
-import { clampEffort, effortsFor } from "../../../composables/chat/effortScale";
+import { effortLabelOf } from "../../../composables/chat/effortScale";
 import { describePin, modelChoiceLabel } from "../../../composables/chat/modelPins";
 import { useQuickModel } from "../../../composables/chat/quickModel";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
@@ -67,14 +67,7 @@ const pct = (part: number, whole: number): string => `${Math.round((part / whole
  * stored `max` on a model whose scale stops at `high`, or on one whose thinking the same pin switched off,
  * would otherwise name a rung this run cannot use. The user's own pick stays stored either way, for the day the
  * longer-scaled model leads again. */
-const effortLabel = (pin: AgentRunPin): string | undefined => {
-    if (pin.effort === undefined || pin.effort === ``) {
-        return undefined;
-    }
-    const thinking = pin.thinking === true;
-    const running = clampEffort(pin.effort, pin.provider, pin.model, thinking);
-    return effortsFor(pin.provider, pin.model, thinking).find((option) => option.value === running)?.label ?? running;
-};
+const effortLabel = (pin: AgentRunPin): string | undefined => effortLabelOf(pin.effort, pin.provider, pin.model, pin.thinking === true);
 
 /* WHAT AN ENTRY SAYS ABOUT HOW IT RUNS, in one line beside its name. Only the fields actually pinned are named,
  * so an entry left at the provider's own defaults reads as just a model: the point of the line is that a

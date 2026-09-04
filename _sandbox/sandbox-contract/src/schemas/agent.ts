@@ -392,7 +392,14 @@ export type AgentTurn = z.infer<typeof AgentTurnSchema>;
  *
  * Both halves or neither, because a model id is only meaningful to the provider that vends it: half a pick
  * would send a Codex model id to Claude. Routes that accept this pass it through verbatim; a model this build
- * has never heard of is a supported pick, since the picker offers a custom-id escape hatch. */
+ * has never heard of is a supported pick, since the picker offers a custom-id escape hatch.
+ *
+ * AND THE TIER IT RUNS AT, because naming a model is only half of what the standing setting says. A pinned
+ * entry carries its own effort (AgentRunPinSchema), and the daemon applies the pin's knobs ONLY to a turn that
+ * named no model (turn-resume.ts): so a caret that could re-point the model but not the tier moved every
+ * override onto the provider's own default effort, and the one moment somebody reaches for the caret is the
+ * failure that just beat the standing order. Optional, and absent means absent, the turn goes out without an
+ * effort and the model's own answers. */
 export const AgentRunPickSchema = z
     .object({
         agent: z.string().min(1).describe("Which provider."),
@@ -400,6 +407,10 @@ export const AgentRunPickSchema = z
             .string()
             .min(1)
             .describe("Which of its models. Both or neither, because a model name only means anything to the provider that serves it."),
+        effort: z
+            .string()
+            .optional()
+            .describe("How hard that model should think, where it offers a choice. Leave it out to take the model's own default."),
     })
     .optional();
 export type AgentRunPick = z.infer<typeof AgentRunPickSchema>;

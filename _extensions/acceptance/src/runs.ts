@@ -92,6 +92,11 @@ export interface RunManifest {
     readonly notes: Readonly<Record<string, string>>;
     readonly provider: string;
     readonly model?: string;
+    /* HOW HARD EACH SESSION THINKS, the caret's other half, recorded beside the model for the same reason it is:
+     * a run fans a session out per story and Retry launches more of them later, so a tier held only in the view
+     * would run the first story at the level the reader chose and every later one at the model's default.
+     * Absent ⇒ the model's own default, which is what an unpinned run has always used. */
+    readonly effort?: string;
     readonly stories: readonly RunStory[];
     // A POST that was refused before the fleet registered a session. Persisted because roster absence alone
     // cannot tell "not launched" from "finished and archived", and because these are the stories Retry can resume.
@@ -105,6 +110,7 @@ export const runManifestOf = (params: {
     readonly notes: Readonly<Record<string, string>>;
     readonly provider: string;
     readonly model?: string | undefined;
+    readonly effort?: string | undefined;
     readonly stories: readonly StorySnapshot[];
 }): RunManifest => ({
     runId: params.runId,
@@ -113,6 +119,7 @@ export const runManifestOf = (params: {
     notes: params.notes,
     provider: params.provider,
     ...(params.model === undefined || params.model === `` ? {} : { model: params.model }),
+    ...(params.effort === undefined || params.effort === `` ? {} : { effort: params.effort }),
     stories: params.stories.map(({ slug, repo, group, path, title, content, criteria }) => ({
         slug,
         repo,
@@ -350,6 +357,7 @@ export const parseManifest = (text: string): RunManifest | undefined => {
             createdAt,
             provider,
             model,
+            effort,
             stories: rawStories,
             targets: rawTargets,
             notes: rawNotes,
@@ -363,6 +371,7 @@ export const parseManifest = (text: string): RunManifest | undefined => {
             createdAt < 0 ||
             !nonempty(provider) ||
             (model !== undefined && !nonempty(model)) ||
+            (effort !== undefined && !nonempty(effort)) ||
             !Array.isArray(rawStories) ||
             rawStories.length === 0
         ) {
@@ -391,6 +400,7 @@ export const parseManifest = (text: string): RunManifest | undefined => {
             notes,
             provider,
             ...(model === undefined ? {} : { model }),
+            ...(effort === undefined ? {} : { effort }),
             stories: complete,
             launchFailures,
         };

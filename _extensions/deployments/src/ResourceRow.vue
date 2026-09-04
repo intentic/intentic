@@ -208,6 +208,7 @@ const logText = computed(() => {
                     label="Ask the agent to fix"
                     icon="sparkles"
                     :model-label="fixModel.model.value.label"
+                    :effort-label="fixModel.model.value.effortLabel"
                     :overridden="fixModel.overridden.value"
                     :loading="busy"
                     :disabled="busy"

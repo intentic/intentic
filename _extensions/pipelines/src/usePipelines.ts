@@ -46,7 +46,11 @@ export function usePipelines() {
      * `pick` is the run button's caret: absent on the ordinary click, in which case the daemon opens the session
      * on the sandbox's own agent-run list. Nothing here reads that list, `api.models.agentRun()` already names
      * it for the button, and a second reading of the same setting is how a button comes to promise one model
-     * while the daemon spends another. */
+     * while the daemon spends another.
+     *
+     * THE TIER TRAVELS WITH THE MODEL, because the daemon fills a pinned entry's knobs in only for a run that
+     * named no model at all: a pick that dropped the effort would run the frontier model somebody reached for
+     * at whatever tier the provider defaults to, which is the cheaper half of what they asked for. */
     const fix = useMutation({
         mutationFn: async ({ run, pick }: { run: PipelineRun; pick?: AgentRunChoice | undefined }): Promise<CiFixResponse> =>
             CiFixResponseSchema.parse(
@@ -56,7 +60,9 @@ export function usePipelines() {
                     body: JSON.stringify({
                         repo: run.repo,
                         runId: run.runId,
-                        ...(pick !== undefined ? { pick: { agent: pick.provider, model: pick.model } } : {}),
+                        ...(pick !== undefined
+                            ? { pick: { agent: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) } }
+                            : {}),
                     }),
                 }),
             ),

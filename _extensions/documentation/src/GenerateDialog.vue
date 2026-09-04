@@ -95,6 +95,7 @@ const start = (): void => {
                 <AgentRunButton
                     label="Generate"
                     :model-label="runModel.model.value.label"
+                    :effort-label="runModel.model.value.effortLabel"
                     :overridden="runModel.overridden.value"
                     :disabled="chosen.length === 0"
                     @run="start"

@@ -371,6 +371,7 @@ const run = async (model: PickedModel): Promise<void> =>
             targets: Object.fromEntries(groups.value.map((story) => [targetKeyOf(story), targets.addressOf(story.repo, story.group) ?? ``])),
             provider: model.provider,
             model: model.model,
+            effort: model.effort,
             notes: notes.value,
         });
     });

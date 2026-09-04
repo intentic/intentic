@@ -87,6 +87,8 @@ export interface StartRunInput {
     // to the provider's catalog default, exactly as an unpinned composer turn does.
     readonly provider: string;
     readonly model: string;
+    // And the tier that model thinks at, where the reader chose one. Absent ⇒ the model's own default.
+    readonly effort?: string | undefined;
 }
 
 export function useRuns() {
@@ -269,6 +271,7 @@ export function useRuns() {
             unattended: true,
             agent: manifest.provider,
             ...(manifest.model === undefined ? {} : { model: manifest.model }),
+            ...(manifest.effort === undefined ? {} : { effort: manifest.effort }),
         };
         StartedTurnSchema.parse(
             await api.sandbox.json(`/agent`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) }),
@@ -296,6 +299,7 @@ export function useRuns() {
             notes: input.notes,
             provider: input.provider,
             model: input.model,
+            effort: input.effort,
             stories: snapshots,
         });
         await api.workspace.write(runManifestPath(runId), JSON.stringify(manifest, null, 2));

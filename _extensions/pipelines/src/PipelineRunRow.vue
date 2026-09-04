@@ -376,6 +376,7 @@ const startFix = (): void => {
                             v-else-if="run.status === `failed`"
                             :label="fixState?.retry === true ? `Try again` : `Fix with agent`"
                             :model-label="fixModel.model.value.label"
+                            :effort-label="fixModel.model.value.effortLabel"
                             :overridden="fixModel.overridden.value"
                             :severity="loud ? undefined : `secondary`"
                             :text="!loud"

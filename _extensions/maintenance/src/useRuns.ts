@@ -150,10 +150,13 @@ export function useRuns() {
                     isolated: true,
                     /* A chore is started by a row rather than by a person at a composer, so the daemon answers
                      * with the owner's `agentRunModels` (Sandbox ▸ Agent ▸ Models), unless they used the caret
-                     * on that row's button, in which case the pair rides on here and the daemon's fill step
-                     * leaves it alone. The flag stays either way: it is what the turn IS. */
+                     * on that row's button, in which case the pair and the tier it was picked at ride on here
+                     * and the daemon's fill step leaves them alone. The flag stays either way: it is what the
+                     * turn IS. */
                     unattended: true,
-                    ...(pick !== undefined ? { agent: pick.provider, model: pick.model } : {}),
+                    ...(pick !== undefined
+                        ? { agent: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) }
+                        : {}),
                 }),
             }),
         );

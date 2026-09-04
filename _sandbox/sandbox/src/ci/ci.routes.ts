@@ -118,11 +118,13 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 /* Started by a surface rather than by someone at a composer, so `agentRunModels` answers for it
                  * (turn-resume.ts), which is also what the button's own caret names before the click.
                  *
-                 * UNLESS they used that caret. A pick rides on as the turn's own agent/model, and the daemon's
-                 * fill step then leaves it alone because it only fills what is absent. The flag stays either
-                 * way: it is what the turn IS, not a statement about whether a model was named. */
+                 * UNLESS they used that caret. A pick rides on as the turn's own agent/model/effort, and the
+                 * daemon's fill step then leaves it alone because it only fills what is absent. The flag stays
+                 * either way: it is what the turn IS, not a statement about whether a model was named. */
                 unattended: true,
-                ...(input.pick !== undefined ? { agent: input.pick.agent, model: input.pick.model } : {}),
+                ...(input.pick !== undefined
+                    ? { agent: input.pick.agent, model: input.pick.model, ...(input.pick.effort === undefined ? {} : { effort: input.pick.effort }) }
+                    : {}),
                 title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
             };
             /* Use the SAME detached-run boundary as POST /agent. The old fire-and-forget generator bypassed the

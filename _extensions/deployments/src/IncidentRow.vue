@@ -52,6 +52,7 @@ const startFix = (): void => {
                 severity="secondary"
                 text
                 :model-label="fixModel.model.value.label"
+                :effort-label="fixModel.model.value.effortLabel"
                 :overridden="fixModel.overridden.value"
                 @run="startFix"
                 @pick="fixModel.choose"

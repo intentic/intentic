@@ -108,6 +108,16 @@ describe(`runManifestOf`, () => {
         const withoutModel = runManifestOf({ ...manifest, model: ``, stories: [story(`login`)] });
         expect(`model` in withoutModel).toBe(false);
     });
+
+    /* THE TIER IS RECORDED WITH THE MODEL, and it has to be: the fan-out is one session per story and Retry
+     * starts more of them off this file minutes later, so a tier the reader chose and the manifest dropped would
+     * run the first story at that level and every later one at the model's own default. Unset stays unset, the
+     * same way the model does, since an empty string is a tier no provider offers. */
+    it(`records the tier the reader chose beside the model, and omits an unset one`, () => {
+        const chosen = runManifestOf({ ...manifest, effort: `xhigh`, stories: [story(`login`)] });
+        const unset = runManifestOf({ ...manifest, effort: ``, stories: [story(`login`)] });
+        expect([chosen.effort, `effort` in unset]).toEqual([`xhigh`, false]);
+    });
 });
 
 describe(`reposOf`, () => {
@@ -158,6 +168,7 @@ describe(`parseManifest`, () => {
             targets: { app: `http://x` },
             notes: {},
             provider: `codex`,
+            effort: `high`,
             stories: [story(`login`)],
         });
         expect(parseManifest(JSON.stringify(source))).toEqual(source);

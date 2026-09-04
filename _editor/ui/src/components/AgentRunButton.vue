@@ -17,10 +17,11 @@ import type { IconName } from "../icons/iconSets.js";
  * for the run that wants something else. That asymmetry is the design: pressing Fix should not become a
  * two-step decision because deviating is occasionally useful.
  *
- * IT NAMES THE MODEL ONLY WHEN THAT IS NEWS. On the standing setting the caret is a bare chevron and the model
- * lives in its tooltip: a list of twenty red pipeline rows each spelling out "Claude Sonnet 4.6" is twenty
- * copies of one fact nobody is reading. Once the user picks something else the label appears inline, because a
- * deviation that is invisible is a deviation you forget you made and then pay for.
+ * IT NAMES THE SPEND ONLY WHEN THAT IS NEWS, and the spend is the model AND the tier it thinks at. On the
+ * standing setting the caret is a bare chevron and both live in its tooltip: a list of twenty red pipeline rows
+ * each spelling out "Claude Sonnet 4.6 · High" is twenty copies of one fact nobody is reading. Once the user
+ * picks something else the label appears inline, because a deviation that is invisible is a deviation you forget
+ * you made and then pay for.
  *
  * THE CARET HANDS BACK ITS OWN ELEMENT rather than raising the picker itself. The picker is not a widget: it
  * is a live read of every connected provider's catalog and which credentials the sandbox holds, so it stays
@@ -35,6 +36,7 @@ import type { IconName } from "../icons/iconSets.js";
 const {
     label,
     modelLabel,
+    effortLabel,
     overridden = false,
     severity = undefined,
     size = `small`,
@@ -48,6 +50,11 @@ const {
     // What the run will open on, already resolved by the caller (useAgentRunPick). Undefined ⇒ nothing pinned
     // and nothing picked, so there is nothing honest to promise and the caret says so instead of guessing.
     modelLabel?: string | undefined;
+    /* HOW HARD IT WILL THINK, where the model offers a choice ("High", "Max"), already named by the caller for
+     * the same reason the model is: the scale belongs to the shell's catalog, not to this kit. Absent ⇒ no tier
+     * was pinned and the model's own default answers, which is a state with nothing to say rather than a word
+     * this button should invent. It is half of what the click costs, so it goes wherever the model name goes. */
+    effortLabel?: string | undefined;
     // Whether that is the user's own pick rather than the sandbox's standing list.
     overridden?: boolean;
     severity?: string | undefined;
@@ -66,15 +73,20 @@ const emit = defineEmits<{ run: []; pick: [HTMLElement] }>();
 // `$el`, so the ref is taken as the generic public instance the runtime actually hands back.
 const caret = ref<ComponentPublicInstance>();
 
+/* THE MODEL AND THE TIER AS ONE PHRASE, since they are one fact about what the click costs and are read
+ * together everywhere else in the app ("Sonnet 4.6 · High", the settings list's own line). A run with no tier
+ * pinned is just the model: the provider's default is not news. */
+const spend = computed(() => (modelLabel === undefined ? undefined : effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`));
+
 /* WHAT THE CARET PROMISES, in the one place a caret can say anything. Three states and they are genuinely
  * different: a run on the sandbox's standing order, a run the user has just re-pointed, and a sandbox that has
  * pinned nothing, where the honest answer is the composer's own model rather than a name this button invents. */
 const caretHint = computed(() =>
-    modelLabel === undefined
+    spend.value === undefined
         ? `Opens on whatever your chat composer is set to. Click to run this one on a specific model.`
         : overridden
-          ? `This run only: ${modelLabel}. Click to change it, or pick the sandbox default to go back.`
-          : `Opens an isolated agent on ${modelLabel}, the sandbox default. Click to run this one on something else.`,
+          ? `This run only: ${spend.value}. Click to change it, or pick the sandbox default to go back.`
+          : `Opens an isolated agent on ${spend.value}, the sandbox default. Click to run this one on something else.`,
 );
 
 const openPicker = (): void => {
@@ -113,17 +125,23 @@ const openPicker = (): void => {
             :text="text"
             :disabled="disabled || loading"
             :class="['rounded-l-none', text ? 'pl-1 pr-1.5' : 'px-1.5']"
-            :aria-label="modelLabel === undefined ? `Choose a model for this run` : `Model for this run: ${modelLabel}`"
+            :aria-label="spend === undefined ? `Choose a model for this run` : `Model for this run: ${spend}`"
             v-tooltip.top="caretHint"
             @click="openPicker"
         >
-            <!-- The deviation, spelled out where the chevron alone would have been. Capped and truncating: a
-                 model name is the one part of this control with no fixed length, and the whole of it stays one
-                 hover away on the tooltip above. -->
+            <!-- The deviation, spelled out where the chevron alone would have been: the model AND the tier, since
+                 a run re-pointed to Max on the model it was already on is a deviation that costs money and would
+                 otherwise be invisible.
+                 THE MODEL IS THE HALF THAT TRUNCATES, and the cap is on it alone. A model name is the one part
+                 of this control with no fixed length ("GPT-5.6 Codex Mini High Fidelity"), while a tier is one
+                 short word — and it is the half that is NEWS, since it was invisible before and is what the
+                 caret was reached for. One capped string would have cut the tier off the end of every long
+                 name. The whole of it stays one hover away on the tooltip above. -->
             <span class="flex items-center gap-1">
                 <template v-if="overridden && modelLabel !== undefined">
                     <Icon name="sparkles" class="shrink-0 text-2xs" />
                     <span class="max-w-[9rem] truncate text-2xs">{{ modelLabel }}</span>
+                    <span v-if="effortLabel !== undefined" class="shrink-0 text-2xs">· {{ effortLabel }}</span>
                 </template>
                 <Icon name="chevron-down" class="shrink-0 text-2xs" />
             </span>

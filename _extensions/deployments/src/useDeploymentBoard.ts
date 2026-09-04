@@ -80,7 +80,11 @@ export function useDeploymentBoard(capability: Ref<string>) {
                     post({
                         kind: resource.kind,
                         id: resource.id,
-                        ...(pick !== undefined ? { pick: { agent: pick.provider, model: pick.model } } : {}),
+                        // The tier rides with the pair: the daemon fills a pinned entry's knobs in only for a run
+                        // that named no model, so a pick without it drops to the provider's own default effort.
+                        ...(pick !== undefined
+                            ? { pick: { agent: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) } }
+                            : {}),
                     }),
                 ),
             ),

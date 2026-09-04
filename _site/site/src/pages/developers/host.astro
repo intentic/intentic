@@ -257,10 +257,16 @@ const packages = [
     </table>
     <p>
         A <code>PickedModel</code> covers the whole choice: <code>provider</code>, <code>model</code>, a display <code>label</code>, and
-        optionally which connected <code>account</code> and which <code>harness</code>. The last two are pins. Leaving them absent lets the
+        optionally which connected <code>account</code>, which <code>harness</code>, and the reasoning <code>effort</code> that model
+        thinks at (with <code>effortLabel</code>, the shell's own word for it). Those are pins. Leaving them absent lets the
         daemon choose, which keeps a saved choice working after an account is disconnected.
         Pin the account when the surface starts <em>unattended</em> runs: nobody is watching at 6am, and a first account that has run out of
         headroom is a run that errors every time until someone reads the row.
+        Pass <code>effort</code> on the turn you start, beside <code>model</code>: the sandbox fills a pinned entry's tier in only for a run
+        that named no model at all, so a run your caret re-pointed and that dropped the tier falls back to the provider's default.
+        The picker offers the tier only when you ask for it, <code>pick(&#123; …, chooseEffort: true &#125;)</code>: a form that stores a model
+        and no tier would be showing a control whose answer it throws away. <code>useAgentRunPick</code> asks for you, so a surface built on
+        <code>AgentRunButton</code> has it already.
     </p>
 
     <h2>api.navigate, api.route and api.theme</h2>

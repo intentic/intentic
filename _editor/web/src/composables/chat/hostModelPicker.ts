@@ -19,10 +19,15 @@ export interface ModelChoice {
     // What the app calls this pair (modelLabelFor), so a caller's own trigger can name the choice without
     // holding a catalog of its own.
     readonly label: string;
-    // The two pins the footer adds to the list's own answer, absent unless the caller is holding one. See
+    // The pins the footer adds to the list's own answer, absent unless the caller is holding one. See
     // PickedModel (extension-api) for why an unattended run is the surface that needs them.
     readonly account?: string;
     readonly harness?: AgentHarness;
+    /* WHICH TIER THE RUN THINKS AT, the footer's third pin and the only one that is a property of the MODEL
+     * rather than of the provider: it therefore survives a re-point across providers, exactly as it does in the
+     * settings page's own picker (ModelPinPickerBody), while the account and harness do not. Absent ⇒ the
+     * model's own default. */
+    readonly effort?: string;
 }
 
 interface ModelRequest {
@@ -32,6 +37,13 @@ interface ModelRequest {
     readonly model: string;
     readonly account?: string;
     readonly harness?: AgentHarness;
+    readonly effort?: string;
+    /* WHETHER TO OFFER THE TIER AT ALL, the caller's own answer. This picker serves several questions: which
+     * model a RUN spends (where the tier rides onto the turn), which model this CHAT is on (whose effort is set
+     * in the composer beside it), and which model an automation or a workflow step is pinned to (a stored pair
+     * with no tier field behind it). Only the first can honour an answer here, and a control whose answer is
+     * dropped on the floor is worse than no control, so the row is drawn on request rather than by default. */
+    readonly chooseEffort?: boolean;
     readonly settle: (choice: ModelChoice | undefined) => void;
 }
 
@@ -39,9 +51,11 @@ interface ModelRequest {
 // destroyed per open, which is what resets the search query and refreshes the catalogs (see ModelPicker).
 export const modelRequest = shallowRef<ModelRequest | undefined>(undefined);
 
-/* Account and harness rows are settings within the open picker, not its answer. Stage them on the request so
- * the footer updates immediately and the eventual model row carries the complete choice back to the caller. */
-export const stageModelPick = (patch: Pick<ModelChoice, "account" | "harness">): void => {
+/* Account, harness and effort rows are settings within the open picker, not its answer. Stage them on the
+ * request so the footer updates immediately and the eventual model row carries the complete choice back to the
+ * caller. An explicit `undefined` is a real value here (the × beside the effort meter, "take the model's own
+ * default"), which is why the patch is spread rather than filtered. */
+export const stageModelPick = (patch: Pick<ModelChoice, "account" | "harness" | "effort">): void => {
     const pending = modelRequest.value;
     if (pending === undefined) {
         return;

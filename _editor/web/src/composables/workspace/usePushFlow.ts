@@ -392,6 +392,13 @@ export function usePushFlow() {
                 if (pick.harness !== undefined) {
                     fix.harness.value = pick.harness as AgentHarness;
                 }
+                /* THE TIER THE CARET NAMED, applied last and only when it named one: the draft was already
+                 * composed on the pinned entry's effort (`fixWith`), so an untouched picker leaves that standing
+                 * rather than resetting a proposal the reader can still see. `setEffort` writes the PICK, which
+                 * the draft clamps to whatever the model just chosen actually offers. */
+                if (pick.effort !== undefined) {
+                    fix.setEffort(pick.effort);
+                }
             }
             startSession(fix);
         }

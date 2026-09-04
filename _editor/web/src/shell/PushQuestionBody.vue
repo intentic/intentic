@@ -68,6 +68,7 @@ const startFix = (): void => {
                 v-if="pushFlow.proposedFix.value"
                 label="Fix with agent"
                 :model-label="fixModel.model.value.label"
+                :effort-label="fixModel.model.value.effortLabel"
                 :overridden="fixModel.overridden.value"
                 @run="startFix"
                 @pick="fixModel.choose"

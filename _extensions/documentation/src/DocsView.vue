@@ -182,8 +182,10 @@ const onStart = (dirs: readonly string[], pick: AgentRunChoice | undefined): voi
         // An explicit subset only when the user narrowed it; otherwise the map discovers the scope.
         ...(dirs.length === 0 ? {} : { packages: dirs }),
         // The caret's choice, when they used it. Recorded on the run so the map agent and every package agent
-        // after it open on the same model.
-        ...(pick === undefined ? {} : { pick: { agent: pick.provider, model: pick.model } }),
+        // after it open on the same model, at the same tier.
+        ...(pick === undefined
+            ? {}
+            : { pick: { agent: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) } }),
     });
 };
 
@@ -192,13 +194,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
 </script>
 
 <template>
-    <SplitView
-        title="Documentation"
-        scroll="page"
-        :scroll-key="`${repo}/${page ?? ``}`"
-        mobile="swap"
-        :detail-open="page !== undefined"
-    >
+    <SplitView title="Documentation" scroll="page" :scroll-key="`${repo}/${page ?? ``}`" mobile="swap" :detail-open="page !== undefined">
         <template #actions>
             <Picker
                 v-if="pinned === undefined && repos.length > 1"

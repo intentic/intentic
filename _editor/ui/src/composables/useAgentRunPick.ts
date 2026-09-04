@@ -27,6 +27,15 @@ export interface AgentRunChoice {
     readonly label: string;
     readonly account?: string | undefined;
     readonly harness?: string | undefined;
+    /* HOW HARD IT THINKS, the second half of what a run costs and the second thing the caret can re-point. It
+     * rides here rather than being left to the daemon for the reason the model does: the pinned entry's own
+     * effort is applied only to a turn that named NO model (turn-resume.ts), so a run the caret re-pointed and
+     * this did not carry would quietly drop to the provider's default tier. Absent ⇒ nothing chosen, and the
+     * turn goes out without one. */
+    readonly effort?: string | undefined;
+    // What the app calls that tier ("X-High"), for the button, since only the host holds the scale. Absent
+    // whenever `effort` is.
+    readonly effortLabel?: string | undefined;
 }
 
 /* The two questions this asks of whichever world it is running in: what would run if nobody chose, and let them
@@ -46,6 +55,14 @@ export interface ModelPicking {
         readonly model: string;
         readonly account?: string | undefined;
         readonly harness?: string | undefined;
+        // The tier the picker opens on, so it starts where the run currently stands rather than at "Default".
+        readonly effort?: string | undefined;
+        /* ASK FOR THE TIER TOO. The host's picker is one panel over several questions, and only some of its
+         * callers can honour an answer about reasoning effort: a run button does (the tier rides onto the turn
+         * it starts), while the chat sets its own effort in the composer and the automations/workflow forms
+         * store a model without one. A control whose answer is dropped is worse than no control, so the row is
+         * drawn only for a caller that says it carries the field. This composable always does. */
+        readonly chooseEffort?: boolean;
     }): Promise<AgentRunChoice | undefined>;
 }
 
@@ -72,10 +89,14 @@ export function useAgentRunPick(models: () => ModelPicking): AgentRunPicker {
         choose: async (anchor: HTMLElement): Promise<void> => {
             const next = await models().pick({
                 anchor,
+                // Every surface that presses this button sends the tier on with the model (the daemon fills a
+                // pinned entry's own in only for a run that named neither), so the row is always offered here.
+                chooseEffort: true,
                 provider: model.value.provider,
                 model: model.value.model,
                 ...(model.value.account !== undefined ? { account: model.value.account } : {}),
                 ...(model.value.harness !== undefined ? { harness: model.value.harness } : {}),
+                ...(model.value.effort !== undefined ? { effort: model.value.effort } : {}),
             });
             if (next !== undefined) {
                 picked.value = next;

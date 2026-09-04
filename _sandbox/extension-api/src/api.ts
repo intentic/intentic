@@ -211,10 +211,10 @@ export interface DocumentProviderRegistration {
  * model without showing the list would otherwise have to keep a catalog of its own, which is exactly the
  * duplication `api.models` exists to end.
  *
- * The last two are optional because they are pins, and the unpinned state is the one most callers want: absent
- * means "whatever the daemon resolves", which is what keeps a saved choice working after an account is
- * disconnected or a harness gains a provider. A caller that only cares which model runs can ignore both and
- * lose nothing. */
+ * Everything after the label is optional because they are pins, and the unpinned state is the one most callers
+ * want: absent means "whatever the daemon resolves", which is what keeps a saved choice working after an account
+ * is disconnected or a harness gains a provider. A caller that only cares which model runs can ignore all of
+ * them and lose nothing. */
 export interface PickedModel {
     // An `AgentProvider`, `claude`, `codex`, a configured model endpoint's id, an installed ACP agent's id.
     // Open on purpose: the set grows with what the sandbox has connected, and an extension only carries it.
@@ -237,6 +237,14 @@ export interface PickedModel {
     // `native` or `claude-code`, the agentic loop, an axis of its own since codex/grok run the same subscription
     // model ids under either. Absent ⇒ native, which for every other provider is the only answer there is.
     readonly harness?: string | undefined;
+    /* HOW HARD THAT MODEL THINKS, one of the provider's own reasoning tiers ("low", "high", "max"), absent ⇒ the
+     * model's own default. Pass it on the turn you start (`effort`) exactly as you pass `model`: the sandbox
+     * fills a pinned entry's tier in only for a run that named NO model, so a run your caret re-pointed and that
+     * dropped this would quietly fall back to the provider's default tier. */
+    readonly effort?: string | undefined;
+    // What the shell calls that tier ("X-High"), for a view that shows the choice. Absent whenever `effort` is,
+    // and for a runtime that owns its own reasoning settings and publishes no scale.
+    readonly effortLabel?: string | undefined;
 }
 
 export type SettingValue = string | number | boolean;
@@ -495,22 +503,30 @@ export interface IntenticApi {
             readonly model: string;
             readonly account?: string | undefined;
             readonly harness?: string | undefined;
+            readonly effort?: string | undefined;
         }): PickedModel;
         /* Open the picker over `anchor`, a popover on desktop, a sheet on mobile, starting on the selection the
          * caller is holding. Resolves with the pick, or undefined if it was dismissed. A second call supersedes
          * the first, resolving it as a dismissal.
          *
-         * A MODEL ROW settles it. Account and harness rows behave as they do in the composer: they update the
-         * open selection without closing, and the eventual model pick carries those pins. Dismissing after only
-         * staging a pin still resolves undefined. Picking a model under a DIFFERENT provider clears the account
-         * with it, an account id is one provider's store key, so carrying it across would pin the run to an
-         * account that provider does not have. */
+         * A MODEL ROW settles it. Account, harness and reasoning-effort rows behave as they do in the composer:
+         * they update the open selection without closing, and the eventual model pick carries those pins.
+         * Dismissing after only staging a pin still resolves undefined. Picking a model under a DIFFERENT provider
+         * clears the account and harness with it, an account id is one provider's store key, so carrying it across
+         * would pin the run to an account that provider does not have; the EFFORT survives, because a tier is a
+         * question every model answers for itself. */
         pick(options: {
             readonly anchor: HTMLElement;
             readonly provider: string;
             readonly model: string;
             readonly account?: string | undefined;
             readonly harness?: string | undefined;
+            readonly effort?: string | undefined;
+            /* OFFER THE REASONING-EFFORT ROW, for a caller that will carry `effort` onto the turn it starts. Off
+             * by default, and deliberately: a form that stores a model and no tier (an automation, a workflow
+             * step) would be showing a control whose answer it drops, which is worse than showing none. Every
+             * <AgentRunButton> asks for it through `useAgentRunPick`, so a surface using that gets it already. */
+            readonly chooseEffort?: boolean;
         }): Promise<PickedModel | undefined>;
     };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").

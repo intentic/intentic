@@ -2,14 +2,9 @@ import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, Picked
 import { extensionApiVersion, flattenQuery, mergeQuery } from "@intentic/extension-api";
 import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { useDevice, useTheme } from "@intentic/ui";
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type ExtensionSummary,
-    sandboxRequestFor,
-    WorkspaceFileSchema,
-} from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRequestFor, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
+import { effortLabelOf } from "../composables/chat/effortScale";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { agentRunChoice, shellModelPicking } from "../composables/chat/shellModelPicking";
 import { summonChat } from "../composables/chat/summon";
@@ -48,15 +43,27 @@ export interface HostBindings {
     readonly capabilities: () => readonly CapabilityFacts[];
 }
 
-/* WHAT TO CALL A SELECTION, the one place a (provider, model, account) triple is turned into words for an
- * extension, so `pick` and `describe` can never name the same pin two different ways.
+/* WHAT TO CALL A SELECTION, the one place a (provider, model, account, effort) selection is turned into words
+ * for an extension, so `pick` and `describe` can never name the same pin two different ways.
  *
  * The account's name is its SIGN-IN IDENTITY where the provider reported one, because that is what the owner
  * recognises: three connections all labelled "Claude" say nothing, and the label is theirs to rename anyway. A
  * pinned id that matches no connected account is left unnamed rather than echoed back, a pin whose credential
- * has been disconnected is exactly what a caller needs to be able to notice. */
-const named = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): PickedModel => {
+ * has been disconnected is exactly what a caller needs to be able to notice.
+ *
+ * The TIER is named the same way and for the same reason (effortLabelOf): clamped to what this model actually
+ * offers, read with thinking off because a run pick carries no thinking setting, and left unnamed where the
+ * runtime publishes no scale at all. */
+const named = (selection: {
+    readonly provider: AgentProvider;
+    readonly model: string;
+    readonly account?: string | undefined;
+    readonly harness?: AgentHarness | undefined;
+    readonly effort?: string | undefined;
+}): PickedModel => {
+    const { provider, model, account, harness, effort } = selection;
     const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
+    const effortLabel = effortLabelOf(effort, provider, model, false);
     return {
         provider,
         model,
@@ -67,6 +74,8 @@ const named = (provider: AgentProvider, model: string, account?: string, harness
         ...(account !== undefined ? { account } : {}),
         ...(connected !== undefined ? { accountLabel: connected.email ?? connected.label } : {}),
         ...(harness !== undefined ? { harness } : {}),
+        ...(effort === undefined || effort === `` ? {} : { effort }),
+        ...(effortLabel === undefined ? {} : { effortLabel }),
     };
 };
 
@@ -465,15 +474,27 @@ export const createExtensionApi = (
              * structural AgentRunChoice does not, accountLabel, which only this side can look up. */
             agentRun: () => {
                 const choice = agentRunChoice();
-                return named(choice.provider as AgentProvider, choice.model);
+                return named({ provider: choice.provider as AgentProvider, model: choice.model, effort: choice.effort });
             },
             describe: (selection) =>
-                named(selection.provider as AgentProvider, selection.model, selection.account, selection.harness as AgentHarness),
+                named({
+                    provider: selection.provider as AgentProvider,
+                    model: selection.model,
+                    account: selection.account,
+                    harness: selection.harness as AgentHarness | undefined,
+                    effort: selection.effort,
+                }),
             pick: async (options) => {
                 const choice = await shellModelPicking().pick(options);
                 return choice === undefined
                     ? undefined
-                    : named(choice.provider as AgentProvider, choice.model, choice.account, choice.harness as AgentHarness);
+                    : named({
+                          provider: choice.provider as AgentProvider,
+                          model: choice.model,
+                          account: choice.account,
+                          harness: choice.harness as AgentHarness | undefined,
+                          effort: choice.effort,
+                      });
             },
         },
         navigate: (path) => {

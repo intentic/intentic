@@ -103,6 +103,7 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
                 :label="`Run ${narrowed ? storyCount(chosen) : `all ${storyCount(total)}`}`"
                 icon="play"
                 :model-label="fixModel.model.value.label"
+                :effort-label="fixModel.model.value.effortLabel"
                 :overridden="fixModel.overridden.value"
                 :disabled="!canRun"
                 hint="Every test session runs on this model: one session per story"

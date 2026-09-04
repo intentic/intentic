@@ -283,6 +283,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                         :label="verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
                         icon="play"
                         :model-label="runModel.model.value.label"
+                        :effort-label="runModel.model.value.effortLabel"
                         :overridden="runModel.overridden.value"
                         :disabled="busy || busyHere || liveAgent !== undefined"
                         @run="startRun"

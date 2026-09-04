@@ -1,7 +1,8 @@
-import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, sendableEffort } from "@intentic/sandbox-contract";
 import type { AgentRunChoice, ModelPicking } from "@intentic/ui";
 import { effectScope } from "vue";
 import { type AgentRunModel, useAgentRunModel } from "./agentRunModel";
+import { effortLabelOf } from "./effortScale";
 import { requestModelPick } from "./hostModelPicker";
 import { modelLabelFor } from "./providerCatalog";
 import { useChat } from "./useChat";
@@ -14,18 +15,35 @@ import { useChat } from "./useChat";
  * drawn by the shell are the same button, and the day the two disagreed about which model a click would spend,
  * one of them would be lying to the user about money. */
 
-// A (provider, model) pair, named the way the app names it — the ONE naming rule (providerCatalog.modelLabelFor),
-// shared with the composer's pill and the board's cards so no two surfaces can call the same pair different
-// things. An UNPINNED model has no catalog row to name it, and an empty label is the one thing this must never
-// return; that floor is the rule's own last rung, the provider's display name, since the provider is what will
-// resolve a model at run time.
-const namedChoice = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): AgentRunChoice => ({
-    provider,
-    model,
-    label: modelLabelFor(provider, model),
-    ...(account !== undefined ? { account } : {}),
-    ...(harness !== undefined ? { harness } : {}),
-});
+/* A (provider, model) pair, named the way the app names it — the ONE naming rule (providerCatalog.modelLabelFor),
+ * shared with the composer's pill and the board's cards so no two surfaces can call the same pair different
+ * things. An UNPINNED model has no catalog row to name it, and an empty label is the one thing this must never
+ * return; that floor is the rule's own last rung, the provider's display name, since the provider is what will
+ * resolve a model at run time.
+ *
+ * THE TIER IS NAMED HERE TOO, by the same argument: a run button that says "Opus 4.6" and spends X-High has told
+ * the reader half of what the click costs, and the scale a tier is named against is the shell's (effortScale),
+ * which neither the kit nor an extension can see. Read with thinking OFF, because a run pick carries no thinking
+ * setting: that is exactly the reading the daemon will make of the turn. */
+const namedChoice = (selection: {
+    readonly provider: AgentProvider;
+    readonly model: string;
+    readonly account?: string | undefined;
+    readonly harness?: AgentHarness | undefined;
+    readonly effort?: string | undefined;
+}): AgentRunChoice => {
+    const { provider, model, account, harness, effort } = selection;
+    const label = effortLabelOf(effort, provider, model, false);
+    return {
+        provider,
+        model,
+        label: modelLabelFor(provider, model),
+        ...(account !== undefined ? { account } : {}),
+        ...(harness !== undefined ? { harness } : {}),
+        ...(effort === undefined || effort === `` ? {} : { effort }),
+        ...(label === undefined ? {} : { effortLabel: label }),
+    };
+};
 
 /* THE AGENT-RUN LIST, ENTERED ONCE FOR THE WHOLE APP.
  *
@@ -52,11 +70,22 @@ const agentRunModel = (): AgentRunModel => (runModel ??= appScope.run(useAgentRu
  * guessed at. Read inside a computed and it is reactive to both.
  *
  * The pin carries its provider WITH the model, and has to: a model id is only meaningful to the provider that
- * vends it, so honouring one without the other would send a Codex id to Claude. */
+ * vends it, so honouring one without the other would send a Codex id to Claude.
+ *
+ * ITS EFFORT COMES ALONG, so the caret opens on the tier the run would actually have used rather than on
+ * "Default", and so a reader who only re-points the MODEL keeps the tier their setting asked for. `sendableEffort`
+ * with thinking off is the repair the daemon will make anyway: a pin written at `max` beside `thinking: on` runs
+ * at High once it rides a pick that carries no thinking, and the meter has to say High rather than light a rung
+ * the run will not use. The composer floor contributes none: an empty list means nobody chose a tier for
+ * unwatched work, and the chat's own effort is an answer about the turn in front of you. */
 export const agentRunChoice = (): AgentRunChoice => {
     const head = agentRunModel().choice.value;
     const chat = useChat();
-    return namedChoice((head?.provider ?? chat.provider.value) as AgentProvider, head?.model ?? chat.model.value);
+    return namedChoice({
+        provider: (head?.provider ?? chat.provider.value) as AgentProvider,
+        model: head?.model ?? chat.model.value,
+        effort: sendableEffort(head?.effort, false),
+    });
 };
 
 export const shellModelPicking = (): ModelPicking => ({
@@ -68,7 +97,9 @@ export const shellModelPicking = (): ModelPicking => ({
             model: options.model,
             ...(options.account !== undefined ? { account: options.account } : {}),
             ...(options.harness !== undefined ? { harness: options.harness as AgentHarness } : {}),
+            ...(options.effort !== undefined ? { effort: options.effort } : {}),
+            ...(options.chooseEffort === true ? { chooseEffort: true } : {}),
         });
-        return choice === undefined ? undefined : namedChoice(choice.provider, choice.model, choice.account, choice.harness);
+        return choice === undefined ? undefined : namedChoice(choice);
     },
 });

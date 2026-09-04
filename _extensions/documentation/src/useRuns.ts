@@ -66,8 +66,11 @@ export interface RunManifest {
      * ON THE MANIFEST rather than held in the view, because a run OUTLIVES the press that started it: only the
      * map agent starts immediately, and the fan-out is started later by `advance()`, on a later poll, quite
      * possibly in a browser that has been reloaded since. A pick kept in memory would document the first
-     * package on the model the user chose and the other forty on the standing one. */
-    readonly pick?: { readonly agent: string; readonly model: string };
+     * package on the model the user chose and the other forty on the standing one.
+     *
+     * The TIER is part of that choice and is recorded with it, for the same reason: a fan-out where the first
+     * session thinks at Max and the rest at the model's default is not the run the reader asked for. */
+    readonly pick?: { readonly agent: string; readonly model: string; readonly effort?: string };
 }
 
 const parseManifest = (text: string): RunManifest | undefined => {
@@ -76,7 +79,7 @@ const parseManifest = (text: string): RunManifest | undefined => {
         const runId = body[`runId`];
         const repo = body[`repo`];
         const packages = body[`packages`];
-        const pick = body[`pick`] as { agent?: unknown; model?: unknown } | undefined;
+        const pick = body[`pick`] as { agent?: unknown; model?: unknown; effort?: unknown } | undefined;
         if (typeof runId !== `string` || typeof repo !== `string`) {
             return undefined;
         }
@@ -86,8 +89,11 @@ const parseManifest = (text: string): RunManifest | undefined => {
             createdAt: typeof body[`createdAt`] === `number` ? (body[`createdAt`] as number) : 0,
             packages: Array.isArray(packages) ? packages.filter((dir): dir is string => typeof dir === `string`) : undefined,
             // Both halves or neither: a model id means nothing without the provider that vends it, so half a
-            // pick read back off disk is worse than none.
-            ...(typeof pick?.agent === `string` && typeof pick.model === `string` ? { pick: { agent: pick.agent, model: pick.model } } : {}),
+            // pick read back off disk is worse than none. The tier is its own question and rides along when the
+            // file has one, a manifest written before the reader chose a tier simply has none.
+            ...(typeof pick?.agent === `string` && typeof pick.model === `string`
+                ? { pick: { agent: pick.agent, model: pick.model, ...(typeof pick.effort === `string` ? { effort: pick.effort } : {}) } }
+                : {}),
         };
     } catch {
         return undefined;
@@ -111,7 +117,7 @@ export interface StartRunInput {
     // Absent ⇒ document every package the map finds. See RunManifest.packages.
     readonly packages?: readonly string[] | undefined;
     // The caret's choice, when the reader made one. Recorded on the manifest so the whole fan-out inherits it.
-    readonly pick?: { readonly agent: string; readonly model: string } | undefined;
+    readonly pick?: { readonly agent: string; readonly model: string; readonly effort?: string } | undefined;
 }
 
 export function useRuns(repo: Ref<string>) {
@@ -207,7 +213,7 @@ export function useRuns(repo: Ref<string>) {
      * a documentation run and every other surface-started run get their answer from.
      *
      * `pick` is the run's own override, read back off its manifest so every session in the fan-out opens on the
-     * same model the caret named, including the ones started an hour later by `advance()`. */
+     * same model and tier the caret named, including the ones started an hour later by `advance()`. */
     const startAgent = async (conversationId: string, prompt: string, pick?: RunManifest[`pick`]): Promise<void> => {
         await api.sandbox.request(`/agent`, {
             method: `POST`,
@@ -218,7 +224,9 @@ export function useRuns(repo: Ref<string>) {
                 isolated: true,
                 permissionMode: `bypassPermissions`,
                 unattended: true,
-                ...(pick !== undefined ? { agent: pick.agent, model: pick.model } : {}),
+                ...(pick !== undefined
+                    ? { agent: pick.agent, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) }
+                    : {}),
             }),
         });
     };
