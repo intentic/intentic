@@ -102,7 +102,7 @@ export const worktreeReminder = (root: string): TurnNote => ({
  * text behind it is addressed to a model and reads like it. Titles here must match the ones at the definition
  * sites, so a note reads the same whether it arrived typed or was parsed back off a provider's store. */
 const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
-    { header: SPAWN_NOTE_HEADER, title: "Spawning helper agents" },
+    { header: SPAWN_NOTE_HEADER, title: "Spawning child agents" },
     // The persona note reaches the user message only where the runtime has no system prompt to hold it (Pi,
     // ACP). It is listed here for the same three reasons every other note is, and for a fourth: it is the one
     // note that says what the turn may NOT touch, so a reader who cannot see it cannot tell a refusal from a

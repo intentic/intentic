@@ -361,7 +361,7 @@ export const AgentSummarySchema = z.object({
     // The ROOT repo's short base sha, the checkout moment's display identity. Per-repo bases stay
     // daemon-internal (agents.diff already reports against them).
     base: z.string().optional().describe("The commit its private copy started from, shortened."),
-    costUsd: z.number().optional().describe("What it has cost so far, in dollars. A helper agent's spend is its own and is not folded in here."),
+    costUsd: z.number().optional().describe("What it has cost so far, in dollars. A subagent's spend is its own and is not folded in here."),
     inputTokens: z.number().optional().describe("Tokens sent."),
     outputTokens: z.number().optional().describe("Tokens received."),
     contextTokens: z.number().optional().describe("How much of the window the conversation currently fills."),
@@ -431,12 +431,12 @@ export const AgentSummarySchema = z.object({
      * the Subagents area is where it is attributed. */
     subagents: z
         .object({
-            running: z.number().describe("Helpers working right now."),
-            total: z.number().describe("Helpers it has started over its whole life."),
+            running: z.number().describe("Subagents working right now."),
+            total: z.number().describe("Subagents it has started over its whole life."),
         })
         .optional()
         .describe(
-            "Helper agents this one delegated to. Absent means it never has, which is most conversations. Their spend is their own and is not folded into this conversation's cost.",
+            "Subagents and child agents this one delegated to. Absent means it never has, which is most conversations. Their spend is their own and is not folded into this conversation's cost.",
         ),
     // The agent's cumulative output (base → branch tip across every repo), refreshed on each land,
     // the card's "12 files · +412 −96" readout. Independent of what has landed.

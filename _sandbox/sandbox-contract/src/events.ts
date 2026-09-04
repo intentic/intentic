@@ -557,7 +557,7 @@ export const TranscriptToolSchema: z.ZodType<TranscriptTool> = z.lazy(() =>
             .array(TranscriptToolSchema)
             .optional()
             .describe(
-                "Calls a delegated helper made, nested under the call that started it, so a reopened conversation redraws the delegation rather than collapsing it into one result.",
+                "Calls a delegated subagent made, nested under the call that started it, so a reopened conversation redraws the delegation rather than collapsing it into one result.",
             ),
         thinking: z.string().optional().describe("What the agent was reasoning about around this call."),
         subagent: TranscriptSubagentSchema.optional().describe(
@@ -772,7 +772,7 @@ export const TranscriptPatchSchema = z.discriminatedUnion("op", [
         op: z.literal("tool").describe("A tool card, whole: new, or the latest state of one already there, matched by id wherever it nests."),
         index: z.number().int().nonnegative(),
         tool: TranscriptToolSchema,
-        parent: z.string().optional().describe("The card this one nests under, when it is a delegated helper's own call."),
+        parent: z.string().optional().describe("The card this one nests under, when it is a delegated subagent's own call."),
     }),
 ]);
 export type TranscriptPatch = z.infer<typeof TranscriptPatchSchema>;

@@ -95,7 +95,7 @@ test("what strip removes, the split hands back: titled, whole, and in the order 
     const sent = withTurnPreamble([note, notice], "fix the bug");
 
     expect(preambleNotes(sent)).toEqual([
-        { title: "Spawning helper agents", text: note },
+        { title: "Spawning child agents", text: note },
         { title: "Dependencies aren't installed yet", text: notice },
     ]);
     // …and the user's words are untouched by the disclosure, exactly as before it existed.

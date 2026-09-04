@@ -777,7 +777,7 @@ export const SandboxSettingsSchema = z.object({
      * The refusal an agent sees names the env var (`ask them to raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`),
      * which is why these three exist as settings at all: without them the only answer to that ask is editing
      * the container's environment and restarting the daemon. */
-    subagentsAtOnce: z.number().min(1).max(200).default(20).describe("How many helper agents may work at the same time."),
+    subagentsAtOnce: z.number().min(1).max(200).default(20).describe("How many subagents may work at the same time."),
     subagentsPerTurn: z.number().min(1).max(2000).default(200).describe("How many a single turn may start in total."),
     // Depth 1 = an agent may delegate, but its children may not. The CLI's own default is 3, and it is the one
     // of the three whose runaway case is unbounded rather than merely wide, each level multiplies the last.
@@ -786,7 +786,7 @@ export const SandboxSettingsSchema = z.object({
         .min(1)
         .max(10)
         .default(3)
-        .describe("How many levels deep the delegation may go, since a helper can start helpers of its own."),
+        .describe("How many levels deep the delegation may go, since a subagent can start subagents of its own."),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 // One of the two built-in bases, as text: Intentic's own prompt, or Claude Code's preset read out of the CLI

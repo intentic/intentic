@@ -194,14 +194,14 @@ export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 // an operator acts on differently from "the child is working".
 export const SubagentStatusSchema = z.enum(["pending", "running", "blocked", "completed", "failed", "killed", "paused"]);
 export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
-/* WHETHER ANYTHING CHECKED WHAT THE HELPER DID, carried beside its report rather than left for the reader to
- * assume. Computed from the helper's own tool calls, the files it edited against the checks that ran after
+/* WHETHER ANYTHING CHECKED WHAT THE SUBAGENT DID, carried beside its report rather than left for the reader to
+ * assume. Computed from the subagent's own tool calls, the files it edited against the checks that ran after
  * them (the daemon's child-verification.ts), so it holds on every provider rather than only where the Claude
  * hooks reach.
  *
  * The four states are deliberately not two. `verified` and `failing` each name the command that spoke, so a
  * targeted test is never read as the suite; `unproven` is the one that matters most, work changed and nothing
- * ran; and `no-code` says the helper edited nothing, which is the honest answer for a research helper and
+ * ran; and `no-code` says the subagent edited nothing, which is the honest answer for a research subagent and
  * must not be rendered as approval. Absent ⇒ the daemon saw no tool calls from it at all. */
 export const SubagentVerificationSchema = z.object({
     state: z
@@ -222,10 +222,10 @@ export const SubagentSessionSchema = z.object({
     id: z
         .string()
         .describe(
-            "The id of the tool call that started it (an SDK child) or the child's own conversation id (a spawned one); either way both sides already hold it, so a card links to its helper with the id it has and the helper points back the same way.",
+            "The id of the tool call that started it (an SDK child) or the child's own conversation id (a spawned one); either way both sides already hold it, so a card links to its subagent with the id it has and the subagent points back the same way.",
         ),
     kind: SubagentKindSchema.describe(
-        "What sort of helper: one the runtime's own Task tool spawned in-process, or a full agent the daemon started for the turn. It changes only how you watch it.",
+        "What sort of subagent: one the runtime's own Task tool spawned in-process, or a full child agent the daemon started for the turn. It changes only how you watch it.",
     ),
     // The conversation whose turn spawned this, what the area groups its rows by, and the way back to the chat
     // the card lives in.
@@ -233,19 +233,19 @@ export const SubagentSessionSchema = z.object({
     // What it is and what it was asked to do: the subagent type (`Explore`, `general-purpose`) or a spawned
     // child's provider label, and the caller's one-line description. The area's row and the card's title read
     // as `Explore · Locate claimIndexer definition`.
-    agentType: z.string().optional().describe("What kind of helper it is."),
+    agentType: z.string().optional().describe("What kind of subagent it is."),
     description: z.string().optional().describe("What it was asked to do, in one line."),
     model: z.string().optional().describe("Which model it runs on."),
     // Which provider serves a `spawned` child (its AgentProvider id), so the row can wear the right logo. An
     // SDK subagent implies its own: it runs on its parent's provider.
-    provider: z.string().optional().describe("Which provider serves it, for a helper spawned across providers."),
+    provider: z.string().optional().describe("Which provider serves it, for a child agent spawned across providers."),
     // How deep in the spawn tree (1 = spawned by the turn itself). From the SDK's meta.json; a subagent may
     // itself delegate, and a flat list that cannot say so reads as though the turn started all of them.
     spawnDepth: z
         .number()
         .optional()
         .describe(
-            "How deep in the chain it sits, where one means the turn itself started it. A helper can start helpers, and a flat list that could not say so would read as though the turn started all of them.",
+            "How deep in the chain it sits, where one means the turn itself started it. A subagent can start subagents, and a flat list that could not say so would read as though the turn started all of them.",
         ),
     // Backgrounded: the parent went on working instead of waiting for it. This is the whole reason the list
     // exists, a backgrounded child used to be invisible until its result landed, sometimes minutes later.
@@ -253,7 +253,7 @@ export const SubagentSessionSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "The parent carried on working instead of waiting for it. This is the whole reason the list exists: such a helper used to be invisible until its result landed, sometimes minutes later.",
+            "The parent carried on working instead of waiting for it. This is the whole reason the list exists: such a subagent used to be invisible until its result landed, sometimes minutes later.",
         ),
     status: SubagentStatusSchema.describe(
         "How it is going. Blocked means it needs an answer, which a parent and an operator act on differently from it simply working.",
@@ -266,7 +266,7 @@ export const SubagentSessionSchema = z.object({
     tokens: z
         .number()
         .optional()
-        .describe("What it has spent. Its own, so a parent's cost and the sum of its helpers' are two different true numbers."),
+        .describe("What it has spent. Its own, so a parent's cost and the sum of its subagents' are two different true numbers."),
     toolUses: z.number().optional().describe("How many tools it has used."),
     lastTool: z.string().optional().describe("The last one it reached for."),
     // Its report, the last assistant message (SubagentStop) or the task summary. The answer to "what did it
@@ -274,7 +274,7 @@ export const SubagentSessionSchema = z.object({
     summary: z
         .string()
         .optional()
-        .describe("Its report: what it concluded, without opening its record. The question a finished helper gets read for."),
+        .describe("Its report: what it concluded, without opening its record. The question a finished subagent gets read for."),
     error: z.string().optional().describe("Why it failed, when it did."),
     // Whether anything checked the work behind that report (SubagentVerificationSchema). Filled once it ends:
     // a standing read while it is still working would be a verdict on a job half done.
@@ -282,7 +282,7 @@ export const SubagentSessionSchema = z.object({
 });
 export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
 export const SubagentsListSchema = z.object({
-    sessions: z.array(SubagentSessionSchema).describe("Every helper this sandbox's conversations have started."),
+    sessions: z.array(SubagentSessionSchema).describe("Every subagent and child agent this sandbox's conversations have started."),
 });
 export type SubagentsList = z.infer<typeof SubagentsListSchema>;
 export const SubagentIdParamSchema = z.object({ id: z.string() });

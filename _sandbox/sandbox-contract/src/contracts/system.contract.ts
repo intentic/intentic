@@ -160,18 +160,18 @@ export const systemContract = {
         .route({
             method: "GET",
             path: "/system/subagents",
-            summary: "Helpers the agents have started",
+            summary: "Subagents the agents have started",
             description:
-                "Every helper agent this sandbox's conversations have delegated work to, whichever tool started it, with what each one is doing.",
+                "Every subagent and child agent this sandbox's conversations have delegated work to, whichever tool started it, with what each one is doing.",
         })
         .output(SubagentsListSchema),
     subagentTranscript: oc
         .route({
             method: "GET",
             path: "/system/subagents/{id}/transcript",
-            summary: "A helper agent's record",
+            summary: "A subagent's record",
             description:
-                "The full record of one delegated helper, in the same shape as any other conversation. It comes live from the parent turn while the helper works, and from stored history once it has finished.",
+                "The full record of one delegated subagent, in the same shape as any other conversation. It comes live from the parent turn while it works, and from stored history once it has finished.",
         })
         .input(SubagentIdParamSchema)
         .output(SessionTranscriptSchema),

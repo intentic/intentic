@@ -45,7 +45,7 @@ const setPosture = (next: Posture): void => {
 </script>
 
 <template>
-    <RowGroup label="Helper agents">
+    <RowGroup label="Child agents">
         <Row icon="robot" title="Start agents of its own" description="A child agent spends the same connected accounts this one does.">
             <template #control>
                 <Picker

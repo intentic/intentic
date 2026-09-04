@@ -156,7 +156,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
              anything is judging at all and on which model, then the document that judge applies, then the
              evidence for both. Nobody can write a rule for behaviour they cannot see, so the log of recent
              decisions sits directly under the policy it is teaching them to edit — and it is also what makes the
-             judge's Watch state worth having. Helper agents last, because it is the one thing here still
+             judge's Watch state worth having. Child agents last, because it is the one thing here still
              answered by a switch rather than by the policy (AgentChildAgents says why). -->
         <template v-else-if="section === `safety`">
             <AgentSafetyJudge />
