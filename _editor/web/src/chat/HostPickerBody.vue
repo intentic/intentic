@@ -3,7 +3,7 @@ import { capabilitiesOf, sendableEffort } from "@intentic/sandbox-contract";
 import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { clampEffort, effortsFor } from "../composables/chat/effortScale";
-import { modelRequest, settleModelPick, stageModelPick } from "../composables/chat/hostModelPicker";
+import { dismissModelPick, modelRequest, settleModelPick, stageModelPick } from "../composables/chat/hostModelPicker";
 import type { PickerEntry } from "../composables/chat/modelPicker";
 import { usePickerAccounts } from "../composables/chat/pickerAccounts";
 import EffortMeter from "./EffortMeter.vue";
@@ -15,8 +15,9 @@ import PickerAccounts from "./PickerAccounts.vue";
  * differs; the panel they frame is the same panel, and it stopped being a single tag the moment it grew a footer.
  *
  * Like the composer, only a MODEL row answers and closes. Account, harness and effort rows configure that answer
- * in place: the open request holds those staged pins until a model is picked, while dismissal still returns no
- * choice to the caller.
+ * in place: the open request holds those staged pins until the panel is left. Leaving it by clicking away is not
+ * a discard — a dismissal after a pin was touched answers with the model the panel opened on plus the pins
+ * (dismissModelPick), because most re-points are of the tier alone and the model is already the right one.
  *
  * THE EFFORT ROW IS HERE FOR THE SAME REASON THE SETTINGS PAGE HAS ONE (ModelPinPickerBody), and it is the same
  * control: this panel is what every "Fix with agent" caret opens, and a run started from a red pipeline has no
@@ -88,7 +89,7 @@ const choose = (entry: PickerEntry): void => {
 </script>
 
 <template>
-    <ModelPicker v-if="request" :provider="request.provider" :model="request.model" @pick="choose" @close="settleModelPick()">
+    <ModelPicker v-if="request" :provider="request.provider" :model="request.model" @pick="choose" @close="dismissModelPick()">
         <template #footer>
             <!-- The composer's footer metrics exactly (ModelPicker's own 12px rhythm, the row groups bleeding
                  back out with `-mx-3`): the two panels are the same panel, and a reader who opens this one from
@@ -105,7 +106,7 @@ const choose = (entry: PickerEntry): void => {
                     :account="request.account"
                     @select-account="stageModelPick({ account: $event })"
                     @select-harness="stageModelPick({ harness: $event })"
-                    @navigate="settleModelPick()"
+                    @navigate="dismissModelPick()"
                 />
 
                 <!-- REASONING EFFORT, the app's own meter, drawn exactly as Sandbox ▸ Agent ▸ Models draws it for

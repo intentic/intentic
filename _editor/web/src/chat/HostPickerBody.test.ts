@@ -47,8 +47,8 @@ vi.mock(`./EffortMeter.vue`, () => ({
 }));
 vi.mock(`../composables/chat/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
 
-const { requestModelPick, settleModelPick } = await import("../composables/chat/hostModelPicker");
-const { providerModels } = await import("../composables/chat/providerCatalog");
+const { dismissModelPick, requestModelPick, settleModelPick } = await import("../composables/chat/hostModelPicker");
+const { modelLabelFor, providerModels } = await import("../composables/chat/providerCatalog");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
 
 let app: App | undefined;
@@ -162,6 +162,38 @@ it(`drops the tier again when the run is set back to the model's own default`, a
     buttons[0]!.click();
 
     await expect(result).resolves.toEqual({ provider: `claude`, model: `claude-opus-4-6`, label: `Claude Opus 4.6` });
+});
+
+/* CLICKING AWAY KEEPS THE TIER. The common re-point is of the effort alone — the model under the caret is
+ * already the one you want — so a dismissal after the meter was touched answers with that model and the staged
+ * tier instead of throwing it away. */
+it(`answers with the staged tier when the panel is dismissed without picking a model row`, async () => {
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseEffort: true });
+    const element = mount();
+
+    rung(element, `X-High`)!.click();
+    await nextTick();
+    dismissModelPick();
+
+    await expect(result).resolves.toEqual({
+        provider: `claude`,
+        model: `claude-opus-4-6`,
+        label: modelLabelFor(`claude`, `claude-opus-4-6`),
+        effort: `xhigh`,
+    });
+});
+
+// Nothing touched is still nothing chosen: a panel opened and closed again must not turn into an override on the
+// caller's row.
+it(`answers with no choice when the panel is dismissed untouched`, async () => {
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, effort: `high`, chooseEffort: true });
+    mount();
+
+    dismissModelPick();
+
+    await expect(result).resolves.toBeUndefined();
 });
 
 /* THE ROW IS THE RUN BUTTONS', not the panel's. The chat sets its effort in the composer, and the automations

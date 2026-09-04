@@ -1,5 +1,6 @@
-import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, sendableEffort } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
+import { modelLabelFor } from "./providerCatalog";
 
 /* THE SHELL'S MODEL PICKER, OPENED BY SOMETHING THAT IS NOT THE COMPOSER, an extension calling
  * `api.models.pick()` (apiImpl.ts), which is the same arrangement `api.terminal` and `api.chat` already have:
@@ -44,6 +45,9 @@ interface ModelRequest {
      * with no tier field behind it). Only the first can honour an answer here, and a control whose answer is
      * dropped on the floor is worse than no control, so the row is drawn on request rather than by default. */
     readonly chooseEffort?: boolean;
+    /* WHETHER A PIN WAS TOUCHED WHILE THIS PICKER WAS OPEN, which is what turns a dismissal into an answer. Set
+     * by stageModelPick, read by dismissModelPick. */
+    readonly staged?: boolean;
     readonly settle: (choice: ModelChoice | undefined) => void;
 }
 
@@ -60,7 +64,33 @@ export const stageModelPick = (patch: Pick<ModelChoice, "account" | "harness" | 
     if (pending === undefined) {
         return;
     }
-    modelRequest.value = { ...pending, ...patch };
+    modelRequest.value = { ...pending, ...patch, staged: true };
+};
+
+/* CLOSING THE PANEL WITHOUT PICKING A ROW STILL KEEPS WHAT WAS SET IN IT. The model row is the answer only when
+ * the model is what changed: someone who opens the caret already on the right model, drags the effort meter and
+ * clicks away has said everything they meant to say, and dropping it made the meter look broken — the tier only
+ * stuck if you afterwards clicked the model you were already on. So a dismissal answers with the model the
+ * picker opened on plus whatever pins were staged, and stays a dismissal when nothing was touched.
+ *
+ * The tier is read the way HostPickerBody reads it and the daemon will read it (sendableEffort over unset
+ * thinking, empty ⇒ the model's own default), so the answer a dismissal gives is the answer a model row would
+ * have given. */
+export const dismissModelPick = (): void => {
+    const pending = modelRequest.value;
+    if (pending === undefined || pending.staged !== true) {
+        settleModelPick(undefined);
+        return;
+    }
+    const effort = sendableEffort(pending.effort, undefined);
+    settleModelPick({
+        provider: pending.provider,
+        model: pending.model,
+        label: modelLabelFor(pending.provider, pending.model),
+        ...(pending.account !== undefined ? { account: pending.account } : {}),
+        ...(pending.harness !== undefined ? { harness: pending.harness } : {}),
+        ...(effort === undefined || effort === `` ? {} : { effort }),
+    });
 };
 
 // Answer the open request, with a choice, or with undefined for a dismissal. Cleared BEFORE the promise
@@ -78,7 +108,7 @@ export const requestModelPick = (request: Omit<ModelRequest, "settle">): Promise
      * which is the dismissal bug that component exists to avoid. A DIFFERENT trigger still supersedes and
      * reopens, which is what someone moving between two chips means. */
     const sameTrigger = modelRequest.value?.anchor === request.anchor;
-    settleModelPick(undefined);
+    dismissModelPick();
     if (sameTrigger) {
         return Promise.resolve(undefined);
     }

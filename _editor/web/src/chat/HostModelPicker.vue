@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ResponsiveOverlay } from "@intentic/ui";
 import { computed } from "vue";
-import { modelRequest, settleModelPick } from "../composables/chat/hostModelPicker";
+import { dismissModelPick, modelRequest } from "../composables/chat/hostModelPicker";
 import HostPickerBody from "./HostPickerBody.vue";
 
 /* The app-global mount for the shell's own model picker when something outside the chat asks for one
@@ -15,12 +15,13 @@ import HostPickerBody from "./HostPickerBody.vue";
  * carries a footer now, and two copies of it are two places for the two surfaces to drift apart. */
 
 // One boolean over the request, so the overlay's own dismissal (pointerdown outside, Escape, the sheet's
-// backdrop) settles the promise as a dismissal rather than silently orphaning it.
+// backdrop) settles the promise rather than silently orphaning it — with whatever pins were set in the panel,
+// since closing it is how someone who only changed the effort says they are done (dismissModelPick).
 const open = computed<boolean>({
     get: () => modelRequest.value !== undefined,
     set: (value) => {
         if (!value) {
-            settleModelPick(undefined);
+            dismissModelPick();
         }
     },
 });
