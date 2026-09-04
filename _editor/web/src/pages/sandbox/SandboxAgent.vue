@@ -152,17 +152,15 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentRecovery />
         </template>
 
-        <!-- What it may do without stopping to ask, read in the order the question is actually asked: whether
-             anything is judging at all and on which model, then the document that judge applies, then the
-             evidence for both. Nobody can write a rule for behaviour they cannot see, so the log of recent
-             decisions sits directly under the policy it is teaching them to edit — and it is also what makes the
-             judge's Watch state worth having. Child agents last, because it is the one thing here still
-             answered by a switch rather than by the policy (AgentChildAgents says why). -->
+        <!-- What it may do without stopping to ask: whether anything is judging at all and on which model,
+             the document that judge applies, and whether it may start child agents of its own.
+             The log of recent decisions sits at the end of the section so its longer, expandable activity
+             feed does not bury the standing controls above it. -->
         <template v-else-if="section === `safety`">
             <AgentSafetyJudge />
             <AgentSafetyPolicy />
-            <AgentSafetyLog />
             <AgentChildAgents />
+            <AgentSafetyLog />
         </template>
 
         <!-- What happens to work once it is done, in the order it happens to it: it gets proved, it gets

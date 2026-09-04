@@ -144,14 +144,13 @@ it(`falls back to accounts when the address names a category that does not exist
  * rather than nowhere, and a coverage assertion counting names cannot tell those two apart. */
 it(`opens the safety category with the gate rules alone`, async () => {
     const { el } = await mount({ section: `safety` });
-    // In the order the question is actually asked: whether anything is judging and on which model, the document
-    // that judge applies, then the evidence for both.
-    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Recent decisions`, `Child agents`]);
+    // Standing rules and controls first, followed by the decision log.
+    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Child agents`, `Recent decisions`]);
 });
 
 it(`opens the safety category when security=safety is in the query`, async () => {
     const { el } = await mount({ security: `safety` });
-    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Recent decisions`, `Child agents`]);
+    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Child agents`, `Recent decisions`]);
 });
 
 // The composer's connect gate wins over whatever the address last remembered: it is a request to sign an account
