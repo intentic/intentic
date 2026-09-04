@@ -1440,7 +1440,7 @@ const submitLabel = computed(() => {
                                  cache: this page must not clone a repo to decorate a sentence. -->
                             <RouterLink
                                 v-if="selected.kind === 'extension'"
-                                to="/sandbox/discover"
+                                to="/sandbox/extensions?view=browse"
                                 class="flex items-center gap-3 rounded-lg border border-line bg-card px-3 py-2.5 transition-colors hover:border-line-strong hover:bg-overlay"
                             >
                                 <Icon name="search" class="shrink-0 text-link" />
@@ -1457,7 +1457,8 @@ const submitLabel = computed(() => {
                                 <Icon name="arrow-right" class="shrink-0 text-subtle" />
                             </RouterLink>
 
-                            <!-- Registry browse (plugins only: extensions have Discover). -->
+                            <!-- Registry browse (plugins only: extensions have the Extensions section's Browse
+                                 half, which is what the link above opens). -->
                             <PluginRegistryBrowse
                                 v-if="selected.kind === 'plugin'"
                                 :key="selected.id"

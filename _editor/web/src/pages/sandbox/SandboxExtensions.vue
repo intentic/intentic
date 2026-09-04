@@ -1,162 +1,136 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import {
-    Button,
-    ui,
-    FilterBar,
-    Notice,
-    type NoticeModel,
-    NoticeStack,
-    Row,
-    RowGroup,
-    SegmentedControl,
-    SkeletonRows,
-    StatusBadge,
-    timeAgo,
-    vAction,
-} from "@intentic/ui";
+import { Button, ui, FilterBar, type NoticeModel, NoticeStack, SegmentedControl, timeAgo, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../composables/agents/agentActions";
-import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
 import { useExtensionList } from "../../composables/extensions/useExtensionList";
-import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
+import { useExtensions } from "../../composables/extensions/useExtensions";
+import { useRegistry } from "../../composables/extensions/useRegistry";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
-import ExtensionRow from "./ExtensionRow.vue";
+import { toListing, updateCount } from "./discoverListing";
 import { extensionBrief } from "./extensionBrief";
+import ExtensionsBrowse from "./ExtensionsBrowse.vue";
+import ExtensionsInstalled from "./ExtensionsInstalled.vue";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 
-/* The Sandbox hub's "Extensions" tab: EVERY first-party and installed extension, the ones compiled into this
- * bundle, the ones baked into the sandbox image, the git-installed capabilities, and the workspace extensions
- * living under .intentic/config/workspace-extensions/: each with its on/off switch. Install/remove happens on the
- * Capabilities page like every other capability (a workspace extension is instead created and deleted as files,
- * typically by an agent); this tab is the management surface.
+/* THE SANDBOX HUB'S "EXTENSIONS" SECTION: what this box has, and what other people have published, as two
+ * pills over one search box.
  *
- * IT IS A LIST OF SEVENTEEN THINGS, AND GROWING, so it is built to be scanned rather than read. Four decisions
- * follow from that, and they are the design:
+ * THEY USED TO BE TWO ROWS in the hub's index, Extensions and Discover, adjacent and described as adjacent on
+ * purpose. Adjacency was the weaker form of the true thing: finding an extension, installing it, managing it
+ * and switching it off are ONE subject, and splitting them across two index rows cost three specific things.
  *
- *  1. The nominal case is silent. An extension that is on and working carries no badge: the switch says it is
- *     on and the absence of anything else says it is fine. What is left in colour is only what deserves the
- *     eye: a load failure, an engines mismatch, an image/app version drift. Those also LEAVE their section,
- *     into a pinned group at the top, so "is anything wrong?" is answered without reading a single row.
- *  2. One line per extension. Version, commit, contribution counts, the consequences of switching it off and
- *     the settings form are all real, and all below the fold: a row expands into its full record. Before, the
- *     tab paid for that detail on every row at all times, which is what made seventeen extensions unreadable.
- *  3. Find beats scroll past a dozen. The filter box matches the id AND everything the extension contributes,
- *     so "github" finds the connectors extension and ".docx" finds viewers; the segmented control answers
- *     "which ones did I switch off?", which is otherwise invisible in an alphabetical list.
- *  4. Sections by PURPOSE, declared in the manifest (see extensionCategories.ts). One alphabetical run of
- *     seventeen names asks the reader to know what each one is before they can find the one they want; five
- *     headings turn the same list into five short ones, and the heading is what a reader arrives with:
- *     "the CI thing", "whatever talks to Discord". The filter and the switcher moved OUT of a group header
- *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
+ *  1. THE UPDATE STORY WAS CUT IN HALF. The badge (how many installed extensions the registry has a newer
+ *     commit for) hung on Discover, while the "updates checked …" line and the host reload that finishes an
+ *     update lived on Extensions. Following the badge landed the reader in a grid of OTHER people's extensions
+ *     to resolve a fact about their own. Both are here now, on one surface, stated once.
+ *  2. EACH HALF'S EMPTY STATE HAD TO POINT AT THE OTHER ROW. A surface for extensions that sends you elsewhere
+ *     for extensions is exactly what the Discover work set out to end; it ended it for the Capabilities page
+ *     and left one seam behind. Now the way out is the pill above, and the two halves cannot drift apart.
+ *  3. ONE SEARCH, TWO LISTS. `query` lives HERE and is shared, so typing "invoices", finding nothing installed
+ *     and switching to Browse keeps the word: "do I have it" and "has anyone published it" are one gesture.
+ *
+ * WHAT THE SECTION OWNS is the instrument: the pills, the search box, creating and reloading, and the
+ * registry's freshness line. What each half owns is its own list, its own states and its own actions. The
+ * mode rides the URL (`?view=browse`) rather than component state, next to Browse's own `?ext=` deep link,
+ * so a reload and a pasted link both land where the reader was. */
 
-const { entries, invalid, unlisted, setEnabled, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded, isLoading, error } = useExtensionList();
-const outline = useSandboxOutline(isLoading);
-// The list query's own message, in the words of the page that asked for it.
-const listNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list this sandbox's extensions.`, detail: error.value },
-);
+const VIEWS = [`installed`, `browse`] as const;
+type View = (typeof VIEWS)[number];
+
+const route = useRoute();
+const router = useRouter();
+
+// `installed` is the param-less URL: the recurring visit is "what do I have", and browsing is the errand.
+const view = computed<View>(() => (route.query[`view`] === `browse` ? `browse` : `installed`));
+/* Switching halves drops `ext` with it: a listing panel is Browse's own state, and leaving its name in the
+ * address while the installed list is on screen is a query param that silently does nothing. */
+const show = (next: View): void => {
+    void router.replace({ query: { ...route.query, view: next === `installed` ? undefined : next, ext: undefined } });
+};
+
+const { entries, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded } = useExtensionList();
+const { extensions } = useExtensions();
+/* The registry read follows the pills: enabled while Browse is on screen, observed-but-not-caused otherwise,
+ * so the update count below costs nothing on the installed half (see useRegistry's note on `read`). Reading
+ * it here rather than only inside Browse is what lets the pill wear the count and the refresh button work. */
+const { entries: listed, isFetching, refetch } = useRegistry({ read: computed(() => view.value === `browse`) });
+const listings = computed(() => listed.value.map((entry) => toListing(entry, extensions.value)));
+const updatable = computed(() => updateCount(listings.value));
 
 // Below this many rows the list IS the overview: a filter box and a state switcher would be more chrome than
-// the thing they filter. The threshold is a display choice, so it lives here rather than in the row model.
-const FILTERABLE_FROM = 8;
+// the thing they filter. Per half, because a catalogue of six cards is already a wall and eight rows are not.
+const FILTERABLE_FROM: Record<View, number> = { installed: 8, browse: 6 };
 
 const query = ref(``);
 const mode = ref<`all` | `on` | `off`>(`all`);
-// One row open at a time: the list must not grow unpredictably under the pointer while it is being scanned.
-const opened = ref<string | undefined>(undefined);
-const pending = ref<string | undefined>(undefined);
-const toggleError = ref<NoticeModel | undefined>(undefined);
-const reloading = ref(false);
+const trust = ref<`all` | `verified`>(`all`);
+// What the half the reader is looking at left after the query: drawn on the field that did the narrowing.
+const matched = ref(0);
+// Whichever half is mounted raises its own failures here, so the section keeps ONE notice region.
+const viewNotice = ref<NoticeModel | undefined>(undefined);
 
-const filterable = computed(() => entries.value.length >= FILTERABLE_FROM);
-const enabledCount = computed(() => entries.value.filter((entry) => entry.extension.enabled).length);
-
-const matches = computed(() => {
+/* THE ONE FACT NEITHER HALF CAN STATE ALONE, and the clearest thing a shared search box buys: how many
+ * PUBLISHED extensions match what the reader typed while looking at what they have. "Nothing matches that
+ * filter" over an installed list is true and useless when somebody has published exactly that thing, and
+ * before the merge there was no surface that knew both numbers. Deliberately ignoring the trust pills: the
+ * offer is about the catalogue, and narrowing it here would make the offer disappear on a setting the reader
+ * changed on the other half. Zero while the registry cache is cold, which is honest, nothing is known yet. */
+const publishedMatches = computed(() => {
     const needle = query.value.trim().toLowerCase();
-    return entries.value.filter(
-        (entry) => (mode.value === `all` || (mode.value === `on`) === entry.extension.enabled) && (needle === `` || entry.search.includes(needle)),
-    );
+    return needle === `` ? 0 : listings.value.filter((listing) => listing.search.includes(needle)).length;
 });
-const attention = computed(() => matches.value.filter((entry) => entry.state.attention));
-const healthy = computed(() => matches.value.filter((entry) => !entry.state.attention));
 
-/* One list of sections, rendered by one loop. The exception group is a section like the others because it
- * behaves like one: a heading over rows, and pinning it first is the whole of its specialness. It overrides
- * the purpose taxonomy rather than sitting inside it: a broken extension is not something to find under the
- * heading you'd have looked for it under on a good day. */
-const sections = computed<ExtensionSection[]>(() => [
-    ...(attention.value.length === 0
-        ? []
-        : [
-              {
-                  id: `attention`,
-                  label: `Needs attention`,
-                  entries: attention.value,
-              },
-          ]),
-    ...sectionsOf(healthy.value),
-]);
-
-/* What the tab says when the sections hold no rows of their own: three different facts, and the wrong one is a
- * lie the reader can see. An attention row IS a match, so a filter that hits only a broken extension leaves the
- * purpose sections empty while a row sits visibly above them; "nothing matches" there would be flatly
- * contradicted by the screen. */
-const emptyNote = computed<string | undefined>(() => {
-    if (isLoading.value || healthy.value.length > 0) {
-        return undefined;
-    }
-    if (entries.value.length === 0) {
-        // The row beneath this tab, not another page. A surface for extensions whose empty state sends the
-        // reader somewhere else to get extensions is the reason Discover exists.
-        return `Nothing installed yet.`;
-    }
-    if (attention.value.length > 0) {
-        return `Nothing else to show: see the group above.`;
-    }
-    return `Nothing matches that filter.`;
-});
+const total = computed(() => (view.value === `installed` ? entries.value.length : listings.value.length));
+const filterable = computed(() => total.value >= FILTERABLE_FROM[view.value]);
+const enabledCount = computed(() => entries.value.filter((entry) => entry.extension.enabled).length);
+const verifiedCount = computed(() => listings.value.filter((listing) => listing.entry.trust === `verified`).length);
 
 const clearFilters = (): void => {
     query.value = ``;
     mode.value = `all`;
+    trust.value = `all`;
 };
 
-// Flip the switch, then converge the shell: the daemon has already stopped/started the extension's processes
-// and dropped its contributions from every subsequent read, and reloadExtensions activates or retires it here
-// without a page reload.
-const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<void> => {
-    pending.value = extension.id;
-    toggleError.value = undefined;
-    try {
-        await setEnabled(extension.id, enabled);
-        await reloadExtensions();
-    } catch (failure) {
-        toggleError.value = noticeFrom(failure, `Could not ${enabled ? `enable` : `disable`} ${extensionIdOf(extension.manifest)}.`);
-    } finally {
-        pending.value = undefined;
-    }
-};
+/* THE PILLS. Both badges are inventories, "how many things are here", so they mean the same thing on both
+ * pills; the update count is a MARK instead, because it is not the size of the list behind the pill and a
+ * second number in the same chip shape would read as one. Its tooltip is the sentence, and the freshness line
+ * at the foot of the section is the same fact in full. */
+const viewOptions = computed(() => [
+    { label: `Installed`, value: `installed` as View, badge: entries.value.length },
+    {
+        label: `Browse`,
+        value: `browse` as View,
+        badge: listings.value.length,
+        ...(updatable.value > 0
+            ? {
+                  mark: `arrow-circle-up` as const,
+                  markTitle: `${updatable.value} installed ${updatable.value === 1 ? `extension has` : `extensions have`} a newer listed commit`,
+              }
+            : {}),
+    },
+]);
 
 // The way out of "reload to load": an extension installed after the host booted has no status until the host
 // runs again, and re-running it is cheaper and less destructive than the page reload it used to take.
+const reloading = ref(false);
 const reload = async (): Promise<void> => {
     reloading.value = true;
-    toggleError.value = undefined;
+    viewNotice.value = undefined;
     try {
         await reloadExtensions();
     } catch (failure) {
-        toggleError.value = noticeFrom(failure, `Could not reload the extension host.`);
+        viewNotice.value = noticeFrom(failure, `Could not reload the extension host.`);
     } finally {
         reloading.value = false;
     }
 };
 
 /* An update landed while this browser kept running the old bundle: applied by the auto rung, another member,
- * or another tab. The daemon is already wholly on the new version; the prompt's button is the host reload the
- * tab already owns, which is what finishes the update HERE. A notice rather than an auto-reload: yanking a
+ * or another tab. The daemon is already wholly on the new version; the prompt's button is the host reload this
+ * section already owns, which is what finishes the update HERE. A notice rather than an auto-reload: yanking a
  * view out from under someone mid-use is the one part of "seamless" that isn't. */
 const staleNotice = computed<NoticeModel | undefined>(() => {
     if (updatedSinceLoaded.value.length === 0) {
@@ -177,20 +151,23 @@ const staleNotice = computed<NoticeModel | undefined>(() => {
 const checking = ref(false);
 const checkNow = async (): Promise<void> => {
     checking.value = true;
-    toggleError.value = undefined;
+    viewNotice.value = undefined;
     try {
         await checkUpdates();
     } catch (failure) {
-        toggleError.value = noticeFrom(failure, `Could not check the registry for updates.`);
+        viewNotice.value = noticeFrom(failure, `Could not check the registry for updates.`);
     } finally {
         checking.value = false;
     }
 };
 
 const creating = ref(false);
-/* The new extension's row exists the moment the daemon answers, but nothing is RUNNING until the host runs again
- *, so creating it ends in the same reload the tab already offers, and the row opens on arrival, naming the
- * directory its two files are in.
+// The row a just-created extension opens on: passed down rather than reached into, so the dialog can live up
+// here beside the button that opens it while the row it names belongs to the installed half.
+const focused = ref<string | undefined>(undefined);
+/* The new extension's row exists the moment the daemon answers, but nothing is RUNNING until the host runs
+ * again, so creating it ends in the same reload this section already offers, and the row opens on arrival,
+ * naming the directory its two files are in.
  *
  * If the author said what they wanted, that hands off to an agent as an ordinary chat: a new conversation with
  * the brief enqueued as a user message, so it lands in the transcript to be read, corrected and continued.
@@ -198,7 +175,11 @@ const creating = ref(false);
  * something against a rubric and report, while this is the first minute of authoring, where the author's own
  * "no, more like…" is the most valuable input there is and an isolated worktree would put it behind a landing. */
 const created = async (extension: { id: string; dir: string; wish: string }): Promise<void> => {
-    opened.value = extension.id;
+    // Authoring is about what this box HAS, so the created row must not land behind the other pill.
+    if (view.value !== `installed`) {
+        show(`installed`);
+    }
+    focused.value = extension.id;
     await reload();
     if (extension.wish !== ``) {
         startAgent(extensionBrief(extension));
@@ -208,18 +189,27 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
 
 <template>
     <div class="flex flex-col gap-5">
-        <NoticeStack :of="[listNotice, toggleError, staleNotice]" />
+        <NoticeStack :of="[viewNotice, staleNotice]" />
 
-        <!-- The tab's instrument, not any one section's. This row's layout reasoning became <FilterBar>'s: the
-             filter and the state switcher narrow every section below and read as one instrument, while reloading
-             the host does not and stays chromeless beside them. No heading on the left: the hub's own tab
-             already says "Extensions", and the running total is on the "All" pill.
+        <!-- THE SECTION'S INSTRUMENT, not either half's. The pills lead because they say which list is being
+             looked at; the search box takes the row's slack after them (one left edge and one right edge down
+             the whole view), and each half's own narrowing rides `#controls` so the two read as one thing.
+             Acting on the list, creating, reloading, re-reading the registry, stays chromeless beside them.
 
-             Below the filterable threshold there is no field to grow, so the lone reload button sits alone on
-             the right rather than under an empty track. -->
-        <div class="flex flex-wrap items-center justify-end gap-2">
-            <FilterBar v-if="filterable" v-model="query" placeholder="Name or contribution…" class="flex-1">
-                <template #controls>
+             Below the filterable threshold there is no field to grow, so a spacer keeps the buttons at the
+             right edge rather than letting them slide in beside the pills. -->
+        <div class="flex flex-wrap items-center gap-2">
+            <SegmentedControl :model-value="view" :options="viewOptions" @update:model-value="show" />
+
+            <FilterBar
+                v-if="filterable"
+                v-model="query"
+                :placeholder="view === `installed` ? `Name or contribution…` : `Name, publisher, what it does…`"
+                :count="matched"
+                :aria-label="view === `installed` ? `Filter installed extensions` : `Search published extensions`"
+                class="flex-1"
+            >
+                <template v-if="view === `installed`" #controls>
                     <SegmentedControl
                         v-model="mode"
                         :options="[
@@ -229,98 +219,75 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                         ]"
                     />
                 </template>
+                <!-- Suppressed while nothing is verified: a filter that can only ever empty the page is a
+                     control that lies about the catalogue. -->
+                <template v-else-if="verifiedCount > 0" #controls>
+                    <SegmentedControl
+                        v-model="trust"
+                        :options="[
+                            { label: `All`, value: `all`, badge: listings.length },
+                            { label: `Verified`, value: `verified`, badge: verifiedCount },
+                        ]"
+                    />
+                </template>
             </FilterBar>
+            <div v-else class="flex-1"></div>
+
             <!-- Authoring sits beside reloading rather than in a section header for the same reason the filter
-                 does: it acts on the tab, not on any one group. It is a labelled button and not a third icon
-                 because it is the only control here that CREATES something: the others narrow or refresh a list
-                 that already exists, and none of them leaves a directory behind. -->
-            <Button label="New extension" size="small" @click="creating = true">
-                <template #icon><Icon name="plus" /></template>
-            </Button>
-            <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" v-action="reload">
-                <Icon name="refresh" :spin="reloading" />
+                 does: it acts on the whole surface, not on any one group. It is a labelled button and not a
+                 third icon because it is the only control here that CREATES something: the others narrow or
+                 refresh a list that already exists, and none of them leaves a directory behind. -->
+            <template v-if="view === `installed`">
+                <Button label="New extension" size="small" @click="creating = true">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
+                <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" v-action="reload">
+                    <Icon name="refresh" :spin="reloading" />
+                </button>
+            </template>
+            <button
+                v-else
+                type="button"
+                :class="ui.iconButton(`h-8 w-8`)"
+                :disabled="isFetching"
+                v-tooltip.top="`Re-read the registry`"
+                @click="refetch"
+            >
+                <Icon name="refresh" :spin="isFetching" />
             </button>
         </div>
 
         <NewExtensionDialog v-model="creating" :create="create" @created="created" />
 
-        <!-- Each count is what its section HOLDS, not the total: rows leave for the pinned group above and for
-             the filter, and a header that kept claiming 17 over 13 rows is a header nobody trusts again.
+        <ExtensionsInstalled
+            v-if="view === `installed`"
+            :query="query"
+            :mode="mode"
+            :focus="focused"
+            :published-matches="publishedMatches"
+            @notice="viewNotice = $event"
+            @matched="matched = $event"
+            @browse="show(`browse`)"
+            @clear="clearFilters"
+        />
+        <ExtensionsBrowse v-else :query="query" :trust="trust" @notice="viewNotice = $event" @matched="matched = $event" @clear="clearFilters" />
 
-             No tier stated, and none needed: a <RowGroup> is a list and a list is compact (see RowGroup's own
-             note). This tab is why that is the default — it was the one caller in the app that never passed the
-             prop, so it drew settings-sized rows while <ExtensionRow>'s own note described "22px inside a 40px
-             row", and the extensions list stood visibly taller than the secrets tab beside it. -->
-        <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :count="section.entries.length" :caption="section.caption">
-            <ExtensionRow
-                v-for="entry in section.entries"
-                :key="entry.extension.id"
-                :entry="entry"
-                :expanded="opened === entry.extension.id"
-                :pending="pending === entry.extension.id"
-                @toggle="(enabled) => toggle(entry.extension, enabled)"
-                @update:expanded="(open) => (opened = open ? entry.extension.id : undefined)"
-            />
-        </RowGroup>
-
-        <!-- `sections` is empty while the read is out, so the groups above render nothing and this is the only
-             thing on the tab. The outline gives it the shape of the list instead of a sentence about it. -->
-        <template v-if="isLoading">
-            <RowGroup v-if="outline" label="Installed">
-                <div role="status" aria-busy="true">
-                    <span class="sr-only">Reading this sandbox's extensions…</span>
-                    <SkeletonRows :rows="3" description control />
-                </div>
-            </RowGroup>
-        </template>
-        <div v-else-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
-            <span>{{ emptyNote }}</span>
-            <!-- An empty tab is the one moment a reader is unambiguously asking where extensions come from, so
-                 it answers rather than describing another page: the next row down. -->
-            <RouterLink v-if="entries.length === 0" to="/sandbox/discover" class="text-xs text-link hover:underline">
-                Discover what people have published →
-            </RouterLink>
-            <Button v-if="matches.length === 0 && entries.length > 0" size="small" label="Clear filter" @click="clearFilters" />
-        </div>
-
-        <!-- The registry comparison's honesty line: update badges above are only as fresh as this. Absent
-             until the first check has run: a blank claim is worse than none. -->
+        <!-- THE REGISTRY COMPARISON'S HONESTY LINE, and the one row of this section that used to be split
+             across two index rows: how many installed extensions have a newer listed commit, when that was
+             last checked, and the two ways to act on it, all in the same sentence. Absent until the first
+             check has run: a blank claim is worse than none. -->
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
+            <template v-if="updatable > 0">
+                <button v-if="view === `installed`" type="button" :class="ui.linkButton(`text-2xs`)" @click="show(`browse`)">
+                    {{ updatable }} {{ updatable === 1 ? `update` : `updates` }} to install
+                </button>
+                <span v-else class="text-content">{{ updatable }} {{ updatable === 1 ? `update` : `updates` }} to install</span>
+                ·
+            </template>
             Updates checked {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
             <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="checking" v-action="checkNow">
                 {{ checking ? `Checking…` : `Check now` }}
             </button>
         </p>
-
-        <!-- Workspace-extension directories the daemon could not enumerate: no manifest, one that does not
-             parse, or an id something else already owns. Named per directory because nothing install-shaped
-             ever rejected them: this group is where their author (usually an agent, via GET /extensions)
-             learns why the row is missing. -->
-        <RowGroup v-if="invalid.length > 0" label="Not loadable">
-            <Row v-for="entry in invalid" :key="entry.dir">
-                <template #title>
-                    <span class="block truncate">.intentic/config/workspace-extensions/{{ entry.dir }}</span>
-                </template>
-                <template #description>
-                    <span class="text-danger">{{ entry.error }}</span>
-                </template>
-                <template #meta><StatusBadge variant="danger" label="invalid" size="xs" /></template>
-            </Row>
-        </RowGroup>
-
-        <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->
-        <RowGroup v-if="unlisted.length > 0" label="Running but not listed">
-            <Row v-for="status in unlisted" :key="status.id">
-                <template #title>
-                    <span class="block truncate">{{ status.extensionId }}</span>
-                </template>
-                <template v-if="status.detail" #description>
-                    <span class="text-warning">{{ status.detail }}</span>
-                </template>
-                <template #meta>
-                    <StatusBadge :variant="status.state === `error` ? `danger` : `warning`" :label="status.state" size="xs" />
-                </template>
-            </Row>
-        </RowGroup>
     </div>
 </template>

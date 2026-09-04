@@ -271,8 +271,8 @@ export const forticlientAnswers = (fields: readonly CapabilityField[], connectio
  * No `tier` and no `registry` are set from this form, and that is correct rather than an omission: both are the
  * REGISTRY's facts about a listing, not something anybody types, and this form only ever installs from a URL its
  * user supplied, whose tier this browser has no way to know, and whose updates and advisories the daemon
- * rightly compares against the official registry when no origin was recorded. A listing installed from Discover
- * carries both from the row it was picked on. */
+ * rightly compares against the official registry when no origin was recorded. A listing installed from the
+ * Extensions section's Browse half carries both from the row it was picked on. */
 export const buildConfig = (entry: CapabilityCatalogEntry, values: FormValues, stored: StoredSecrets = NOTHING_STORED): Record<string, string> =>
     fieldConfig(entry, (field) => {
         if (!fieldApplies(field, values)) {

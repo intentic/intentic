@@ -146,9 +146,13 @@ const assurances = computed(() => [
         <div class="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
             <Button :label="props.joinLabel" :loading="props.working" class="ui-button-loud" @click="emit(`checkout`)" />
             <!-- The one way out that is not "leave", for a reader who wants to see behind the gate before
-                 paying. Only offered inside the product: Discover is a shell route, and sending somebody with
-                 no sandbox there would bounce them into setup. -->
-            <RouterLink v-if="props.browsable" :to="{ name: `sandbox`, params: { tab: `discover` } }" class="text-xs text-link hover:underline">
+                 paying. Only offered inside the product: the extensions catalogue is a shell route, and sending
+                 somebody with no sandbox there would bounce them into setup. -->
+            <RouterLink
+                v-if="props.browsable"
+                :to="{ name: `sandbox`, params: { tab: `extensions` }, query: { view: `browse` } }"
+                class="text-xs text-link hover:underline"
+            >
                 See what's premium first
             </RouterLink>
         </div>

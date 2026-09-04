@@ -193,7 +193,10 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                         <template v-if="installsLeft > 0">
                             Enough for {{ n(installsLeft) }} more premium {{ installsLeft === 1 ? `install` : `installs` }} today, or any service run
                             you approve. ·
-                            <RouterLink :to="{ name: `sandbox`, params: { tab: `discover` } }" class="text-link hover:underline">
+                            <RouterLink
+                                :to="{ name: `sandbox`, params: { tab: `extensions` }, query: { view: `browse` } }"
+                                class="text-link hover:underline"
+                            >
                                 Find something to spend them on
                             </RouterLink>
                         </template>

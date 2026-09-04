@@ -16,7 +16,6 @@ import type { HubTab } from "../hub/hubNav";
 import SandboxAccess from "./sandbox/SandboxAccess.vue";
 import SandboxAgent from "./sandbox/SandboxAgent.vue";
 import SandboxComputers from "./sandbox/SandboxComputers.vue";
-import SandboxDiscover from "./sandbox/SandboxDiscover.vue";
 import SandboxEnvironment from "./sandbox/SandboxEnvironment.vue";
 import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
 import { toListing, updateCount } from "./sandbox/discoverListing";
@@ -46,20 +45,25 @@ import SandboxUsage from "./sandbox/SandboxUsage.vue";
  * they came from is the honest one, and it is also the fact a reader wants when a row they do not recognise
  * appears. Give the API a group and they can move. */
 
-/* Discover sits directly under Extensions, and the adjacency is the point. Finding one, installing it, managing
- * it and switching it off are one subject, and they used to be two pages: the tab below listed what you had and
- * its empty state pointed at the Capabilities page to get more. A surface for extensions that has to send you
- * elsewhere for extensions is the whole of what was wrong.
+/* ONE ROW FOR EXTENSIONS, and it used to be two. Finding one, installing it, managing it and switching it off
+ * are one subject, and Discover sat directly under Extensions with the adjacency described as the point:
+ * adjacency was the weaker form of the true thing, and the section owns both halves as pills now (see
+ * SandboxExtensions.vue for what the split cost).
  *
  * Its badge is the number of installed extensions the registry has a newer commit for: the one fact in this
- * index that is looked FOR rather than looked at, on the row that can act on it. Info rather than warning: a
- * newer commit is an offer, not a debt, and nothing here updates itself. */
+ * index that is looked FOR rather than looked at, and it now sits on the row that can act on it, which is the
+ * clearest thing the merge bought. Info rather than warning: a newer commit is an offer, not a debt, and
+ * nothing here updates itself. */
 const configurationRows = (updates: number): readonly HubTab[] => [
     { slug: `environment`, label: `Environment`, icon: `box` },
     { slug: `secrets`, label: `Secrets`, icon: `key` },
     { slug: `agent`, label: `Agent`, icon: `sparkles` },
-    { slug: `extensions`, label: `Extensions`, icon: `sliders-h` },
-    { slug: `discover`, label: `Discover`, icon: `search`, badge: updates > 0 ? { count: updates, tone: `info` as const } : undefined },
+    {
+        slug: `extensions`,
+        label: `Extensions`,
+        icon: `sliders-h`,
+        badge: updates > 0 ? { count: updates, tone: `info` as const } : undefined,
+    },
 ];
 const reachRows = (contendedPorts: number): readonly HubTab[] => [
     { slug: `access`, label: `Access`, icon: `users` },
@@ -108,7 +112,7 @@ const { runningCount } = useRunning();
 const { contendedPorts } = useSyncHealth();
 const { panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
-/* The Discover row's count, read from whatever the registry cache already holds, `read: false`, so opening
+/* The Extensions row's count, read from whatever the registry cache already holds, `read: false`, so opening
  * this hub never causes the clone that browsing a registry is. See useRegistry for why the badge is deliberately
  * free rather than eager. */
 const { entries: listedExtensions } = useRegistry({ read: false });
@@ -164,7 +168,6 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxPersonas v-else-if="slug === `personas`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
-            <SandboxDiscover v-else-if="slug === `discover`" />
             <SandboxComputers v-else-if="slug === `computers`" />
             <!-- The extension-contributed sections, rendered with the same error boundary and lazy-view cache
                  the rail's routed host uses. `ActiveExtension` is exactly ExtensionView's two props. -->

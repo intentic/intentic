@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
-import { Button, ui, FilterBar, Notice, type NoticeModel, NoticeStack, SegmentedControl } from "@intentic/ui";
+import { Button, ui, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -18,11 +18,17 @@ import DiscoverCard from "./DiscoverCard.vue";
 import DiscoverDetail from "./DiscoverDetail.vue";
 import { type DiscoverListing, listingSections, toListing } from "./discoverListing";
 
-/* DISCOVER: what other people have published, in the one place in this app that already means "extensions".
+/* BROWSE: what other people have published, in the one place in this app that already means "extensions".
  *
- * This is a move, not a new feature: browsing a registry existed, buried five clicks deep inside an optional
- * block on a form on the Capabilities page, presented as a way to PRE-FILL A TEXT FIELD. Three things were
- * wrong with that and all three are what this file is shaped by.
+ * The other half of the Extensions section. Finding one, installing it, managing it and switching it off are
+ * one subject, so they are one section with two pills rather than two rows in the hub's index: the search box
+ * above is shared, which is what makes "I don't have it" and "somebody published it" the same gesture. The
+ * pills, the search text and the registry's freshness line belong to the section (SandboxExtensions.vue) and
+ * reach this component as `query` / `trust`.
+ *
+ * Browsing a registry used to be buried five clicks deep inside an optional block on a form on the
+ * Capabilities page, presented as a way to PRE-FILL A TEXT FIELD. Three things were wrong with that and all
+ * three are what this file is shaped by.
  *
  *  1. A URL FIELD STOOD WHERE A SEARCH BOX BELONGS. The first thing the old surface asked for was the address
  *     of the registry: a reader who wanted to see what exists was asked to supply the thing that would show
@@ -42,52 +48,63 @@ import { type DiscoverListing, listingSections, toListing } from "./discoverList
  * to the install, not to the browse. What it can honestly show is who vouched for it, what the nightly scan
  * re-derived at the pinned commit, and where the code is. It shows those and stops. */
 
+const { query, trust } = defineProps<{
+    /** The section's search text: matched against name, publisher, description and category. */
+    query: string;
+    /** The section's trust pills: "show me only what somebody has actually read". */
+    trust: `all` | `verified`;
+}>();
+const emit = defineEmits<{
+    /** This half's own failures, raised so the section keeps ONE notice region above the instrument. */
+    notice: [NoticeModel | undefined];
+    /** How many listings the section's query left, drawn on the search field. */
+    matched: [number];
+    /** Their filter matched nothing and they pressed the way out. */
+    clear: [];
+}>();
+
 const route = useRoute();
 const router = useRouter();
 const { canShip: canOperate } = useRole();
-const { entries, registryName, url, token, isOfficial, isLoading, isFetching, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
+const { entries, registryName, url, token, isOfficial, isLoading, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
 const outline = useSandboxOutline(isLoading);
 const { extensions } = useExtensions();
 const { add } = useCapabilities();
 // Re-read the credit balance the moment a premium install has spent from it: see the install handler.
 const { spent } = useMembership();
 
-const query = ref(``);
-const mode = ref<`all` | `verified`>(`all`);
 const installing = ref<string | undefined>(undefined);
 const failure = ref<NoticeModel | undefined>(undefined);
 
-// Below this many rows a filter box is more chrome than the thing it filters: the Extensions tab's threshold
-// and its reasoning, applied to a list that will be short for a while yet.
-const FILTERABLE_FROM = 6;
-
 const listings = computed<readonly DiscoverListing[]>(() => entries.value.map((entry) => toListing(entry, extensions.value)));
-const verifiedCount = computed(() => listings.value.filter((listing) => listing.entry.trust === `verified`).length);
 
 const matches = computed(() => {
-    const needle = query.value.trim().toLowerCase();
+    const needle = query.trim().toLowerCase();
     return listings.value.filter(
-        (listing) => (mode.value === `all` || listing.entry.trust === `verified`) && (needle === `` || listing.search.includes(needle)),
+        (listing) => (trust === `all` || listing.entry.trust === `verified`) && (needle === `` || listing.search.includes(needle)),
     );
 });
 const sections = computed(() => listingSections(matches.value));
+watch(() => matches.value.length, (count) => emit(`matched`, count), { immediate: true });
 
-const listNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined
-        ? undefined
-        : {
-              tone: `danger`,
-              title: `Couldn't read that registry.`,
-              detail: error.value,
-              // A registry that cannot be cloned may simply be a network blip, and re-reading is the whole of
-              // the recovery, so the one way out this notice offers is the one that might work.
-              action: { label: `Try again`, run: refetch },
-          },
+/* A registry that cannot be cloned may simply be a network blip, and re-reading is the whole of the recovery,
+ * so the one way out this notice offers is the one that might work. */
+watch(
+    () => error.value,
+    (failed) =>
+        emit(
+            `notice`,
+            failed === undefined
+                ? undefined
+                : { tone: `danger`, title: `Couldn't read that registry.`, detail: failed, action: { label: `Try again`, run: refetch } },
+        ),
+    { immediate: true },
 );
 
-/* THE LISTING IN THE URL, so a listing can be linked to. The hub's route carries one param and it is the tab,
- * so the listing rides a query, which is a real address either way: a reload reopens the panel, and the link
- * an author pastes into a chat lands their reader on their own extension rather than on a grid to search. */
+/* THE LISTING IN THE URL, so a listing can be linked to. The hub's route carries one param and it is the
+ * section, so the listing rides a query beside the `view` pill, which is a real address either way: a reload
+ * reopens the panel, and the link an author pastes into a chat lands their reader on their own extension
+ * rather than on a grid to search. */
 const openName = computed<string | undefined>(() => (typeof route.query[`ext`] === `string` ? route.query[`ext`] : undefined));
 const opened = computed<DiscoverListing | undefined>(() => listings.value.find((listing) => listing.entry.name === openName.value));
 const detailOpen = computed({
@@ -158,8 +175,8 @@ const install = async (listing: DiscoverListing): Promise<void> => {
                 }
             },
         );
-        // Installed, but nothing of it is RUNNING until the host runs again: the same convergence the
-        // Extensions tab's reload button performs, done here so the extension works without a page reload.
+        // Installed, but nothing of it is RUNNING until the host runs again: the same convergence the section's
+        // reload button performs, done here so the extension works without a page reload.
         await reloadExtensions();
         /* A premium install has just spent credits, so every surface showing a balance is now wrong by exactly
          * the donation: the account menu, this catalogue's next cost block, the composer's pill. Re-read once
@@ -216,12 +233,7 @@ const backToOfficial = (): void => {
     changing.value = false;
 };
 
-const clearFilters = (): void => {
-    query.value = ``;
-    mode.value = `all`;
-};
-
-/* What the page says when the sections hold nothing: four different facts, and printing the wrong one is a
+/* What this half says when the sections hold nothing: four different facts, and printing the wrong one is a
  * lie the reader can see. Kept apart from the error notice above: a registry that failed to read has not
  * "listed no extensions", and telling somebody their registry is empty when it is actually unreachable sends
  * them to go and check the wrong thing. */
@@ -234,7 +246,7 @@ const emptyNote = computed<string | undefined>(() => {
             ? `Nothing is published yet. Yours could be the first: see below.`
             : `That registry lists no intentic extensions. It may hold Claude plugins, which install from the Capabilities page.`;
     }
-    return mode.value === `verified` && query.value.trim() === ``
+    return trust === `verified` && query.trim() === ``
         ? `Nothing here has been reviewed yet. Switch to All to see everything published.`
         : `Nothing matches that filter.`;
 });
@@ -242,36 +254,6 @@ const emptyNote = computed<string | undefined>(() => {
 
 <template>
     <div class="flex flex-col gap-5">
-        <NoticeStack :of="[listNotice]" />
-
-        <!-- SEARCH FIRST. The one control a person arrives wanting, at the top, spanning the grid it narrows:
-             and the trust switcher beside it, because "show me only what somebody has actually read" is the
-             single most useful narrowing this list has. The switcher is suppressed while nothing is verified:
-             a filter that can only ever empty the page is a control that lies about the catalogue. -->
-        <div class="flex flex-wrap items-center gap-2">
-            <FilterBar
-                v-if="listings.length >= FILTERABLE_FROM"
-                v-model="query"
-                placeholder="Name, publisher, what it does…"
-                :count="matches.length"
-                class="flex-1"
-            >
-                <template v-if="verifiedCount > 0" #controls>
-                    <SegmentedControl
-                        v-model="mode"
-                        :options="[
-                            { label: `All`, value: `all`, badge: listings.length },
-                            { label: `Verified`, value: `verified`, badge: verifiedCount },
-                        ]"
-                    />
-                </template>
-            </FilterBar>
-            <div v-else class="flex-1"></div>
-            <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="isFetching" v-tooltip.top="`Re-read the registry`" @click="refetch">
-                <Icon name="refresh" :spin="isFetching" />
-            </button>
-        </div>
-
         <!-- THE SOURCE LINE. Where the list came from, stated rather than asked for: one line, and a way to
              point somewhere else that costs a click instead of standing in front of the catalogue. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
@@ -310,7 +292,7 @@ const emptyNote = computed<string | undefined>(() => {
         <!-- A registry read is a git clone, so this is the longest wait in the hub and the one most worth
              drawing. The outline is the CARD GRID at the same breakpoints, because that is what makes the
              catalogue recognisable before a single name has landed: a centred sentence in an empty pane made
-             the slowest tab also look like the emptiest. -->
+             the slowest view also look like the emptiest. -->
         <div v-if="isLoading && outline" class="@container" role="status" aria-busy="true">
             <span class="sr-only">Reading the registry…</span>
             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3" aria-hidden="true">
@@ -347,13 +329,13 @@ const emptyNote = computed<string | undefined>(() => {
 
         <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
             <span>{{ emptyNote }}</span>
-            <Button v-if="listings.length > 0" size="small" label="Clear filter" @click="clearFilters" />
+            <Button v-if="listings.length > 0" size="small" label="Clear filter" @click="emit(`clear`)" />
         </div>
 
         <!-- THE OTHER HALF OF SURFACING WHAT PEOPLE BUILD. Until now nothing in this app ever said that
              publishing was possible, let alone that it costs a topic on a repository rather than an account,
              a review queue or a cut. It is a footer rather than a banner because it is for the minority of
-             readers who build, but it has to exist SOMEWHERE, and this is the one page where somebody is
+             readers who build, but it has to exist SOMEWHERE, and this is the one surface where somebody is
              already thinking about other people's extensions. -->
         <!-- One flowing paragraph rather than a row of flex items: the glyph and the two links belong INSIDE the
              sentence, and as siblings of it they each took a line of their own the moment the pane narrowed. -->

@@ -1,6 +1,6 @@
 import type { Marketplace } from "@intentic-app/api-contract";
 import { OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
-import { computed, ref } from "vue";
+import { computed, type MaybeRefOrGetter, ref, toValue } from "vue";
 import { REGISTRY } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { browseMarketplace } from "./useCapabilities";
@@ -34,8 +34,12 @@ const isOfficialRegistry = computed(() => registryUrl.value.trim() === OFFICIAL_
  * daemon, and doing one every time somebody opens the Sandbox screen, to decorate a row they may not be going
  * to, is invisible work charged to the wrong person. So the badge observes the same cached query without
  * enabling it: it is free, it is live the moment anything else has read the registry, and the cache is
- * persisted across reloads, so in practice it is populated from the last visit rather than from nothing. */
-export function useRegistry({ read = true }: { read?: boolean } = {}) {
+ * persisted across reloads, so in practice it is populated from the last visit rather than from nothing.
+ *
+ * IT TAKES A GETTER as well as a boolean, because the Extensions section is BOTH callers: it wears the badge
+ * while the installed half is on screen and reads the registry the moment the Browse pill is on, and a plain
+ * boolean captured at setup would pin it to whichever half it happened to mount under. */
+export function useRegistry({ read = true }: { read?: MaybeRefOrGetter<boolean> } = {}) {
     const url = computed(() => registryUrl.value.trim());
     const token = computed(() => registryToken.value.trim());
 
@@ -44,7 +48,7 @@ export function useRegistry({ read = true }: { read?: boolean } = {}) {
         // one, and keying on it would put it in the query cache's index, which is persisted.
         queryKey: computed(() => REGISTRY.of(url.value)),
         queryFn: () => browseMarketplace(url.value, token.value === `` ? undefined : token.value),
-        enabled: computed(() => read && url.value.length > 0),
+        enabled: computed(() => toValue(read) && url.value.length > 0),
         staleTime: 5 * 60_000,
         refetchOnMount: false,
         refetchOnWindowFocus: false,

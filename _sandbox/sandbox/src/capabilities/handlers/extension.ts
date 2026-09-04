@@ -22,8 +22,8 @@ export const extensionHandler: CapabilityHandler = {
      * own "Premium" label and the registry is the address of a public catalogue. Withholding them cost far more
      * than a missing label: secret-fields.ts derives the credential keys as the COMPLEMENT of this echo, so an
      * unechoed field is vaulted and the manifest keeps the marker in its place, and the marker is not a url and
-     * not a member of the tier enum, so every install from Discover (which always attaches the registry it
-     * browsed) wrote an entry that failed CapabilitySchema on the very next read and was skipped as unreadable.
+     * not a member of the tier enum, so every install from the registry catalogue (which always attaches the
+     * registry it browsed) wrote an entry that failed CapabilitySchema on the very next read and was skipped as unreadable.
      * The extension then had no capability entry to be enumerated from: no row, no switch, no views, no bin, no
      * agent plugin. An echo is a claim about what the browser may see, and here it is also the claim that decides
      * what leaves the file, so a field that is merely uninteresting must still be named. */
