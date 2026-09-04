@@ -84,7 +84,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
     if (personaCount > 0) {
         actions.push({
             id: `personas`,
-            icon: `user`,
+            icon: `account-box`,
             tooltip:
                 personaCount === 1
                     ? `Change who works here: 1 persona`

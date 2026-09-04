@@ -66,12 +66,15 @@ const configurationRows = (updates: number): readonly HubTab[] => [
     },
 ];
 const reachRows = (contendedPorts: number): readonly HubTab[] => [
-    { slug: `access`, label: `Access`, icon: `users` },
+    /* Who may USE this box: members, invites, roles. `shield`, not `users`: Personas sits one row below and
+     * used to wear the neighbouring single-person glyph, so two user silhouettes in the same band were the
+     * same tile at rail size. */
+    { slug: `access`, label: `Access`, icon: `shield` },
     /* Who this box IS when it acts outside: under Reach because that is the direction it points, and
      * deliberately not under Configuration beside `agent`. Those two rows are one letter apart in English and
      * opposite in consequence (which subscription pays for a turn, versus whose name is on what it posts), and
      * neighbouring them is how someone eventually pins a nightly job to the right billing and the wrong Reddit. */
-    { slug: `personas`, label: `Personas`, icon: `user` },
+    { slug: `personas`, label: `Personas`, icon: `account-box` },
     // "Computers", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
     // enrollment this tab used to be named after is one property of one of them.
     {
