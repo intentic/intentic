@@ -1,4 +1,5 @@
 import { onChatNote, postChatNote } from "./chatChannel";
+import { reloadOnHotUpdate } from "../hotReload";
 import { claimClosedDrafts } from "./closedDrafts";
 import { Conversation } from "./conversation";
 import { traceFocus } from "./focusTrace";
@@ -130,3 +131,7 @@ export const summonChat = (summons: Summons): void => {
     apply(carrying);
     relaySummons(carrying);
 };
+
+// One summons reader per window: a hot update that re-ran this module would apply every board click to a
+// second copy of the tab store, and the panel would sit there ignoring the board (hotReload.ts).
+reloadOnHotUpdate(import.meta);

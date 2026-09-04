@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, shallowRef, watch } from "vue";
+import { reloadOnHotUpdate } from "../hotReload";
 import { floatingWindowPanel, showsPanel } from "../floating";
 import { useSandbox } from "../sandbox/useSandbox";
 import { onChatNote, postChatNote } from "./chatChannel";
@@ -92,3 +93,8 @@ watch(
     },
     { immediate: true },
 );
+
+// One heard strip and one pair of readers per window: a hot update that re-ran this module would leave the
+// channel writing the strip into an instance `chatStrip` no longer reads, and every board would freeze at the
+// last thing the popped-out chat said before the edit (hotReload.ts).
+reloadOnHotUpdate(import.meta);

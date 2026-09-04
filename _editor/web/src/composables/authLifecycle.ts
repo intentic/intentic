@@ -1,3 +1,5 @@
+import { reloadOnHotUpdate } from "./hotReload";
+
 // Platform-session invalidation has several authoritative sources: an explicit sign-out, a confirmed empty
 // Better Auth session, a protected platform RPC's 401, or another tab doing one of those. They all enter here
 // so the signed-in shell, daemon connections, in-memory credentials, and persisted caches fall together.
@@ -22,3 +24,7 @@ export const invalidatePlatformAuth = async (broadcast = true): Promise<void> =>
 if (channel !== undefined) {
     channel.addEventListener(`message`, () => void invalidatePlatformAuth(false));
 }
+
+// One channel and one set of listeners per window: a hot update that re-ran this module would leave another
+// tab's sign-out landing on listeners this window's shell no longer holds (hotReload.ts).
+reloadOnHotUpdate(import.meta);

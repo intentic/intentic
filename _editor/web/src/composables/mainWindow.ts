@@ -1,6 +1,7 @@
 import { getCurrentScope, onScopeDispose, watch } from "vue";
 import type { RouteLocationRaw, Router } from "vue-router";
 import { floatingWindowPanel, floatsElsewhere } from "./floating";
+import { reloadOnHotUpdate } from "./hotReload";
 import { uuid } from "./uuid";
 
 /* WHERE A LINK PRESSED INSIDE A POPPED-OUT PANEL LANDS.
@@ -265,3 +266,8 @@ export const useMainWindow = (show: (errand: MainWindowErrand) => void): void =>
         onScopeDispose(release);
     }
 };
+
+// One channel and one roll of windows per window: a hot update that re-ran this module would leave the
+// browser's listener on the first instance, so a link pressed in a popped-out panel would be handed to a set of
+// windows nobody is keeping (hotReload.ts).
+reloadOnHotUpdate(import.meta);

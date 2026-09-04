@@ -2722,4 +2722,4 @@ export function useChat() {
 
 // One tab store per window: a hot update that re-ran this module would hand the panel a second, empty strip while
 // the channel's readers went on writing to the first (hotReload.ts).
-reloadOnHotUpdate(import.meta.hot);
+reloadOnHotUpdate(import.meta);

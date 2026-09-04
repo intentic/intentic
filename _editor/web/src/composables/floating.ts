@@ -506,4 +506,4 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
 
 // One claim, one set of sightings and one channel per window: a hot update that re-ran this module would leave a
 // floating window beating from an instance nothing reads and reading `mine` off one nothing claimed (hotReload.ts).
-reloadOnHotUpdate(import.meta.hot);
+reloadOnHotUpdate(import.meta);

@@ -1,4 +1,5 @@
 import { computed, ref, watch } from "vue";
+import { reloadOnHotUpdate } from "../hotReload";
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "../browserStorage";
 import { useGoogleIdentity } from "../useGoogleIdentity";
@@ -536,3 +537,8 @@ const sessionExpiresAt = computed<number | undefined>(() => {
 export function useSandboxSession() {
     return { presentedEmail, sessionExpiresAt, getSessionToken, rejectSessionToken, invalidateSession, clearSessions, retireAccountAccess };
 }
+
+// One session store and one channel per window: a hot update that re-ran this module would leave the daemon
+// bearer being minted into an instance the client no longer reads, and every call would go back to Google
+// (hotReload.ts).
+reloadOnHotUpdate(import.meta);

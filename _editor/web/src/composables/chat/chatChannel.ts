@@ -94,4 +94,4 @@ channel?.addEventListener(`message`, (event: MessageEvent<ChatEnvelope>) => rece
 
 // One channel and one set of readers per window: a hot update that re-ran this module would leave the browser's
 // listener on the first instance, feeding readers of a store the panel no longer renders (hotReload.ts).
-reloadOnHotUpdate(import.meta.hot);
+reloadOnHotUpdate(import.meta);

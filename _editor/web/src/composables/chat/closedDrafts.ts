@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, shallowRef, watch } from "vue";
+import { reloadOnHotUpdate } from "../hotReload";
 import { onChatNote, postChatNote } from "./chatChannel";
 import { readStoredTabs, type StoredTab } from "./tabSnapshot";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -125,3 +126,7 @@ export const forgetClosedDraft = (conversationId: string): void => {
 onChatNote(`closed-drafts`, (note) => {
     kept.value = note.tabs;
 });
+
+// One set of set-aside words per window: a hot update that re-ran this module would leave the reader filling an
+// instance nothing claims from, so a chat reopened after it would come back empty (hotReload.ts).
+reloadOnHotUpdate(import.meta);
