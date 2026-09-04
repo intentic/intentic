@@ -72,6 +72,42 @@ describe(`the patterns are safe to interpolate`, () => {
     });
 });
 
+/* THE PATTERNS AGAINST LINES, which is the only place a false finding can be caught before a reader is told to go
+ * and fix one. The invariants above ask whether a rule is well formed; these ask whether it is right, and the cases
+ * are lines from real files rather than invented ones.
+ *
+ * Only the rule whose names are ordinary words is covered here. `@NgModule(` and `ReactDOM.render(` cannot be
+ * mistaken for anything, and a test that restated them would be asserting that a literal is itself. */
+describe(`the Vue 2 teardown hooks`, () => {
+    const hits = (line: string): boolean => new RegExp(idiomRule(`vue-2-lifecycle`)?.pattern ?? `(?:)`).test(line);
+
+    test(`a hook is found however the component writes it`, () => {
+        expect(hits(`    destroyed() {`)).toBe(true);
+        expect(hits(`    beforeDestroy() {`)).toBe(true);
+        expect(hits(`    destroyed: function () {`)).toBe(true);
+        expect(hits(`    destroyed: async () => {`)).toBe(true);
+        // The name is Vue's alone, so it is the finding whatever it is assigned.
+        expect(hits(`    beforeDestroy: this.teardown,`)).toBe(true);
+    });
+
+    /* The finding this rule really produced, against a module that deletes idle machines. Every line below is a
+     * fact about a tally, and a chore that reads them as a lifecycle hook sends its reader at a file with no
+     * component in it. */
+    test(`a field named after the word is not a hook`, () => {
+        expect(hits(`): Promise<{ warned: number; destroyed: number; dropped: number }> => {`)).toBe(false);
+        expect(hits(`    const tally = { warned: 0, destroyed: 0, dropped: 0 };`)).toBe(false);
+        expect(hits(`    return \`destroyed\`;`)).toBe(false);
+        expect(hits(`    if (machine.destroyed) {`)).toBe(false);
+        expect(hits(`type IdleVerdict = "kept" | "warned" | "destroyed" | "dropped";`)).toBe(false);
+    });
+
+    // The other half of the same guard: the pattern above is only ever asked about a component file, so a backend
+    // module is not eligible for this finding whatever it happens to name a variable.
+    test(`the sweep asks the question of components only`, () => {
+        expect(idiomRule(`vue-2-lifecycle`)?.globs).toEqual([`*.vue`]);
+    });
+});
+
 describe(`recognising the stack`, () => {
     test(`a framework is recognised from any manifest's dependency names`, () => {
         expect(frameworksOf([`vue`, `vite`]).map((framework) => framework.id)).toEqual([`vue`]);

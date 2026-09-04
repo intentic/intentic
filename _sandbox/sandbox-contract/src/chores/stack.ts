@@ -168,8 +168,19 @@ export const IDIOM_RULES: readonly IdiomRule[] = [
         framework: `vue`,
         label: `the Vue 2 teardown hooks`,
         replacement: `beforeUnmount and unmounted`,
-        pattern: `\\b(beforeDestroy|destroyed)\\s*[(:]`,
-        globs: [`*.vue`, `*.ts`, `*.js`],
+        /* TWO NAMES, AND ONLY ONE OF THEM IS VUE'S. `beforeDestroy` is a word nobody writes by accident, so its
+         * presence is the finding. `destroyed` is ordinary English, and asking only for a `(` or a `:` after it
+         * matched `{ warned: number; destroyed: number }` in a backend module that reaps idle machines: the chore
+         * told its reader to migrate a Node file to beforeUnmount, which is the kind of row that teaches people to
+         * stop reading the rest. So the ambiguous half has to be a FUNCTION in an options object, the only shape a
+         * hook is ever written in, and a field or a type named after the word is no longer evidence of anything.
+         *
+         * The globs are the second half of the same guard, and `*.ts` was the reason a backend file was eligible at
+         * all. A teardown hook is a component's, so this reads components. What that gives up is a Vue 2 mixin
+         * living in a plain `.js` file, and it is the right trade: `vue-global-api` still catches such a file when
+         * it constructs anything, and an idiom found nowhere costs less than one found in the wrong repository. */
+        pattern: `\\bbeforeDestroy\\s*[(:]|\\bdestroyed\\s*(\\(\\s*\\)\\s*\\{|:\\s*(async\\s+)?(function|\\(\\s*\\)\\s*=>))`,
+        globs: [`*.vue`],
     },
     {
         id: `vue-global-api`,
