@@ -3,7 +3,6 @@ import { useTextSize } from "@intentic/ui/text-size";
 import type * as Monaco from "monaco-editor-core";
 import { watch } from "vue";
 import { toScreenPx } from "../uiScale";
-import { useImportedTheme } from "../theme/useImportedTheme";
 
 /* Single Monaco integration point for the workspace code surface (CodeView + DiffView). Monaco is VSCode's
  * editor: its minimap, diff editor, find, and selection overview are built-in. It is lazy-loaded on first use
@@ -25,33 +24,8 @@ type ShikiToMonaco = (typeof import("@shikijs/monaco"))["shikiToMonaco"];
 
 type ShikiCore = Awaited<ReturnType<ReturnType<typeof useHighlighter>[`ensureCore`]>>;
 
-// The stock theme for the active color scheme.
-const baseTheme = (): string => (useTheme().scheme.value === `dark` ? `dark-plus` : `light-plus`);
-
-// The theme Monaco should show: an imported VSCode theme when one is active AND actually loaded into the core
-// (so a failed/absent import silently falls back to the stock theme, normal highlighting can never break here).
-const shikiTheme = (core: NonNullable<ShikiCore>): string => {
-    const imported = useImportedTheme().active.value;
-    if (imported !== undefined && core.getLoadedThemes().includes(imported.shikiName)) {
-        return imported.shikiName;
-    }
-    return baseTheme();
-};
-
-// Load the active import's raw VSCode theme (its `tokenColors` are the syntax colors) into the Shiki core under its
-// stable name, once. Shiki consumes VSCode themes directly. Guarded: a malformed theme just doesn't apply, it
-// never throws out of here, so the editor keeps tokenizing with the stock theme.
-const ensureImportedTheme = async (core: NonNullable<ShikiCore>): Promise<void> => {
-    const imported = useImportedTheme().active.value;
-    if (imported === undefined || core.getLoadedThemes().includes(imported.shikiName)) {
-        return;
-    }
-    try {
-        await core.loadTheme({ ...imported.raw, name: imported.shikiName } as Parameters<(typeof core)[`loadTheme`]>[0]);
-    } catch {
-        // A bad theme JSON: leave it unloaded so shikiTheme() falls back to the stock theme.
-    }
-};
+// The theme Monaco should show: light-plus or dark-plus matching the active color scheme.
+const activeTheme = (): string => (useTheme().scheme.value === `dark` ? `dark-plus` : `light-plus`);
 
 const channel = (n: number): string => n.toString(16).padStart(2, `0`);
 
@@ -80,7 +54,7 @@ const resolveEditorBg = (): string => {
 // HTML highlighter is unaffected.
 const patchEditorSurface = (core: NonNullable<ShikiCore>): void => {
     const bg = resolveEditorBg();
-    const colors = (core.getTheme(shikiTheme(core)).colors ??= {});
+    const colors = (core.getTheme(activeTheme()).colors ??= {});
     colors[`editor.background`] = bg;
     colors[`editorGutter.background`] = bg;
     /* The minimap slider is the only standing "you are here" on a surface with no scrollbar (CodeView turns the
@@ -103,7 +77,7 @@ const bridged = new Set<string>();
 const applyBridge = (monaco: typeof Monaco, core: NonNullable<ShikiCore>): void => {
     patchEditorSurface(core);
     bridge?.(core, monaco);
-    monaco.editor.setTheme(shikiTheme(core));
+    monaco.editor.setTheme(activeTheme());
 };
 
 const init = async (): Promise<typeof Monaco> => {
@@ -119,29 +93,12 @@ const init = async (): Promise<typeof Monaco> => {
     // Bridge with no grammars yet, it still defines light-plus/dark-plus and patches setTheme, so even a
     // plaintext (unsupported / oversized) file renders with the right theme background. Grammars register lazily.
     const core = await useHighlighter().ensureCore();
-    // Load a restored imported theme before the first bridge, so a reload lands straight on the imported syntax.
-    await ensureImportedTheme(core);
     applyBridge(monaco, core);
     // One active theme at a time. Re-run the bridge (not a bare setTheme) on a scheme OR accent change, so the
     // editor background is re-resolved from --color-canvas and re-baked into the now-active theme, keeping the
     // editor on the canvas token across light/dark and colour changes (module-lifetime watcher).
     const { scheme, accent } = useTheme();
     watch([scheme, accent], () => applyBridge(monaco, core));
-    /* Importing / removing a VSCode theme re-themes the editor's syntax too: load the new theme (if any), then
-     * re-run the bridge so Monaco switches onto it (or falls back to the stock theme when the import is removed).
-     *
-     * The load is a round trip through a file, so two imports in quick succession, or an import and the removal
-     * that follows it, are two of these in flight at once, and the one that happens to finish LAST is the one
-     * that would paint. Re-reading the active import after the await is what settles it: a call that is no
-     * longer about the current theme has nothing left to say and stands down. */
-    const { active: importedTheme } = useImportedTheme();
-    watch(importedTheme, async (imported) => {
-        await ensureImportedTheme(core);
-        if (importedTheme.value !== imported) {
-            return;
-        }
-        applyBridge(monaco, core);
-    });
     return monaco;
 };
 

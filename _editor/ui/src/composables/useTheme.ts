@@ -22,8 +22,7 @@ const ACCENT_VARS_KEY = `ui-accent-vars`;
  * The accent is a colour rather than one of a handful of named themes, so it cannot be an attribute with a
  * stylesheet block behind it: it is written as inline custom properties on <html>, which beat the ramps
  * declared in primitive-colors.css and re-resolve every semantic scale, role token and Tailwind utility built
- * on them. (The same mechanism an imported VSCode theme already uses, one tier further down: this sets the
- * primitive RAMPS, an import overrides the chrome tokens on top and still wins.) */
+ * on them. */
 
 const apply = (value: ColorScheme): void => {
     if (value === `dark`) {
@@ -57,8 +56,6 @@ const toggle = (): void => {
 
 const applyAccent = (value: string): void => {
     const style = document.documentElement.style;
-    // Property by property rather than a cssText assignment: an imported VSCode theme writes its own overrides
-    // onto this same element, and replacing the whole declaration would drop them.
     for (const [name, colour] of Object.entries(themeVars(value))) {
         style.setProperty(name, colour);
     }

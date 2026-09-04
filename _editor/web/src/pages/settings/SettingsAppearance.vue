@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-    Button,
     ColorPicker,
     Row,
     RowGroup,
@@ -12,20 +11,18 @@ import {
     type IconName,
 } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useToolCalls } from "../../composables/chat/useToolCalls";
 import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";
 import { type DiffOpen, useLayout } from "../../composables/useLayout";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useChangeWeight } from "../../composables/workspace/changeWeight";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
-import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
 import { type Skin, useSkin } from "../../skins/useSkin";
 
 /* Appearance: how the workspace looks for this account: the color scheme (data-mode), the one colour the whole app
- * is built out of, file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX
- * theme. Each recolors/re-renders the whole UI
+ * is built out of, file-tree treatment, and which tabs the terminal strip carries. Each recolors/re-renders the whole UI
  * live, so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on
  * this page. Laid out as grouped rows (RowGroup/Row) rather than a card per option, with the borderless
  * SegmentedControl control and the Explorer preview flush in the row's #below. */
@@ -57,20 +54,6 @@ const DIFF_OPEN_OPTIONS = [
     { label: `Past imports`, value: `imports`, title: `The first change that isn't an import: nothing above it but the import list` },
     { label: `Biggest change`, value: `biggest`, title: `The block with the most changed lines: earlier changes end up above you` },
 ] as const satisfies readonly { label: string; value: DiffOpen; title: string }[];
-
-// Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
-const { active: importedTheme, importThemeJson, clearImportedTheme } = useImportedTheme();
-const themeJson = ref(``);
-const importError = ref<string | undefined>(undefined);
-const applyImport = (): void => {
-    importError.value = undefined;
-    try {
-        importThemeJson(themeJson.value);
-        themeJson.value = ``;
-    } catch (caught) {
-        importError.value = caught instanceof Error ? `Couldn't read that theme: ${caught.message}` : `Could not parse the theme JSON.`;
-    }
-};
 
 // SegmentedControl option lists: labels capitalized, values are the raw token strings the composables store.
 const cap = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
@@ -252,34 +235,6 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <RowGroup label="Terminal">
             <Row as="label" icon="sparkles" title="Work terminals">
                 <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>
-            </Row>
-        </RowGroup>
-
-        <!-- Theme import: the one row that needs a full-width editor. Its body lives in #below. -->
-        <RowGroup label="Theme import">
-            <Row icon="palette" title="Import a VSCode theme">
-                <template #control>
-                    <Button v-if="importedTheme" size="small" severity="secondary" @click="clearImportedTheme()"> Remove </Button>
-                </template>
-                <template #below>
-                    <p v-if="importedTheme" class="mb-2 inline-flex items-center gap-1.5 text-xs text-muted">
-                        <Icon name="check-circle" class="text-success" />
-                        Active: <b class="text-content">{{ importedTheme.name }}</b> · {{ importedTheme.mode }}
-                    </p>
-                    <textarea
-                        v-model="themeJson"
-                        rows="4"
-                        spellcheck="false"
-                        placeholder='Paste theme JSON, e.g. { "type": "dark", "colors": { "editor.background": "#1e1e1e", … } }'
-                        class="ui-field-box scrollbar-thin w-full font-mono"
-                    ></textarea>
-                    <div v-if="importError" class="mt-2 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
-                        {{ importError }}
-                    </div>
-                    <div class="mt-2 flex justify-end">
-                        <Button size="small" :disabled="themeJson.trim().length === 0" @click="applyImport()"> Apply theme </Button>
-                    </div>
-                </template>
             </Row>
         </RowGroup>
     </div>

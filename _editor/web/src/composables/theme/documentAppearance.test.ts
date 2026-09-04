@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /* THE WINDOW THAT NEVER OPENED THE SETTINGS PAGE.
  *
  * A popped-out panel is a whole other window of the app (composables/floating.ts), and its route mounts one
- * panel: it has no reason to import the settings page, and so it used to have no reason to import `useSkin` or
- * `useImportedTheme` either, since those were reachable from there and (for the theme) from `useMonaco`. The
+ * panel: it has no reason to import the settings page, and so it used to have no reason to import `useSkin`
+ * either, since that was reachable only from there. The
  * result was not a setting that lagged, it was a setting that did not exist in that window: nothing applied the
  * stored value and nothing was registered to hear it change. The skin still LOOKED right, because index.html's
  * anti-flash script writes `data-skin` from storage on every load, which is what made this read as "themes don't
@@ -85,16 +85,5 @@ describe(`installDocumentAppearance`, () => {
 
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
         expect(document.getElementById(`ui-skin-font`)).not.toBeNull();
-    });
-
-    it(`lands an imported VSCode theme's chrome tokens`, async () => {
-        const { installDocumentAppearance } = await boot();
-        const { receivePreferenceChange } = await seam();
-
-        installDocumentAppearance();
-        const theme = { name: `Night`, mode: `dark`, tokens: { "--color-canvas": `#101014` }, raw: {}, shikiName: `imported-1` };
-        receivePreferenceChange({ key: `ui-imported-theme`, raw: JSON.stringify(theme) });
-
-        expect(root().style.getPropertyValue(`--color-canvas`)).toBe(`#101014`);
     });
 });

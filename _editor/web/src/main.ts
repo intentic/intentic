@@ -35,8 +35,8 @@ installClientDiagnostics();
 await purgeIfMarked();
 dropOutdatedMirrors();
 
-/* The whole-document look, installed for THIS window: the scheme, the base text size, the skin and any imported
- * VSCode theme. Here rather than in whatever page happens to read one, because a preference that paints <html>
+/* The whole-document look, installed for THIS window: the scheme, the base text size, and the skin.
+ * Here rather than in whatever page happens to read one, because a preference that paints <html>
  * has to be declared in every window of the app or it is neither applied nor live there, which is what left a
  * popped-out chat frozen in the theme it was opened with (composables/theme/documentAppearance.ts). After the
  * purge above, so a wipe this page was asked to perform is never read back as a preference. */
