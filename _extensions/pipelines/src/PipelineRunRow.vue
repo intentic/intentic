@@ -181,7 +181,8 @@ const fixSince = computed<string | undefined>(() => {
  * worth, while "$0.42" and "+40 −12" say the same things in a third of the pixels. */
 const fixFacts = computed<string | undefined>(() => {
     const agent = props.fix;
-    if (agent === undefined) {
+    const state = fixState.value;
+    if (agent === undefined || state?.kind === `landed`) {
         return undefined;
     }
     const files = agent.diff?.files ?? 0;
@@ -191,6 +192,8 @@ const fixFacts = computed<string | undefined>(() => {
             .join(` · `) || undefined
     );
 });
+// Age, spend, and diff on the chip while a fix is still in play; once it is landed the label is the whole report.
+const showFixChipMeta = computed(() => fixState.value !== undefined && fixState.value.kind !== `landed`);
 // Why the chip says what it says and what pressing it does (fixStance's hint), then the facts behind the
 // numbers on it. Parenthesised rather than run on, because the hint is a sentence and this is a list.
 const fixDetail = computed<string | undefined>(() => {
@@ -343,12 +346,9 @@ const startFix = (): void => {
                              It stays a state even on a run that has since gone green: a rerun keeps the vendor's
                              run id, and an agent still working on the failure it USED to have is worth saying.
 
-                             IT CARRIES THE WHOLE REPORT NOW, and the reason is what sits underneath it: this row
-                             opens into a job graph, and the line of agent facts that used to run above that graph
-                             cost every open row a diagram's worth of height to say what fits here in three
-                             tokens. The age is always on (whether a fix is minutes or hours old is most of what
-                             "is this in hand" means); the money and the diff arrive with the width to hold them;
-                             the model's name and the file count are one hover away, where they cost nothing. -->
+                             IT CARRIES THE REPORT while a fix is still in play: age, spend, and diff on the chip,
+                             model and file count in the tooltip. Once landed, the label alone — the work is in the
+                             workspace and Re-run is the next move. -->
                         <a
                             v-if="fixState !== undefined && !fixState.retry"
                             v-bind="fixState.link"
@@ -359,9 +359,9 @@ const startFix = (): void => {
                         >
                             <Icon :name="fixState.icon" :spin="fixState.spin" class="text-2xs" />
                             {{ fixState.label }}
-                            <span v-if="fixAge" class="text-2xs font-normal tabular-nums text-subtle">{{ fixAge }}</span>
-                            <span v-if="spend" class="hidden text-2xs font-normal tabular-nums text-subtle @3xl:inline">{{ spend }}</span>
-                            <DiffStat v-if="fixDiff" class="hidden @3xl:inline" :additions="fixDiff.insertions" :deletions="fixDiff.deletions" />
+                            <span v-if="showFixChipMeta && fixAge" class="text-2xs font-normal tabular-nums text-subtle">{{ fixAge }}</span>
+                            <span v-if="showFixChipMeta && spend" class="hidden text-2xs font-normal tabular-nums text-subtle @3xl:inline">{{ spend }}</span>
+                            <DiffStat v-if="showFixChipMeta && fixDiff" class="hidden @3xl:inline" :additions="fixDiff.insertions" :deletions="fixDiff.deletions" />
                         </a>
                         <!-- Primary only on the branch's open failure, and only while no agent is already on that
                              branch. Every other red row keeps the same action at Re-run's weight: a log entry, not

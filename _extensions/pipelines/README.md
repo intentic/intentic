@@ -91,13 +91,14 @@ inside the view rather than gating the tile.
 - ONE SLOT ON THE ROW FOR THE AGENT, whichever half of its life it is in: the button becomes a state chip
   (`fixStance.ts`), and only an ENDED fix turns back into a press, labelled "Try again". The words are the fleet
   board's own, a card one click away must not describe the same agent differently.
-- THE CHIP IS THE WHOLE REPORT, and what decides that is what the row opens into. The state, its age, the spend
-  and the diff used to be repeated as a line of facts above the job graph, so every open row paid a diagram's
-  worth of height to say a second time what the header had already said once. Now the chip carries the word and
-  the age always, the money and the diff at `@3xl` of ROW (this board renders into a pane the reader can halve
-  with the chat panel), and the model's name, the file count and the exact phrasing of the age in its tooltip,
-  where width is free. Same rule one turn on for the branch's agent: a row with none of its own gets a neutral
-  chip that opens it, rather than a sentence under the header.
+- THE CHIP IS THE REPORT while a fix is still in play: the state, its age, the spend and the diff used to be
+  repeated as a line of facts above the job graph, so every open row paid a diagram's worth of height to say a
+  second time what the header had already said once. Now the chip carries the word and the age always, the money
+  and the diff at `@3xl` of ROW (this board renders into a pane the reader can halve with the chat panel), and
+  the model's name, the file count and the exact phrasing of the age in its tooltip, where width is free. Once
+  landed, the label alone — the work is in the workspace and Re-run is the next move. Same rule one turn on for
+  the branch's agent: a row with none of its own gets a neutral chip that opens it, rather than a sentence under
+  the header.
 - An ending outranks a diff. An agent that crashed after writing two files has one, and reading that as a fix
   ready to land is the board promising something the turn never finished; the files earn a sentence in the
   hint, not the verdict. Same order the fleet's own lane machine reads them in.
