@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// jsdom because the subject is WHICH GROUPS ARE ON SCREEN. The Agent tab used to stack eighteen sections in one
+// jsdom because the subject is WHICH GROUPS ARE ON SCREEN. The Agent tab used to stack seventeen sections in one
 // scroll; it now shows one category of them at a time, and everything worth pinning is about the seam between
 // the strip and the address:
 //
@@ -108,7 +108,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-/* The default, and the reason the split is worth anything: sixteen of the eighteen groups are NOT on the page.
+/* The default, and the reason the split is worth anything: fifteen of the seventeen groups are NOT on the page.
  *
  * MODELS IS THE DEFAULT rather than a category named for the accounts it leads with. Signing in is a step toward
  * picking a model, never the errand itself, and `/sandbox/agent#models` — the composer's "turn it off for every
@@ -163,14 +163,15 @@ it(`opens the safety category with the gate rules alone`, async () => {
  * a coverage assertion counting names would pass just as happily with the switch back under the gate rules. */
 it(`holds delegation under tools, not under the gate rules`, async () => {
     const { el } = await mount({ section: `tools` });
-    expect(shown(el)).toContain(`Subagents`);
-    expect(shown(el)).not.toContain(`Safety policy`);
+    // Both categories in full rather than a membership check: the group has to be ON one screen and OFF the
+    // other, and a `toContain` pair would still pass with Subagents drawn on both.
+    expect(shown(el)).toEqual([`Code search`, `Dependencies`, `Command output`, `Subagents`]);
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
 
     const { el: safety } = await mount({ section: `safety` });
-    expect(shown(safety)).not.toContain(`Subagents`);
+    expect(shown(safety)).toEqual([`Safety judge`, `Safety policy`, `Recent decisions`]);
 });
 
 // The composer's connect gate wins over whatever the address last remembered: it is a request to sign an account
