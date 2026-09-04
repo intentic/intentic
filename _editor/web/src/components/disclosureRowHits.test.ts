@@ -222,3 +222,36 @@ it(`ignores a press that travelled, so text can be selected out of the row`, asy
     await press(row.find(`.name`), 3);
     expect(row.isOpen()).toBe(true);
 });
+
+/* A DRAWER'S HOVER WASH RIDES THE WRAPPER, not the header <Row>. The header loses its bottom padding when the
+ * drawer opens, and a wash that stopped at the header read as cut off over the evidence and the verbs below it. */
+it(`puts the hover wash on the wrapper when the body is a drawer, not on the header row`, async () => {
+    const host = document.createElement(`div`);
+    document.body.append(host);
+    const open = ref(true);
+    const app: App = createApp({
+        render: () =>
+            h(
+                DisclosureRow,
+                {
+                    body: `drawer`,
+                    density: `compact`,
+                    open: open.value,
+                    "onUpdate:open": (next: boolean) => {
+                        open.value = next;
+                    },
+                },
+                {
+                    title: () => h(`span`, { class: `name` }, `A chore`),
+                    below: () => h(`p`, { class: `evidence-text` }, `evidence`),
+                },
+            ),
+    });
+    app.mount(host);
+    mounted.push({ app, host });
+
+    const wrapper = host.firstElementChild as HTMLElement;
+    const header = host.querySelector<HTMLElement>(`.group.block`);
+    expect(wrapper?.className).toContain(`ui-row-select`);
+    expect(header?.className ?? ``).not.toContain(`ui-row-select`);
+});

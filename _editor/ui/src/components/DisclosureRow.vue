@@ -198,13 +198,21 @@ const tint = computed(() => {
     return ``;
 });
 
+/* WHERE THE HOVER WASH LIVES. On every mode except `hit="row"`, it rides the WRAPPER so an open drawer's block
+ * is one surface — the header's <Row> loses its bottom padding when a drawer opens (`!pb-0`), and a wash that
+ * stopped at the header read as cut off the moment the pointer reached the evidence or the verbs under it.
+ * `hit="row"` keeps the wash on <Row> instead, because the whole row is pressable and stacking two would be
+ * the failure the note above is about. */
+const wrapperSelect = computed(() => (!disabled && hit !== `row` ? `ui-row-select` : ``));
+const rowInteractive = computed(() => !disabled && hit === `row`);
+
 // Padding for a drawer: ROW_DRAWER_PAD — same horizontal measure as ROW_BLOCK_PAD, less top air because the
 // header row's own padding already paid for separation and a drawer that opens into a diagram was reading as a
 // gap rather than as a boundary.
 </script>
 
 <template>
-    <div class="group" :class="[tint, $slots[`before`] ? `flex flex-col` : ``]" @pointerdown="onPointerDown">
+    <div class="group" :class="[tint, wrapperSelect, $slots[`before`] ? `flex flex-col` : ``]" @pointerdown="onPointerDown">
         <!-- `#before` IS THE SELECTION COLUMN, and it is outside the toggle rather than in `#lead` because a
              checkbox nested in a <button> is invalid and unusable: every attempt to tick it would open the row
              instead. It rides inside the tint so the whole line still lights up as one row, which is the part a
@@ -226,7 +234,7 @@ const tint = computed(() => {
                 :header-button="hit === `header` && !disabled"
                 :header-expanded="disabled ? undefined : open"
                 :header-controls="disabled ? undefined : bodyId"
-                :interactive="!disabled"
+                :interactive="rowInteractive"
                 :headline-guard="hit === `pair`"
                 @header-click="onRowClick"
                 @click="onRowClick"
