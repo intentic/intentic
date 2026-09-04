@@ -286,6 +286,19 @@ Measured against a deliberately wedged engine (`wsl -t docker-desktop`, app left
 the probe loop overshoots its own grace — restarted Docker Desktop, and had the engine back **25 seconds
 later**, with the fleet never leaving `online=6` because the distro was never involved.
 
+**But a restart is never free, so the pass asks whether the fleet is working first.** A saturated engine and a
+dead one look identical from the reconciler: on 4 September two jobs pushing multi-GB images to ghcr.io kept
+`docker version` from answering inside the 20-second bound, a pass called the engine dead and killed Docker
+Desktop — which restarts the utility VM the six runners live in — and both pushes died in the same second
+(`unexpected EOF` in one, exit 255 in the other, then `Cannot connect to the Docker daemon` in every step
+after them). Neither job's log named the machine. `-Restart` had refused to take the VM down while a job was
+executing since the day it was written; the reconciler was doing exactly that every three minutes. It now asks
+the same question — `pgrep -c Runner.Worker` in the distro — and **defers** while the answer is non-zero. A
+deferral, not a veto: a job genuinely wedged on a dead engine holds its runner until its own
+`timeout-minutes`, so after `-EngineGraceMinutes` (30) of *consecutive* unreadiness the restart happens anyway
+and says so. The outage is stamped in `engine-unready-since.txt` beside `fleet.log`, because each pass is a
+new process, and the first pass that finds the engine healthy clears it.
+
 **No probe in a pass may block, and a bounded loop around an unbounded call is not a bound.** This is the
 watchdog's own failure mode, and it cost twelve hours. `EngineReady` was a plain `docker version`; against the
 wedged engine above that call does not fail, it never returns. Every pass parked on it — so the pass never

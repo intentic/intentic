@@ -45,6 +45,15 @@
   the distro's `df` read 680 GB free while Windows had 2.04. That number is only true on the host, which is
   where this script runs.
 
+  AND THE FOURTH WAY WAS THIS SCRIPT. On 4 September two CI jobs pushed multi-GB images to ghcr.io at once and
+  the engine stopped answering `docker version` inside the reconciler's 20-second bound -- saturated, not dead.
+  A pass waited its 90 seconds, called it dead, and killed Docker Desktop, which restarts the WSL VM the six
+  runners live in: both pushes died in the same second (21:27:19), every step after them read "Cannot connect
+  to the Docker daemon", and neither job's log named this machine. -Restart has always refused to take the VM
+  down while a job is executing; the reconciler was doing exactly that every three minutes without asking. It
+  asks now -- and defers rather than vetoes, because a job wedged on a genuinely dead engine would otherwise
+  hold the repair off for the length of its own timeout.
+
   WHAT IT REGISTERS. A logon task with a repeating trigger, the same shape setup-windows-runner.ps1 uses for
   the Windows runner and for the same reasons: at logon for the reboot, every few minutes for everything that
   takes the fleet down without anybody logging out. The action is a reconciler, not a supervisor -- it looks
@@ -88,6 +97,11 @@ param(
     # patience setting: a wedged Docker Desktop does not fail `docker version`, it never returns it, so without
     # a cap the probe is what parks the pass forever. See the reconciler's own section 1.
     [int]$EngineProbeSeconds = 20,
+    # How long the engine may go on not answering, with jobs executing, before a pass restarts Docker Desktop
+    # anyway. A restart takes the WSL VM with it and fails every job in flight, so a busy fleet DEFERS one --
+    # but only this long: a job wedged on a genuinely dead engine holds its runner until its own
+    # timeout-minutes, and an unconditional "never while busy" would be a wedge nothing heals for an hour.
+    [int]$EngineGraceMinutes = 30,
     # Free space on the host volume, in GB, under which a pass reclaims rebuildable docker state. Twice this is
     # only reported; half of it takes the whole build cache rather than the stale part.
     [int]$LowDiskGb = 60,
@@ -125,6 +139,10 @@ $LogPath = Join-Path $Root 'fleet.log'
 # it appends every line the reconciler already wrote there itself, so the log a person reads shows each event
 # twice and reads like the watchdog ran twice.
 $LaunchLog = Join-Path $Root 'launch.log'
+# When the engine STOPPED answering, written by the pass that first found it unready and removed by the first
+# pass that finds it healthy again. A file rather than a variable because every pass is a new process, and the
+# question the engine-restart guard asks -- "how long has this outage been going on" -- spans passes.
+$UnreadySince = Join-Path $Root 'engine-unready-since.txt'
 $DockerSettings = Join-Path $env:APPDATA 'Docker\settings-store.json'
 $WslConfig = Join-Path $env:USERPROFILE '.wslconfig'
 
@@ -311,6 +329,36 @@ function DockerProcesses {
     return @(Get-Process -Name 'Docker Desktop', 'com.docker.backend', 'com.docker.build', 'com.docker.dev-envs', 'com.docker.extensions' -ErrorAction SilentlyContinue)
 }
 
+# IS THE FLEET EXECUTING ANYTHING RIGHT NOW -- the question this section did not ask, and the only one that
+# separates "heal a dead engine" from "kill six running jobs". Restarting Docker Desktop restarts the WSL
+# utility VM the fleet lives in, which is the same act -Restart has refused to perform while a job is executing
+# since the day it was written; the reconciler was performing it every three minutes with no such guard.
+#
+# WHAT THAT COST, on 4 September: CI run 33918156956 had two jobs pushing multi-GB images to ghcr.io, which is
+# enough to keep the engine from answering `docker version` inside the 20-second bound above. A pass spent its
+# 90 seconds, called the engine dead and killed Docker Desktop -- and at 21:27:19 BOTH pushes died in the same
+# second, `unexpected EOF` in one and exit 255 in the other, with every step after them reporting "Cannot
+# connect to the Docker daemon". Nothing in either job's log named this machine. From here a SATURATED engine
+# and a DEAD one look identical, and a busy fleet is the thing that tells them apart.
+#
+# Runner.Worker is the per-job process a listener spawns, so its presence IS "a job is executing" -- the same
+# probe -Restart uses, for the same reason.
+function BusyRunners {
+    # `-l --running -q` is the one probe here that does NOT start the distro, and a distro that is not running
+    # is executing nothing by definition.
+    `$up = @(& wsl.exe -l --running -q 2>`$null | ForEach-Object { (`$_ -replace "``0", '').Trim() } | Where-Object { `$_ })
+    if (`$up -notcontains '$Distro') { return 0 }
+    # pgrep exits 1 when nothing matches, so the COUNT it prints is the answer and the exit code is not.
+    `$r = RunBounded 'wsl.exe' '-d $Distro -e pgrep -c Runner.Worker' $EngineProbeSeconds
+    # A probe that timed out means the DISTRO is not answering either, which is not a fleet with work in flight
+    # -- and reading "unknown" as busy is how the healing path below would never run again.
+    if (`$null -eq `$r) { return 0 }
+    `$n = (`$r.Out -replace "``0", '').Trim()
+    if (`$n -match '^\d+`$') { return [int]`$n }
+    return 0
+}
+function ClearUnready { Remove-Item '$UnreadySince' -Force -ErrorAction SilentlyContinue }
+
 if (`$dockerExe -and -not (EngineReady)) {
     if ((DockerProcesses).Count -eq 0) {
         if (Test-Path `$desktopExe) {
@@ -319,7 +367,8 @@ if (`$dockerExe -and -not (EngineReady)) {
         }
         WaitForEngine 4 | Out-Null
     } else {
-        # UP BUT NOT ANSWERING GETS A RESTART, NOT MORE WAITING, and that is a distinction this file learned the
+        # UP BUT NOT ANSWERING GETS A RESTART, NOT MORE WAITING -- unless the fleet is working, which is the
+        # guard below and the one thing this branch may not do without. And that is a distinction this file learned the
         # hard way. `wsl --shutdown` -- which this script's own -Restart does, and which a WSL update does on its
         # own -- takes Docker Desktop's `docker-desktop` distro out from under it. Its Windows processes stay
         # alive, the app is still on screen, and every request to the engine then answers 500 Internal Server
@@ -331,6 +380,34 @@ if (`$dockerExe -and -not (EngineReady)) {
         # The 90 seconds first is what keeps this from fighting a Docker Desktop that is legitimately still
         # booting -- the engine takes about half a minute from a cold start on this machine.
         if (-not (WaitForEngine 1.5)) {
+            # HOW LONG THIS OUTAGE HAS BEEN GOING ON, not how long this pass has waited. Stamped by the first
+            # pass that finds the engine unready and cleared by the first that finds it healthy, so a fleet
+            # that is merely saturated -- the case above -- never accumulates minutes here.
+            `$unreadySince = `$null
+            try {
+                `$stamp = (Get-Content '$UnreadySince' -ErrorAction Stop | Select-Object -First 1)
+                `$unreadySince = [datetime]::Parse(`$stamp, [Globalization.CultureInfo]::InvariantCulture)
+            } catch { }
+            if (-not `$unreadySince) {
+                `$unreadySince = Get-Date
+                Set-Content -Path '$UnreadySince' -Value `$unreadySince.ToString('o') -ErrorAction SilentlyContinue
+            }
+            `$busy = BusyRunners
+            `$outage = [int]((Get-Date) - `$unreadySince).TotalMinutes
+            if (`$busy -gt 0 -and `$outage -lt $EngineGraceMinutes) {
+                # THE LINE THAT WOULD HAVE SAVED RUN 33918156956. Said every pass rather than once, because
+                # this is the state a person reads the log to find, and a deferral that logs nothing is
+                # indistinguishable from a watchdog that has stopped.
+                Say "engine not answering, but `$busy job(s) are executing and the outage is `$outage min -- NOT restarting Docker Desktop: it takes the WSL VM with it and fails them mid-step, and an engine merely saturated by their own image pushes looks exactly like this. Restarts anyway once the outage passes $EngineGraceMinutes min."
+                `$restartEngine = `$false
+            } else {
+                if (`$busy -gt 0) {
+                    Say "engine not answering for `$outage min with `$busy job(s) still executing -- restarting anyway: past $EngineGraceMinutes min those jobs are wedged on a dead engine rather than working, and they fail either way"
+                }
+                `$restartEngine = `$true
+            }
+        } else { `$restartEngine = `$false }
+        if (`$restartEngine) {
             Say 'Docker Desktop is running but its engine has not answered -- restarting it'
             DockerProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
             # The CLI processes a wedged engine is holding open. RunBounded kills the ones this pass starts, so
@@ -349,8 +426,13 @@ if (`$dockerExe -and -not (EngineReady)) {
             WaitForEngine 4 | Out-Null
         }
     }
-    if (EngineReady) { Say 'docker engine is up' }
+    if (EngineReady) { Say 'docker engine is up'; ClearUnready }
     else { Say "docker engine still not answering`$(if (`$engineBlocked) { ' (the probe TIMED OUT -- it is blocking, not erroring, which is what a full host disk does to it)' }) -- starting the fleet anyway; its container jobs will fail until it does" }
+} elseif (`$dockerExe) {
+    # AN OUTAGE THAT ENDED ON ITS OWN ends here, and clearing it here is what keeps the grace above honest. The
+    # saturated engine this section now waits out never reaches the repair branch at all, so without this line
+    # its stamp would outlive it and the NEXT outage would read as half an hour old on its first pass.
+    ClearUnready
 }
 if (-not `$dockerExe) { Say 'no docker CLI on this host -- skipping the engine check' }
 
