@@ -57,7 +57,10 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
      * everywhere for weeks, and concluded the update had not worked. */
     const skew = watcherBuildSkew(sync);
     if (skew !== undefined) {
-        return `OLD BUILD RUNNING (${skew.running}, ${skew.installed} installed) · ${halves.join(" · ")}`;
+        // A loop too old to stamp its own build names only what it is behind: the tray has one line, and
+        // "OLD BUILD RUNNING" plus the version that should be serving is the whole of what fits and matters.
+        const which = skew.running === undefined ? `${skew.installed} installed` : `${skew.running}, ${skew.installed} installed`;
+        return `OLD BUILD RUNNING (${which}) · ${halves.join(" · ")}`;
     }
     return halves.join(" · ");
 };
@@ -156,9 +159,17 @@ export const watcherLine = (watcher: MachineReport["watcher"], now: number): str
  * printed while everything watcherLine talks about is working. */
 export const buildSkewLine = (report: MachineReport): string | undefined => {
     const skew = watcherBuildSkew(report);
-    return skew === undefined
-        ? undefined
-        : `Agent: running ${skew.running}, but ${skew.installed} is installed on this machine — the loop keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
+    if (skew === undefined) {
+        return undefined;
+    }
+    /* A loop that predates the build stamp cannot name itself, and that is the FURTHEST-behind case rather than
+     * an unknown one: it is serving, something newer is installed beside it, and it is old enough not to have
+     * carried the field. The remedy is identical either way, so only the first clause differs. */
+    const which =
+        skew.running === undefined
+            ? `Agent: running a build older than the ${skew.installed} installed on this machine (too old to report its own version)`
+            : `Agent: running ${skew.running}, but ${skew.installed} is installed on this machine`;
+    return `${which} — the loop keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
 };
 
 const printReport = (report: MachineReport, out: (message: string) => void): void => {

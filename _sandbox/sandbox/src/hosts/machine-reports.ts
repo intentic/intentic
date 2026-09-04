@@ -287,7 +287,48 @@ export const mergeComputers = (
         };
     });
 
-    for (const { host, result } of hosts) {
+    /* WHICH ROW A COMPUTER IS, and there are two ways to know it, of very different strengths.
+     *
+     * A machine that ANSWERED states its own hostname, and that is the strong one: it is the single fact both
+     * doors can produce about the same box, and the whole reason the reconciliation above is safe.
+     *
+     * A machine that did NOT answer states nothing at all — and a laptop with its lid shut is the ordinary case
+     * here, not an edge one. Left unjoined it forked into a second row for a computer already on screen: same
+     * name, no report, nothing to show. The two then disagreed about one box, and each way of disagreeing was a
+     * bug somebody hit. The sync row, seeing no computer door, offered "Connect this computer" for a computer
+     * that is connected and merely asleep. Both rows carried the same `key`, because an enrollment is keyed by
+     * the machine's hostname and a host row by its capability id, and those are routinely the same string —
+     * which is a duplicate list key in every view that renders them.
+     *
+     * So a host with no report joins on the one thing left: its capability id BEING the enrolled machine's own
+     * name. That is weaker than a hostname and it is deliberately not the guess the note above warns off. The
+     * hazard there is two DIFFERENT machines colliding on a name neither side chose; this is two names the owner
+     * chose for the same box, typed identically, landing on a row that is about to say the computer is asleep
+     * and offer nothing.
+     *
+     * IT ALSO NEVER OUTRANKS EVIDENCE, which is why the hosts are walked in two passes rather than in the order
+     * the capability list happens to be in. A machine that answered gets first refusal on every row; only then
+     * do the silent ones claim what is left. Without that ordering an ASLEEP computer named like the enrollment
+     * takes the row, and the machine that is awake and can actually see the container — the WSL distro inside
+     * that same laptop, connected under its own id — is pushed to a row of its own with all the buttons on it,
+     * beside the row that has all the folders. Neither rule may ever steal an occupied row: one host per row,
+     * so two hosts can no longer overwrite each other's identity, which a Windows machine and the WSL distro
+     * inside it, sharing a hostname, otherwise do. */
+    const claim = (report: MachineReport | undefined, id: string): Computer | undefined =>
+        report === undefined
+            ? rows.find((row) => row.hostId === undefined && row.label.toLowerCase() === id.toLowerCase())
+            : rows.find((row) => row.hostId === undefined && row.key === report.hostname);
+
+    /* ONE KEY, ONE ROW, as an invariant rather than as something that happens to hold. Two rows sharing a key is
+     * a rendering fault wherever this list is drawn, and the capability id is unique by construction, so it is
+     * always available to tell two rows about different computers apart. */
+    const taken = new Set(rows.map((row) => row.key));
+    const distinct = (preferred: string, id: string): string =>
+        [preferred, id, `${preferred}:${id}`].find((candidate) => !taken.has(candidate)) ?? `${preferred}:${id}:${rows.length}`;
+
+    const answered = hosts.filter((entry) => "report" in entry.result);
+    const silent = hosts.filter((entry) => !("report" in entry.result));
+    for (const { host, result } of [...answered, ...silent]) {
         const report = "report" in result ? result.report : undefined;
         // Everything this side knows about the machine itself, as opposed to what it is doing for this sandbox.
         const platform = platformOf(host.platform, report);
@@ -299,15 +340,27 @@ export const mergeComputers = (
             ...(host.version === undefined ? {} : { hostAgent: host.version }),
             ...(host.lastSeen === undefined ? {} : { lastSeen: host.lastSeen }),
         };
-        const existing = report === undefined ? undefined : rows.find((row) => row.key === report.hostname);
+        const existing = claim(report, host.id);
         if (existing !== undefined) {
-            // The same box through both doors. The pulled report wins because it alone carries the containers;
-            // the sync-enrolled label stays because it is the name this sandbox has always shown for the machine.
-            Object.assign(existing, { ...identity, report });
+            /* The same box through both doors. The pulled report wins because it alone carries the containers;
+             * the sync-enrolled label stays because it is the name this sandbox has always shown for the machine.
+             *
+             * A door that is SHUT adds no report and takes none away: the row keeps whatever its sync agent
+             * volunteered, and `online: false` is what says the computer half is unreachable. The gap goes only
+             * onto a row with nothing else to show — "asleep or offline" printed over a live agent's folders and
+             * ports is the page contradicting itself, and the row says the useful half of it (no buttons, and
+             * why) from the computer door's own state instead (manageBlock). */
+            Object.assign(existing, {
+                ...identity,
+                ...(report === undefined ? {} : { report }),
+                ...(report === undefined && existing.report === undefined ? { gap: "gap" in result ? result.gap : "offline" } : {}),
+            });
             continue;
         }
+        const key = distinct(report?.hostname ?? host.id, host.id);
+        taken.add(key);
         rows.push({
-            key: report?.hostname ?? host.id,
+            key,
             label: host.id,
             ...identity,
             ...(report === undefined ? { gap: "gap" in result ? result.gap : "offline" } : { report }),

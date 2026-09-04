@@ -54,7 +54,9 @@ export interface MachineWatcherState {
      * be updated and go on serving a months-old loop with nothing on any screen to say so. Decided by the CALLER
      * (watcherBuildSkew in the sandbox contract), for the same reason `stalled` is: the rule belongs beside the
      * field it judges so the terminal and the browser cannot disagree about one machine. */
-    staleBuild?: { readonly running: string; readonly installed: string } | undefined;
+    /* `running` is optional inside it because the worst case cannot state itself: a loop old enough to predate
+     * the build stamp reports no build at all, and it is running, with something newer installed beside it. */
+    staleBuild?: { readonly running: string | undefined; readonly installed: string } | undefined;
 }
 
 /* One sandbox CONTAINER on the machine, the docker half of the same sandbox the two lists above describe. */

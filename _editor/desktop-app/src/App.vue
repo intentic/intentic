@@ -343,7 +343,12 @@ const machineWatcher = computed<MachineWatcherState | undefined>(() => {
     }
     const runningBuild = watcher.build;
     const installed = status.value?.sync.agents.sync;
-    if (!watcher.running || runningBuild === undefined || installed === undefined || runningBuild === installed) {
+    /* An UNSTAMPED running build is the loudest case, not a missing one: the loop stamps its build into the
+     * pidfile, so one that reports none predates the stamp and is therefore older than whatever is installed
+     * beside it. Only two things withhold the sentence — a loop that is not running (said in louder words a
+     * line above) and a working-tree agent, `0.0.0` here as it is in the contract this app mirrors, which is
+     * not a version and must never be told it is behind. */
+    if (!watcher.running || installed === undefined || installed === `0.0.0` || runningBuild === installed) {
         return watcher;
     }
     return { ...watcher, staleBuild: { running: runningBuild, installed } };

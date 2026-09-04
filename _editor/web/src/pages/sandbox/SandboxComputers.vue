@@ -239,7 +239,9 @@ interface ComputerRow {
      *  reported. Derived HERE rather than in the template, where `{ ...watcher, stalled }` was a fresh object
      *  every render and re-rendered the whole of <MachineDetail> beneath it for a fact that changes about once
      *  a minute. */
-    readonly watcher: (MachineWatcher & { readonly stalled: boolean; readonly staleBuild?: { running: string; installed: string } }) | undefined;
+    readonly watcher:
+        | (MachineWatcher & { readonly stalled: boolean; readonly staleBuild?: { running: string | undefined; installed: string } })
+        | undefined;
 }
 
 /* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
@@ -387,10 +389,23 @@ const blockOf = (computer: Computer): ManageBlock | undefined => blocks.value.ge
  * perfectly well is exactly the row this reaches. */
 const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
     connect: `Desktop sync carries folders and ports, never containers, so its sandboxes can't be started, updated or removed from here. Connect it as a computer for the same buttons the desktop app's own window has.`,
+    /* THE SENTENCE THIS PAGE WAS MISSING. Every button below hangs on a socket this computer opens outbound, and
+     * a machine can be syncing files flawlessly with that socket down: the sync half and the computer half are
+     * two doors, and only one of them is open here. It names the command rather than offering a control, like
+     * the agent-behind line above it, because the remedy is on that computer and nothing here can press it. */
+    offline: `This computer is connected but isn't reachable right now — asleep, off the network, or its agent isn't running — so its sandboxes can't be started, updated or removed from here.`,
     "sandboxes-off": `Turn on "Manage sandboxes on this computer" in this computer's capability card to use the buttons below.`,
     "remove-off": `Removing a sandbox needs "Remove sandboxes from this computer" on this computer's capability card. Everything else below already works.`,
 };
-const BLOCK_ACTION: Record<ManageBlock[`kind`], string> = {
+/* THE REMEDY THAT IS A COMMAND RATHER THAN A CONTROL, split out so it can be SET IN MONO like every other
+ * command this view names. Inside the sentence above it was prose, and a bare `intentic-machine run` in the
+ * middle of a grey paragraph is the one thing on this row nobody would recognise as something to type — while
+ * the line directly above it renders the same shape of instruction in the app's own command ink. */
+const BLOCK_COMMAND: Partial<Record<ManageBlock[`kind`], string>> = { offline: `intentic-machine run` };
+// Only the kinds a click can actually close. An offline computer has no button here on purpose: its fix is a
+// command on that machine, and a control pointing at a capability card would send the reader to the one place
+// that cannot help.
+const BLOCK_ACTION: Partial<Record<ManageBlock[`kind`], string>> = {
     connect: `Connect this computer`,
     "sandboxes-off": `Open its permissions`,
     "remove-off": `Open its permissions`,
@@ -419,6 +434,11 @@ const blockText = (computer: Computer): string | undefined => {
 const blockAction = (computer: Computer): string | undefined => {
     const block = blockOf(computer);
     return block === undefined || blockTarget(block) === undefined ? undefined : BLOCK_ACTION[block.kind];
+};
+// The command to type on that computer, where the fix is one rather than a click.
+const blockCommand = (computer: Computer): string | undefined => {
+    const block = blockOf(computer);
+    return block === undefined ? undefined : BLOCK_COMMAND[block.kind];
 };
 // Only ever read where `blockAction` already said there is somewhere to go, so the fallback is unreachable:
 // it exists because a template cannot narrow one call's result against another's.
@@ -1045,7 +1065,16 @@ const runRevoke = async (): Promise<void> => {
                              ink, because none of these is a fault: a machine syncing files perfectly is the row
                              this reaches most often, and the desktop app has managed its containers all along. -->
                             <div v-if="blockText(row.computer)" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <p class="min-w-0 text-xs text-muted">{{ blockText(row.computer) }}</p>
+                                <p class="min-w-0 text-xs text-muted">
+                                    {{ blockText(row.computer) }}
+                                    <!-- Set in the same command ink as the upgrade line above, and kept on one
+                                         line: a command broken across a wrap is a command nobody can copy by
+                                         eye, which is the only way this one is going to be read. -->
+                                    <template v-if="blockCommand(row.computer)">
+                                        Run <span class="font-mono whitespace-nowrap text-content">{{ blockCommand(row.computer) }}</span> on that
+                                        computer.
+                                    </template>
+                                </p>
                                 <!-- The fix has an address, so this is a link wearing the button's clothes: hovering
                                  it says where it goes, and Ctrl/⌘-click opens the card without losing the list
                                  of machines it was read from. -->

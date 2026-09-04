@@ -213,6 +213,24 @@ test(`stays quiet about permissions on a computer that cannot be reached`, () =>
     expect(manageBlock(computer({ hostId: `my-pc`, online: true, gap: `no-agent` }), undefined)).toBeUndefined();
 });
 
+/* THE STATE THIS BLOCK HAD NO WORDS FOR, and the one a reader is most likely to be standing in.
+ *
+ * A machine reaches this page through two independent doors, and the sync one being wide open says nothing at
+ * all about the other. So a computer syncing files perfectly — folders, ports, a green badge, a live agent — can
+ * have its computer socket down, and every verb on the row needs that socket. The row drew no buttons and gave
+ * no reason: `online` is a fact this page reads and never printed, which leaves a reader to conclude the buttons
+ * were never built rather than that their laptop is asleep. */
+test(`says why a connected computer that is asleep has no buttons`, () => {
+    expect(manageBlock(reported({ hostId: `my-pc`, online: false, platform: `linux` }), { platform: `linux`, sandboxes: `on` })).toEqual({
+        kind: `offline`,
+        connection: `my-pc`,
+        card: `linux`,
+    });
+    // Never twice: a row with no report of its own already renders "Asleep or offline." from its gap, a few
+    // pixels above, and the same sentence in two voices reads as a page that lost its place.
+    expect(manageBlock(computer({ hostId: `my-pc`, online: false, gap: `offline` }), undefined)).toBeUndefined();
+});
+
 /* --- WHAT A COMPUTER'S ENROLLMENT SAYS ---------------------------------------------------------------------
  *
  * These moved here with the fact they judge. The staleness rule used to live in the Desktop sync card, where it

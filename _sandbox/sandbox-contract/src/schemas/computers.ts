@@ -1,6 +1,8 @@
 // computers: what ONE of the user's own machines is running
 import { z } from "zod";
 import { HostFactsSchema } from "./hosts.js";
+// The one sentinel every non-release build carries, so a locally compiled agent is never told it is behind.
+import { DEV_VERSION } from "../versions.js";
 /* The other end of desktop sync, stated as a fact instead of a claim.
  *
  * Everything here already existed, as the machine agent's printed status on a terminal nobody running the desktop app
@@ -306,14 +308,21 @@ export type MachineReport = z.infer<typeof MachineReportSchema>;
  * status`) and the browser (the Computers row) both answer this question, and a machine that is behind in one and
  * fine in the other is worse than either answer alone. The remedy is the same in both: restart the loop.
  *
- * Silent whenever either half is unknown, which covers a loop that is stopped (nothing is serving, and the row
- * already says so in louder words), an agent too old to stamp its build, and a machine with no installed agent to
- * compare against — none of which is a skew, and each of which would otherwise nag about a difference nobody can
- * act on. */
-export const watcherBuildSkew = (report: MachineReport): { readonly running: string; readonly installed: string } | undefined => {
+ * AN UNSTAMPED LOOP IS THE LOUDEST CASE, not a missing one, and reading it as "nothing to say" is what let this
+ * whole check miss the machines it was written for. `watcher.build` is stamped into the pidfile by the loop that
+ * claimed it, so a loop old enough to predate the stamp reports none — and it is running, and something newer is
+ * installed beside it, which is a skew by definition and a wider one than any it could have named. Every surface
+ * therefore went quiet on precisely the machines furthest behind: upgrade, see the new number everywhere, watch
+ * nothing change, and have no screen anywhere say why.
+ *
+ * So the running build is OPTIONAL in the answer and the question is asked of the installed one. Still silent
+ * whenever the honest answer is "no idea": a loop that is stopped (nothing is serving, and every surface already
+ * says so in louder words), a machine with no installed agent to compare against, and a working-tree build, which
+ * is not a version and must not be told it is behind. */
+export const watcherBuildSkew = (report: MachineReport): { readonly running: string | undefined; readonly installed: string } | undefined => {
     const running = report.watcher.build;
     const installed = report.agents.sync;
-    if (!report.watcher.running || running === undefined || installed === undefined || running === installed) {
+    if (!report.watcher.running || installed === undefined || installed === DEV_VERSION || running === installed) {
         return undefined;
     }
     return { running, installed };

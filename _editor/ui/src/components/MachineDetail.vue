@@ -243,9 +243,21 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                          on the same line as the version people read off this block, because "I updated the agent
                          and the number never moved" is where this ends up otherwise. -->
                     <span v-if="watcher.staleBuild !== undefined" class="text-xs text-warning">
-                        on <span class="font-mono">{{ watcher.staleBuild.running }}</span>, while
-                        <span class="font-mono">{{ watcher.staleBuild.installed }}</span> is installed here — it keeps the build it started with, so
-                        restart it with <span class="font-mono">intentic-machine run --stop</span> then <span class="font-mono">intentic-machine run</span>
+                        <template v-if="watcher.staleBuild.running">
+                            on <span class="font-mono">{{ watcher.staleBuild.running }}</span>, while
+                            <span class="font-mono">{{ watcher.staleBuild.installed }}</span> is installed here
+                        </template>
+                        <!-- The loop is too old to say which build it is, which is not a gap in the answer: it
+                             is the answer, and the furthest-behind a machine gets. -->
+                        <template v-else>
+                            on a build older than the <span class="font-mono">{{ watcher.staleBuild.installed }}</span> installed here
+                        </template>
+                        <!-- The two commands stay whole across a wrap. This sentence is long enough to break
+                             on any real width, and it broke mid-command ("intentic-" / "machine run"), which is
+                             the one part of it a reader has to retype. -->
+                        — it keeps the build it started with, so restart it with
+                        <span class="font-mono whitespace-nowrap">intentic-machine run --stop</span> then
+                        <span class="font-mono whitespace-nowrap">intentic-machine run</span>
                     </span>
                 </template>
                 <template v-else>

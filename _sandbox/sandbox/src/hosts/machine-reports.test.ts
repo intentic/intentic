@@ -144,6 +144,59 @@ test("folds a sync enrollment and a host capability into one row when the hostna
     expect(merged[0]?.report?.sandboxes).toHaveLength(1);
 });
 
+/* A LAPTOP WITH ITS LID SHUT IS THE ORDINARY CASE HERE, not an edge one, and it used to fork into a SECOND row
+ * for a computer already on screen: same name, no report, nothing to show. The two rows then disagreed about one
+ * box — the sync row, seeing no computer door, offered "Connect this computer" for a computer that is connected
+ * and merely asleep — and both carried the same `key`, which is a duplicate list key wherever they are drawn. */
+test("joins an offline computer to the machine it is already syncing", () => {
+    const merged = mergeComputers(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
+        [{ host: host("radarsu-rog", { online: false, platform: "windows" }), result: { gap: "offline" } }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ key: "radarsu-rog", label: "radarsu-rog", hostId: "radarsu-rog", online: false, platform: "windows" });
+    // The volunteered report survives: a shut computer door does not stop files syncing, and a row that dropped
+    // its folders and ports would be reporting an outage that is not happening.
+    expect(merged[0]?.report?.hostname).toBe("radarsu-rog");
+    // And the row is NOT marked offline, because the machine plainly is not — only its computer half is. That
+    // distinction is what the row reads to say "no buttons, and here is why" over a live agent's own facts.
+    expect(merged[0]?.gap).toBeUndefined();
+});
+
+/* EVIDENCE OUTRANKS A NAME, whatever order the capability list is in. One laptop can hold two computer
+ * connections — Windows, and the WSL distro inside it under its own id — and only one of them is awake and can
+ * see the container. If the sleeping one takes the row because its id matches the enrollment, the machine that
+ * can actually manage the sandbox lands on a row of its own: all the buttons over there, all the folders here. */
+test("lets the computer that answered take the row before one that only shares its name", () => {
+    const merged = mergeComputers(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
+        [
+            { host: host("radarsu-rog", { online: false, platform: "windows" }), result: { gap: "offline" } },
+            { host: host("radarsu-rog-wsl"), result: { report: report("radarsu-rog") } },
+        ],
+    );
+    expect(merged.find((row) => row.sync !== undefined)).toMatchObject({ hostId: "radarsu-rog-wsl", online: true });
+    // The sleeping one still gets its row; it simply does not get THAT one.
+    expect(merged.map((row) => row.hostId).toSorted()).toEqual(["radarsu-rog", "radarsu-rog-wsl"]);
+});
+
+/* TWO CAPABILITY IDS, ONE HOSTNAME: a Windows machine and the WSL distro inside it genuinely report the same
+ * one. The first join wins the row; the second must not overwrite its identity, and must not take its key. */
+test("keeps two computers apart when they report one hostname", () => {
+    const merged = mergeComputers(
+        [],
+        [],
+        [
+            { host: host("win"), result: { report: report("radarsu-rog") } },
+            { host: host("wsl"), result: { report: report("radarsu-rog") } },
+        ],
+    );
+    expect(merged.map((row) => row.hostId)).toEqual(["win", "wsl"]);
+    expect(new Set(merged.map((row) => row.key)).size).toBe(2);
+});
+
 // The failure this conservatism exists to prevent: two collaborators' laptops on one shared sandbox must never
 // become one row just because both are reachable.
 test("keeps two machines apart when nothing says they are the same box", () => {

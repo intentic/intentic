@@ -245,6 +245,13 @@ export const hostCard = (platform: string | undefined): string | undefined => (p
 export type ManageBlock =
     // No computer connection at all, the row can never show a container until one exists.
     | { readonly kind: `connect`; readonly card?: string | undefined }
+    /* Connected as a computer, and that computer is not holding a socket right now: asleep, off the network, or
+     * its agent is not running. The row this reaches is the one that gave this whole area away — a machine
+     * syncing files perfectly, its folders and ports and sandboxes all listed, its badge green, and not one
+     * button anywhere, because every verb needs the computer door and that door is shut. It said nothing at all
+     * about it: `online` is a fact this page reads and never printed, so the reader was left to conclude the
+     * buttons had not been built. */
+    | { readonly kind: `offline`; readonly connection: string; readonly card?: string | undefined }
     // Connected, but "Manage sandboxes on this computer" is off, so every verb here would be refused.
     | { readonly kind: `sandboxes-off`; readonly connection: string; readonly card?: string | undefined }
     // Everything works except the one that cannot be undone, which has a switch of its own.
@@ -274,14 +281,22 @@ export const manageBlock = (computer: Computer, scopes: ComputerScopes | undefin
         const card = hostCard(computer.platform);
         return { kind: `connect`, ...(card === undefined ? {} : { card }) };
     }
-    /* A machine that is asleep, or that would not answer, already says so in its own line. Repeating "and also
-     * your switches" under it would be advice about a computer nobody can reach, and the switches may well be
-     * on, since a gap is the reason nothing could be read to find out. */
-    if (computer.online !== true || computer.gap !== undefined) {
-        return undefined;
-    }
     const card = cardOf(computer, scopes);
     const link = { connection: computer.hostId, ...(card === undefined ? {} : { card }) };
+    /* THE DOOR IS THERE AND SHUT, which is the state this block had no words for, and the one a reader is most
+     * likely to be standing in: a machine reaches this page through two independent doors, and the sync one
+     * being wide open says nothing at all about the other. Only where the row is not ALREADY saying it — a row
+     * with no report of its own renders `gap: offline` ("Asleep or offline.") a few pixels above, and the same
+     * sentence twice reads as a page that lost its place. */
+    if (computer.online !== true) {
+        return computer.gap === undefined ? { kind: `offline`, ...link } : undefined;
+    }
+    /* A machine that would not answer already says so in its own line. Repeating "and also your switches" under
+     * it would be advice about a computer nobody can reach, and the switches may well be on, since a gap is the
+     * reason nothing could be read to find out. */
+    if (computer.gap !== undefined) {
+        return undefined;
+    }
     if (scopes?.[`sandboxes`] !== `on`) {
         return { kind: `sandboxes-off`, ...link };
     }

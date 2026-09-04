@@ -1,4 +1,4 @@
-import { type MachinePairing, type MachineReport, WATCHER_STALL_AFTER_MS } from "@intentic/sandbox-contract";
+import { DEV_VERSION, type MachinePairing, type MachineReport, WATCHER_STALL_AFTER_MS } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildSkewLine, pairingLine, statusSummary, watcherLine } from "../status.js";
 import { enrollKey, selectPairings } from "./commands.js";
@@ -262,12 +262,25 @@ describe("buildSkewLine and the status summary", () => {
         expect(buildSkewLine(report({ ...serving, build: "1.240.0" }, "1.240.0"))).toBeUndefined();
     });
 
-    /* Silence on every kind of not-knowing, which is the same rule the version chip follows: an agent too old to
-     * stamp its build, and a machine with no installed agent to compare against, are not skews, and a nag nobody
-     * can act on is worse than the fact being absent. */
-    it("says nothing when either build is unknown", () => {
-        expect(buildSkewLine(report({ running: true, pid: 4242 }, "1.240.0"))).toBeUndefined();
+    /* AN UNSTAMPED LOOP IS THE LOUDEST CASE, not a missing one, and reading it as "nothing to say" is what let
+     * this check go quiet on the machines it was written for. The loop stamps its build into the pidfile it
+     * claims, so one reporting none predates the stamp: it is serving, something newer is installed beside it,
+     * and it is further behind than any build it could have named. */
+    it("names the machines too far behind to say which build they are on", () => {
+        const unstamped = report({ running: true, pid: 4242 }, "1.240.0");
+        const line = buildSkewLine(unstamped);
+        expect(line).toContain("1.240.0");
+        expect(line).toContain("intentic-machine run --stop");
+        expect(statusSummary(4242, 0, unstamped, NOW)).toContain("OLD BUILD RUNNING");
+    });
+
+    /* Silence is kept for the two kinds of genuinely not knowing, the same rule the version chip follows: a
+     * machine with no installed agent to compare against, and a working-tree build, which is not a version at
+     * all — a developer running the agent they just compiled is behind nothing, and a nag nobody can satisfy is
+     * worse than the fact being absent. */
+    it("says nothing when there is no release to be behind", () => {
         expect(buildSkewLine(report(serving, undefined))).toBeUndefined();
+        expect(buildSkewLine(report({ running: true, pid: 4242 }, DEV_VERSION))).toBeUndefined();
     });
 
     // A stopped loop is not serving an old build, it is not serving anything, and the line above it says so in
