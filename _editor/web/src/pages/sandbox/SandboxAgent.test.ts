@@ -149,6 +149,11 @@ it(`opens the safety category with the gate rules alone`, async () => {
     expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Recent decisions`, `Child agents`]);
 });
 
+it(`opens the safety category when security=safety is in the query`, async () => {
+    const { el } = await mount({ security: `safety` });
+    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Recent decisions`, `Child agents`]);
+});
+
 // The composer's connect gate wins over whatever the address last remembered: it is a request to sign an account
 // in, and the group that does that is Accounts.
 it(`shows accounts for a sign-in link even while another category is named`, async () => {

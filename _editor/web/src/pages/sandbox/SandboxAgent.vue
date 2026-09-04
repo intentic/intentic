@@ -76,7 +76,7 @@ const section = computed<Section>({
         if (typeof route.query[`connect`] === `string`) {
             return `accounts`;
         }
-        const asked = route.query[`section`];
+        const asked = route.query[`section`] ?? (route.query[`security`] === `safety` ? `safety` : undefined);
         return SECTIONS.find((entry) => entry.value === asked)?.value ?? DEFAULT;
     },
     // Pushed, not replaced: these are destinations like the hub's own sections, so Back should return to the
