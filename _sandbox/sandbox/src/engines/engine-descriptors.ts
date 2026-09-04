@@ -285,9 +285,13 @@ const opencodeDescriptor: EngineDescriptor = {
     },
 };
 
-// CLIProxyAPI names its assets by version and by the kernel's own architecture word, which is not Debian's:
-// the pack translates arm64 → aarch64 and this has to make the same translation or the download 404s.
-const releaseArch = (): string => (arch() === "arm64" ? "aarch64" : arch() === "x64" ? "x86_64" : arch());
+/* THE ARCHITECTURE WORD IN A CLIPROXYAPI ASSET NAME, which is upstream's own vocabulary and matches neither
+ * Node's nor Debian's throughout: the arm build is `aarch64` where dpkg says `arm64`, and the x86 build is
+ * `amd64` where the kernel says `x86_64`. Only the exact pair upstream publishes downloads; anything else 404s,
+ * and a 404 here is the whole update path for this engine failing on every x64 sandbox. So the two tokens are
+ * transcribed from the release's asset list, which is also where packs/translator.Dockerfile's `case` gets its
+ * half of the same mapping — the pack starts from `dpkg --print-architecture`, so it only has arm to translate. */
+export const releaseArch = (nodeArch: string = arch()): string => (nodeArch === "arm64" ? "aarch64" : nodeArch === "x64" ? "amd64" : nodeArch);
 
 const translatorDescriptor: EngineDescriptor = {
     id: "translator",

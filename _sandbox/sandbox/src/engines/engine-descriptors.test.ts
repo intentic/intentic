@@ -1,6 +1,6 @@
 import { ENGINE_IDS } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
+import { ENGINE_DESCRIPTORS, engineDescriptor, releaseArch } from "./engine-descriptors.js";
 
 /* THE TABLE HAS TO BE TOTAL, and the floors in it have to be the versions the image really carries. Both are
  * guarded by DISCOVERY rather than by a second list: an engine added to the contract and forgotten here would
@@ -34,6 +34,25 @@ test("a Claude floor in the package's own numbers compares as versions", () => {
     expect(claude.satisfiesFloor?.("0.3.257", "0.3.251")).toBe(true);
     expect(claude.satisfiesFloor?.("0.3.251", "0.3.251")).toBe(true);
     expect(claude.satisfiesFloor?.("0.3.240", "0.3.251")).toBe(false);
+});
+
+/* THE ARCHITECTURE WORD IN THE TRANSLATOR'S ASSET NAME IS THE WHOLE DOWNLOAD. CLIProxyAPI publishes
+ * `linux_amd64` and `linux_aarch64`; the kernel's `x86_64` names no file it has ever released, so asking for one
+ * is a 404 — the store install for this engine dead on every x64 sandbox, while the image's copy keeps serving
+ * turns and hides it. That is what shipped, and it was visible only to an owner who pressed Update and read the
+ * failure on the card. BOTH tokens are pinned, not just the running machine's: CI and an arm laptop each
+ * exercise one branch, so a suite that only checked its own would keep the other free to rot. */
+test("the translator asks for the architecture word upstream publishes, not the kernel's", () => {
+    expect(releaseArch("x64")).toBe("amd64");
+    expect(releaseArch("arm64")).toBe("aarch64");
+});
+
+// The rest of the name, pinned against the release's own asset list: upstream's prefix, its `linux_` platform
+// word, its extension. Only the version varies, and the token above is the part that varies by machine.
+test("the translator's asset is the file its release carries", () => {
+    const { source } = engineDescriptor("translator");
+    const asset = source.kind === "github-release" ? source.asset("7.2.140") : undefined;
+    expect(asset).toBe(`CLIProxyAPI_7.2.140_linux_${releaseArch()}.tar.gz`);
 });
 
 // Only the engine loaded IN this process has two vocabularies to reconcile; the rest are what they are called.
