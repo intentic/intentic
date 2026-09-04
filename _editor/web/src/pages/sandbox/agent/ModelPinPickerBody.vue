@@ -195,10 +195,13 @@ const unpickable = (entry: PickerEntry): boolean =>
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Reasoning effort</span>
                     <span class="flex shrink-0 items-center gap-1.5">
                         <EffortMeter :efforts="efforts" :effort="effort" empty-label="Default" @pick="configure({ effort: $event })" />
+                        <!-- It keeps its slot at "Default" rather than unmounting, so picking a rung never
+                             re-lays-out the row and slides the ladder out from under the cursor. -->
                         <button
-                            v-if="effort !== ``"
                             type="button"
-                            :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`)"
+                            :aria-hidden="effort === `` ? `true` : undefined"
+                            :tabindex="effort === `` ? -1 : undefined"
+                            :class="[ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`), effort === `` ? `pointer-events-none invisible` : ``]"
                             v-tooltip.top="`Take this model's own default effort`"
                             aria-label="Take this model's own default effort"
                             @click="configure({ effort: undefined })"

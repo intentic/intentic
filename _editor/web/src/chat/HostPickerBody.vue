@@ -116,10 +116,14 @@ const choose = (entry: PickerEntry): void => {
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Reasoning effort</span>
                     <span class="flex shrink-0 items-center gap-1.5">
                         <EffortMeter :efforts="efforts" :effort="effort" empty-label="Default" @pick="stageModelPick({ effort: $event })" />
+                        <!-- The × KEEPS ITS SLOT at "Default" instead of unmounting: it is the last thing on a
+                             right-aligned row, so appearing on the first pick used to shove the ladder sideways
+                             out from under the cursor that had just clicked it. Hidden, it is inert and unseen. -->
                         <button
-                            v-if="effort !== ``"
                             type="button"
-                            :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`)"
+                            :aria-hidden="effort === `` ? `true` : undefined"
+                            :tabindex="effort === `` ? -1 : undefined"
+                            :class="[ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`), effort === `` ? `pointer-events-none invisible` : ``]"
                             v-tooltip.top="`Take this model's own default effort`"
                             aria-label="Take this model's own default effort"
                             @click="stageModelPick({ effort: undefined })"

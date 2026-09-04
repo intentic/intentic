@@ -150,7 +150,9 @@ test("thinking keeps its three stops apart: absent sends nothing, off sends off"
 test("the top tier follows the entry's own thinking: only switching it off takes Max away", async () => {
     catalog.value = { claude: [{ value: `claude-opus-5`, label: `Claude Opus 5`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }] };
     const rungs = (host: HTMLElement): string[] =>
-        [...(row(host, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button[aria-label]`) ?? [])].map(
+        // The rungs are the meter's own segments: the row also holds the reset ×, which keeps its slot (hidden)
+        // even at Default so that picking a tier never re-lays-out the row under the cursor.
+        [...(row(host, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button.composer-effort-seg`) ?? [])].map(
             (button) => button.getAttribute(`aria-label`) ?? ``,
         );
 
@@ -173,7 +175,7 @@ test("an entry on a provider that published no scale gets a floor with no Max in
     await nextTick();
 
     expect(
-        [...(row(host, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button[aria-label]`) ?? [])].map((button) =>
+        [...(row(host, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button.composer-effort-seg`) ?? [])].map((button) =>
             button.getAttribute(`aria-label`),
         ),
     ).toEqual([`Low`, `Medium`, `High`, `X-High`]);

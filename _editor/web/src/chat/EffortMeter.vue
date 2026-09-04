@@ -52,6 +52,13 @@ const {
 
 const effortIndex = computed(() => efforts.findIndex((option) => option.value === effort));
 const effortLabel = computed(() => efforts.find((option) => option.value === effort)?.label ?? (effort === `` ? emptyLabel : effort));
+/**
+ * Every word the label can ever read on this scale, stacked invisibly under the live one so the label box is as
+ * wide as its WIDEST rung and never resizes. The meter sits at the right edge of a row (the picker's effort line,
+ * the composer), so a label that grows from "High" to "X-High" used to push the ladder sideways — out from under
+ * the cursor that had just clicked it, mid-click-through. The box is fixed, so the rungs hold still.
+ */
+const labelWidths = computed(() => [...new Set([...efforts.map((option) => option.label), ...(emptyLabel === `` ? [] : [emptyLabel])])]);
 const effortFill = (index: number): string => {
     const top = Math.max(1, efforts.length - 1);
     const pct = 50 + (index / top) * 45; // Low ≈ 50% brand → top level ≈ 95% brand
@@ -90,7 +97,14 @@ const pick = (value: string): void => {
                         :style="index <= effortIndex ? { backgroundColor: effortFill(index) } : undefined"
                     ></span>
                 </span>
-                <span class="text-2xs text-subtle" :class="labelClass">{{ effortLabel }}</span>
+                <!-- The outer span keeps the caller's own display (labelClass hides the word in a narrow
+                     composer); the grid that reserves the widest rung's width lives one level in. -->
+                <span class="text-2xs text-subtle" :class="labelClass">
+                    <span class="grid">
+                        <span v-for="word in labelWidths" :key="word" class="invisible col-start-1 row-start-1 whitespace-nowrap" aria-hidden="true">{{ word }}</span>
+                        <span class="col-start-1 row-start-1 whitespace-nowrap">{{ effortLabel }}</span>
+                    </span>
+                </span>
             </button>
             <ResponsiveOverlay v-model="sheetOpen" :anchor="trigger ?? undefined" header="Reasoning effort" panel-class="w-56 p-1">
                 <div class="flex flex-col gap-0.5">
@@ -134,7 +148,10 @@ const pick = (value: string): void => {
                     :aria-pressed="effort === option.value"
                 ></button>
             </div>
-            <span class="text-2xs text-subtle" :class="labelClass">{{ effortLabel }}</span>
+            <span class="grid text-2xs text-subtle" :class="labelClass">
+                <span v-for="word in labelWidths" :key="word" class="invisible col-start-1 row-start-1 whitespace-nowrap" aria-hidden="true">{{ word }}</span>
+                <span class="col-start-1 row-start-1 whitespace-nowrap">{{ effortLabel }}</span>
+            </span>
         </template>
     </div>
 </template>
