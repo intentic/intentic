@@ -56,6 +56,14 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-08-15",
     },
     "/about/": aboutMeta,
+    /* The blog's index. Only the INDEX is here: a post's title and description live in its own frontmatter,
+     * next to the words they describe, and `blog/[slug].astro` passes them to the layout directly. This
+     * table is for pages whose copy has nowhere else to be. */
+    "/blog/": {
+        title: "The intentic blog",
+        description: "What we have worked out about running a fleet of coding agents, and what we got wrong on the way. Releases are on the changelog.",
+        datePublished: "2026-09-04",
+    },
     // The desktop app's download page. It is the answer to the objection the quickstart raises, so its
     // description leads with what the app removes rather than what it is built with.
     "/download/": {

@@ -1,0 +1,63 @@
+---
+import { blogHref, formatPostDate, posts } from "../../lib/posts";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* THE BLOG'S FRONT DOOR: every post, newest first, and nothing else.
+ *
+ * No tag filters, no pagination, no author bios, no "related posts" rail. Those are the furniture a blog
+ * grows when it has three hundred posts, and building them for the first three is building a shape the
+ * content has to grow into. When this list gets long enough to be hard to read, that is the day to paginate
+ * it, and the list itself will say so.
+ *
+ * WHY A BLOG AND NOT A NEWS FEED. The site already publishes news: /changelog/ carries every release in the
+ * words of the people it shipped for, straight from the published GitHub Releases. A second dated feed of
+ * "what happened" would compete with it and lose, because the changelog is generated and this would be
+ * written by hand. So this shelf is the other thing — the writing that is still true in a year, arguing
+ * something rather than announcing it — and it is what a post here has to earn its place by being. */
+
+const feedPath = "/blog/rss.xml";
+---
+
+<BaseLayout>
+    <Nav />
+    <main class="flex-1">
+        <section class="page-hero">
+            <div class="below-bar relative mx-auto w-full max-w-3xl px-6 pb-14">
+                <p class="eyebrow">Writing</p>
+                <h1 class="display mt-3">The intentic blog</h1>
+                <p class="mt-5 text-lg text-[var(--color-muted)]">
+                    What we have worked out about running a fleet of coding agents, and what we got wrong on the way. Releases live on the{" "}
+                    <a class="text-link hover:underline" href="/changelog/">changelog</a>.
+                </p>
+                <p class="mt-4 text-sm text-[var(--color-subtle)]">
+                    <a class="text-link hover:underline" href={feedPath}>Subscribe by RSS</a>
+                </p>
+            </div>
+        </section>
+
+        <section class="mx-auto w-full max-w-3xl px-6 pb-24">
+            {
+                posts.length === 0 ? (
+                    <p class="text-[var(--color-muted)]">Nothing published yet.</p>
+                ) : (
+                    <ol class="not-prose flex list-none flex-col gap-px border-t border-[var(--color-line)] p-0">
+                        {posts.map((post) => (
+                            <li class="border-b border-[var(--color-line)]">
+                                <a class="group block py-7 no-underline" href={blogHref(post.slug)}>
+                                    <time class="text-xs tracking-wide text-[var(--color-subtle)] uppercase" datetime={post.frontmatter.date}>
+                                        {formatPostDate(post.frontmatter.date)}
+                                    </time>
+                                    <h2 class="mt-2 text-2xl text-[var(--color-content)] group-hover:text-[var(--color-link)]">{post.frontmatter.title}</h2>
+                                    <p class="mt-2 text-[var(--color-muted)]">{post.frontmatter.description}</p>
+                                </a>
+                            </li>
+                        ))}
+                    </ol>
+                )
+            }
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>

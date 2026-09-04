@@ -43,6 +43,11 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
   id and an anchor. Derived rather than authored; see the file for why.
 - [src/pages/docs/search.json.ts](src/pages/docs/search.json.ts): the docs search index, section by section.
 - [src/lib/registry.ts](src/lib/registry.ts): the extension registry the marketplace pages read; the public gallery includes only exact sources carrying current deterministic-scan and agent-audit evidence.
+- [content/](content/): the two pieces of this site somebody edits without touching a page — `live.json`
+  (the notice strip and the download / create-workspace kill switches, live at the edge in about thirty
+  seconds, no deploy) and `posts/*.md` (the blog, built like every other page). Its README is the one to read
+  before changing either; [src/lib/live.ts](src/lib/live.ts) is why the first of them is layered the way it
+  is, and [src/lib/posts.ts](src/lib/posts.ts) is the post loader and its frontmatter contract.
 - [src/lib/changelog.ts](src/lib/changelog.ts): the published GitHub Releases `/changelog/` reads, and the
   parser for the "What's new" section `_tools/scripts/release/publish-github.sh` writes into each release body.
 - [src/lib/desktop-downloads.ts](src/lib/desktop-downloads.ts): the desktop builds, named once, so the download
@@ -68,6 +73,11 @@ This package is layout and routing; a wording change should not need to touch it
   app boots, so it has to be served from this site's own origin rather than linked to somewhere else.
 - The demo opens as its own full page, never in an overlay: an IDE wants the whole viewport, and every link to
   it on the site (nav, hero, product and compare CTAs) is a plain `<a>` to `/demo/`.
+- **The worker rewrites every HTML response**, from `content/live.json`. It only ever OVERRIDES what the
+  build already emitted: the notice strip is in the markup of every page with `hidden` on it, and the CTAs are
+  matched by what they are (`a.btn` pointing at the app, `a[data-download-cta]`) rather than by a `data-`
+  attribute somebody has to remember to add. A failed fetch or a malformed document leaves the page untouched.
+  Nothing is ever injected as HTML — see `withLiveContent` in [worker.ts](worker.ts).
 - **Some paths are the worker's, not Astro's**: `/desktop/*`, `/connect` and the other vanity routes are
   answered by `worker.ts`, which does not run under `astro dev`. `/desktop/*` is stood in for by a dev-only
   middleware reading the worker's own table, so download links work locally; the script routes are not, and a

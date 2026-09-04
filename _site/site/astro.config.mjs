@@ -15,6 +15,7 @@ import { defineConfig } from "astro/config";
 import { createReadStream, existsSync } from "node:fs";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 import { ogCard, ogFonts } from "./scripts/og-template.mjs";
+import { postPaths } from "./scripts/post-slugs.mjs";
 import { sourceFirstWorkspace } from "./scripts/source-first.mjs";
 
 // Absent when the Inter TTFs are not checked out; the OG integration is then left out entirely and BaseLayout
@@ -177,6 +178,12 @@ export default defineConfig({
                  * can quote without needing the rest of it. */
                 { label: "Guides", paths: [guidesHref(""), ...guidePages.map((page) => guidesHref(page.slug))] },
                 { label: "Compare", paths: [compareHref(""), ...comparePages.map((page) => compareHref(page.slug))] },
+                /* The blog, after Compare and before Docs. It is the only shelf here whose pages ARGUE
+                 * something rather than describing the product, which is what makes it worth naming: a
+                 * model asked "what do these people think about X" has somewhere specific to look, instead
+                 * of inferring an opinion from a feature page that does not hold one. Unlisted pages fall
+                 * into a "More" section on their own, so this is about the label, not about inclusion. */
+                { label: "Blog", paths: ["/blog/", ...postPaths()] },
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },
                 // The authoring book as its own section, not folded into Docs: an answer engine asked "how do I
                 // write an intentic extension" should be able to reach the eight pages that answer it without

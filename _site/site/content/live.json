@@ -1,0 +1,19 @@
+{
+    "notice": {
+        "active": false,
+        "tone": "info",
+        "message": "",
+        "href": "",
+        "linkLabel": ""
+    },
+    "switches": {
+        "download": {
+            "enabled": true,
+            "reason": ""
+        },
+        "workspace": {
+            "enabled": true,
+            "reason": ""
+        }
+    }
+}

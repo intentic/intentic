@@ -1,0 +1,161 @@
+---
+import liveJson from "../../content/live.json";
+import { type LiveContent, parseLiveContent } from "../lib/live";
+
+/* THE NOTICE STRIP: "the hosted sandboxes are degraded", and nothing more ambitious than that.
+ *
+ * It renders on EVERY page, from the state committed in `content/live.json`, and `worker.ts` rewrites it at
+ * the edge from the same file's live copy — so the strip a visitor sees is at most half a minute behind the
+ * commit, and exactly right after the next deploy. See `src/lib/live.ts` for why it is layered that way.
+ *
+ * IT IS ALWAYS IN THE MARKUP, `hidden` when there is nothing to say. The worker can only rewrite an element
+ * that exists: if the strip were rendered conditionally, turning a notice ON would need a deploy, which is
+ * the one thing this whole lane is for. The cost is an empty div on every page.
+ *
+ * IT IS NOT INDEXED, and that is what `data-nosnippet` and the markdown mirror's blindness to it are for. A
+ * notice is true for an afternoon; a search result quoting one for a fortnight afterwards is worse than no
+ * notice at all. It carries no heading, so `html-to-markdown` walks past it and the page's `.md` twin and
+ * its `llms.txt` line never mention it. */
+
+// Baked at BUILD from the committed file. Parsed rather than trusted even here: the same document is
+// hand-edited, and a build is a better place to find out it is malformed than a request is.
+const content: LiveContent | undefined = parseLiveContent(liveJson);
+const notice = content?.notice;
+const active = notice?.active === true;
+---
+
+<aside
+    class="live-notice"
+    data-live-notice
+    data-tone={notice?.tone ?? "info"}
+    data-nosnippet
+    role="status"
+    aria-live="polite"
+    hidden={!active}
+>
+    <p class="live-notice-inner">
+        <span class="live-notice-dot" aria-hidden="true"></span>
+        <span data-live-notice-message>{notice?.message ?? ""}</span>
+        {/* ALWAYS RENDERED, `hidden` with no destination. The worker may only SET an href and a label on an
+            anchor that already exists — it never injects markup, because injecting markup from a document
+            outside the build is the one thing in this design that could put somebody else's HTML on the
+            page. Its href is allowlisted in `live.ts` as well; this is the half that needs no trust. */}
+        <a class="live-notice-link" href={notice?.href || "/"} data-live-notice-link hidden={!active || notice?.href === ""}>
+            {notice?.linkLabel ?? "Details"}
+        </a>
+    </p>
+</aside>
+
+<style is:global>
+    /* ── THE NOTICE STRIP ────────────────────────────────────────────────────────────────────────────
+     *
+     * Pinned above the bar, which is `position: fixed` at `top: 0`. So the strip does not push the bar in
+     * flow — it cannot, they are not in flow together — and the two rules under `:has()` are what move
+     * everything else down by exactly the strip's height. `--notice-height` is a stylesheet value rather
+     * than a measurement for the same reason `--bar-height` is: the worker toggles an attribute, not a
+     * layout, and nothing may reflow by a pixel it had to compute in JavaScript first.
+     *
+     * `:has()` rather than a class on <html>: the worker sets `hidden` on the strip and only on the strip.
+     * A second thing to toggle is a second thing to get wrong at the edge, on the day it matters. */
+    :root {
+        --notice-height: 2.5rem;
+    }
+
+    /* `min-height`, NOT `height`. The offsets below reserve exactly `--notice-height` for this strip, so a
+     * message that needs more than that has to go somewhere, and the two options are growing over the bar or
+     * being silently cut in half. Growth wins: it is ugly and obvious, and the sentence survives — a clipped
+     * incident notice is the one failure this whole lane exists to prevent. `MAX_MESSAGE` in live.ts is what
+     * makes it very unlikely in the first place; this is what happens if it ever is not enough. */
+    .live-notice {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 110;
+        min-height: var(--notice-height);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--notice-ground, rgba(31, 23, 16, 0.96));
+        border-bottom: 1px solid var(--notice-edge, var(--color-line-strong));
+        backdrop-filter: blur(14px);
+    }
+    .live-notice[hidden] {
+        display: none;
+    }
+
+    body:has(> .live-notice:not([hidden])) {
+        padding-top: var(--notice-height);
+    }
+    body:has(> .live-notice:not([hidden])) .bar {
+        top: var(--notice-height);
+    }
+
+    .live-notice-inner {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        max-width: 84rem;
+        /* Vertical padding, so a message that wraps is not flush against the strip's own edges. At one line
+           it is absorbed by the min-height and changes nothing. */
+        padding: 0.5rem 1.5rem;
+        margin: 0;
+        font-size: 0.85rem;
+        line-height: 1.2;
+        color: var(--color-content);
+        text-align: center;
+    }
+
+    /* One lit dot, in the tone's colour: the strip's ground stays neutral at every severity so a warning
+       and an outage do not repaint the top of the site in two different colours. */
+    .live-notice-dot {
+        flex: none;
+        width: 0.5rem;
+        height: 0.5rem;
+        background: var(--notice-accent);
+        box-shadow: 0 0 0.5rem var(--notice-accent);
+    }
+    .live-notice[data-tone="info"] {
+        --notice-accent: var(--color-gold);
+    }
+    .live-notice[data-tone="warn"] {
+        --notice-accent: var(--color-warning);
+    }
+    .live-notice[data-tone="down"] {
+        --notice-accent: var(--color-danger);
+    }
+
+    .live-notice-link {
+        flex: none;
+        color: var(--color-link);
+        text-decoration: underline;
+        text-underline-offset: 0.2em;
+    }
+    .live-notice-link[hidden] {
+        display: none;
+    }
+
+    /* THE NARROW RESERVE. A sentence that is one line at 1280px is three at 390px, and the strip's height is
+       reserved rather than measured, so the phone is where the number has to be set. Three lines of 0.78rem
+       plus the padding above, which is what `MAX_MESSAGE` (120 characters) is sized against. */
+    @media (max-width: 40rem) {
+        :root {
+            --notice-height: 4.4rem;
+        }
+        .live-notice-inner {
+            padding: 0.5rem 1rem;
+            font-size: 0.78rem;
+        }
+    }
+
+    /* ── A CONTROL THE WORKER TURNED OFF ─────────────────────────────────────────────────────────────
+     *
+     * `worker.ts` strips the href and sets this attribute; the reason rides in `title`. `pointer-events`
+     * is the belt to that braces — an <a> with no href is already inert and unfocusable, and this is what
+     * stops it looking clickable on the way there. It stays legible rather than being hidden: a reader who
+     * came for the download needs to see that it exists and is withheld, which the notice above explains. */
+    [data-live-disabled] {
+        opacity: 0.5;
+        pointer-events: none;
+        cursor: not-allowed;
+        filter: grayscale(0.6);
+    }
+</style>

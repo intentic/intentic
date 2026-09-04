@@ -1,5 +1,6 @@
-import { INSTALL_SCRIPTS } from "@intentic/constants";
+import { INSTALL_SCRIPTS, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
+import { type LiveContent, LIVE_CACHE_SECONDS, LIVE_CONTENT_URL, type LiveSwitch, parseLiveContent } from "./src/lib/live";
 
 /* Vanity install-script URLs: https://intentic.dev/connect etc. The monorepo has no public git mirror to
  * redirect to, so the connect scripts live in this package's public/scripts/ (tracked site assets) and the
@@ -156,6 +157,115 @@ async function resolveDownload(asset: (version: string) => string, key: string):
     return resolved;
 }
 
+/* THE LIVE DOCUMENT: `content/live.json`, read at REQUEST time instead of at build time, which is the whole
+ * reason it exists. `src/lib/live.ts` says what it holds and why those three things are not built like
+ * everything else on this site.
+ *
+ * Memoised in the isolate for the same window Cloudflare is told to cache it for, so a warm isolate answers
+ * from memory and a cold one costs one subrequest. `cf.cacheTtl` OVERRIDES what raw.githubusercontent asks
+ * for, which is five minutes: GitHub purges its own CDN on push, so the number below is the real distance
+ * between somebody committing a notice and the site carrying it.
+ *
+ * EVERY failure returns undefined, and undefined means the page is served exactly as it was built. Not a
+ * default, not an empty notice, not an enabled button: untouched. The built page already carries the last
+ * committed state, so "GitHub is unreachable" degrades to "the site is as fresh as its last deploy". */
+const LIVE_TTL_MS = LIVE_CACHE_SECONDS * 1000;
+let liveCache: { content: LiveContent | undefined; at: number } | undefined;
+
+async function liveContent(): Promise<LiveContent | undefined> {
+    if (liveCache !== undefined && Date.now() - liveCache.at < LIVE_TTL_MS) {
+        return liveCache.content;
+    }
+    let content: LiveContent | undefined;
+    try {
+        const response = await fetch(LIVE_CONTENT_URL, { cf: { cacheTtl: LIVE_CACHE_SECONDS, cacheEverything: true } });
+        if (response.ok) {
+            content = parseLiveContent(await response.json());
+        }
+    } catch {
+        // Unreachable, rate-limited, or not JSON at all. The built page stands.
+    }
+    liveCache = { content, at: Date.now() };
+    return content;
+}
+
+/* Which controls each switch reaches, as selectors rather than as marks on the pages.
+ *
+ * A `data-` attribute on every call-to-action would have to be remembered by whoever adds the next page, and
+ * the day it is forgotten is the day a kill switch half works: eight buttons dark and one still handing out
+ * the bad installer. These match what the button IS — an anchor styled as a button, pointing at the app or at
+ * a download — so a page written next year is covered by having done the ordinary thing.
+ *
+ * `.btn` is load-bearing in the app selector: the footer's "Open the app" and the download page's prose
+ * mention of app.intentic.dev are links in a sentence, not doors, and greying out a word mid-paragraph
+ * communicates nothing. Only the buttons go dark. */
+const APP_HOST = new URL(PLATFORM_WEB_ORIGIN).host;
+const WORKSPACE_CONTROLS = `a.btn[href*="${APP_HOST}"]`;
+const DOWNLOAD_CONTROLS = "a[data-download-cta], a[href^='/desktop/']";
+
+/* An <a> the switch has closed: no destination, announced as disabled, carrying the reason as its tooltip.
+ * The href is REMOVED rather than pointed somewhere else — an anchor without one is inert and unfocusable in
+ * every browser, which is a stronger guarantee than any styling, and the CSS in LiveNotice.astro is only
+ * there so it stops LOOKING clickable on the way. The visible explanation is the notice strip's job. */
+const disable = (control: LiveSwitch) => ({
+    element(element: HTMLRewriterElement) {
+        element.removeAttribute("href");
+        element.setAttribute("aria-disabled", "true");
+        element.setAttribute("data-live-disabled", "");
+        if (control.reason !== "") {
+            element.setAttribute("title", control.reason);
+        }
+    },
+});
+
+/* The built page, with the live document written over it. Only ever an override: every handler here edits an
+ * element the build already emitted, and none of them inserts markup. `setInnerContent` escapes by default
+ * and is left that way, so the worst a malformed `live.json` can do is put a sentence of literal text on the
+ * page — which is what a notice is.
+ *
+ * The response is marked `must-revalidate` because it now carries state the asset it came from does not: a
+ * document cached for an hour downstream is a notice that cannot be taken down, which is the failure this
+ * lane exists to avoid. */
+function withLiveContent(response: Response, live: LiveContent): Response {
+    const { notice, switches } = live;
+    let rewriter = new HTMLRewriter()
+        .on("[data-live-notice]", {
+            element(element) {
+                if (notice.active) {
+                    element.removeAttribute("hidden");
+                } else {
+                    element.setAttribute("hidden", "");
+                }
+                element.setAttribute("data-tone", notice.tone);
+            },
+        })
+        .on("[data-live-notice-message]", {
+            element(element) {
+                element.setInnerContent(notice.message);
+            },
+        })
+        .on("[data-live-notice-link]", {
+            element(element) {
+                if (notice.active && notice.href !== "") {
+                    element.removeAttribute("hidden");
+                    element.setAttribute("href", notice.href);
+                    element.setInnerContent(notice.linkLabel);
+                } else {
+                    element.setAttribute("hidden", "");
+                }
+            },
+        });
+    if (!switches.workspace.enabled) {
+        rewriter = rewriter.on(WORKSPACE_CONTROLS, disable(switches.workspace));
+    }
+    if (!switches.download.enabled) {
+        rewriter = rewriter.on(DOWNLOAD_CONTROLS, disable(switches.download));
+    }
+    const headers = new Headers(response.headers);
+    headers.set("cache-control", "public, max-age=0, must-revalidate");
+    return rewriter.transform(new Response(response.body, { status: response.status, statusText: response.statusText, headers }));
+}
+
 /* THE PROTOCOL, DECIDED ONCE. Cloudflare serves this site on both schemes, so until this existed every page
  * had a plaintext twin that answered 200 and carried the same self-referencing canonical, two crawlable
  * copies of one site, splitting the links and the crawl signals between them. Google had already indexed the
@@ -185,15 +295,55 @@ export default {
             return secure;
         }
 
-        const response = await route(request, url, env);
+        /* The live document is read ONCE per request and handed to the route, because two of the three
+         * things it controls are decisions the route itself makes: whether /desktop/windows hands over an
+         * installer at all, and whether the page it falls back to says why. */
+        const live = await liveContent();
+        const response = await route(request, url, env, live);
+
+        /* The rewrite, on documents and nowhere else. `/demo/` is skipped by name: it is an application, not
+         * a page of this site — it carries no notice strip and none of these controls, so running its HTML
+         * through the rewriter would be work with no possible effect. */
+        const isDocument = response.headers.get("content-type")?.includes("text/html") === true;
+        const shaped = live !== undefined && isDocument && !url.pathname.startsWith("/demo") ? withLiveContent(response, live) : response;
+
         // Header sets are immutable on a response that came from fetch(), so this is a copy either way.
-        const headers = new Headers(response.headers);
+        const headers = new Headers(shaped.headers);
         headers.set("strict-transport-security", HSTS);
-        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+        return new Response(shaped.body, { status: shaped.status, statusText: shaped.statusText, headers });
     },
 };
 
-async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
+/* One desktop download route, answered. Its own function rather than a branch inside `route`, because it is
+ * the only branch there that makes a decision of its own rather than choosing an asset. */
+async function desktopDownload(
+    download: (typeof DESKTOP_ROUTES)[string],
+    request: Request,
+    url: URL,
+    env: { ASSETS: { fetch: typeof fetch } },
+    live: LiveContent | undefined,
+): Promise<Response> {
+    /* THE SWITCH IS THE ROUTE'S, not the button's. Greying out every download button on the site is what a
+     * visitor sees; it is not what stops the bad installer being installed. These URLs are stable and
+     * published on purpose — they are in the app's own links, in release notes, in whatever anybody
+     * bookmarked — so a switch that only dressed the pages would leave every one of those working. A
+     * withheld download answers with the download page instead, which is where the reason is: its own
+     * buttons are dark, and the notice strip above them says why. */
+    if (live?.switches.download.enabled === false) {
+        return Response.redirect(new URL("/download/", url).href, 302);
+    }
+    const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download.staged}`, url), request));
+    if (staged.ok) {
+        const headers = new Headers(staged.headers);
+        headers.set("content-disposition", `attachment; filename="${download.staged}"`);
+        return new Response(staged.body, { status: staged.status, headers });
+    }
+    // Keyed on the staged name rather than the route, so /desktop and /desktop/windows, the same installer
+    // under two paths, share one resolution instead of probing for it twice.
+    return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
+}
+
+async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof fetch } }, live: LiveContent | undefined): Promise<Response> {
     if (url.pathname === SITEMAP_ALIAS) {
         return Response.redirect(new URL("/sitemap-index.xml", url).href, 301);
     }
@@ -207,15 +357,7 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
 
     const download = DESKTOP_ROUTES[url.pathname.replace(/\/$/, "")];
     if (download !== undefined) {
-        const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download.staged}`, url), request));
-        if (staged.ok) {
-            const headers = new Headers(staged.headers);
-            headers.set("content-disposition", `attachment; filename="${download.staged}"`);
-            return new Response(staged.body, { status: staged.status, headers });
-        }
-        // Keyed on the staged name rather than the route, so /desktop and /desktop/windows, the same
-        // installer under two paths, share one resolution instead of probing for it twice.
-        return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
+        return desktopDownload(download, request, url, env, live);
     }
 
     const canonical = canonicalForMarkdown(url.pathname);

@@ -1,0 +1,84 @@
+---
+import { blogHref, formatPostDate, type Post, posts } from "../../lib/posts";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* ONE POST.
+ *
+ * The body wears `.docs-body`, which is the site's prose style and already the one every documentation page
+ * is set in — headings with their rule above, links in gold, code in its own ground, tables. A blog post is
+ * prose on this site the same way a docs page is, and giving it a second, nearly identical stylesheet would
+ * be two places to fix the day somebody decides paragraphs are too tight.
+ *
+ * It carries a breadcrumb trail, which is what makes BaseLayout treat it as an article: `og:type=article`,
+ * `article:published_time`, and a BlogPosting node in the graph. `articleType` is the only thing this page
+ * has to say out loud, because the default is TechArticle and a post is not one. */
+
+export function getStaticPaths() {
+    return posts.map((post) => ({ params: { slug: post.slug }, props: { post } }));
+}
+
+interface Props {
+    post: Post;
+}
+
+const { post } = Astro.props;
+const { Content, frontmatter } = post;
+
+/* The <title> is the post's own, with NO ` · intentic` after it — which is what the guides and the
+ * comparison shelf do, and what the docs do not. A result gets about sixty characters; on a page whose whole
+ * job is to be found by its title, the brand is the least useful eleven of them, and the headline in the
+ * BlogPosting node has to match what the reader sees anyway.
+ *
+ * IT IS A PROP, NOT A `page-meta.ts` ENTRY, and no comment may go between the props below: `{/* … *\/}` in
+ * an attribute position is not a comment to the Astro parser, it is a shorthand expression, and it silently
+ * swallowed every prop after it — the post rendered under the site's fallback title until this moved here. */
+
+// The next post to read, which is the one before this in time. The newest post wraps to the oldest rather
+// than showing nothing: a dead end at the bottom of the newest post is the most-read dead end on the shelf.
+const index = posts.indexOf(post);
+const next = posts.length > 1 ? posts[(index + 1) % posts.length] : undefined;
+---
+
+<BaseLayout
+    title={frontmatter.title}
+    description={frontmatter.description}
+    datePublished={frontmatter.date}
+    articleType="BlogPosting"
+    breadcrumbs={[{ name: "Blog", path: blogHref("") }, { name: frontmatter.title, path: blogHref(post.slug) }]}
+>
+    <Nav />
+    <main class="flex-1">
+        <article class="page-hero">
+            {/* `below-bar` is what clears the fixed bar, and it is a function of the bar's own height
+                rather than a number: see global.css. `page-hero` alone only supplies a containing block. */}
+            <div class="below-bar relative mx-auto w-full max-w-3xl px-6 pb-14">
+                <p class="eyebrow">
+                    <a class="no-underline" href={blogHref("")}>Blog</a>
+                </p>
+                <h1 class="display mt-3">{frontmatter.title}</h1>
+                <p class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-subtle)]">
+                    <time datetime={frontmatter.date}>{formatPostDate(frontmatter.date)}</time>
+                    {frontmatter.tags?.map((tag) => <span class="text-[var(--color-muted)]">{tag}</span>)}
+                </p>
+
+                <div class="docs-body mt-10">
+                    <Content />
+                </div>
+
+                {
+                    next && (
+                        <nav class="mt-16 border-t border-[var(--color-line)] pt-6" aria-label="More posts">
+                            <p class="text-xs tracking-wide text-[var(--color-subtle)] uppercase">Read next</p>
+                            <a class="mt-2 block text-lg text-[var(--color-link)] hover:underline" href={blogHref(next.slug)}>
+                                {next.frontmatter.title}
+                            </a>
+                        </nav>
+                    )
+                }
+            </div>
+        </article>
+    </main>
+    <Footer />
+</BaseLayout>

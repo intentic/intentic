@@ -39,8 +39,13 @@ export interface PageGraphOptions {
     dateModified?: string;
     /** Home is implicit and prepended; pass the trail below it. */
     breadcrumbs?: BreadcrumbEntry[];
-    /** Renders the page as a TechArticle alongside its WebPage: for documentation. */
+    /** Renders the page as an article alongside its WebPage: for documentation. */
     article?: boolean;
+    /* WHICH KIND of article, when there is one. Documentation is a TechArticle and that is what almost
+     * every article page here is, so it stays the default. A blog post is a BlogPosting: dated, written by
+     * a person, part of a Blog — a different thing to a reference page that happens to be prose, and the
+     * type is how a search engine knows which of the two it has. */
+    articleType?: "TechArticle" | "BlogPosting";
     /** Present ⇒ the page node is a FAQPage carrying these as its mainEntity. */
     faq?: FaqEntry[];
     /** Extra top-level nodes to merge into the graph (e.g. the SoftwareApplication on the landing page). */
@@ -107,6 +112,25 @@ function breadcrumbNode(url: string, trail: BreadcrumbEntry[]) {
  * The page's own nodes, in graph form. FAQPage is a subclass of WebPage, so a page with questions is
  * typed FAQPage outright rather than carrying a second, near-duplicate node for the same URL.
  */
+/* The article a prose page also is, hung off that page's WebPage node rather than standing alone: the same
+ * URL is one page with two aspects, not two documents. TechArticle for documentation, BlogPosting for a
+ * post; everything else about the node is identical, which is why one function makes both. */
+function articleNode(opts: PageGraphOptions, url: string, pageId: string) {
+    return {
+        "@type": opts.articleType ?? "TechArticle",
+        "@id": `${url}#article`,
+        headline: opts.name,
+        description: opts.description,
+        inLanguage: "en-US",
+        mainEntityOfPage: { "@id": pageId },
+        isPartOf: { "@id": pageId },
+        author: founderRef,
+        publisher: orgRef,
+        ...(opts.datePublished ? { datePublished: opts.datePublished } : {}),
+        ...(opts.dateModified ? { dateModified: opts.dateModified } : {}),
+    };
+}
+
 export function buildPageGraph(opts: PageGraphOptions) {
     const url = `${SITE_URL}${opts.path}`;
     const pageId = `${url}#webpage`;
@@ -135,21 +159,7 @@ export function buildPageGraph(opts: PageGraphOptions) {
             : {}),
     };
 
-    const article = opts.article
-        ? {
-              "@type": "TechArticle",
-              "@id": `${url}#article`,
-              headline: opts.name,
-              description: opts.description,
-              inLanguage: "en-US",
-              mainEntityOfPage: { "@id": pageId },
-              isPartOf: { "@id": pageId },
-              author: founderRef,
-              publisher: orgRef,
-              ...(opts.datePublished ? { datePublished: opts.datePublished } : {}),
-              ...(opts.dateModified ? { dateModified: opts.dateModified } : {}),
-          }
-        : undefined;
+    const article = opts.article ? articleNode(opts, url, pageId) : undefined;
 
     return {
         "@context": "https://schema.org",

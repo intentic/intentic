@@ -8,6 +8,7 @@ import { lastModForUrl } from "@intentic-dev/astro-integrations";
 // The package's own `util.js` entry, not its root: the root pulls in the build hook, and with it satori and
 // resvg's native .node binary, which rollup then tries to bundle into the page. This subpath is pure path math.
 import { getImagePath } from "astro-opengraph-images/util.js";
+import LiveNotice from "../components/LiveNotice.astro";
 import PageBackdrop from "../components/PageBackdrop.astro";
 
 interface Props {
@@ -16,6 +17,12 @@ interface Props {
     ogImage?: string;
     /** The trail below Home. Present ⇒ the page emits a BreadcrumbList and og:type=article. */
     breadcrumbs?: BreadcrumbEntry[];
+    /* The day this page went up, for a page that is not in `page-meta.ts` because it is one of many built
+     * from one template. A blog post is the case: its date is in its own frontmatter, where whoever wrote
+     * the post put it, and there is nowhere else it could sensibly live. */
+    datePublished?: string;
+    /** `BlogPosting` for a post; the default suits documentation. Only read when the page is an article. */
+    articleType?: "TechArticle" | "BlogPosting";
     faq?: FaqEntry[];
     extraJsonLd?: Record<string, unknown>[];
     noindex?: boolean;
@@ -48,7 +55,7 @@ if (!authored && meta === undefined && Astro.props.noindex !== true) {
 
 const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} · ${ORG_TAGLINE}`;
 const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPTION;
-const datePublished = meta?.datePublished;
+const datePublished = Astro.props.datePublished ?? meta?.datePublished;
 const dateModified = lastModForUrl(`${SITE_URL}${path}`) ?? undefined;
 
 // A page with a breadcrumb trail is a page inside the documentation, which is also what makes it an
@@ -61,8 +68,13 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 // The card astro-opengraph-images will write for this page, named by the same function the integration uses to
 // find it: the two MUST agree or the build fails, which is the point: a page can no longer advertise an image
 // nobody generated. `path` rather than Astro.url so the name is the built (always-slashed) one in dev too.
+/* A card is generated for any page that HAS its own title and description, from `page-meta.ts` or from its
+ * own props. It used to require the table, which meant a page owning its copy directly — every blog post —
+ * advertised the generic logo card while the two lines that would have made a good one sat in its
+ * frontmatter. `authored` is the same condition the build error above uses, so a page either has both and
+ * gets a card, or has neither and does not build. */
 const perPageOgAvailable = import.meta.env.PUBLIC_OG_PER_PAGE;
-const defaultOgPath = perPageOgAvailable && meta ? getImagePath({ url: new URL(path, Astro.site), site: Astro.site }) : "/assets/intentic-logo-sized.png";
+const defaultOgPath = perPageOgAvailable && (meta || authored) ? getImagePath({ url: new URL(path, Astro.site), site: Astro.site }) : "/assets/intentic-logo-sized.png";
 const ogImage = new URL(Astro.props.ogImage ?? defaultOgPath, Astro.site);
 
 const jsonLd = buildPageGraph({
@@ -73,6 +85,7 @@ const jsonLd = buildPageGraph({
     dateModified,
     breadcrumbs,
     article: isArticle,
+    articleType: Astro.props.articleType,
     faq: Astro.props.faq,
     extra: Astro.props.extraJsonLd,
 });
@@ -104,6 +117,9 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <link rel="manifest" href="/manifest.json" />
         <link rel="canonical" href={canonicalURL.href} />
         <link rel="sitemap" href="/sitemap-index.xml" />
+        {/* Sitewide, not only on /blog/: a feed reader's "subscribe" button reads this tag off whatever page
+            the reader happened to paste, which is almost never the index. */}
+        <link rel="alternate" type="application/rss+xml" title={`${ORG_NAME} blog`} href="/blog/rss.xml" />
 
         <meta property="og:type" content={isArticle ? "article" : "website"} />
         <meta property="og:locale" content="en_US" />
@@ -152,6 +168,9 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
     {/* `relative` gives the backdrop a containing block and `isolate` keeps its negative layer inside the
         body, above the document's own background rather than behind it. */}
     <body class="relative isolate flex min-h-screen flex-col">
+        {/* A DIRECT CHILD OF <body>, and first: the strip's own `:has(> .live-notice…)` rules move the bar
+            and the page down by its height, and a wrapper between the two would break both of them. */}
+        <LiveNotice />
         {Astro.props.backdrop !== false && <PageBackdrop />}
         <slot />
 
