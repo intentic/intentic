@@ -160,6 +160,11 @@ export const sourceAliases = (): Record<string, string> => ({
     // it, and the chat applies its patches. Off the barrel for the same reason again, it is derivation over the
     // wire types, and the chat's transcript state (and its unit tests) reach it without the wire behind it.
     "@intentic/sandbox-contract/transcript-fold": fromRoot("_sandbox/sandbox-contract/src/transcript-fold.ts"),
+    // The batch-run substrate, where a batch's conversation ids, run ids and manifest paths are DERIVED, shared
+    // by acceptance, documentation and maintenance so the three surfaces cannot disagree about where a run
+    // lives. Off the barrel for the same reason as the three above: naming a path is arithmetic over strings,
+    // and the extensions that do it reach it without resolving every schema in the wire contract.
+    "@intentic/sandbox-contract/batch-runs": fromRoot("_sandbox/sandbox-contract/src/batch-runs.ts"),
     "@intentic/sandbox-contract": fromRoot("_sandbox/sandbox-contract/src/index.ts"),
     // The extension-registry file format, imported by the wire contract (schemas.ts), so without this line
     // the dev server resolves it to a dist/ that only exists once the lib has been built.
