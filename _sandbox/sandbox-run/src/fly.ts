@@ -191,12 +191,16 @@ export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({
  * boots it from next. The platform is the executor on this lane the way `ic sandbox rebuild` is on a docker
  * host, so the shape is the platform's to compose, and it is a different shape from the sandbox's: no volume,
  * no front door, no restart (the exit code IS the answer), and the recipe delivered as files rather than
- * baked into an image. `performance` CPUs rather than `shared`: a build is minutes of compiler and package
- * manager on a machine that exists for nothing else, and it is billed to the platform, not the owner's hours. */
+ * baked into an image. Its minutes are metered to the owner like the sandbox's own awake minutes, and the
+ * platform bounds them with a timeout, so a builder is never free compute for whoever approved the recipe. */
 export interface FlyBuildRun {
     // The buildkit image, pinned by the platform's config.
     readonly image: string;
-    readonly guest: { readonly cpus: number; readonly memoryMb: number };
+    /* The CPU kind is the platform's call, not this composer's. A build is mostly a package manager waiting
+     * on the network, where shared CPUs cost a fraction of performance ones and finish about as fast; and a
+     * builder runs whatever RUN steps the recipe carries for as long as the timeout allows, so the cheaper
+     * kind is also the one worth less to anybody who approved a recipe in order to mine on it. */
+    readonly guest: { readonly cpuKind: "shared" | "performance"; readonly cpus: number; readonly memoryMb: number };
     // Plain text here, base64 on the wire: the Dockerfile, the build script, the registry credential.
     readonly files: readonly { readonly path: string; readonly content: string }[];
     // What the machine runs in place of the image's entrypoint (buildkitd), the platform's build script.
@@ -207,7 +211,7 @@ export interface FlyBuildRun {
 
 export const flyBuildMachineConfig = (run: FlyBuildRun): FlyMachineConfig => ({
     image: run.image,
-    guest: { cpu_kind: "performance", cpus: run.guest.cpus, memory_mb: run.guest.memoryMb },
+    guest: { cpu_kind: run.guest.cpuKind, cpus: run.guest.cpus, memory_mb: run.guest.memoryMb },
     env: Object.fromEntries((run.env ?? []).filter(([, value]) => value !== "")),
     mounts: [],
     restart: { policy: "no" },

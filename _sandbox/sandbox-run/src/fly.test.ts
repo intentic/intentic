@@ -135,7 +135,7 @@ describe(`flyMachineConfig: an overlay-built image`, () => {
 describe(`flyBuildMachineConfig`, () => {
     const build = {
         image: `moby/buildkit:v0.20.2`,
-        guest: { cpus: 2, memoryMb: 4096 },
+        guest: { cpuKind: `shared` as const, cpus: 2, memoryMb: 4096 },
         files: [
             { path: `/build/Dockerfile`, content: `FROM ghcr.io/intentic/sandbox:stable\nRUN true\n` },
             { path: `/build/run.sh`, content: `#!/bin/sh\nexit 0\n` },
@@ -143,10 +143,11 @@ describe(`flyBuildMachineConfig`, () => {
         entrypoint: [`/bin/sh`, `/build/run.sh`],
     };
 
-    it(`is a performance guest with no volume, no restart and the script as its entrypoint`, () => {
+    it(`is a guest of the platform's chosen CPU kind with no volume, no restart and the script as its entrypoint`, () => {
         const config = flyBuildMachineConfig(build);
         expect(config.image).toBe(build.image);
-        expect(config.guest).toEqual({ cpu_kind: `performance`, cpus: 2, memory_mb: 4096 });
+        expect(config.guest).toEqual({ cpu_kind: `shared`, cpus: 2, memory_mb: 4096 });
+        expect(flyBuildMachineConfig({ ...build, guest: { ...build.guest, cpuKind: `performance` } }).guest.cpu_kind).toBe(`performance`);
         expect(config.mounts).toEqual([]);
         expect(config.restart).toEqual({ policy: `no` });
         expect(config.auto_destroy).toBe(false);
