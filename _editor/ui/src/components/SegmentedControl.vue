@@ -22,7 +22,11 @@ const {
     // that its options are readable.
     // The array is `readonly` so a shared preset can be declared `as const` / `readonly` at its source and
     // spread straight in (TIME_WINDOWS is, and every feed that shows it would otherwise need a copy).
-    options: readonly { label: string; value: T; title?: string; badge?: number; mark?: IconName; markTitle?: string }[];
+    // icon: a glyph BEFORE the label, for a set whose options are also drawn somewhere else by that glyph — the
+    // automation trigger kinds are a clock, a bolt, a live connection and an eye in every row of the list, and a
+    // picker that dropped them would be teaching the vocabulary twice. Never instead of the label: an icon-only
+    // segmented control is a toolbar, and this is a set of named choices.
+    options: readonly { label: string; value: T; icon?: IconName; title?: string; badge?: number; mark?: IconName; markTitle?: string }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
     /* The control OWNS its row rather than trailing a toolbar: equal-width pills across the full width, in a
@@ -115,7 +119,8 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
             ]"
             @click="model = option.value"
         >
-            {{ option.label
+            <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-2xs" /><!--
+            -->{{ option.label
             }}<span v-if="option.mark !== undefined" class="ml-1 rounded-full bg-primary-600/15 px-1 text-2xs text-link"
                 ><Icon :name="option.mark" /></span
             ><span v-else-if="option.badge !== undefined && option.badge > 0" class="ml-1 rounded-full bg-primary-600/15 px-1 text-2xs text-link">{{

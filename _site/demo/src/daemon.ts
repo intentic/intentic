@@ -22,7 +22,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { KNOWLEDGE_BASE } from "@intentic/ext-knowledge";
 import { BROWSER_SESSIONS } from "./browser";
-import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
@@ -446,6 +446,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
      * (the fixture is the store), and so is clearing a held wake; what refuses is FIRING one, because a wake is
      * an agent turn against a repo the recording doesn't have. */
     [`GET`, `/automations`, () => json({ automations: automationsList(Date.now()) })],
+    // What can wake an agent here, and what is worth starting from. Without it the composer's source picker is
+    // empty and the page's whole offer half never draws: see the note on the fixture.
+    [`GET`, `/automations/catalog`, () => json(automationCatalog())],
     [`GET`, `/automations/pending`, () => json({ approvals: automationApprovals(Date.now()) })],
     [`POST`, `/automations`, saveAutomationRoute],
     [`DELETE`, `/automations/{id}`, ({ param }) => okAfter(() => deleteAutomation(Date.now(), param(`id`)))],

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { AutomationSummary, AutomationTemplate } from "@intentic/sandbox-contract";
 import {
-    Button,
     ui,
     ConfirmDialog,
     Icon,
@@ -14,6 +13,8 @@ import {
     SearchBar,
     SegmentedControl,
     SkeletonRows,
+    StatusTally,
+    type TallyItem,
     useLoadingReveal,
     vAction,
 } from "@intentic/extension-ui";
@@ -21,7 +22,7 @@ import { computed, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
 import FrontDeskInstallDialog from "./FrontDeskInstallDialog.vue";
-import { since } from "./cronSchedule";
+import { nextIn } from "./cronSchedule";
 import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
 import { useAutomations } from "./useAutomations";
@@ -31,16 +32,20 @@ import { useAutomations } from "./useAutomations";
  * work) → optional guard (a shell command the daemon runs in the workspace first; non-zero exit skips the
  * wake) → the prompt the agent wakes with. The daemon fires them and records the run history.
  *
- * The page is a LIST, not a gallery: one dense line per automation under two labelled groups (chores watch
- * this codebase, integrations are fired from outside it), because the question this page answers at any size
- * is "what is on, what fired, what broke". Everything that used to be a paragraph is now either a column, a
- * hover, or the row's own disclosure: each stock chore's explanation rides its suggestion pill.
+ * THE PAGE IS AN OPERATIONS BOARD, and it is laid out top-down as the three questions one gets asked:
  *
- * The chore SUGGESTIONS sit under the list rather than above it: they are the one kind of automation a user is
- * expected to want without knowing it exists, so they must stay visible, but they are an offer and the list is
- * the content. Turning one on writes a REAL automation into the list above, with its prompt, model and guard
- * editable like any other, there is deliberately no chore toggle that isn't an automation: a second place to
- * turn something on is a second place for it to disagree with itself.
+ *   1. IS ANYTHING WRONG? — the tally on the title row, before a single row is read. It is the same control
+ *      the Pipelines and Deployments boards open with, for the same reason: a page about work that happens
+ *      while nobody is watching has to answer "did it" before it answers "what".
+ *   2. WHAT IS STANDING? — two labelled groups of two-line rows (chores watch this codebase, integrations are
+ *      fired from outside it). Each row says what wakes it, what it is for, and how it has been going; the
+ *      prose, the ledger and the editor are behind its own disclosure.
+ *   3. WHAT ELSE COULD BE? — one offer section at the foot, because it is an offer and the list is the content.
+ *
+ * The offers stay VISIBLE rather than folding into a menu: they are the one kind of automation a user is
+ * expected to want without knowing it exists. Taking one writes a REAL automation into the list above, with its
+ * prompt, model and guard editable like any other — there is deliberately no chore toggle that isn't an
+ * automation: a second place to turn something on is a second place for it to disagree with itself.
  *
  * NOTHING ON THIS PAGE AUTHORS AN AUTOMATION IN A DIALOG. Creating opens a panel at the top of the list and
  * editing opens one inside the row, both at page width and both rendering the same <AutomationFields>: an
@@ -98,6 +103,25 @@ const counts = computed(() => ({
     off: searched.value.filter((automation) => !automation.enabled).length,
     failing: searched.value.filter(failing).length,
 }));
+/* THE ORIENTATION LINE, and it reads the WHOLE list rather than the filtered one: it sits on the title row,
+ * above the control that does the filtering, so a tally that moved when a filter was typed would be answering
+ * a different question from the one its position promises ("is anything wrong here", not "in this view").
+ *
+ * Only "on" is `always`: it is the board's subject, and a board whose tally renders as nothing at all reads as
+ * broken. "0 paused" and "0 failing" are facts nobody asked for, and dropping them is what lets the eye land on
+ * a count that is not zero. */
+const tally = computed<readonly TallyItem[]>(() => [
+    { label: `on`, value: automations.value.filter((automation) => automation.enabled).length, variant: `success`, always: true },
+    { label: `paused`, value: automations.value.filter((automation) => !automation.enabled).length, variant: `neutral` },
+    { label: `failing`, value: automations.value.filter(failing).length, variant: `danger` },
+]);
+// The soonest thing due, across every enabled row: the one fact a page of standing jobs owes a reader that no
+// single row can give them. Absent when nothing here runs on a clock, which is an honest silence.
+const nextFire = computed<number | undefined>(() => {
+    const due = automations.value.flatMap((automation) => (automation.enabled && automation.nextRun !== undefined ? [automation.nextRun] : []));
+    return due.length === 0 ? undefined : Math.min(...due);
+});
+
 // Errors appears only once something IS failing: the tab showing up is itself the alert, where a permanent
 // "Errors 0" would be a filter that only ever leads to an empty list. It survives while it is the active tab so
 // a fixed run can't strand the user on a vanished filter.
@@ -221,6 +245,15 @@ const toggleDetail = (id: string): void => {
 <template>
     <Page width="wide">
         <PageHeader title="Automations">
+            <!-- ON THE TITLE ROW, not under it: this board would rather spend that height on its body, and the
+                 tally is short enough to ride beside an h1 (see <StatusTally>, and Pipelines, which does the
+                 same). Hidden while the first read is in flight, because "0 on" is a claim, and it is one the
+                 list underneath is about to contradict. -->
+            <template #info>
+                <StatusTally v-if="!isLoading && automations.length > 0" :items="tally" class="ml-2">
+                    <span v-if="nextFire !== undefined" class="text-xs text-subtle">next {{ nextIn(nextFire) }}</span>
+                </StatusTally>
+            </template>
             <template #actions>
                 <PageAction icon="plus" label="New automation" primary @click="createOpen = true" />
             </template>
@@ -268,8 +301,13 @@ const toggleDetail = (id: string): void => {
                 </RowGroup>
             </template>
 
-            <div v-else-if="automations.length === 0" :class="ui.emptyState('py-5')">
-                No automations yet: turn on a code chore below, or build your own with New automation.
+            <!-- The empty state names the two doors out of it and draws neither as a button: "New automation" is
+                 already the page's one accent control, four inches up and to the right, and a second copy of it
+                 here would be the loudest thing on an empty page. The offers under it are the other door, and
+                 they are real controls a click away. -->
+            <div v-else-if="automations.length === 0" :class="ui.emptyState('flex flex-col items-center gap-1 py-6')">
+                <span class="text-sm text-content">Nothing runs on its own yet.</span>
+                <span>Take one of the offers below, or build your own with <b class="font-medium text-muted">New automation</b>.</span>
             </div>
             <div v-else-if="shown.length === 0" :class="ui.emptyState('py-5')">
                 Nothing matches this filter.
@@ -319,57 +357,78 @@ const toggleDetail = (id: string): void => {
                 />
             </RowGroup>
 
-            <!-- The same pills for things that are not chores but are equally easy to never find out about.
-                 Separate section because the sentence under it is different: a chore costs nothing until its
-                 check finds something, while these need a few fields before they do anything at all. -->
-            <section v-if="availableSuggestions.length > 0">
-                <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                    <span :class="ui.sectionLabel()">Reach this agent from elsewhere</span>
-                    <span class="text-2xs text-subtle">A few details to fill in, then it is a row like any other.</span>
+            <!-- THE OFFERS, IN ONE SECTION AND ON A GRID.
+                 They were two sections of wrapping PILLS, which is the shape that made the foot of this page
+                 read as debris: a pill is sized by its own text, so eight of them wrap into ragged runs of
+                 different heights with their `· note` suffixes landing in a different place on every line, and
+                 the eye gets no column to travel down. On a grid each offer is the same box, the titles line up,
+                 and the note has a line of its own instead of trailing the title through a middle dot.
+                 One section, two labelled runs — the same split the composer's template gallery draws, because
+                 it is the same catalogue and a reader should meet it in one shape. The runs stay separate
+                 because the sentence over each is genuinely different: a chore costs nothing until its own check
+                 finds something, while the others need a few fields before they do anything at all. -->
+            <section v-if="availableChores.length > 0 || availableSuggestions.length > 0" class="@container">
+                <div class="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-1">
+                    <span :class="ui.sectionLabel()">Add an automation</span>
+                    <span class="text-2xs text-subtle">Things this sandbox can do that nobody has asked it for yet.</span>
                 </div>
-                <div class="flex flex-wrap gap-1.5">
-                    <button
-                        v-for="recipe in availableSuggestions"
-                        :key="recipe.id"
-                        type="button"
-                        :class="ui.addTile(`bg-card px-2.5 py-1.5`)"
-                        v-tooltip.top="recipe.description"
-                        @click="openFromSuggestion(recipe)"
-                    >
-                        <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
-                        <Icon v-if="recipe.icon" :name="glyph(recipe.icon)!" class="shrink-0 text-2xs" />
-                        {{ recipe.title }}
-                        <span v-if="recipe.note" class="text-2xs text-subtle">· {{ recipe.note }}</span>
-                    </button>
-                </div>
-            </section>
+                <div class="flex flex-col gap-3">
+                    <div v-if="availableChores.length > 0" class="flex flex-col gap-1.5">
+                        <span class="px-1 text-2xs text-subtle">
+                            <b class="font-medium text-muted">Code chores</b> · their check runs for free first, so a turn is spent only when it finds
+                            something.
+                        </span>
+                        <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
+                            <button
+                                v-for="recipe in availableChores"
+                                :key="recipe.id"
+                                type="button"
+                                :class="ui.addTile(`w-full items-start justify-start gap-2 px-3 py-2 text-left`)"
+                                :disabled="enabling !== undefined"
+                                v-tooltip.top="recipe.description"
+                                v-action="() => enableChore(recipe)"
+                            >
+                                <!-- The wait rides the tile's own glyph rather than a second icon beside it: the
+                                     press creates this row, so the thing that is busy IS the offer. -->
+                                <Icon
+                                    :name="enabling === recipe.id ? `spinner` : (glyph(recipe.icon) ?? `bolt`)"
+                                    :spin="enabling === recipe.id"
+                                    class="mt-0.5 shrink-0 text-2xs"
+                                />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate font-medium">{{ recipe.title }}</span>
+                                    <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
+                                </span>
+                                <Icon name="plus" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                            </button>
+                        </div>
+                    </div>
 
-            <!-- The offer, as pills rather than cards: one line each however many there are, and each one click
-                 from being a real row above. -->
-            <section v-if="availableChores.length > 0">
-                <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                    <span :class="ui.sectionLabel()">Add a code chore</span>
-                    <span class="text-2xs text-subtle">Their check runs for free first: a turn is spent only when it finds something.</span>
-                </div>
-                <div class="flex flex-wrap gap-1.5">
-                    <button
-                        v-for="recipe in availableChores"
-                        :key="recipe.id"
-                        type="button"
-                        :class="ui.addTile(`bg-card px-2.5 py-1.5`)"
-                        :disabled="enabling !== undefined"
-                        v-tooltip.top="recipe.description"
-                        v-action="() => enableChore(recipe)"
-                    >
-                        <Icon
-                            :name="enabling === recipe.id ? `spinner` : `plus`"
-                            :spin="enabling === recipe.id"
-                            class="shrink-0 text-2xs text-subtle"
-                        />
-                        <Icon v-if="recipe.icon" :name="glyph(recipe.icon)!" class="shrink-0 text-2xs" />
-                        {{ recipe.title }}
-                        <span v-if="recipe.note" class="text-2xs text-subtle">· {{ recipe.note }}</span>
-                    </button>
+                    <div v-if="availableSuggestions.length > 0" class="flex flex-col gap-1.5">
+                        <span class="px-1 text-2xs text-subtle">
+                            <b class="font-medium text-muted">Reach this agent from elsewhere</b> · a few details to fill in, then it is a row like any
+                            other.
+                        </span>
+                        <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
+                            <button
+                                v-for="recipe in availableSuggestions"
+                                :key="recipe.id"
+                                type="button"
+                                :class="ui.addTile(`w-full items-start justify-start gap-2 px-3 py-2 text-left`)"
+                                v-tooltip.top="recipe.description"
+                                @click="openFromSuggestion(recipe)"
+                            >
+                                <Icon :name="glyph(recipe.icon) ?? `bolt`" class="mt-0.5 shrink-0 text-2xs" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate font-medium">{{ recipe.title }}</span>
+                                    <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
+                                </span>
+                                <!-- A chevron rather than a plus, and the difference is real: these OPEN the
+                                     composer prefilled, where a chore is created by the press itself. -->
+                                <Icon name="chevron-right" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </section>
         </div>

@@ -166,6 +166,11 @@
 @source inline("{snap-none,snap-x,snap-y,snap-start,snap-center,snap-end,snap-mandatory,snap-proximity}");
 /* This app's own, promised by name for the same reason as everything above. */
 @source inline("{scrollbar-thin,scrollbar-stable,ui-softscroll,ui-row-select,ui-row-select-on,skeleton}");
+/* THE CHIP, promised for the same reason as the field and the row: it is a hand-written control everywhere it
+ * is not named. An extension picking one of a set — a trigger's events, a schedule's weekdays, a widget's
+ * access mode — either wears this pair or invents a fifth spelling of "this one is on", which is precisely the
+ * drift `.ui-chip` was extracted to end (styles/utilities.css). The automations surface alone had three. */
+@source inline("{ui-chip,ui-chip-on}");
 /* THE FIELD, promised by name — which is half of why it is a class and not a utility string (primeng.css).
  * An extension cannot be handed `ui.input()`'s old recipe as a promise: an arbitrary Tailwind string is not
  * something this surface can guarantee across a version. These six are, and between them they are every field

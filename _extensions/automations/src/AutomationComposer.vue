@@ -160,22 +160,29 @@ const finish = (id: string): void => {
 </script>
 
 <template>
-    <section class="flex flex-col gap-3 rounded-lg border border-line bg-card p-3.5">
+    <section class="flex flex-col gap-3 rounded-lg border border-line bg-card p-4">
         <div class="flex items-center gap-2">
             <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
-            <h2 class="flex-1 text-xs font-semibold text-content">New automation</h2>
+            <!-- The panel's own name, at the size of the rail labels inside it rather than a notch under them:
+                 it is the heading of everything below, and at `text-xs` it was the quietest thing in its own
+                 header. -->
+            <h2 class="flex-1 text-sm font-semibold text-content">New automation</h2>
 
             <!-- The offer, at the size of an offer: one control in the panel's chrome, beside the close button,
                  where a starting point belongs. Once something is picked it becomes the pick's name, so the
-                 header states what the fields below were prefilled from without spending a row on saying it. -->
+                 header states what the fields below were prefilled from without spending a row on saying it.
+                 THE KIT'S CHIP, because that is what this is: one of a set, lit when it is the one. -->
             <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
                 <!-- Clearing the template lives INSIDE the chip, on its tint, because outside it was a bare ✕
                      eight pixels from the panel's own bare ✕: two identical glyphs side by side, one of which
-                     throws away everything typed so far. On the tint it reads as part of the thing it clears. -->
-                <div class="flex items-center rounded-md transition-colors" :class="template ? CARD_SELECTED : CARD_IDLE">
+                     throws away everything typed so far. On the tint it reads as part of the thing it clears.
+                     The wrapper wears the chip and the two buttons inside it are bare, so the pair is one
+                     object: `ui-chip`'s own padding is dropped for the buttons to carry instead. -->
+                <div class="ui-chip gap-0 px-0" :class="template ? `ui-chip-on` : ``">
                     <button
                         type="button"
-                        class="flex max-w-64 cursor-pointer items-center gap-1.5 px-2 py-1 text-2xs"
+                        class="flex max-w-64 cursor-pointer items-center gap-1.5 py-1 pl-2.5 text-2xs"
+                        :class="template ? `pr-1` : `pr-2.5`"
                         :aria-expanded="recipesOpen"
                         @click="toggleRecipes"
                     >
@@ -188,7 +195,7 @@ const finish = (id: string): void => {
                     <button
                         v-if="template"
                         type="button"
-                        class="shrink-0 cursor-pointer py-1 pr-2 pl-0.5 text-2xs opacity-70 transition-opacity hover:opacity-100"
+                        class="shrink-0 cursor-pointer py-1 pr-2.5 pl-0.5 text-2xs opacity-70 transition-opacity hover:opacity-100"
                         aria-label="Clear template"
                         @click="picked = undefined"
                     >
@@ -259,13 +266,10 @@ const finish = (id: string): void => {
                 </div>
             </div>
 
-            <button
-                type="button"
-                class="shrink-0 cursor-pointer text-2xs text-subtle transition-colors hover:text-content"
-                aria-label="Close"
-                @click="emit(`close`)"
-            >
-                <Icon name="times" />
+            <!-- The kit's icon button rather than a bare glyph: the same 24px of ink, but with a thumb-sized hit
+                 area on a coarse pointer and the hover plate every other dismiss in the app has. -->
+            <button type="button" :class="ui.iconButton()" aria-label="Close" @click="emit(`close`)">
+                <Icon name="times" class="text-xs" />
             </button>
         </div>
 
