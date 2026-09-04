@@ -743,6 +743,7 @@ interface HalfAction {
 }
 interface MachineSwitch {
     readonly label: string;
+    readonly state: HalfState;
     /** The state in one word, for the settled positions. */
     readonly word: string;
     /** What disagrees, when the pairings do. Replaces the word rather than joining it. */
@@ -774,6 +775,7 @@ const machineSwitches = (row: ComputerRow): MachineSwitch[] => {
     if (switchable(row, sync)) {
         switches.push({
             label: `File syncing`,
+            state: sync.state,
             word: sync.state === `off` ? `paused` : `on`,
             note: halfNote(sync, `paused`),
             actions: actionsFor(sync.state, PAUSE, RESUME),
@@ -783,6 +785,7 @@ const machineSwitches = (row: ComputerRow): MachineSwitch[] => {
     if (switchable(row, mirror)) {
         switches.push({
             label: `Port mirroring`,
+            state: mirror.state,
             word: mirror.state === `off` ? `off` : `on`,
             note: halfNote(mirror, `off`),
             actions: actionsFor(mirror.state, MIRROR_OFF, MIRROR_ON),
@@ -1131,75 +1134,77 @@ const runRevoke = async (): Promise<void> => {
                                  sandbox: the box keeps running, the ports keep arriving, the files stop moving.
                                  Pause had no button at all until now — only a sentence naming a command to go
                                  and type, on the view built to replace that terminal. -->
-                                <template #folder="{ group }">
-                                    <Button
-                                        v-if="pausable(row.computer, group)"
-                                        size="small"
-                                        severity="secondary"
-                                        :text="true"
-                                        :label="group.folder?.paused === true ? `Resume syncing` : `Pause syncing`"
-                                        :loading="syncRunning(row.computer, group, `sync-pause`)"
-                                        :disabled="working"
-                                        v-tooltip.top="
-                                            group.folder?.paused === true
-                                                ? `Start moving files between this computer and the sandbox again`
-                                                : `Stop moving files either way. The sandbox keeps running and its ports keep being mirrored.`
-                                        "
-                                        @click="
-                                            void runSync(
-                                                row.computer,
-                                                rowKey(row.computer, group),
-                                                group.sandboxId,
-                                                group.folder?.paused === true ? `sync-resume` : `sync-pause`,
-                                            )
-                                        "
-                                    />
-                                    <!-- THE END OF THE PAIRING, and the one control here that nothing undoes in
-                                     a click: turning it back on means a fresh one-liner on that computer. It
-                                     asks the MACHINE to unpair (which is why it needs the computer door), so
-                                     the agent tears its own sessions down and self-revokes rather than
-                                     discovering later that its key stopped working. -->
-                                    <Button
-                                        v-if="commandable(row.computer, group)"
-                                        size="small"
-                                        severity="danger"
-                                        :text="true"
-                                        label="Unpair"
-                                        :loading="syncRunning(row.computer, group, `sync-unpair`)"
-                                        :disabled="working"
-                                        v-tooltip.top="`Stop this computer syncing this sandbox. Its local folder is left exactly as it is.`"
-                                        @click="confirmingUnpair = { computer: row.computer, group }"
-                                    />
-                                </template>
-                                <!-- THE SWITCH THAT CLEARS THE USER'S OWN LOCALHOST, under the ports it is about
-                                 rather than up in the verbs, which act on the container. Two "Stop"s a pixel
-                                 apart would be read as one, and this one stops nothing in the sandbox: the dev
-                                 server keeps serving, the files keep syncing, the number leaves the machine's
-                                 localhost. Its label points whichever way the machine currently says. -->
-                                <template #ports="{ group }">
-                                    <Button
-                                        v-if="commandable(row.computer, group)"
-                                        size="small"
-                                        severity="secondary"
-                                        :text="true"
-                                        :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
-                                        :loading="syncRunning(row.computer, group, `mirror-off`)"
-                                        :disabled="working"
-                                        v-tooltip.top="
-                                            mirroringOff(group.folder)
-                                                ? `Put this sandbox's ports back on this computer's localhost`
-                                                : `Take this sandbox's ports off this computer's localhost. Files keep syncing.`
-                                        "
-                                        @click="
-                                            void runSync(
-                                                row.computer,
-                                                rowKey(row.computer, group),
-                                                group.sandboxId,
-                                                mirroringOff(group.folder) ? `mirror-on` : `mirror-off`,
-                                            )
-                                        "
-                                    />
-                                </template>
+                                 <template #folder="{ group }">
+                                     <div class="mt-1 flex flex-wrap items-center gap-2">
+                                         <Button
+                                             v-if="pausable(row.computer, group)"
+                                             size="small"
+                                             severity="secondary"
+                                             :label="group.folder?.paused === true ? `Resume syncing` : `Pause syncing`"
+                                             :loading="syncRunning(row.computer, group, `sync-pause`)"
+                                             :disabled="working"
+                                             v-tooltip.top="
+                                                 group.folder?.paused === true
+                                                     ? `Start moving files between this computer and the sandbox again`
+                                                     : `Stop moving files either way. The sandbox keeps running and its ports keep being mirrored.`
+                                             "
+                                             @click="
+                                                 void runSync(
+                                                     row.computer,
+                                                     rowKey(row.computer, group),
+                                                     group.sandboxId,
+                                                     group.folder?.paused === true ? `sync-resume` : `sync-pause`,
+                                                 )
+                                             "
+                                         />
+                                         <!-- THE END OF THE PAIRING, and the one control here that nothing undoes in
+                                          a click: turning it back on means a fresh one-liner on that computer. It
+                                          asks the MACHINE to unpair (which is why it needs the computer door), so
+                                          the agent tears its own sessions down and self-revokes rather than
+                                          discovering later that its key stopped working. -->
+                                         <Button
+                                             v-if="commandable(row.computer, group)"
+                                             size="small"
+                                             severity="danger"
+                                             :text="true"
+                                             label="Unpair"
+                                             :loading="syncRunning(row.computer, group, `sync-unpair`)"
+                                             :disabled="working"
+                                             v-tooltip.top="`Stop this computer syncing this sandbox. Its local folder is left exactly as it is.`"
+                                             @click="confirmingUnpair = { computer: row.computer, group }"
+                                         />
+                                     </div>
+                                 </template>
+                                 <!-- THE SWITCH THAT CLEARS THE USER'S OWN LOCALHOST, under the ports it is about
+                                  rather than up in the verbs, which act on the container. Two "Stop"s a pixel
+                                  apart would be read as one, and this one stops nothing in the sandbox: the dev
+                                  server keeps serving, the files keep syncing, the number leaves the machine's
+                                  localhost. Its label points whichever way the machine currently says. -->
+                                 <template #ports="{ group }">
+                                     <div class="mt-1 flex flex-wrap items-center gap-2">
+                                         <Button
+                                             v-if="commandable(row.computer, group)"
+                                             size="small"
+                                             severity="secondary"
+                                             :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
+                                             :loading="syncRunning(row.computer, group, `mirror-off`)"
+                                             :disabled="working"
+                                             v-tooltip.top="
+                                                 mirroringOff(group.folder)
+                                                     ? `Put this sandbox's ports back on this computer's localhost`
+                                                     : `Take this sandbox's ports off this computer's localhost. Files keep syncing.`
+                                             "
+                                             @click="
+                                                 void runSync(
+                                                     row.computer,
+                                                     rowKey(row.computer, group),
+                                                     group.sandboxId,
+                                                     mirroringOff(group.folder) ? `mirror-on` : `mirror-off`,
+                                                 )
+                                             "
+                                         />
+                                     </div>
+                                 </template>
                                 <!-- The machine's own output: while a row works, and afterwards for as long as a log
                                  tail is being read. Every other operation has said all it had to say in its
                                  result line by the time it ends. -->
@@ -1233,14 +1238,13 @@ const runRevoke = async (): Promise<void> => {
                              Only on a row that HAS an enrollment, and only for the owner, matching the daemon's
                              own floor. What it replaced was one button under the list that revoked every paired
                              computer at once, including the ones mirroring ports for other people. -->
-                        <div v-if="row.computer.sync && isOwner" class="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line-subtle pt-3">
+                        <div v-if="row.computer.sync && isOwner" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line-subtle pt-3">
                             <p class="min-w-0 flex-1 text-xs text-muted">
                                 Revoking stops this computer reaching the sandbox at all. Nothing on it is deleted, and its agent stays installed.
                             </p>
                             <Button
                                 size="small"
                                 severity="danger"
-                                :text="true"
                                 label="Revoke access"
                                 :disabled="working || revoking"
                                 @click="confirmingRevoke = row.computer"
