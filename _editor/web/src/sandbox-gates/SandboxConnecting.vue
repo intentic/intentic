@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
@@ -19,7 +20,22 @@ const { active, connection } = useSandbox();
 const { clearCredential } = useGoogleIdentity();
 const { invalidateSession, getSessionToken } = useSandboxSession();
 
-const notice = computed(() => connectionNotice(connection.value.failure, active.value?.name));
+/* THE ONE CLOCK ON THIS SCREEN, and it runs only while there is a running outage to time: a wait that has
+ * lasted a minute on a machine WE run is a different sentence from the same wait at ten seconds
+ * (connectionNotice), and nothing else here changes with time. Stopped the moment the failure clears, so a
+ * connected workspace pays nothing for it. */
+const timing = computed(() => connection.value.unavailableSince !== undefined);
+const now = useNow(timing);
+const notice = computed(() =>
+    connectionNotice({
+        failure: connection.value.failure,
+        sandboxName: active.value?.name,
+        // A machine the platform started for this sandbox: the row says so, and it is what earns this gate the
+        // right to name a cause instead of waiting politely forever.
+        hostedMachine: (active.value?.hosted ?? null) !== null,
+        outageMs: connection.value.unavailableSince === undefined ? 0 : now.value - connection.value.unavailableSince,
+    }),
+);
 
 // Carry the sandbox id so /setup resumes THIS sandbox instead of offering a blank create form.
 // Carried as a link rather than pushed, so the one way out of this gate has an address on it like everything
@@ -39,10 +55,23 @@ const signIn = async (): Promise<void> => {
     <GateCard icon="box" :title="notice.title" :spinner="notice.action === undefined">
         <p class="text-sm text-muted">{{ notice.body }}</p>
         <template #actions>
-            <Button v-if="notice.action === `setup`" :as="RouterLink" :to="setupTo" label="Finish setup" icon-pos="right" severity="secondary">
+            <Button
+                v-if="notice.action?.kind === `setup`"
+                :as="RouterLink"
+                :to="setupTo"
+                :label="notice.action.label"
+                icon-pos="right"
+                severity="secondary"
+            >
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
-            <Button v-else-if="notice.action === `signin`" label="Sign in again" icon-pos="right" severity="secondary" @click="signIn">
+            <Button
+                v-else-if="notice.action?.kind === `signin`"
+                :label="notice.action.label"
+                icon-pos="right"
+                severity="secondary"
+                @click="signIn"
+            >
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
         </template>

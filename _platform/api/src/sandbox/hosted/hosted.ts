@@ -424,6 +424,34 @@ export const refreshHosted = async (
 // Tear the whole app down (machines + volume ride with it). 404-tolerant by fly.ts's contract.
 export const destroyHosted = async (config: Config, appName: string): Promise<void> => deleteApp(config.hosted.flyApiToken, appName);
 
+/* GIVING UP ON A MACHINE, AND ON THE ADDRESS THAT WAS ONLY EVER ITS OWN. The one statement every path that
+ * ends a hosted machine finishes with — the idle sweep collecting one, the same sweep dropping a row Fly no
+ * longer has, a wake that discovers the machine is gone — because all three used to end at the first half and
+ * the second half is what the owner actually experiences.
+ *
+ * THE ROW GOES because it is a belief the platform can no longer justify, and because `hostedOffer` counts
+ * rows: one left pointing at nothing costs its owner the free lane entirely, on a machine that does not exist.
+ *
+ * THE SANDBOX'S `daemonUrl` GOES WITH IT, and this is the half that was missing. A hosted sandbox is reached
+ * by the edge replaying to that machine's app; with the machine gone, that address answers nothing, forever.
+ * The browser, though, reads a non-null `daemonUrl` as "there is something to dial" and settles into its
+ * reconnect loop against it — the wake reflex firing every minute into a box that was destroyed, the gate
+ * saying "waiting for the sandbox to answer" for as long as anybody leaves the tab open. Blanking it is what
+ * turns that into the sentence this case has always deserved: the sandbox isn't connected, here is setup.
+ * Which is also exactly what the idle sweep promised in prose and never actually did — "the row, the name,
+ * the address and the sharing all survive, so coming back means picking a machine again".
+ *
+ * `lastSeenAt` deliberately STAYS. It records that a daemon once checked in, which remains true and is what
+ * the shell reads to decide this is a workspace to open rather than a setup to finish (router/setupGate.ts):
+ * the sandbox is still the reader's, with its name, its address and the people it is shared with, and it
+ * should open into the shell that says so, not vanish into the wizard. */
+export const forgetHostedMachine = async (prisma: PrismaClient, hostedMachineId: string, sandboxId: string): Promise<void> => {
+    await prisma.$transaction([
+        prisma.hostedMachine.delete({ where: { id: hostedMachineId } }),
+        prisma.sandbox.update({ where: { id: sandboxId }, data: { daemonUrl: null } }),
+    ]);
+};
+
 /* HOW LONG AN APP IS TOO YOUNG TO JUDGE. A cold provision is app → volume → machine → row, so between the
  * first call and the last there are minutes in which a perfectly healthy signup owns Fly resources that no row
  * vouches for yet. Anything inside this window is somebody arriving, never a leftover. */

@@ -4,7 +4,7 @@ import type { Config } from "../../config.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { premiumOf } from "../../pool/pool-membership.js";
 import { getMachine, isFlyGone } from "./fly.js";
-import { destroyHosted, hostedEnabled } from "./hosted.js";
+import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
 
 /* COLLECTING THE MACHINES NOBODY CAME BACK TO, the free hosted lane's largest cost and its least useful one.
  *
@@ -89,7 +89,7 @@ const decideIdleMachine = async (
         return undefined;
     });
     if (state === undefined) {
-        await prisma.hostedMachine.delete({ where: { id: machine.id } });
+        await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
         logger.warn({ app: machine.appName, sandboxId: machine.sandbox.id }, `hosted idle sweep: machine gone from the provider; row dropped`);
         return `dropped`;
     }
@@ -103,9 +103,11 @@ const decideIdleMachine = async (
     }
     if (idleDaysSoFar >= config.hosted.idleDays) {
         await destroyHosted(config, machine.appName);
-        // The row goes with the machine; the SANDBOX stays, which is what lets its owner give it a new machine
-        // without losing the name, the address or who it is shared with.
-        await prisma.hostedMachine.delete({ where: { id: machine.id } });
+        // The row goes with the machine, and so does the address that was the machine's (forgetHostedMachine);
+        // the SANDBOX stays, which is what lets its owner give it a new machine without losing the name or who
+        // it is shared with, and what makes coming back land on "pick a machine" rather than on a workspace
+        // reconnecting forever to a box we deleted.
+        await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
         logger.warn(
             { app: machine.appName, sandboxId: machine.sandbox.id, idleDays: Math.floor(idleDaysSoFar) },
             `hosted idle sweep: machine collected`,

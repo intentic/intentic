@@ -34,6 +34,21 @@ export interface ArrivalInput {
      * anything: the way to finish it is the one they were already on, and quietly doing something else to
      * their sandbox is the one move a resumed setup must never make. */
     readonly touched: boolean;
+    /* THE ROW WAS MINTED BY THIS ARRIVAL, seconds ago, by the page itself (Setup.vue's `createdHere`). The
+     * other half of `touched`, and the half that was missing.
+     *
+     * `touched` asks whether anybody ever ACTED on this row, which is exactly the right question for a
+     * half-finished install and exactly the wrong one for a row nobody ever did anything with. A visit that
+     * opened /setup and closed the tab leaves such a row behind — untouched, and permanent — so every LATER
+     * visit found it, read it as a blank first arrival, and started a machine on the platform's provider for
+     * it. Measured on the live product: an account whose only sandbox was an abandoned draft from a fortnight
+     * earlier was handed a machine by nothing more than opening app.intentic.dev, and, because a row with
+     * hardware attached is no longer a draft, the machine then stayed.
+     *
+     * A machine is the one thing this page can start that costs the reader something (their one free
+     * allowance, and a real box on somebody's provider), so it is started only for a row this visit made out
+     * of nothing. Anything found lying here gets the picker, which is one click and says what it will do. */
+    readonly fresh: boolean;
     // The platform hosts sandboxes at all (`sandbox.hostedOffer`), and this account has an allowance left.
     readonly hostedOffered: boolean;
     readonly hostedSpent: boolean;
@@ -76,6 +91,10 @@ export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (input.inApp) {
         return input.commandOffered ? `local` : `choose`;
     }
-    // …and in a browser, the machine is ours, whenever there is one to give.
-    return hostedTakeable(input) ? `hosted` : `choose`;
+    /* …and in a browser, the machine is ours, whenever there is one to give AND this arrival is the one that
+     * made the row. `fresh` is what keeps the zero-click machine a property of ARRIVING for the first time
+     * rather than of the row happening to look blank: without it, every reload of a draft nobody finished
+     * spent an allowance and left a box running (see `fresh` above). A reader who does want one from here is
+     * one labelled click away, on the picker `choose` draws. */
+    return input.fresh && hostedTakeable(input) ? `hosted` : `choose`;
 };

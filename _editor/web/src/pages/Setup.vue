@@ -583,13 +583,27 @@ const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
  * one is a field name. */
 const factLabel = `fact-label shrink-0`;
 
-/* A stable value slot keeps every address state—text, spinner, or failure—on the same baseline.
+/* THE VALUE SITS ON THE LABEL'S BASELINE, and that is a real baseline rather than an approximation of one.
+ *
+ * This slot used to be a fixed 32px box with its content CENTRED in it, on a row that centred its two cells:
+ * the idea being that a box of a constant height keeps every address state — text, spinner, hostname, failure
+ * — in the same place. It does keep them level with each other, and it cannot keep them level with the LABEL,
+ * because centring aligns boxes and reading aligns baselines. `ADDRESS` is 11px and its value is 12px (14px
+ * for a hostname), so centring two boxes of different heights leaves their baselines about 1.25px apart, and
+ * a gold letterspaced field name sitting a pixel above the sentence beside it is exactly as visible as it
+ * sounds. The row asks for baselines now (`sm:items-baseline`, all the way down through the cell to here) and
+ * keeps its steady 32px by centring the ROW TRACK inside it instead of the cells (`sm:content-center`), so
+ * nothing about the card's rhythm changes and every state still lands in one place.
+ *
+ * A spinner is the exception that has to be spelled out: it is a picture, so it wants the text's middle, not
+ * its baseline (an SVG's baseline is its bottom edge, which would hang it below the line and — worse — make
+ * it, rather than the words, the thing the label aligns to). Those two branches say `self-center`.
  *
  * The MONO is added by the two branches that print a real hostname and by neither of the others, which is a
  * distinction worth keeping: a hostname is the one string on this card somebody may have to compare character
  * by character, and "Assigned when your machine starts" set in a terminal face is a sentence pretending to be
  * a value. */
-const factSlot = `flex min-h-8 min-w-0 items-center text-sm text-content`;
+const factSlot = `flex min-w-0 items-baseline text-sm text-content`;
 const factHost = `${factSlot} fact-host font-mono`;
 
 // There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
@@ -1504,6 +1518,9 @@ const arrive = async (): Promise<void> => {
     arrival.value = arrivalFor({
         inApp: desktop.value,
         touched: resuming.value,
+        // `autoCreate` above is the only thing that sets this, so it says exactly what it means: the row the
+        // arrival is about was minted by this visit and by nothing else.
+        fresh: createdHere.value,
         hostedOffered: hostedOffered.value,
         hostedSpent: hostedSpent.value,
         commandOffered: commandOffered.value,
@@ -2033,12 +2050,20 @@ const warmSandboxCredential = async (): Promise<void> => {
                     <!-- Naming belongs inside the workspace, where it helps distinguish real machines. The
                          ordinary path therefore has no identity card at all: only exceptional arrival state
                          occupies this space, unframed, before the actual machine choice. -->
-                    <div v-else-if="!loaded || created === null || resuming" class="flex flex-col items-start gap-2 py-1">
-                        <p v-if="!loaded" class="flex items-center gap-2 text-xs text-muted">
-                            <Icon name="spinner" spin class="text-info" />
-                        </p>
-                        <template v-else-if="created === null">
-                            <p v-if="creating" class="flex items-center gap-2 text-xs text-muted">
+                    <!-- ONLY WHILE THERE IS NOTHING ELSE ON SCREEN, which is what `created === null` buys and what
+                         a bare `!loaded` did not.
+                         `loaded` goes true at the END of the whole arrival — including the seconds a hosted
+                         provision takes — while `created` is set in the middle of it, so on the ordinary browser
+                         arrival this block and the run card below were BOTH drawn: a naked spinner with no words
+                         next to it, floating above a card that was already narrating the same wait step by step.
+                         Two things claiming to be the progress indicator, one of them mute. The card is the one
+                         that can say what is happening, so this now renders only when the card cannot: before a
+                         row exists, or when a resumed one needs its own line. -->
+                    <div v-else-if="created === null || resuming" class="flex flex-col items-start gap-2 py-1">
+                        <template v-if="created === null">
+                            <!-- Reading the offers and minting the row are one wait to the reader, so they are one
+                                 line. It used to be two states, and the first of them had no sentence at all. -->
+                            <p v-if="!loaded || creating" class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
                                 Setting one up for you. Nothing to fill in.
                             </p>
@@ -2049,8 +2074,10 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 </Button>
                             </template>
                             <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
-                             user who needs it is looking for exactly these words. -->
-                            <button type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
+                             user who needs it is looking for exactly these words. Held back until the arrival read
+                             has answered: offering the attach lane is only honest once we know what this platform
+                             can do, and it is the one line on the page that must not flicker in and out. -->
+                            <button v-if="loaded" type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
                                 Already running a sandbox somewhere? Connect it by domain →
                             </button>
                         </template>
@@ -2288,9 +2315,12 @@ const warmSandboxCredential = async (): Promise<void> => {
                                  hostname — the value ran off the card and was clipped at 320px. Above the
                                  value instead, the address gets the whole width, which is also the only place
                                  on this card where a string may have to be read character by character. -->
-                            <div v-if="addressFact !== `own`" class="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-facts sm:items-center">
+                            <div
+                                v-if="addressFact !== `own`"
+                                class="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:min-h-8 sm:grid-cols-facts sm:content-center sm:items-baseline"
+                            >
                                 <span :class="factLabel">Address</span>
-                                <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                                     <!-- A hosted sandbox's address is the daemon's own announce: no mint, no
                                          escape hatches: the machine is born holding its tunnel, and the page
                                          redirects the moment this turns real.
@@ -2303,7 +2333,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     <template v-if="addressFact === `hosted`">
                                         <span v-if="hostedHost" :class="factHost">{{ hostedHost }}</span>
                                         <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
-                                            <Icon name="spinner" spin /> Assigned as your machine starts…
+                                            <Icon name="spinner" spin class="self-center" /> Assigned as your machine starts…
                                         </span>
                                         <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
                                     </template>
@@ -2319,7 +2349,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
                                         <span v-else-if="setup" :class="factHost">{{ setup.hostname }}</span>
                                         <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
-                                            <Icon name="spinner" spin /> Preparing your intentic domain…
+                                            <Icon name="spinner" spin class="self-center" /> Preparing your intentic domain…
                                         </span>
                                         <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and
                                              "Already reachable at a domain? Connect it" were two links, in two

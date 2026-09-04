@@ -13,6 +13,7 @@ import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly.js";
 import {
     destroyHosted,
+    forgetHostedMachine,
     HostedAlreadyProvisioned,
     type HostedProvisionArgs,
     hostedEnabled,
@@ -580,6 +581,25 @@ export const sandboxRoutes = {
         try {
             await wakeHosted(context.config, sandbox.hosted);
         } catch (error) {
+            /* FLY ANSWERING THAT THE MACHINE IS NOT THERE IS THE END OF IT, not a bad minute to retry: nothing
+             * about a machine that does not exist will ever change again. This is also the only moment the
+             * platform is ever ASKED about such a machine by somebody who is stuck on it — the wake reflex
+             * fires from the browser the instant a hosted daemon stops answering (useSandbox.ts) — so it is
+             * where the belief has to be given up. Until it was, the row sat there holding the owner's one
+             * free machine while the browser reconnected to its dead address every few seconds, for as long
+             * as the tab stayed open, and only the nightly idle sweep would eventually notice, a fortnight
+             * later. Now the row and the address go here, and the very next poll turns that endless wait into
+             * "this sandbox isn't connected — set it up", which is a screen with a way out of it. */
+            if (isFlyGone(error)) {
+                await forgetHostedMachine(context.prisma, sandbox.hosted.id, sandbox.id);
+                context.logger.warn(
+                    { app: sandbox.hosted.appName, sandboxId: sandbox.id },
+                    `hosted wake: the provider has no such machine; the row and the sandbox's address are dropped`,
+                );
+                throw new ORPCError(`NOT_FOUND`, {
+                    message: `the machine this sandbox ran on no longer exists; give it a new one from setup`,
+                });
+            }
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `waking the machine failed` });
         }
         // Only after a start that actually succeeded: a wake that failed cost nothing and must not be billed.

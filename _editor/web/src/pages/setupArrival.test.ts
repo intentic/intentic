@@ -6,6 +6,7 @@ import { arrivalFor, type ArrivalInput } from "./setupArrival";
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     inApp: false,
     touched: false,
+    fresh: true,
     hostedOffered: true,
     hostedSpent: false,
     commandOffered: true,
@@ -39,6 +40,23 @@ describe(`the surface answers, not the reader`, () => {
 it(`never acts on a resumed sandbox that something has happened to`, () => {
     expect(arrivalFor(arrival({ touched: true }))).toBe(`choose`);
     expect(arrivalFor(arrival({ touched: true, inApp: true }))).toBe(`choose`);
+});
+
+/* …AND NOT ON ONE NOTHING EVER HAPPENED TO EITHER, WHICH IS THE HALF `touched` COULD NOT SEE. Opening /setup
+ * mints a row; closing the tab leaves it, untouched and permanent. Every later visit then found a row that
+ * looked exactly like a blank first arrival and started a real machine on the platform's provider for it,
+ * spending the account's one free allowance on a box nobody asked for — observed on the live product against
+ * a draft a fortnight old, and the reason somebody who had deliberately removed their machine came back to
+ * another one. The picker is what a found row gets: one click, and it says what it will do. */
+it(`starts a machine only for the row this arrival minted`, () => {
+    expect(arrivalFor(arrival({ fresh: true }))).toBe(`hosted`);
+    expect(arrivalFor(arrival({ fresh: false }))).toBe(`choose`);
+});
+
+// The reader's own click still outranks it: somebody who pressed "Start instantly" on the site has asked, so
+// the row being one they left behind last week is beside the point.
+it(`still honours an explicit ask on a row it found rather than made`, () => {
+    expect(arrivalFor(arrival({ fresh: false, requestedMachine: `hosted` }))).toBe(`hosted`);
 });
 
 /* A RUNG CHOSEN BEFORE THIS PAGE OUTRANKS THE SURFACE, in both directions. The site's /where-it-runs cards

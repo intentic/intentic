@@ -369,6 +369,27 @@ it(`starts a machine of ours for a browser, on arrival`, async () => {
     expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 });
 
+/* …ONLY FOR A ROW THIS ARRIVAL MADE, WHICH IS THE HALF THAT WAS MISSING. Opening /setup mints a row; closing
+ * the tab leaves it behind, untouched and permanent. Every later visit then found something that looked
+ * exactly like a first arrival and started a real machine on the platform's provider for it, spending the
+ * account's one free allowance with no click anywhere. Reproduced on the live product: an account whose only
+ * sandbox was an abandoned draft from a fortnight earlier was handed a machine by nothing but opening
+ * app.intentic.dev, and — because a row with hardware attached is no longer a discardable draft — it stayed.
+ * A found row gets the picker instead: the same rung, one labelled click, saying what it will do. */
+it(`starts nothing for a sandbox it found rather than made`, async () => {
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const abandoned = sandboxRow({ id: `s1`, name: `workspace` });
+    sandboxes.value = [abandoned];
+    list.mockResolvedValue([abandoned]);
+    const el = await mount();
+    expect(create).not.toHaveBeenCalled();
+    expect(hostedProvision).not.toHaveBeenCalled();
+    // …and the rung is on the picker, unchosen, rather than folded away behind a machine already booting.
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs.map((card) => card.getAttribute(`aria-checked`))).toEqual([`false`, `true`]);
+    expect(rungs[0]?.textContent).toContain(`Start instantly`);
+});
+
 /* …AND THE OTHER ANSWER IS ONE LINE AWAY, never a support article. A page that decided for the reader owes
  * them the rung it did not take in plain sight; revealing it starts and destroys nothing, because a reader
  * opening it to READ what the alternative is has not chosen it yet. */

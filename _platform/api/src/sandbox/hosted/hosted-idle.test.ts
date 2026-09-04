@@ -33,6 +33,10 @@ const machine = (over: Record<string, unknown> = {}) => ({
 const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) =>
     ({
         hostedMachine: { findMany: vi.fn().mockResolvedValue(rows), update: vi.fn().mockResolvedValue({}), delete: vi.fn().mockResolvedValue({}) },
+        // Ending a machine writes two rows together (forgetHostedMachine): the machine goes and the sandbox's
+        // address goes with it. The stub settles what the model calls already returned, as the hosted suite's does.
+        sandbox: { update: vi.fn().mockResolvedValue({}) },
+        $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
         membership: { findUnique: vi.fn().mockResolvedValue(null) },
         ...over,
     }) as unknown as PrismaClient;
@@ -60,9 +64,13 @@ describe(`collecting the machines nobody came back to`, () => {
         const prisma = prismaWith([machine()]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
-        // The MACHINE row goes; the sandbox is untouched, so its name, address and sharing survive and its
-        // owner can give it a new machine rather than finding the workspace itself gone.
+        // The MACHINE row goes; the SANDBOX stays, so its name and sharing survive and its owner can give it a
+        // new machine rather than finding the workspace itself gone.
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h1` } });
+        /* …and the address goes WITH the machine, because it only ever was the machine's: the edge replays it
+         * to an app that no longer exists. Leaving it is what made "coming back means picking a machine again"
+         * false in practice — the shell opened, dialled the dead address, and sat on a reconnect spinner. */
+        expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 
     /* THE ROW THAT OUTLIVED ITS MACHINE, and the reason this sweep threw every night for weeks: a machine
@@ -75,6 +83,7 @@ describe(`collecting the machines nobody came back to`, () => {
         const prisma = prismaWith([machine({ sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(15) } })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 1 });
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h1` } });
+        expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 
     it(`warns once inside the notice period and destroys nothing`, async () => {

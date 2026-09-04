@@ -995,6 +995,52 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toBeInstanceOf(ORPCError);
     });
 
+    /* THE WEDGE THIS ROUTE IS THE ONLY WITNESS TO. The browser's wake reflex fires the instant a hosted daemon
+     * stops answering, so when the machine has been destroyed under its row — by hand at the provider, or by
+     * another deployment sharing the org — this is the one call that ever learns it. It used to answer
+     * BAD_GATEWAY and change nothing: the row went on holding the owner's single free machine, the sandbox went
+     * on advertising the dead address, and the workspace sat on "waiting for the sandbox to answer" until
+     * somebody deleted the whole sandbox to escape. Both facts are given up here now. */
+    it(`wake drops the row and the sandbox's dead address when the provider has no such machine`, async () => {
+        stubFetch([{ match: () => true, respond: () => json({ error: `machine not found` }, 404) }]);
+        const written: unknown[] = [];
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: vi.fn().mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
+                update: vi.fn((args: unknown) => {
+                    written.push(args);
+                    return Promise.resolve({});
+                }),
+            },
+            hostedMachine: { delete: vi.fn((args: unknown) => { written.push(args); return Promise.resolve({}); }) },
+        });
+        await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
+            code: `NOT_FOUND`,
+        });
+        // The row, so `hostedOffer` stops counting a machine that does not exist against the owner's allowance…
+        expect(written).toContainEqual({ where: { id: `h1` } });
+        // …and the address, so the browser reads "not connected" (and offers setup) instead of reconnecting forever.
+        expect(written).toContainEqual({ where: { id: `s1` }, data: { daemonUrl: null } });
+    });
+
+    // A provider having a bad minute is not evidence of anything: the row and the address must survive it, or
+    // one Fly hiccup would hand every hosted sandbox back to the setup wizard.
+    it(`wake keeps the row when the provider merely refuses`, async () => {
+        stubFetch([{ match: () => true, respond: () => json({ error: `host unavailable` }, 500) }]);
+        const remove = vi.fn();
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: vi.fn().mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
+                update: vi.fn().mockResolvedValue({}),
+            },
+            hostedMachine: { delete: remove },
+        });
+        await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
+            code: `BAD_GATEWAY`,
+        });
+        expect(remove).not.toHaveBeenCalled();
+    });
+
     it(`wake starts the machine for an accepted member's hosted sandbox`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
         const findFirst = vi.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-a`, machineId: `m1`, region: `iad` } });
