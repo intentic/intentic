@@ -79,10 +79,11 @@ const status = computed(() => (pickUp.value === undefined ? `` : pickUpStatus(pi
  * The waiting hint survives for the endings with nothing held, which are the only ones a wait still gates
  * (pickUpReady). It owes the reader the one thing "disabled" never says: why, and until when. */
 const continueHint = computed(() => {
+    const keyHint = !mobile.value && props.ready ? ` (Enter)` : ``;
     if (pickUp.value?.held !== undefined) {
-        return `Send this turn again, exactly as it was: nothing is added to the chat. The reset is a due date, not a wall — an earlier press may get through`;
+        return `Send this turn again, exactly as it was: nothing is added to the chat. The reset is a due date, not a wall — an earlier press may get through${keyHint}`;
     }
-    return props.ready ? `Pick up where it left off, without retyping` : `Waiting: nothing gets through until the allowance resets`;
+    return props.ready ? `Pick up where it left off, without retyping${keyHint}` : `Waiting: nothing gets through until the allowance resets`;
 });
 
 /* THE OUTAGE'S OWN PAIR OF CONTROLS, which no other ending has, because no other ending has a second party
@@ -180,16 +181,19 @@ const fallback = computed(() =>
  * with the same visual weight as the way out of the thing on screen is how a row stops being readable. */
 const offerAutoContinue = computed(() => !autoContinue.value && outage.value?.automatic === undefined);
 
-/* THE MENU EXISTS ONLY WHEN IT HAS SOMETHING IN IT: a caret opening an empty panel is worse than no caret, and
- * on the commonest ending of all (a turn that stopped, one account connected, auto-continue already on) there
- * is nothing to put behind it and the row is a line and one button. */
-const ways = computed(() => fallback.value !== undefined || offerAutoContinue.value);
+/* THE AUTO-CONTINUE AFFORDANCE:
+ * When fallback is available (i.e. multiple variants), the chevron menu opens "Other ways on" offering
+ * both fallback and auto-continue.
+ * When there is NO fallback (the overwhelmingly common 2-action situation: Continue and Auto-continue),
+ * auto-continue is shown directly as a secondary action button instead of hiding behind a chevron menu. */
+const showInlineAutoContinue = computed(() => fallback.value === undefined && offerAutoContinue.value);
+const hasMenu = computed(() => fallback.value !== undefined);
 const waysOpen = ref(false);
 const waysAnchor = ref<HTMLElement>();
 // A menu whose strip has gone, or whose contents have, is a panel floating over an answer nobody asked for:
 // both of the things that can empty it also close it.
 watch(
-    () => props.visible && ways.value,
+    () => props.visible && hasMenu.value,
     (open) => {
         if (!open) {
             waysOpen.value = false;
@@ -296,17 +300,25 @@ const autoContinueLine = computed(() =>
         >
             Send it when it's back
         </Button>
-        <!-- THE PRESS AND ITS VARIANTS, as one control. The key is named ON the button rather than in a tooltip,
-             because a pointer that has travelled here has already spent what the shortcut would have saved; the
-             composer's hint slot says the same thing one line below, for the reader who hasn't moved yet.
-             Present but inert while the pick-up is still waiting on an instant it named: a button that
-             disappears until the reset takes the promise with it, and the promise is the point. -->
-        <div ref="waysAnchor" class="flex shrink-0 items-center">
+        <!-- THE PRESS AND ITS VARIANTS: Continue, inline Auto-continue when there are only 2 actions,
+             or a chevron dropdown when multiple variants exist (e.g. fallback account). -->
+        <div ref="waysAnchor" class="flex shrink-0 items-center gap-1">
+            <Button
+                v-if="showInlineAutoContinue"
+                size="small"
+                severity="secondary"
+                :text="true"
+                :disabled="!reachable"
+                v-tooltip.top="'Keep continuing automatically whenever a turn stops short'"
+                @click="armAutoContinue"
+            >
+                <Icon name="repeat" class="mr-1 text-2xs" />Auto-continue
+            </Button>
             <Button size="small" :text="true" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
-                Continue<span v-if="!mobile && ready" class="font-normal text-subtle"> · Enter</span>
+                Continue
             </Button>
             <Button
-                v-if="ways"
+                v-if="hasMenu"
                 size="small"
                 severity="secondary"
                 :text="true"
@@ -320,9 +332,7 @@ const autoContinueLine = computed(() =>
             </Button>
         </div>
     </div>
-    <!-- THE PRESS'S VARIANTS: the same verb with one thing changed. Rows rather than buttons, because each is
-         worth a line of its own saying what it spends — another subscription's allowance, or every future turn
-         that stops short — and that is precisely what would not fit on a button in the row. -->
+    <!-- THE PRESS'S VARIANTS: shown in the dropdown when multiple alternative ways on exist. -->
     <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" header="Other ways on" panel-class="w-80 p-1">
         <div class="flex flex-col p-1">
             <button
@@ -333,8 +343,6 @@ const autoContinueLine = computed(() =>
             >
                 <Icon name="user" class="mt-0.5 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
-                    <!-- Names the account rather than the act, so it reads as the same press with the one thing
-                         that differs appended, which is exactly what it is. -->
                     <span class="truncate text-sm text-content md:text-xs">Continue on {{ fallbackLabel(fallback) }}</span>
                     <span class="text-2xs text-subtle">Sends this turn again now, on their allowance, instead of waiting for this one.</span>
                 </span>
@@ -348,7 +356,7 @@ const autoContinueLine = computed(() =>
                 <Icon name="repeat" class="mt-0.5 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
                     <span class="text-sm text-content md:text-xs">Auto-continue</span>
-                    <span class="text-2xs text-subtle">Keeps pressing Continue for you in this chat, whenever a turn stops short.</span>
+                    <span class="text-2xs text-subtle">Keeps continuing whenever a turn stops short.</span>
                 </span>
             </button>
         </div>

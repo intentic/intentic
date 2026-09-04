@@ -176,8 +176,8 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
 
     // A status, not a paragraph: what happened, and what survived it.
     expect(composerText()).toContain(`Turn stopped short · work kept`);
-    // The key is named ON the button, so the reader who has already reached for the mouse learns it anyway.
-    expect(continueButton()?.textContent).toContain(`Enter`);
+    // Continue button is present without "Enter" in its button text
+    expect(continueButton()?.textContent?.trim()).toBe(`Continue`);
 
     continueButton()!.click();
     await settle();
@@ -220,20 +220,19 @@ it(`stands down the moment the user types something of their own`, async () => {
 });
 
 /* THE STANDING VERSION OF THE PRESS, offered at the moment anyone wishes for it: reading "this turn stopped
- * before it finished" again. Arming it is one click from there, and the strip then says what the chat is doing
- * about itself, because a switch with no readout and no way off is a trap rather than an automation. */
+ * before it finished" again. When only Continue and Auto-continue exist, Auto-continue is shown directly as a button.
+ * Arming it is one click, and the strip then says what the chat is doing about itself. */
 it(`offers to keep continuing by itself, and says so once it is on`, async () => {
     const conversation = stoppedChat();
     await mountPanel();
 
-    await openWays();
+    expect(button(`Auto-continue`)).toEqual(expect.any(Object));
     button(`Auto-continue`)!.click();
     await settle();
 
     expect(conversation.autoContinue.value).toBe(true);
     expect(composerText()).toContain(`Auto-continue is on`);
     // The offer is not repeated once taken: the armed strip is where the state and the way out of it live now.
-    // With nothing else behind it the caret goes too, rather than opening an empty panel.
     expect(button(`Auto-continue`)).toBeUndefined();
     expect(waysButton()).toBeUndefined();
     expect(continueButton()).toEqual(expect.any(Object));
@@ -485,8 +484,8 @@ it(`offers the other account by name on a spent allowance, and re-runs the held 
     expect(resume).toHaveBeenCalledTimes(1);
 });
 
-// The common sandbox has one subscription and no second pool to move to. An inert or absent-but-implied button
-// would be worse than the wait: the strip says what it can do and nothing more.
+// The common sandbox has one subscription and no second pool to move to.
+// When only Continue and Auto-continue exist, Auto-continue is shown directly.
 it(`offers no second account when the only other connection is spent too`, async () => {
     twoAccounts(99, 99);
     limitChat();
@@ -497,9 +496,6 @@ it(`offers no second account when the only other connection is spent too`, async
      * the buttons rather than on the line, which is worded from the live reading. */
     const labels = [...document.querySelectorAll<HTMLButtonElement>(`button`)].map((element) => element.textContent?.trim() ?? ``);
     expect(labels).toContainEqual(expect.stringContaining(`Send it when it's back`));
-
-    // And opened, the menu carries only the standing version of the press: there is no other pool to name.
-    await openWays();
     expect(button(`Continue on`)).toBeUndefined();
     expect(button(`Auto-continue`)).toEqual(expect.any(Object));
 });
