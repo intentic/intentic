@@ -4,9 +4,11 @@ import {
     COMMAND_CLASS_LABELS,
     type CommandClass,
     type CommandContext,
+    type CommandJudgeMode,
     type CommandMatch,
     type CommandSpan,
     matchCommand,
+    mergeSpans,
     type ProgramAsk,
     type SafetyLogEntry,
     type SafetyVerdict,
@@ -37,6 +39,11 @@ import type { TurnTaint } from "./turn-taint.js";
  *   2 JUDGE       a quick model reading the owner's written policy, the program as data, and the daemon's own
  *                 facts about the turn (agent/command-judge.ts). Answers allow, ask or refuse.
  *   3 PERSON      the card, raised only on `ask`, carrying the judge's sentence.
+ *
+ * TIERS 2 AND 3 ARE THE OWNER'S TO DECLINE (`judging`, the contract's CommandJudgeMode). Off skips the judge
+ * entirely and leaves the hard rule standing alone; watch runs it and records every verdict while holding
+ * nothing. Tiers 1 and 1½ are not under the switch, because triage costs nothing and the hard rule never needed
+ * a model.
  *
  * WHAT THIS REPLACED, because the shape only makes sense against it: the classifier's match WAS the verdict, and
  * the owner tuned six per-class switches over it. So `echo "rm -rf /"` into a README, `rg 'rm -rf'`, a heredoc
@@ -86,6 +93,20 @@ export interface CommandGateOptions {
      * afterwards, and the log would be recording verdicts against a document that no longer exists. An edit
      * takes effect on the next turn, which is also when the agent's own edits to it take effect. */
     readonly policy: string;
+    /* HOW MUCH OF THIS GATE THE OWNER TURNED ON (settings.commandJudge; the contract's CommandJudgeMode argues
+     * the three states). Snapshotted per turn beside the policy, and for the same reason: a turn that judged its
+     * first command and merely logged its second because somebody flipped a control mid-turn is a turn nobody
+     * can account for afterwards.
+     *
+     * `off` never calls the judge, records nothing, and raises no card outside the hard rule. `watch` calls it,
+     * records every verdict, and still raises no card outside the hard rule — an `ask` is written down as an ask
+     * and the command runs. `on` is the design as described above.
+     *
+     * THE HARD RULE IS OUTSIDE ALL THREE. It is a typed verdict rather than a judgment, it never spent a model
+     * call, and the Safety page promises in as many words that it cannot be turned off. So a command that would
+     * wipe a block device parks on a card at every setting, with a sentence saying the judge did not weigh in
+     * rather than one pretending it did. */
+    readonly judging: CommandJudgeMode;
     // Nobody is at a composer: an automation wake, a loop iteration, a chore. An ask refuses instead of parking,
     // and the judge is told so before it decides (JudgeFacts.unattended).
     readonly unattended: boolean;
@@ -167,7 +188,8 @@ export interface GateSubject {
     readonly toolName: string;
     // The card's chip: "Run command", "Run code".
     readonly displayName: string;
-    // How the title reads: "This command would delete files recursively".
+    /* The word for the thing being held, used only where the HARD RULE writes the title ("This command would
+     * wipe a disk…"). An ordinary card's title is the judge's own sentence, which already calls it what it is. */
     readonly noun: string;
     // Which grammar colours it on the card, and which word the explainer's prompt uses for it. The two
     // execution backends, named as Shiki names them.
@@ -207,14 +229,25 @@ const elision = (count: number): string => `\n[… ${count} character${count ===
  *
  * Fragments past the window are dropped rather than left dangling — the window is sized by what fits, and a
  * command with marks scattered over kilobytes cannot show all of them on a card. What it can promise is that
- * the FIRST flagged fragment is always on the card, under the title that named it, and that the transcript
- * beside the tool call has the whole program.
+ * the FIRST flagged fragment is always on the card, and that the transcript beside the tool call has the whole
+ * program.
  *
- * ONLY THE HELD CLASS'S fragments. The title says which consequence stopped this ("would read credential
- * material"), so marking a second matched class's fragments beside it would point at text nobody is being asked
- * about, under a sentence that does not describe it. */
-const programAsk = (program: string, subject: GateSubject, matches: readonly CommandMatch[], held: CommandClass): ProgramAsk => {
-    const spans: readonly CommandSpan[] = matches.find((match) => match.commandClass === held)?.spans ?? [];
+ * WHICH FRAGMENTS ARE MARKED depends on who wrote the title, and the two answers are different claims.
+ *
+ * Under the HARD RULE the title names a consequence ("would wipe a disk…"), so the marks are that class's and
+ * only that class's: a second matched class's fragments beside it would point at text nobody is being asked
+ * about, under a sentence that does not describe it.
+ *
+ * Under the JUDGE the title is its own sentence and asserts nothing about which pattern fired, so the marks are
+ * EVERY matched class's — what triage noticed, all of it, rather than whichever class happens to sort first in
+ * the catalog. Marking one of them was how a card came to read "this command would delete files recursively"
+ * over a `rm -rf` in a build directory while the sentence under it, and the actual reason for the card, was an
+ * `npm publish` further along the same line. Merged (mergeSpans) because two classes regularly fire on one
+ * fragment and the renderer is promised non-overlapping ranges. */
+const programAsk = (program: string, subject: GateSubject, matches: readonly CommandMatch[], held: CommandClass | undefined): ProgramAsk => {
+    const spans: readonly CommandSpan[] = mergeSpans(
+        matches.filter((match) => held === undefined || match.commandClass === held).flatMap((match) => match.spans),
+    );
     const language = subject.language;
     if (program.length <= SHOWN) {
         return { text: program, language, truncated: false, spans: [...spans] };
@@ -342,6 +375,14 @@ const cannotAsk = (reason: string, options: CommandGateOptions): GateOutcome | u
  * read as a verdict somebody reached. */
 const JUDGE_UNAVAILABLE = `The safety judge could not be reached, so this was decided by the standing rule alone.`;
 
+/* THE SAME POSTURE, ARRIVED AT ON PURPOSE RATHER THAN BY FAILING. `off` reaches the hard rule with no verdict to
+ * put on the card either, and it must not borrow the sentence above: "could not be reached" would report a fault
+ * where the owner made a choice, and send whoever reads the log looking for a broken account.
+ *
+ * `watch` needs no sentence of its own — the judge did read the command and did write one, and its account of
+ * what this does is worth more on the card than a line about the setting. */
+const JUDGE_OFF = `The safety judge is turned off, so this was decided by the standing rule alone.`;
+
 export const createCommandGate = (options: CommandGateOptions): CommandGate => {
     /* WHAT AN ANSWERED CARD REMEMBERS FOR THE REST OF THIS TURN, keyed by the program text itself.
      *
@@ -404,18 +445,17 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
             // card. An allowed command drops them a line later and pays only the offsets the same walk collected.
             const matches = matchCommand(program, context);
             // TIER 1. Nothing matched ⇒ nothing to judge, and no model was spent: this is the overwhelming
-            // majority of everything an agent runs, and it must stay free. Bound rather than length-checked so
-            // the first match is in hand below without a fallback that could only ever mislabel a card.
-            const first = matches[0];
-            if (first === undefined) {
+            // majority of everything an agent runs, and it must stay free.
+            if (matches.length === 0) {
                 return ALLOWED;
             }
             const classes = matches.map((match) => match.commandClass);
             const at = Date.now();
             const outsideSource = options.taint.source();
-            /* TIER 1½, THE HARD RULE, applied before the judge is called and un-waivable by it. The class it
-             * names is also what the card's title says, so the person is told which consequence stopped this
-             * rather than being handed the judge's paraphrase of it. */
+            /* TIER 1½, THE HARD RULE, applied before the judge is called and un-waivable by it. It is also the
+             * one thing that may write the card's TITLE, because it is the one verdict here that is typed rather
+             * than guessed: everything else the catalog matched is triage, and triage's opinion of what a command
+             * would do has no business on a card as a statement of fact. */
             const hard = hardRuled(classes);
             const facts: JudgeFacts = {
                 consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
@@ -426,16 +466,31 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
                 ...(options.machine === undefined ? {} : { machine: options.machine }),
             };
             /* TIER 2. A judge that cannot run leaves the hard rule standing and lets everything else through —
-             * see JUDGE_UNAVAILABLE for why that direction and not the other. */
-            const verdict: SafetyVerdict = await askJudge(program, facts).catch(
-                (): SafetyVerdict => ({ decision: hard === undefined ? "allow" : "ask", sentence: JUDGE_UNAVAILABLE }),
-            );
+             * see JUDGE_UNAVAILABLE for why that direction and not the other. `off` never asks it at all, and
+             * takes a sentence that says so, because there is still a hard rule here to write a card for. */
+            const verdict: SafetyVerdict =
+                options.judging === "off"
+                    ? { decision: "allow", sentence: JUDGE_OFF }
+                    : await askJudge(program, facts).catch((): SafetyVerdict => ({ decision: "allow", sentence: JUDGE_UNAVAILABLE }));
+            /* WHAT IS ENFORCED, as opposed to what was said, and the two are the same thing at exactly one
+             * setting. At `on` the verdict decides. At `off` and `watch` NOTHING the judge said decides: its
+             * words are evidence for the log and never an instruction, or a mode called "watch" would be one
+             * that refuses commands, which is the opposite of what the owner asked for. */
+            const enforced = options.judging === "on" ? verdict.decision : "allow";
             // The hard rule can only ever make a verdict stricter, never looser: an `allow` over a class nothing
             // recovers becomes an ask, and a `refuse` stays a refusal.
-            const decision = hard !== undefined && verdict.decision === "allow" ? "ask" : verdict.decision;
-            const entry = { program: excerptProgram(program), classes, decision, sentence: verdict.sentence };
+            const decision = hard !== undefined && enforced === "allow" ? "ask" : enforced;
+            /* THE ROW CARRIES THE JUDGE'S OWN WORD, never the enforced one, which is what the schema says it is
+             * ("What the judge decided") and what makes both of the readings below possible: `ask` beside an
+             * outcome of `allowed` is a watched turn saying "this would have stopped you"; `allow` beside an
+             * outcome of `asked` is the hard rule saying "it would not have, and I did anyway". */
+            const entry = { program: excerptProgram(program), classes, decision: verdict.decision, sentence: verdict.sentence };
             if (decision === "allow") {
-                record({ ...entry, outcome: "allowed" }, at);
+                // Nothing was judged and nothing enforced: at `off` there is no verdict to write down, and a row
+                // per flagged command saying "allowed, because nobody looked" only repeats the setting.
+                if (options.judging !== "off") {
+                    record({ ...entry, outcome: "allowed" }, at);
+                }
                 return ALLOWED;
             }
             if (decision === "refuse") {
@@ -460,25 +515,33 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
                 feedback: "The turn ended before you answered.",
             });
             record({ ...entry, outcome: "asked" }, at);
-            /* The card carries the program AS A PROGRAM, with the fragments that fired marked. The class it
-             * marks is the hard-ruled one when there is one, and otherwise the first triage matched: the title
-             * names that same class, so the marks and the sentence above them are about one thing.
+            /* WHO WRITES THE TITLE, and it is the last place in this design where triage's opinion was still
+             * being presented as fact.
              *
-             * `explain` is the judge's sentence and it is on the card from the moment it goes out. Nothing
-             * races it in afterwards any more; the verdict had to exist before there was a card at all. */
-            const marked = hard ?? first.commandClass;
+             * It used to be `This command would ${LABEL[matches[0]]}` — the FIRST class the catalog matched, in
+             * the catalog's own order, which has nothing to do with why the card exists. A command that deleted a
+             * build directory and then published a package was titled "This command would delete files
+             * recursively" over a sentence reading "Publishes an npm package, which the policy requires asking
+             * about", with the `rm -rf` marked underneath as the fragment it was stopped for. Every word of that
+             * card except the sentence was about the wrong half of the command, and it is the shape that teaches
+             * an owner their gate is crying wolf about deletions when it never was.
+             *
+             * So the JUDGE'S SENTENCE IS THE CARD. It is the only account here of why this particular command is
+             * being asked about, it is written from the program and the owner's own policy, and it is on the card
+             * from the moment it goes out — there was no card until the verdict existed. `explain` is left off
+             * rather than carrying the same words a second time in the muted subline.
+             *
+             * THE HARD RULE IS THE EXCEPTION and keeps a titled consequence, because it really is a typed verdict
+             * over a named class: the card says which one, the judge's sentence goes underneath as `explain`
+             * (at `off` that sentence says the judge did not run), and the marks are that class's alone. */
             yield {
                 kind: "permission",
                 requestId: id,
                 toolName: subject.toolName,
-                title: `This ${subject.noun} would ${COMMAND_CLASS_LABELS[marked]}`,
+                title: hard === undefined ? verdict.sentence : `This ${subject.noun} would ${COMMAND_CLASS_LABELS[hard]}`,
                 displayName: subject.displayName,
-                program: programAsk(program, subject, matches, marked),
-                /* `explain` and NOT `reason`. They are one sentence now: the judge's account of the command IS
-                 * why the card exists, where the two used to be different things (a rule's name, plus an
-                 * optional translation of the shell). Sending both would print the same words twice on one
-                 * card, once as the lead and once as the muted subline. */
-                explain: verdict.sentence,
+                program: programAsk(program, subject, matches, hard),
+                ...(hard === undefined ? {} : { explain: verdict.sentence }),
                 /* THE ALWAYS BUTTON IS AN EDIT TO THE POLICY, and its label is the line that would be written,
                  * so nobody accepts a rule they have not read. Offered only when the judge proposed a line AND
                  * there is somewhere to put it — the schema says to send `alwaysLabel` only when an always has

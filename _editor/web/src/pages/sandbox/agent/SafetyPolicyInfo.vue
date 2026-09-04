@@ -39,7 +39,9 @@ const TIERS = [
         </p>
         <p class="mt-2 text-2xs text-muted">
             One rule sits outside the document: wiping a disk, or deleting anything under <code>/history</code>, always asks. A model can be argued
-            into most things by text inside the command it is judging, and those two cost more than any policy line is worth.
+            into most things by text inside the command it is judging, and those two cost more than any policy line is worth. It is also the one
+            rule the <span class="font-medium text-content">Safety judge</span> switch above cannot reach — turning the judge off stops your policy
+            being read, not that.
         </p>
     </InfoDialog>
 </template>

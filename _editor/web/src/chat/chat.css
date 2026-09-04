@@ -728,14 +728,6 @@
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
 }
-/* The same fragments as chips, for the row that stays on the card while the command is folded away behind its
-   disclosure. Hiding the command must never hide the evidence for why it was held, so these carry the mark's
-   own tint at full strength and its monospace, and read as quotations of the command rather than as prose. */
-.chat-command-chip {
-    background: color-mix(in srgb, var(--color-warning) 16%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
-    color: var(--color-content);
-}
 /* The composer is stuck to the bottom of the transcript's own scroller (ChatPanel's footer), and most of the
    box it occupies is transparent — the padding around the rounded composer, the gaps between it and whatever
    banners are stacked above it. Once the user scrolls up, those pixels show the messages passing beneath, so

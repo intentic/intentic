@@ -94,8 +94,13 @@ const spansOf = (patterns: readonly RegExp[], command: string): CommandSpan[] =>
 /* Sorted, with overlaps folded together. Two patterns firing on one fragment is ordinary here (a script's
  * recursive delete matches both the with-a-literal-path pattern and the any-path one), and handing a renderer
  * overlapping ranges makes it either double-paint or reinvent this. Adjacency is NOT merged: touching spans
- * from genuinely different fragments read correctly as two marks. */
-const normalize = (spans: readonly CommandSpan[]): CommandSpan[] => {
+ * from genuinely different fragments read correctly as two marks.
+ *
+ * EXPORTED because a caller that marks SEVERAL classes at once needs it too, and the overlap it has to fold is
+ * across classes rather than within one: `rm -rf /work` is both files.destructive and system.destructive on the
+ * same characters, and a card that painted both would hand its renderer two ranges over one fragment. The
+ * command gate marks every matched class now (guard/command-gate.ts says why), so this is the second caller. */
+export const mergeSpans = (spans: readonly CommandSpan[]): CommandSpan[] => {
     const merged: CommandSpan[] = [];
     for (const span of [...spans].sort((left, right) => left.start - right.start || left.end - right.end)) {
         const last = merged.at(-1);
@@ -484,7 +489,7 @@ const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandC
  * command text alone, which is every caller that has no filesystem to consult. */
 export const matchCommand = (command: string, context?: CommandContext): CommandMatch[] =>
     CommandClassSchema.options.flatMap((commandClass) => {
-        const spans = normalize(MATCHES[commandClass](command, context));
+        const spans = mergeSpans(MATCHES[commandClass](command, context));
         return spans.length === 0 ? [] : [{ commandClass, spans }];
     });
 

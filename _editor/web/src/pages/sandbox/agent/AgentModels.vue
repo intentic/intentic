@@ -4,11 +4,12 @@ import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { computed, shallowRef } from "vue";
 import { useAgentRunModel } from "../../../composables/chat/agentRunModel";
 import { effortLabelOf } from "../../../composables/chat/effortScale";
-import { describePin, modelChoiceLabel } from "../../../composables/chat/modelPins";
+import { modelChoiceLabel } from "../../../composables/chat/modelPins";
 import { useQuickModel } from "../../../composables/chat/quickModel";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import AddModelButton from "./AddModelButton.vue";
+import { pinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
 
@@ -80,68 +81,6 @@ const knobSummary = (pin: AgentRunPin): string | undefined =>
         ...(pin.harness === `claude-code` ? [`Claude Code`] : []),
     ].join(` · `) || undefined;
 
-/* ONE EDITOR OVER THREE LISTS, AND TWO STORED SHAPES. Add, re-point, promote and remove are the same four
- * gestures whichever list they are made in, and three hand-rolled copies of each is where the rows quietly stop
- * agreeing about what "already in the order" means. What actually differs between the lists is how an entry is
- * WRITTEN DOWN: the quick and cheaper-tier lists keep `${provider}:${model}` keys, while an agent-run entry is
- * a pin carrying its own run settings (AgentRunPinSchema). So the rows and the picker work in PINS, and each
- * list says how one is stored.
- *
- * `read`/`write` rather than a settings key, because two of the lists are read through their own composables:
- * each resolves its own chain, and the row has to draw THE LIST AS THE USER WROTE IT either way. A pin whose
- * account was disconnected still belongs on screen, greyed: it is a setting they made, and a row that silently
- * stopped drawing it would look like the app had eaten it. (Every resolver drops it at run time, which is the
- * right answer THERE: no feature may fail on a credential the sandbox no longer has.) */
-function pinnedList<T>(list: {
-    readonly read: () => readonly T[];
-    readonly write: (entries: readonly T[]) => void;
-    readonly decode: (entry: T) => AgentRunPin | undefined;
-    readonly encode: (pin: AgentRunPin) => T;
-    // Whether entries carry their own run settings. Only the agent-run list does; ModelPinPicker says why.
-    readonly knobs?: boolean;
-}) {
-    const entries = computed(() =>
-        list.read().map((stored, index) => {
-            const pin = list.decode(stored);
-            const described = describePin(pin, String(stored));
-            return {
-                key: `${index}:${described.label}`,
-                index,
-                pin,
-                detail: list.knobs === true && pin !== undefined ? knobSummary(pin) : undefined,
-                ...described,
-            };
-        }),
-    );
-    return {
-        knobs: list.knobs === true,
-        entries,
-        // Everything already written down, so the picker can offer those rows without letting one be pinned
-        // twice: a model that vanished from the list as you used it would make you hunt for a row that was
-        // there a moment ago.
-        taken: computed(() => entries.value.flatMap((entry) => (entry.choice === undefined ? [] : [quickModelKey(entry.choice)]))),
-        // Adding appends; re-pointing an entry replaces it where it stands, because its position in the order is
-        // the other half of what the user said.
-        apply: (index: number | undefined, pin: AgentRunPin): void => {
-            const stored = list.encode(pin);
-            const current = list.read();
-            list.write(index === undefined ? [...current, stored] : current.map((held, at) => (at === index ? stored : held)));
-        },
-        // Emptying the list is not a broken state: it is how each row gets back to its own floor, which is why
-        // removing the last one needs no confirmation and no separate "reset" control.
-        remove: (index: number): void => list.write(list.read().filter((_, at) => at !== index)),
-        // One step up the order. Only up, and only where there is a step to take: with a whole list on screen,
-        // "move this one earlier" repeated is the entire vocabulary needed, and a second button per row in a
-        // 14rem column is how a settings page turns into a control panel.
-        promote: (index: number): void => {
-            const held = [...list.read()];
-            const [moved] = held.splice(index, 1);
-            held.splice(index - 1, 0, moved!);
-            list.write(held);
-        },
-    };
-}
-
 const quick = pinnedList({
     read: () => quickModel.pinned.value,
     write: (keys) => patch({ quickModel: [...keys] }),
@@ -167,6 +106,7 @@ const runs = pinnedList({
     write: (pins) => patch({ agentRunModels: [...pins] }),
     decode: (pin) => pin,
     encode: (pin) => pin,
+    detail: knobSummary,
     knobs: true,
 });
 

@@ -38,6 +38,7 @@ vi.mock(`./agent/AgentDependencies.vue`, () => stub(`Dependencies`));
 vi.mock(`./agent/AgentCommandOutput.vue`, () => stub(`Command output`));
 vi.mock(`./agent/AgentSubagents.vue`, () => stub(`Subagents`));
 vi.mock(`./agent/AgentRecovery.vue`, () => stub(`When a turn breaks`));
+vi.mock(`./agent/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
 vi.mock(`./agent/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
 vi.mock(`./agent/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
 vi.mock(`./agent/AgentChildAgents.vue`, () => stub(`Child agents`));
@@ -45,7 +46,7 @@ vi.mock(`./agent/AgentChecks.vue`, () => stub(`Checks`));
 vi.mock(`./agent/AgentFinishedWork.vue`, () => stub(`Finished work`));
 vi.mock(`./agent/AgentChangelog.vue`, () => stub(`Changelog`));
 
-// The seventeen names above, for the test that every one of them lands in exactly one category.
+// The eighteen names above, for the test that every one of them lands in exactly one category.
 const EVERY_GROUP = [
     `AI account`,
     `Models`,
@@ -58,6 +59,7 @@ const EVERY_GROUP = [
     `Command output`,
     `Subagents`,
     `When a turn breaks`,
+    `Safety judge`,
     `Safety policy`,
     `Recent decisions`,
     `Child agents`,
@@ -142,7 +144,9 @@ it(`falls back to accounts when the address names a category that does not exist
  * rather than nowhere, and a coverage assertion counting names cannot tell those two apart. */
 it(`opens the safety category with the gate rules alone`, async () => {
     const { el } = await mount({ section: `safety` });
-    expect(shown(el)).toEqual([`Safety policy`, `Recent decisions`, `Child agents`]);
+    // In the order the question is actually asked: whether anything is judging and on which model, the document
+    // that judge applies, then the evidence for both.
+    expect(shown(el)).toEqual([`Safety judge`, `Safety policy`, `Recent decisions`, `Child agents`]);
 });
 
 // The composer's connect gate wins over whatever the address last remembered: it is a request to sign an account

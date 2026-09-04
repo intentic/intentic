@@ -46,6 +46,29 @@ import type { CommandClass } from "./schemas/agent.js";
  * set shrinks to block devices when that lands. */
 export const HARD_RULE_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["system.destructive"]);
 
+/* WHETHER THE JUDGE RUNS AT ALL, and whether its answer is allowed to stop anything. The owner's switch over
+ * everything below, and the reason it exists is that a tier which spends a model call and can interrupt you is a
+ * tier somebody is entitled to decline — the old rulebook could be set to allow everything, and losing that when
+ * the judge arrived made the redesign a thing you could only opt further INTO.
+ *
+ * THREE STATES, and the middle one is the one worth arguing for. Nobody trusts a judge they have not watched,
+ * and the only evidence that it asks about the right things is a log of what it decided while it could not
+ * interrupt them. Same shape, and the same reasoning, as the tier judge's own Measure state (settings.autoTier).
+ *
+ *   off    nothing is judged. No model call, no cards, nothing written to the log. Triage still runs, because
+ *          the hard rule below is built on it and costs nothing.
+ *   watch  the judge runs on every triage hit and every verdict is recorded, and NOTHING is ever held: an `ask`
+ *          is logged as an ask and the command runs anyway. What it costs is one model call per triage hit;
+ *          what it buys is the Recent decisions list, read against a policy nobody has tested yet.
+ *   on     the verdict decides, which is the behaviour this design describes everywhere else.
+ *
+ * THE HARD RULE IS NOT UNDER THIS SWITCH, at any setting. HARD_RULE_CLASSES is a typed verdict rather than a
+ * judgment, it never needed a model, and the Safety page promises in as many words that it cannot be edited
+ * away. So `off` and `watch` still raise a card for wiping a block device or deleting under /history — with a
+ * sentence saying the judge did not weigh in, rather than one pretending it did. */
+export const CommandJudgeModeSchema = z.enum(["off", "watch", "on"]);
+export type CommandJudgeMode = z.infer<typeof CommandJudgeModeSchema>;
+
 /* WHAT THE JUDGE ANSWERS. Three verdicts, and each is a different instruction to the gate:
  *
  *   allow   run it, say nothing, nobody is interrupted. The ordinary answer for a triage false positive,

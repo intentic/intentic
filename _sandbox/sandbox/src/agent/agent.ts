@@ -18,6 +18,7 @@ import {
     type AgentEvent,
     type AskQuestion,
     type CardDocument,
+    type CommandJudgeMode,
     DEFAULT_SAFETY_POLICY,
     type DependencyFreshness,
     documentOf,
@@ -284,6 +285,11 @@ export interface AgentRequest {
      * because triage and the hard rule are not the owner's configuration but facts about the command, and a turn
      * whose commands match nothing pays one classify per Bash call and no model. */
     readonly safetyPolicy?: string;
+    /* How much of that gate the owner turned on (settings.commandJudge). Absent ⇒ `on`, the full design; `watch`
+     * records every verdict and holds nothing, `off` never calls the judge. The hard rule is outside all three
+     * (guard/command-gate.ts states why), so this can never leave a turn with nothing between it and a formatted
+     * disk — which is the property that makes the switch offerable at all. */
+    readonly judging?: CommandJudgeMode;
     /* THE JUDGE and the three writes around it, as functions on the request rather than as services, for the
      * reason every service-shaped dependency here is: this module is handed what it needs to run a turn and does
      * not reach for `Services`, so the account chain, the quota memo and the provider walk stay behind one seam
@@ -694,6 +700,7 @@ const baseOptions = (
              * is rewritten exactly as it would have been. */
             commandGateHooks({
                 policy: request.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
+                judging: request.judging ?? "on",
                 unattended: request.unattended === true,
                 push,
                 signal: request.signal,

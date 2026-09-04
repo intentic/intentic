@@ -66,6 +66,16 @@ export interface QuickAnswer<T> {
 export interface QuickAsk<T> {
     readonly prompt: string;
     readonly answer: QuickAnswer<T>;
+    /* WHICH MODELS THIS ONE ASK MAY RUN ON, as `${provider}:${model}` keys in the order to try them, when it is
+     * not the sandbox's own quick chain. Absent (or empty) ⇒ `settings.quickModel`, which is every helper here
+     * except one.
+     *
+     * The exception is the safety judge, and the reason it earns a list of its own is that it is the only ask
+     * whose input is adversarial and whose wrong answer is a card raised (or not raised) rather than a sentence
+     * somebody edits. Carried on the ASK rather than as another parameter to askQuickModel, because it is a
+     * property of what is being asked and not of how this call is being made — `onProgress` is the latter, and
+     * the two would read identically as positional arguments. */
+    readonly models?: readonly string[];
 }
 
 /* THE VALUE ONE RUNG PRODUCED, or a throw naming what it did instead. Runs inside the walk's try, so both roads

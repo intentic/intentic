@@ -756,10 +756,10 @@ test("an asked command raises a permission card and approves it when the user al
     }
 
     const card = events.find((event) => event.kind === "permission");
-    // The vendor's command reaches the card as a PROGRAM, marked where the classifier fired, exactly as the
-    // Claude path's does: one gate, one card, whichever runtime carried the call.
+    // The vendor's command reaches the card as a PROGRAM, marked where the classifier fired, under the judge's
+    // own sentence — exactly as the Claude path's does: one gate, one card, whichever runtime carried the call.
     expect(card).toMatchObject({
-        title: expect.stringContaining("delete files recursively"),
+        title: "It does the thing.",
         program: { text: "rm -rf build", language: "bash", spans: [{ start: 0, end: 12 }] },
     });
     expect(events.some((event) => event.kind === "resolved")).toBe(true);

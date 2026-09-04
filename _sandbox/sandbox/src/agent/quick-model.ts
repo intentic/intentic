@@ -238,7 +238,13 @@ export const askQuickModel = async <T>(
     signal: AbortSignal,
     onProgress?: QuickModelProgress,
 ): Promise<QuickModelAnswer<T>> => {
-    const chain = resolveQuickModels(await quickModelSources(services), (await services.sandboxSettings.get()).quickModel);
+    /* The ask's own list wins where it has one, and falls back to the sandbox's quick chain where it does not —
+     * an EMPTY list is the fallback rather than "no models", because that is the shape every pin setting here
+     * ships in and the row that edits one has to be emptiable back to its floor (QuickAsk.models says which ask
+     * carries one and why). Both roads then go through resolveQuickModels, so a pinned provider that has been
+     * disconnected degrades to Auto exactly as it does everywhere else instead of failing on a dead credential. */
+    const pinned = (await services.sandboxSettings.get()).quickModel;
+    const chain = resolveQuickModels(await quickModelSources(services), ask.models?.length ? ask.models : pinned);
     if (chain.length === 0) {
         throw new Error(`No AI account is connected to this sandbox: connect one in Sandbox ▸ Agent first.`);
     }

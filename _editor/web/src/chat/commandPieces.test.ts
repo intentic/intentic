@@ -1,6 +1,6 @@
 import type { CodeToken } from "@intentic/ui";
 import { describe, expect, it } from "vitest";
-import { commandLines, linePieces, markedFragments, splitLines } from "./commandPieces.js";
+import { commandLines, linePieces, splitLines } from "./commandPieces.js";
 
 // A stand-in for Shiki's output: the colour boundaries, without loading a grammar in a unit test. `htmlStyle`
 // is opaque to the merge, so any distinguishable value proves it survives the cut.
@@ -102,17 +102,5 @@ describe(`commandLines`, () => {
     it(`renders plain when no grammar has landed`, () => {
         const lines = commandLines(`cat .env`, [{ start: 4, end: 8 }], undefined);
         expect(markedText(lines[0]!.pieces)).toEqual([`.env`]);
-    });
-});
-
-/* The chips that stay on the card while the command is folded behind its disclosure. Hiding the command must
- * never hide the evidence for why it was held. */
-describe(`markedFragments`, () => {
-    it(`states each fragment once, however many times the command names it`, () => {
-        expect(markedFragments(`cat .env && rm .env`, [{ start: 4, end: 8 }, { start: 15, end: 19 }])).toEqual([`.env`]);
-    });
-
-    it(`is empty when every marked fragment fell past the truncation`, () => {
-        expect(markedFragments(`cat something`, [])).toEqual([]);
     });
 });

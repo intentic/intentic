@@ -32,7 +32,6 @@ import ChatCard from "./ChatCard.vue";
 import ChatCommandBlock from "./ChatCommandBlock.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
-import { markedFragments } from "./commandPieces";
 import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus, questionStatus } from "./cardStatus";
 import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
@@ -269,19 +268,19 @@ const permissionTitle = computed(() => {
     return permission.title ?? permission.displayName ?? permission.toolName;
 });
 
-/* WHETHER THE COMMAND IS SHOWING, when a sentence is standing in front of it. Closed to start, and only ever
- * reachable at all when there IS a sentence: with none, the program is the card's body and there is nothing to
- * disclose. Local to the card and not persisted, deliberately, this is a per-decision choice, and remembering
- * "I opened the last one" would silently expand a card the next decision may not need it on.
+/* WHETHER THE COMMAND IS SHOWING. Closed to start, on every card that holds a program: the card's title is the
+ * safety judge's own sentence about this command (or, under the hard rule, the consequence that stopped it with
+ * that sentence underneath), so the question is always answered above the fold and the shell below it is the
+ * evidence for an answer somebody wants to check. Local to the card and not persisted, deliberately: this is a
+ * per-decision choice, and remembering "I opened the last one" would silently expand a card the next decision
+ * may not need it on.
  *
- * The FRAGMENTS are what make closing it defensible: they are the part of the command the gate actually
- * stopped it for, and they stay on the card whether it is open or closed. Hiding the command must never hide
- * the evidence, or a fold has turned a wall of text into a card nobody can audit. */
+ * THE FRAGMENT CHIPS THAT USED TO SIT BESIDE IT ARE GONE, and their removal is the same fix as the title's. They
+ * were labelled "Stopped for" and drawn from ONE matched class, so a command that cleaned a build directory and
+ * then published a package showed `rm -rf …` as the reason under a sentence about npm: the card's own summary of
+ * why it existed, asserting something the judge never said. What triage matched is still marked inside the
+ * command itself, where it reads as "these are the fragments a pattern noticed" rather than as a cause. */
 const commandOpen = ref(false);
-const commandFragments = computed(() => {
-    const program = props.message.permission?.program;
-    return program === undefined ? [] : markedFragments(program.text, program.spans);
-});
 
 // The approved run's latest status line off the provider's stream: what the card shows living while the
 // receipt is still pending. Newest wins: a status line is a spinner label, not a log.
@@ -1314,47 +1313,30 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </ChatCard>
 
-            <!-- PROSE, at last matching the comment this card has carried all along: permissionTitle is a full
-                 sentence ("This command would read credential material"), so it wraps at the body tier rather
-                 than truncating a size up. -->
+            <!-- PROSE, and on a command card the title is the whole answer: the safety judge's own sentence
+                 about this program, written from the program text and the owner's policy and never from
+                 anything the agent being gated said. So it wraps at the body tier rather than truncating a
+                 size up — this is the line that gets the two seconds a card is read in. -->
             <ChatCard v-if="message.permission" icon="shield" prose :title="permissionTitle" :status="permissionStatus(message.permission)">
                 <div class="chat-card-body flex flex-col gap-2">
-                    <!-- THE SENTENCE FIRST: what the program does and why it is being asked about, in the words
-                         the safety judge wrote from the program text and the owner's policy — never in the words
-                         of the agent being gated. It leads because it is the thing that can be read in the two
-                         seconds this card gets, and it is never the only account of the command, which sits
-                         under it either way. On a command card it is always present, because it is the reason
-                         the card exists rather than a translation added to it. -->
+                    <!-- …and where the title says something the judge did not — the hard rule naming a
+                         consequence, a machine command naming the computer — the judge's sentence rides here,
+                         directly under it. Absent on an ordinary command card, where it would be the same words
+                         a second time. -->
                     <span v-if="message.permission.explain" class="text-xs leading-relaxed text-content/85">{{ message.permission.explain }}</span>
                     <span v-else-if="message.permission.description" class="text-xs text-content/85">{{ message.permission.description }}</span>
 
                     <template v-if="message.permission.program">
-                        <!-- THE EVIDENCE, ALWAYS ON THE CARD. These are the fragments that put the command in
-                             the class that held it, and they stay visible whether or not the command below is
-                             folded away: hiding the command must never hide the reason it was stopped, or the
-                             disclosure has traded a wall of shell for a card nobody can audit. Only shown
-                             beside a sentence, though: with the command already expanded they would be the
-                             same characters twice, marked in the same colour, one line apart. -->
-                        <div v-if="message.permission.explain && commandFragments.length > 0" class="flex flex-wrap items-center gap-1.5">
-                            <span class="text-2xs text-subtle">Stopped for</span>
-                            <code
-                                v-for="fragment in commandFragments"
-                                :key="fragment"
-                                class="chat-command-chip max-w-full truncate rounded px-1.5 py-0.5 font-mono text-2xs"
-                                >{{ fragment }}</code
-                            >
-                        </div>
-
                         <!-- A DISCLOSURE, and deliberately neither a hover nor a tab.
                              Hover has no touch or keyboard equivalent, so putting the exact text of what you
                              are approving behind one hides it from every phone and every keyboard user. Tabs
                              would make the command a peer VIEW of its own summary, so reading the actual thing
                              costs a deliberate switch away from the card's default — on a safety prompt, the
                              default has to be the thing itself or one labelled click from it.
-                             Only offered when a sentence stands in for it; with no sentence there is nothing
-                             to collapse behind and the command is simply the body. -->
+                             Offered on every card that holds a program, because every one of them now leads
+                             with a sentence about that program: the gate's own title is the judge's verdict in
+                             words, so there is always something standing in front of the shell. -->
                         <button
-                            v-if="message.permission.explain"
                             type="button"
                             :class="ui.textAction(`gap-1 text-2xs`)"
                             :aria-expanded="commandOpen"
@@ -1363,7 +1345,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             <Icon :name="commandOpen ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                             {{ commandOpen ? "Hide the command" : "Show the command" }}
                         </button>
-                        <ChatCommandBlock v-if="commandOpen || !message.permission.explain" :program="message.permission.program" />
+                        <ChatCommandBlock v-if="commandOpen" :program="message.permission.program" />
                     </template>
 
                     <span v-if="message.permission.path" class="font-mono text-2xs leading-snug text-subtle">{{ message.permission.path }}</span>

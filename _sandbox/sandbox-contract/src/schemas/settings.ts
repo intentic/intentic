@@ -1,5 +1,6 @@
 // settings: per-sandbox agent settings (.intentic/config/settings.json)
 import { z } from "zod";
+import { CommandJudgeModeSchema } from "../safety-policy.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema, AgentRunPinSchema } from "./agent.js";
 // Which prompt the agent is, before this turn composes anything on top. Two built-in bases and an escape
 // hatch: Intentic's own (the default), Claude Code's preset, or the owner's text. Declared out here rather
@@ -715,17 +716,50 @@ export const SandboxSettingsSchema = z.object({
         .record(z.string(), AdmissionRuleSchema)
         .default({})
         .describe("What an agent may do out in the world, per kind of action: go ahead, ask first, or never."),
-    /* THE COMMAND GATE IS NOT CONFIGURED HERE. It used to be: `commandRules` was a verdict per CommandClass and
-     * `explainCommands` decided whether a card carried a sentence. Both are gone, and the reason is the whole
-     * safety redesign (safety-policy.ts argues it): a regex verdict per class asked about `echo "rm -rf /"` and
-     * an actual delete in the same words, and no setting of six switches fixes that, because telling the two
-     * apart is an act of understanding rather than a threshold. What replaced them is the owner's written
-     * policy at .intentic/config/safety.md, read by a judge that also sees what the daemon knows about the turn,
-     * plus one typed hard rule the judge cannot waive. The Safety page edits that document; nothing about the
-     * command gate belongs in this object.
+    /* NO VERDICT FOR THE COMMAND GATE LIVES HERE, and the two settings that do are about the JUDGE rather than
+     * about what it should decide. `commandRules` used to be a verdict per CommandClass and `explainCommands`
+     * decided whether a card carried a sentence; both are gone, and the reason is the whole safety redesign
+     * (safety-policy.ts argues it). A regex verdict per class asked about `echo "rm -rf /"` and an actual delete
+     * in the same words, and no setting of six switches fixes that, because telling the two apart is an act of
+     * understanding rather than a threshold. What replaced them is the owner's written policy at
+     * .intentic/config/safety.md, read by a judge that also sees what the daemon knows about the turn, plus one
+     * typed hard rule the judge cannot waive. The Safety page edits that document; what a command may DO is
+     * settled there and nowhere in this object.
      *
-     * The sentence on a card is no longer optional either: it is the judge's own reason for the verdict, so a
-     * card without one would be a card that could not say why it exists. */
+     * WHETHER THE JUDGE RUNS AT ALL is a different question, and one this object has to answer, because it is
+     * the only tier of the design that spends money and interrupts people. An owner who does not want either is
+     * entitled to say so, and before this they could not: the old rulebook could be set to allow everything, and
+     * the redesign quietly made itself the one part of the sandbox you could only opt further into.
+     *
+     * Judged commands are also the one automatic job whose model choice genuinely differs from the rest of
+     * `quickModel`'s work, which is why the list below exists rather than a line in the comment above it: a
+     * commit message written by a model that misread the diff is a sentence somebody edits, and a verdict
+     * written by a model that misread a command is a card that should not have been raised or, worse, one that
+     * should have been. */
+    commandJudge: CommandJudgeModeSchema.default("on").describe(
+        "Whether a model reads your safety policy before a flagged command runs. Off judges nothing and asks about nothing; Watch judges everything and records it without ever interrupting you, which is how you find out what your policy actually does before you let it stop anything; On lets the verdict decide. Wiping a disk or deleting under /history asks at every setting — that rule is typed rather than judged, and cannot be turned off.",
+    ),
+    /* WHICH MODEL READS THE POLICY, an ordered list of `${provider}:${modelId}` keys (quickModelKey) walked top
+     * to bottom, or EMPTY for whatever the quick model would be.
+     *
+     * A LIST, for the reason every other model setting here is one: the head runs out and the whole feature goes
+     * with it. Falling back to the quick chain rather than to Auto is deliberate — it is what this did before the
+     * setting existed, so an owner who never opens the row keeps exactly the behaviour they had, and one who
+     * writes an entry is saying that command verdicts are worth a different model than commit messages.
+     *
+     * THE ARGUMENT FOR SETTING IT AT ALL, since the cheapest connected rung is the default: this prompt is the
+     * one quick job that is genuinely adversarial. Its input includes text the agent is about to run, which may
+     * have arrived from a stranger's web page, and a small model can be talked round by it (command-judge.ts is
+     * candid about that). It is also the job where being WRONG is expensive in both directions — a needless card
+     * teaches the owner to click through the next one. Neither is a reason for us to spend somebody's frontier
+     * allowance by default; both are reasons for them to be able to. */
+    commandJudgeModels: z
+        .array(z.string())
+        .max(10)
+        .default([])
+        .describe(
+            "Which models decide whether a flagged command should run, tried in order so one spent account does not take the gate down. Empty uses whatever the quick model is, which is what this did before the setting existed.",
+        ),
     /* HOW MUCH AN AGENT MAY DELEGATE, the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
      *

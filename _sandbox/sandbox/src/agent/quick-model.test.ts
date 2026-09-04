@@ -180,6 +180,25 @@ test("falls through Auto's own ladder when nothing is pinned", async () => {
     expect(answer.choice.provider).not.toBe(answer.skipped[0]?.choice.provider);
 });
 
+/* AN ASK MAY BRING ITS OWN CHAIN, which one of them does: the safety judge decides whether a command runs and
+ * reads text that may be a stranger's, so an owner is entitled to spend a different model on it than on their
+ * commit messages (settings.commandJudgeModels → QuickAsk.models). Everything else about the walk is unchanged,
+ * which is the property these two pin. */
+test("an ask that names its own models spends those instead of the sandbox's quick chain", async () => {
+    const answer = await askQuickModel(fakeServices([`gemini:gemini-3-flash-lite`]), { ...DRAFT, models: [`claude:claude-opus-5`] }, signal());
+
+    expect(answer.choice).toEqual({ provider: `claude`, model: `claude-opus-5` });
+    expect(geminiOneShot).not.toHaveBeenCalled();
+});
+
+// Empty is the floor rather than "no models": every pin setting here ships empty, and the row that edits one
+// has to be emptiable back to what it did before the setting existed.
+test("an ask whose own list is empty falls back to the sandbox's quick chain", async () => {
+    const answer = await askQuickModel(fakeServices([`codex:gpt-5.6`]), { ...DRAFT, models: [] }, signal());
+
+    expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
+});
+
 test("says the sandbox has no account rather than failing on a model call", async () => {
     ready.mockResolvedValue({ claude: false, gemini: false, codex: false });
 

@@ -109,13 +109,3 @@ export const commandLines = (
     tokens: readonly (readonly CodeToken[] | undefined)[] | undefined,
 ): readonly CommandLine[] =>
     splitLines(text).map((line, index) => ({ ...line, pieces: linePieces(line, spans, tokens?.[index]) }));
-
-/* THE MARKED FRAGMENTS ON THEIR OWN, for the chip row that stays on the card while the command is folded away
- * behind its disclosure.
- *
- * This is the load-bearing half of that disclosure: hiding the command must never hide the EVIDENCE for why it
- * was held, or the card has traded a wall of shell for something a reader cannot audit at all. Deduplicated,
- * because a command that reads the same credential file three times has one fact to state, not three. */
-export const markedFragments = (text: string, spans: readonly CommandSpan[]): readonly string[] => [
-    ...new Set(spans.map((span) => text.slice(span.start, span.end).trim()).filter((fragment) => fragment !== ``)),
-];

@@ -17,6 +17,7 @@ import AgentMemory from "./agent/AgentMemory.vue";
 import AgentModels from "./agent/AgentModels.vue";
 import AgentRecovery from "./agent/AgentRecovery.vue";
 import AgentRules from "./agent/AgentRules.vue";
+import AgentSafetyJudge from "./agent/AgentSafetyJudge.vue";
 import AgentSafetyLog from "./agent/AgentSafetyLog.vue";
 import AgentSafetyPolicy from "./agent/AgentSafetyPolicy.vue";
 import AgentSkills from "./agent/AgentSkills.vue";
@@ -151,11 +152,14 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentRecovery />
         </template>
 
-        <!-- What it may do without stopping to ask. The policy first, then the evidence for it: nobody can
-             write a rule for behaviour they cannot see, so the log of recent decisions sits directly under the
-             document it is teaching them to edit. Helper agents last, because it is the one thing here still
+        <!-- What it may do without stopping to ask, read in the order the question is actually asked: whether
+             anything is judging at all and on which model, then the document that judge applies, then the
+             evidence for both. Nobody can write a rule for behaviour they cannot see, so the log of recent
+             decisions sits directly under the policy it is teaching them to edit — and it is also what makes the
+             judge's Watch state worth having. Helper agents last, because it is the one thing here still
              answered by a switch rather than by the policy (AgentChildAgents says why). -->
         <template v-else-if="section === `safety`">
+            <AgentSafetyJudge />
             <AgentSafetyPolicy />
             <AgentSafetyLog />
             <AgentChildAgents />

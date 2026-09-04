@@ -1,4 +1,4 @@
-import { type AgentCapabilities, DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type CommandJudgeMode, DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
 import { type CommandGate, type CommandGateOptions, createCommandGate } from "./command-gate.js";
 import { clearTurnTaint, createTurnTaint, publishTurnTaint, type TurnTaint } from "./turn-taint.js";
 
@@ -22,6 +22,10 @@ export interface TurnGateInput {
      * turn-plan.ts). Absent ⇒ the shipped default, which is what a caller building a request by hand gets and
      * what the bench runs under. */
     readonly safetyPolicy?: string;
+    /* How much of the gate the owner turned on (settings.commandJudge). Absent ⇒ `on`, the full design, which is
+     * what a caller building a request by hand and the bench both want: a default that quietly judged nothing
+     * would make "is the gate wired here?" unanswerable from the request. */
+    readonly judging?: CommandJudgeMode;
     // Ask the judge. Absent ⇒ every triage hit takes the judge-unavailable path; see CommandGateOptions.judge.
     readonly judge?: CommandGateOptions["judge"];
     // Record and amend verdicts, and append an accepted line to the policy. All three absent for a turn with no
@@ -108,6 +112,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
         taint,
         gate: createCommandGate({
             policy: turn.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
+            judging: turn.judging ?? "on",
             unattended: turn.unattended === true,
             ...(canParkFor(turn.rulebook) ? {} : { canPark: false }),
             ...(turn.cwd === undefined ? {} : { cwd: turn.cwd }),

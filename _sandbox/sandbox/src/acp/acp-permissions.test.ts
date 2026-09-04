@@ -70,6 +70,7 @@ const gateWith = (
 ): ReturnType<typeof createCommandGate> =>
     createCommandGate({
         policy: DEFAULT_SAFETY_POLICY,
+        judging: "on",
         judge: judging(decision),
         unattended: true,
         signal: new AbortController().signal,
@@ -113,6 +114,7 @@ test("the outside-content source is handed to the judge on this transport too", 
     const seen: (string | undefined)[] = [];
     const gate = createCommandGate({
         policy: DEFAULT_SAFETY_POLICY,
+        judging: "on",
         judge: async (_program, facts) => {
             seen.push(facts.outsideSource);
             return { decision: "refuse", sentence: "Not on a tainted turn." };
@@ -150,6 +152,7 @@ test("an asked command raises a permission card and the call runs when the user 
     const events: { kind: string; requestId?: string }[] = [];
     const gate = createCommandGate({
         policy: DEFAULT_SAFETY_POLICY,
+        judging: "on",
         judge: judging("ask"),
         unattended: false,
         signal: new AbortController().signal,

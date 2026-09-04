@@ -49,6 +49,8 @@ const harness = (options: Partial<CommandGateOptions> = {}): Harness => {
     const judge = options.judge;
     const matchers = commandGateHooks({
         policy: DEFAULT_SAFETY_POLICY,
+        // The full design unless a test says otherwise; the owner's other two settings have a describe of their own.
+        judging: "on",
         unattended: false,
         push: (event) => events.push(event),
         signal: controller.signal,
@@ -169,7 +171,10 @@ describe("command gate: triage", () => {
         const gate = harness({ judge: always("allow", `Appends a line of prose to a notes file.`) });
         const pending = gate.run(`echo "rm -rf /" >> notes.md`);
         await settled();
+        // The one card that keeps a titled consequence, because the hard rule really is a typed verdict over a
+        // named class rather than triage's guess. The judge's sentence goes underneath it.
         expect(cardOf(gate.events).title).toContain("wipe a disk");
+        expect(cardOf(gate.events).explain).toBe(`Appends a line of prose to a notes file.`);
         resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         expect((await pending).hookSpecificOutput).toBeUndefined();
     });
@@ -197,25 +202,47 @@ describe("command gate: verdicts", () => {
         await settled();
         const card = cardOf(gate.events);
         expect(card).toMatchObject({ toolName: "Bash", program: { text: FORCE_PUSH, language: "bash", truncated: false } });
-        expect(card.title).toContain(COMMAND_CLASS_LABELS["git.destructive"]);
         expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
         expect(await pending).toEqual({});
         // Every parked card owes the stream its resolution frame.
         expect(gate.events.some((event) => event.kind === "resolved")).toBe(true);
     });
 
-    /* THE SENTENCE IS ON THE CARD WHEN IT GOES OUT, which is the shape change the judge made possible. It used
-     * to arrive later as its own frame, raced against the answer, because it was an optional translation the
-     * card must not wait for. It is the verdict's reason now, so there was no card until it existed. */
-    test("the card carries the judge's sentence from the moment it is raised", async () => {
+    /* THE SENTENCE IS THE CARD, and it is there when the card goes out. It used to arrive later as its own
+     * frame, raced against the answer, because it was an optional translation the card must not wait for. It is
+     * the verdict's reason now, so there was no card until it existed — and it is the TITLE rather than a note
+     * under one, because it is the only account here of why this command in particular is being asked about. */
+    test("the judge's sentence is the card's title from the moment it is raised", async () => {
         const gate = harness({ judge: always("ask", `Discards whatever commits origin has.`) });
         const pending = gate.run(FORCE_PUSH);
         await settled();
-        expect(cardOf(gate.events).explain).toBe(`Discards whatever commits origin has.`);
+        expect(cardOf(gate.events).title).toBe(`Discards whatever commits origin has.`);
+        // And not a second time in the subline: `explain` would print the same words twice on one card.
+        expect(cardOf(gate.events).explain).toBeUndefined();
         // And nothing follows it in: the card and its resolution are the only two frames.
         resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
         expect(gate.events.map((event) => event.kind)).toEqual(["permission", "resolved"]);
+    });
+
+    /* THE BUG THIS TITLE REPLACED, kept as a test because it is the failure an owner actually reports. The card
+     * used to be titled with the FIRST class the catalog matched, in the catalog's own order, which has nothing
+     * to do with why the card exists: a command that cleans a build directory and then publishes reads as
+     * `files.destructive` to triage and as a publish to the judge, and the card said "This command would delete
+     * files recursively" over a sentence about npm. Nothing on it may assert a consequence the judge did not. */
+    test("a card about a publish does not announce a recursive delete triage also matched", async () => {
+        const gate = harness({ judge: always("ask", `Publishes an npm package, which your policy asks about.`) });
+        const command = `rm -rf /tmp/repro/state && npm publish`;
+        const pending = gate.run(command);
+        await settled();
+        const card = cardOf(gate.events);
+        expect(card.title).toBe(`Publishes an npm package, which your policy asks about.`);
+        expect(card.title).not.toContain(COMMAND_CLASS_LABELS["files.destructive"]);
+        // Both matched fragments are marked, in the command's own order: with the title asserting nothing about
+        // which pattern fired, showing one of them would be the same claim made with a highlight instead.
+        expect(card.program?.spans.map((span) => command.slice(span.start, span.end))).toEqual([`rm -rf /tmp/repro/state`, `npm publish`]);
+        resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+        await pending;
     });
 
     test("declining refuses the command and does not invite a way around it", async () => {
@@ -432,6 +459,92 @@ describe("command gate: no judge", () => {
     });
 });
 
+/* THE OWNER'S SWITCH OVER TIERS 2 AND 3 (settings.commandJudge). The design's own answer to "this asks me about
+ * things I do not care about": a judge you can watch before you let it stop anything, and one you can decline
+ * outright. What must survive both settings is the hard rule, which never was the judge's to reach. */
+describe("command gate: the owner's switch", () => {
+    describe("off", () => {
+        test("nothing is judged, nothing is asked, and no model is spent", async () => {
+            const gate = harness({ judging: "off", judge: always("refuse") });
+            for (const command of [FORCE_PUSH, "rm -rf build", "cat .env", "npm publish"]) {
+                expect((await gate.run(command)).hookSpecificOutput, command).toBeUndefined();
+            }
+            expect(gate.seen).toEqual([]);
+            expect(gate.events).toEqual([]);
+        });
+
+        // Nothing looked at it, so there is nothing to write down: a row per flagged command saying "allowed,
+        // because the judge is off" only repeats the setting back to whoever opened the log.
+        test("nothing is written to the log either", async () => {
+            const gate = harness({ judging: "off", judge: always("refuse") });
+            await gate.run(FORCE_PUSH);
+            expect(gate.logged).toEqual([]);
+        });
+
+        /* THE FLOOR UNDER THE SWITCH, and the reason the switch can be offered at all. The Safety page promises
+         * in as many words that wiping a disk always asks; a setting that quietly broke that promise would make
+         * the page a lie. It says the judge did not run rather than inventing a verdict. */
+        test("the hard rule still asks, and says the judge is off rather than inventing a reason", async () => {
+            const gate = harness({ judging: "off", judge: always("allow") });
+            const pending = gate.run("mkfs.ext4 /dev/sda1");
+            await settled();
+            const card = cardOf(gate.events);
+            expect(card.title).toContain("wipe a disk");
+            expect(card.explain).toContain("turned off");
+            expect(gate.seen).toEqual([]);
+            expect(rowsOf(gate.logged)).toEqual([
+                {
+                    program: "mkfs.ext4 /dev/sda1",
+                    classes: ["system.destructive"],
+                    decision: "allow",
+                    sentence: `The safety judge is turned off, so this was decided by the standing rule alone.`,
+                    outcome: "asked",
+                },
+            ]);
+            resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+            expect((await pending).hookSpecificOutput).toBeUndefined();
+        });
+    });
+
+    describe("watch", () => {
+        /* THE POINT OF THE MODE: the verdict is recorded and the command runs anyway, so an owner can read what
+         * their policy would have done to a week of real work before letting it do any of it. The row's own two
+         * fields say so without a third being added — `decision: ask` beside `outcome: allowed` is exactly "this
+         * would have stopped you, and it did not". */
+        test("an ask is recorded as an ask and the command runs anyway", async () => {
+            const gate = harness({ judging: "watch", judge: always("ask", `Force-pushes to origin.`) });
+            expect((await gate.run(FORCE_PUSH)).hookSpecificOutput).toBeUndefined();
+            expect(gate.events).toEqual([]);
+            expect(rowsOf(gate.logged)).toEqual([
+                { ...FORCE_PUSH_ROW, sentence: `Force-pushes to origin.`, decision: "ask", outcome: "allowed" },
+            ]);
+        });
+
+        // A mode that refused commands would be the opposite of what the owner asked for, so the verdict does
+        // not enforce here either — a refusal is written down and stepped over exactly as an ask is.
+        test("a refusal is recorded and stepped over rather than enforced", async () => {
+            const gate = harness({ judging: "watch", judge: always("refuse", `Your policy forbids this.`) });
+            expect((await gate.run(FORCE_PUSH)).hookSpecificOutput).toBeUndefined();
+            expect(rowsOf(gate.logged)).toEqual([
+                { ...FORCE_PUSH_ROW, sentence: `Your policy forbids this.`, decision: "refuse", outcome: "allowed" },
+            ]);
+        });
+
+        // The hard rule is not the judge's verdict, so there is nothing here for the owner to be evaluating and
+        // no setting stands between it and a card. Its sentence is the judge's, which did run at this setting.
+        test("the hard rule still asks, carrying what the judge said about it", async () => {
+            const gate = harness({ judging: "watch", judge: always("allow", `Formats the second disk.`) });
+            const pending = gate.run("mkfs.ext4 /dev/sda1");
+            await settled();
+            const card = cardOf(gate.events);
+            expect(card.title).toContain("wipe a disk");
+            expect(card.explain).toBe(`Formats the second disk.`);
+            resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+            expect((await pending).hookSpecificOutput).toBeUndefined();
+        });
+    });
+});
+
 /* WHAT AN ANSWER REMEMBERS. Two different memories, and keeping them apart is the point: the turn-scoped one
  * stops the same command asking twice in one turn, and the durable one is a line the owner READ before
  * accepting, in a document they can edit later. Neither is a hidden grant. */
@@ -623,9 +736,10 @@ describe("the gate over JS runs", () => {
         await settled();
         const card = cardOf(gate.events);
         // The script's own grammar, not bash: the card colours what it is holding, and the two backends are the
-        // two languages the gate reads.
+        // two languages the gate reads. The card's WORDS are the judge's, and it was told which of the two this
+        // is (facts.language), so calling it a script is that sentence's job rather than a title template's.
         expect(card).toMatchObject({ toolName: JS_TOOL_NAME, displayName: "Run code", program: { text: script, language: "javascript" } });
-        expect(card.title).toContain("script");
+        expect(gate.seen[0]?.facts.language).toBe("javascript");
         expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
         expect(await pending).toEqual({});
     });

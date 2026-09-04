@@ -393,8 +393,9 @@ describe(`ChatMessageView permission card`, () => {
                 requestId: `perm-1`,
                 status: `pending`,
                 toolName: `Bash`,
-                title: `This command would read credential material`,
-                alwaysLabel: `Allow everything that would read credential material this turn`,
+                // The gate's own title now: the judge's sentence about THIS command, not a class triage matched.
+                title: `Searches the workspace for token references and reads a credentials file.`,
+                alwaysLabel: `Always: reading .env files under /work is fine`,
                 program: { text: COMMAND, language: `bash`, truncated: false, spans: [CREDENTIAL] },
                 ...extra,
             },
@@ -414,43 +415,50 @@ describe(`ChatMessageView permission card`, () => {
      * marks are the GATE's and do not depend on a grammar chunk, so a card whose highlighting has not arrived
      * (or never will, offline, or in a language we ship no grammar for) still answers the question it exists to
      * ask. */
-    it(`shows the whole command and marks the fragment that held it`, () => {
-        const rendered = program(mount(held()));
-        expect(rendered.all).toBe(COMMAND);
-        expect(rendered.marked).toEqual([`.env.production`]);
-    });
-
-    // With no sentence to stand in for it, the command IS the body: nothing to disclose, so nothing offering to.
-    it(`shows the command outright when there is no explanation`, () => {
+    /* THE DISCLOSURE. The command is folded on every card that carries one, because every one of them leads with
+     * a sentence about that command — the gate's title IS the judge's verdict in words, so the question is
+     * answered above the fold and the shell below it is there to be checked rather than to be read first.
+     *
+     * Colour is asynchronous and never lands in jsdom, which is exactly the state the marks are asserted
+     * against: they are the GATE's offsets and do not depend on a grammar chunk, so a card whose highlighting
+     * has not arrived (or never will, offline, or in a language we ship no grammar for) still marks what triage
+     * flagged. */
+    it(`folds the command behind a labelled control, and shows it whole and marked when opened`, async () => {
         const element = mount(held());
-        expect(element.textContent).not.toContain(`Show the command`);
-        expect(element.querySelector(`pre`)).not.toBeNull();
-    });
-
-    /* THE DISCLOSURE, and the property that makes it defensible. Folded, the card still names the fragments it
-     * was stopped for: hiding the command may never hide the evidence, or the fold has turned a wall of shell
-     * into a card nobody can audit. */
-    it(`folds the command behind a labelled control while keeping the marked fragments on the card`, async () => {
-        const explain = `Searches the workspace for token references and reads a credentials file.`;
-        const element = mount(held({ explain }));
-        expect(element.textContent).toContain(`token references`);
         expect(element.querySelector(`pre`)).toBeNull();
-        // The evidence, still stated.
-        expect(element.textContent).toContain(`Stopped for`);
-        expect([...element.querySelectorAll(`code.chat-command-chip`)].map((chip) => chip.textContent)).toEqual([`.env.production`]);
 
         const toggle = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show the command`));
         expect(toggle?.getAttribute(`aria-expanded`)).toBe(`false`);
         toggle?.click();
         await nextTick();
-        expect(program(element).all).toBe(COMMAND);
+        expect(program(element)).toEqual({ all: COMMAND, marked: [`.env.production`] });
         expect(element.textContent).toContain(`Hide the command`);
+    });
+
+    /* NOTHING ON THE CARD MAY ASSERT A CONSEQUENCE THE JUDGE DID NOT. The chip row that used to sit here was
+     * labelled "Stopped for" and drawn from one matched class, so a command that cleaned a build directory and
+     * then published a package offered `rm -rf …` as its reason under a sentence about npm. What triage matched
+     * is still marked inside the command, where it reads as a pattern hit rather than as a cause. */
+    it(`offers no fragment chips standing in for a reason`, () => {
+        const element = mount(held({ explain: `Wipes the second disk.` }));
+        expect(element.textContent).not.toContain(`Stopped for`);
+        expect(element.querySelector(`code.chat-command-chip`)).toBeNull();
+    });
+
+    // The hard rule's card, the one shape that still titles a consequence: the judge's sentence rides under it
+    // rather than replacing it, so both are on screen and neither is said twice.
+    it(`shows the judge's sentence under a hard-rule title`, () => {
+        const element = mount(held({ title: `This command would wipe a disk`, explain: `Formats the second disk.` }));
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`This command would wipe a disk`);
+        expect(element.textContent).toContain(`Formats the second disk.`);
     });
 
     // The daemon cut the program; the card says so rather than ending mid-word and letting a reader believe
     // they have seen all of it.
-    it(`says when the program was shortened`, () => {
+    it(`says when the program was shortened`, async () => {
         const element = mount(held({ program: { text: `cat .env`, language: `bash`, truncated: true, spans: [] } }));
+        [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show the command`))?.click();
+        await nextTick();
         expect(element.textContent).toContain(`Shortened for this card`);
     });
 

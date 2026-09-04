@@ -93,35 +93,52 @@ export const judgeHostCommand = async (
     const hard = classes.find((commandClass) => guard(commandRun, { commandClass }).effect !== "allow");
     const unattended = conversationId === undefined || conversationUnattended(conversationId);
     const outsideSource = conversationId === undefined ? undefined : conversationTaintSource(conversationId);
-    const policy = await services.safetyPolicy.text();
-    const verdict: SafetyVerdict = await judgeCommand(
-        services,
-        {
-            policy,
-            program: input.command,
-            facts: {
-                consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
-                unattended,
-                language: "bash",
-                machine: input.machine,
-                ...(outsideSource === undefined ? {} : { outsideSource }),
-            },
-        },
-        AbortSignal.timeout(DEADLINE_MS),
-    ).catch(
-        // A judge that cannot run leaves the hard rule standing and lets everything else through to the machine,
-        // where the scopes decide. Same posture and same reasoning as the sandbox gate's own fallback.
-        (): SafetyVerdict => ({
-            decision: hard === undefined ? "allow" : "ask",
-            sentence: `The safety judge could not be reached, so this was decided by the standing rule alone.`,
-        }),
-    );
-    // The hard rule can only make a verdict stricter, never looser.
-    const decision = hard !== undefined && verdict.decision === "allow" ? "ask" : verdict.decision;
+    /* THE SAME SWITCH THE SANDBOX'S OWN GATE READS (settings.commandJudge), applied to the same three tiers, so
+     * an owner who turned the judge off is not still being asked about their laptop. Read live rather than
+     * snapshotted, unlike the sandbox gate's, because this call arrives outside any turn's planning: there is no
+     * moment here that a snapshot could belong to.
+     *
+     * IT LOOSENS NOTHING THAT MATTERS. Everything below is friction the daemon adds on top of the machine's own
+     * scopes, and the scopes are not reachable from this document or this setting — an off judge means the daemon
+     * has no objection of its own and the machine decides, which is where the security argument always rested. */
+    const [policy, settings] = await Promise.all([services.safetyPolicy.text(), services.sandboxSettings.get()]);
+    const judging = settings.commandJudge;
+    const verdict: SafetyVerdict =
+        judging === "off"
+            ? { decision: "allow", sentence: `The safety judge is turned off, so this was decided by the standing rule alone.` }
+            : await judgeCommand(
+                  services,
+                  {
+                      policy,
+                      program: input.command,
+                      models: settings.commandJudgeModels,
+                      facts: {
+                          consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
+                          unattended,
+                          language: "bash",
+                          machine: input.machine,
+                          ...(outsideSource === undefined ? {} : { outsideSource }),
+                      },
+                  },
+                  AbortSignal.timeout(DEADLINE_MS),
+              ).catch(
+                  // A judge that cannot run leaves the hard rule standing and lets everything else through to the
+                  // machine, where the scopes decide. Same posture and reasoning as the sandbox gate's fallback.
+                  (): SafetyVerdict => ({
+                      decision: "allow",
+                      sentence: `The safety judge could not be reached, so this was decided by the standing rule alone.`,
+                  }),
+              );
+    // Only at `on` does the verdict decide anything; at `off` and `watch` it is evidence for the log and the hard
+    // rule is the whole gate. Which the hard rule can then only make stricter, never looser.
+    const enforced = judging === "on" ? verdict.decision : "allow";
+    const decision = hard !== undefined && enforced === "allow" ? "ask" : enforced;
+    // The row carries the JUDGE'S own word rather than the enforced one, which is what the schema says it holds:
+    // an `ask` beside an outcome of `allowed` is a watched sandbox saying "this would have stopped you".
     const entry = {
         program: excerptProgram(input.command),
         classes,
-        decision,
+        decision: verdict.decision,
         sentence: verdict.sentence,
         machine: input.machine,
     };
@@ -129,7 +146,11 @@ export const judgeHostCommand = async (
         void services.safetyLog.record({ at, ...entry, outcome, ...(answer === undefined ? {} : { answer }) }).catch(() => undefined);
     };
     if (decision === "allow") {
-        record("allowed");
+        // Nothing was judged at `off`, so there is no verdict to write down: a row per flagged command saying
+        // "allowed, because nobody looked" only repeats the setting back to whoever reads the log.
+        if (judging !== "off") {
+            record("allowed");
+        }
         return undefined;
     }
     if (decision === "refuse") {

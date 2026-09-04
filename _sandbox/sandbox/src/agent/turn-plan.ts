@@ -184,21 +184,22 @@ export interface TurnContext {
  * turn names the step instead of the phase, and because they overlap, the turn pays the SLOWEST rather than
  * the total. Nothing here reads anything else here, with two exceptions the harness arm spells out.
  */
-/* THE SAFETY JUDGE, BOUND TO THIS SANDBOX'S ACCOUNTS AND TO THIS TURN'S POLICY.
+/* THE SAFETY JUDGE, BOUND TO THIS SANDBOX'S ACCOUNTS AND TO THIS TURN'S POLICY AND MODEL.
  *
- * A closure over `services` and the policy text rather than either of them directly, because the seam it fills
- * lives in guard/, which is deliberately ignorant of accounts, chains and quotas (see CommandGateOptions.judge),
- * and because the policy must be the one snapshot this turn was planned with rather than whatever the file says
- * at the moment a command happens to run.
+ * A closure over `services`, the policy text and the owner's model pin rather than any of them directly, because
+ * the seam it fills lives in guard/, which is deliberately ignorant of accounts, chains and quotas (see
+ * CommandGateOptions.judge), and because both of those settings must be the one snapshot this turn was planned
+ * with rather than whatever the files say at the moment a command happens to run.
  *
  * Always present, unlike the explainer it replaced — that was off unless the owner switched it on, because it
  * was a nicety on a card. This is the decision itself, and a turn without it would be a turn where the hard rule
  * is the only thing standing. What keeps it cheap is that the gate only calls it when triage fires, and memoises
- * per program within the turn. */
+ * per program within the turn; whether it is called AT ALL is the owner's (settings.commandJudge, carried beside
+ * this as `judging`), and at `off` the gate never reaches this closure. */
 const judgeFor =
-    (services: Services, policy: string): CommandGateOptions["judge"] =>
+    (services: Services, policy: string, models: readonly string[]): CommandGateOptions["judge"] =>
     (program, facts, signal) =>
-        judgeCommand(services, { policy, program, facts }, signal);
+        judgeCommand(services, { policy, program, facts, models }, signal);
 
 export const conversationExperimentArm = (conversationId: string | undefined, holdout: number): boolean => {
     if (conversationId === undefined) {
@@ -1284,9 +1285,15 @@ export const planHarnessTurn = async (
              * no no-hook economy to have: triage and the hard rule are facts about the command rather than the
              * owner's configuration, and a turn that skipped them because nobody had written a policy would be a
              * turn with nothing between it and a formatted disk. The economy is inside the gate instead — a
-             * command that matches no pattern costs one classify and no model at all. */
+             * command that matches no pattern costs one classify and no model at all.
+             *
+             * `judging` is how much of that the owner asked for, and the judge is bound even at `off`: the gate
+             * decides whether to call it, in one place, rather than every wiring site deciding whether to hand
+             * one down. Both this and the policy above are snapshots taken here, so one turn is judged by one
+             * document and one model however long it runs. */
             safetyPolicy,
-            judge: judgeFor(services, safetyPolicy),
+            judging: settings.commandJudge,
+            judge: judgeFor(services, safetyPolicy, settings.commandJudgeModels),
             logSafety: (entry) => {
                 void services.safetyLog.record(entry).catch(() => undefined);
             },

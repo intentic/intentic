@@ -36,10 +36,16 @@ export type AskQuestion = z.infer<typeof AskQuestionSchema>;
  * card with no way to know it was holding four hundred characters of shell: it rendered them as a paragraph,
  * wrapped mid-flag, and the fragment that caused the hold was somewhere in the middle of it.
  *
- * `spans` is the gate's own evidence, computed by the classifier at the moment the rule fired (contract's
+ * `spans` is where the pattern match fired, computed by the classifier at the moment it did (contract's
  * command-classes.ts, matchCommand) and carried rather than re-derived: a browser that re-ran the patterns
- * would be a second classifier, and the day the two disagreed the card would be marking a fragment that is not
- * the one anybody was held for. Offsets are into `text` AFTER truncation, so they are always paintable.
+ * would be a second classifier, and the day the two disagreed the card would be marking a fragment the daemon
+ * never saw. Offsets are into `text` AFTER truncation, so they are always paintable.
+ *
+ * IT IS NOT A CLAIM ABOUT WHY THE CARD EXISTS, and the card no longer presents it as one. The reason is the
+ * judge's sentence in the title; these are the fragments TRIAGE noticed, all of the matched classes' rather
+ * than whichever sorts first — the card used to show one class's and label them "Stopped for", so a command
+ * that cleaned a build directory on its way to publishing offered `rm -rf …` as its reason under a sentence
+ * about npm. Under the hard rule the title DOES name a class, so there the marks are that class's alone.
  *
  * `language` is a Shiki grammar id, and the two are the two execution backends the gate reads (command-gate's
  * EXECUTION_SOURCES): a shell line and a script. */
@@ -53,7 +59,9 @@ export const ProgramAskSchema = z.object({
         ),
     spans: z
         .array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }))
-        .describe("Which fragments of the text put it in the class that held it. Offsets into text, in order, never overlapping."),
+        .describe(
+            "Which fragments of the text the pattern match fired on: every matched class's, or, under the hard rule, only the class the title names. Offsets into text, in order, never overlapping.",
+        ),
 });
 export type ProgramAsk = z.infer<typeof ProgramAskSchema>;
 
@@ -81,16 +89,20 @@ export const PermissionAskSchema = z.object({
     program: ProgramAskSchema.optional().describe(
         "The program this card is holding, when the card is about one. Present on a command gate's card and absent on every other permission ask.",
     ),
-    /* THE JUDGE'S OWN SENTENCE, and on a command card it is the reason the card exists rather than a note added
-     * to it: the judge read the owner's policy and the program and decided this needed asking, and this is what
-     * it decided. Written by the quick model from the program text and the policy, never by the agent being
-     * gated — a card whose persuasive half was authored by the thing it is stopping argues for its own approval,
-     * and the turns that raise cards are exactly the ones whose account of themselves may be a stranger's. */
+    /* THE JUDGE'S OWN SENTENCE, WHERE THE TITLE IS SOMEBODY ELSE'S. On an ordinary command card the sentence IS
+     * the title (the judge read the owner's policy and the program, and its account of why this needs asking is
+     * the only account there is), so this is left off rather than printing the same words twice. It carries the
+     * sentence on the two cards whose title says something the sentence cannot: the hard rule's, which names the
+     * consequence that stopped it, and a machine command's, which names the computer.
+     *
+     * Written by the quick model from the program text and the policy, never by the agent being gated — a card
+     * whose persuasive half was authored by the thing it is stopping argues for its own approval, and the turns
+     * that raise cards are exactly the ones whose account of themselves may be a stranger's. */
     explain: z
         .string()
         .optional()
         .describe(
-            "One plain sentence saying what the program does and why it is being asked about. Written by the judge that read your safety policy, never by the agent being gated.",
+            "One plain sentence saying what the program does and why it is being asked about, where the title says something else. Written by the judge that read your safety policy, never by the agent being gated.",
         ),
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;

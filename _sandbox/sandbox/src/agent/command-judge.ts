@@ -216,12 +216,17 @@ export const judgeAnswer: QuickAnswer<JudgedReply> = {
  * its own. */
 export const judgeCommand = async (
     services: Services,
-    input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts },
+    input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly models: readonly string[] },
     signal: AbortSignal,
 ): Promise<SafetyVerdict> => {
     const { value } = await askQuickModel(
         services,
-        { prompt: judgePrompt(input.policy, input.program, input.facts), answer: judgeAnswer },
+        /* `models` is the owner's own pin for THIS job (settings.commandJudgeModels), empty for "whatever the
+         * quick model is", which is what this did before the setting existed. Passed down rather than read here
+         * so the whole judgment — the policy and the model that reads it — is one snapshot taken when the turn
+         * was planned, and a turn cannot end up judged by two different models because somebody was editing the
+         * row while it ran. */
+        { prompt: judgePrompt(input.policy, input.program, input.facts), answer: judgeAnswer, models: input.models },
         signal,
     );
     return value.verdict;
