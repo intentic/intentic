@@ -19,7 +19,10 @@ import {
     CfTokenSchema,
     CfZonesSchema,
     DaemonUrlSchema,
+    HostedBuildStateSchema,
+    HostedBuildStatusSchema,
     HostedOfferSchema,
+    HostedRebuildInputSchema,
     HostedStatusSchema,
     ImageDataUrlSchema,
     InviteListSchema,
@@ -120,6 +123,15 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/hosted-restart" })
         .input(sandboxIdInput)
         .output(z.object({ ok: z.boolean() })),
+    /* Build the owner-approved environment overlay into this sandbox's image and boot the machine onto it,
+     * the hosted lane's `ic sandbox rebuild`. A docker host's owner runs that command themselves; a hosted
+     * sandbox has no host, so the platform builds on a machine of its own inside the sandbox's app and swaps
+     * the image with the same config replacement a restart uses, volume intact. The input carries the
+     * approved content with its hash and the platform re-hashes it, so only the bytes the owner reviewed are
+     * ever built. Answers the build as started; `hostedBuildStatus` is the poll the Environment card sits on
+     * until the build ends, and the daemon coming back with the hash as applied is the last word. */
+    hostedRebuild: oc.route({ method: "POST", path: "/sandbox/hosted-rebuild" }).input(HostedRebuildInputSchema).output(HostedBuildStateSchema),
+    hostedBuildStatus: oc.route({ method: "POST", path: "/sandbox/hosted-build-status" }).input(sandboxIdInput).output(HostedBuildStatusSchema),
     wake: oc
         .route({ method: "POST", path: "/sandbox/wake" })
         .input(sandboxIdInput)

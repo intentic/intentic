@@ -611,6 +611,46 @@ export const HostedStatusSchema = z.object({
 });
 export type HostedStatus = z.infer<typeof HostedStatusSchema>;
 
+/* A HOSTED SANDBOX'S OVERLAY BUILD, as the Environment card follows it. On a docker host the owner runs
+ * `ic sandbox rebuild` themselves and watches its terminal; a hosted sandbox has no host, so the platform
+ * builds the approved overlay on a machine of its own and this is the window onto that build. `hash` is the
+ * approved content's sha256, the one the daemon will report as applied once the machine boots the result.
+ * `log` is the builder's own output, present when there is something to read, which is above all a failed
+ * `RUN`: the reason the recipe did not build is the one thing the owner needs from a failure. */
+export const HostedBuildStateSchema = z.object({
+    state: z.enum(["building", "built", "failed"]),
+    hash: z.string(),
+    startedAt: z.string(),
+    finishedAt: z.string().optional(),
+    error: z.string().optional(),
+    log: z.string().optional(),
+});
+export type HostedBuildState = z.infer<typeof HostedBuildStateSchema>;
+
+/* The most overlay the platform will carry into a builder. A composed overlay is a few kilobytes of RUN lines;
+ * a quarter megabyte is far past any recipe and well short of what an abusive request could make a build
+ * machine chew on. */
+export const HOSTED_OVERLAY_MAX_BYTES = 256 * 1024;
+
+/* What the browser hands over to have an overlay built: the approved content AND its hash, both read off the
+ * daemon's /environment route. The platform re-hashes the content, which is the same guarantee `ic sandbox
+ * rebuild <hash>` gives on a docker host: only bytes that still hash to what the owner reviewed are built. */
+export const HostedRebuildInputSchema = z.object({
+    sandboxId: z.string(),
+    hash: z.string().regex(/^[0-9a-f]{64}$/),
+    content: z.string().min(1).max(HOSTED_OVERLAY_MAX_BYTES),
+});
+export type HostedRebuildInput = z.infer<typeof HostedRebuildInputSchema>;
+
+// The build in flight or the last one finished, or null when this sandbox never asked for one. `applied` is
+// the overlay hash the platform last booted the machine with (null on the stock image), the platform's own
+// record, which is there before the daemon is back to say the same.
+export const HostedBuildStatusSchema = z.object({
+    build: HostedBuildStateSchema.nullable(),
+    applied: z.string().nullable(),
+});
+export type HostedBuildStatus = z.infer<typeof HostedBuildStatusSchema>;
+
 /* The HOSTED lane's machine as the browser sees it: the platform created it on its OWN provider account and
  * keeps the way back in, so its presence is an affordance rather than residue: an unreachable hosted daemon
  * means "call sandbox.wake and keep probing", never "it's gone". Deliberately no live machine state, wake is

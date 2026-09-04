@@ -805,7 +805,10 @@ on connected instances, and as grid badges for the consequential ones (image / r
 code-authored and may carry privileged `# intentic:runtime` directives; extension/connector checkout
 fragments are restricted to RUN/ENV instructions: the whole "what can an extension bake into the image"
 security surface is `invalidExtensionFragment`
-([fragment-sources.ts](_sandbox/sandbox/src/environment/fragment-sources.ts)). `composeEnvironment` folds
+([overlay-lint.ts](_sandbox/sandbox-contract/src/overlay-lint.ts) in the contract, where `lintOverlay` and
+`hasOfficialBase` read a whole composed overlay by the same grammar for every executor, the platform's
+hosted rebuild included; applied by
+[fragment-sources.ts](_sandbox/sandbox/src/environment/fragment-sources.ts)). `composeEnvironment` folds
 every active entry's fragments (a cli entry resolves its connector's fragment through the registry; an
 extension entry its `contributes.environment`) into the overlay Dockerfile (`FROM` the base image), and an
 owner-run rebuild applies it: until then the capability reads `pending` and the UI routes to the

@@ -11,6 +11,7 @@ import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../w
 import { packFragment } from "./packs.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
+import { hasOfficialBase } from "@intentic/sandbox-contract";
 import {
     approvedPath,
     approveEnvironment,
@@ -19,7 +20,6 @@ import {
     decideRuntimeInstall,
     draftsDir,
     baseImageOf,
-    hasValidBase,
     proposalPath,
     readEnvironment,
     rejectEnvironment,
@@ -89,15 +89,6 @@ const vpn = (id: string): Capability => ({
 });
 const discord: Capability = { id: "discord", kind: "cli", config: { provider: "discord", botToken: "t" } };
 
-test("hasValidBase pins the first instruction to the official sandbox image", () => {
-    expect(hasValidBase("FROM ghcr.io/intentic/sandbox:stable\nRUN true\n")).toBe(true);
-    expect(hasValidBase("# comment\n\nFROM ghcr.io/intentic/sandbox:1.52.0\nRUN true\n")).toBe(true);
-    expect(hasValidBase("FROM alpine:latest\n")).toBe(false);
-    expect(hasValidBase("FROM ghcr.io/intentic/sandbox:\n")).toBe(false);
-    expect(hasValidBase("RUN true\nFROM ghcr.io/intentic/sandbox:stable\n")).toBe(false);
-    expect(hasValidBase("")).toBe(false);
-});
-
 test("baseImageOf prefers the runner-named base, else an official running image, else the release tag", () => {
     const latest = "ghcr.io/intentic/sandbox:latest";
     // Fresh connect.sh run: no base named, and the running image IS the base.
@@ -129,7 +120,7 @@ test("a rebuild is version-preserving: composing again after one is byte-identic
     const first = await composeEnvironment(services);
     const approved = (await services.files.read(approvedPath(services)))!;
     expect(approved).toContain(`FROM ${latest}`);
-    expect(hasValidBase(approved)).toBe(true);
+    expect(hasOfficialBase(approved)).toBe(true);
 
     // Recompose as the daemon does on boot AFTER a rebuild: the container now runs the overlay's own tag, with
     // the base named by recreate.sh and the applied hash stamped. Identical content and hash ⇒ the Environment
@@ -154,7 +145,7 @@ test("propose → approve stores the custom section and recomposes; applied deri
     expect(state.custom).toEqual({ content: CUSTOM, hash });
     // The approved file is the daemon-composed artifact: pinned base + the custom section verbatim (trimmed).
     expect(state.approved).toEqual(expect.any(Object));
-    expect(hasValidBase(state.approved!.content)).toBe(true);
+    expect(hasOfficialBase(state.approved!.content)).toBe(true);
     expect(state.approved!.content).toContain("# ---- custom (owner-approved) ----");
     expect(state.approved!.content).toContain(CUSTOM.trim());
     expect(state.approved!.hash).not.toBe(hash);
@@ -205,7 +196,7 @@ test("compose folds a capability's fragment (install + runtime directives) into 
     const approved = await services.files.read(approvedPath(services));
     expect(approved).toEqual(expect.any(String));
     expect(hash).toBe(sha256Hex(approved!));
-    expect(hasValidBase(approved!)).toBe(true);
+    expect(hasOfficialBase(approved!)).toBe(true);
     expect(approved).toContain("wireguard-tools");
     expect(approved).toContain("# intentic:runtime --device=/dev/net/tun");
     expect(approved).toContain("# intentic:runtime --cap-add=NET_ADMIN");
@@ -250,7 +241,7 @@ test("compose with nothing left removes the overlay on a stock container, keeps 
     const bare = await overlayBuilt.files.read(approvedPath(overlayBuilt));
     expect(bare).toEqual(expect.any(String));
     expect(hash).toBe(sha256Hex(bare!));
-    expect(hasValidBase(bare!)).toBe(true);
+    expect(hasOfficialBase(bare!)).toBe(true);
     expect(bare).not.toContain("# ---- custom");
 });
 

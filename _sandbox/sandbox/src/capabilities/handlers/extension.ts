@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionConfig } from "@intentic/sandbox-contract";
-import { invalidExtensionFragment } from "../../environment/fragment-sources.js";
+import { invalidExtensionFragment } from "@intentic/sandbox-contract";
 import { extensionProcessKey } from "../../extensions/extension-processes.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";

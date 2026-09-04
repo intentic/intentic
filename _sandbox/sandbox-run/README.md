@@ -27,7 +27,10 @@ app); this package is why they cannot disagree about what one is.
 
 - [src/index.ts](src/index.ts): the contract and the docker-run emitter; the surface every docker-shaped flow uses.
 - [src/fly.ts](src/fly.ts), the hosted flavor: the same contract emitted as a Fly Machine config (one VM per
-  sandbox, one volume standing in for the three docker ones, the `SANDBOX_VM` switch), plus the one thing a
+  sandbox, one volume standing in for the three docker ones, the `SANDBOX_VM` switch, the approved overlay's
+  hash as `SANDBOX_ENVIRONMENT_HASH` when the image was built from one), the shape of the one other machine a
+  hosted sandbox runs (`flyBuildMachineConfig`: the builder the platform creates in the sandbox's app to build
+  that overlay, its recipe delivered as `files`, no volume, no restart), plus the one thing a
   docker run never declares: the machine's **front door**, the preview proxy as a Fly service with a health
   check under the sandbox's own hostname, because a hosted machine is reached by a replay from the platform's
   edge rather than through a tunnel it dials.

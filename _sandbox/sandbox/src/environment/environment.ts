@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Environment, EnvironmentRecurring, EnvironmentRuntimeDecision } from "@intentic/sandbox-contract";
+import { type Environment, type EnvironmentRecurring, type EnvironmentRuntimeDecision, isOfficialSandboxImage } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, stepFor } from "./auto-drafts.js";
@@ -27,7 +27,6 @@ export const customPath = (services: Services): string => statePath(services.wor
 // with no sign a downgrade happened. A capability whose whole point is its image fragment (vpn) is the worst
 // case, applying the fragment and running a daemon that understands it become mutually exclusive.
 const RELEASE_IMAGE = "ghcr.io/intentic/sandbox:stable";
-const OFFICIAL_IMAGE = /^ghcr\.io\/intentic\/sandbox:\S+$/;
 
 // Both inputs are RUNNER-set container env (SANDBOX_BASE_IMAGE / SANDBOX_IMAGE), never anything the agent can
 // write, so neither is a path for smuggling a base image past the owner.
@@ -49,19 +48,12 @@ export const baseImageOf = (baseImage: string | undefined, runningImage: string 
         return baseImage.trim();
     }
     const running = runningImage?.trim() ?? "";
-    return OFFICIAL_IMAGE.test(running) ? running : RELEASE_IMAGE;
+    return isOfficialSandboxImage(running) ? running : RELEASE_IMAGE;
 };
 
-// The composed overlay must extend the official sandbox image, the first instruction is pinned so an approved
-// overlay can't swap the base for an arbitrary image. Held by construction in composeEnvironment; the ic recreate flow
-// re-checks it as a redundant safety check.
-export const hasValidBase = (content: string): boolean => {
-    const first = content
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => line !== "" && !line.startsWith("#"));
-    return first !== undefined && /^FROM ghcr\.io\/intentic\/sandbox:\S+$/.test(first);
-};
+// The composed overlay must extend the official sandbox image: the first instruction is pinned so an approved
+// overlay can't swap the base for an arbitrary image. Held by construction in composeEnvironment; every
+// executor re-checks it with the contract's `hasOfficialBase` (ic in Rust, the platform's hosted rebuild).
 
 // A proposal is custom-section content only: the daemon owns the base pin (no FROM) and runtime directives are
 // reserved for capability fragments (a proposal can't smuggle container privileges).

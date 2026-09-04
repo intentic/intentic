@@ -1,6 +1,6 @@
 import { PREVIEW_PORT } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
-import { FLY_VOLUME_LAYOUT, FLY_VOLUME_PATH, FRONT_DOOR_CONCURRENCY, flyMachineConfig } from "./fly.js";
+import { FLY_VOLUME_LAYOUT, FLY_VOLUME_PATH, FRONT_DOOR_CONCURRENCY, flyBuildMachineConfig, flyMachineConfig } from "./fly.js";
 
 describe(`flyMachineConfig`, () => {
     const run = {
@@ -102,5 +102,73 @@ describe(`flyMachineConfig: the front door`, () => {
         const config = flyMachineConfig(run);
         expect(config.services).toBeUndefined();
         expect(config.checks).toBeUndefined();
+    });
+});
+
+describe(`flyMachineConfig: an overlay-built image`, () => {
+    const run = {
+        name: `intentic-sbx-abcdef012345`,
+        image: `registry.fly.io/intentic-sbx-abcdef012345:env-0123456789ab`,
+        baseImage: `ghcr.io/intentic/sandbox:stable`,
+        guest: { cpus: 4, memoryMb: 4096 },
+        volumeId: `vol_123`,
+    };
+
+    // The daemon derives "applied" from this hash against the approved file's, exactly as it does on a
+    // docker host recreated by ic; the base stays the official tag so a recompose keeps extending it.
+    it(`stamps the approved overlay's hash beside the image pair`, () => {
+        const hash = `a`.repeat(64);
+        const config = flyMachineConfig({ ...run, environmentHash: hash });
+        expect(Object.entries(config.env).slice(0, 4)).toEqual([
+            [`SANDBOX_NAME`, run.name],
+            [`SANDBOX_IMAGE`, run.image],
+            [`SANDBOX_BASE_IMAGE`, `ghcr.io/intentic/sandbox:stable`],
+            [`SANDBOX_ENVIRONMENT_HASH`, hash],
+        ]);
+    });
+
+    it(`stamps no hash for a stock image`, () => {
+        expect(`SANDBOX_ENVIRONMENT_HASH` in flyMachineConfig(run).env).toBe(false);
+    });
+});
+
+describe(`flyBuildMachineConfig`, () => {
+    const build = {
+        image: `moby/buildkit:v0.20.2`,
+        guest: { cpus: 2, memoryMb: 4096 },
+        files: [
+            { path: `/build/Dockerfile`, content: `FROM ghcr.io/intentic/sandbox:stable\nRUN true\n` },
+            { path: `/build/run.sh`, content: `#!/bin/sh\nexit 0\n` },
+        ],
+        entrypoint: [`/bin/sh`, `/build/run.sh`],
+    };
+
+    it(`is a performance guest with no volume, no restart and the script as its entrypoint`, () => {
+        const config = flyBuildMachineConfig(build);
+        expect(config.image).toBe(build.image);
+        expect(config.guest).toEqual({ cpu_kind: `performance`, cpus: 2, memory_mb: 4096 });
+        expect(config.mounts).toEqual([]);
+        expect(config.restart).toEqual({ policy: `no` });
+        expect(config.auto_destroy).toBe(false);
+        expect(config.init).toEqual({ entrypoint: [`/bin/sh`, `/build/run.sh`] });
+        expect(config.services).toBeUndefined();
+        expect(config.checks).toBeUndefined();
+    });
+
+    it(`delivers every file base64-encoded at its guest path`, () => {
+        const files = flyBuildMachineConfig(build).files!;
+        expect(files.map((file) => file.guest_path)).toEqual([`/build/Dockerfile`, `/build/run.sh`]);
+        expect(files.map((file) => Buffer.from(file.raw_value, `base64`).toString(`utf8`))).toEqual(build.files.map((file) => file.content));
+    });
+
+    it(`carries only the env pairs with a value`, () => {
+        const config = flyBuildMachineConfig({
+            ...build,
+            env: [
+                [`PLATFORM_URL`, `https://api.test`],
+                [`EMPTY`, ``],
+            ],
+        });
+        expect(config.env).toEqual({ PLATFORM_URL: `https://api.test` });
     });
 });

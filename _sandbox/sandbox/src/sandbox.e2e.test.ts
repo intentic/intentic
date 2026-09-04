@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { STATE_DIR } from "@intentic/constants";
-import { sandboxContract } from "@intentic/sandbox-contract";
+import { hasOfficialBase, sandboxContract } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -11,7 +11,6 @@ import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonUrl, dockerBuild, dockerRmi, startSandboxContainer, until } from "./e2e-harness.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { hasValidBase } from "./environment/environment.js";
 
 // The Tier-2 daemon e2e: boot the REAL sandbox image (built from this repo's Dockerfile, the same artifact CI
 // publishes) in loopback mode and drive its HTTP surface exactly as the browser does, asserting only what the
@@ -313,7 +312,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(environment.approved).toEqual(expect.any(Object));
         const approved = environment.approved as { content: string; hash: string };
         // The compose contract recreate.sh trusts: pinned base, daemon-owned fragment, runtime directives, hash.
-        expect(hasValidBase(approved.content)).toBe(true);
+        expect(hasOfficialBase(approved.content)).toBe(true);
         expect(approved.content).toContain("wireguard-tools");
         expect(approved.content).toContain("# intentic:runtime --device=/dev/net/tun");
         expect(approved.content).toContain("# intentic:runtime --cap-add=NET_ADMIN");

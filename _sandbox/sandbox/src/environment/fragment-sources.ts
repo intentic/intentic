@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import { type Capability, invalidExtensionFragment } from "@intentic/sandbox-contract";
 import { contributionFor, contributionFragmentPath, contributionPackName, contributionRegistry } from "../capabilities/contributions.js";
 import { packFragment, readPack } from "./packs.js";
 import { registry } from "../capabilities/registry.js";
@@ -12,37 +12,9 @@ import type { Services } from "../composition.js";
  * that MAY carry privileged `# intentic:runtime` directives; an extension's `contributes.environment.fragment`
  * is a checkout file restricted to RUN/ENV instructions only. Keeping the split here, not in
  * CapabilityHandler.fragment (which stays sync + trusted), means the "what can an extension bake into the
- * image" security surface is exactly `invalidExtensionFragment`. composeEnvironment calls this per capability. */
-
-// Reject anything an extension fragment must not contain: FROM (the daemon owns the base pin), any privileged
-// runtime directive, and any Dockerfile instruction other than RUN/ENV. Continuation-aware (a `\`-continued
-// RUN body spans lines). Returns the offending line, or undefined when the fragment is clean.
-export const invalidExtensionFragment = (content: string): string | undefined => {
-    let continued = false;
-    for (const raw of content.split("\n")) {
-        const line = raw.trim();
-        const wasContinued = continued;
-        continued = line.endsWith("\\");
-        if (line === "" || line.startsWith("#")) {
-            // A comment could still smuggle a runtime directive that an out-of-band rebuild executor greps for.
-            if (line.includes("intentic:runtime")) {
-                return raw;
-            }
-            continue;
-        }
-        // The body of a continued RUN/ENV, not an instruction line, so don't re-check the leading keyword.
-        if (wasContinued) {
-            if (line.includes("intentic:runtime")) {
-                return raw;
-            }
-            continue;
-        }
-        if (!/^(run|env)\s/i.test(line) || line.includes("intentic:runtime")) {
-            return raw;
-        }
-    }
-    return undefined;
-};
+ * image" security surface is exactly `invalidExtensionFragment` (@intentic/sandbox-contract overlay-lint,
+ * shared with the platform's hosted rebuild, which re-reads a whole overlay by the same grammar).
+ * composeEnvironment calls this per capability. */
 
 // Every fragment one capability entry contributes. The core handler fragment first (trusted), then, for an
 // extension capability declaring contributes.environment, the checkout fragment, validated and skipped with a

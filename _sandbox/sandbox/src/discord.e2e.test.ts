@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { downloadFile } from "@huggingface/hub";
-import { sandboxContract } from "@intentic/sandbox-contract";
+import { hasOfficialBase, sandboxContract } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -12,7 +12,6 @@ import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonUrl, dockerBuild, dockerRmi, dockerRun, startSandboxContainer, until } from "./e2e-harness.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { hasValidBase } from "./environment/environment.js";
 
 // The Tier-3 real Discord + Whisper e2e: the ext-discord gateway process on a REAL bot token receives a REAL
 // message (sent by a second, harness-owned bot: the listener deliberately dispatches third-party bot posts, see
@@ -149,7 +148,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const environment = (await (await fetch(`${base}/environment`)).json()) as { approved?: { content: string; hash: string } };
         expect(environment.approved).toEqual(expect.any(Object));
         const approved = environment.approved as { content: string; hash: string };
-        expect(hasValidBase(approved.content)).toBe(true);
+        expect(hasOfficialBase(approved.content)).toBe(true);
         expect(approved.content).toContain("whisper-cli");
         expect(approved.hash).toBe(sha256Hex(approved.content));
 
