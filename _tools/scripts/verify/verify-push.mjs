@@ -98,6 +98,25 @@ import { ago, freshFor, readVerdict, treeHash, writeVerdict } from "../lib/tree-
 
 const root = repoRoot(import.meta.url);
 const hook = process.argv.includes("--hook");
+
+/* GIT'S OWN ENVIRONMENT STOPS HERE, once, for every tier below.
+ *
+ * A hook is a child of git, and git hands its children the variables that say WHICH REPOSITORY a command acts
+ * on — GIT_DIR above all, exported for every push from a linked worktree, and every agent turn runs in one.
+ * Those variables outrank the `cwd` a command was given, so they reach past what anything here asked for.
+ * Everything this gate runs git with names its directory: this file passes `cwd: root`, meaning THIS checkout,
+ * and the checks and tests that build a THROWAWAY repository in a temp dir mean that one. With GIT_DIR in the
+ * environment neither gets it. The release-notes check spent a push proving the cost: its scratch `git init`
+ * re-initialised the pushing checkout, its two empty commits landed on that branch, its tags collided with the
+ * real release tags, and it then refused the push over a `git describe` answer that was about the repository
+ * being pushed rather than the repository it built. The tests that stand up real repositories (the stash, the
+ * remote and the maintenance suites) inherit the same environment in tier 3.
+ *
+ * Deleted rather than worked around in each caller: a gate that measures a checkout should be told which one
+ * by its own arguments, and nothing it runs has business acting on a repository it did not name. */
+for (const variable of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_GRAFT_FILE", "GIT_CEILING_DIRECTORIES", "GIT_INDEX_VERSION"]) {
+    delete process.env[variable];
+}
 // Refuse a tree the app's check measured red, instead of letting the owner's "Push anyway" stand.
 const STRICT = false;
 // How much of a failed suite's output is repeated into git's error text when the hook ran it (the terminal case
