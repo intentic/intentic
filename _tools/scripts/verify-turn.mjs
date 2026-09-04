@@ -23,27 +23,22 @@
  * THE DIRTY SET IS THE TURN'S OWN. An isolated turn's worktree is clean when the turn starts (landing commits
  * the remainder), so `git status` there lists this turn's edits and nothing else. In the primary checkout the
  * dirty set is everyone's landed, uncommitted work, so the closure is wider there, which is still correct: it
- * is the work that has not been measured. */
+ * is the work that has not been measured.
+ *
+ * AND IT SAYS ALL OF IT AT ONCE (lib/steps.mjs). This is the moment where collecting matters most, because the
+ * budget here is not time, it is TURNS: the Stop sends a model back at most twice (MAX_FOLLOW_UPS in
+ * sandbox/src/rules/turn-ending.ts) and is silent afterwards whatever the tree says. A gate that stopped at its
+ * first failing step could therefore name at most two of a turn's problems before the work was held, which is
+ * what held 28 turns in the six days before this was written. The gates, the linter and the closure's
+ * typecheck-and-test are three independent readers and all three get to speak. */
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { affectedBy, readWorkspaceGraph } from "../checks/lib/workspace-graph.mjs";
 import { repoRoot } from "../constants/src/node.mjs";
+import { createSteps } from "./lib/steps.mjs";
 
 const root = repoRoot(import.meta.url);
-const say = (line) => console.error(`verify:turn: ${line}`);
-
-const step = (label, command, args, env = {}) => {
-    say(`${label} …`);
-    const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32", env: { ...process.env, ...env } });
-    if (result.error !== undefined) {
-        say(`${label}: ${result.error.message}`);
-        process.exit(1);
-    }
-    if (result.status !== 0) {
-        say(`${label} failed`);
-        process.exit(result.status ?? 1);
-    }
-};
+const { say, step, skip, finish } = createSteps("verify:turn", root);
 
 // Every path the tree says changed: staged, unstaged, untracked; a rename by its new name.
 const changedPaths = () => {
@@ -57,7 +52,8 @@ const changedPaths = () => {
         .map((line) => line.slice(3).trim().split(" -> ").at(-1));
 };
 
-const started = Date.now();
+// The two cheap readers, both independent of each other and of the closure below: a syntax error found in a
+// second is worth having whatever the type checker goes on to say.
 step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs")]);
 step("lint", "pnpm", ["lint"]);
 
@@ -75,13 +71,17 @@ if (global !== undefined) {
     say(`${seeds.size} changed package${seeds.size === 1 ? "" : "s"}, ${affected.size} in the closure: ${[...affected].sort().join(", ")}`);
 }
 
+// The emit is the one thing the closure's check genuinely reads; after a failed one it would report missing
+// modules against files that are correct, which is why this pair is a dependency and the two above are not.
 if (affected.size > 0) {
-    step("emit declarations", process.execPath, [join(root, "_tools/scripts/emit-declarations.mjs")]);
-    const filters = global !== undefined ? [] : [...affected].flatMap((name) => ["--filter", name]);
-    step("typecheck and test", "pnpm", ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", ...filters], {
-        VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4",
-        INDEXNOW_ENABLED: "0",
-    });
+    if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/emit-declarations.mjs")])) {
+        const filters = global !== undefined ? [] : [...affected].flatMap((name) => ["--filter", name]);
+        step("typecheck and test", "pnpm", ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", ...filters], {
+            env: { VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4", INDEXNOW_ENABLED: "0" },
+        });
+    } else {
+        skip("typecheck and test", "the declarations it reads were not emitted");
+    }
 }
 
-say(`passed in ${Math.round((Date.now() - started) / 1000)}s`);
+finish(() => (affected.size === 0 ? "the checkout gates and the linter; nothing in this turn's closure to measure" : `the turn's closure: ${affected.size} package${affected.size === 1 ? "" : "s"}`));

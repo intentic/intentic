@@ -359,6 +359,10 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             // raising that limit is a decision about every session sharing the box, and `git log` is the only
             // thing that answers "since when have we been allowing four of these at a time".
             `${STATE_DIR}/config/heavy-commands.json`,
+            /* The scripts the rules run. Tracked because an untracked one is invisible to the land: the pair
+             * that used to live here was written in a worktree and never arrived, leaving settings.json naming
+             * two hooks that did not exist. A rule is reviewable; the code it runs on every edit has to be. */
+            `${STATE_DIR}/config/hooks/`,
             `${STATE_DIR}/config/loop-designs.json`,
             `${STATE_DIR}/config/personas.json`,
             // A persona's own kit: the prompt it runs on and the skills only its turns reach. Tracked for the

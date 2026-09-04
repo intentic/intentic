@@ -273,6 +273,31 @@ const STATE_FILES = [
      * — raising the limit is a decision about everyone's sessions on that box, and `git log` is the only thing
      * that answers "since when have we allowed four of these at once". */
     { path: ".intentic/config/heavy-commands.json", invalidates: ["settings"], portability: "carry", versioned: true },
+    /* THE SCRIPTS THE RULE TABLE RUNS, one file per reader, at the moments settings.json points them at: the
+     * per-edit linter and byte scan today (`file.edited`), whatever the owner adds beside them tomorrow.
+     *
+     * IT IS HERE BECAUSE IT WAS NOT, and the gap was silent. The root repository excludes `.intentic/config/*`
+     * with one carve-out per tracked entry, derived from this table's `versioned` flags (history.ts
+     * rootExcludes), so a directory nobody marked is ignored — and an ignored file is invisible to the land.
+     * The two scripts were written in an agent's worktree; the rules naming them were written into
+     * settings.json, which IS tracked; and only the rules arrived. What the workspace held from then on was two
+     * hooks pointing at files that did not exist: a per-edit gate that looked armed on the settings screen,
+     * spawned a process on every edit, and read nothing. The linter and the byte scan ran nowhere between an
+     * edit and a push for as long as that stood.
+     *
+     * `versioned` for the strongest form of the reason the config slice generally is. This is not a setting that
+     * decides how the sandbox behaves, it is the CODE that runs when it does, against every file an agent
+     * writes: a change here deserves review more than a change to the rule that calls it. `carry`, because it is
+     * authored text about this workspace's own conventions, holding no credential and nothing about this
+     * machine. Invalidating nothing is a real answer here rather than a gap: the settings screen renders the
+     * RULES, which live in settings.json and have their own key. */
+    {
+        path: ".intentic/config/hooks/",
+        invalidates: [],
+        why: "The settings screen renders the rules that name these scripts, out of settings.json; nothing in the browser reads the scripts themselves.",
+        portability: "carry",
+        versioned: true,
+    },
     // The rule table's last-fired stamps, beside the rules themselves. `derived` rather than `carry`: it is a
     // record of what happened in THIS sandbox, and carrying it to a fresh one would date every rule to work
     // that machine never did.

@@ -65,6 +65,7 @@ jobs:
       # three groups pays it — the standing cost of the split, against a platform deploy that no longer waits
       # on the marketing site.
       - run: pnpm prepass
+        id: prepass
       # THROUGH THE ENVIRONMENT, not interpolated into the script. `${{ }}` inside a `run:` block is textual
       # substitution BEFORE the shell sees the line, so the value becomes script rather than an argument to it
       # — the shape zizmor calls template-injection and the one every Actions exploit writeup starts from. The
@@ -86,6 +87,19 @@ jobs:
       # pipeline reports one broken package and the next push finds the next one. Continuing into everything
       # whose own dependencies are still green makes one run say everything that is wrong.
       # Through the environment, unquoted, for the two reasons the typecheck step above spells out.
+      #
+      # AND THE STEP BOUNDARY IS THE SAME DEFECT ONE LEVEL UP. Actions stops a job at its first failing step, so
+      # everything the paragraph above buys inside turbo was being thrown away between the two invocations: a
+      # type error in any package meant this step never ran, the pipeline reported the type error alone, and the
+      # test failures underneath it were found by the next push. That is precisely "one broken package and the
+      # next push finds the next one", written in YAML instead of in turbo's scheduler.
+      #
+      # `!cancelled()` rather than `always()`: a cancelled run has been asked to stop and must not spend a
+      # runner finishing this. `steps.prepass.outcome == 'success'` is the one real dependency in the chain —
+      # the declarations this reads are what prepass emits, so without them the failures here would be missing
+      # modules rather than anything about the tree. A failed typecheck still fails the JOB; it just no longer
+      # decides how much of the tree gets measured.
       - run: pnpm turbo run build test $FILTERS --continue=dependencies-successful
+        if: ${{ !cancelled() && steps.prepass.outcome == 'success' }}
         env:
           FILTERS: ${{ inputs.filters }}

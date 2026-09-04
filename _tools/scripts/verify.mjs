@@ -17,39 +17,42 @@
  * dies EXDEV under worktree isolation; the push gate (verify-push.mjs) runs build from the primary checkout.
  *
  * A GREEN RUN IS RECORDED against a hash of the tree it measured (lib/tree-verdict.mjs), so the push gate that
- * follows replays it and runs only the build. */
-import { spawnSync } from "node:child_process";
+ * follows replays it and runs only the build.
+ *
+ * EVERY STEP THAT CAN STILL SAY SOMETHING RUNS (lib/steps.mjs). This is the whole repository, measured after a
+ * land, on the main tree, off every model's clock: a run that stopped at the first failing step would be
+ * spending that serialized slot to report a fraction of what it had already paid to find out. The one real
+ * dependency is the declarations emit, which typecheck and the suites READ; those are skipped when it fails,
+ * and the digest says so rather than letting an unmeasured package read as a green one. */
 import { join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
+import { createSteps } from "./lib/steps.mjs";
 import { treeHash, writeVerdict } from "./lib/tree-verdict.mjs";
 
 const root = repoRoot(import.meta.url);
-const say = (line) => console.error(`verify: ${line}`);
+const { step, skip, finish } = createSteps("verify", root);
 
-const step = (label, command, args, env = {}) => {
-    say(`${label} …`);
-    const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32", env: { ...process.env, ...env } });
-    if (result.error !== undefined) {
-        say(`${label}: ${result.error.message}`);
-        process.exit(1);
-    }
-    if (result.status !== 0) {
-        say(`${label} failed`);
-        process.exit(result.status ?? 1);
-    }
-};
-
-const started = Date.now();
+// Independent of everything below: it reads the checkout, not the build.
 step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs")]);
-step("emit declarations", process.execPath, [join(root, "_tools/scripts/emit-declarations.mjs")]);
-step("typecheck", "pnpm", ["turbo", "run", "typecheck", "--continue=dependencies-successful"]);
+
 // VITEST_MAX_WORKERS is the ONLY thing bounding a repo-wide run's memory (turbo.json says why); the caller's
 // own value wins. INDEXNOW_ENABLED=0 for the reason ci.yml gives: the site build otherwise polls the live site.
-step("test", "pnpm", ["turbo", "run", "test", "--only", "--continue=dependencies-successful"], {
-    VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4",
-    INDEXNOW_ENABLED: "0",
-});
+const SUITE_ENV = { VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4", INDEXNOW_ENABLED: "0" };
 
-const seconds = Math.round((Date.now() - started) / 1000);
-const recorded = writeVerdict(root, treeHash(root), "passed", "verify");
-say(`passed in ${seconds}s: checkout gates, declarations, typecheck and tests${recorded ? " (recorded for the push gate)" : ""}`);
+/* THE ONE EDGE. Both steps below resolve their workspace imports through the .d.ts this emits, so after a
+ * failed emit they report missing modules and name files that are correct. Typecheck and test are independent
+ * of EACH OTHER, though — vitest strips types, so a suite runs and means something on a tree that does not
+ * type-check — which is exactly the pair that used to be reported one per run. */
+if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/emit-declarations.mjs")])) {
+    step("typecheck", "pnpm", ["turbo", "run", "typecheck", "--continue=dependencies-successful"]);
+    step("test", "pnpm", ["turbo", "run", "test", "--only", "--continue=dependencies-successful"], { env: SUITE_ENV });
+} else {
+    for (const label of ["typecheck", "test"]) {
+        skip(label, "the declarations it reads were not emitted");
+    }
+}
+
+finish(() => {
+    const recorded = writeVerdict(root, treeHash(root), "passed", "verify");
+    return `checkout gates, declarations, typecheck and tests${recorded ? " (recorded for the push gate)" : ""}`;
+});

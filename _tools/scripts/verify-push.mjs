@@ -92,6 +92,7 @@ import { join, relative } from "node:path";
 // By file, not by package name, for the reason _tools/checks/lib/repo.mjs gives: the hook runs on a clone that may never have
 // installed, and a bare specifier resolves through node_modules.
 import { repoRoot } from "../constants/src/node.mjs";
+import { createSteps } from "./lib/steps.mjs";
 import { ago, freshFor, readVerdict, treeHash, writeVerdict } from "./lib/tree-verdict.mjs";
 
 const root = repoRoot(import.meta.url);
@@ -104,9 +105,18 @@ const TAIL_LINES = 80;
 const ZERO_SHA = /^0+$/;
 const TAG_REF = /^refs\/tags\//;
 
-// stderr throughout: git shows a hook's stderr to whoever pushed, and the daemon reads the same stream.
-const say = (line) => console.error(`verify-push: ${line}`);
-const fail = (line) => {
+/* stderr throughout: git shows a hook's stderr to whoever pushed, and the daemon reads the same stream.
+ *
+ * THE TWO CHEAP TIERS COLLECT (lib/steps.mjs) AND THE BOUNDARY BETWEEN THEM AND THE SUITE DOES NOT, which is
+ * the one place in this repository where stopping early is still the right answer. Inside a tier the steps are
+ * independent readers of the same checkout and cost a second between them, so a push that is wrong in four ways
+ * should be told about four rather than about the first; whether to then spend TEN MINUTES on typecheck, build
+ * and tests for a tree already known to be refused is a different question, and the header's "refused in a
+ * second" is the answer this gate was built to give. So: everything each tier found, then the decision. */
+const { say, step, fail, finish } = createSteps("verify-push", root);
+// The refusals that end the run where they stand rather than joining a digest: the ones that are about the
+// PUSH rather than about the tree (an unmeasurable range, a suite that could not start, a verdict replayed).
+const refuse = (line) => {
     say(line);
     process.exit(1);
 };
@@ -114,18 +124,6 @@ const fail = (line) => {
 const git = (...args) => {
     const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
     return result.status === 0 ? result.stdout : undefined;
-};
-
-// One tier's command, output straight to whoever is watching. A command that could not start is as much a
-// refusal as one that failed: the gate has learned nothing about the tree and says so instead of passing.
-const step = (label, command, args) => {
-    const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
-    if (result.error !== undefined) {
-        fail(`${label}: ${result.error.message}`);
-    }
-    if (result.status !== 0) {
-        fail(`${label} failed; the push does not go`);
-    }
 };
 
 /* ── what is leaving ─────────────────────────────────────────────────────────────────────────────────────────
@@ -226,6 +224,7 @@ const changed = changedPaths();
         .filter((path) => LOCKSTEP.test(path));
     if (committed.length > 0 && uncommitted.length > 0) {
         fail(
+            "manifest/lockfile lockstep",
             `the push commits ${committed.join(", ")} while ${uncommitted.join(", ")} ${uncommitted.length === 1 ? "is" : "are"} changed and uncommitted ` +
                 `beside it; CI's checkout gets the first without the second and fails the lockfile check (the lockfile no longer records the manifest). ` +
                 `Commit them together`,
@@ -237,7 +236,7 @@ const changed = changedPaths();
     if (lint.error !== undefined) {
         say(`lint skipped: ${lint.error.message} (CI does not lint; the turn-ending check does)`);
     } else if (lint.status !== 0) {
-        fail("lint failed; the push does not go");
+        fail("lint", `exit ${lint.status ?? "signal"} · pnpm lint`);
     }
 }
 
@@ -267,6 +266,10 @@ if (touched.length > 0) {
         }
     }
 }
+
+/* Everything both cheap tiers found, and the decision the header describes: a tree refused by a reader that
+ * costs a second does not go on to spend ten minutes being refused again. On a clean pair this returns. */
+finish(() => "the checkout gates, the assertion ratchet, the manifest/lockfile lockstep, the linter and rustfmt");
 
 /* ── tier 3: the three steps verify.yml runs ─────────────────────────────────────────────────────────────── */
 
@@ -342,7 +345,7 @@ if (replay) {
 }
 if (hook && fresh && verdict.status === "failed") {
     if (STRICT) {
-        fail(`this exact tree FAILED the push check ${ago(verdict.at)}; fix it, or \`git push --no-verify\` if you must`);
+        refuse(`this exact tree FAILED the push check ${ago(verdict.at)}; fix it, or \`git push --no-verify\` if you must`);
     }
     say(`this exact tree FAILED the push check ${ago(verdict.at)} and the push was asked for anyway; CI will say the same`);
     noteUncommitted();
@@ -358,7 +361,7 @@ if (!result.ok) {
     if (result.tail) {
         console.error(result.tail);
     }
-    fail(`${result.why}; the push does not go`);
+    refuse(`${result.why}; the push does not go`);
 }
 say(
     result.buildOnly

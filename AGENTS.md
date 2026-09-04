@@ -51,7 +51,10 @@ and nothing has been built on it yet.
 under `intentic/**`): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter, the declarations emit,
 and `turbo run typecheck test --only` over the AFFECTED CLOSURE, the packages holding a changed file plus
 every package that depends on one. That is exactly the set whose fixtures can name a shape you just changed;
-nothing outside it can have been broken by this turn, and nothing inside it is somebody else's red. Do not
+nothing outside it can have been broken by this turn, and nothing inside it is somebody else's red. Every one
+of those readers runs even when an earlier one failed, and the run ends with a digest naming each step that
+did (`_tools/scripts/lib/steps.mjs`), so one report is the whole list rather than the first item on it: you
+get two follow-ups, and a gate that named one problem per run could not spend them. Do not
 run or announce that gate yourself; failures return to the turn, and the check's last run decides whether
 the work lands: a red first run with a green second is a turn that passed, a turn still red when it ends is
 held on its branch as "Ready to land".
@@ -83,7 +86,9 @@ commits a branch push already measured (the release tag, `stable`), so it stands
 range's test files (`_tools/scripts/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
 only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the
 linter; then `cargo fmt --check` on any Rust crate the push touches; then the three steps CI's verify groups
-run. A tree that `pnpm verify` already measured, which after a land is the ordinary case, replays that verdict
+run. The two cheap tiers collect — a push wrong in four readable ways is told about four — and the boundary
+before the suite still stops, because a tree already refused by a reader that costs a second should not spend
+ten minutes being refused again. A tree that `pnpm verify` already measured, which after a land is the ordinary case, replays that verdict
 and runs only the build it could not (`_tools/scripts/lib/tree-verdict.mjs`).
 
 It measures the working tree; CI measures the commit. The land now regenerates `pnpm-lock.yaml` in the
