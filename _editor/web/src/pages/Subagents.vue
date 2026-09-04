@@ -708,10 +708,13 @@ watch(
                      agent type, the model and a spinner, all of them facts the rail beside it already carries
                      for every child at once.
                      What is left is what a reader can ACT on: whether the work above shows its tool calls, and
-                     the way back to the conversation that started this. Right-aligned and in the status
-                     strip's own type, so a reader coming from the chat finds the same toggle in the same
-                     corner of the screen. -->
-                <div v-if="current" class="flex shrink-0 items-center justify-end gap-3 px-3 pb-2 pt-1 text-2xs text-subtle">
+                     the way back to the conversation that started this. CENTRED under the column rather than
+                     pushed into a corner: two controls are not a status bar, and hung off the right edge they
+                     read as the leftovers of the toolbar this used to be. Under the middle of the transcript
+                     they are where the reading eye already is, and they sit on the axis the column itself
+                     sits on. In the status strip's own type, so a reader coming from the chat recognises the
+                     toggle as the one they set there. -->
+                <div v-if="current" class="flex shrink-0 items-center justify-center gap-3 px-3 pb-2 pt-1 text-2xs text-subtle">
                     <!-- The chat's own control, not a copy of it: a reader who hid the calls in one place has
                          said what they want of the other. -->
                     <ChatToolCallsToggle />
