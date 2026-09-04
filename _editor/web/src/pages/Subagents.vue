@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type AgentProvider, NATIVE_PROVIDERS, providerLabel, type TranscriptRow, type SubagentSession } from "@intentic/sandbox-contract";
+import { type AgentProvider, providerLabel, type TranscriptRow, type SubagentSession } from "@intentic/sandbox-contract";
 import { Icon, type IconName, Markdown, ui, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, ref, watch } from "vue";
@@ -19,9 +19,7 @@ import ChatThinking from "../chat/ChatThinking.vue";
 import ChatToolCallsToggle from "../chat/ChatToolCallsToggle.vue";
 import ChatToolRows from "../chat/ChatToolRows.vue";
 import ChatToolRun from "../chat/ChatToolRun.vue";
-import ProviderLogo from "../chat/ProviderLogo.vue";
 import ActionLink from "../components/ActionLink.vue";
-import IdentityTile from "../components/IdentityTile.vue";
 import RailCard from "../components/RailCard.vue";
 import RailColumn from "../components/RailColumn.vue";
 import RailLane from "../components/RailLane.vue";
@@ -42,8 +40,11 @@ import { fileLinkDecorator } from "../composables/renderMarkdown";
  * WHAT IT HAS NO COMPOSER FOR. The chat's footer is missing here because there is nothing to send: steering a
  * child goes through the daemon's `/children/send` door, which is a SUPERVISION call and admits only a shell
  * carrying a live turn stamp (children/children.routes.ts) — an agent talking to the agent it started. A person
- * reaches a child through its parent, so the header's "Parent" is the outward action this pane has, and the
- * tool-calls toggle takes the slot the composer's status strip would have carried it in.
+ * reaches a child through its parent, so "Parent" is the outward action this pane has; it and the tool-calls
+ * toggle sit exactly where the chat keeps its own — on a strip under the column, in the composer status row's
+ * place. There is no header bar over the transcript: what a header would have named (the child's title, its
+ * type, its model, whether it is still going) is the ROW you pressed to get here, carried by the rail beside
+ * the column for every child at once, and saying it twice bought a second, worse card at the top of the pane.
  *
  * THE LIST IS THE CHAT RAIL'S, NOT A SECOND LIST OF SESSIONS. Its rows are RailCard on RailLane inside
  * RailColumn: the same card, the same lane slab and the same column the floating chat lists its conversations
@@ -51,8 +52,9 @@ import { fileLinkDecorator } from "../composables/renderMarkdown";
  * This used to be its own thing: a flat column of bordered rows, its own status glyphs, its own facts in
  * its own order, no identity tile and no card surface, so the agents an AGENT started looked like a different
  * kind of object from the agents the user started, two screens apart in the same app. A row needs NOTHING
- * beyond the shared card now: what is particular about a child — what it runs as, and which conversation it came
- * out of — is answered about the ONE child being read, in the pane's header, which is where one child is read.
+ * beyond the shared card now, and the pane beside it adds no second header repeating that row: which
+ * conversation the open child came out of is the "Parent" link on the strip below, and what it runs as is a
+ * word nobody picks a delegation by.
  *
  * SAME CARD MEANS SAME FORM AND SAME FACTS, and the facts are the CHAT RAIL'S, not a superset of them. It is
  * the card's `tight` shape here as it is there, so a row is the same height in both lists; and it carries what
@@ -78,8 +80,9 @@ const { sessions } = useSubagentsQuery();
 const { agentById, open: openAgent } = useAgents();
 /* WHETHER THE WORK BELOW DRAWS ITS TOOL CALLS: the chat's own account preference, read here for the reason it
  * is read there. A child's transcript IS a transcript, and it is the same person reading both; one of the two
- * surfaces quietly ignoring the setting is how "hide tool calls" came to mean "except over there". The header
- * carries the control (ChatToolCallsToggle) because this pane has no composer to put a status strip under. */
+ * surfaces quietly ignoring the setting is how "hide tool calls" came to mean "except over there". The control
+ * (ChatToolCallsToggle) rides the strip under the column, which is the slot the composer's status row keeps it
+ * in over there: this pane has no composer, but it has the same bottom edge. */
 const { showToolCalls } = useToolCalls();
 
 /* ONE AGENT'S CHILDREN, when the card's chip is what opened this. The chip is a fact about ONE agent: "this
@@ -137,11 +140,10 @@ const lanes = computed<{ readonly label: string; readonly dot: string; readonly 
 ]);
 
 /* The row's heading: WHAT IT WAS ASKED TO DO. The card's one piece of content, so the description takes it
- * whole: the type it runs as (`Explore`, `general-purpose`) is a fact ABOUT the row and belongs to the pane
- * header, which names the ONE child being read rather than repeating a word down a column of fourteen. It used
- * to lead the title, where on a rail this wide it ate the half of the line that says which of fourteen children
- * this one is: every row began "general-purpose · " and the descriptions were clipped at the point they started
- * to differ. */
+ * whole, and the type it runs as (`Explore`, `general-purpose`) is only the fallback for a child that arrived
+ * without one. It used to lead every title, where on a rail this wide it ate the half of the line that says
+ * which of fourteen children this one is: every row began "general-purpose · " and the descriptions were
+ * clipped at the point they started to differ. */
 const titleOf = (session: SubagentSession): string =>
     [session.description, session.agentType].find((part) => part !== undefined && part !== ``) ?? `Agent ${session.id.slice(-6)}`;
 
@@ -197,23 +199,11 @@ const modelOf = (session: SubagentSession): { label: string; inherited: boolean 
     return sessionCategory(titleOf(session)) === undefined ? undefined : { label: providerLabel(provider), inherited: false };
 };
 
-/* THE BRAND MARK FOR AN AGENT TYPE THAT NAMES A RUNTIME. `claude` set as a lowercase word among the header's
- * other grey facts reads as a stray label rather than as the vendor it is; the same fact as a glyph is read in
- * one pass and costs a fifth of the width. Only the native runtimes have a mark: an `Explore` or a
- * `general-purpose` is a WORD, and a word is what says it. */
-const typeMark = (session: SubagentSession): AgentProvider | undefined =>
-    session.agentType !== undefined && (NATIVE_PROVIDERS as readonly string[]).includes(session.agentType) ? session.agentType : undefined;
-
-/* The header's actions, drawn the way the rail's cards are: no box until you are on them. A hairline button on
- * a surface whose whole structure is card-and-lane is a third kind of edge, and two of them in the corner of an
- * otherwise borderless header is what made this bar read as a toolbar bolted to the top.
- *
- * Two spellings of one box, because one of these actions is a COMPONENT that already lays itself out
- * (ChatToolCallsToggle is `inline-flex` and positions a slash against itself): handing it the row half as well
- * would be two `display` rules on one element, decided by stylesheet order. So the box is stated once and the
- * row is what the plain elements add to it. */
-const HEADER_ACTION_BOX = `shrink-0 rounded-md px-1.5 py-1 transition-colors hover:bg-overlay hover:text-content`;
-const HEADER_ACTION = `flex items-center gap-1 ${HEADER_ACTION_BOX}`;
+/* The footer's one link, drawn the way the rail's cards are: no box until you are on them. A hairline button on
+ * a surface whose whole structure is card-and-lane is a third kind of edge. The toggle beside it brings its own
+ * layout (ChatToolCallsToggle is `inline-flex` and positions a slash against itself) and is left to it, exactly
+ * as the composer's status strip leaves it. */
+const FOOTER_ACTION = `flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 transition-colors hover:bg-overlay hover:text-content`;
 
 // The SDK's own task vocabulary, ready to `v-bind` onto the Icon: the shape agentStatusMeta returns for a
 // fleet agent, so the rail's glyph slot is fed the same way here as it is there.
@@ -285,7 +275,7 @@ const liveOf = (session: SubagentSession): { icon: IconName; text: string; since
  * WHAT THIS LINE NO LONGER CARRIES, AND WHY: this rail is a SWITCHER, and it had drifted into a dashboard —
  * `bg`, the parent's clipped title, the agent type, and a tool-call/token counter, four facts wide, ahead of
  * the one the reader came for. Not one of them ever decided which of a dozen children to open: the type is
- * already the title of any child that has no description and is spelled in full in the pane header; the
+ * already the title of any child that has no description, and no reader picks between delegations by it; the
  * parent's title arrived clipped to three words ("package.json an…") and is one press away as "Parent"; `bg`
  * and the counters are a running child's own readout, which the live line beside them gives in the words that
  * mean something ("Read · 30s"). What they did do was crowd out the MODEL and push the live readout onto a row
@@ -555,61 +545,12 @@ watch(
             </RailColumn>
 
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                <!-- WHAT IT IS, in the card's own vocabulary (the tile, the title, the status glyph) so the row
-                     you pressed and the header you land on read as one agent, and the two ways out of this
-                     pane: back to the conversation that started it, and, for a delegation (which unlike a
-                     subagent has a process of its own), into the shell it runs in. -->
-                <!-- NO RULE UNDER IT. The rail beside it is lane slabs on a card ground and draws not one
-                     hairline; a line across the top of the pane put the only border on the surface exactly
-                     where the eye lands first, and cut the header off from the transcript it names. Height and
-                     the title's weight are what separate them now: the same way the lanes separate the rail. -->
-                <div v-if="current" class="flex shrink-0 items-center gap-2.5 px-4 py-2.5 text-2xs text-muted">
-                    <IdentityTile :title="titleOf(current)" :provider="providerOf(current)" class="h-5 w-5 text-2xs" />
-                    <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ titleOf(current) }}</span>
-                    <!-- Wrapped rather than tooltipped directly: the mark is a component, and the note is what
-                         keeps the glyph from being a fact only the people who already know it can read. -->
-                    <span
-                        v-if="typeMark(current) !== undefined"
-                        v-tooltip.bottom="`Runs as ${current.agentType}`"
-                        class="flex shrink-0 items-center text-sm text-subtle"
-                    >
-                        <ProviderLogo :provider="typeMark(current)!" />
-                    </span>
-                    <span v-else-if="current.agentType !== undefined" class="shrink-0">{{ current.agentType }}</span>
-                    <!-- The same label the row above it wears (modelOf): a header that spelled the raw id while
-                         the card said the short name read as two different models. -->
-                    <span
-                        v-if="modelOf(current) !== undefined"
-                        class="shrink-0"
-                        v-tooltip.bottom="modelOf(current)!.inherited ? `Its parent's model: this agent reported none of its own` : undefined"
-                        >{{ modelOf(current)!.label }}</span
-                    >
-                    <Icon v-bind="STATUS[current.status]" class="shrink-0" />
-                    <!-- WHETHER THE WORK BELOW SHOWS ITS TOOL CALLS: the chat's own control (the same component
-                         the composer's status strip draws), because this is the chat's own transcript with the
-                         chat's own folded runs in it, and a reader who hid the calls in one place has said what
-                         they want of the other. In the header for the reason it is under the composer over
-                         there: it goes wherever the surface's own furniture is, and this pane has a header
-                         where a pane has a status strip. -->
-                    <ChatToolCallsToggle :class="HEADER_ACTION_BOX" />
-                    <!-- A control AND an address (ActionLink): the plain click points the docked chat at the
-                         parent, which is better than a page load; Ctrl/⌘-click opens that conversation's own
-                         page in a tab, which a <button> could never offer. -->
-                    <ActionLink
-                        :to="parentTo(current)"
-                        :class="HEADER_ACTION"
-                        v-tooltip.bottom="`Open the conversation that started this agent`"
-                        @activate="openParent(current)"
-                    >
-                        <Icon name="comments" class="text-2xs" />Parent
-                    </ActionLink>
-                </div>
                 <!-- HOW IT ENDED, when that was badly. Plain text, because an error string is a string and
                      not a document, and separate from the report below, which for a delegation is the same
                      tail of the same output and must not be said twice. Held apart from the transcript by its
                      own tinted panel rather than by rules above and below it: the colour already says this
                      block is not the conversation, and a hairline is the app's least specific way to repeat it. -->
-                <p v-if="current?.error" class="mx-4 shrink-0 whitespace-pre-wrap rounded-md bg-danger/10 px-3 py-2 text-2xs text-danger">
+                <p v-if="current?.error" class="mx-4 mt-3 shrink-0 whitespace-pre-wrap rounded-md bg-danger/10 px-3 py-2 text-2xs text-danger">
                     {{ current.error }}
                 </p>
 
@@ -757,6 +698,34 @@ watch(
                             </section>
                         </div>
                     </div>
+                </div>
+
+                <!-- THE PANE'S CONTROLS, WHERE THIS APP KEEPS A TRANSCRIPT'S CONTROLS: under the column, on the
+                     same line the chat draws under its composer (ChatPaneStatus). They used to sit in a header
+                     bar across the top, which put the surface's only toolbar at the point the eye lands first
+                     and dressed the two ways out of the pane as chrome; and the row it sat on had drifted into
+                     a second, worse card — the child's title repeated from the row you had just pressed, the
+                     agent type, the model and a spinner, all of them facts the rail beside it already carries
+                     for every child at once.
+                     What is left is what a reader can ACT on: whether the work above shows its tool calls, and
+                     the way back to the conversation that started this. Right-aligned and in the status
+                     strip's own type, so a reader coming from the chat finds the same toggle in the same
+                     corner of the screen. -->
+                <div v-if="current" class="flex shrink-0 items-center justify-end gap-3 px-3 pb-2 pt-1 text-2xs text-subtle">
+                    <!-- The chat's own control, not a copy of it: a reader who hid the calls in one place has
+                         said what they want of the other. -->
+                    <ChatToolCallsToggle />
+                    <!-- A control AND an address (ActionLink): the plain click points the docked chat at the
+                         parent, which is better than a page load; Ctrl/⌘-click opens that conversation's own
+                         page in a tab, which a <button> could never offer. -->
+                    <ActionLink
+                        :to="parentTo(current)"
+                        :class="FOOTER_ACTION"
+                        v-tooltip.top="`Open the conversation that started this agent`"
+                        @activate="openParent(current)"
+                    >
+                        <Icon name="comments" class="text-2xs" />Parent
+                    </ActionLink>
                 </div>
             </div>
         </template>

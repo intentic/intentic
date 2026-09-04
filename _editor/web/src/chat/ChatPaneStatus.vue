@@ -132,9 +132,9 @@ const creditChip = computed(() => {
         <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
         <div class="ml-auto flex items-center gap-3">
             <!-- WHETHER THIS TRANSCRIPT SHOWS ITS TOOL CALLS (ChatToolCallsToggle, which the Subagents area's
-                 pane header draws too: one control, both places a transcript is read). A pane has no header to
-                 hang it off, so here it joins the readouts under the composer: the strip that already says what
-                 this chat is doing. -->
+                 pane draws too, on a strip of its own along the same bottom edge: one control, both places a
+                 transcript is read, in the same corner of the screen). Here it joins the readouts under the
+                 composer: the strip that already says what this chat is doing. -->
             <ChatToolCallsToggle />
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />

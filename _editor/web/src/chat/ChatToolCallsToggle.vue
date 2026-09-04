@@ -8,7 +8,7 @@ import { useToolCalls } from "../composables/chat/useToolCalls";
  * preference also lives, for the person who wants it decided once). It is a component rather than markup in a
  * footer because there are TWO surfaces that draw a transcript and neither is the other's frame: the chat pane,
  * where it joins the readouts under the composer (ChatPaneStatus), and the Subagents area, where a child's
- * transcript has no composer at all and the pane's header carries it instead. Drawn twice from one definition,
+ * transcript has no composer at all and a bare strip along the same bottom edge carries it. Drawn twice from one definition,
  * so the glyph, its struck-through state and the words in its tooltip cannot drift between the two.
  *
  * A HAMMER, ALONE, AND STRUCK THROUGH WHEN THE CALLS ARE HIDDEN. The glyph names what is being shown: the work
@@ -22,7 +22,7 @@ import { useToolCalls } from "../composables/chat/useToolCalls";
  * control in the world already uses) carries the answer. The slash runs across the handle, not along it.
  *
  * It INHERITS its host's ink rather than naming a colour, which is what lets one control sit in a status strip
- * set in `text-subtle` and in a pane header set in `text-muted` without either reading as the odd one out. */
+ * set in `text-subtle` and on a footer strip set in `text-muted` without either reading as the odd one out. */
 
 const { showToolCalls } = useToolCalls();
 </script>
