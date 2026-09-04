@@ -27,7 +27,7 @@ vi.mock("../sandbox/sandboxScreen", () => ({ landOnAfterSwitch }));
 const { acrossAttention, boxNameOf, isRemote, openInSandbox, otherFleet, partialAnswer, fleetScope, readingAcross, scopeOffered } =
     await import("./fleetScope");
 
-const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+const none = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
 const agent = (over: Partial<AgentSummary>): AgentSummary =>
     ({ id: `a1`, status: `idle`, provider: `claude`, harness: `claude-code`, updatedAt: 1, attention: none, ...over }) as AgentSummary;
 

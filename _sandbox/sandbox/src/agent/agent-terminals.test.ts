@@ -267,7 +267,11 @@ test("matching reads the agent's reference form, never the resolved secret", asy
     /* Two rewrites compose here and their order is load-bearing: a resolved credential must not reach a
      * user-authored regex, and must not become a rule id that gets printed into a pane log. The rule below
      * matches the secret's VALUE, so a queue built after resolution would fire and one built before will not. */
-    const bundle: SecretAccess = { list: async () => [{ name: "TOKEN", value: "pnpm test", source: "env" }], used: () => {} };
+    const bundle: SecretAccess = {
+        list: async () => [{ name: "TOKEN", value: "pnpm test", source: "env" }],
+        used: () => {},
+        release: async () => ({ ok: true }),
+    };
     const reference = `{{secret:${"TOKEN"}}}`;
     const command = await rewritten({ command: `curl -H ${reference}` }, bashTmuxHooks([], undefined, undefined, bundle, heavy()));
     // The line the pane runs does hold the value — that is what the exit is for — but it did not decide.

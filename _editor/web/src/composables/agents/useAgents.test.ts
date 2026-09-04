@@ -38,7 +38,7 @@ describe("windowFinished", () => {
             provider: `claude` as const,
             harness: `native` as const,
             updatedAt: 1_000 - at,
-            attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+            attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
             open: false,
             unread: false,
             unsent: false,
@@ -98,7 +98,7 @@ describe("windowFinished", () => {
  * could neither be archived (not finished) nor finish (nothing to land). The line that matters is whether
  * archiving would bury something the agent is still WAITING for. */
 describe("canArchive", () => {
-    const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+    const none = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
 
     it("takes the dead ends: a failed turn and an unlandable conflict are exactly what wants taking off the board", () => {
         expect(canArchive({ status: `error`, attention: none })).toBe(true);
@@ -151,7 +151,7 @@ describe("roster titles", () => {
         provider: `claude`,
         harness: `native`,
         updatedAt: 1_000,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
         ...(title !== undefined ? { title } : {}),
     });
 
@@ -202,7 +202,7 @@ describe("roster frames the board can skip", () => {
         // an unread badge flipping would be a second reason for a card to change.
         updatedAt: 1_000,
         seenAt: 2_000,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
         ...extra,
     });
     const cardsById = (): Map<string, FleetAgent> => new Map(useAgents().fleet.value.map((card) => [card.id, card]));
@@ -266,7 +266,7 @@ describe("diff invalidation", () => {
         harness: `native`,
         updatedAt: 1_000,
         seenAt: 2_000,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
 
     beforeEach(() => {
@@ -327,7 +327,7 @@ describe("draft cards", () => {
         provider: `claude`,
         harness: `native`,
         updatedAt: 1_000,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
 
     // The lane the phantom card landed in, by id: the board's own list, not a count, so a case can say which
@@ -816,7 +816,7 @@ describe("the finished fold", () => {
         provider: `claude`,
         harness: `native`,
         updatedAt,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
     const shownIds = (): string[] => windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id).shown.map((entry) => entry.id);
 
@@ -890,7 +890,7 @@ describe("lane order holds still", () => {
         harness: `native`,
         startedAt,
         updatedAt,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
     const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
 
@@ -930,7 +930,7 @@ describe("lane order holds still", () => {
         const asking = (id: string): AgentSummary => ({
             ...running(id, 5_000, 7_000),
             status: `awaiting`,
-            attention: { plan: false, question: true, permission: false, service: false, capability: false, conflict: false },
+            attention: { plan: false, question: true, permission: false, service: false, capability: false, credential: false, conflict: false },
         });
         setAgents([asking(`b`), asking(`a`)], 1);
         const settled = useAgents().lanes.value.attention.map((entry) => entry.id);
@@ -952,7 +952,7 @@ describe("archive", () => {
         provider: `claude`,
         harness: `native`,
         updatedAt: 1_000,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
     const post = vi.mocked(sandboxJson);
@@ -1418,7 +1418,7 @@ describe("the archive list", () => {
         harness: `native`,
         updatedAt: 1_000,
         seenAt: 2_000,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
     const post = vi.mocked(sandboxJson);
@@ -1493,7 +1493,7 @@ describe("tabs the daemon retired", () => {
         provider: `claude`,
         harness: `native`,
         updatedAt: 1_000,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
     const openTabs = (): string[] => useChat().conversations.value.map((conversation) => conversation.conversationId);
     // A tab the roster has latched as registered: an untouched draft would be swept by the tab list's own

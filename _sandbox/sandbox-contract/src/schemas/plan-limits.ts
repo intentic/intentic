@@ -259,6 +259,25 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
             .boolean()
             .describe("Yes releases exactly one payment. Anything else spends nothing. This click is the only way the money can move."),
     }),
+    /* A GATED CREDENTIAL's release, and the one reply on this list whose sender is CHECKED. Every other card
+     * here is answered by whoever holds a session, because every other card is the owner's to decide; this one
+     * is addressed to a named list, so the daemon reads the verified identity off the request and refuses a
+     * click from anybody else with the card left standing for whoever can answer it. The refusal covers `no`
+     * as well: a stranger may not skip a release on the approver's behalf either, or the gate would be a
+     * denial-of-service anybody with a session could aim at a turn.
+     *
+     * `approve` carries no qualifiers because the gate's own policy decides how far one yes goes: a per-use
+     * gate releases exactly this use and the next one asks again, a conversation-scoped gate covers the rest
+     * of the conversation. The card says which, so the click is never wider than it reads. */
+    z.object({
+        kind: z.literal("credential_offer").describe("Releasing a credential the agent may only use once a named person says so."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        approve: z
+            .boolean()
+            .describe(
+                "Yes releases it, as far as the card says (this one use, or the rest of the conversation). Only the people the card names can answer at all, yes or no.",
+            ),
+    }),
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;
 // Steering: a user message delivered INTO the running turn (injected between tool calls, Claude Code style),

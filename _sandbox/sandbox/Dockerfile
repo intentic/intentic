@@ -525,6 +525,11 @@ COPY --chmod=755 _sandbox/sandbox/bin/capabilities /usr/local/bin/capabilities
 # endpoints under the owner's policy. Same shape as services — it relays through the daemon, which owns the
 # consent card and the ledger; the signing key lives with the platform and never enters this container.
 COPY --chmod=755 _sandbox/sandbox/bin/wallet /usr/local/bin/wallet
+# The credential-approval command: which stored secrets and connected accounts the owner put behind a named
+# person, and the in-chat ask to release one (src/secrets/credential-gate.ts). Same shape as capabilities —
+# it relays through the daemon, which owns the policy, the card and the identity check. It reads NAMES and
+# approver addresses only; no route it can reach returns a credential.
+COPY --chmod=755 _sandbox/sandbox/bin/secrets /usr/local/bin/secrets
 # The child-agent command the spawn note teaches (src/children/spawn-note.ts): start a full agent on any
 # connected provider from any runtime's shell, wait on it, list this conversation's children. Same shape as
 # services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI

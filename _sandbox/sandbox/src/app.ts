@@ -949,7 +949,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (denied !== undefined) {
             return denied;
         }
-        return c.json({ members: await services.members.list() });
+        /* THE OWNER RIDES ALONG, and the roster is the poorer without them: ownership is an identity fact
+         * rather than a grant, so the members file has never held it, which left every surface built on this
+         * answer unable to name the one person who is definitely allowed in. That was invisible until
+         * credential gates needed an approver list — "only Bob may release this" is picked from the people
+         * this route names, and the owner picking themselves was the obvious first case and the one that
+         * could not be expressed. Undefined before first sign-in has bound anybody (loopback and test
+         * daemons), which reads as a roster with no owner rather than an error. */
+        const owner = await services.ownerEmail();
+        return c.json({ members: await services.members.list(), ...(owner !== undefined ? { owner } : {}) });
     });
     app.post("/members", async (c) => {
         const denied = await ownershipDenied(c);

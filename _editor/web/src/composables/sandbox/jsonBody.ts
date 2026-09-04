@@ -7,8 +7,12 @@
  * reaches the active sandbox, the endpoint, the session token and the perf tracker at module scope, so every
  * suite that drives a composable stubs it whole (`vi.mock("./sandboxClient", …)`). A pure request-shaper living
  * in there would be undefined in each of those suites the moment its owner started using it, a trap that
- * springs on whoever writes the next test, not on whoever moved the helper. Nothing to stub here. */
-export const jsonBody = (method: `POST` | `DELETE`, payload: unknown): RequestInit => ({
+ * springs on whoever writes the next test, not on whoever moved the helper. Nothing to stub here.
+ *
+ * PUT joined the list for the credential gates, which upsert a policy under the subject in their own path:
+ * "put this gate here, replacing whatever was there" is what the route does, and spelling it POST would have
+ * made the one route in the daemon that is genuinely idempotent claim otherwise. */
+export const jsonBody = (method: `POST` | `PUT` | `DELETE`, payload: unknown): RequestInit => ({
     method,
     headers: { "content-type": `application/json` },
     body: JSON.stringify(payload),

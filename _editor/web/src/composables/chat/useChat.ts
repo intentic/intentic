@@ -792,6 +792,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     decideCapabilityOffer: (message: ChatMessage, connect: boolean): Promise<void> => conversation.value.decideCapabilityOffer(message, connect),
     // The pay click for a USDC payment, the only thing that releases it (or skips it, spending nothing).
     decidePaymentOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decidePaymentOffer(message, approve),
+    /* The release click for a gated credential, and the only decide here that is not simply the viewer's to
+     * make: the daemon checks the clicker against the names on the card and refuses anybody else, leaving
+     * the card up for whoever can (secrets/credential-gate.ts). */
+    decideCredentialOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decideCredentialOffer(message, approve),
     // "Can't help now" for a browser-help card; "hand back" lives on /browsers, beside the live stage.
     declineBrowserHelp: (message: ChatMessage): Promise<void> => conversation.value.declineBrowserHelp(message),
     // The same for a terminal-help card; "hand back" lives on the terminal panel, over the waiting prompt.

@@ -139,7 +139,7 @@ export const terminalHelpFor = (session: string): TerminalHelp | undefined => as
  * The parked tool call is waiting on a PERSON, not on tmux, so nothing else would ever release it: the turn
  * would sit parked on a banner this very kill just took down. Settled as "not helped", which is the honest
  * account of a terminal that went away before anyone typed in it. Idempotent, a turn-abort settle racing in
- * finds the request already gone (agent-requests.ts resolveRequest returns false and this clears nothing).
+ * finds the request already gone (agent-requests.ts resolveRequest answers "missing" and this clears nothing).
  */
 export const settleTerminalHelpFor = (session: string): void => {
     const help = asks.get(session);

@@ -407,6 +407,8 @@ export class TranscriptFold {
                 return this.park(event.requestId, { capabilityOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "payment_offer":
                 return this.park(event.requestId, { paymentOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
+            case "credential_offer":
+                return this.park(event.requestId, { credentialOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "resolved":
                 // The card above was released, and the frame says how. The window that answered already froze its
                 // own card the instant its reply was accepted (card-status.ts, the same derivation), so this is a
@@ -438,6 +440,15 @@ export class TranscriptFold {
                             amountUsd: event.amountUsd,
                             ...(event.transaction === undefined ? {} : { transaction: event.transaction }),
                             ...(event.network === undefined ? {} : { network: event.network }),
+                        };
+                    }
+                });
+            case "credential_receipt":
+                return this.patchParked(event.requestId, (row) => {
+                    if (row.credentialOffer !== undefined) {
+                        row.credentialOffer.receipt = {
+                            outcome: event.outcome,
+                            ...(event.approvedBy === undefined ? {} : { approvedBy: event.approvedBy }),
                         };
                     }
                 });

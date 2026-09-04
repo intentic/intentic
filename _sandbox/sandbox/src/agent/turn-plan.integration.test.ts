@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { createCredentialGrants } from "../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
@@ -79,6 +80,10 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
             issueAt: async () => undefined,
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        // Nothing gated: planTurn narrows the manifest once for every runtime, so the approval policy is
+        // read on every turn whether or not a gate exists (secrets/credential-gating.ts).
+        credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
+        credentialGrants: createCredentialGrants(),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // Every turn resolves a persona now, above the provider split, so every arm below reaches this: a
         // workspace with no cards is the open attended posture these tests already assume.

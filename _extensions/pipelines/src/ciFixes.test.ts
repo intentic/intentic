@@ -2,7 +2,7 @@ import { type AgentSummary, ciFixConversationId, type PipelineRun } from "@inten
 import { expect, test } from "vitest";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
 
-const NO_ATTENTION = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+const NO_ATTENTION = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
 
 const run = (over: Partial<PipelineRun> & { runId: number }): PipelineRun => ({
     repo: `web`,

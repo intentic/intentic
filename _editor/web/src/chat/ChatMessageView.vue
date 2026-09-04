@@ -25,6 +25,7 @@ import { landsByDefault } from "../composables/sandbox/rules";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { useSandboxSession } from "../composables/sandbox/sandboxSession";
 import { useToolCalls } from "../composables/chat/useToolCalls";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatCard from "./ChatCard.vue";
@@ -32,7 +33,7 @@ import ChatCommandBlock from "./ChatCommandBlock.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import { markedFragments } from "./commandPieces";
-import { capabilityStatus, helpStatus, offerStatus, permissionStatus, planStatus, questionStatus } from "./cardStatus";
+import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus, questionStatus } from "./cardStatus";
 import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolRows from "./ChatToolRows.vue";
@@ -65,6 +66,7 @@ const {
     decideServiceOffer,
     decideCapabilityOffer,
     decidePaymentOffer,
+    decideCredentialOffer,
     declineBrowserHelp,
     declineTerminalHelp,
     awaitingDecision,
@@ -83,6 +85,24 @@ const {
  * the two buttons beside it, which are a different answer to the same question and were still live over a
  * decision that had already been made. Every card's answering buttons carry it. */
 const settling = computed(() => isDeciding(props.message));
+
+/* WHETHER THE PERSON LOOKING AT A RELEASE CARD IS ONE OF THE PEOPLE IT NAMES.
+ *
+ * A COURTESY, NOT THE RULE. The daemon checks the verified identity on the reply and refuses anybody else
+ * with the card left standing (secrets/credential-gate.ts), so nothing here is load-bearing for security —
+ * a browser with the buttons force-enabled gets a 403. What it buys is that a colleague reading the chat
+ * learns the card is not theirs to answer by LOOKING at it rather than by pressing it and being told no.
+ *
+ * Lowercased both sides for the roster's own reason: every write to the members list normalizes, while a
+ * Google email claim may preserve case, so an exact match would grey the buttons out for exactly the
+ * Workspace domains that keep it. Undefined presented email (loopback, a dev daemon with no auth) leaves the
+ * buttons live: there is no identity to compare, and the server is still the one deciding. */
+const { presentedEmail } = useSandboxSession();
+const mayRelease = computed(() => {
+    const approvers = props.message.credentialOffer?.offer.approvers;
+    const me = presentedEmail.value?.toLowerCase();
+    return approvers === undefined || me === undefined || approvers.some((approver) => approver.toLowerCase() === me);
+});
 
 const router = useRouter();
 const helpBrowserAt = (session: string): string => `/browsers/${session}`;
@@ -1546,6 +1566,81 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
                     <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decidePaymentOffer(message, false)"
                         >Skip: free</ChatDecisionButton
+                    >
+                </template>
+            </ChatCard>
+
+            <!-- A gated credential asking for a NAMED person's click, and the only card here that is not
+                 addressed to whoever is looking at it: the owner put this secret or connected account behind
+                 an exact list of people, and the daemon checks the verified identity on the reply against that
+                 list, refusing anybody else with the card left standing (secrets/credential-gate.ts). So the
+                 names are ON the card — buttons that do nothing for the reader have to say who they are
+                 waiting for — and the agent's own words are the one `why` line. The turn is parked on the exit
+                 itself: nothing resolves, types or mounts until this settles. -->
+            <ChatCard
+                v-if="message.credentialOffer"
+                icon="key"
+                :title="`Release ${message.credentialOffer.offer.subject} to the agent?`"
+                :status="offerStatus(message.credentialOffer)"
+            >
+                <div class="chat-card-body flex flex-col gap-1">
+                    <!-- What is about to happen, in the reader's terms rather than the daemon's: a command, a
+                         script, a page, an account being loaded, or one one-time code. -->
+                    <span class="text-xs text-content/85">{{ credentialLane(message.credentialOffer.offer) }}</span>
+                    <!-- Where it would go, in full on hover. Reference-form by construction at this point:
+                         the value has not been substituted yet, which is what makes this safe to show. -->
+                    <span
+                        v-if="message.credentialOffer.offer.detail"
+                        class="truncate font-mono text-2xs text-subtle"
+                        v-tooltip.left.overflow="message.credentialOffer.offer.detail"
+                        >{{ message.credentialOffer.offer.detail }}</span
+                    >
+                    <span v-if="message.credentialOffer.offer.why" class="text-2xs text-subtle"
+                        >The agent's case: {{ message.credentialOffer.offer.why }}</span
+                    >
+                    <span class="truncate text-2xs text-subtle" v-tooltip.left.overflow="message.credentialOffer.offer.approvers.join(`, `)"
+                        >Approvers: {{ message.credentialOffer.offer.approvers.join(`, `) }}</span
+                    >
+                    <!-- How far one yes goes, off the POLICY rather than off the click, so the button is never
+                         wider than it reads. -->
+                    <span class="pt-1 text-xs text-content">{{
+                        message.credentialOffer.offer.scope === `conversation`
+                            ? `Releasing it covers the rest of this conversation.`
+                            : `Releasing it covers this one use. The next one asks again.`
+                    }}</span>
+                </div>
+
+                <!-- Who released it, or that somebody refused. Nothing is drawn for a card nobody answered:
+                     the header chip already says "Not answered", and a deadline is not a refusal by anybody. -->
+                <div v-if="message.credentialOffer.receipt" class="chat-card-row">
+                    <span v-if="message.credentialOffer.receipt.outcome === 'released'" class="truncate text-2xs text-muted"
+                        >Released by {{ message.credentialOffer.receipt.approvedBy }}</span
+                    >
+                    <span v-else class="text-2xs text-muted"
+                        >Refused<template v-if="message.credentialOffer.receipt.approvedBy">
+                            by {{ message.credentialOffer.receipt.approvedBy }}</template
+                        >: the agent was told to carry on without it.</span
+                    >
+                </div>
+
+                <template v-if="message.credentialOffer.status === 'pending'" #actions>
+                    <ChatDecisionButton
+                        tone="primary"
+                        icon="check"
+                        :disabled="settling || !mayRelease"
+                        v-tooltip="mayRelease ? undefined : `Only ${message.credentialOffer.offer.approvers.join(`, `)} can release this`"
+                        @click="decideCredentialOffer(message, true)"
+                        >Release</ChatDecisionButton
+                    >
+                    <!-- A no is approver-only too: letting a stranger skip on their behalf would make the gate
+                         a way for anybody with a session to stop somebody else's turn. -->
+                    <ChatDecisionButton
+                        tone="secondary"
+                        icon="times"
+                        :disabled="settling || !mayRelease"
+                        v-tooltip="mayRelease ? undefined : `Only ${message.credentialOffer.offer.approvers.join(`, `)} can answer this`"
+                        @click="decideCredentialOffer(message, false)"
+                        >Skip</ChatDecisionButton
                     >
                 </template>
             </ChatCard>

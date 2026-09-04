@@ -86,6 +86,12 @@ export const AgentAttentionSchema = z.object({
     // A missing capability parked on the owner's setup (capabilities/capability-offer.ts), the agent is
     // waiting for something to be connected, so the lane can say "setup needed" rather than a generic pause.
     capability: z.boolean().describe("It needs something connected that is not connected yet."),
+    // A gated credential parked on a NAMED person's click (secrets/credential-gate.ts). Its own lane because
+    // it is the one pause the person reading the board may not be able to clear: every other card here waits
+    // for whoever is looking at it, this one waits for the specific people the gate names.
+    credential: z
+        .boolean()
+        .describe("It is waiting for a named person to release a credential. The one pause that may not be yours to clear, whatever your role."),
     conflict: z.boolean().describe("Its work cannot be merged without somebody resolving a clash."),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;

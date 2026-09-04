@@ -2,6 +2,7 @@ import type { CardStatus } from "./ChatCard.vue";
 import type {
     TranscriptBrowserHelp,
     TranscriptCapabilityOffer,
+    TranscriptCredentialOffer,
     TranscriptPaymentOffer,
     TranscriptPermission,
     TranscriptPlan,
@@ -80,9 +81,12 @@ export const helpStatus = (help: TranscriptBrowserHelp | TranscriptTerminalHelp)
     }
 };
 
-// The two spend cards, likewise one shape: approved, skipped, or nobody answered. Whether the money actually
-// moved is the receipt's to say, in its own row, not the header chip's.
-export const offerStatus = (offer: TranscriptServiceOffer | TranscriptPaymentOffer): CardStatus | undefined => {
+/* The two spend cards and the credential release, one shape: approved, skipped, or nobody answered. Whether
+ * the money actually moved — or WHO released the credential — is the receipt's to say, in its own row, not the
+ * header chip's. The credential card joins them rather than getting a fourth copy of this switch because its
+ * three endings are the same three, and the one thing that makes it different (it is addressed to named
+ * people) changes who may press the buttons, not how the card reads once somebody has. */
+export const offerStatus = (offer: TranscriptServiceOffer | TranscriptPaymentOffer | TranscriptCredentialOffer): CardStatus | undefined => {
     switch (offer.status) {
         case "approved":
             return { label: "Approved", tone: "done" };
@@ -92,6 +96,33 @@ export const offerStatus = (offer: TranscriptServiceOffer | TranscriptPaymentOff
             return { label: "Not answered", tone: "gone" };
         default:
             return undefined;
+    }
+};
+
+/* WHAT A RELEASE IS ACTUALLY FOR, in the reader's words rather than the daemon's lane name.
+ *
+ * The approver is being asked to make one decision, and the thing that decides it is what happens NEXT: a
+ * password about to be typed into a page is a different risk from an account about to be loaded for a turn,
+ * and "lane: browser" says neither. So the sentence names the destination in the terms somebody who does not
+ * work on this daemon would use.
+ *
+ * Here rather than in the template because it is a rule with five branches and one of them depends on the
+ * KIND as well: a `session` release of a secret cannot happen (secrets are spent at exits, never mounted), so
+ * the wording keys off the kind where the two could read the same. */
+export const credentialLane = (offer: TranscriptCredentialOffer["offer"]): string => {
+    switch (offer.lane) {
+        case "shell":
+            return "The agent is about to use it in a shell command.";
+        case "code":
+            return "The agent is about to use it in a script it is running.";
+        case "browser":
+            return "The agent is about to type it into a page.";
+        case "otp":
+            return "The agent is about to mint a one-time code from it.";
+        default:
+            return offer.kind === "capability"
+                ? "The agent is asking for this connected account to be loaded into the conversation."
+                : "The agent is asking to use this credential.";
     }
 };
 

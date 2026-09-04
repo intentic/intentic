@@ -1717,6 +1717,55 @@ describe(`Conversation`, () => {
         expect(card.serviceOffer?.receipt).toMatchObject({ outcome: `ok` });
     });
 
+    /* THE RELEASE CARD. The one card here addressed to NAMED PEOPLE rather than to whoever is looking: the
+     * owner put this credential behind a list, and the daemon checks the verified identity on the reply. What
+     * this suite can pin is the chat's half — the card parks the turn, the click settles it, and the receipt
+     * that patches on names WHO released it, which is the only place that name ever appears. */
+    it(`parks the turn on a release card; the click settles it and the receipt names who released it`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = {
+            subject: `DATABASE_URL`,
+            kind: `secret` as const,
+            lane: `shell` as const,
+            detail: `psql {{secret:DATABASE_URL}}`,
+            why: `run the migration`,
+            approvers: [`bob@corp.com`],
+            scope: `use` as const,
+        };
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `credential_offer`, requestId: `c1`, offer }], { stayOpen: true }));
+
+        const turn = conversation.send(`migrate the db`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+
+        const card = (): ChatMessage => conversation.messages.value.find((message) => message.credentialOffer !== undefined)!;
+        expect(card().credentialOffer).toMatchObject({ requestId: `c1`, status: `pending`, offer: { approvers: [`bob@corp.com`] } });
+
+        await conversation.decideCredentialOffer(card(), true);
+        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        expect(card().credentialOffer).toMatchObject({ status: `approved` });
+        // Releasing is not an ending: the exit the turn was parked on carries on.
+        expect(conversation.streaming.value).toBe(true);
+        await conversation.stop();
+        await turn;
+    });
+
+    it(`a replayed release card freezes from the resolved frame and wears the approver's name`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = { subject: `reddit`, kind: `capability` as const, lane: `session` as const, approvers: [`bob@corp.com`], scope: `conversation` as const };
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `credential_offer`, requestId: `c1`, offer },
+                { kind: `resolved`, requestId: `c1`, reply: { kind: `credential_offer`, requestId: `c1`, approve: true } },
+                { kind: `credential_receipt`, requestId: `c1`, outcome: `released`, approvedBy: `bob@corp.com` },
+            ]),
+        );
+
+        await conversation.send(`post it`, settings);
+
+        const card = conversation.messages.value.find((message) => message.credentialOffer !== undefined)!;
+        expect(card.credentialOffer).toMatchObject({ status: `approved`, receipt: { outcome: `released`, approvedBy: `bob@corp.com` } });
+    });
+
     /* THE SETUP CARD. Connect does NOT predict the outcome: the owner still has the setup to do, so the card
      * moves to `connecting` and the capability_outcome frame is what says how it ended, and "Not now" leaves
      * the turn running: the agent was told to continue without the capability, which is work, not an ending.

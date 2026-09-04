@@ -47,6 +47,14 @@ export interface SecretRow {
     /** Set/update and remove are offered only where the write actually goes somewhere. */
     readonly editable: boolean;
     readonly removable: boolean;
+    /** Whether this row can be GATED at all, and under which subject the gate is written. Absent on the rows
+     *  a gate would be meaningless or harmful on: a value nobody has set yet has nothing to release, and an AI
+     *  subscription's credential is what makes the sandbox able to think at all. */
+    readonly gateSubject?: string | undefined;
+    /** True where a release cannot be per-use because the credential is MOUNTED rather than spent: a signed-in
+     *  browser, an identity's browser, a running MCP server. The daemon forces those to conversation scope, so
+     *  the editor states the rule instead of offering a choice that will be overridden. */
+    readonly sessionShaped: boolean;
     /** Everything the filter box matches, already folded. */
     readonly haystack: string;
 }
@@ -78,13 +86,26 @@ const usedBy = (entry: SecretInventoryEntry): string =>
 /* WHAT IS OWED, in the order it is owed. An empty value is the louder fact and the one a reader is scanning
  * for; a stale CI copy is only ever the second thing wrong with a row, and the open row spells the CI state out
  * either way. Saying "not set" is not the same as pinning it: a spare key with no value is worth stating and is
- * nobody's outstanding task, which is the line `attention` draws. */
+ * nobody's outstanding task, which is the line `attention` draws.
+ *
+ * A GATE IS NOT A DEBT, and that is why it is read last and never sets `attention`. "Bob has to release this"
+ * is the configuration working exactly as the owner asked, not an errand anybody has to run; badging it would
+ * make the tab's one honest warning colour mean two different things. It is still worth a line, because a
+ * reader scanning for why a turn could not use something needs to see it without opening the row. */
 const noteOf = (entry: SecretInventoryEntry): string | undefined => {
     if (entry.status === `missing`) {
         return `not set`;
     }
-    return entry.ci !== undefined && !entry.ci.synced ? `CI hasn't got this yet` : undefined;
+    if (entry.ci !== undefined && !entry.ci.synced) {
+        return `CI hasn't got this yet`;
+    }
+    return entry.gate === undefined ? undefined : `needs approval from ${entry.gate.approvers.join(` or `)}`;
 };
+
+// What the filter box can find a gated row by: the word people would type, plus the approvers' addresses, so
+// "who is waiting on Bob" is one search rather than a scroll.
+const gateHaystack = (entry: SecretInventoryEntry): string =>
+    entry.gate === undefined ? `` : ` needs approval ${entry.gate.approvers.join(` `)}`;
 
 const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): SecretRow | undefined => {
     const instance = sources.capabilities.find((capability) => capability.id === entry.key);
@@ -104,10 +125,16 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
         logo: card?.logo,
         icon: card?.icon ?? CREDENTIAL_GLYPH,
         attention: false,
+        // The one thing a connected account's row has to say beyond what it IS: a gated one is not loaded
+        // into a turn at all, so "needs approval from Bob" is the difference between a reader understanding
+        // why the agent could not use it and reading the connection as broken.
+        ...(entry.gate === undefined ? {} : { note: `needs approval from ${entry.gate.approvers.join(` or `)}` }),
         state: connectionState(instance.kind, instance, undefined),
         editable: true,
         removable: false,
-        haystack: `${instance.id} ${card?.name ?? ``} ${instance.kind} ${facts}`.toLowerCase(),
+        gateSubject: instance.id,
+        sessionShaped: instance.kind === `browser` || instance.kind === `identity` || instance.kind === `mcp`,
+        haystack: `${instance.id} ${card?.name ?? ``} ${instance.kind} ${facts}${gateHaystack(entry)}`.toLowerCase(),
     };
 };
 
@@ -128,7 +155,14 @@ const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => 
         note: noteOf(entry),
         editable: group === `required` || group === `yours` || group === `credential`,
         removable: group === `yours`,
-        haystack: `${entry.key} ${entry.label ?? ``} ${detail} ${entry.storedAt}`.toLowerCase(),
+        /* A gate needs something to gate. A value nobody has set has nothing to release; a provider account is
+         * the sandbox's ability to think, and putting THAT behind a colleague's click would stop every turn
+         * rather than guard anything. Everything the owner actually keeps here can be gated. */
+        ...(entry.status !== `missing` && group !== `provider` ? { gateSubject: entry.key } : {}),
+        // A row with no capability behind it is a stored value, which is spent at an exit and can be released
+        // one use at a time; the capability rows that cannot are answered in credentialRow above.
+        sessionShaped: false,
+        haystack: `${entry.key} ${entry.label ?? ``} ${detail} ${entry.storedAt}${gateHaystack(entry)}`.toLowerCase(),
     };
 };
 

@@ -31,13 +31,28 @@ export interface SecretUseReport {
     readonly name: string;
     readonly lane: "shell" | "code" | "browser";
     readonly detail?: string;
+    // Who released it, for a name the owner put behind a named approver. Absent on an ungated use, which is
+    // nearly all of them: the row records a person only where a person was actually asked.
+    readonly approvedBy?: string;
 }
 
-// What the turn hands every secret-touching seam: the registry to read, and the audit trail to feed. `used`
-// is fire-and-forget, persisting the row is the daemon's problem, never the tool call's.
+/* WHAT THE TURN HANDS EVERY SECRET-TOUCHING SEAM: the registry to read, the audit trail to feed, and the
+ * approval gate to clear. `used` is fire-and-forget, persisting the row is the daemon's problem, never the
+ * tool call's; `release` is the opposite, its answer decides whether the exit happens at all.
+ *
+ * `release` TAKES THE WHOLE LIST rather than one name at a time, because one command can carry several
+ * references and the owner should be asked once per credential, not once per token. Names that share a
+ * subject (`reddit/password` and `reddit/totp` are both the `reddit` capability) are one question; different
+ * subjects are asked in turn. Ungated names cost nothing: the gate answers allow without reading a file when
+ * no policy covers them. */
 export interface SecretAccess {
     readonly list: () => Promise<readonly NamedSecret[]>;
     readonly used: (use: SecretUseReport) => void;
+    readonly release: (
+        names: readonly string[],
+        lane: "shell" | "code" | "browser",
+        detail: string,
+    ) => Promise<{ readonly ok: true; readonly approvedBy?: Readonly<Record<string, string>> } | { readonly refusal: string }>;
 }
 
 // The audit row's "used where", from the agent's own command line, which is reference-form by construction.
@@ -76,8 +91,21 @@ export const resolveCommandSecrets = async (command: string, secrets: SecretAcce
             }`,
         };
     }
+    /* THE APPROVAL GATE, between "every name resolved" and "the value goes out".
+     *
+     * AFTER the all-names-known check, deliberately: a command naming one gated secret and one that does not
+     * exist is a broken command, and asking a person to release a credential for it would spend their
+     * attention on a turn that was going to fail anyway. BEFORE the audit rows, equally deliberately: the
+     * ledger records what LEFT, and a refused resolution never left, so a row here would make the inventory's
+     * "last used" a record of attempts. */
+    const detail = commandDetail(command);
+    const released = await secrets.release(used, lane, detail);
+    if ("refusal" in released) {
+        return { refusal: released.refusal };
+    }
     for (const name of used) {
-        secrets.used({ name, lane, detail: commandDetail(command) });
+        const approvedBy = released.approvedBy?.[name];
+        secrets.used({ name, lane, detail, ...(approvedBy !== undefined ? { approvedBy } : {}) });
     }
     return { command: text };
 };

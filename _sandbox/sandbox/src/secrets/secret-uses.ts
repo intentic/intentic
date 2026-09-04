@@ -24,6 +24,14 @@ const SecretUseSchema = z.object({
     lane: z.enum(["shell", "code", "browser"]),
     // Where it went, in the reader's terms: the head of the agent's command line, or the page's host.
     detail: z.string().optional(),
+    /* WHO RELEASED IT, for a name the owner put behind a named approver (secrets/credential-gate.ts). An
+     * email, off the VERIFIED identity on the reply that released it, never off anything a click claimed —
+     * which is what makes this row an audit line rather than a decoration. Absent on an ungated use, which
+     * is nearly every row: a person is recorded only where a person was actually asked.
+     *
+     * Still never a value, and the rule this file opens with is unchanged: names, destinations and now the
+     * approver's address. */
+    approvedBy: z.string().optional(),
     // Epoch ms, the store's clock, stamped at record time.
     at: z.number(),
 });

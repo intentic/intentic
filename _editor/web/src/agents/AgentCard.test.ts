@@ -30,7 +30,7 @@ const NO_ATTENTION: AgentSummary[`attention`] = {
     permission: false,
     service: false,
     capability: false,
-    conflict: false,
+    credential: false, conflict: false,
 };
 
 // An agent holding finished work on its branch: auto-land off, nothing refused, the one state the card offers

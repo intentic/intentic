@@ -60,6 +60,9 @@ import { contributionRegistry } from "./capabilities/contributions.js";
 import { fileSecretVault, type SecretVault } from "./capabilities/secret-vault.js";
 import { type NamedSecret, secretRegistryOf } from "./secrets/secret-registry.js";
 import { fileSecretUses, type SecretUsesStore } from "./secrets/secret-uses.js";
+import { type CredentialGatesStore, fileCredentialGates } from "./secrets/credential-gates.js";
+import { type CredentialGrants, createCredentialGrants } from "./secrets/credential-grants.js";
+import { type CredentialGate, createCredentialGate } from "./secrets/credential-gate.js";
 import { fileWalletLedger, type WalletLedgerStore } from "./wallet/wallet-ledger.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
@@ -166,6 +169,7 @@ import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panel
 import { discoverRepos } from "./workspace/repo-discovery.js";
 import { type PushStore, filePushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
+import { turnAwaiting } from "./push/notifications.js";
 import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
 import { type ListeningPort, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import {
@@ -193,7 +197,7 @@ import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firing
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
 import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { onTurnSettled, turnRunOf } from "./agent/turn-runs.js";
+import { onTurnSettled, soleLiveConversation, turnRunOf } from "./agent/turn-runs.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
 import { type Announcer, createAnnouncer } from "./platform/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/reach-report.js";
@@ -398,6 +402,14 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // The use ledger those exits feed, one row per resolved reference or typed field, joined onto the
     // secrets inventory as each entry's "last used" (secrets/secret-uses.ts).
     readonly secretUses: SecretUsesStore;
+    /* WHICH CREDENTIALS NEED A NAMED PERSON'S CLICK, and the machinery that asks for one. Three fields
+     * because they are three different lifetimes: the POLICY is a file the owner writes (off the workspace,
+     * beside the vault, for the reason secrets/credential-gates.ts gives), the GRANTS are in memory and die
+     * with the daemon on purpose (secrets/credential-grants.ts), and the GATE is the consult every exit and
+     * every mount shares, so the rule cannot be enforced at three doors and forgotten at the fourth. */
+    readonly credentialGates: CredentialGatesStore;
+    readonly credentialGrants: CredentialGrants;
+    readonly credentialGate: CredentialGate;
     // The wallet's payment record, one row per attempt that reached policy, opened before any signature is
     // asked for and settled after the endpoint answers; the daily-cap arithmetic reads it (wallet/wallet-ledger.ts).
     readonly walletLedger: WalletLedgerStore;
@@ -788,6 +800,13 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Shared-access grants, the emails authorized besides the owner. Always present; the /members routes read
     // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
     readonly members: MembersStore;
+    /* WHO THIS SANDBOX BELONGS TO, the bound owner's email, read-only. Undefined before the first sign-in has
+     * bound one (trust-on-first-use, auth/auth.ts), which is also every loopback and test daemon.
+     *
+     * The READ half alone, on purpose: two surfaces need the email (the Access roster, so the owner appears on
+     * their own roster and can be named a credential approver; the gate routes, which check approvers against
+     * "the owner or a member"), and neither may WRITE it. Binding ownership stays where it is. */
+    readonly ownerEmail: () => Promise<string | undefined>;
     // When set, the daemon is exposed directly and verifies the caller's bearer (a daemon-minted session, or a
     // Google ID token) on every route but /health; CORS is emitted for `allowOrigins`. Undefined ⇒ loopback mode
     // (tests / host-internal preview). authorizeOwner gates the owner-only member-management routes; mintSession
@@ -871,6 +890,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
               }
             : undefined;
     const members = fileMembersStore(statePath(workspace.root, ".intentic/identity/members.json"));
+    /* THE BOUND OWNER, hoisted out of the authorizer it used to be built inside, because two surfaces now
+     * need to READ the email rather than merely authorize against it: the Access roster answers with it (an
+     * owner absent from their own roster cannot be named an approver), and the credential gate routes check
+     * an approver list against "the owner or a member". Exposed as the read alone, never the write: binding
+     * ownership stays the authorizer's trust-on-first-use, and nothing else may set it. */
+    const ownerStore = fileOwnerStore(statePath(workspace.root, ".intentic/identity/owner.json"));
     // The session secret lives under historyRoot (like the activity/usage ledgers), daemon-private, outside
     // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
@@ -881,7 +906,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             ? createAuthorizer({
                   verify: createGoogleVerifier(config.google.clientId),
                   session: sessions.verify,
-                  owner: fileOwnerStore(statePath(workspace.root, ".intentic/identity/owner.json")),
+                  owner: ownerStore,
                   members,
                   browserAccess,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
@@ -951,6 +976,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the store and the sender that reads it must be the same instance, or a subscription added
     // through the routes would be invisible to the next send.
     const pushStore = filePushStore(join(config.historyRoot, "push.json"));
+    // Hoisted because the credential gate notifies through it when a release card goes up, and the gate is
+    // built below in the same object this sender is returned on.
+    const pushSender = createPushSender(pushStore, logger);
     // Shared by the turn path (which builds a namespace per isolated turn) and worktree creation (which plants
     // mount points rather than symlinks when it knows the namespace is coming), so both read ONE probe.
     const turnIsolation = createTurnIsolation({ root: workspace.root, historyRoot: config.historyRoot, logger });
@@ -1025,6 +1053,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     /* The credential values, off /work (secret-vault.ts). Sited beside the AI-provider logins under
      * AGENT_AUTH_DIR, which is already outside the file routes, the tree walk and the search index. */
     const secretVault = fileSecretVault(join(authRoot, "capability-secrets.json"));
+    /* The approval policy sits BESIDE the vault it guards, off the workspace, for the vault's own reason:
+     * `.intentic/config/` is tracked and agent-editable, so a gate kept there would be a lock with its key in
+     * the room with the agent (secrets/credential-gates.ts). Hoisted with the grants map because the gate
+     * below closes over both. */
+    const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
+    const credentialGrants = createCredentialGrants();
     /* The connector registry this needs to know which of an entry's fields are credentials, resolved against the
      * RAW manifest rather than the vaulted store, enumerating extensions reads capability entries, so pointing
      * it at the decorator would have the decorator call itself. Enumeration only ever looks at an entry's
@@ -1305,6 +1339,28 @@ export const createServices = (config: Config, logger: Logger): Services => {
             vaultExtensionSettingSecrets(workspace.root, extensionSecretVault, await settingSecretKeys(), onUnvaultableSetting),
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
         secretUses: fileSecretUses(statePath(workspace.root, ".intentic/records/secret-uses.json")),
+        credentialGates,
+        credentialGrants,
+        /* THE RELEASE GATE, composed here rather than at each door, because its GRANTS must be one map: a
+         * release clicked at the shell exit has to be the same release the browser mount reads next turn, and
+         * two gates built at two routes would be two maps that agree about nothing.
+         *
+         * `liveRun` and `observe` are the payment gate's own seams, verbatim (wallet/wallet.routes.ts): the
+         * card is raised from code deep inside a turn rather than from the turn generator, so it is pushed
+         * into the live run's frame log and mirrored to the registry by hand. `soleLiveConversation` covers
+         * the door where the caller could not name a conversation and exactly one is running, and refuses to
+         * guess between two. */
+        credentialGate: createCredentialGate({
+            gates: credentialGates,
+            grants: credentialGrants,
+            liveRun: (conversationId) => {
+                const id = conversationId ?? soleLiveConversation();
+                const run = id === undefined ? undefined : turnRunOf(id);
+                return id === undefined || run === undefined || run.done ? undefined : { conversationId: id, push: (event) => run.push(event) };
+            },
+            observe: (conversationId, event) => agents.observe(conversationId, event),
+            notify: (conversationId) => void pushSender.notifyIfAway(turnAwaiting(conversationId, "credential_offer")),
+        }),
         walletLedger: fileWalletLedger(statePath(workspace.root, ".intentic/records/wallet-ledger.json")),
         trial,
         platformTunnel,
@@ -1348,7 +1404,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         runtimeInstalls,
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, agents, logger }),
         push: pushStore,
-        pushSender: createPushSender(pushStore, logger),
+        pushSender,
         // The provider slices, whole: their members' docs live on the slice interfaces, beside the code.
         ...claude,
         ...codex,
@@ -1518,6 +1574,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
             await purgeConversationState(workspace.root, config.historyRoot, removed, retained);
             for (const entry of removed) {
                 saidIndex.forget(entry.id);
+                /* A conversation nobody can reopen must not leave a live credential release behind it.
+                 * Conversation ids are not guaranteed never to be reused, and a grant is consent given inside
+                 * a conversation somebody was watching: once the conversation is gone there is nothing left
+                 * for that consent to be about (secrets/credential-grants.ts). */
+                credentialGrants.forget(entry.id);
             }
         },
         // Reads the live sockets (through the shared scan, cached for a beat inside the resolver) rather than
@@ -1532,6 +1593,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             portOf: (key) => processes.portOf(key) ?? serviceProcesses.portOf(key),
         }),
         members,
+        ownerEmail: () => ownerStore.read(),
         auth,
     };
     servicesHolder.current = services;

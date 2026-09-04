@@ -392,6 +392,53 @@ describe("foldTurn", () => {
         ]);
     });
 
+    /* A GATED CREDENTIAL's card keeps WHO released it, not merely that something was approved: the approver is
+     * the whole point of the gate, and the reply cannot carry them (it is the daemon that verified the
+     * identity), so the receipt frame is the only place that name ever appears. */
+    it("keeps who released a gated credential on the card that asked for it", () => {
+        const offer = {
+            subject: "DATABASE_URL",
+            kind: "secret" as const,
+            lane: "shell" as const,
+            detail: "psql {{secret:DATABASE_URL}}",
+            why: "run the migration",
+            approvers: ["bob@corp.com"],
+            scope: "use" as const,
+        };
+        const events: AgentEvent[] = [
+            { kind: "credential_offer", requestId: "c1", offer },
+            { kind: "resolved", requestId: "c1", reply: { kind: "credential_offer", requestId: "c1", approve: true } },
+            { kind: "credential_receipt", requestId: "c1", outcome: "released", approvedBy: "bob@corp.com" },
+            { kind: "delta", text: "Migrated." },
+        ];
+        expect(foldOf("migrate", events).slice(1)).toEqual([
+            {
+                role: "assistant",
+                text: "",
+                credentialOffer: { requestId: "c1", offer, status: "approved", receipt: { outcome: "released", approvedBy: "bob@corp.com" } },
+            },
+            { role: "assistant", text: "Migrated." },
+        ]);
+    });
+
+    /* A release nobody answered is nobody's refusal. The deadline passing freezes the card `cancelled` and
+     * writes NO receipt, because "refused" would name a decision a person never made — the same split the
+     * gate's two refusal sentences make to the agent. */
+    it("freezes an unanswered release as nobody's decision, with no receipt", () => {
+        const offer = {
+            subject: "reddit",
+            kind: "capability" as const,
+            lane: "session" as const,
+            approvers: ["alice@corp.com"],
+            scope: "conversation" as const,
+        };
+        const events: AgentEvent[] = [{ kind: "credential_offer", requestId: "c1", offer }];
+        expect(foldTurn(openingOf("post it"), events, "stopped").slice(1)).toEqual([
+            { role: "assistant", text: "", credentialOffer: { requestId: "c1", offer, status: "cancelled" } },
+            { role: "notice", text: "Stopped." },
+        ]);
+    });
+
     // A turn the user stopped says so, after freezing whatever it was parked on.
     it("writes a stop down after cancelling what the turn was waiting on", () => {
         const events: AgentEvent[] = [

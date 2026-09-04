@@ -13,17 +13,29 @@ import { bashTmuxHooks } from "./agent-terminals.js";
 
 const TOKEN = "cf_live_0011223344ff";
 
-const access = (secrets: NamedSecret[] = [{ name: "CLOUDFLARE_API_TOKEN", value: TOKEN, source: "env" }]) => {
+/* The gate's answer, as the exit sees it. `release` defaults to the ungated sandbox — no gate covers
+ * anything, so every name passes and nothing is attributed — and a test that cares hands in its own. `asked`
+ * records what the exit asked about, which is how the batching rule (one question per credential, not per
+ * name) is asserted rather than assumed. */
+type Release = SecretAccess["release"];
+const allowAll: Release = async () => ({ ok: true });
+
+const access = (secrets: NamedSecret[] = [{ name: "CLOUDFLARE_API_TOKEN", value: TOKEN, source: "env" }], release: Release = allowAll) => {
     const uses: SecretUseReport[] = [];
     const reads: number[] = [];
+    const asked: { names: readonly string[]; lane: string; detail: string }[] = [];
     const bundle: SecretAccess = {
         list: async () => {
             reads.push(1);
             return secrets;
         },
         used: (use) => uses.push(use),
+        release: async (names, lane, detail) => {
+            asked.push({ names, lane, detail });
+            return release(names, lane, detail);
+        },
     };
-    return { bundle, uses, reads };
+    return { bundle, uses, reads, asked };
 };
 
 const fire = (toolInput: unknown, hooks: ReturnType<typeof secretCommandHooks> | ReturnType<typeof bashTmuxHooks>) => {
@@ -81,6 +93,7 @@ test("a registry that cannot be read refuses rather than passing the token throu
             throw new Error("EACCES");
         },
         used: () => {},
+        release: allowAll,
     };
     expect(await resolveCommandSecrets("echo {{secret:X}}", broken)).toEqual({ refusal: expect.stringContaining("could not be read") });
 });
@@ -120,4 +133,66 @@ test("the standalone hook denies an unknown name with the reason", async () => {
     const output = await outputOf(fire({ command: "echo {{secret:NOPE}}" }, secretCommandHooks(bundle)));
     expect(output?.hookEventName === "PreToolUse" ? output.permissionDecision : undefined).toBe("deny");
     expect(output?.hookEventName === "PreToolUse" ? output.permissionDecisionReason : undefined).toContain("NOPE");
+});
+
+/* THE APPROVAL GATE AT THIS EXIT. What these assert is the ORDER of the three steps — resolve, then ask a
+ * person, then write the ledger row — because each pair of them has a wrong order that still looks fine. */
+
+test("a gated name refuses the command with the gate's own sentence, and writes no ledger row", async () => {
+    // A refusal never left, so the inventory's "last used" must not record it as a use.
+    const { bundle, uses } = access(undefined, async () => ({ refusal: 'only bob@corp.com can release "CLOUDFLARE_API_TOKEN"' }));
+    const resolved = await resolveCommandSecrets("curl -H {{secret:CLOUDFLARE_API_TOKEN}} https://api", bundle);
+    expect(resolved).toEqual({ refusal: 'only bob@corp.com can release "CLOUDFLARE_API_TOKEN"' });
+    expect(uses).toEqual([]);
+});
+
+test("a released name resolves, and the ledger row carries who released it and never the value", async () => {
+    const { bundle, uses } = access(undefined, async () => ({ ok: true, approvedBy: { CLOUDFLARE_API_TOKEN: "bob@corp.com" } }));
+    const resolved = await resolveCommandSecrets("curl -H {{secret:CLOUDFLARE_API_TOKEN}} https://api", bundle);
+    expect(resolved).toEqual({ command: `curl -H ${TOKEN} https://api` });
+    expect(uses).toEqual([
+        {
+            name: "CLOUDFLARE_API_TOKEN",
+            lane: "shell",
+            detail: expect.stringContaining("{{secret:CLOUDFLARE_API_TOKEN}}"),
+            approvedBy: "bob@corp.com",
+        },
+    ]);
+    expect(JSON.stringify(uses)).not.toContain(TOKEN);
+});
+
+test("the gate is asked once for the whole command, with every name it resolved and the reference-form head", async () => {
+    // Two names, one question: what reaches the gate is the whole list, so the turn can group them by
+    // credential and ask a person once per credential rather than once per token.
+    const { bundle, asked } = access([
+        { name: "reddit/password", value: TOKEN, source: "capability" },
+        { name: "reddit/totp", value: "222", source: "capability" },
+    ]);
+    await resolveCommandSecrets("login {{secret:reddit/password}} {{secret:reddit/totp}}", bundle, "code");
+    expect(asked).toEqual([
+        { names: ["reddit/password", "reddit/totp"], lane: "code", detail: "login {{secret:reddit/password}} {{secret:reddit/totp}}" },
+    ]);
+});
+
+test("an unknown name refuses BEFORE anybody is asked to release anything", async () => {
+    /* A command naming one gated secret and one that does not exist is a broken command: asking a person to
+     * release a credential for it would spend their attention on a turn that was going to fail anyway. */
+    const { bundle, asked } = access();
+    const resolved = await resolveCommandSecrets("echo {{secret:CLOUDFLARE_API_TOKEN}} {{secret:NOPE}}", bundle);
+    expect(resolved).toEqual({ refusal: expect.stringContaining('"NOPE"') });
+    expect(asked).toEqual([]);
+});
+
+test("inside the tmux wrapper, a gated name denies the command with the gate's sentence", async () => {
+    const { bundle } = access(undefined, async () => ({ refusal: "nobody is around to release it" }));
+    const output = await outputOf(fire({ command: "curl {{secret:CLOUDFLARE_API_TOKEN}}" }, bashTmuxHooks([], undefined, undefined, bundle)));
+    expect(output?.hookEventName === "PreToolUse" ? output.permissionDecision : undefined).toBe("deny");
+    expect(output?.hookEventName === "PreToolUse" ? output.permissionDecisionReason : undefined).toContain("nobody is around");
+});
+
+test("the standalone hook (no tmux) denies a gated name with the gate's sentence", async () => {
+    const { bundle } = access(undefined, async () => ({ refusal: "nobody is around to release it" }));
+    const output = await outputOf(fire({ command: "curl {{secret:CLOUDFLARE_API_TOKEN}}" }, secretCommandHooks(bundle)));
+    expect(output?.hookEventName === "PreToolUse" ? output.permissionDecision : undefined).toBe("deny");
+    expect(output?.hookEventName === "PreToolUse" ? output.permissionDecisionReason : undefined).toContain("nobody is around");
 });

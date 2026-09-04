@@ -137,6 +137,52 @@ export const commandRun = defineGuardedAction<CommandRunInput>({
             : ALLOW(`the hard rule does not cover ${commandClass}`),
 });
 
+export interface CredentialUseInput {
+    // Whether the owner put this credential behind named approvers at all. False for the overwhelming
+    // majority of uses, which is why this action's ALLOW is the common path and costs a comparison.
+    readonly gated: boolean;
+    // Whether this conversation already holds a release for it (a `conversation`-scoped gate somebody
+    // already answered). The grant is consulted at the CONSULT SITE and arrives as a fact, the catalog's own
+    // rule: policy rides in, IO stays outside, so the whole matrix is testable without a store.
+    readonly granted: boolean;
+    readonly unattended: boolean;
+    // Whether a card CAN be raised: there is a live conversation to draw it in. Looked up rather than
+    // guessed, the childSpawn decide's own correction one door along.
+    readonly canPark: boolean;
+}
+
+/* MAY THE AGENT USE THIS CREDENTIAL RIGHT NOW? Consulted at every exit a stored value can leave through and
+ * at every mount that hands one to a turn (secrets/credential-gate.ts), which is what makes the rule bind on
+ * all of them at once instead of once per door.
+ *
+ * A "hold" ASKS, and asks a NAMED PERSON rather than whoever is looking: this is the only card in the sandbox
+ * addressed to a list, and the reply route checks the clicker's verified identity against it. That is why the
+ * two refusals below are refusals and not holds. An unattended turn has nobody to ask, and a turn with no live
+ * conversation has nowhere to draw the card — both are properties of the TURN rather than of the policy, which
+ * is why they are decided here and worded by the gate (commandRun's own division of labour).
+ *
+ * IT NEVER DENIES ON POLICY GROUNDS. A gate is not a ban: the owner's sentence is "ask Bob", never "never".
+ * So the only DENY here is the absence of anybody to ask, and a gate whose approvers are all asleep produces
+ * an unanswered card and a refusal that says so, not a permanent no. */
+export const credentialUse = defineGuardedAction<CredentialUseInput>({
+    action: "credential.use",
+    decide: ({ gated, granted, unattended, canPark }) => {
+        if (!gated) {
+            return ALLOW("no gate covers this credential");
+        }
+        if (granted) {
+            return ALLOW("this conversation already holds a release for it");
+        }
+        if (unattended) {
+            return DENY("this turn is running unattended, and a gated credential needs a named person's click");
+        }
+        if (!canPark) {
+            return DENY("there is no live conversation to raise the release card in");
+        }
+        return HOLD("a named approver has to release this credential");
+    },
+});
+
 export interface ChildSpawnInput {
     // The provider the child would run on, so a rule can single one out ("agents.spawn.cursor") or cover the
     // whole surface ("agents.spawn"). The specific key wins, the outbound gate's own precedence shape.

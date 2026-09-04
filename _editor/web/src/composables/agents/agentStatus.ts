@@ -341,6 +341,20 @@ const ATTENTION_WORDS = {
     // Same rank as spend, same reason: the agent is parked on a setup only you can do. The verb carries the
     // work, because this click leads into a flow rather than settling a one-press approval.
     capability: { chip: `Setup needed`, verb: `Set up` },
+    /* A CREDENTIAL WAITING FOR THE PEOPLE THE OWNER NAMED, and the one park on this board that may not be the
+     * reader's to clear at all: the others wait for whoever is looking, this one waits for an exact list of
+     * addresses and the daemon refuses everybody else (secrets/credential-gate.ts).
+     *
+     * RANKED HERE, above a question and below a spend, for the reason the neighbours are ranked: it blocks the
+     * turn outright the way a setup does, and it is worth the trip because clearing it may mean finding
+     * somebody. It is not first because a plan and a spend are decisions with consequences to read, while this
+     * one is a yes-or-no about a credential whose whole context is on the card.
+     *
+     * THE VERB NAMES THE DESTINATION rather than the action, which is this table's exception and has to be:
+     * `Release` would promise something the reader may be unable to do, and a button that reads as an action
+     * and then refuses is worse than one that reads as a look. The conflict entry below made the same choice
+     * for the same reason one lane over. */
+    credential: { chip: `Release needed`, verb: `See the request` },
     question: { chip: `Question for you`, verb: `Answer` },
     /* A TOOL WAITING FOR A YES, and the entry whose absence was the whole bug. It ranks LAST of the parks
      * because it is the most routine of them and the cheapest to clear: a plan, a spend and a setup each want

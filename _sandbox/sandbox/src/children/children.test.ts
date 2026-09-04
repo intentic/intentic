@@ -711,7 +711,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             // No always-allow offered, because nothing here would remember one.
             expect(card).not.toHaveProperty("alwaysLabel");
 
-            expect(resolveRequest({ kind: "permission", requestId, decision: "once" })).toBe(true);
+            expect(resolveRequest({ kind: "permission", requestId, decision: "once" })).toBe("settled");
             const result = await spawning;
             expect(result.ok).toBe(true);
             if (result.ok) {

@@ -241,7 +241,7 @@ const reply = async (request: Request): Promise<Response> => {
     }
     // The card that was parked belongs to the agent whose attention flag raised it: answering clears it.
     patchAgent(AWAITING_AGENT_ID, {
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
     return json({ ok: true });
 };
@@ -258,14 +258,14 @@ const land = (id: string): Response => {
         patchAgent(id, {
             status: `conflict`,
             updatedAt: Date.now(),
-            attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: true },
+            attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: true },
         });
         return json(result);
     }
     patchAgent(id, {
         status: `landed`,
         updatedAt: Date.now(),
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     });
     const paths = landedPaths(id);
     for (const listener of listeners) {

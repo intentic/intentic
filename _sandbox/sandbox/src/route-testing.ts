@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { stateRelPath } from "./workspace/state-paths.js";
 
-import type { AttachFrame, Capability, Persona, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
+import type { AttachFrame, Capability, CredentialGate, Persona, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
 import { capabilitiesOf, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -47,6 +47,7 @@ import { IN_MEMORY, openSearchIndex } from "./sessions/search-index.js";
 import type { ThreadSession, ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { SecretUse } from "./secrets/secret-uses.js";
+import { createCredentialGrants } from "./secrets/credential-grants.js";
 
 import { unstubbed } from "@intentic/testing";
 import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
@@ -528,6 +529,28 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 all: async () => uses,
             };
         })(),
+        /* NOTHING GATED, which is the state of a sandbox whose owner has never put a credential behind a
+         * named person — and the state nearly every route suite here wants, because a gate changes what the
+         * inventory renders and what an exit is allowed to do. A suite that wants one writes it through the
+         * store. In-memory rather than unstubbed because the inventory route reads the policy on every call. */
+        credentialGates: (() => {
+            let gates: CredentialGate[] = [];
+            return {
+                list: async () => gates,
+                set: async (gate: CredentialGate) => {
+                    gates = [...gates.filter((entry) => entry.subject !== gate.subject), gate];
+                },
+                remove: async (subject: string) => {
+                    gates = gates.filter((entry) => entry.subject !== subject);
+                },
+                forName: async () => undefined,
+                forCapability: async () => undefined,
+            };
+        })(),
+        credentialGrants: createCredentialGrants(),
+        // Nothing is gated above, so the gate allows everything and asks nobody; the gated matrix is tested
+        // where the gate lives (secrets/credential-gate.test.ts).
+        credentialGate: { check: async () => ({ allow: true as const }) },
         // Nothing declined by default: every route suite wants the catalog answering as it does on a sandbox
         // nobody has said no on yet.
         capabilityDismissals: memoryDismissalsStore(),

@@ -2,7 +2,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fixStance } from "./fixStance";
 
-const NO_ATTENTION = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+const NO_ATTENTION = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
 
 const agent = (over: Partial<AgentSummary> = {}): AgentSummary => ({
     id: `ci-fix-web-42`,

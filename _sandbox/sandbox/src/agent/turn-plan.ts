@@ -5,6 +5,8 @@ import {
     type AgentEvent,
     type AgentTurn,
     type Capability,
+    type CredentialGate,
+    type CredentialGateKind,
     type Rule,
     type SandboxSettings,
     type SystemPromptMode,
@@ -24,6 +26,8 @@ import { discoverRepos } from "../workspace/repo-discovery.js";
 import { accountsServer } from "../browser/accounts-tools.js";
 import { secretsServer } from "../browser/secrets-tools.js";
 import type { SecretAccess } from "./agent-secrets.js";
+import { gateTargetOf } from "../secrets/credential-gates.js";
+import { gatedCapabilities, gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../secrets/credential-gating.js";
 import { fetchEmailCode } from "../browser/email-codes.js";
 import { openBrowserAccount } from "../capabilities/open-account.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
@@ -301,7 +305,27 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     /* The manifest as this turn may see it, narrowed ONCE and handed to every arm in place of the full list.
      * Filtering here rather than in each arm is what makes a shelf mean the same thing on every runtime, and
      * what keeps a capability kind added tomorrow from being quietly denied to everybody (personas.ts). */
-    const granted = personaCapabilities(installed, persona);
+    const personaGranted = personaCapabilities(installed, persona);
+    /* THE OWNER'S APPROVAL GATES, applied on top of the persona's own filter, and the second reason this list
+     * is narrowed exactly once for every runtime. A browser profile, an identity's browser and an MCP server
+     * are credentials that are MOUNTED rather than spent, so a gated one is withheld from the manifest the
+     * arms build from instead of refused at a use that has no moment to refuse
+     * (secrets/credential-gating.ts). What was withheld travels to `honoured` as a note, because absence is
+     * invisible: a turn that simply cannot see an account concludes it is not connected.
+     *
+     * AN UNREADABLE POLICY WITHHOLDS NOTHING HERE, which is the one place in this feature that does not fail
+     * closed, and it is a bounded exception worth stating. This filter cannot fail closed usefully: it would
+     * have to withhold every mounted credential in the sandbox to be safe against a policy it cannot read,
+     * turning one corrupt byte into a turn with no accounts at all. Everything that SPENDS a credential
+     * refuses instead (credential-gate.ts reads the same store and turns a read failure into a refusal), so
+     * the residue is a profile mounted for a turn that cannot type its password, cannot resolve its
+     * reference, and cannot mint its one-time code. Logged, because it should never happen quietly. */
+    const gates = await services.credentialGates.list().catch((error: unknown) => {
+        services.logger.warn({ err: error }, "credential gates: the approval policy could not be read, no capability is withheld this turn");
+        return [] as const;
+    });
+    const gatedMounts = gatedCapabilities(personaGranted, gates, services.credentialGrants, input.conversationId);
+    const granted = gatedMounts.capabilities;
     /* THE SPAWN DOOR, decided once here for every runtime, in both of its shapes. A persona with the delegate
      * shelf open AND full agency (shell and write — a child is a whole agent holding both) gets to start
      * agents on any connected provider; one without must not get them back by proxy. The TOOL mounts read this
@@ -407,10 +431,21 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         (conversationTurns === 0 && input.forkOf === undefined) || (entry?.compactedTurn !== undefined && entry.compactedTurn >= conversationTurns - 1);
     const planned: TurnContext = {
         ...shared,
-        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed, terseArm, prompt, {
-            map: workspaceMapEligible,
-            turnEnding: turnEndingEligible,
-        }),
+        base: honoured(
+            services,
+            shared,
+            capabilities,
+            setupNoticeFor(setup),
+            persona,
+            installed,
+            terseArm,
+            prompt,
+            {
+                map: workspaceMapEligible,
+                turnEnding: turnEndingEligible,
+            },
+            { gates, withheld: gatedMounts.withheld },
+        ),
         persona,
     };
     /* CAN THE MODEL HOLD THIS TURN AT ALL, the last gate before an arm is asked to build a request, and the only
@@ -512,6 +547,11 @@ const honoured = (
      * against. One record rather than a row of booleans: two positional flags of the same type, side by side,
      * is a swap that would typecheck. */
     send: { readonly map: boolean; readonly turnEnding: boolean },
+    /* THE OWNER'S CREDENTIAL GATES, read once by planTurn: `gates` so the connector half of the withholding
+     * can be applied to the environment here (where the environment is built), and `withheld` so the note
+     * covers what the MOUNT filter already took, which happened upstream. One record rather than two
+     * positional lists of the same type, which is a swap that would typecheck. */
+    gating: { readonly gates: readonly CredentialGate[]; readonly withheld: readonly CredentialGate[] },
 ): AgentRequest => {
     const { permissionMode, effort, fast, cliEnv, disallowedTools, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
@@ -561,6 +601,16 @@ const honoured = (
      * raises. `mapCwd` outside the root is dropped by the escape guard, and a dropped start folder maps the root
      * exactly as it opens the session there. */
     const mapNote = send.map && mapCwd !== undefined ? workspaceMapNote({ root: mapRoot, cwd: mapCwd }) : undefined;
+    /* THE ENVIRONMENT, THROUGH TWO FILTERS, resolved here rather than beside its own use below because the
+     * note a few lines down has to say what the second one took. The persona's filter is about what this TURN
+     * may reach; the gate's is about what a PERSON has released. A connector caught by either loses every
+     * variable carrying its suffix, which takes the token out of the environment rather than asking the agent
+     * not to look at it. */
+    const personaEnv = cliEnv === undefined ? undefined : personaCliEnv(cliEnv, installed, persona, envSuffix);
+    const gatedEnv =
+        personaEnv === undefined
+            ? undefined
+            : gatedCliEnv(personaEnv, installed, gating.gates, services.credentialGrants, context.base.conversationId, envSuffix);
     const notes: TurnNote[] = [
         // First of the preamble, when there is one at all: a note that says who the turn is acting as belongs
         // ahead of anything about the files or the tools it is about to use.
@@ -589,6 +639,13 @@ const honoured = (
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [{ title: setupNoticeTitle(setupNotice), text: setupNotice }] : []),
         ...(context.iqSearchNote !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: context.iqSearchNote }] : []),
         ...(context.spawnNote !== undefined ? [{ title: SPAWN_NOTE_TITLE, text: context.spawnNote }] : []),
+        /* WHAT A NAMED PERSON HAS TO RELEASE BEFORE THIS TURN CAN USE IT, over both filters at once: the
+         * mounts planTurn already withheld and the connector variables stripped just below. Sent on EVERY
+         * turn that is missing something rather than once per conversation, unlike the teaching notes above
+         * it: those describe a door that stays open, and this describes a condition that changes the moment
+         * somebody clicks, so a turn reading a stale "needs approval" from its own history would be reading
+         * the opposite of the truth. */
+        ...[gatedCredentialsNote([...gating.withheld, ...(gatedEnv?.withheld ?? [])])].filter((note) => note !== undefined),
         /* Only the Claude Code loop executes command rules at Stop. Native runtimes must not be promised a
          * check their fallback path does not run. Said on the turns that cannot already read it in their own
          * history, which is the opening message and the first turn past a compaction (see `send.turnEnding`). */
@@ -597,10 +654,15 @@ const honoured = (
     // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
     // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered
     // list, the filtered one is what the ARMS get, and this is the same decision applied to the environment.
-    const shellEnv = cliEnv === undefined ? undefined : personaCliEnv(cliEnv, installed, persona, envSuffix);
+    const shellEnv = gatedEnv?.cliEnv;
     // The shelves that are not capability-shaped, as tool names the runtime knows. Concatenated with whatever
     // the request already carried (the hashline swap sets its own) rather than replacing it.
-    const denied = [...(disallowedTools ?? []), ...personaDisallowedTools(persona, installed)];
+    /* Three sources, one list: whatever the request already carried (the hashline swap sets its own), the
+     * shelves this persona does not have, and the SKILLS of the credentials a named approver has not released
+     * — a cheatsheet without its credential reads as an offer and sends the model at tools that are not there
+     * (secrets/credential-gating.ts, and personas.ts `deniedSkills`, which learned it first). */
+    const withheldCredentials = [...gating.withheld, ...(gatedEnv?.withheld ?? [])];
+    const denied = [...(disallowedTools ?? []), ...personaDisallowedTools(persona, installed), ...gatedSkills(withheldCredentials)];
     const dependencyDir = startIn ?? "";
     const dependencyInstallAllowed = persona.powers.files === "write" && persona.powers.shell;
     /* THE JS EXECUTION BACKEND'S PLAN, resolved here because this is the point where the persona, the turn's
@@ -819,6 +881,50 @@ export const planHarnessTurn = async (
                 .record({ ...use, at: Date.now() })
                 .catch((error: unknown) => services.logger.warn({ err: error, secret: use.name }, "secret use record failed"));
         },
+        /* THE APPROVAL GATE, bound to THIS turn: which conversation a card can be raised in, whether anybody
+         * is watching, and the signal that settles the wait when the turn is stopped out from under it.
+         *
+         * ONE CARD PER SUBJECT, not per name. A command carrying `reddit/password` and `reddit/totp` names two
+         * secrets and ONE credential, and asking twice would train the approver to click without reading.
+         * Different subjects are asked one after another, which is deliberately the simple, honest shape: two
+         * gated credentials in one command is two decisions, and batching them onto one card would ask a
+         * person to approve a list rather than a thing. */
+        release: async (names, lane, detail) => {
+            if (names.length === 0) {
+                return { ok: true };
+            }
+            const bySubject = new Map<string, { readonly kind: CredentialGateKind; readonly names: string[] }>();
+            for (const name of names) {
+                const { subject, kind } = gateTargetOf(name);
+                const entry = bySubject.get(subject);
+                if (entry === undefined) {
+                    bySubject.set(subject, { kind, names: [name] });
+                    continue;
+                }
+                entry.names.push(name);
+            }
+            const approvedBy: Record<string, string> = {};
+            for (const [subject, { kind, names: covered }] of bySubject) {
+                const verdict = await services.credentialGate.check({
+                    subject,
+                    kind,
+                    lane,
+                    detail,
+                    conversationId: input.conversationId,
+                    unattended: input.unattended === true,
+                    signal: context.base.signal,
+                });
+                if (!verdict.allow) {
+                    return { refusal: verdict.reason };
+                }
+                if (verdict.approvedBy !== undefined) {
+                    for (const name of covered) {
+                        approvedBy[name] = verdict.approvedBy;
+                    }
+                }
+            }
+            return Object.keys(approvedBy).length > 0 ? { ok: true, approvedBy } : { ok: true };
+        },
     };
     const sdkServers = {
         ...browser.servers,
@@ -993,6 +1099,18 @@ export const planHarnessTurn = async (
                           // the tools stay testable without Services or a network.
                           openAccount: (request) => openBrowserAccount(services, request),
                           fetchCode: fetchEmailCode,
+                          release: async (account, lane, detail) => {
+                              const verdict = await services.credentialGate.check({
+                                  subject: account,
+                                  kind: "capability",
+                                  lane,
+                                  detail,
+                                  conversationId: input.conversationId,
+                                  unattended: input.unattended === true,
+                                  signal: context.base.signal,
+                              });
+                              return verdict.allow ? { ok: true } : { refusal: verdict.reason };
+                          },
                       }),
                   }
                 : {}),

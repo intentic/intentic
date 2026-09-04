@@ -38,7 +38,10 @@ mismatch is a type error rather than a runtime surprise.
   run, the demo runs it over its recording, and the browser only applies the patches it emits, so there is one
   opinion about what a turn looks like. Its notices (a stop, a refusal, a landing, a routed tier) are written
   here too. [src/card-status.ts](src/card-status.ts) is how a card settles: raised `pending`, and given its
-  status by the reply that released it or by the stop that cancelled it.
+  status by the reply that released it or by the stop that cancelled it. One card is settled by a reply the
+  daemon may REFUSE: a `credential_offer` is addressed to the named people the owner's gate lists rather than
+  to whoever holds a session, so a reply that reaches this derivation at all is one the daemon already accepted
+  from an approver, and who that was rides on the `credential_receipt` frame (the reply carries no sender).
 - [src/workspace-state.ts](src/workspace-state.ts) and [src/runtime-state.ts](src/runtime-state.ts): which
   changed file, and which moved runtime thing, makes which browser view stale. The workspace table also assigns
   each daemon-owned path its export lifecycle (`carry`, `secret`, `identity`, or `derived`), including the

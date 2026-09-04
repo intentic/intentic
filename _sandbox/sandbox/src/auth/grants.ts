@@ -47,11 +47,12 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
     },
 });
 
-// The `vpn`, `otp`, `services` and `capabilities` CLIs on the agent's PATH (and in the owner's terminals)
-// reach the daemon over loopback with the per-boot agent token. Scoped hard: the agent may dial and drop the
-// tunnels the owner configured, may mint one-time codes off a stored TOTP seed, each derived, expiring
-// within its period, may browse and run the platform's priced services on the owner's credit allowance, and
-// may ask the owner to connect a capability; it may never read /secrets or the /capabilities REST surface
+// The `vpn`, `otp`, `services`, `capabilities`, `wallet`, `agents` and `secrets` CLIs on the agent's PATH
+// (and in the owner's terminals) reach the daemon over loopback with the per-boot agent token. Scoped hard:
+// the agent may dial and drop the tunnels the owner configured, may mint one-time codes off a stored TOTP
+// seed, each derived, expiring within its period, may browse and run the platform's priced services on the
+// owner's credit allowance, may ask the owner to connect a capability, and may ask a NAMED APPROVER to
+// release a gated credential; it may never read a VALUE, out of /secrets or the /capabilities REST surface
 // itself, which would hand it the credentials behind them.
 const agentReach = (method: string, path: string): boolean =>
     path === "/vpn" ||
@@ -95,7 +96,19 @@ const agentReach = (method: string, path: string): boolean =>
     (method === "POST" && path === "/children/wait") ||
     (method === "POST" && path === "/children/send") ||
     (method === "POST" && path === "/children/answer") ||
-    (method === "GET" && path === "/children");
+    (method === "GET" && path === "/children") ||
+    /* THE CREDENTIAL-APPROVAL SURFACE the `secrets` CLI drives, and the ONLY two doors under `/secrets` this
+     * token has ever been given. The comment above used to say the agent may never read `/secrets` at all,
+     * and the reason it said so still holds for every other route there: they answer with, or write, values.
+     *
+     * These two answer with NAMES. `gates` lists what is gated and which addresses may release it, which the
+     * agent needs for a reason absence created: a gated connected account is withheld from the turn rather
+     * than refused inside it, so without this the model cannot tell "needs Bob" from "not connected" and
+     * goes looking for another road (secrets/credential-gating.ts). `request` raises the release card and
+     * parks — consent is enforced at the route and the identity check is on the reply (agent-requests.ts
+     * mayAnswer), so the model can ASK and can never grant itself anything. */
+    (method === "GET" && path === "/secrets/gates") ||
+    (method === "POST" && path === "/secrets/request");
 
 /* The WIDE grant, a panel's backend is server-side code running inside this container that legitimately acts
  * as the app, and a panel is open-ended (an operator UI the owner or the agent wrote), so enumerating what one

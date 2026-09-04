@@ -13,7 +13,7 @@ type Cards = { -readonly [K in CardField]?: TranscriptRow[K] };
 
 export const settledCards = (cards: TranscriptCards, reply: AgentReply | undefined): TranscriptCards => {
     const out: Cards = {};
-    const { plan, question, permission, browserHelp, terminalHelp, serviceOffer, capabilityOffer, paymentOffer } = cards;
+    const { plan, question, permission, browserHelp, terminalHelp, serviceOffer, capabilityOffer, paymentOffer, credentialOffer } = cards;
     if (plan !== undefined) {
         out.plan = { ...plan, status: reply?.kind !== "plan" ? "cancelled" : reply.approve ? "approved" : "rejected" };
     }
@@ -59,6 +59,17 @@ export const settledCards = (cards: TranscriptCards, reply: AgentReply | undefin
     if (paymentOffer !== undefined) {
         out.paymentOffer = { ...paymentOffer, status: reply?.kind !== "payment_offer" ? "cancelled" : reply.approve ? "approved" : "skipped" };
     }
+    /* A yes settles the decision; WHO decided is the credential_receipt frame's to say, because only the
+     * daemon knows it — the reply carries no name, the identity was verified off the request that delivered
+     * it. A reply that reaches this derivation at all is one the daemon already accepted from an approver: a
+     * click from anybody else is refused before the card is settled, so it never gets here and the card stays
+     * pending. */
+    if (credentialOffer !== undefined) {
+        out.credentialOffer = {
+            ...credentialOffer,
+            status: reply?.kind !== "credential_offer" ? "cancelled" : reply.approve ? "approved" : "skipped",
+        };
+    }
     return out;
 };
 
@@ -77,6 +88,7 @@ export const cancelledCards = (cards: TranscriptCards): TranscriptCards => {
         "serviceOffer",
         "capabilityOffer",
         "paymentOffer",
+        "credentialOffer",
     ] as const) {
         const card = cards[field];
         if (card === undefined) {

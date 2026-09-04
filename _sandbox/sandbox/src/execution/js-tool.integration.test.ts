@@ -34,6 +34,9 @@ test("the handler runs the script and answers in the shell shape", async () => {
 const stored = (uses: SecretUseReport[]): SecretAccess => ({
     list: async () => [{ name: "API_TOKEN", value: "sk-live-abc", source: "env" }],
     used: (use) => uses.push(use),
+    // Nothing is gated in this sandbox, which is the ordinary case: the gate answers allow and attributes
+    // nothing. The gated cases live beside the exit itself (agent/agent-secrets.test.ts).
+    release: async () => ({ ok: true }),
 });
 
 test("a secret reference resolves on the way into the process and the use is filed on the code lane", async () => {

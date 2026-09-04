@@ -22,6 +22,17 @@ vi.mock(`../../composables/secrets/useSecrets`, () => ({
         refreshInventory: () => {},
     }),
     useSecrets: () => ({ set: { mutateAsync: vi.fn() }, remove: { mutateAsync: vi.fn() } }),
+    /* NOTHING GATED and NOT THE OWNER: the state of nearly every sandbox, and the one that keeps these cases
+     * about what this suite is for — which rows the tab shows and how it names them. The approval editor's own
+     * behaviour is asserted where the rule lives (secretRows.test.ts for what a gated row says). */
+    useCredentialGates: () => ({
+        gates: ref([]),
+        gateFor: () => undefined,
+        approverChoices: ref([]),
+        isOwner: ref(false),
+        setGate: { mutateAsync: vi.fn() },
+        removeGate: { mutateAsync: vi.fn() },
+    }),
     reveal: vi.fn(),
 }));
 

@@ -1,5 +1,6 @@
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
+import { createCredentialGrants } from "../secrets/credential-grants.js";
 import type { Services } from "../composition.js";
 import { testConfig } from "../testing.js";
 import type { AgentRequest } from "./agent.js";
@@ -45,6 +46,12 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", { status: async () => [], issueAt: async () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        /* NOTHING GATED, which is the state of a sandbox whose owner has never put a credential behind a named
+         * person — and read on EVERY turn rather than only a gated one, for the personas read's own reason
+         * below: planTurn narrows the manifest once for every runtime, so the policy read cannot be
+         * conditional on there being a gate. A suite about withholding hands in its own list. */
+        credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
+        credentialGrants: createCredentialGrants(),
         // Read on every turn, not only a pinned one: an unattended wake that named no persona is exactly the
         // case whose answer must be "no accounts", so the read cannot be conditional on there being one.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),

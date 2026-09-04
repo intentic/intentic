@@ -89,7 +89,7 @@ const roster = (): AgentSummary[] =>
         provider: `claude`,
         harness: `native`,
         updatedAt: 10_000 - at,
-        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     }));
 const seed = (): void => setAgents(roster(), 100);
 

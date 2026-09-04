@@ -43,7 +43,7 @@ describe("guard mechanism", () => {
     // invents its own gate instead of defining an action here is discoverable by its absence.
     test("the catalog carries the shipped actions", () => {
         const actions = listGuardedActions();
-        for (const expected of ["session.start", "outbound.send", "command.run"]) {
+        for (const expected of ["session.start", "outbound.send", "command.run", "credential.use"]) {
             expect(actions, `catalog is missing "${expected}"`).toContain(expected);
         }
     });

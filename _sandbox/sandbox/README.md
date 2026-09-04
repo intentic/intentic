@@ -191,6 +191,31 @@ reports the profile.
   blanked instead, and only where the tool call itself named a credential file
   ([src/agent/agent-redaction.ts](src/agent/agent-redaction.ts)): the same classifier the command gate consults
   decides that, so the shape patterns that would mangle source code never run on any.
+- Put the riskiest credentials behind a NAMED PERSON (src/secrets/credential-*.ts). Masking answers "can the
+  model see this value"; it never answered "who decided to spend it". Any stored secret, and any connected
+  account, can be gated to an exact list of members: after that no exit resolves it, no turn mounts it and no
+  environment carries it until one of those people clicks Release on a card in the live conversation. The
+  approvers are a LIST rather than a role floor, because "only Bob may release the production password" is the
+  sentence people mean and a floor of `maintainer` says the opposite; the owner is on it only if they put
+  themselves on it. One click releases one use by default (per-entry, the owner can say "the rest of this
+  conversation" instead); a browser account, an identity and an MCP server are forced to conversation scope
+  because a signed-in profile is loaded for a whole turn and cannot be released for a single use. Enforcement
+  is at the exits for values ([src/secrets/credential-gate.ts](src/secrets/credential-gate.ts)) and by ABSENCE
+  for accounts ([src/secrets/credential-gating.ts](src/secrets/credential-gating.ts), the persona filter's own
+  pattern) — with a turn note naming the door, because a withheld account otherwise reads to a model as one
+  that is not connected. It FAILS CLOSED four ways: an unreadable policy, an unattended turn, no live
+  conversation, and a release with no verified identity behind it are each a refusal that names the approvers
+  and tells the model not to retry. The policy lives OFF the workspace beside the credential vault
+  ([src/secrets/credential-gates.ts](src/secrets/credential-gates.ts)) for the vault's own reason: `.intentic/
+  config/` is tracked and agent-editable, so a gate kept there would be a lock with its key in the room with
+  the agent. WHAT IT IS NOT A WALL AGAINST: a shell in this container runs as the owner of both the vault and
+  the policy, so a compromised container is out of scope here exactly as it is for the vault (SECURITY.md); the
+  gate is a wall against the AGENT's own judgment being the last word on WHEN a credential is spent. Two gaps
+  are open and stated rather than papered over: a release card raised by a turn running on a REMOTE RUNNER is
+  refused on relay, because the relayed reply carries the answer and not the verified answerer
+  ([src/runners/runner-service.ts](src/runners/runner-service.ts)); and the deploy engine reading
+  `desired-state/.env` on its own is not an agent exit, so a gated env secret still reaches a deploy the agent
+  starts — the gate covers what the AGENT spends, not what the engine consumes.
 - Run the agent's JavaScript, not only its shell (src/execution). The JS execution backend is the second way a
   turn runs work of its own: declared per runtime (`AgentCapabilities.execution`), granted per persona card
   beside the shell switch, planned into the one request every runtime builds on, and served on the Claude Code
@@ -276,6 +301,14 @@ reports the profile.
   for the connection to come live, so the agent resumes in the same turn with the capability usable; a no is
   remembered for the conversation so a repeat ask never raises a second card. The model contributes one line
   of why and can connect nothing itself.
+- Let an agent ask a NAMED PERSON to release a credential the owner gated (src/secrets/credential-gate.ts).
+  The agent's `secrets gates` (bin/secrets) says what is gated and by whom, and `secrets request <id> --why`
+  parks on the release card for the people the gate names. It exists because of an asymmetry: a gated SECRET
+  announces itself (write its reference, the exit parks), while a gated ACCOUNT is simply absent from the turn
+  and reads as one that was never connected — so the CLI plus a turn note is the door the model can find. The
+  two routes it reaches (`GET /secrets/gates`, `POST /secrets/request`) are the only ones under `/secrets` the
+  agent token has ever been given (src/auth/grants.ts), and both answer names: the read cannot return a value
+  and the ask cannot grant itself anything.
 - Let an agent **pay for things on the open web** out of a USDC wallet, under the owner's policy
   (src/wallet/). The agent's `wallet fetch` (bin/wallet + the baked wallet skill) parks while the daemon
   makes the request itself, reads the endpoint's own **x402** challenge (src/wallet/x402.ts: both live wire
@@ -520,7 +553,7 @@ reports the profile.
   runner's summary, and the sync door pushes this sandbox's settings down the live link (replace semantics —
   the parent is a runner's whole authority). `docs/remote-runners-plan.md` at the workspace root says why
   every seam sits where it does.
-- [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card. It runs four tiers and only the last interrupts anybody: TRIAGE (the classifier), the HARD RULE (`commandRun`, un-waivable, one class), the JUDGE (a model reading the owner's policy), and the PERSON. WHAT a command is, as opposed to what may be done about it, lives one package out in
+- [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card. It runs four tiers and only the last interrupts anybody: TRIAGE (the classifier), the HARD RULE (`commandRun`, un-waivable, one class), the JUDGE (a model reading the owner's policy), and the PERSON. `credentialUse` is the catalog's fifth action and the only one whose sole DENY is "there is nobody to ask": a gate is never a ban, so an unattended turn and a turn with no live conversation are refusals while everything else is a hold that asks a named person (src/secrets/credential-gate.ts). WHAT a command is, as opposed to what may be done about it, lives one package out in
   [sandbox-contract/src/command-classes.ts](../sandbox-contract/src/command-classes.ts): the same table the
   machine agent reads before running anything on somebody's own computer, so the two enforcement points cannot
   drift about what counts as a recursive delete. It is regex over shell text and says so: friction for
@@ -646,6 +679,17 @@ reports the profile.
   ([src/agent/agent-secrets.ts](src/agent/agent-secrets.ts)) and the browser's `type_secret`
   ([src/browser/secrets-tools.ts](src/browser/secrets-tools.ts)): each use landing on the ledger
   (`src/secrets/secret-uses.ts`) the inventory joins as "last used".
+- [src/secrets/credential-gate.ts](src/secrets/credential-gate.ts), the release gate: the one consult every
+  exit and every mount shares, so the rule cannot be enforced at three doors and forgotten at the fourth. The
+  payment gate's shape (card raised from outside the turn generator, pushed into the live run, two different
+  no's) with one difference that is the whole feature: the card is addressed to a NAMED LIST, so the waiter
+  carries a `mayAnswer` the reply route checks against the verified identity on the request
+  ([src/agent/agent-requests.ts](src/agent/agent-requests.ts)), and a stranger's click — yes or no — is
+  refused with the card left standing. The policy is a file off the workspace
+  ([src/secrets/credential-gates.ts](src/secrets/credential-gates.ts), which refuses an unreadable policy
+  rather than reading it as "nothing gated"); the "rest of the conversation" releases are in memory
+  ([src/secrets/credential-grants.ts](src/secrets/credential-grants.ts)) and deliberately die with the daemon,
+  because a release that outlived every turn and card it was given in would be consent nobody is present for.
 - [src/wallet/payment-offer.ts](src/wallet/payment-offer.ts), the payment gate: probe unpaid, parse the
   endpoint's challenge, check the owner's caps, card it (or not, inside their band), have the platform sign,
   retry with payment, receipt what settled. The ledger row ([src/wallet/wallet-ledger.ts](src/wallet/wallet-ledger.ts))

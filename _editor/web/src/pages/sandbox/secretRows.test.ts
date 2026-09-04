@@ -119,3 +119,58 @@ it(`searches an env secret by what uses it, not only by its key`, () => {
     const row = secretRow(entry({ key: `CF_TOKEN`, kind: `env`, requiredBy: [{ resourceId: `shop-dns`, type: `dns` }] }), sources());
     expect(matchesSecret(row, `shop-dns`, false)).toBe(true);
 });
+
+/* THE APPROVAL GATE, as a row reads it. A gate is the configuration WORKING, not an errand, so what is pinned
+ * here is that it says who is waiting without borrowing the tab's one warning colour. */
+
+it(`says who has to approve a gated row, and does not count it as an errand`, () => {
+    const gated = secretRow(entry({ key: `DATABASE_URL`, kind: `env`, gate: { approvers: [`bob@corp.com`], scope: `use` } }), sources());
+    expect(gated.note).toBe(`needs approval from bob@corp.com`);
+    // "Bob has to release this" is the owner's own configuration, not something anybody has to go and fix.
+    expect(gated.attention).toBe(false);
+    // Two approvers read as a choice, because either of them can release it.
+    const shared = secretRow(
+        entry({ key: `DATABASE_URL`, kind: `env`, gate: { approvers: [`bob@corp.com`, `alice@corp.com`], scope: `conversation` } }),
+        sources(),
+    );
+    expect(shared.note).toBe(`needs approval from bob@corp.com or alice@corp.com`);
+});
+
+it(`lets a real debt outrank the gate note on one row`, () => {
+    // A value nobody has set is the louder fact, and it is the one a reader is scanning for.
+    const missing = secretRow(
+        entry({ key: `CF_TOKEN`, kind: `env`, status: `missing`, requiredBy: [{ resourceId: `s`, type: `d` }], gate: { approvers: [`bob@corp.com`], scope: `use` } }),
+        sources(),
+    );
+    expect(missing.note).toBe(`not set`);
+});
+
+it(`finds a gated row by the word people type and by the approver's address`, () => {
+    const gated = secretRow(entry({ key: `DATABASE_URL`, kind: `env`, gate: { approvers: [`bob@corp.com`], scope: `use` } }), sources());
+    expect(matchesSecret(gated, `approval`, false)).toBe(true);
+    expect(matchesSecret(gated, `bob@corp.com`, false)).toBe(true);
+    const open = secretRow(entry({ key: `OTHER`, kind: `env` }), sources());
+    expect(matchesSecret(open, `approval`, false)).toBe(false);
+});
+
+it(`offers a gate only where there is something to release, and forces conversation scope on a mounted account`, () => {
+    // Nothing to release: a value nobody has set, and an AI subscription (gating THAT would stop every turn).
+    expect(secretRow(entry({ key: `SPARE`, kind: `env`, status: `missing` }), sources()).gateSubject).toBeUndefined();
+    expect(secretRow(entry({ key: `claude:default`, kind: `provider`, revealable: false }), sources()).gateSubject).toBeUndefined();
+    // A stored value is spent at an exit, so it can be released one use at a time.
+    const stored = secretRow(entry({ key: `DATABASE_URL`, kind: `env` }), sources());
+    expect([stored.gateSubject, stored.sessionShaped]).toEqual([`DATABASE_URL`, false]);
+    /* A signed-in browser is MOUNTED for a whole turn, so there is no single use to release: the row says so
+     * and the daemon forces the scope (secrets/credential-grants.ts). */
+    const browser = secretRows([entry({ key: `reddit`, kind: `capability`, status: `connected` })], {
+        capabilities: [capability(`reddit`, `browser`, { platform: `reddit` })],
+        extensions: [connectors],
+    })[0];
+    expect([browser?.gateSubject, browser?.sessionShaped]).toEqual([`reddit`, true]);
+    // A connector's credential is a value at an exit, like a stored secret, so it keeps the choice.
+    const connector = secretRows([entry({ key: `github`, kind: `capability`, status: `connected` })], {
+        capabilities: [capability(`github`, `cli`, { provider: `github` })],
+        extensions: [connectors],
+    })[0];
+    expect([connector?.gateSubject, connector?.sessionShaped]).toEqual([`github`, false]);
+});

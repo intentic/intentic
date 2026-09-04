@@ -1,4 +1,5 @@
 import type { AgentReply, EditorContext } from "@intentic/sandbox-contract";
+import type { Caller } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { conversationOf, resolveRequest } from "./agent-requests.js";
@@ -27,9 +28,21 @@ export const editorContextNote = (context: EditorContext): string => {
     return `The user has \`${context.file}\` open in the editor with this text selected${range}: "this" likely refers to it:\n\`\`\`\`\n${context.selection}\n\`\`\`\``;
 };
 
-// True when the card was there to answer; false when nothing holds that id (already answered, or the turn
-// ended), which the route surfaces as NOT_FOUND and a parent reads as "try the runner".
-export const applyReply = async (services: Services, reply: AgentReply): Promise<boolean> => {
+/* `settled` when the card was there and this person could answer it. `missing` when nothing holds that id
+ * (already answered, or the turn ended), which the route surfaces as NOT_FOUND and a parent reads as "try the
+ * runner". `refused` when the card is here but is addressed to somebody else — a gated credential's release
+ * names its approvers — which the route surfaces as FORBIDDEN with that sentence, leaving the card parked for
+ * whoever can answer it.
+ *
+ * `caller` is the identity the daemon VERIFIED on the request that carried the reply (context.identity), not
+ * anything the body claimed. It is optional because most doors here have no identity to offer: loopback mode,
+ * a panel token, and the runner relay below all arrive without one, and every card but the credential release
+ * is indifferent to who answered. */
+export const applyReply = async (
+    services: Services,
+    reply: AgentReply,
+    caller?: Caller,
+): Promise<"settled" | "missing" | { refused: string }> => {
     /* A DISMISSED QUESTION ENDS THE TURN, and it ends here rather than in the browser: the card was raised
      * because the agent could not choose, so waving it away answers nothing, and letting the turn run on
      * means it guesses at exactly the fork it just said it could not guess at.
@@ -40,18 +53,19 @@ export const applyReply = async (services: Services, reply: AgentReply): Promise
     if (dismissed !== undefined) {
         services.agents.stopping(dismissed, "dismissed");
     }
-    if (!resolveRequest(reply)) {
-        return false;
+    const outcome = resolveRequest(reply, caller);
+    if (outcome !== "settled") {
+        return outcome;
     }
     if (dismissed === undefined) {
-        return true;
+        return "settled";
     }
     stopTurn(dismissed);
     // Joined like the stop route joins, and for the same reason: the answer to this request is what the
     // browser lets the user type behind, so it must not come back while the run still holds the conversation.
     // The wait is a blink, the turn is parked inside the card being dismissed.
     await turnRunOf(dismissed)?.waitUntilFinished();
-    return true;
+    return "settled";
 };
 
 export interface SteerInput {

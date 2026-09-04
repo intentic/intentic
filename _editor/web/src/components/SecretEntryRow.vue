@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { BrandMark, ui, CopyButton, DisclosureRow, Notice, type NoticeModel, StatusBadge, vAction } from "@intentic/ui";
+import { BrandMark, ui, CopyButton, DisclosureRow, Notice, type NoticeModel, SegmentedControl, StatusBadge, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
+import type { CredentialGateScope } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../pages/sandbox/secretRows";
-import { reveal, useSecrets } from "../composables/secrets/useSecrets";
+import { reveal, useCredentialGates, useSecrets } from "../composables/secrets/useSecrets";
+import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
 
 /* ONE SECRET, on one line until asked otherwise: the extension row's shape, for the extension row's reason:
@@ -30,6 +32,85 @@ const { row, expanded } = defineProps<{ row: SecretRow; expanded: boolean }>();
 const emit = defineEmits<{ "update:expanded": [expanded: boolean] }>();
 
 const { remove } = useSecrets();
+
+/* THE APPROVAL BLOCK. Editing a gate is the OWNER's alone, enforced at the daemon's route because a
+ * maintainer is exactly who a gate is sometimes written about; what this file does is render the read-only
+ * form for everybody else rather than offering controls that would 403 (secrets/credential-gate.ts).
+ *
+ * The DRAFT is local until Save, unlike every other control on this row. A gate is three decisions that only
+ * make sense together — on/off, who, and how far one release goes — and writing each keystroke through would
+ * mean a moment where a credential is gated to nobody, which the route rightly refuses (a gate with an empty
+ * approver list is a lock, not a gate). So the draft is assembled here and sent once. */
+const { gateFor, approverChoices, isOwner, setGate, removeGate } = useCredentialGates();
+
+const gate = computed(() => (row.gateSubject === undefined ? undefined : gateFor(row.gateSubject)));
+const draftApprovers = ref<string[]>([]);
+const draftScope = ref<CredentialGateScope>(`use`);
+const gateError = ref<NoticeModel | undefined>(undefined);
+
+/* The draft follows the SERVER's answer whenever the row opens or the policy changes under it, which is what
+ * keeps a second tab's edit from being silently overwritten by a stale draft sitting behind a chevron. A
+ * session-shaped credential opens on `conversation` because that is the only scope it can have. */
+watch(
+    [() => expanded, gate],
+    () => {
+        draftApprovers.value = [...(gate.value?.approvers ?? [])];
+        draftScope.value = gate.value?.scope ?? (row.sessionShaped ? `conversation` : `use`);
+        gateError.value = undefined;
+    },
+    { immediate: true },
+);
+
+const toggleApprover = (email: string): void => {
+    draftApprovers.value = draftApprovers.value.includes(email)
+        ? draftApprovers.value.filter((entry) => entry !== email)
+        : [...draftApprovers.value, email];
+};
+
+// Saveable only with somebody on it, and only when something actually changed: the route refuses an empty
+// list, and re-sending the gate that is already stored is a write nobody asked for.
+const gateDirty = computed(
+    () =>
+        draftApprovers.value.length > 0 &&
+        (gate.value === undefined ||
+            gate.value.scope !== draftScope.value ||
+            gate.value.approvers.length !== draftApprovers.value.length ||
+            !gate.value.approvers.every((approver) => draftApprovers.value.includes(approver))),
+);
+
+const saveGate = async (): Promise<void> => {
+    gateError.value = undefined;
+    if (row.gateSubject === undefined) {
+        return;
+    }
+    try {
+        await setGate.mutateAsync({
+            subject: row.gateSubject,
+            kind: row.entry.kind === `capability` ? `capability` : `secret`,
+            approvers: draftApprovers.value,
+            scope: draftScope.value,
+        });
+    } catch (err) {
+        gateError.value = noticeFrom(err, `Could not save who has to approve this.`);
+    }
+};
+
+const clearGate = async (): Promise<void> => {
+    gateError.value = undefined;
+    if (row.gateSubject === undefined) {
+        return;
+    }
+    try {
+        await removeGate.mutateAsync(row.gateSubject);
+    } catch (err) {
+        gateError.value = noticeFrom(err, `Could not stop requiring approval.`);
+    }
+};
+
+const SCOPE_OPTIONS = [
+    { label: `This once`, value: `use` as const, title: `One click releases exactly one use. The next use asks again.` },
+    { label: `Rest of the conversation`, value: `conversation` as const, title: `One click covers every use for the rest of that conversation.` },
+];
 
 const editing = ref(false);
 const multiline = ref(false);
@@ -226,6 +307,90 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>
+            <!-- WHO HAS TO RELEASE THIS. Off for nearly everything, which is the design: gating is for the few
+                 credentials where one wrong use is the incident, and a sandbox where everything asks is one
+                 where nobody reads the cards. Only the owner can change it (the daemon's route is the rule,
+                 this is the courtesy), and only rows with something to release carry the block at all. -->
+            <div v-if="row.gateSubject !== undefined" class="mt-3 border-t border-line pt-2">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Needs approval</span>
+                    <ToggleSwitch
+                        v-if="isOwner"
+                        :model-value="gate !== undefined"
+                        v-tooltip.top="
+                            gate === undefined
+                                ? `Require a named person to release this before the agent can use it`
+                                : `Let the agent use this without asking anybody`
+                        "
+                        aria-label="Needs approval"
+                        @update:model-value="
+                            (value: boolean) => {
+                                if (value) {
+                                    draftApprovers = approverChoices.slice(0, 1);
+                                    draftScope = row.sessionShaped ? `conversation` : `use`;
+                                } else {
+                                    void clearGate();
+                                }
+                            }
+                        "
+                    />
+                </div>
+
+                <!-- Not the owner: the state, and why the controls are not here. Said rather than hidden — a
+                     maintainer who can see a gate but not change it needs to know which of those it is. -->
+                <p v-if="!isOwner" class="pt-0.5 text-2xs text-muted">
+                    <template v-if="gate">
+                        Only {{ gate.approvers.join(` or `) }} can release this, and
+                        {{ gate.scope === `conversation` ? `one release covers the rest of a conversation` : `every use asks again` }}. Only the
+                        owner can change this.
+                    </template>
+                    <template v-else>Nobody has to approve this. Only the owner can change that.</template>
+                </p>
+
+                <template v-else-if="gate !== undefined || draftApprovers.length > 0">
+                    <!-- The approvers, as an exact list rather than a role floor: "only Bob" is the sentence
+                         people mean, and a floor cannot say it. The owner appears here like anybody else,
+                         because they are not an implicit approver — the list is exactly who may click. -->
+                    <p class="pt-1 text-2xs text-muted">Who can release it</p>
+                    <div class="flex flex-wrap gap-1 pt-1">
+                        <button
+                            v-for="email of approverChoices"
+                            :key="email"
+                            type="button"
+                            class="ui-chip py-1 px-2 text-2xs"
+                            :class="draftApprovers.includes(email) ? `ui-chip-on` : ``"
+                            :aria-pressed="draftApprovers.includes(email)"
+                            @click="toggleApprover(email)"
+                        >
+                            {{ email }}
+                        </button>
+                        <span v-if="approverChoices.length === 0" class="text-2xs text-muted"
+                            >Nobody can be named yet: give somebody access first, on the Access tab.</span
+                        >
+                    </div>
+
+                    <!-- HOW FAR ONE RELEASE GOES, and the one control that is sometimes not a choice: a
+                         signed-in browser profile or a running MCP server is mounted for a whole turn, so
+                         there is no "one use" to release. The daemon forces those, and saying so is better
+                         than offering a switch that gets overridden. -->
+                    <p class="pt-2 text-2xs text-muted">How long one release lasts</p>
+                    <p v-if="row.sessionShaped" class="pt-0.5 text-2xs text-subtle">
+                        For the rest of the conversation. A signed-in account is loaded for a whole turn, so it cannot be released for a single
+                        use.
+                    </p>
+                    <SegmentedControl v-else v-model="draftScope" :options="SCOPE_OPTIONS" size="xs" wrap class="pt-1" />
+
+                    <div class="flex items-center gap-2 pt-2">
+                        <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="!gateDirty" v-action="saveGate">
+                            {{ gate === undefined ? `Require approval` : `Save` }}
+                        </button>
+                        <span v-if="draftApprovers.length === 0" class="text-2xs text-warning">Name at least one person.</span>
+                    </div>
+                </template>
+                <p v-else class="pt-0.5 text-2xs text-muted">The agent can use this without asking anybody.</p>
+                <Notice v-if="gateError" :of="gateError" class="mt-2" />
+            </div>
+
             <Notice v-if="error" :of="error" class="mt-2" />
 
             <div v-if="panelMode === `reveal`" class="mt-2">

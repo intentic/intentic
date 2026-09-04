@@ -416,10 +416,33 @@ export const createCapabilitiesRoutes = (services: Services) => {
         // One TOTP code off the capability's stored seed, the `otp` command's whole backend. The seed field is
         // whichever one the capability's card marks `totp`; the code is minted here so the seed never crosses
         // the wire (this route is the single capability read the per-boot agent token is admitted to).
-        otp: i.otp.handler(async ({ input }) => {
+        otp: i.otp.handler(async ({ input, context, signal }) => {
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
+            }
+            /* A ONE-TIME CODE IS A USE OF THE STORED SEED, so a gated capability's `otp` asks like every other
+             * exit (secrets/credential-gate.ts). This lane is per-use by nature — a code is derived, expires
+             * within its period, and cannot be "kept" — but the SCOPE is still the gate's own: a
+             * conversation-scoped release already answered covers this code without a second card, and an
+             * ungranted one raises one.
+             *
+             * The conversation comes off the header every agent CLI in this sandbox sends from
+             * INTENTIC_TURN_OWNER (bin/otp), and its absence is a detached shell, which the gate refuses
+             * rather than guessing a chat to draw the card in. */
+            const verdict = await services.credentialGate.check({
+                subject: input.id,
+                kind: "capability",
+                lane: "otp",
+                detail: `a one-time code for ${input.id}`,
+                conversationId: context.headers.get("x-intentic-conversation") ?? undefined,
+                // A code is only ever asked for from a turn's own shell; whether anybody is watching is the
+                // gate's to discover from the live run, not something this route can claim.
+                unattended: false,
+                signal: signal ?? new AbortController().signal,
+            });
+            if (!verdict.allow) {
+                throw new ORPCError("FORBIDDEN", { message: verdict.reason });
             }
             const contribution = contributionFor(await contributionRegistry(services), capability.kind, capability.config);
             const field = contribution?.spec.fields.find((candidate) => candidate.totp === true);

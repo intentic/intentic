@@ -215,7 +215,17 @@ const SECRETS_GUIDANCE =
     "the transcript and permission cards keep the token. To put one into a web form, focus the field with the " +
     "browser tools and call `mcp__secrets__type_secret`. A name that does not exist fails the command and lists " +
     "the names that do. In files you write, keep the reference, never a raw value, and never ask the user to " +
-    "paste one into chat.";
+    "paste one into chat. " +
+    /* THE GATE, in two sentences on the end of the stable paragraph rather than a note of its own, because a
+     * turn has to know this BEFORE it hits it: the refusal is easy to read as "this credential is broken" and
+     * the absence of a gated account is easy to read as "not connected", and both wrong readings end with the
+     * model doing something else instead of asking a person. Appended here (not sent conditionally) to keep
+     * the paragraph byte-stable for the provider prompt cache, which is the reason this is one block. */
+    "Some names, and some connected accounts, are gated to a named approver. Using one raises a card in the " +
+    "chat for those people and the turn waits; a refusal names who can release it, so carry on without it and " +
+    "say plainly what you left undone rather than looking for another way in. A gated account is not loaded " +
+    "into your turn at all, so it can look unconnected: `secrets gates` says what is gated and by whom, and " +
+    "`secrets request <id> --why \"…\"` asks for an account or connector for the rest of the conversation.";
 
 /* The outside-content envelope language (base's outside-text.ts and the seams that wrap with it). One
  * stable paragraph for the same reason the secrets language is one: the model SEES the tags on every stranger

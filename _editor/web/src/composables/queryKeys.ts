@@ -165,6 +165,11 @@ export const SANDBOX_SETTINGS = family(`settings`);
 export const SANDBOX_SAVINGS = family(`settings-savings`);
 export const SECRETS = family(`secrets`);
 export const SECRETS_INVENTORY = family(`secrets`, `inventory`);
+// Which credentials need a named person's approval, and who may be named: the policy and the roster the
+// approver picker chooses from. Its own key rather than part of the inventory's, so the Secrets tab's
+// gate editor refetches without re-running the inventory fan-out beside it.
+export const SECRET_GATES = family(`secrets`, `gates`);
+export const SANDBOX_MEMBERS = family(`members`);
 export const SKILLS = family(`skills`);
 export const SYNC_HEALTH = family(`sync-health`);
 export const TERMINALS = family(`terminals`);

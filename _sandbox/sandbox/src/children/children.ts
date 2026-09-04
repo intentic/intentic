@@ -670,7 +670,9 @@ export const answerChild = async (
                     : "It is waiting on PLAN approval, which is the owner's consent to give, not a parent's. The owner answers it in their chat.",
         };
     }
-    if (!resolveRequest({ kind: "question", requestId: pending.requestId, answers })) {
+    // A child's question is answerable by whatever the parent turn decided, so there is no approver list on
+    // this card and only "was it still there" can come back (agent-requests.ts).
+    if (resolveRequest({ kind: "question", requestId: pending.requestId, answers }) !== "settled") {
         return { ok: false, message: "That question already settled." };
     }
     return { ok: true, note: "Answered: the child carries on with your picks." };

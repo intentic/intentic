@@ -1013,7 +1013,7 @@ test("approving the restored plan resumes the session in the posture a live appr
     await resumeInterruptedTurns(services, capture, BOOT_AT);
     await cardsUp(observed, "plan");
 
-    expect(resolveRequest({ kind: "plan", requestId: "r-plan", approve: true })).toBe(true);
+    expect(resolveRequest({ kind: "plan", requestId: "r-plan", approve: true })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // The answer is the prompt, behind the note that says the words are the user's response, not a repeat of
     // the original request, which the session already holds.
@@ -1043,7 +1043,7 @@ test("rejecting the restored plan with feedback goes back into plan mode carryin
     await cardsUp(observed, "plan");
 
     const feedback = "Use pnpm, not npm.";
-    expect(resolveRequest({ kind: "plan", requestId: "r-rej", approve: false, feedback })).toBe(true);
+    expect(resolveRequest({ kind: "plan", requestId: "r-rej", approve: false, feedback })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(feedback);
     expect(inputs[0]).toMatchObject({ permissionMode: "plan" });
@@ -1057,7 +1057,7 @@ test("answering the restored question resumes with the picks, worded as a live a
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "question");
 
-    expect(resolveRequest({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe(true);
+    expect(resolveRequest({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // formatAnswers' own wording: the model reads ONE shape of answer whichever side of a restart it lands on.
     expect(prompts[0]).toMatch(/user answered/i);
@@ -1072,7 +1072,7 @@ test("dismissing the restored question ends the turn quietly, exactly as a live 
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "question");
 
-    expect(resolveRequest({ kind: "question", requestId: "r-dis", cancelled: true })).toBe(true);
+    expect(resolveRequest({ kind: "question", requestId: "r-dis", cancelled: true })).toBe("settled");
     await settle("pk-dis");
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
@@ -1086,7 +1086,7 @@ test("allowing the restored permission resumes the turn told to run the tool", a
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
 
-    expect(resolveRequest({ kind: "permission", requestId: "r-allow", decision: "once" })).toBe(true);
+    expect(resolveRequest({ kind: "permission", requestId: "r-allow", decision: "once" })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
     expect(prompts[0]).toMatch(/allowed Bash/i);
@@ -1100,7 +1100,7 @@ test("denying the restored permission with feedback resumes as a redirection; a 
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
     const feedback = "Read the file instead.";
-    expect(resolveRequest({ kind: "permission", requestId: "r-redir", decision: "deny", feedback })).toBe(true);
+    expect(resolveRequest({ kind: "permission", requestId: "r-redir", decision: "deny", feedback })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(feedback);
     await settle("pk-redir");
@@ -1111,7 +1111,7 @@ test("denying the restored permission with feedback resumes as a redirection; a 
     const barePrompts: string[] = [];
     await resumeInterruptedTurns(bare.services, fakeWake(barePrompts), BOOT_AT);
     await cardsUp(bare.observed, "permission");
-    expect(resolveRequest({ kind: "permission", requestId: "r-bare", decision: "deny" })).toBe(true);
+    expect(resolveRequest({ kind: "permission", requestId: "r-bare", decision: "deny" })).toBe("settled");
     await settle("pk-bare");
     expect(barePrompts).toEqual([]);
     expect(bare.resuming).toEqual([]);
@@ -1124,7 +1124,7 @@ test("one answer resumes a turn parked on several cards: the others freeze cance
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
 
-    expect(resolveRequest({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe(true);
+    expect(resolveRequest({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/allowed Bash/i);
     // The question the user did not answer froze cancelled: no reply on its resolved frame, and the resumed

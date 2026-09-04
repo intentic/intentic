@@ -14,12 +14,21 @@ import { readFileSync } from "node:fs";
 const TOKEN_PATH = "/run/intentic/agent.token";
 const base = `http://127.0.0.1:${process.env.SANDBOX_PORT ?? "8787"}`;
 
+// The conversation this shell was spawned for (platform/leftovers.ts workloadStamp), sent so the daemon knows
+// WHOSE chat to raise a card in when the capability is behind a named approver (secrets/credential-gate.ts).
+// Every other agent CLI here sends the same header for the same reason; without it a gated code is refused
+// rather than asked about, because there is no conversation to draw the card in.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+
 const USAGE = `otp — mint the current one-time code for a connected capability
 
   otp <name>        print the current TOTP code (e.g. otp npm → 492817)
 
 The code goes to stdout alone, so it composes: npm publish --otp "$(otp npm)".
-Seeds are stored by the sandbox owner on the capability's card; this command can only mint codes, never read them.`;
+Seeds are stored by the sandbox owner on the capability's card; this command can only mint codes, never read them.
+
+If the owner has put that capability behind a named approver, minting a code raises a card in this chat and
+waits for one of them; a refusal says who can release it. Hold the command open rather than timing it out.`;
 
 const die = (message) => {
     process.stderr.write(`${message}\n`);
@@ -44,7 +53,10 @@ const main = async () => {
         return;
     }
     const response = await fetch(`${base}/capabilities/${encodeURIComponent(name)}/otp`, {
-        headers: { "x-intentic-agent": token() },
+        headers: {
+            "x-intentic-agent": token(),
+            ...(CONVERSATION !== "" ? { "x-intentic-conversation": CONVERSATION } : {}),
+        },
     }).catch((error) => die(`otp: cannot reach the daemon at ${base} (${error.message})`));
     const body = await response.json().catch(() => null);
     if (!response.ok) {

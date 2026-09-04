@@ -32,18 +32,29 @@ export const turnFinished = (conversationId: string, prompt: string, outcome: { 
     tag: `turn-${conversationId}`,
 });
 
-const AWAITING: Record<"plan" | "question" | "permission" | "browser_help" | "terminal_help", { title: string; body: string }> = {
+export type AwaitingKind = "plan" | "question" | "permission" | "browser_help" | "terminal_help" | "credential_offer";
+
+const AWAITING: Record<AwaitingKind, { title: string; body: string }> = {
     plan: { title: "Plan ready for review", body: "The agent proposed a plan and is waiting for your approval." },
     question: { title: "The agent has a question", body: "It stopped to ask you something before continuing." },
     permission: { title: "Permission needed", body: "The agent is waiting for you to allow a tool it wants to run." },
     browser_help: { title: "The agent's browser needs you", body: "It hit something only a person can clear, a captcha or a sign-in step." },
     terminal_help: { title: "The agent's terminal needs you", body: "A command it started is waiting at a prompt only you can answer." },
+    /* THE ONE CARD WHOSE AUDIENCE IS NOT WHOEVER STARTED THE WORK. The five above interrupt the person who
+     * set a turn going and is likely still nearby; a gated credential waits for the people the OWNER named,
+     * who may have no idea a turn is running at all. So it is the offer kind that earns a notification while
+     * its siblings (a payment, a priced run, a capability setup) do not: those wait for the owner, who is
+     * already looking at the chat they asked the question from.
+     *
+     * IT GOES TO EVERY REGISTERED DEVICE, not to the approvers alone, and that is a known gap rather than a
+     * choice: a push channel is a browser endpoint or a relay device id and carries no member identity
+     * (push-store.ts), so there is nothing here to address by email. The body therefore says a credential
+     * rather than WHICH one, and names nobody: a notification is delivered to devices this daemon cannot
+     * attribute to a person, so it must not leak who is being asked for what. */
+    credential_offer: { title: "A credential needs a named approver", body: "The agent is waiting for one of the people named on it to release a credential." },
 };
 
-export const turnAwaiting = (
-    conversationId: string,
-    kind: "plan" | "question" | "permission" | "browser_help" | "terminal_help",
-): PushNotification => ({
+export const turnAwaiting = (conversationId: string, kind: AwaitingKind): PushNotification => ({
     ...AWAITING[kind],
     url: conversationUrl(conversationId),
     // One tag across all three kinds: while a turn is parked there is exactly one thing to answer, so a

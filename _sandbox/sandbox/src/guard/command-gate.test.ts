@@ -198,7 +198,7 @@ describe("command gate: verdicts", () => {
         const card = cardOf(gate.events);
         expect(card).toMatchObject({ toolName: "Bash", program: { text: FORCE_PUSH, language: "bash", truncated: false } });
         expect(card.title).toContain(COMMAND_CLASS_LABELS["git.destructive"]);
-        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe(true);
+        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
         expect(await pending).toEqual({});
         // Every parked card owes the stream its resolution frame.
         expect(gate.events.some((event) => event.kind === "resolved")).toBe(true);
@@ -222,7 +222,7 @@ describe("command gate: verdicts", () => {
         const gate = harness({ judge: always("ask") });
         const pending = gate.run(`rm -rf ${WORKSPACE_ROOT}/intentic`);
         await settled();
-        expect(resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" })).toBe(true);
+        expect(resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" })).toBe("settled");
         const out = await pending;
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
         expect(reasonOf(out)).toMatch(/declined/i);
@@ -234,7 +234,7 @@ describe("command gate: verdicts", () => {
         const pending = gate.run("rm -rf build");
         await settled();
         const requestId = cardOf(gate.events).requestId;
-        expect(resolveRequest({ kind: "permission", requestId, decision: "deny", feedback: "Use `pnpm clean` instead." })).toBe(true);
+        expect(resolveRequest({ kind: "permission", requestId, decision: "deny", feedback: "Use `pnpm clean` instead." })).toBe("settled");
         expect(reasonOf(await pending)).toBe("Use `pnpm clean` instead.");
     });
 
@@ -626,7 +626,7 @@ describe("the gate over JS runs", () => {
         // two languages the gate reads.
         expect(card).toMatchObject({ toolName: JS_TOOL_NAME, displayName: "Run code", program: { text: script, language: "javascript" } });
         expect(card.title).toContain("script");
-        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe(true);
+        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
         expect(await pending).toEqual({});
     });
 });

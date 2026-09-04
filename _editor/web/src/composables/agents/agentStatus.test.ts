@@ -19,7 +19,7 @@ import {
 
 // No mocks: agentStatus is a leaf of pure functions, which is the point of it living apart from the fleet
 // store: useAgents pulls useChat pulls the router, and none of that is needed to place an agent.
-const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+const none = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
 // One armed watch, as the roster carries it. `deadlineAt` is relative to NOW at call time, which is what every
 // countdown assertion below reads against, so the fixtures state the distance and never a wall-clock instant.
 const NOW = 1_700_000_000_000;

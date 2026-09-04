@@ -32,7 +32,7 @@ const card = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
     harness: "native",
     branch: "agent/c1",
     updatedAt: 0,
-    attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+    attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
     ...overrides,
 });
 

@@ -82,7 +82,7 @@ const seed = (): void =>
                 provider: `claude`,
                 harness: `native`,
                 updatedAt: 2_000,
-                attention: { plan: false, question: true, permission: false, service: false, capability: false, conflict: false },
+                attention: { plan: false, question: true, permission: false, service: false, capability: false, credential: false, conflict: false },
             },
             {
                 id: `done`,
@@ -91,7 +91,7 @@ const seed = (): void =>
                 provider: `claude`,
                 harness: `native`,
                 updatedAt: 1_000,
-                attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+                attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
             },
         ] satisfies AgentSummary[],
         100,
@@ -170,7 +170,7 @@ const seedFinished = (count: number): void =>
             harness: `native`,
             // Newest first, so `done0` leads the lane and `done${count - 1}` is the one furthest behind the fold.
             updatedAt: 2_000 - at,
-            attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+            attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
         })) satisfies AgentSummary[],
         100,
     );

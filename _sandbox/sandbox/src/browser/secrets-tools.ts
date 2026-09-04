@@ -75,9 +75,18 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                             return "the current page";
                         }
                     })();
+                    /* THE APPROVAL GATE, in front of the keystrokes rather than after them, which is the only
+                     * place it can be: a value typed into a page is gone the instant it lands, so there is no
+                     * "undo" a late refusal could reach. Asked with the HOST as its detail, because that is
+                     * what the person clicking needs to know — which site is about to receive it. */
+                    const released = await deps.secrets.release([name], "browser", host);
+                    if ("refusal" in released) {
+                        return fail(released.refusal);
+                    }
                     // Same human-ish cadence as type_credential, some forms listen for the key events.
                     await page.keyboard.type(entry.value, { delay: 30 });
-                    deps.secrets.used({ name, lane: "browser", detail: host });
+                    const approvedBy = released.approvedBy?.[name];
+                    deps.secrets.used({ name, lane: "browser", detail: host, ...(approvedBy !== undefined ? { approvedBy } : {}) });
                     return ok(`typed ${secretReference(name)} into the focused field on ${host} (value not shown)`);
                 },
             ),

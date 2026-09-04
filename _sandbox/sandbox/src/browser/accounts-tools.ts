@@ -72,6 +72,14 @@ export interface AccountsDeps {
     readonly openAccount: (input: OpenAccountInput) => Promise<string>;
     // Read the newest code/link a site sent to a mailbox (email-codes.ts).
     readonly fetchCode: (mailbox: Mailbox, site: string, now: Date) => ReturnType<typeof fetchEmailCode>;
+    /* BELT TO BRACES ON A GATED ACCOUNT (secrets/credential-gate.ts). An account whose capability is gated is
+     * not mounted at all, so in the ordinary run of things these tools cannot even be reached for one: the
+     * profile is absent and `deps.accounts` never names it. This is the second check anyway, because the two
+     * facts that make the first one sufficient are both mutable — the mount filter runs at turn start, and a
+     * conversation-scoped release granted mid-conversation changes what "mounted" means from the next turn.
+     * A per-call check costs a comparison against a policy that covers nothing in nearly every sandbox, and
+     * it means the guarantee does not depend on a reader believing the absence argument. */
+    readonly release: (account: string, lane: "session" | "otp", detail: string) => Promise<{ readonly ok: true } | { readonly refusal: string }>;
 }
 
 /* Resolved per call rather than captured at server build: the owner can add a password mid-turn (the agent
@@ -202,6 +210,10 @@ export const accountsServer =
                         if (!(await focusedEditable(page))) {
                             return fail("no text field is focused on the page: browser_click the field first, then call this again");
                         }
+                        const released = await deps.release(account, "session", `type the stored ${field} for ${account}`);
+                        if ("refusal" in released) {
+                            return fail(released.refusal);
+                        }
                         // A human-ish keystroke cadence, matching the stealth posture of everything else on
                         // this profile; insertText would skip the key events some login forms listen for.
                         await page.keyboard.type(value, { delay: 30 });
@@ -230,6 +242,12 @@ export const accountsServer =
                             return fail(
                                 `"${account}" already stores a password, type it with type_credential, or pass replace: true if the site refused it`,
                             );
+                        }
+                        // Minting a password onto a gated account's card CHANGES that credential, which is at
+                        // least as much the approver's business as spending it.
+                        const released = await deps.release(account, "session", `store a new generated password on ${account}`);
+                        if ("refusal" in released) {
+                            return fail(released.refusal);
                         }
                         await deps.capabilities.upsert({ ...capability, config: { ...config, password: generatePassword() } } as Capability);
                         return ok(

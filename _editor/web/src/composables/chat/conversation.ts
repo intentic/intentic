@@ -2306,6 +2306,33 @@ export class Conversation {
         }
     }
 
+    /* THE RELEASE, the click that lets a turn use a credential the owner put behind a named person (the
+     * daemon holds the exit parked until this settles it; secrets/credential-gate.ts). How far one yes goes
+     * is the POLICY's answer and not this call's: a per-use gate releases exactly this use and the next one
+     * asks again, a conversation-scoped gate covers the rest of the conversation. The card says which.
+     *
+     * THE ONE CARD WHOSE ANSWER CAN BE REFUSED. Every other decide here settles whatever it reaches, because
+     * the daemon is single-tenant and a card is the owner's to decide; this one is checked server-side
+     * against the verified identity on the request, and a click from anybody the card does not name comes
+     * back 403 with the card still standing. The template disables the buttons for a non-approver so the
+     * refusal is not how they find out, but the server is what enforces it — the disabled attribute is a
+     * courtesy, not the rule. */
+    async decideCredentialOffer(message: ChatMessage, approve: boolean): Promise<void> {
+        const offer = message.credentialOffer;
+        if (offer?.status !== `pending`) {
+            return;
+        }
+        const landed = await this.decide(
+            message,
+            { kind: `credential_offer`, requestId: offer.requestId, approve },
+            `Could not record your decision: the card may have expired, or it may not be yours to answer.`,
+            { credentialOffer: offer },
+        );
+        if (landed) {
+            void this.drainQueue();
+        }
+    }
+
     /* The setup decision, the click that decides a missing-capability ask (the daemon holds the agent's
      * request parked until this settles it; capabilities/capability-offer.ts). Connect moves the card to
      * `connecting`, the owner is now setting it up, and the agent stays parked watching for the connection;

@@ -22,7 +22,7 @@ vi.mock("../queryPersistence", () => ({ queryClient: { setQueryData: vi.fn() } }
 const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
 type BoxFleet = Parameters<typeof boxAttention>[0];
 
-const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+const none = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
 const agent = (over: Partial<AgentSummary>): AgentSummary =>
     ({ id: `a1`, status: `idle`, provider: `claude`, harness: `claude-code`, updatedAt: 1, attention: none, ...over }) as AgentSummary;
 

@@ -4,6 +4,7 @@ import { AgentSummarySchema, LandConflictSchema } from "./schemas/agents.js";
 import { RateLimitInfoSchema } from "./schemas/claude-gate.js";
 import { FastModeStateSchema } from "./schemas/fast-mode.js";
 import { AccountUsageSchema, AgentReplySchema, ProviderRefusalSchema, UsageWindowSchema } from "./schemas/plan-limits.js";
+import { CredentialGateKindSchema, CredentialGateScopeSchema, CredentialLaneSchema } from "./schemas/secrets.js";
 import { ShareDetailSchema } from "./schemas/share.js";
 import { MemberRoleSchema } from "./schemas/shared.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "./schemas/terminal.js";
@@ -209,6 +210,39 @@ export const PaymentOfferSchema = z.object({
 });
 export type PaymentOffer = z.infer<typeof PaymentOfferSchema>;
 
+/* ONE GATED CREDENTIAL, ASKED FOR, the card the daemon raises when the agent reaches for a secret or a
+ * connected account the owner put behind a named person (secrets/credential-gate.ts).
+ *
+ * Every field but `why` is the daemon's own: the subject and its approvers come off the gate policy the owner
+ * wrote (which lives off the workspace, where the agent cannot edit it), the lane and detail come from the
+ * exit that was about to spend the credential, and the scope is the policy's, not the asker's. The model
+ * contributes one line of rationale and nothing else, which is what makes the card impossible to
+ * misrepresent: a prompt-injected turn can ask for the production password and cannot make the card say it is
+ * asking for the staging one.
+ *
+ * THE APPROVERS ARE ON THE CARD because the card is not addressed to "the owner" the way every other offer
+ * here is — it is addressed to a LIST, the server checks the clicker's verified identity against it, and a
+ * click from anybody else is refused with the card left standing. So the names have to be visible: a card
+ * whose buttons do nothing for the person looking at it must say who it is waiting for. */
+export const CredentialOfferSchema = z.object({
+    // The gate's subject: a secret's reference name (`DATABASE_URL`) or a capability id (`reddit`).
+    subject: z.string().describe("Which credential is being asked for."),
+    kind: CredentialGateKindSchema,
+    lane: CredentialLaneSchema,
+    // Where it would go, in the reader's terms: the head of the agent's command line, the page's host, or the
+    // capability's own name. Reference-form by construction on the secret lanes (resolution is what fires the
+    // ask), so this can be shown without leaking anything.
+    detail: z
+        .string()
+        .optional()
+        .describe("Where it would go: the start of the command, the site, or what is being mounted. Never a value: the command still reads as a reference at this point."),
+    // The agent's one-line case, the only prose on the card that is the model's.
+    why: z.string().optional().describe("The agent's case for using it, and the only words on this card that are the agent's."),
+    approvers: z.array(z.string()).describe("Who may release it. A click from anyone else is refused and leaves the card standing."),
+    scope: CredentialGateScopeSchema,
+});
+export type CredentialOffer = z.infer<typeof CredentialOfferSchema>;
+
 // One provider-advertised slash command, an ACP agent's available_commands entry, or a Claude Code session's
 // supportedCommands() (its built-ins plus the workspace's own .claude/commands and any plugin/skill commands).
 // `hint` is the argument placeholder the popover shows after the name.
@@ -360,6 +394,7 @@ const terminalHelpCard = {
 const serviceOfferCard = { requestId: z.string(), offer: ServiceOfferSchema };
 const capabilityOfferCard = { requestId: z.string(), offer: CapabilityOfferSchema };
 const paymentOfferCard = { requestId: z.string(), offer: PaymentOfferSchema };
+const credentialOfferCard = { requestId: z.string(), offer: CredentialOfferSchema };
 
 /* HOW AN OFFER'S ACCEPTED HALF ENDED, the follow-up that lands on the card after the click. Each is the body of
  * the frame that reports it (`service_receipt`, `capability_outcome`, `payment_receipt`) and the field the
@@ -382,6 +417,15 @@ export const PaymentReceiptSchema = z.object({
     network: z.string().optional(),
 });
 export type PaymentReceipt = z.infer<typeof PaymentReceiptSchema>;
+/* WHO RELEASED A GATED CREDENTIAL, or that a person refused it. `released` carries the approver's own address,
+ * read off the VERIFIED identity on the reply rather than off anything the click claimed, which is what makes
+ * the row an audit line rather than a rendering. There is no receipt for a card nobody answered: `resolved`
+ * already says so, and inventing "refused" for a deadline would put words in a person's mouth. */
+export const CredentialReceiptSchema = z.object({
+    outcome: z.enum(["released", "refused"]),
+    approvedBy: z.string().optional(),
+});
+export type CredentialReceipt = z.infer<typeof CredentialReceiptSchema>;
 
 /* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
  * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the
@@ -468,6 +512,12 @@ export const TranscriptPaymentOfferSchema = z.object({
     receipt: PaymentReceiptSchema.optional().describe("How the approved payment ended (the payment_receipt frame)."),
 });
 export type TranscriptPaymentOffer = z.infer<typeof TranscriptPaymentOfferSchema>;
+export const TranscriptCredentialOfferSchema = z.object({
+    ...credentialOfferCard,
+    status: OfferStatusSchema.describe("Where the decision stands."),
+    receipt: CredentialReceiptSchema.optional().describe("Who released it, or that somebody refused (the credential_receipt frame)."),
+});
+export type TranscriptCredentialOffer = z.infer<typeof TranscriptCredentialOfferSchema>;
 
 // ---- transcript rows ----
 // What a conversation is made of, on every surface: the rows the daemon folds a turn's frames into as they
@@ -664,13 +714,26 @@ export const TranscriptRowSchema = z.object({
     serviceOffer: TranscriptServiceOfferSchema.optional().describe("The priced service run this row offered, the decision, and the receipt."),
     capabilityOffer: TranscriptCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
     paymentOffer: TranscriptPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
+    credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
+        "The gated credential this row asked to use, who may release it, and who did.",
+    ),
 });
 export type TranscriptRow = z.infer<typeof TranscriptRowSchema>;
 
 /* THE CARD FIELDS A ROW CAN CARRY, as one list, for every reader that has to ask "does this row hold a card":
  * the fold that counts a card-only bubble as a row, the chat's row count (a branch is cut by it), and the
  * surfaces that draw whichever card a bubble is waiting on. */
-export const CARD_FIELDS = ["plan", "question", "permission", "browserHelp", "terminalHelp", "serviceOffer", "capabilityOffer", "paymentOffer"] as const;
+export const CARD_FIELDS = [
+    "plan",
+    "question",
+    "permission",
+    "browserHelp",
+    "terminalHelp",
+    "serviceOffer",
+    "capabilityOffer",
+    "paymentOffer",
+    "credentialOffer",
+] as const;
 export type CardField = (typeof CARD_FIELDS)[number];
 export type TranscriptCards = Pick<TranscriptRow, CardField>;
 // Whether a row holds a card at all, answered or not.
@@ -1164,6 +1227,20 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * case the signed authorization expires unused and NOTHING left the wallet. A skip needs no receipt,
      * nothing moved, and `resolved` already says so. */
     PaymentReceiptSchema.extend({ kind: z.literal("payment_receipt"), requestId: z.string() }),
+    /* A GATED CREDENTIAL awaiting a NAMED person's click, the one card on this stream that is not addressed to
+     * the owner: the daemon holds an exit (a `{{secret:…}}` about to resolve, a browser field about to be
+     * typed into, a connected account about to be mounted) parked until one of the gate's approvers releases
+     * it (secrets/credential-gate.ts). Raised OUTSIDE the turn generator like the offers above — the exits run
+     * inside a PreToolUse hook and inside the daemon's own `secrets request` route — so it is not journalled
+     * for restore: its waiter is a held hook or a held connection, both of which die with the daemon, and the
+     * next use after a restart simply asks again. Settles through the same `POST /agent/reply`, which is where
+     * the clicker's identity is checked against `offer.approvers`. */
+    z.object({ kind: z.literal("credential_offer"), ...credentialOfferCard }),
+    /* WHO RELEASED IT, pushed the moment a person decided, so the settled card names them rather than saying
+     * only that something was approved: `released` with the approver's verified address, or `refused` when a
+     * person said no. Nothing is pushed for a card nobody answered — `resolved` already says that, and a
+     * deadline is not a refusal by anybody. */
+    CredentialReceiptSchema.extend({ kind: z.literal("credential_receipt"), requestId: z.string() }),
     // The card above named by `requestId` is released, the user answered (or dismissed it, or the turn was
     // stopped out from under it), so the turn is executing again. Emitted by whoever parked, the moment its
     // waiter settles, because the park's END is otherwise invisible on this stream: nothing else here says

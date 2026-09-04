@@ -2097,7 +2097,7 @@ export const createAgentRoutes = (services: Services) => {
          *
          * Marked before it is resolved, and the whole handler down to the abort is synchronous, so the tool's
          * own continuation cannot run in between and re-publish the agent as running. */
-        reply: i.reply.handler(async ({ input }) => {
+        reply: i.reply.handler(async ({ input, context }) => {
             /* WHAT THE DECISION SAYS IN THE TRANSCRIPT, written by the daemon into the run's own rows, so every
              * window and the record read it the same: the dismissal's line goes down BEFORE the reply ends the
              * turn (the stop that follows writes its own), a plan's verdict and the feedback that came with it
@@ -2107,7 +2107,19 @@ export const createAgentRoutes = (services: Services) => {
             if (input.kind === "question" && input.cancelled === true) {
                 run?.note({ role: "notice", text: "Question dismissed." });
             }
-            if (await applyReply(services, input)) {
+            /* WHO IS CLICKING, carried into the settlement rather than checked here. `context.identity` is the
+             * identity the bearer middleware VERIFIED for this request (context.ts), so it is the one claim
+             * about who is answering that no client wrote. Every card but one is indifferent to it; a gated
+             * credential's release is addressed to a named list, and the card itself holds the list, so the
+             * check belongs on the card (agent-requests.ts mayAnswer) and this handler only relays the answer
+             * and the refusal it may come back with. */
+            const applied = await applyReply(services, input, context.identity);
+            if (typeof applied === "object") {
+                // The card is still parked, waiting for somebody who can answer it. 403 rather than 404: the
+                // request was well-formed and the card exists, this person simply is not on its list.
+                throw new ORPCError("FORBIDDEN", { message: applied.refused });
+            }
+            if (applied === "settled") {
                 if (input.kind === "plan") {
                     run?.note({ role: "notice", text: input.approve ? "Plan approved." : "Kept planning." });
                     // The rejection's feedback is the user's turn: kept visible, otherwise the typed text (and

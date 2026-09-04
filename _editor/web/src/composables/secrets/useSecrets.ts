@@ -1,11 +1,19 @@
-import { type SecretInventoryEntry, SecretInventorySchema, SecretKeysSchema, SecretRevealSchema } from "@intentic/sandbox-contract";
+import {
+    type CredentialGate,
+    CredentialGatesSchema,
+    type SecretInventoryEntry,
+    SecretInventorySchema,
+    SecretKeysSchema,
+    SecretRevealSchema,
+} from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../devFill";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { SECRETS, SECRETS_INVENTORY } from "../queryKeys";
+import { SANDBOX_MEMBERS, SECRET_GATES, SECRETS, SECRETS_INVENTORY } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
+import { useSandboxSession } from "../sandbox/sandboxSession";
 
 /* User-supplied env-var secrets (Cloudflare token, GitHub PAT, another-host SSH key), written straight to the
  * sandbox daemon's /secrets routes (never through the platform). Split by consumer so a surface only observes
@@ -81,6 +89,64 @@ export function useMissingSecretCount() {
     return {
         missingRequiredCount: computed(() => missingRequired(query.data.value ?? [])),
         countPending: computed(() => query.isPending.value),
+    };
+}
+
+/* WHO MAY RELEASE WHAT, and who could be named: the Secrets tab's approval editor reads both, so they are one
+ * hook. The POLICY is the daemon's `/secrets/gates`; the ROSTER is `/members`, which answers the granted
+ * members and the bound owner (the owner rides along precisely so they can name themselves, which is the
+ * obvious first gate somebody writes and was the one that could not be expressed).
+ *
+ * Its own hook rather than options on the inventory above, on this file's own rule: a surface observes only
+ * the server state it reads, and the ambient chrome that watches the missing-secret count must not start
+ * polling an approval policy it never renders.
+ *
+ * ONLY THE OWNER MAY WRITE, enforced in the daemon's route (a maintainer is exactly who a gate is sometimes
+ * written about, so the /secrets maintainer floor is not enough). `isOwner` is what the UI reads to render the
+ * editor read-only instead of offering controls that will 403; it is a courtesy, and the route is the rule. */
+export function useCredentialGates() {
+    const queryClient = useQueryClient();
+    const gatesKey = SECRET_GATES.of();
+    const { query: gatesQuery } = useSandboxQuery({
+        queryKey: gatesKey,
+        // A daemon whose policy has never been written answers an empty list; anything else (an unreadable
+        // policy) is a real error, and the tab surfaces it rather than drawing a sandbox with no gates.
+        queryFn: async (): Promise<CredentialGate[]> => CredentialGatesSchema.parse(await sandboxJson(`/secrets/gates`)).gates,
+    });
+    const { query: rosterQuery } = useSandboxQuery({
+        queryKey: SANDBOX_MEMBERS.of(),
+        queryFn: async (): Promise<{ members: { email: string }[]; owner?: string }> =>
+            (await sandboxJson(`/members`)) as { members: { email: string }[]; owner?: string },
+    });
+    const { presentedEmail } = useSandboxSession();
+    const invalidate = (): void => void queryClient.invalidateQueries({ queryKey: gatesKey });
+    const setGate = useMutation({
+        mutationFn: (gate: CredentialGate) => sandboxJson(`/secrets/gates/${encodeURIComponent(gate.subject)}`, jsonBody(`PUT`, gate)),
+        onSuccess: invalidate,
+    });
+    const removeGate = useMutation({
+        mutationFn: (subject: string) => sandboxJson(`/secrets/gates/${encodeURIComponent(subject)}`, { method: `DELETE` }),
+        onSuccess: invalidate,
+    });
+    const owner = computed<string | undefined>(() => rosterQuery.data.value?.owner);
+    return {
+        gates: computed<CredentialGate[]>(() => gatesQuery.data.value ?? []),
+        gateFor: (subject: string): CredentialGate | undefined => (gatesQuery.data.value ?? []).find((gate) => gate.subject === subject),
+        /* Everybody who could be named, owner first: the owner is the answer people reach for most and the
+         * roster below them is alphabetical wherever the daemon put it. Deduplicated because an owner who is
+         * also on the members file (a re-grant, an older sandbox) must not appear twice in a picker. */
+        approverChoices: computed<string[]>(() => {
+            const roster = rosterQuery.data.value;
+            return [...new Set([...(roster?.owner === undefined ? [] : [roster.owner]), ...(roster?.members ?? []).map((member) => member.email)])];
+        }),
+        // Compared lowercased for the roster's own reason: every write to it normalizes, while a Google claim
+        // may preserve case.
+        isOwner: computed<boolean>(() => {
+            const me = presentedEmail.value?.toLowerCase();
+            return me !== undefined && owner.value?.toLowerCase() === me;
+        }),
+        setGate,
+        removeGate,
     };
 }
 

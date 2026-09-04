@@ -419,7 +419,7 @@ export const windowFinished = <T>(
 };
 
 // What a card that is not the daemon's says about itself: no attention, nothing owed.
-const NO_ATTENTION: FleetAgent["attention"] = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+const NO_ATTENTION: FleetAgent["attention"] = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
 
 /* ONE CHAT THAT WAS CLOSED WITH ITS MESSAGE STILL IN IT (chat/closedDrafts), as a card.
  *

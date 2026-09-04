@@ -170,8 +170,16 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         runTurn: os.runTurn.handler(({ input }) => runTurn(input)),
         /* The user's answer, arriving from the parent (where the browser is) for a card THIS daemon raised.
          * Applied by the same function a local answer takes, dismissal-ends-the-turn included, so a question
-         * closes identically wherever the turn happens to be running. */
-        reply: os.reply.handler(async ({ input }) => ({ applied: await applyReply(services, input) })),
+         * closes identically wherever the turn happens to be running.
+         *
+         * A GATED CREDENTIAL'S RELEASE CANNOT COME THIS WAY, and that is a known gap rather than an oversight
+         * (README's honesty list). The relay carries the ANSWER and not the answerer: the identity was
+         * verified by the parent daemon against the parent's own roster, and this hop presents the runner
+         * enrollment's token, so there is nothing here this side could check a named approver against.
+         * `mayAnswer` therefore sees no caller and refuses, which is the fail-closed direction: a release card
+         * raised by a remote turn goes unanswered rather than being released by an unverified click. Closing
+         * it properly means carrying a signed statement of the verified identity across the hop. */
+        reply: os.reply.handler(async ({ input }) => ({ applied: (await applyReply(services, input)) === "settled" })),
         // Composed HERE on purpose: the attachment note names absolute paths, and the only workspace those
         // paths mean anything in is this one (turn-interactions.ts).
         steer: os.steer.handler(({ input }) => {
