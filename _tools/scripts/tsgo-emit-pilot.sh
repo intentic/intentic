@@ -23,8 +23,12 @@ WORK="$(mktemp -d)"
 DIFF_OUT="/tmp/tsgo-emit-pilot.diff"
 trap 'rm -rf "$WORK"' EXIT
 
+# `$PKG/dist` is EMPTIED rather than removed, here and at the restore below: it is a mirror root, so every live
+# agent turn has the main checkout's copy of it mounted as an overlay lowerdir, and replacing its inode leaves
+# their merged view of it permanently empty (@intentic/constants/mirror-roots). This script runs in the checkout
+# by hand, which is exactly when other conversations are open.
 emit() { # $1 = tsc|tsgo -> emit into PKG/dist, snapshot to $WORK/$1
-  rm -rf "$PKG/dist" "$PKG/.cache"
+  node "$ROOT/_tools/scripts/clean-outputs.mjs" "$PKG/dist" "$PKG/.cache"
   echo ">> $1 -p $TSCONFIG"
   pnpm exec "$1" -p "$TSCONFIG" || return 1
   cp -r "$PKG/dist" "$WORK/$1"
@@ -59,7 +63,7 @@ fi
 
 echo
 echo "== restoring canonical tsc build for $PKG =="
-rm -rf "$PKG/dist" "$PKG/.cache"
+node "$ROOT/_tools/scripts/clean-outputs.mjs" "$PKG/dist" "$PKG/.cache"
 pnpm exec tsc -p "$TSCONFIG" >/dev/null
 echo "done — dist/ restored via tsc."
 exit $status

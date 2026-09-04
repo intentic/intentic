@@ -19,7 +19,7 @@
         }
     },
     "scripts": {
-        "build": "rm -rf ./generated ./dist ./.cache && DATABASE_URL=postgresql://placeholder prisma generate --no-hints && tsgo",
+        "build": "node ../../_tools/scripts/clean-outputs.mjs ./generated ./dist ./.cache && DATABASE_URL=postgresql://placeholder prisma generate --no-hints && tsgo",
         "generate": "DATABASE_URL=postgresql://placeholder prisma generate --no-hints",
         "migrate:dev": "prisma migrate dev",
         "migrate:deploy": "prisma migrate deploy",

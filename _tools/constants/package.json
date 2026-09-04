@@ -19,7 +19,9 @@
         "src/contract-shrink.mjs",
         "src/contract-shrink.d.mts",
         "src/control-bytes.mjs",
-        "src/control-bytes.d.mts"
+        "src/control-bytes.d.mts",
+        "src/mirror-roots.mjs",
+        "src/mirror-roots.d.mts"
     ],
     "exports": {
         ".": {
@@ -48,6 +50,10 @@
         "./control-bytes": {
             "types": "./src/control-bytes.d.mts",
             "default": "./src/control-bytes.mjs"
+        },
+        "./mirror-roots": {
+            "types": "./src/mirror-roots.d.mts",
+            "default": "./src/mirror-roots.mjs"
         }
     },
     "scripts": {

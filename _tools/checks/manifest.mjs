@@ -26,6 +26,7 @@ export const CHECKS = [
     { id: "publish-set", file: "publish-set.mjs", needs: "checkout", about: "PUB is dependency-closed and topologically ordered" },
     { id: "engines", file: "engines-blessed.mjs", needs: "checkout", about: "engines.json blesses only versions this repo pins" },
     { id: "build-cache", file: "build-cache-mounts.mjs", needs: "checkout", about: "sandbox image fragments keep the build-cache contract" },
+    { id: "mirror-roots", file: "mirror-roots.mjs", needs: "checkout", about: "build output an agent turn overlays is emptied, never removed" },
     { id: "paths", file: "path-literals.mjs", needs: "checkout", about: "no hand-spelled roots and no counted ones (ratcheted)" },
     { id: "tailwind", file: "tailwind-bypass.mjs", needs: "checkout", about: "no arbitrary colours or pixel sizes in class attributes" },
     { id: "display", file: "display-descenders.mjs", needs: "checkout", about: "clipped display type keeps its descender clearance" },

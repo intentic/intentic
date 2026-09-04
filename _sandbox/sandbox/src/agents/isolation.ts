@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -70,7 +71,8 @@ const SHARED_STATE = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, "")).t
  * because a bind ignores `ro` in the same breath, the flag only takes on the remount. */
 const SHELF = "refs";
 
-/* WHAT A CHECKOUT CANNOT CARRY, and so has to come from the main tree.
+/* WHAT A CHECKOUT CANNOT CARRY, and so has to come from the main tree. The names are MIRRORED_DIRS, imported
+ * above from @intentic/constants/mirror-roots.
  *
  * A worktree is TRACKED files only, and the two things a package's dependents resolve THROUGH are both
  * untracked: its installed tree (`node_modules`) and its build output (`dist`, `generated`, the entry every
@@ -83,8 +85,17 @@ const SHELF = "refs";
  * record of what its dist was built FROM; handed to a turn whose sources have since moved, an incremental
  * build reads it, agrees with the mirrored dist and emits nothing, leaving the agent testing the main tree's
  * code under its own file names. A turn with no tsbuildinfo simply builds from scratch, which is slower and
- * always right. */
-const MIRRORED_DIRS = new Set(["node_modules", "dist", "generated"]);
+ * always right.
+ *
+ * THE SET IS SHARED RATHER THAN SPELLED HERE because it is half of an invariant whose OTHER half is enforced
+ * on the main tree: each of these directories is the LOWERDIR of a live overlay in every isolated turn, and an
+ * overlay resolves its lowerdir exactly once, at mount time. A command on the main checkout that replaces one
+ * of these directories rather than emptying it (`rm -rf dist && mkdir dist`) leaves every live turn's merged
+ * view of it reading as completely empty, upper layer and all, with no repair available from inside the
+ * namespace. `_platform/prisma`'s build script did precisely that to `generated`, and the turn-ending check of
+ * every open conversation went red on a TS6307 for a file that was sitting right there.
+ * `_tools/checks/mirror-roots.mjs` refuses the shape now, and it reads this same set: a name added here that
+ * the gate has never heard of is a directory nothing protects. */
 
 // Same bound as the symlink mirroring it replaces (a monorepo's `_apps/<pkg>`, `_libs/<pkg>`).
 const MAX_LINK_DEPTH = 3;

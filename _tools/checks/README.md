@@ -8,8 +8,9 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 - Run them side by side, each in its own process, from a clone that has never installed (`run.mjs`).
 - Hold the repository's structural promises: the lockfile records the manifests, every test file is in a
   type-check program and under a budget, the workflows keep the fork boundary and the permission ceilings, a
-  shrunk wire contract arrives declared, the daemon's module seams stay where they are, the UI draws from its
-  design system, and no tracked text file carries a control byte.
+  shrunk wire contract arrives declared, the daemon's module seams stay where they are, no build script removes
+  a directory agent turns have mounted over, the UI draws from its design system, and no tracked text file
+  carries a control byte.
 
 ## Key files
 
@@ -32,8 +33,9 @@ Who reads the list: CI's `preflight` job (before any install), the pre-push hook
 Every check works on a bare checkout, which decides how they are written: a relative import of
 `@intentic/constants`' hand-written JavaScript rather than a bare specifier, a line scanner over
 `pnpm-lock.yaml` and the workflow files rather than a YAML parser, and a `vue/compiler-sfc` that is attempted and
-vouched for less when it is absent. The three judgments the daemon also makes (the assertion measure, the
-wire-contract shrink, the control-byte table) live in `@intentic/constants` for the same reason, one copy each.
+vouched for less when it is absent. The four judgments the daemon also makes (the assertion measure, the
+wire-contract shrink, the control-byte table, the overlay mirror roots) live in `@intentic/constants` for the
+same reason, one copy each.
 
 A check that cannot be met today is ratcheted, never switched off: a baseline it may shrink and not grow
 (`baselines/path-literals.json`, and the `UNAUDITED`, `NARROW_TAKERS` and `MUTUAL_PAIRS` lists inside the

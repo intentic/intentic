@@ -1,7 +1,11 @@
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
+import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
+import { repoRoot } from "@intentic/constants/node";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { afterEach, expect, test } from "vitest";
@@ -254,6 +258,28 @@ test("a dir the checkout fills is never mirrored: a tracked build output stays t
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: true })).toEqual(["_libs/ui/node_modules"]);
 });
 
+/* THE TWO HALVES OF THE MIRROR-ROOT INVARIANT, PINNED TO EACH OTHER. Every name in MIRRORED_DIRS becomes an
+ * overlay whose lowerdir is the main checkout's directory, and an overlay resolves that lowerdir once: a
+ * main-tree command that REPLACES one of these directories rather than emptying it leaves every live turn's
+ * merged view of it reading empty (see @intentic/constants/mirror-roots, and the TS6307 on prisma's freshly
+ * generated `client.ts` that it cost). `_tools/checks/mirror-roots.mjs` refuses that shape for every name in
+ * the same set, so a name discovered here that the gate does not read would be a directory nothing protects.
+ * Derived from the set rather than transcribed, which is what makes adding a fourth name mean adding coverage. */
+test("every name the shared set carries is discovered as a mirror, and nothing else is", async () => {
+    const root = await mkdtemp(join(tmpdir(), "isolation-"));
+    tempDirs.push(root);
+    for (const dir of MIRRORED_DIRS) {
+        await mkdir(join(root, "_libs", "ui", dir), { recursive: true });
+    }
+    // A neighbour that is untracked build output too, and deliberately NOT mirrored: main's tsbuildinfo would
+    // tell the turn's incremental build that the mirrored dist already covers sources the turn has changed.
+    await mkdir(join(root, "_libs", "ui", ".cache"), { recursive: true });
+
+    expect(await mirroredDirs(root, await checkout(), { intoNestedRepos: true })).toEqual(
+        [...MIRRORED_DIRS].toSorted().map((dir) => `_libs/ui/${dir}`),
+    );
+});
+
 test("a nested repo's dirs belong to its own worktree, not the parent's", async () => {
     const root = await mkdtemp(join(tmpdir(), "isolation-"));
     tempDirs.push(root);
@@ -267,4 +293,106 @@ test("a nested repo's dirs belong to its own worktree, not the parent's", async 
     // The symlink mirror runs per repo, and planting `intent/node_modules` from here would put the nested
     // repo's link inside the PARENT's checkout.
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: false })).toEqual(["node_modules"]);
+});
+
+/* AGAINST A REAL OVERLAY, because the rule the rest of this repository is now shaped around is a claim about
+ * the kernel and nothing else can settle it.
+ *
+ * An overlay resolves its lowerdir ONCE, at mount time. Every mirror above is mounted with the MAIN checkout's
+ * directory as that lower, and the main tree keeps being built on while turns are open, so what the main tree
+ * is allowed to do to those directories is the whole safety argument. The measured answer, below, is that
+ * emptying one is free and REPLACING one is fatal: after `rm -rf dist && mkdir dist` on the lower, the merged
+ * directory reads as completely empty — not even the file the turn itself wrote into the upper layer, which is
+ * still `stat`-able by name — and no remount inside the namespace brings it back.
+ *
+ * That is what `_platform/prisma`'s `rm -rf ./generated` did to every open conversation at once: a `client.ts`
+ * that `prisma generate` had just written, sitting in a directory `readdir` swore was empty, so the tsconfig's
+ * `./generated/**` include matched nothing and the declarations emit failed TS6307 on the turn-ending check of
+ * every agent, whatever it had changed. `_tools/scripts/clean-outputs.mjs` is the remedy and is driven here
+ * rather than imitated: this test fails if that script ever starts replacing what it is supposed to empty.
+ *
+ * THE MODE: a real mount namespace with a real overlayfs, which needs CAP_SYS_ADMIN, and an upperdir on a
+ * filesystem that is not itself an overlay — a container's own root usually is one, which is why this uses the
+ * history volume exactly as isolationAvailable's probe does. Skipped where either is missing (CI, a dev host),
+ * and the shape it protects is guarded there by _tools/checks/mirror-roots.mjs instead. */
+/* The measurement as one shell program, because the mount only exists inside the namespace it is made in: put
+ * the overlay up, then run whatever the caller wants to say about it. */
+const overlayShell = (dir: string, trailer: string): string =>
+    [
+        "set -e",
+        `mount -t overlay probe -o ${shellQuote(`lowerdir=${dir}/lower/dist,upperdir=${dir}/upper,workdir=${dir}/work`)} ${shellQuote(`${dir}/merged`)}`,
+        trailer,
+    ].join("\n");
+
+const overlayScratch = (): string | undefined => {
+    if (!existsSync(HISTORY_ROOT)) {
+        return undefined;
+    }
+    const dir = mkdtempSync(join(HISTORY_ROOT, ".overlay-probe-"));
+    for (const part of ["lower/dist", "upper", "work", "merged"]) {
+        mkdirSync(join(dir, part), { recursive: true });
+    }
+    // The mount IS the probe: seccomp can refuse the syscall with the capability present, and overlayfs is its
+    // own kernel gate. Made and torn down in one namespace, so nothing is left holding the directory busy.
+    const probe = spawnSync("unshare", ["--mount", "--propagation", "private", "sh", "-c", overlayShell(dir, "true")], { timeout: 10_000 });
+    if (probe.status === 0) {
+        return dir;
+    }
+    // Nothing else will ever hear about this directory, so it is reclaimed here rather than by the afterEach,
+    // which only sees a scratch a running test took ownership of.
+    rmSync(dir, { recursive: true, force: true });
+    return undefined;
+};
+
+const OVERLAY_SCRATCH = overlayScratch();
+const listing = (output: string, label: string): string[] =>
+    (output.split("\n").find((line) => line.startsWith(`${label}:`)) ?? "")
+        .slice(label.length + 1)
+        .split(" ")
+        .filter(Boolean)
+        .toSorted();
+
+test.skipIf(OVERLAY_SCRATCH === undefined)("emptying a mirror root keeps the turn's view of it; replacing it empties the turn's view", () => {
+    const dir = OVERLAY_SCRATCH as string;
+    tempDirs.push(dir);
+    const lower = `${dir}/lower/dist`;
+    const merged = `${dir}/merged`;
+    const clean = join(repoRoot(import.meta.url), "_tools/scripts/clean-outputs.mjs");
+    const result = spawnSync(
+        "unshare",
+        [
+            "--mount",
+            "--propagation",
+            "private",
+            "sh",
+            "-c",
+            overlayShell(
+                dir,
+                [
+                    // The turn's own emit, landing in this conversation's upper layer.
+                    `printf turn > ${shellQuote(`${merged}/turn.js`)}`,
+                    // The main tree clears and rewrites its dist underneath, the sanctioned way, through the
+                    // very script every build script in this repository now calls.
+                    `node ${shellQuote(clean)} ${shellQuote(lower)} > /dev/null`,
+                    `printf main > ${shellQuote(`${lower}/main.js`)}`,
+                    `echo "emptied: $(ls ${shellQuote(merged)} | tr '\\n' ' ')"`,
+                    // And the way that used to be written, which gives the path a new inode.
+                    `rm -rf ${shellQuote(lower)} && mkdir ${shellQuote(lower)} && printf main > ${shellQuote(`${lower}/main.js`)}`,
+                    `echo "replaced: $(ls ${shellQuote(merged)} | tr '\\n' ' ')"`,
+                    // The upper layer is untouched by either: the file is there, only readdir stopped saying so.
+                    `echo "stat: $(cat ${shellQuote(`${merged}/turn.js`)} 2>&1)"`,
+                ].join("\n"),
+            ),
+        ],
+        { encoding: "utf8", timeout: 30_000 },
+    );
+    expect(result.stderr).toBe("");
+    // Emptied in place: the lower's new output and the turn's own file, both there, which is what makes
+    // mirroring a directory the main tree keeps rebuilding workable at all.
+    expect(listing(result.stdout, "emptied")).toEqual(["main.js", "turn.js"]);
+    // Replaced: nothing at all, the turn's own upper-layer file included. This is the outage.
+    expect(listing(result.stdout, "replaced")).toEqual([]);
+    // And it is a readdir failure, not a data loss: the same file still opens by name, which is exactly why
+    // TS6307 was the symptom rather than a missing file.
+    expect(result.stdout).toContain("stat: turn");
 });

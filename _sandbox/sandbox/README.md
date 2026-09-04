@@ -868,6 +868,18 @@ conversation's worktree instead of a path that still reaches the shared checkout
   ACP, Pi: `AgentCapabilities.isolation` `"cwd"`), so nothing in those checkouts resolved an import and no
   daemon-side command in them could find a workspace binary. Those turns get the symlink instead, and
   `linkMirrors` converges the form back on the next namespaced turn in the same conversation.
+- **Nothing on the main tree may replace a directory a turn has mounted over — it is emptied instead**
+  (`@intentic/constants/mirror-roots`, enforced by `_tools/checks/mirror-roots.mjs`). Each mirror is an overlay
+  whose lowerdir is the MAIN checkout's copy, and an overlay resolves that lowerdir once, at mount time.
+  Rewriting the files inside it is free and the merged view follows; giving the directory a new inode is not.
+  `_platform/prisma`'s build script did exactly that (`rm -rf ./generated` before `prisma generate`), so a
+  `turbo run build` on the main tree left every live turn holding a `generated` directory that `readdir`
+  reported as EMPTY — its own upper layer included, while `stat` on the files still worked — and the
+  declarations emit failed `TS6307` on `generated/client.ts` at the Stop of every open conversation, whatever
+  it had changed. Only the mount ROOT is unrecoverable: a turn's own write to any directory below it copies
+  that directory up and the stale lower stops mattering, which is why `prisma generate` replacing
+  `generated/models` on every run is harmless. Measured both ways in
+  `src/agents/isolation.integration.test.ts` against a real overlay.
 - **The branch is rebased again at the last moment before it lands, not only before the turn starts**
   (`src/agents/sync.ts` `syncBeforeLand`, called from the auto-land in `src/agent/agent.routes.ts` and the
   manual land route). Turn-start is the right moment for the MODEL, which then reads today's code, and the

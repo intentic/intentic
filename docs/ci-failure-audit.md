@@ -50,6 +50,21 @@ was wrong); and `queue-run.integration.test.ts`, the only test file still failin
 durations for a process to start — a 5s rendezvous bound and a 400ms sleep before a slot was assumed held — so
 both are now rendezvous with a 30s bound, one against a marker the held command itself writes.
 
+**And one red that belonged to no run at all (2026-09-04).** Every agent turn's ending check was failing
+`_tools/scripts/emit-declarations.mjs` with `TS6307: File '.../_platform/prisma/generated/client.ts' is not
+listed within the file list of project`, on a file `prisma generate` had written seconds earlier and `stat`
+could still open. The tsconfig was right and the codegen was right; the DIRECTORY was unreadable. Each turn
+mounts `node_modules`, `dist` and `generated` as overlays whose lowerdir is the main checkout's copy, an
+overlay resolves that lowerdir once at mount time, and `_platform/prisma`'s build script began `rm -rf
+./generated`, so a `turbo run build` on the main tree gave that path a new inode and every live turn's merged
+view of it went permanently empty — upper layer included. This document's own question ("would a cheaper check
+have said so first") has a sharper form here, because the failing gate was not measuring the turn at all: a
+gate that goes red for a reason no change caused teaches everyone reading it that red means nothing. The
+build scripts now empty those directories instead of replacing them
+(`_tools/scripts/clean-outputs.mjs`), `@intentic/constants/mirror-roots` holds the rule as one copy the
+daemon's isolation and the gates share, and `_tools/checks/mirror-roots.mjs` refuses the shape anywhere a
+shell command in the repository spells it.
+
 **Withdrawn:** 5. The sweep it proposed is the wrong change, and Class B says why with the failing output.
 
 **Left to the team:** 7(c), branch protection. It is a decision about how the repository is worked, not a code
