@@ -17,6 +17,7 @@ import type { Services } from "../composition.js";
 import { baseImageOf, customPath } from "../environment/environment.js";
 import { remoteState } from "../git/remote.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
+import { stateRelPath } from "../workspace/state-paths.js";
 
 /* THE DEFINITION SIDE OF PORTABILITY: a sandbox's declarable shape derived from its live manifests, emitted
  * as `sandbox.toml`, and read back for apply/diff (apply-definition.ts drives the writes).
@@ -106,6 +107,18 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     {
         path: ".intentic/config/heavy-commands.json",
         note: "Learned from this workspace's runs; harmless where it is wrong, and relearned against the target's repos.",
+    },
+    /* The safety policy, and the one row here that USED to be a section: it was `commandRules` inside
+     * settings.json, which is a source, so the posture travelled with a definition that named no workspace at
+     * all. It is a prose document now, read by a model rather than parsed, and a section would have to carry it
+     * as an opaque blob nothing on the way in could check. Riding the workspace repo is also the safer door:
+     * how much a sandbox does unasked is the target owner's call, and this way it arrives only where they chose
+     * to clone the workspace it belongs to. */
+    {
+        // Spelled through the table's own type rather than as a literal like its neighbours: this row is new,
+        // and a path the compiler checks against WORKSPACE_STATE_FILES cannot drift out of the coverage guard.
+        path: stateRelPath(".intentic/config/safety.md"),
+        note: "Arrives as the file it is, and governs the target from its first turn: read what it says before cloning a workspace you did not write.",
     },
 ];
 

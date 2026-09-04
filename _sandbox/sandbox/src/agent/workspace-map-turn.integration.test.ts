@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
@@ -84,6 +84,8 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
         }),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        // Read once per turn and carried for the judge: every planned turn reaches it, map or no map.
+        safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         async *codexAgent() {},
         async *grokAgent() {},
         async *agent() {},

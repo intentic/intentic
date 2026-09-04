@@ -13,7 +13,7 @@ const CORPUS = [
     expect(result).toMatchObject({ ok: true });
     expect(result.message).toContain("ada");
 });`,
-    // Template literals count up to their first \${; regexes count their source; escaped quotes stay inside.
+    // Templates count their static runs and not their \${…}; regexes count their source; escaped quotes stay inside.
     'it.each([1, 2])("n", (n) => { expect(text).toBe(`${n} of 12 files \\` still`); expect(text).toMatch(/9 of \\d+ files/); expect(s).toBe("it\\"s"); });',
     // Asymmetric matchers loosen the exact matcher they sit inside.
     `test("b", () => { expect(frame).toEqual({ id: expect.any(String), at: expect.closeTo(1, 2) }); });`,
@@ -51,6 +51,34 @@ describe(`what counts as weaker`, () => {
         );
         const after = measure(`test("x", () => { expect(t).toBe("Start your first agent"); });`);
         expect(weakened(before, after)).toBeUndefined();
+    });
+
+    /* WHAT COUNTS AS ASSERTED TEXT, on the literal shapes a test file actually writes: a template composed from
+     * a constant (which this repository requires of every path, see _tools/checks/path-literals.mjs), a regex,
+     * an escaped quote. The template is the one worth stating: `${STATE_DIR}/config/safety.md` asserts the
+     * seventeen characters of path around the interpolation, and reading the whole literal as computed made
+     * every path assertion in the repository read as an assertion about nothing. */
+    test(`a template's static runs are asserted text, and its \${…} is not`, () => {
+        expect(measure('test("x", () => { expect(p).toBe(`${STATE_DIR}/config/safety.md`); });')).toEqual({
+            exact: 1,
+            loose: 0,
+            chars: `/config/safety.md`.length,
+            tests: 1,
+        });
+        // 40 characters: 21 of template around `${n}`, 14 of regex source, 5 of a string holding an escaped quote.
+        expect(measure(CORPUS[2] ?? "")).toEqual({ exact: 2, loose: 1, chars: 40, tests: 1 });
+    });
+
+    /* AND WHAT IS NOT ASSERTED TEXT: the prose around the assertion. These files are commented line by line and
+     * the prose says "the owner's", so a walker that read that apostrophe as an opening quote ran past the `)`
+     * it was measuring and counted to the end of the file. Editing a comment then moved the number, and landed a
+     * narrowing on a file whose assertions nobody had touched. */
+    test(`an apostrophe in a comment is prose, not a string that swallows the file`, () => {
+        const commented = `// the owner's own copy
+test("x", () => { expect(t).toBe("ada"); });
+/* and the agent's, which is where the count used to run to */
+test("y", () => { expect(u).toBe("bob"); });`;
+        expect(measure(commented)).toEqual({ exact: 2, loose: 0, chars: 6, tests: 2 });
     });
 
     test(`stronger, or unchanged, is never a finding`, () => {

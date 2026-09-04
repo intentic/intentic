@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
@@ -85,6 +85,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // A measurement seam, not a behavioural one: pass the work through and time nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
+        // Snapshotted for the judge on every planned turn, so every arm below reaches it too.
+        safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),

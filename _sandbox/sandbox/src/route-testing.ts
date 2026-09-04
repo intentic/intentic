@@ -6,7 +6,7 @@ import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { stateRelPath } from "./workspace/state-paths.js";
 
 import type { AttachFrame, Capability, Persona, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
-import { capabilitiesOf, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
+import { capabilitiesOf, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { ControlScope } from "./auth/control-tokens.js";
@@ -496,6 +496,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             set: async () => {},
             ...sandboxSettings,
         }),
+        // The shipped policy, for the same reason: a planned turn snapshots it for the judge before it
+        // dispatches, so every route that runs a turn reads it whether or not the suite is about safety.
+        safetyPolicy: unstubbed("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         // A connected account by default, so the /agent guard (no token + no env creds) doesn't short-circuit
         // turns under test. Tests that exercise the disconnected path override this.
         claudeStore: unstubbed("claudeStore", {

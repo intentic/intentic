@@ -114,6 +114,15 @@ const cardOf = (events: readonly AgentEvent[]): Extract<AgentEvent, { kind: "per
 // Let the parked hook reach its `wait` before answering the card it raised.
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
+/* The log rows as these tests read them: the whole entry except `at`, which is a clock reading rather than a
+ * decision. Dropping the one unassertable field is what lets every log test pin the ENTIRE row — a partial
+ * match would have said nothing about the fields the gate is supposed to leave alone (no `answer` on a verdict
+ * nobody was asked about, no `machine` on a command that ran here). */
+const rowsOf = (logged: readonly SafetyLogEntry[]): Omit<SafetyLogEntry, "at">[] => logged.map(({ at: _at, ...row }) => row);
+
+// What triage and the judge fill in for the command most of these tests run, before the verdict is reached.
+const FORCE_PUSH_ROW = { program: FORCE_PUSH, classes: ["git.destructive"], sentence: `It does the thing.` };
+
 /* TIER 1. The classifier decides only that a judge should look, and the money test for the whole redesign is
  * that a command it does not match costs nothing at all: not a card, not a log line, and above all not a model
  * call. That is what pays for triage being allowed to be over-inclusive everywhere else. */
@@ -268,7 +277,9 @@ describe("command gate: the facts the judge is handed", () => {
         const gate = harness({ judge: always("allow"), cwd: `${WORKSPACE_ROOT}/app` });
         await gate.run(FORCE_PUSH);
         expect(gate.seen[0]?.program).toBe(FORCE_PUSH);
-        expect(gate.seen[0]?.facts).toMatchObject({
+        // The WHOLE set of facts, not a subset of it: what the judge is not told is as much the contract as what
+        // it is, and a partial match would say nothing about a machine or an outside source leaking in here.
+        expect(gate.seen[0]?.facts).toEqual({
             consequences: [COMMAND_CLASS_LABELS["git.destructive"]],
             language: "bash",
             cwd: `${WORKSPACE_ROOT}/app`,
@@ -492,15 +503,17 @@ describe("command gate: the log", () => {
     test("an allowed command is recorded even though nobody was interrupted", async () => {
         const gate = harness({ judge: always("allow", `Deletes the build directory.`) });
         await gate.run("rm -rf build");
-        expect(gate.logged).toMatchObject([
+        expect(rowsOf(gate.logged)).toEqual([
             { program: "rm -rf build", classes: ["files.destructive"], decision: "allow", outcome: "allowed", sentence: "Deletes the build directory." },
         ]);
+        // The one field the row above drops, which is a clock reading and not a decision.
+        expect(Number.isInteger(gate.logged[0]?.at)).toBe(true);
     });
 
     test("a refusal is recorded as one", async () => {
         const gate = harness({ judge: always("refuse") });
         await gate.run(FORCE_PUSH);
-        expect(gate.logged).toMatchObject([{ decision: "refuse", outcome: "refused" }]);
+        expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "refuse", outcome: "refused" }]);
     });
 
     /* THE VERDICT IS WRITTEN WHEN IT IS REACHED, not when the card settles: a turn stopped while a card is up
@@ -509,16 +522,16 @@ describe("command gate: the log", () => {
         const gate = harness({ judge: always("ask") });
         const pending = gate.run(FORCE_PUSH);
         await settled();
-        expect(gate.logged).toMatchObject([{ decision: "ask", outcome: "asked" }]);
+        expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "ask", outcome: "asked" }]);
         resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" });
         await pending;
-        expect(gate.logged).toMatchObject([{ outcome: "refused", answer: "declined" }]);
+        expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "ask", outcome: "refused", answer: "declined" }]);
     });
 
     test("an unanswerable ask is recorded as the refusal it became", async () => {
         const gate = harness({ judge: always("ask"), unattended: true });
         await gate.run(FORCE_PUSH);
-        expect(gate.logged).toMatchObject([{ decision: "ask", outcome: "refused" }]);
+        expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "ask", outcome: "refused" }]);
     });
 });
 

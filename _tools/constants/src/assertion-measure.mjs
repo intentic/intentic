@@ -17,8 +17,8 @@
  *
  * THREE NUMBERS PER FILE: EXACT matchers (toBe, toEqual, toStrictEqual, toHaveLength, toHaveBeenCalledWith,
  * snapshots…), LOOSE matchers (toContain, toMatch, toMatchObject, toBeTruthy, toBeGreaterThan, expect.any…), and
- * the characters of literal text the assertions pin down (every string and regex inside a matcher's argument
- * list). A file is weaker in either of two shapes:
+ * the characters of literal text the assertions pin down (every string, regex and template run inside a
+ * matcher's argument list, comments excluded). A file is weaker in either of two shapes:
  *
  *   · a DOWNGRADE: fewer exact matchers and more loose ones, the `toEqual` → `toMatchObject` move;
  *   · a NARROWING: the asserted text shrinks by more than a quarter while the file keeps as many tests as it had,
@@ -89,38 +89,90 @@ const MATCHER = /\.(to[A-Z][A-Za-z]*)\s*\(/g;
 const TEST_CASE = /^\s*(?:test|it)(?:\.(?:each|skip|only|concurrent|todo|fails|skipIf|runIf))?\s*\(/gm;
 
 /* The literal text a matcher's argument list pins down: from the `(` that opens it to the `)` that closes it,
- * every string literal's characters and every regex's source. Walked by hand because a matcher's argument is
- * routinely a multi-line object with nested calls, which no single regex can bound. Template literals count up
- * to their first `${`: what follows is computed, not asserted. */
+ * every string literal's characters, every regex's source, and every static run of a template. Walked by hand
+ * because a matcher's argument is routinely a multi-line object with nested calls, which no single regex can
+ * bound.
+ *
+ * COMMENTS ARE SKIPPED FIRST, and that is not tidiness. Assertions here are routinely commented one by one,
+ * the prose says "the owner's" and "the agent's", and to a walker that reads an apostrophe as an opening quote
+ * that comment is a string running to the next apostrophe — over the `)` that closes the matcher, over the
+ * tests below it, to the end of the file. The number that came back was not an overcount of one file's text so
+ * much as a coin flip on how many apostrophes the prose happened to hold, and editing a comment landed a
+ * "narrowing" on a file whose assertions nobody had touched.
+ *
+ * A TEMPLATE'S STATIC RUNS COUNT, only its `${…}` does not. `${STATE_DIR}/config/safety.md` pins seventeen
+ * characters of path and one interpolation, and reading the whole literal as computed made every assertion in
+ * a repository that composes its paths from constants — which this one requires, see _tools/checks/path-literals.mjs —
+ * look like an assertion about nothing. */
+// Past a template's `${…}`, by brace depth: the expression inside is computed, so none of it is asserted text.
+const pastInterpolation = (source, from) => {
+    let braces = 1;
+    let i = from + 2;
+    for (; i < source.length && braces > 0; i += 1) {
+        braces += source[i] === "{" ? 1 : 0;
+        braces -= source[i] === "}" ? 1 : 0;
+    }
+    return i;
+};
+
+// A template literal, from its opening backtick: the characters of its static runs, and where it ends.
+const templateChars = (source, from) => {
+    let chars = 0;
+    let run = from + 1;
+    let i = run;
+    while (i < source.length && source[i] !== "`") {
+        if (source[i] === "\\") {
+            i += 2;
+        } else if (source[i] === "$" && source[i + 1] === "{") {
+            chars += i - run;
+            i = pastInterpolation(source, i);
+            run = i;
+        } else {
+            i += 1;
+        }
+    }
+    return { chars: chars + Math.min(i, source.length) - run, end: i };
+};
+
 const assertedChars = (source, from) => {
     let depth = 0;
     let chars = 0;
     for (let i = from; i < source.length; i += 1) {
         const ch = source[i];
-        if (ch === "(") {
+        if (ch === "/" && source[i + 1] === "/") {
+            const end = source.indexOf("\n", i);
+            if (end === -1) {
+                return chars;
+            }
+            i = end;
+        } else if (ch === "/" && source[i + 1] === "*") {
+            const end = source.indexOf("*/", i + 2);
+            if (end === -1) {
+                return chars;
+            }
+            i = end + 1;
+        } else if (ch === "(") {
             depth += 1;
         } else if (ch === ")") {
             depth -= 1;
             if (depth === 0) {
                 return chars;
             }
-        } else if (ch === '"' || ch === "'" || ch === "`") {
+        } else if (ch === '"' || ch === "'") {
             const quote = ch;
             let j = i + 1;
             for (; j < source.length && source[j] !== quote; j += 1) {
                 if (source[j] === "\\") {
                     j += 1;
-                } else if (quote === "`" && source[j] === "$" && source[j + 1] === "{") {
-                    break;
                 }
             }
             chars += j - i - 1;
-            // Past the literal, or, for a template cut at `${`, on to its closing quote by plain scanning.
-            i = quote === "`" && source[j] === "$" ? source.indexOf("`", j) : j;
-            if (i === -1) {
-                return chars;
-            }
-        } else if (ch === "/" && /[(,\s=]/.test(source[i - 1] ?? "(") && source[i + 1] !== "/" && source[i + 1] !== "*") {
+            i = j;
+        } else if (ch === "`") {
+            const template = templateChars(source, i);
+            chars += template.chars;
+            i = template.end;
+        } else if (ch === "/" && /[(,\s=]/.test(source[i - 1] ?? "(")) {
             // A regex literal in argument position: its source is asserted text like a string's.
             let j = i + 1;
             for (; j < source.length && source[j] !== "/" && source[j] !== "\n"; j += 1) {

@@ -1,4 +1,4 @@
-/* THE 39 GROUPS OF THE DAEMON'S SURFACE, IN READING ORDER, each with the one line that says what it is FOR,
+/* THE 40 GROUPS OF THE DAEMON'S SURFACE, IN READING ORDER, each with the one line that says what it is FOR,
  * and the shelf it sits on.
  *
  * This is the only hand-written content in the generated document, and it is hand-written because it is the
@@ -17,7 +17,7 @@
  * COMPLETENESS IS GUARDED, NOT TRUSTED. The tests walk the contract and fail if a group here has no routes or
  * a group in the contract has no entry, so adding a contract file is a build error until it is described. That
  * is the repo's discovery-over-enumeration rule applied to the one enumerated list that has to exist: a list of
- * 39 prose paragraphs cannot be derived, but its AGREEMENT with the code can be.
+ * 40 prose paragraphs cannot be derived, but its AGREEMENT with the code can be.
  */
 
 /** The shelves the reference rail is built from, in reading order. */
@@ -212,6 +212,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "The sandbox's own configuration, plus what it has saved you and which rules fired",
         description:
             "Read and write the settings that govern how agents behave here. The other three routes are read-only reports on their effects: what the token-saving measures were actually worth, the text behind a built-in prompt, and when each rule last did something.",
+    },
+    {
+        name: "safety",
+        shelf: "kit",
+        label: "Safety policy",
+        summary: "The document deciding when an agent stops to ask, and the record of what it decided",
+        description:
+            "Settings next door are read by a parser; this one is read by a model. The policy is prose about which of the things an agent may already do are worth interrupting you about, and the two policy routes read and replace it whole. The third is the log every verdict lands in, including the ones nobody was interrupted for, and it is what makes the document writable: an owner can only author a rule for behaviour they can see.",
     },
 
     // ── Connected systems ─────────────────────────────────────────────────────────────────────────────

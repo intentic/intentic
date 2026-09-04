@@ -1,4 +1,4 @@
-import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { testConfig } from "../testing.js";
@@ -58,6 +58,11 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
          * composition needs them. A turn that is about to be refused for its credential therefore reaches this
          * read, and the delegation lookup below, before the arm ever gates it. */
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        /* The safety policy, read once per turn and carried on the request for the judge to apply. Every
+         * planned turn reaches it, above the provider split like the settings read above, so it belongs here
+         * rather than in the suites. The shipped text for the same reason the schema's defaults are: it is what
+         * a workspace nobody has written a policy in is governed by. */
+        safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         // No translator and no api key: the state both Codex gates refuse from, which most cases here start in.
         config: testConfig,
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),
