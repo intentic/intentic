@@ -72,6 +72,14 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         note: "Personas arrive naming accounts the target has not connected; each reads as broken until its capability is.",
     },
     { path: ".intentic/config/personas/", note: "Persona prompt files, beside the cards that name them." },
+    {
+        /* Through `stateRelPath` rather than spelled out, unlike the entries around it: those predate the
+         * path-literals rule and are held by a baseline that may shrink and not grow, and this way the state
+         * table's own union checks the name. It drops the trailing slash a directory entry carries, which the
+         * comparison against WORKSPACE_STATE_FILES needs, so that goes back on. */
+        path: `${stateRelPath(".intentic/config/hooks/")}/`,
+        note: "The scripts a file.edited rule runs, beside the settings that name them; one that finds nothing it recognises on the target stays silent rather than failing every edit.",
+    },
     { path: ".intentic/config/approvals/", note: "Approvals arrive awaiting a yes, which is the only state they act in." },
     {
         path: ".intentic/config/automations.json",

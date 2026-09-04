@@ -199,7 +199,16 @@ Not everything migrates out, and getting this backwards is expensive in both dir
   contribution point, for two reasons. An extension can be switched off, and a bus that stops when someone
   hides a screen is not a bus. And a substrate living in one pack means every other pack that wants to reach it
   either edits that pack or reinvents it: which is exactly what happened while the automations vocabulary lived
-  in the automations view, and what three separately-written isolated-run implementations are still evidence of.
+  in the automations view, and what three separately-written isolated-run implementations were the evidence of.
+
+  Two of the four are now in the core. The trigger bus went first (`contributes.automationTemplates` and
+  `contributes.listener`). The **batch run engine** followed: `sandbox-contract/batch-runs.ts` owns where a
+  run's directories go, how its id and the conversation id derived from it are made, how a file an agent is
+  still writing is survived, and the flags that make a turn a run — and `acceptance`, `maintenance` and
+  `documentation` now share it instead of each carrying a copy. The copies had agreed on every decision that
+  matters and drifted on the details: one minted run ids that could collide inside a millisecond, all three
+  called their ids sortable and none of them padded, and each spelled the agent's reporting instructions its
+  own way. The standing-check registry and the CI event source are still owed.
 
 The end state is a kernel plus substrates: files/git/watcher, terminals and processes, the agent runtime,
 capabilities and their privileged handlers, auth, the extension system: and the cross-cutting buses every pack

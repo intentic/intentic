@@ -1,4 +1,5 @@
 import { STATE_DIR } from "@intentic/sandbox-contract";
+import { type BatchRunKind, batchConversationId, batchRunIdAt, batchRunManifestPath, batchRunPrefix, batchRunsDir } from "@intentic/sandbox-contract/batch-runs";
 /* WHERE THE DOCUMENTS LIVE, two trees, and the reason there are two.
  *
  * PUBLISHED: a package's page is its own `README.md`, beside its code; only the repo-level map lives apart, at
@@ -105,22 +106,32 @@ export const stagingPath = (repo: string, tail: string): string => `${stagingDir
 // ---- runs ---------------------------------------------------------------------------------------------------
 
 /* A generation run's own directory, beside the staged documents rather than inside any repo: it is bookkeeping
- * about agents, not documentation, and it must never be publishable. */
-export const RUNS_DIR = `${STAGING_ROOT}/runs`;
-const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
-export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;
+ * about agents, not documentation, and it must never be publishable.
+ *
+ * The run machinery itself — the layout, the id, the conversation id derived from it — is the core's batch-run
+ * substrate, shared with acceptance and maintenance (sandbox-contract/batch-runs.ts). Only the ROOT differs
+ * here, and deliberately: these runs live beside the staged documents rather than under `records`, which the
+ * substrate takes as the kind's own tail rather than composing from a pack id. */
+const KIND: BatchRunKind = {
+    runsDir: `config/docs/runs`,
+    // `dg` for "docs generation": the prefix `GET /agents` is filtered by to join a run to the live fleet,
+    // which is why the ids are derived rather than stored.
+    prefix: `dg`,
+    // How many runs deep anything that reads run state goes. Only the newest runs carry news, and a workspace
+    // with a long history must not spend a request per run to light a badge.
+    scanRuns: 10,
+};
+
+export const RUNS_DIR = batchRunsDir(KIND);
+export const runManifestPath = (runId: string): string => batchRunManifestPath(KIND, runId);
 
 // What the rail badge has already been shown, in the same tree as the runs it summarises, so acknowledging is
 // durable across reloads and shared across the owner's browsers without inventing a setting nobody would type.
 export const SEEN_PATH = `${STAGING_ROOT}/seen.json`;
 
-// How many runs deep anything that reads run state goes. Only the newest runs carry news, and a workspace with
-// a long history must not spend a request per run to light a badge.
-export const SCAN_RUNS = 10;
+export const SCAN_RUNS = KIND.scanRuns;
 
-/* `r` + a base-36 timestamp: sortable, short, and readable enough to match a directory to a moment. Taken from
- * the caller so this module stays pure and testable. */
-export const runIdAt = (epochMs: number): string => `r${epochMs.toString(36)}`;
+export const runIdAt = (epochMs: number): string => batchRunIdAt(epochMs);
 
 /* A package directory → a slug usable in a conversation id AND a run subdirectory. `_deploy/graph` must not
  * become two path segments, so separators collapse to dashes; anything outside the id charset goes too, and a
@@ -136,22 +147,14 @@ export const slugOf = (dir: string): string => {
     return reduced === `` ? `pkg` : reduced.slice(0, 40);
 };
 
-// The conversationId regex is `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$` (it lands in branch names and paths), so 64 is
-// a hard ceiling. The RUN id is what must survive truncation, it attributes a fleet card back to its run, so
-// the slug is what gets cut, and slugs are already capped at 40 with run ids around 9.
-const CONVERSATION_ID_MAX = 64;
+/* Every documentation-run conversation, across all runs. Exported because THREE things filter on it — one
+ * run's agents, any run's agents, and the poll deciding whether to keep polling — and the id scheme has to
+ * live in one place. */
+export const ANY_RUN_PREFIX = batchRunPrefix(KIND);
 
-// `dg` for "docs generation", the prefix `GET /agents` is filtered by to join a run to the live fleet, which is
-// why the ids are derived rather than stored.
-/* Exported because THREE things filter on it, one run's agents, any run's agents, and the poll deciding whether
- * to keep polling, and the id scheme has to live in one place. */
-const RUN_ID_PREFIX = "dg";
-
-// Every documentation-run conversation, across all runs.
-export const ANY_RUN_PREFIX = `${RUN_ID_PREFIX}-`;
-
-export const conversationIdOf = (runId: string, slug: string): string =>
-    `${RUN_ID_PREFIX}-${runId}-${slug}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/, ``);
+// The substrate cuts the SLUG rather than the run id when the two together would overflow 64 characters, which
+// is what attributes a fleet card back to its run. Slugs are already capped at 40 above and run ids are ~10.
+export const conversationIdOf = (runId: string, slug: string): string => batchConversationId(KIND, runId, slug);
 
 // The map phase's own conversation, one per run, before the fan-out. Named so it sorts first and reads as what
 // it is in the fleet board.

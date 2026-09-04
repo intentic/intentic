@@ -40,6 +40,17 @@
                 "default": "./dist/chores/index.js"
             }
         },
+        "./batch-runs": {
+            "types": "./dist/batch-runs.d.ts",
+            "import": {
+                "@intentic/src": "./src/batch-runs.ts",
+                "default": "./dist/batch-runs.js"
+            },
+            "require": {
+                "@intentic/src": "./src/batch-runs.ts",
+                "default": "./dist/batch-runs.js"
+            }
+        },
         "./tunnel-ids": {
             "types": "./dist/tunnel-ids.d.ts",
             "import": {

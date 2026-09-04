@@ -1,32 +1,41 @@
-import { STATE_DIR } from "@intentic/sandbox-contract";
+import {
+    type BatchRunKind,
+    batchConversationId,
+    batchItemDir,
+    batchResultPath,
+    batchRunIdAt,
+    batchRunManifestPath,
+    batchRunsDir,
+} from "@intentic/sandbox-contract/batch-runs";
 import type { Story } from "./stories";
 
-/* A RUN is the set of stories the user selected at one moment, and it is backed by files rather than by any
- * store this extension owns: `run.json` under the run directory is written before the first turn starts, and
- * each agent writes its own `result.json` beside it. Two consequences worth stating,
+/* A RUN is the set of stories the user selected at one moment. The machinery under it — the directory layout,
+ * the run id, the conversation id derived from it — is the core's batch-run substrate, shared with maintenance
+ * and documentation (sandbox-contract/batch-runs.ts), and its header argues the two properties this surface
+ * depends on: a run backed by FILES survives archiving the agents, closing the browser and rebuilding the
+ * image, and conversation ids that are DERIVED make joining a run to the fleet a filter over `GET /agents`
+ * rather than bookkeeping that can drift. Only a launch refusal is recorded here: no session exists for the
+ * roster to describe in that case.
  *
- *  • The run survives everything. Archive the fleet agents, discard them, close the browser, rebuild the image:
- *    the reports are still there, because nothing about them lives in the registry or in extension settings.
- *  • Registered-session status needs no store either. A run's conversation ids are DERIVED
- *    (`xt-<runId>-<slug>`), so joining a run to the fleet is a filter over GET /agents. Only a launch refusal is
- *    recorded: no session exists for the roster to describe in that case.
- *
- * The directory sits under the workspace's `.intentic`, which is outside every repo (the root repo excludes it)
- * and is bound back in SHARED for isolated turns, so every agent in a run writes into the same tree the browser
- * reads, with nothing to land and no git noise. */
+ * What stays in this file is what is about STORIES: the promise as tested, the criteria parsed out of it, the
+ * targets each story was walked against, and the evidence a report may reference. */
 
-export const RUNS_DIR = `${STATE_DIR}/records/artifacts/acceptance`;
+const KIND: BatchRunKind = {
+    runsDir: `records/artifacts/acceptance`,
+    prefix: `xt`,
+    /* How many runs deep anything that READS RESULTS goes. A bound on the walk, not on what can be tested: only
+     * the newest runs carry news, and a workspace with hundreds of run directories must not spend a request per
+     * story to render a list or to light a badge. Shared by the rail badge's background scan and the view's own
+     * tally so the two can never disagree about what "recent" means. */
+    scanRuns: 10,
+};
 
-/* How many runs deep anything that READS RESULTS goes. A bound on the walk, not on what can be tested: only the
- * newest runs carry news, and a workspace with hundreds of run directories must not spend a request per story to
- * render a list or to light a badge. Shared by the rail badge's background scan and the view's own tally so the
- * two can never disagree about what "recent" means. */
-export const SCAN_RUNS = 10;
+export const RUNS_DIR = batchRunsDir(KIND);
+export const SCAN_RUNS = KIND.scanRuns;
 
-const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
-export const storyDir = (runId: string, slug: string): string => `${runDir(runId)}/${slug}`;
-export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;
-export const resultPath = (runId: string, slug: string): string => `${storyDir(runId, slug)}/result.json`;
+export const storyDir = (runId: string, slug: string): string => batchItemDir(KIND, runId, slug);
+export const runManifestPath = (runId: string): string => batchRunManifestPath(KIND, runId);
+export const resultPath = (runId: string, slug: string): string => batchResultPath(KIND, runId, slug);
 export const reportPath = (runId: string, slug: string): string => `${storyDir(runId, slug)}/report.md`;
 
 // What the rail's badge has already been shown. A file rather than an extension setting: the badge is derived
@@ -34,10 +43,6 @@ export const reportPath = (runId: string, slug: string): string => `${storyDir(r
 // owner's browsers, and adds no user-visible setting for a value no user would ever type.
 export const SEEN_PATH = `${RUNS_DIR}/seen.json`;
 
-// The conversationId's own regex is `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$` (it lands in branch names and paths), so
-// 64 characters is a hard ceiling, not a style choice.
-const CONVERSATION_ID_MAX = 64;
-const PREFIX = "xt";
 const RUN_ID = /^r[0-9a-z]+$/;
 const STORY_SLUG = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -47,17 +52,14 @@ const SHOT_PATH = /^shots\/[^/]+\.png$/i;
 // result validation and rendered Markdown so the two evidence surfaces have one path boundary.
 export const isShotPath = (path: string): boolean => SHOT_PATH.test(path);
 
-// `r` + a base-36 timestamp: sortable, 8-ish characters, and readable enough to match a directory to a moment.
-// Taken from the caller so this module stays pure and testable.
-export const runIdAt = (epochMs: number): string => `r${epochMs.toString(36)}`;
+export const runIdAt = (epochMs: number): string => batchRunIdAt(epochMs);
 
-/* The fleet conversation id for one story of one run. The run id is what must survive truncation, it is how a
- * card is attributed back to its run, so the SLUG is what gets cut when the two together would overflow. A
- * truncated slug can collide with a sibling's, which is why storiesOf() has already made slugs unique by
- * suffixing digits: the suffix sits at the end, exactly where the cut lands, so uniqueness is preserved only if
- * the cut leaves it. It does, slugs are capped at 40 characters and run ids are ~9, well inside 64. */
-export const conversationIdOf = (runId: string, slug: string): string =>
-    `${PREFIX}-${runId}-${slug}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/, ``);
+/* The fleet conversation id for one story of one run. The substrate cuts the SLUG rather than the run id when
+ * the two together would overflow, which matters here: a truncated slug can collide with a sibling's, and
+ * storiesOf() has already made slugs unique by suffixing digits — the suffix sits at the end, exactly where the
+ * cut lands, so uniqueness is preserved only if the cut leaves it. It does: slugs are capped at 40 characters
+ * and run ids are ~10, well inside 64. */
+export const conversationIdOf = (runId: string, slug: string): string => batchConversationId(KIND, runId, slug);
 
 // One story's entry in run.json. `conversationId` is stored rather than re-derived so a future change to the id
 // scheme cannot orphan the runs already on disk; `repo` and `group` because together they name the address the

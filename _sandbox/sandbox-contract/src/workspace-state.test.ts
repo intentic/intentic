@@ -359,9 +359,12 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             // raising that limit is a decision about every session sharing the box, and `git log` is the only
             // thing that answers "since when have we been allowing four of these at a time".
             `${STATE_DIR}/config/heavy-commands.json`,
-            /* The scripts the rules run. Tracked because an untracked one is invisible to the land: the pair
-             * that used to live here was written in a worktree and never arrived, leaving settings.json naming
-             * two hooks that did not exist. A rule is reviewable; the code it runs on every edit has to be. */
+            /* The scripts the rules run. Tracked because the exclude list carves entries out BY NAME, so a
+             * directory nobody marked is invisible both to `git add -A` and to the land: that is how 559e896
+             * came to repoint settings.json at two scripts it never staged, and how the pair written in a
+             * worktree never arrived. What the workspace held from then on was settings naming two hooks that
+             * did not exist, and every edit for a day firing `node` at a missing file. A rule is reviewable;
+             * the code it runs on every write has to be. */
             `${STATE_DIR}/config/hooks/`,
             `${STATE_DIR}/config/loop-designs.json`,
             `${STATE_DIR}/config/personas.json`,

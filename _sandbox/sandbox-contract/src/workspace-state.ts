@@ -297,6 +297,9 @@ const STATE_FILES = [
         why: "The settings screen renders the rules that name these scripts, out of settings.json; nothing in the browser reads the scripts themselves.",
         portability: "carry",
         versioned: true,
+        // The daemon never BUILDS this path, it only runs what a rule's command names, so there is no statePath
+        // call for the coverage pair to find. Whoever authors a reader is the writer here.
+        outsideWriter: "the owner or an agent, authoring them; the daemon only ever RUNS one, by the path a rule's command names",
     },
     // The rule table's last-fired stamps, beside the rules themselves. `derived` rather than `carry`: it is a
     // record of what happened in THIS sandbox, and carrying it to a fresh one would date every rule to work
