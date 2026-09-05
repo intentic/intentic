@@ -26,7 +26,7 @@ import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
 import { prepushContract } from "./contracts/prepush.contract.js";
-import { keysContract } from "./contracts/keys.contract.js";
+import { mintedContract } from "./contracts/minted.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
@@ -77,7 +77,7 @@ export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { prepushContract } from "./contracts/prepush.contract.js";
-export { keysContract } from "./contracts/keys.contract.js";
+export { mintedContract } from "./contracts/minted.contract.js";
 export { providersContract } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { safetyContract } from "./contracts/safety.contract.js";
@@ -243,7 +243,7 @@ export const sandboxContract = {
     ports: portsContract,
     public: publicContract,
     prepush: prepushContract,
-    keys: keysContract,
+    keys: mintedContract,
     providers: providersContract,
     push: pushContract,
     secrets: secretsContract,

@@ -875,17 +875,23 @@ const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(manag
  * `/account/rename`, `/account/disconnect`), which is what lets one set of helpers read, rename and disconnect
  * an account without knowing whose it is.
  *
- * A keyed provider's base is `/keys/<provider>`, one route family for all of them (keys.contract.ts), so this
- * is the last line that has to know they exist. Claude's is the fallback because it is the default provider,
- * and the two named bases are providers with a store of their own. */
+ * A minted provider's base is `/keys/<provider>`, one route family for all of them (minted.contract.ts), so
+ * this is the last line that has to know they exist. Claude's is the fallback because it is the default
+ * provider, and the two named bases are providers with a store of their own. */
 const providerBase = (p: AgentProvider): string =>
-    providerSpec(p)?.auth.kind === `key` ? `/keys/${p}` : p === `grok` ? `/grok` : p === `cursor` ? `/cursor` : `/claude`;
+    providerSpec(p)?.auth.kind === `minted` ? `/keys/${p}` : p === `grok` ? `/grok` : p === `cursor` ? `/cursor` : `/claude`;
+
+// Whether this provider's sign-in ends with the daemon minting the vendor's key: the one fact the connect
+// helpers below branch on, read off the spec row rather than off a list of names here.
+const isMinted = (p: AgentProvider): boolean => providerSpec(p)?.auth.kind === `minted`;
 
 /* Where a native sign-in BEGINS, which is the one account path that is not uniform. Claude and Grok both mint
- * their handshake at `<base>/oauth/start`; Cursor's is `/cursor/login/start`, because what it starts is not an
- * OAuth handshake this client takes any part in — the daemon runs the whole PKCE exchange itself and the
- * redeemable half never leaves it (see cursor.contract.ts). Naming it differently is the wire saying so. */
-const connectStartPath = (p: AgentProvider): string => (p === `cursor` ? `/cursor/login/start` : `${providerBase(p)}/oauth/start`);
+ * their handshake at `<base>/oauth/start`. Cursor's and the minted providers' are `<base>/login/start`, because
+ * what those start is not an OAuth handshake this client takes any part in — the daemon runs the exchange (and,
+ * for a minted provider, the mint that follows it) itself and the redeemable half never leaves it. Naming them
+ * differently is the wire saying so. */
+const connectStartPath = (p: AgentProvider): string =>
+    p === `cursor` || isMinted(p) ? `${providerBase(p)}/login/start` : `${providerBase(p)}/oauth/start`;
 
 // Where a provider's model catalog is read from. Two shapes, because there are two kinds of subject: a native
 // provider is one of a closed set the daemon holds a catalog for, so it rides the shared route as a parameter;
@@ -1169,11 +1175,22 @@ interface NativeConnectFlow {
     readonly url: string;
     readonly code: string;
     readonly pkce?: { readonly verifier: string; readonly state: string };
-    /* Cursor only: the attempt's id, so abandoning the card also stops the daemon polling Cursor for a sign-in
-     * nobody is going to complete. Not a credential and not redeemable — the proof that finishes the sign-in
-     * never leaves the sandbox — which is exactly why it can sit on this shape when `pkce` above could not
-     * have. */
+    /* Cursor and the minted providers: the attempt's id, so abandoning the card also stops the daemon polling
+     * upstream for a sign-in nobody is going to complete. Not a credential and not redeemable — the proof that
+     * finishes the sign-in never leaves the sandbox — which is exactly why it can sit on this shape when `pkce`
+     * above could not have. */
     readonly handshake?: string;
+    /* Minted providers only: how this sign-in ENDS, which is the one thing the panel cannot infer from the
+     * fields above. Meta polls itself to completion; BigModel dead-ends on a loopback address the user brings
+     * back. Both are the same provider row and the same store, so the shape is on the flow rather than the
+     * provider. Absent ⇒ the older shapes, which the panel reads the way it always has. */
+    readonly flow?: `device` | `redirect`;
+    // Minted redirect only: the marker the landing address carries, so a pasted URL can be recognised as this
+    // attempt's before it is sent anywhere.
+    readonly state?: string;
+    // Minted only: which of the provider's estates this attempt signed in to, for the line the panel shows
+    // while a two-estate provider is waiting.
+    readonly variant?: string;
 }
 const nativeConnectFlow = ref<NativeConnectFlow | undefined>(undefined);
 // The display label the user typed for the account being connected (blank ⇒ the daemon derives one from the
@@ -1348,18 +1365,19 @@ let nativePollTimer: ReturnType<typeof setTimeout> | undefined;
 
 /* Drop any in-progress handshake: clear the poll timer and the connect UI state. Safe to call repeatedly.
  *
- * Cursor gets one extra step, and it is the only flow here that needs one: its handshake is a POLL RUNNING IN
- * THE DAEMON, not in this tab, so closing the card would otherwise leave the sandbox asking Cursor about a
- * sign-in nobody is completing for the next eighteen minutes. Fire-and-forget: the attempt expires on its own
- * anyway, so a failed cancel costs nothing worth reporting. */
+ * A flow that HAS A HANDSHAKE gets one extra step, and Cursor and the minted providers are those: the handshake
+ * is a POLL RUNNING IN THE DAEMON, not in this tab, so closing the card would otherwise leave the sandbox
+ * asking upstream about a sign-in nobody is completing for the next eighteen minutes. Keyed off the handshake
+ * rather than off a provider name, so a fourth flow of this shape is cancelled the day it is added.
+ * Fire-and-forget: the attempt expires on its own anyway, so a failed cancel costs nothing worth reporting. */
 const cancelConnect = (): void => {
     if (nativePollTimer !== undefined) {
         clearTimeout(nativePollTimer);
         nativePollTimer = undefined;
     }
     const flow = nativeConnectFlow.value;
-    if (flow?.provider === `cursor` && flow.handshake !== undefined) {
-        void sandboxRequest(`/cursor/login/cancel`, {
+    if (flow?.handshake !== undefined) {
+        void sandboxRequest(`${providerBase(flow.provider)}/login/cancel`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
             body: JSON.stringify({ handshake: flow.handshake }),
@@ -2284,7 +2302,7 @@ watch([reachable, conversations], ([isReachable]) => {
 // handshake is a thing the user asked for. `accountBusy` holds the provider for the length of the round-trip:
 // that is the click's acknowledgement, and it is why the sign-in can only ever REPLACE the button that started
 // it rather than appear next to a button still inviting the same click.
-const startConnect = async (): Promise<void> => {
+const startConnect = async (variant?: string): Promise<void> => {
     const target = managedProvider.value;
     if (accountBusy.value !== undefined) {
         return;
@@ -2298,7 +2316,12 @@ const startConnect = async (): Promise<void> => {
         const path = connectStartPath(target);
         let response: Response;
         try {
-            response = await sandboxRequest(path, { method: `POST` });
+            // The estate to sign in to, for a provider that sells through more than one (Z.ai). Absent takes the
+            // provider's default, which is what every single-estate row sends.
+            response = await sandboxRequest(
+                path,
+                isMinted(target) ? jsonBody(`POST`, variant === undefined ? {} : { variant }) : { method: `POST` },
+            );
         } catch (err) {
             error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection: is your sandbox online?`);
             return;
@@ -2316,6 +2339,38 @@ const startConnect = async (): Promise<void> => {
             nativePollTimer = setTimeout(() => void pollNativeOnce(`grok`, Date.now() + CODEX_POLL_DEADLINE_MS), 3000);
             return;
         }
+        if (isMinted(target)) {
+            /* A MINTED SIGN-IN, both shapes at once, because the daemon answers the same body for either and the
+             * shape is on it (`flow`). The panel reads that field to decide whether it is a read-only card or one
+             * with an address to bring back; this side treats them alike in the one way that matters — the POLL
+             * IS ARMED EITHER WAY. A device sign-in finishes upstream; a redirect one finishes when the pasted
+             * address delivers the grant and the daemon goes on to mint. Neither hands the account back on a
+             * response, so both learn it worked from the same place: a row appearing in the account list.
+             *
+             * The deadline comes off the wire rather than the shared 15-minute constant, for the reason Cursor's
+             * does: the daemon's attempt is the one that actually expires, and a card that gave up first would
+             * report an abandoned sign-in that is still live. */
+            const body = (await response.json()) as {
+                url: string;
+                code: string;
+                state: string;
+                flow: `device` | `redirect`;
+                variant: string;
+                handshake: string;
+                expiresAt: number;
+            };
+            nativeConnectFlow.value = {
+                provider: target,
+                url: body.url,
+                code: body.code,
+                state: body.state,
+                flow: body.flow,
+                variant: body.variant,
+                handshake: body.handshake,
+            };
+            nativePollTimer = setTimeout(() => void pollNativeOnce(target, body.expiresAt), 3000);
+            return;
+        }
         if (target === `cursor`) {
             /* Cursor's page is already addressed to this attempt, so there is NO code to show and nothing to
              * paste back: the daemon holds the redeemable half and completes the exchange itself. The card is
@@ -2331,45 +2386,6 @@ const startConnect = async (): Promise<void> => {
         }
         const body = (await response.json()) as { authorizeUrl: string; verifier: string; state: string };
         nativeConnectFlow.value = { provider: `claude`, url: body.authorizeUrl, code: ``, pkce: { verifier: body.verifier, state: body.state } };
-    } finally {
-        accountBusy.value = undefined;
-    }
-};
-
-/* CONNECT A PROVIDER BY PASTING ITS KEY, the third connect mechanism beside the native handshakes above and the
- * translator's subscription logins, and by far the shortest, because there is no handshake at all: the user
- * already holds the credential.
- *
- * So there is no flow to arm, nothing to poll and no deadline. The key goes to the daemon, the account list is
- * re-read, and the row is connected — which is why this returns whether it worked rather than parking a flow
- * the panel would have to watch.
- *
- * The key is never held in module state and never echoed back: the caller's field is cleared by the panel on
- * success, and every route on that contract answers with an account shape that has no field a key could ride
- * in. */
-const connectKey = async (target: AgentProvider, apiKey: string, label: string): Promise<boolean> => {
-    if (accountBusy.value !== undefined) {
-        return false;
-    }
-    accountBusy.value = target;
-    error.value = null;
-    const path = `${providerBase(target)}/connect`;
-    try {
-        const response = await sandboxRequest(
-            path,
-            jsonBody(`POST`, { apiKey: apiKey.trim(), ...(label.trim() === `` ? {} : { label: label.trim() }) }),
-        );
-        if (!response.ok) {
-            error.value = (await sandboxError(response, { method: `POST`, path })).message;
-            return false;
-        }
-        // Re-read rather than trusting the answer into the list: the same round-trip every other connect ends
-        // with, and it is what makes a second tab's row appear here too.
-        await refreshAccounts(target, false);
-        return true;
-    } catch (err) {
-        error.value = errorMessage(err, `Could not connect that key: is your sandbox online?`);
-        return false;
     } finally {
         accountBusy.value = undefined;
     }
@@ -2533,12 +2549,44 @@ const loadCapabilityProviders = async (): Promise<void> => {
     endpointsLoaded.value = true;
 };
 
-// Step 2 of the native paste-back connect: exchange the code Anthropic showed against the PKCE handshake.
-// Grok completes via its device poll loop; routed redirects complete through completeTranslator.
+/* Step 2 of a native paste-back connect: hand back what the provider gave the user. Grok and Cursor complete
+ * via their device poll loops; routed redirects complete through completeTranslator.
+ *
+ * TWO PASTE-BACKS, AND THEY END DIFFERENTLY, which is the whole reason this branches rather than taking one
+ * path. Anthropic's exchange ANSWERS with the account, so this lands it and stops. A minted provider's redirect
+ * only DELIVERS THE GRANT: the daemon still has an exchange and a mint to do behind the answer, so all this can
+ * report is that the address was accepted, and the poll already running from `startConnect` is what turns it
+ * into a row. Treating the second like the first would clear the card while the sign-in was still working, and
+ * a failure minutes later would have nowhere to land. */
+const deliverMintedGrant = async (flow: NativeConnectFlow & { readonly handshake: string }, redirectUrl: string): Promise<boolean> => {
+    const path = `${providerBase(flow.provider)}/login/complete`;
+    let response: Response;
+    try {
+        response = await sandboxRequest(path, jsonBody(`POST`, { handshake: flow.handshake, redirectUrl }));
+    } catch (err) {
+        error.value = errorMessage(err, `Could not finish the ${providerLabel(flow.provider)} sign-in: is your sandbox online?`);
+        return false;
+    }
+    if (!response.ok) {
+        // The daemon's own words: a state that belongs to another attempt, an address the vendor put an error
+        // in, and an address with no code at all send the user somewhere different, and only it knows which
+        // happened.
+        error.value = (await sandboxError(response, { method: `POST`, path })).message;
+        return false;
+    }
+    // The flow STAYS UP: the mint is still running, and the poll that has been ticking since `start` is what
+    // clears the card when the account lands.
+    error.value = null;
+    return true;
+};
+
 const completeConnect = async (code: string): Promise<boolean> => {
     const flow = nativeConnectFlow.value;
     accountBusy.value = flow?.provider;
     try {
+        if (flow?.flow === `redirect` && flow.handshake !== undefined) {
+            return await deliverMintedGrant({ ...flow, handshake: flow.handshake }, code);
+        }
         if (flow?.pkce === undefined) {
             error.value = `Start the connection first.`;
             return false;
@@ -2706,7 +2754,6 @@ export function useChat() {
         showActiveProvider,
         loadUsage,
         startConnect,
-        connectKey,
         completeConnect,
         cancelConnect,
         renameAccount,

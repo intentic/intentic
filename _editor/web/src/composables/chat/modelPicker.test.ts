@@ -241,14 +241,13 @@ test("leads the locked band with the provider that costs nothing", () => {
 
     /* The active one, then the connected one, then free (a Google sign-in) ahead of the paid subscriptions,
      * which keep PROVIDERS order among themselves: equal cost, so nothing here has an opinion about them.
-     * `grok`, `cursor` and `zai` ride along with no rows of their own: an empty section still renders its
-     * header and state row, which is how a provider nobody has connected is discovered at all.
+     * `grok`, `cursor`, `meta` and `zai` ride along with no rows of their own: an empty section still renders
+     * its header and state row, which is how a provider nobody has connected is discovered at all.
      *
-     * `meta` is LAST, and that is the third cost tier finally being used by something. Its access kind is
-     * `key`, metered per call, which ACCESS_COST has always ranked below a subscription the user has already
-     * paid for; until this provider existed nothing occupied that rung, so this line is the first evidence the
-     * ordering rule has all three. */
-    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`, `zai`, `meta`]);
+     * The tail is PROVIDERS order and not a price ranking, which is the honest answer now that there are only
+     * two rungs: every one of these is a subscription the user already pays for, including Meta's Muse Code and
+     * Z.ai's Coding Plan, whose keys are minted by a sign-in rather than metered per call. */
+    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {

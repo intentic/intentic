@@ -316,10 +316,10 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
     {
         name: "keys",
         shelf: "models",
-        label: "Key-based providers",
-        summary: "Providers connected by pasting an API key you already hold",
+        label: "Minted-key providers",
+        summary: "Providers whose sign-in mints their own API key",
         description:
-            "Some vendors publish an Anthropic Messages endpoint of their own, so a turn on them is an ordinary Claude Code turn pointed at a different host, authenticated with a key rather than a sign-in. These routes store, name and remove those keys; one provider can hold several side by side. A key travels in and never back out: every answer here is an account row, which has no field a credential could ride in.",
+            "Some vendors publish an Anthropic Messages endpoint of their own, so a turn on them is an ordinary Claude Code turn pointed at a different host. Their sign-in token is not an inference credential, so the sandbox goes on to mint the vendor's own key from it and holds that. These routes run that sign-in, and name and remove what it produced; one provider can hold several plans side by side. The minted key never travels: every answer here is an account row, which has no field a credential could ride in.",
     },
     {
         name: "providers",

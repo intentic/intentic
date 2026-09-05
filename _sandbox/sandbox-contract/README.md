@@ -70,7 +70,9 @@ mismatch is a type error rather than a runtime surprise.
     access and vendor tables, the plan-limit list, the routed-provider enum and its accounts schema, the
     daemon's CLIProxyAPI id map, and the web's account tabs and readiness rules. A row carries the two axes it
     deliberately keeps apart: what a turn COSTS (`access`) and what the user CONNECTS (`auth`: an OAuth account
-    this daemon stores, a subscription the bundled translator holds, or an API key pasted into a field).
+    this daemon stores, a subscription the bundled translator holds, or a sign-in that MINTS the vendor's own
+    API key, which then carries its estates' base URLs — Z.ai sells one plan through two of them and a key
+    minted on one is refused by the other's host).
     `brand` is typed against the marks in `@intentic/constants`, so a provider added without a logo does not
     compile. **Adding a provider is a row here**, its brand path, and (daemon-side) one line in the provider
     registry; `provider-specs.test.ts` walks the table rather than a list, so the guard covers a provider the

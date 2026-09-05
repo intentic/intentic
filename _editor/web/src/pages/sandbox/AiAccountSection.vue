@@ -4,12 +4,13 @@ import {
     type AgentProvider,
     isFreeProvider,
     type KeyedProvider,
+    mintedVariants,
     type OauthAccount,
     type TranslatorAccount,
     providerLabel,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
+import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";
@@ -95,12 +96,34 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string }> = {
 // Codex, Kimi and Gemini own no native account: the subscription row IS their connection. Read off the same
 // rule the composer's gate uses, so a provider is never offered an account row it has no store behind.
 const hasNativeAccounts = computed(() => !subscriptionOnly(managedProvider.value));
-/* A KEY, NOT A HANDSHAKE. Meta and Z.ai are connected by pasting a credential the user already holds, so the
- * three-step sign-in this card is built around collapses to a field: there is nothing to open, nothing to come
- * back from and nothing to cancel. The row therefore carries no Connect button at all — the panel below it has
- * one, next to the field it belongs to, because a button that only reveals another button is a step nobody
- * needed. */
-const isKeyed = computed(() => providerSpec(managedProvider.value)?.auth.kind === `key`);
+/* WHICH ESTATE TO SIGN IN TO, and the ONLY provider fact this card asks the user for before a sign-in starts.
+ *
+ * Z.ai sells one product through two entirely separate estates: an international plan signs in at z.ai and its
+ * key works against api.z.ai, a mainland GLM Coding Plan signs in at bigmodel.cn and its key works against
+ * open.bigmodel.cn, and each host refuses the other's credential. Nothing we can read tells us which one a
+ * person holds, and guessing sends half of them through a sign-in that ends in a refusal about a key that is
+ * perfectly good — so the choice is made HERE, before anything opens, rather than diagnosed afterwards.
+ *
+ * Shown only where there is genuinely a choice: a provider with one estate (Meta) renders no control at all,
+ * and its `login/start` names no variant. */
+const estates = computed(() => {
+    const variants = mintedVariants(managedProvider.value) ?? [];
+    return variants.length > 1 ? variants : [];
+});
+// The head of the list is the default, the same rule the daemon applies to a start that names nothing. Reset on
+// a provider switch so a choice made on one row cannot follow the user to another.
+const estate = ref<string | undefined>(undefined);
+watch(managedProvider, () => {
+    estate.value = undefined;
+});
+const chosenEstate = computed<string>({
+    get: () => estate.value ?? estates.value[0]?.id ?? ``,
+    set: (value) => {
+        estate.value = value;
+    },
+});
+// Blank means the provider offers no choice, and a blank variant is what the daemon reads as "take the default".
+const connectHere = (): void => void startConnect(chosenEstate.value === `` ? undefined : chosenEstate.value);
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
 // Whether a sign-in is unfolding under this provider's native / routed row right now. Both flows carry the
@@ -271,7 +294,7 @@ const connectRequested = (target: AgentProvider): void => {
         void connectTranslator(target);
         return;
     }
-    void startConnect();
+    connectHere();
 };
 
 const focusConnect = (): void => {
@@ -414,7 +437,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                             label="Reconnect"
                             size="small"
                             :loading="accountBusy === managedProvider"
-                            @click="startConnect"
+                            @click="connectHere"
                         />
                         <Button
                             label="Disconnect"
@@ -439,15 +462,26 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :note="nativeFlowLive ? `signing in…` : `not connected`"
                     :note-busy="nativeFlowLive"
                 >
-                    <template v-if="!isKeyed" #control>
+                    <template #control>
                         <Button v-if="nativeFlowLive" label="Cancel" size="small" severity="secondary" :text="true" @click="cancelConnect" />
                         <!-- Filled: with no account at all, this is the one thing the group is asking for. -->
-                        <Button v-else label="Connect" size="small" :loading="accountBusy === managedProvider" @click="startConnect">
+                        <Button v-else label="Connect" size="small" :loading="accountBusy === managedProvider" @click="connectHere">
                             <template #icon><Icon name="link" /></template>
                         </Button>
                     </template>
-                    <template v-if="nativeFlowLive || isKeyed" #below>
-                        <ConnectFlow :kind="isKeyed ? `keyed` : `native`" :provider="managedProvider" />
+                    <template v-if="nativeFlowLive || estates.length > 0" #below>
+                        <!-- The estate chooser stands where the sign-in will unfold, and is REPLACED by it: the
+                             choice is the first step of this connect, not a setting beside it, so it has no
+                             business staying on screen once the sign-in it configured is running. -->
+                        <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
+                        <SegmentedControl
+                            v-else
+                            v-model="chosenEstate"
+                            size="xs"
+                            wrap
+                            :options="estates.map((variant) => ({ label: variant.label, value: variant.id }))"
+                            :aria-label="`Which ${managedLabel} plan`"
+                        />
                     </template>
                 </ConnectionRow>
 
@@ -459,14 +493,22 @@ onUnmounted(() => clearTimeout(ringTimer));
                     state="add"
                     :note="nativeFlowLive ? `signing in…` : undefined"
                     :note-busy="nativeFlowLive"
-                    :interactive="!nativeFlowLive && !isKeyed"
-                    @click="!nativeFlowLive && !isKeyed && startConnect()"
+                    :interactive="!nativeFlowLive"
+                    @click="!nativeFlowLive && connectHere()"
                 >
                     <template v-if="nativeFlowLive" #control>
                         <Button label="Cancel" size="small" severity="secondary" :text="true" @click.stop="cancelConnect" />
                     </template>
-                    <template v-if="nativeFlowLive || isKeyed" #below>
-                        <ConnectFlow :kind="isKeyed ? `keyed` : `native`" :provider="managedProvider" />
+                    <template v-if="nativeFlowLive || estates.length > 0" #below>
+                        <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
+                        <SegmentedControl
+                            v-else
+                            v-model="chosenEstate"
+                            size="xs"
+                            wrap
+                            :options="estates.map((variant) => ({ label: variant.label, value: variant.id }))"
+                            :aria-label="`Which ${managedLabel} plan`"
+                        />
                     </template>
                 </ConnectionRow>
             </template>

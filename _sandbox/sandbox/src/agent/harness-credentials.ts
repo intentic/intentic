@@ -1,8 +1,8 @@
 import {
     type AgentProvider,
     endpointIdOf,
-    keyEndpointOf,
-    type KeyProvider,
+    type MintedProvider,
+    mintedVariant,
     type NativeProvider,
     PROVIDER_ACCESS,
     PROVIDER_VENDOR,
@@ -70,7 +70,7 @@ export interface TurnAllowance {
      * shape answer to different things: the VENDOR is knowable for every routed turn (it is whose credential
      * was spent), while a READING only exists where the provider publishes a quota surface the daemon can ask.
      *
-     * A keyed provider publishes none, so it names its vendor and omits this. The refusal then reads "Meta
+     * A minted provider publishes none, so it names its vendor and omits this. The refusal then reads "Meta
      * usage limit reached. Send again once it resets." — right about who refused, silent about pools and
      * resets nobody measured. Folding the two would have forced a choice between naming the wrong vendor and
      * inventing a denominator, and limitSentence already had the sentence for exactly this state. */
@@ -342,6 +342,68 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     };
 };
 
+/* A MINTED PROVIDER'S TURN, and it is the shortest branch of this whole file for the reason those providers
+ * were worth adding at all: they publish an Anthropic Messages endpoint, so the harness is pointed straight at
+ * it with the key their sign-in minted and there is nothing to translate. Structurally the
+ * `protocol: "anthropic"` half of resolveEndpointCredentials above, with the base URL coming from the account's
+ * own estate instead of from a capability the user filled in.
+ *
+ * THE BASE COMES OFF THE ACCOUNT, not the provider, and that is the one thing to get right here. Z.ai sells the
+ * same plan through two estates whose hosts refuse each other's keys, so the account records which one minted
+ * it and this dials that one. A provider-wide base would send every mainland plan's turns to api.z.ai, where
+ * the credential is simply unknown — a refusal that reads like a bad key and is not one.
+ *
+ * The base drops any version segment because the harness appends `/v1/messages` itself, and the key rides as
+ * ANTHROPIC_AUTH_TOKEN, which the CLI sends as `Authorization: Bearer` — the header both vendors document.
+ * Setting `endpoint` at all is what makes agent.ts drop CLAUDE_CODE_OAUTH_TOKEN, so a Claude subscription can
+ * never travel to either of these hosts.
+ *
+ * NO HARNESS BRANCH, because these providers have no native runtime: `capabilitiesOf` hands both harnesses to
+ * the Claude Code loop, so every one of their turns arrives here. */
+const resolveMintedCredentials = async (
+    services: Services,
+    provider: MintedProvider,
+    input: { readonly account?: string; readonly model?: string },
+): Promise<HarnessCredentialsResult> => {
+    const accounts = await services.minted[provider].store.credentials();
+    // The user's explicit pick when it is still connected, else the first account, which is the same rule every
+    // account-keyed reader in this daemon follows.
+    const picked = accounts.find((account) => account.id === input.account) ?? accounts[0];
+    if (picked === undefined) {
+        return {
+            ok: false,
+            code: "subscription-required",
+            message: `Connect your ${requirementOf(provider)} in Sandbox ▸ Agent to run ${providerLabel(provider)}.`,
+        };
+    }
+    /* An estate the provider no longer has. Refused rather than defaulted, for the reason above: dialling the
+     * default host with a key minted somewhere else spends the turn to arrive at an authentication error about a
+     * credential that is perfectly good. */
+    const variant = mintedVariant(provider, picked.variant);
+    if (variant === undefined) {
+        return {
+            ok: false,
+            code: "subscription-required",
+            message: `That ${providerLabel(provider)} account was connected through a sign-in this sandbox no longer offers. Connect it again in Sandbox ▸ Agent.`,
+        };
+    }
+    // Validated against the ESTATE's own live catalog exactly as a routed pick is: a model the vendor has
+    // retired falls to the catalog default rather than being sent and refused. The catalog is never empty (its
+    // seed floor is the last rung), so there is always a default to fall to.
+    const catalog = await services.minted[provider].catalogOf(variant.id).models();
+    return {
+        ok: true,
+        credentials: {
+            endpoint: { baseUrl: unversionedBase(variant.anthropicBase), authToken: picked.apiKey, model: routedModel(catalog, input.model) },
+            account: picked.id,
+            // Whose allowance the turn spends, so a 429 from these hosts names the right vendor instead of the
+            // harness's own guess of "Claude". No `limit`: neither vendor publishes a quota surface a minted key
+            // can read (the spec's planLimits says so), and an invented one would be worse.
+            allowance: { vendor: PROVIDER_VENDOR[provider] },
+        },
+    };
+};
+
 // How long an unnamed pick waits for the accounts' headroom to be re-read before ranking them. Short: a turn's
 // start is what is waiting, and the reading a slow endpoint eventually lands still serves the next pick.
 const PICK_REFRESH_WAIT_MS = 1_000;
@@ -390,11 +452,16 @@ export const resolveHarnessCredentials = async (
             message: "Cursor doesn't run under the Claude Code harness. It runs on its own runtime instead.",
         };
     }
-    /* A KEYED PROVIDER'S TURN, and it is the shortest branch in this function for the reason those providers
+    /* A MINTED PROVIDER'S TURN, and it is the shortest branch in this function for the reason those providers
      * were worth adding at all: they publish an Anthropic Messages endpoint, so the harness is pointed straight
-     * at it with the user's key and there is nothing to translate. Structurally the `protocol: "anthropic"`
-     * half of resolveEndpointCredentials above, with the base URL coming from the provider's spec row instead
-     * of from a capability the user filled in.
+     * at it with the key their sign-in minted and there is nothing to translate. Structurally the
+     * `protocol: "anthropic"` half of resolveEndpointCredentials above, with the base URL coming from the
+     * account's own estate instead of from a capability the user filled in.
+     *
+     * THE BASE COMES OFF THE ACCOUNT, not the provider, and that is the one thing to get right here. Z.ai sells
+     * the same plan through two estates whose hosts refuse each other's keys, so the account records which one
+     * minted it and this dials that one. A provider-wide base would send every mainland plan's turns to
+     * api.z.ai, where the credential is simply unknown — a refusal that reads like a bad key and is not one.
      *
      * The base drops any version segment because the harness appends `/v1/messages` itself, and the key rides
      * as ANTHROPIC_AUTH_TOKEN, which the CLI sends as `Authorization: Bearer` — the header both vendors
@@ -403,35 +470,8 @@ export const resolveHarnessCredentials = async (
      *
      * NO HARNESS BRANCH, because these providers have no native runtime: `capabilitiesOf` hands both harnesses
      * to the Claude Code loop, so every one of their turns arrives here. */
-    const keyEndpoint = input.agent === undefined ? undefined : keyEndpointOf(input.agent);
-    if (keyEndpoint !== undefined) {
-        const provider = input.agent as KeyProvider;
-        const accounts = await services.keyed[provider].store.credentials();
-        // The user's explicit pick when it is still connected, else the first account, which is the same rule
-        // every account-keyed reader in this daemon follows.
-        const picked = accounts.find((account) => account.id === input.account) ?? accounts[0];
-        if (picked === undefined) {
-            return {
-                ok: false,
-                code: "subscription-required",
-                message: `Connect your ${requirementOf(provider)} in Sandbox ▸ Agent to run ${providerLabel(provider)}.`,
-            };
-        }
-        // Validated against the provider's own live catalog exactly as a routed pick is: a model the vendor has
-        // retired falls to the catalog default rather than being sent and refused. The catalog is never empty
-        // (its seed floor is the last rung), so there is always a default to fall to.
-        const catalog = await services.keyed[provider].catalog.models();
-        return {
-            ok: true,
-            credentials: {
-                endpoint: { baseUrl: unversionedBase(keyEndpoint.anthropicBase), authToken: picked.apiKey, model: routedModel(catalog, input.model) },
-                account: picked.id,
-                // Whose allowance the turn spends, so a 429 from these hosts names the right vendor instead of
-                // the harness's own guess of "Claude". No `limit`: neither vendor publishes a quota surface a
-                // stored key can read (the spec's planLimits says so), and an invented one would be worse.
-                allowance: { vendor: PROVIDER_VENDOR[provider] },
-            },
-        };
+    if (input.agent !== undefined && mintedVariant(input.agent) !== undefined) {
+        return await resolveMintedCredentials(services, input.agent as MintedProvider, input);
     }
     if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi") {
         if (services.config.translator.url === "") {

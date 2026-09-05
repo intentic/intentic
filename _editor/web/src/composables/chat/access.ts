@@ -110,7 +110,6 @@ export const accessStateFor = (provider: AgentProvider): ProviderAccessState => 
 const KIND_BADGE: Record<AccessKind, (requirement: string) => string> = {
     free: (requirement) => `Free · ${requirement}`,
     subscription: (requirement) => `Needs ${requirement}`,
-    key: (requirement) => `Needs ${requirement}`,
 };
 
 // The chip a provider's section header shows: nothing once it's connected (a usable provider should look like

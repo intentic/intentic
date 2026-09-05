@@ -1,6 +1,7 @@
 import {
-    KEY_PROVIDERS,
-    keyEndpointOf,
+    MINTED_PROVIDERS,
+    mintedVariant,
+    mintedVariants,
     PROVIDER_ACCESS,
     PROVIDER_VENDOR,
     type ProviderRefusal,
@@ -202,23 +203,26 @@ test("a named account is still the account that runs, refused or not", async () 
     expect(result.ok && result.credentials.account).toBe("refused");
 });
 
-/* A KEYED PROVIDER'S TURN, on the wire, for every keyed provider in the spec table.
+/* A MINTED PROVIDER'S TURN, on the wire, for every minted provider in the spec table.
  *
  * This is the assertion the conformance tests cannot make: a spec row that names the general Z.ai entitlement
  * instead of the Coding Plan one, or a base URL carrying a version segment the harness then doubles, is
  * type-correct and passes every table walk. What it is not is a turn that reaches a model. */
-describe.each(KEY_PROVIDERS.map((provider) => ({ provider })))("a $provider turn", ({ provider }) => {
-    const withKey = async () => {
+describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider turn", ({ provider }) => {
+    // The estate a sign-in that offered no choice would have used, which is what a single-estate provider always
+    // mints on and what the default connect row sends.
+    const defaultVariant = mintedVariant(provider)!;
+    const withKey = async (variant: string = defaultVariant.id) => {
         const sandbox = services({});
-        await sandbox.keyed[provider].store.connect({ apiKey: "vendor-key", label: "Mine" });
+        await sandbox.minted[provider].store.connect({ apiKey: "vendor-key", variant });
         return sandbox;
     };
 
-    test("points the harness at the vendor's own Anthropic endpoint with the pasted key", async () => {
+    test("points the harness at the estate's own Anthropic endpoint with the minted key", async () => {
         const result = await resolveHarnessCredentials(await withKey(), { agent: provider });
         expect(result.ok).toBe(true);
         const endpoint = result.ok ? result.credentials.endpoint : undefined;
-        expect(endpoint?.baseUrl).toBe(keyEndpointOf(provider)?.anthropicBase);
+        expect(endpoint?.baseUrl).toBe(defaultVariant.anthropicBase);
         expect(endpoint?.authToken).toBe("vendor-key");
         // The harness appends `/v1/messages` itself, so a base that already carried one would be a 404 the
         // user only meets mid-conversation.
@@ -238,10 +242,28 @@ describe.each(KEY_PROVIDERS.map((provider) => ({ provider })))("a $provider turn
 
     test("resolves a model the catalog actually offers, whatever the picker held", async () => {
         const sandbox = await withKey();
-        const catalog = await sandbox.keyed[provider].catalog.models();
+        const catalog = await sandbox.minted[provider].catalogOf(defaultVariant.id).models();
         const result = await resolveHarnessCredentials(sandbox, { agent: provider, model: "a-model-the-vendor-retired" });
         // A pick the catalog no longer offers falls to its default rather than being sent and refused.
         expect(result.ok && result.credentials.endpoint?.model).toBe(catalog.default);
+    });
+
+    /* THE ACCOUNT'S OWN ESTATE IS WHAT GETS DIALLED, one case per estate the provider sells through, which is
+     * the assertion Z.ai's two hosts exist for: a mainland key sent to api.z.ai is simply unknown there, and the
+     * refusal reads like a bad credential rather than like the wrong host. */
+    test.each((mintedVariants(provider) ?? []).map((variant) => ({ variant })))("on $variant.id dials that estate's host", async ({ variant }) => {
+        const result = await resolveHarnessCredentials(await withKey(variant.id), { agent: provider });
+        expect(result.ok && result.credentials.endpoint?.baseUrl).toBe(variant.anthropicBase);
+    });
+
+    /* An account stored against an estate the provider no longer sells through. Refused rather than defaulted:
+     * silently dialling the default host would spend the turn to arrive at an authentication error about a key
+     * that is perfectly good, and send the user looking at their credential instead of at their connection. */
+    test("an account from an estate this sandbox no longer offers is refused rather than defaulted", async () => {
+        const result = await resolveHarnessCredentials(await withKey("an-estate-that-was-retired"), { agent: provider });
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.code).toBe("subscription-required");
+        expect(!result.ok && result.message).toContain("Connect it again");
     });
 
     test("with no key connected, refuses by naming what to connect rather than falling through to Claude", async () => {

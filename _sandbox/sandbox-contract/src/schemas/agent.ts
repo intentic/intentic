@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { KEY_PROVIDERS, NATIVE_PROVIDERS } from "../provider-specs.js";
+import { MINTED_PROVIDERS, NATIVE_PROVIDERS } from "../provider-specs.js";
 import { AgentPlacementSchema } from "../runner-protocol.js";
 import { entryId } from "./internal.js";
 // The agent runtimes the daemon can serve, the vocabulary every surface that picks an agent shares (chat
@@ -21,11 +21,11 @@ export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 // subjects are exactly the ones the daemon keeps one for. Closing it here is what makes an unknown id a 400 from
 // the contract instead of a registry lookup that reads back `undefined` and serves an empty list.
 export const NativeProviderParamSchema = z.object({ provider: z.enum(NATIVE_PROVIDERS) });
-// The provider naming an account on the routes that connect one by pasting a key (keys.contract.ts). Closed the
-// same way and for the same reason as the catalog param above, narrowed to the providers whose credential this
-// daemon actually stores as a key: pasting one at a provider that authenticates some other way is a 400 from
-// the contract rather than a handler discovering there is no store to write to.
-export const KeyProviderParamSchema = z.object({ provider: z.enum(KEY_PROVIDERS) });
+// The provider naming an account on the routes whose sign-in mints the vendor's own key (minted.contract.ts).
+// Closed the same way and for the same reason as the catalog param above, narrowed to the providers this daemon
+// actually holds a minted credential for: starting that login at a provider which authenticates some other way
+// is a 400 from the contract rather than a handler discovering there is no store to write to.
+export const MintedProviderParamSchema = z.object({ provider: z.enum(MINTED_PROVIDERS) });
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. See AgentTurnSchema.harness.
 export const AgentHarnessSchema = z.enum(["native", "claude-code"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;

@@ -5,7 +5,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { useChat } from "../../composables/chat/useChat";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 
-/* THE sign-in panel: one component for all five providers and both mechanisms (a provider's own account and a
+/* THE sign-in panel: one component for every provider and both mechanisms (a provider's own account and a
  * translator subscription), because a user signing in does the same three things every time: go to the
  * provider, deal with the one thing it hands back, come back. There were two of these, and they had quietly
  * drifted apart (one waited with a spinner, the other didn't; one could name the account, the other couldn't;
@@ -13,8 +13,13 @@ import ProviderLogo from "../../chat/ProviderLogo.vue";
  * work differently" when the only real difference is the shape of the token.
  *
  * That real difference is the ONE branch here: a device flow means the provider polls itself and the panel is
- * read-only; a redirect flow hands the user something to paste back (Anthropic's authorization code or the
- * address Google dead-ends on).
+ * read-only; a redirect flow hands the user something to paste back (Anthropic's authorization code, or the
+ * address Google and BigModel dead-end on).
+ *
+ * THERE IS NO THIRD SHAPE ANY MORE. Meta and Z.ai used to render a password field here — the one connect flow
+ * in this app that asked a user to go and find a credential, when both vendors' own CLIs sign in and mint the
+ * key themselves. They are sign-ins now, of the two shapes above, so this panel branches on the handshake and
+ * never on the provider.
  *
  * ONE SIZE, since there is one kind of place this stands: inside the row or the strip that started the
  * sign-in. It used to have a `prominent` variant for the first screen of a fresh sandbox, back when that screen
@@ -26,10 +31,9 @@ import ProviderLogo from "../../chat/ProviderLogo.vue";
  * sign-in: see AiAccountSection's row and ChatAccountPanel's strip. useChat is a module singleton, so this
  * reads the live handshake with nothing threaded through props but which row it is unfolding under. */
 
-const { kind, provider } = defineProps<{ kind: `native` | `routed` | `keyed`; provider: AgentProvider }>();
+const { kind, provider } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider }>();
 
-const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator, connectKey } =
-    useChat();
+const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator } = useChat();
 
 // This flow's own key in the account-write ledger: the two mechanisms of one provider (Grok's xAI account and
 // its SuperGrok subscription) are separate connections, so "Finish" must spin for one and not the other.
@@ -57,39 +61,71 @@ const destination = computed(() => providerSpec(provider)?.destination ?? provid
 /* Whether this is a NO-PASTE sign-in: the provider (or the daemon) finishes it out of band and this panel is
  * read-only, as against one that hands the user something to bring back.
  *
- * Three ways to know, because there are three shapes of handshake. A routed flow says so outright. A native one
- * with a code is Grok's, pre-filled at x.ai. And a native one with a HANDSHAKE id is Cursor's, which has
- * neither a code nor anything to paste: the page it opens is already addressed to the attempt, and the daemon
- * holds the half that redeems it. That last case is why this cannot simply read `code !== ""` any more — an
+ * `flow` when the handshake carries one, and both the routed flows and the minted ones do: the wire says which
+ * shape it is, and for a minted provider it is a fact about the ESTATE rather than about the provider (Z.ai
+ * polls internationally and dead-ends on the mainland), so it could not be read off a name here anyway.
+ *
+ * Without that field there are two older shapes left. A code is Grok's, pre-filled at x.ai. A HANDSHAKE id with
+ * no code is Cursor's, which has nothing to paste: the page it opens is already addressed to the attempt, and
+ * the daemon holds the half that redeems it. That last case is why this cannot simply read `code !== ""` — an
  * empty code used to mean "paste-back", and for Cursor it means the opposite. */
 const deviceFlow = computed(() => {
     const live = flow.value;
     if (live === undefined) {
         return false;
     }
-    if (`flow` in live) {
+    if (live.flow !== undefined) {
         return live.flow === `device`;
     }
     return live.code !== `` || live.handshake !== undefined;
 });
 
+/* Whether the thing coming back is a whole ADDRESS rather than a code the provider showed on screen, which
+ * decides both the placeholder and whether the dead-end picture is drawn. Every routed redirect is one, and so
+ * is a minted redirect (BigModel's), for the same reason: the vendor sends the browser to a loopback port only
+ * this container binds, so the page never loads and the grant is in the address bar. Anthropic's paste-back is
+ * NOT one — it lands on a real page that shows a code. */
+const redirectFlow = computed(() => flow.value !== undefined && !deviceFlow.value && (kind === `routed` || flow.value.flow === `redirect`));
+
 // Only the mechanics a user cannot infer from the button they just pressed and the field in front of them.
 // Anthropic's flow says everything it needs to in "Open Anthropic" + "Paste code…", so it gets no line at all.
 const hint = computed<string | undefined>(() => {
-    if (deviceFlow.value) {
-        if (kind === `native`) {
-            // Two native no-paste flows, and the reassurance each needs is different: Grok's is "the code is
-            // already in the page", Cursor's is "there is no code, and nothing comes back here".
-            return provider === `cursor`
-                ? `Sign in on the page that opens: this sandbox finishes the rest and the account appears here.`
-                : `Already filled in at x.ai: approve on any device.`;
-        }
+    if (!deviceFlow.value) {
+        return undefined;
+    }
+    if (kind === `routed`) {
         return flow.value?.code ? `Sign in and approve: enter this code if the page asks for it.` : `Approve the sign-in on the page that opens.`;
     }
-    return undefined;
+    /* Three native no-paste flows now, and the reassurance each needs is different: Grok's is "the code is
+     * already in the page", Cursor's and a minted device sign-in's is "there is no code, and nothing comes back
+     * here" — except that Meta's device flow DOES show a code, which the card above already displays, so what
+     * that one needs is where to type it. Read off the flow's own fields rather than off the provider, so a
+     * fourth sign-in of an existing shape needs no new branch. */
+    if (provider === `grok`) {
+        return `Already filled in at x.ai: approve on any device.`;
+    }
+    return flow.value?.code
+        ? `Enter this code on the page that opens: this sandbox finishes the rest and the account appears here.`
+        : `Sign in on the page that opens: this sandbox finishes the rest and the account appears here.`;
 });
 
-const pastePlaceholder = computed(() => (kind === `routed` ? `Paste the address you landed on…` : `Paste code…`));
+const pastePlaceholder = computed(() => (redirectFlow.value ? `Paste the address you landed on…` : `Paste code…`));
+
+/* WHAT THE DEAD-END ADDRESS ACTUALLY LOOKS LIKE, per flow, because the picture below exists for exactly one
+ * purpose: the user is two tabs away staring at a browser error, and this is what they have to RECOGNIZE. An
+ * address drawn with the wrong parameter name is worse than no picture, and the two redirects that reach here
+ * genuinely differ — Google's grant is `code`, BigModel's is `authCode`, and they land on different paths.
+ * Truncated the way a real one is, since the point is the shape rather than the value. */
+const deadEndAddress = computed(() =>
+    kind === `routed` ? `localhost:8317/?code=4/0AX4…` : `127.0.0.1:8317/callback?authCode=eyJhb…`,
+);
+
+/* Whether a name typed here would ACTUALLY travel with the sign-in: `connectLabel` is read by completeConnect's
+ * paste-back exchange and by no other ending. Every flow that finishes out of band (Grok's device code,
+ * Cursor's poll, a minted sign-in, a translator subscription) lands its account minutes later through a route
+ * that never saw the field, so offering it there would be a control that silently does nothing — and in all of
+ * those cases the name is a rename, on the row the account lands as. */
+const namesTheAccount = computed(() => kind === `native` && nativeConnectFlow.value?.provider === provider && nativeConnectFlow.value.pkce !== undefined);
 
 // Whether this panel is waiting on something the user has to bring back: the state both helpers below arm on,
 // and the only one in which a window listener or a clipboard read is any of our business.
@@ -107,15 +143,20 @@ const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.val
  *     copied, so the moment they come back with it we take it: from a paste anywhere on the panel, or off the
  *     clipboard by ourselves when the browser lets us read it. */
 
-// The pending handshake's `state`, for the routed flow that has one. Read off the translator flow rather than
-// off `flow` because the two shapes differ: a native handshake keeps its state inside `pkce`, and only the
-// redirect this guards is ever matched against it.
-const redirectState = computed(() => (kind === `routed` ? (translatorConnectFlow.value?.state ?? ``) : ``));
+// The pending handshake's `state`, for whichever flow has one. A routed session's lives on the translator flow;
+// a minted redirect's lives on the native one. Claude's native handshake keeps its state inside `pkce` and is
+// never matched here, because it is not a redirect: nothing to recognise off the clipboard.
+const redirectState = computed(() => (kind === `routed` ? (translatorConnectFlow.value?.state ?? ``) : (nativeConnectFlow.value?.state ?? ``)));
 
-// Whether a string is the address THIS handshake is waiting for. `code=` is the grant; the state is what makes
-// it ours: the translator matches it to the pending session, so anything else that happens to be in the
-// clipboard (a link, a snippet, another sandbox's sign-in) fails this and is left alone.
-const isOurRedirect = (text: string): boolean => text.includes(`code=`) && (redirectState.value === `` || text.includes(redirectState.value));
+/* Whether a string is the address THIS handshake is waiting for. The grant is the query parameter, and the
+ * state is what makes it ours: it is matched against the attempt that issued it, so anything else that happens
+ * to be in the clipboard (a link, a snippet, another sandbox's sign-in) fails this and is left alone.
+ *
+ * `authCode=` as well as `code=`, because BigModel names it the first way and everything else names it the
+ * second. Reading only `code=` would leave the one flow that most needs this help — the one whose page does not
+ * load at all — with nothing recognised off the clipboard and no auto-finish. */
+const isOurRedirect = (text: string): boolean =>
+    (text.includes(`code=`) || text.includes(`authCode=`)) && (redirectState.value === `` || text.includes(redirectState.value));
 
 // The one field the paste flows share: an authorization code or redirect URL, the panel takes
 // the string and hands it to whichever half of the handshake is live.
@@ -140,7 +181,7 @@ const finish = async (): Promise<void> => {
  * clipboard read below) with one rule instead of three, and it can only fire on an address carrying this
  * handshake's own state, so a half-typed or wrong-tab string just sits there to be looked at. */
 watch(pasted, (value) => {
-    if (kind === `routed` && awaitingPaste.value && isOurRedirect(value.trim())) {
+    if (redirectFlow.value && awaitingPaste.value && isOurRedirect(value.trim())) {
         void finish();
     }
 });
@@ -219,65 +260,10 @@ watch(flow, (live) => {
         wentToProvider.value = false;
     }
 });
-
-/* ---- the third mechanism: a key you already hold ----------------------------------------------------------
- *
- * No handshake, so none of the machinery above applies: nothing to open and come back from, nothing to poll,
- * no clipboard to watch. The panel is a field and a button, plus a link to the one page that issues the key,
- * because "paste your API key" is only actionable if you know which of a vendor's consoles mints it.
- *
- * The field is a PASSWORD field. Not because the DOM makes it safer — the value is in memory either way — but
- * because this is the one connect flow where the credential is on screen in full, in a settings page somebody
- * may well be sharing, and the other two never put one there at all. It is cleared on success, and nothing here
- * ever reads a key back: the account rows the daemon answers with have no field one could arrive in. */
-const keyValue = ref(``);
-const keyLabel = ref(``);
-const namingKey = ref(false);
-const keyConsole = computed(() => {
-    const auth = providerSpec(provider)?.auth;
-    return auth?.kind === `key` ? auth.console : undefined;
-});
-const saveKey = async (): Promise<void> => {
-    if (keyValue.value.trim() === ``) {
-        return;
-    }
-    if (await connectKey(provider, keyValue.value, keyLabel.value)) {
-        keyValue.value = ``;
-        keyLabel.value = ``;
-        namingKey.value = false;
-    }
-};
 </script>
 
 <template>
-    <!-- THE KEYED PANEL IS ALWAYS OPEN, unlike the two below it, and that is the mechanism showing through
-         rather than an inconsistency: those unfold under a handshake the user started and fold away when it
-         ends, while here there is nothing to start. The row asked for a key; the field is the row. -->
-    <div v-if="kind === `keyed`" class="flex flex-col gap-2.5">
-        <div class="flex gap-2">
-            <input
-                v-model="keyValue"
-                type="password"
-                name="providerApiKey"
-                autocomplete="off"
-                :placeholder="`Paste your ${destination} API key…`"
-                :class="ui.inputSm(`min-w-0 flex-1`)"
-                @keydown.enter="saveKey"
-            />
-            <Button label="Connect" size="small" :disabled="keyValue.trim().length === 0" :loading="accountBusy === provider" @click="saveKey" />
-        </div>
-        <div class="flex items-center gap-3">
-            <a v-if="keyConsole" :class="ui.textAction(`text-2xs text-subtle`)" :href="keyConsole" target="_blank" rel="noopener">
-                Get a key from {{ destination }}<Icon name="external-link" class="ml-1" />
-            </a>
-            <!-- Same fold as the native flows': a name is a rename, not a step, and leading with it would make
-                 every connect look like a form to fill in before anything happens. It matters more here, though
-                 — a pasted key carries no identity at all, so two of them are indistinguishable without one. -->
-            <button v-if="!namingKey" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingKey = true">Name this key…</button>
-        </div>
-        <input v-if="namingKey" v-model="keyLabel" name="keyLabel" placeholder="Key name" :class="ui.inputSm(`min-w-0`)" />
-    </div>
-    <div v-else-if="flow" class="flex flex-col gap-2.5">
+    <div v-if="flow" class="flex flex-col gap-2.5">
         <!-- `self-start`: in a column the button would stretch edge to edge, which reads as a banner rather than
              as the first step of three. -->
         <Button as="a" class="self-start" size="small" :href="flow.url" target="_blank" rel="noopener" @click="wentToProvider = true">
@@ -298,9 +284,10 @@ const saveKey = async (): Promise<void> => {
                  the provider finishes on an address only the sandbox can serve, so the browser shows a plain
                  error and every instinct says the sign-in broke. A picture rather than a sentence because the
                  sentence is on the screen they are LEAVING: by the time it matters they are two tabs away
-                 looking at the real thing, and what they need then is to RECOGNIZE it. Only for the redirect
-                 that actually dead-ends; Anthropic's paste-back lands on a real page and needs none of this. -->
-            <template v-if="kind === `routed`">
+                 looking at the real thing, and what they need then is to RECOGNIZE it. Only for the redirects
+                 that actually dead-end (Google's, BigModel's); Anthropic's paste-back lands on a real page and
+                 needs none of this. -->
+            <template v-if="redirectFlow">
                 <p class="text-2xs text-muted">
                     After {{ destination }}, the <span class="font-semibold text-content">page won't load</span>. That's normal, it points back inside
                     your sandbox.
@@ -316,7 +303,7 @@ const saveKey = async (): Promise<void> => {
                             class="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-primary-500 bg-overlay px-1.5 py-0.5 ring-2 ring-primary-500/25"
                         >
                             <Icon name="unlock" class="shrink-0 text-[0.6rem] text-subtle" />
-                            <span class="truncate font-mono text-[0.6rem] text-content">localhost:8317/?code=4/0AX4…</span>
+                            <span class="truncate font-mono text-[0.6rem] text-content">{{ deadEndAddress }}</span>
                         </span>
                     </div>
                     <div class="flex flex-col items-center gap-1 px-3 py-3">
@@ -339,7 +326,7 @@ const saveKey = async (): Promise<void> => {
                 <Button label="Finish" size="small" :disabled="pasted.trim().length === 0" :loading="accountBusy === busyKey" @click="finish" />
             </div>
         </template>
-        <template v-if="kind === `native`">
+        <template v-if="namesTheAccount">
             <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
                 Name this account…
             </button>

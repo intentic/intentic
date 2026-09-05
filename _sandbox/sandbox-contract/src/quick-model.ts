@@ -92,12 +92,19 @@ const tierOf = (model: string): number => tierRankOf(familyOf(model));
 // list, so it reads -1 and leads the tiebreak; unreachable in practice, since it can never tie on cost.
 const providerOrder = (provider: AgentProvider): number => PROVIDERS.findIndex((entry) => entry.value === provider);
 
+/* WHAT AN ENDPOINT COSTS, one rung past every provider's, and the reason it is a number here rather than a
+ * member of AccessKind. That axis describes the providers this repo ships, and every one of them is unlocked by
+ * signing in to something the user already holds, so none of them is metered per call. An endpoint is the
+ * opposite: whatever gateway somebody pointed us at, whose bill this repo cannot see. Reading it as dearer than
+ * anything on the table is the conservative answer, and it is what keeps Auto from reaching for a paid gateway
+ * on its own initiative. */
+const METERED_COST = Math.max(...Object.values(ACCESS_COST)) + 1;
+
 // How much a call on this provider costs at the margin. Every native provider declares an access kind; an
-// endpoint declares none, and takes the metered rung, the conservative reading of a model API whose bill this
-// repo cannot see, which keeps Auto from reaching for someone's paid gateway on its own initiative.
+// endpoint declares none, and takes the metered rung above.
 const costOf = (provider: AgentProvider): number => {
     const access = accessFor(provider);
-    return access === undefined ? ACCESS_COST.key : ACCESS_COST[access.kind];
+    return access === undefined ? METERED_COST : ACCESS_COST[access.kind];
 };
 
 /* AUTO, every connected provider's cheapest row, best-first, as a ladder rather than a winner.

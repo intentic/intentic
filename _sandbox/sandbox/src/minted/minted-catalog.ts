@@ -1,26 +1,29 @@
-import { compareUnrankedModelIds, keyEndpointOf, type KeyProvider, type Model } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds, type MintedProvider, type MintedVariant, type Model } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { discoveredCatalog } from "../agent/model-catalog.js";
 import type { JsonFile } from "../store/json-file.js";
-import type { KeyedStore } from "./keyed-credentials.js";
+import type { MintedStore } from "./minted-credentials.js";
 
-/* WHAT A KEYED PROVIDER SERVES, read from the vendor's own OpenAI-compatible `/models` with a connected
- * account's key, on the shared ladder (live → the last list this provider answered with → a compile-time floor).
+/* WHAT A MINTED PROVIDER SERVES, read from the vendor's own OpenAI-compatible `/models` with a connected
+ * account's key, on the shared ladder (live → the last list this estate answered with → a compile-time floor).
  *
  * THE FLOOR EXISTS HERE AND NOT FOR AN `endpoint` CAPABILITY, and the difference is knowledge. An endpoint is
  * whatever server the user pointed us at, so inventing models for it would mean offering rows that may not
- * exist on that particular box. Here we know exactly whose API this is, so a fresh sandbox whose key was pasted
+ * exist on that particular box. Here we know exactly whose API this is, so a fresh sandbox whose sign-in landed
  * ten seconds ago can offer the right two rows instead of a spinner, and the very next read replaces them with
  * whatever the account can actually reach.
  *
  * THE CATALOG IS READ OVER THE OPENAI SURFACE WHILE TURNS RUN ON THE ANTHROPIC ONE, and that is not an
  * inconsistency to tidy away: both vendors publish `GET …/models` on their OpenAI-compatible root and neither
- * publishes a catalog on the Messages endpoint. The two roots are held together on the provider's spec row
- * (ProviderAuth's `anthropicBase` and `catalogBase`) precisely so nobody has to remember that one is read and
+ * publishes a catalog on the Messages endpoint. The two roots are held together on the estate they belong to
+ * (MintedVariant's `anthropicBase` and `catalogBase`) precisely so nobody has to remember that one is read and
  * the other dialled.
  *
- * ONE IMPLEMENTATION FOR EVERY KEYED PROVIDER: what varies is two URLs, a seed list and which store holds the
- * key, all of which arrive as arguments. A third keyed provider adds a spec row and a seed, not a file. */
+ * ONE CATALOG PER ESTATE, NOT PER PROVIDER, which is the one thing this file learned the hard way from Z.ai
+ * having two. A key minted on api.z.ai cannot read open.bigmodel.cn's list and vice versa: pointing one cache at
+ * one provider would serve a mainland plan the international estate's models, and every turn on a row it offered
+ * would be refused by the host that never had that model. So the store is filtered to the accounts of THIS
+ * estate, and a provider that holds two of them holds two of these. */
 
 // The OpenAI catalog shape both vendors answer with. `display_name` is not in OpenAI's own schema; it is read
 // where a vendor sends it (Anthropic's REST catalog does) and its absence renders a label-only row, which is
@@ -29,7 +32,7 @@ const ModelsResponseSchema = z.object({
     data: z.array(z.object({ id: z.string().min(1), display_name: z.string().optional() })),
 });
 
-// Short, because a keyed provider's catalog moves when the vendor ships, not when the user edits something, and
+// Short, because a minted provider's catalog moves when the vendor ships, not when the user edits something, and
 // a minute is what every other provider's catalog here uses.
 const MODELS_TTL_MS = 60_000;
 // A vendor API across the internet, not a model server on the docker host. Long enough for a cold edge, short
@@ -52,41 +55,43 @@ const labelFor = (id: string): string => (id.split("/").at(-1) ?? "") || id;
 const toCatalog = (models: readonly Model[], seed: readonly Model[]): { models: Model[]; default: string } => {
     const list = models.filter(isChatModel).toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
     // Never empty by construction: the ladder only renders this with a live list, the persisted list, or the
-    // seed, and the seed is non-empty for every keyed provider (asserted by the registry's own test). The
+    // seed, and the seed is non-empty for every minted provider (asserted by the registry's own test). The
     // fallback is here so a filter that removed every row cannot produce a default nothing serves.
     const ordered = list.length > 0 ? list : [...seed];
     return { models: ordered, default: ordered[0]?.id ?? "" };
 };
 
-export interface KeyedCatalog {
+export interface MintedCatalog {
     readonly models: () => Promise<{ models: Model[]; default: string }>;
-    // Drop the cached answer. Called when the last account of this provider is disconnected, so the picker
-    // stops offering a catalog read with a key that is gone.
+    // Drop the cached answer. Called when an account of this provider is connected or disconnected, so the
+    // picker stops offering a catalog read with a credential that is gone (or misses one that just arrived).
     readonly forget: () => void;
 }
 
-export const createKeyedCatalog = (input: {
-    readonly provider: KeyProvider;
-    readonly store: Pick<KeyedStore, "credentials">;
+export const createMintedCatalog = (input: {
+    readonly provider: MintedProvider;
+    readonly variant: MintedVariant;
+    readonly store: Pick<MintedStore, "credentials">;
     readonly seed: readonly Model[];
     // The last-known-good list. A vendor blip at boot must not empty a working picker, and unlike the local
     // translator these APIs are a network away, so the file rung genuinely earns its place here.
     readonly file: JsonFile<Model[]>;
     readonly fetchImpl?: typeof fetch;
-}): KeyedCatalog => {
+}): MintedCatalog => {
     const fetchImpl = input.fetchImpl ?? fetch;
-    const endpoint = keyEndpointOf(input.provider);
+    const { variant } = input;
 
     const discover = async (): Promise<Model[]> => {
-        // No key, no catalog: the ladder reads an empty list as "nothing usable right now", caches nothing, and
-        // renders the persisted list or the seed. Which is exactly right for a provider nobody has connected —
-        // the picker shows what it WOULD serve, under a badge saying what it costs to unlock.
+        // No credential for THIS estate, no catalog: the ladder reads an empty list as "nothing usable right
+        // now", caches nothing, and renders the persisted list or the seed. Which is exactly right for a
+        // provider nobody has connected — the picker shows what it WOULD serve, under a badge saying what it
+        // costs to unlock.
         const credentials = await input.store.credentials();
-        const key = credentials[0]?.apiKey;
-        if (endpoint === undefined || key === undefined) {
+        const key = credentials.find((account) => account.variant === variant.id)?.apiKey;
+        if (key === undefined) {
             return [];
         }
-        const response = await fetchImpl(`${endpoint.catalogBase}/models`, {
+        const response = await fetchImpl(`${variant.catalogBase}/models`, {
             headers: { authorization: `Bearer ${key}` },
             signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
         }).catch(() => undefined);

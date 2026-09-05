@@ -14,15 +14,14 @@ import { type AgentCapabilities, CLAUDE_CODE, CODEX, CURSOR, OPENCODE, OPENCODE_
  *
  * WHAT A ROW IS, and the two axes it deliberately keeps apart:
  *
- *   `access` is what a turn COSTS: free, an already-paid subscription with a quota, or a metered key. It is
- *            what the picker badges, what orders the locked band, and what quick-model spends against
- *            (ACCESS_COST).
+ *   `access` is what a turn COSTS: free, or an already-paid subscription with a quota. It is what the picker
+ *            badges, what orders the locked band, and what quick-model spends against (ACCESS_COST).
  *   `auth`   is what the user CONNECTS: an OAuth account this daemon stores, a subscription the bundled
- *            translator holds, or an API key pasted into a field.
+ *            translator holds, or a sign-in that mints the vendor's own API key.
  *
  * They are not the same question and conflating them is how Z.ai would have been described wrongly whichever
- * single word was picked: its cost is a prepaid coding plan, its credential is a key you paste. Keeping the
- * axes apart is what lets a surface ask the one it actually needs.
+ * single word was picked: its cost is a prepaid coding plan, and the credential that plan is spent through is an
+ * API key its sign-in mints. Keeping the axes apart is what lets a surface ask the one it actually needs.
  *
  * `brand` is typed against the marks in @intentic/constants, so a provider added without a logo does not
  * compile. That is deliberate: the fallback glyph is honest for an ACP agent nobody here has heard of, and
@@ -36,7 +35,12 @@ import { type AgentCapabilities, CLAUDE_CODE, CODEX, CURSOR, OPENCODE, OPENCODE_
 // "can this row actually run" is the first thing a model list has to answer. `free` is not a courtesy tier: the
 // Google channel serves its models on an ordinary Google sign-in, at no subscription, which is the single most
 // useful thing this catalog can tell a user who has connected nothing yet.
-export type AccessKind = "free" | "subscription" | "key";
+//
+// There is deliberately no `key` rung. Every provider here is unlocked by signing in to something the user
+// already holds, so a per-call metered credential is not a shape this table can describe — a raw API key against
+// somebody's own gateway is an `endpoint` capability (schemas/capabilities.ts), which is not a provider row and
+// never appeared on this axis.
+export type AccessKind = "free" | "subscription";
 
 export interface ProviderAccess {
     readonly kind: AccessKind;
@@ -46,11 +50,11 @@ export interface ProviderAccess {
     readonly runs: string;
 }
 
-// What a turn on this provider costs at the MARGIN, ordering the same three kinds by the only question a
-// helper spending the user's money on their behalf has to answer: free is free; a subscription is already paid
-// but has a quota the user watches; a key is metered, so every call is real money. Deliberately not folded into
-// AccessKind's declaration order, a union's order is not a runtime fact, and this one is relied on.
-export const ACCESS_COST: Record<AccessKind, number> = { free: 0, subscription: 1, key: 2 };
+// What a turn on this provider costs at the MARGIN, ordering the two kinds by the only question a helper
+// spending the user's allowance on their behalf has to answer: free is free; a subscription is already paid but
+// has a quota the user watches. Deliberately not folded into AccessKind's declaration order, a union's order is
+// not a runtime fact, and this one is relied on.
+export const ACCESS_COST: Record<AccessKind, number> = { free: 0, subscription: 1 };
 
 /* HOW A CREDENTIAL FOR THIS PROVIDER IS OBTAINED AND HELD. Three mechanisms, and every surface that used to
  * branch on a provider's NAME (the web's readiness rules, the connect panel's shape, the daemon's credential
@@ -63,25 +67,53 @@ export const ACCESS_COST: Record<AccessKind, number> = { free: 0, subscription: 
  *   "translator" , the bundled CLIProxyAPI holds a SUBSCRIPTION OAuth and re-serves it behind an Anthropic
  *                  endpoint, so the Claude Code loop can run a non-Claude model on it. `cliProxy` is that
  *                  provider's id in the proxy's own vocabulary, which is not always ours.
- *   "key"        , the user pastes an API key and the harness is pointed straight at the provider's own
- *                  Anthropic Messages endpoint with it. No translator hop, because there is nothing to
- *                  translate — the same reasoning an `anthropic`-protocol endpoint capability already rides.
+ *   "minted"     , the daemon runs a sign-in whose token is NOT an inference credential, so it goes on to mint
+ *                  the vendor's own API key from it and stores that. The harness is then pointed straight at the
+ *                  vendor's Anthropic Messages endpoint with the minted key — no translator hop, because there
+ *                  is nothing to translate, the same road an `anthropic`-protocol endpoint capability drives.
+ *
+ * NOBODY PASTES A KEY, and the absence is the point rather than an omission. Both of these vendors sell a plan
+ * and issue keys under it, and the first cut of these two providers therefore shipped as a password field — which
+ * is a worse product than what the vendors' own CLIs do (their sign-in mints the key) and the only connect flow
+ * in this app that asked the user to go and find a credential. The minted mechanism is that sign-in. A raw key
+ * against somebody's own gateway is still supported and always was: it is an `endpoint` capability, not this.
  */
 export type ProviderAuth =
     | { readonly kind: "oauth" }
     | { readonly kind: "translator"; readonly cliProxy: string }
-    | {
-          readonly kind: "key";
-          // What ANTHROPIC_BASE_URL is set to for a turn. WITHOUT a version segment: the harness appends
-          // `/v1/messages` itself (see the daemon's endpoint-config.ts for why the two ecosystems disagree here).
-          readonly anthropicBase: string;
-          // Where the model catalog is read from, an OpenAI-compatible root WITH its version segment, because
-          // that is the surface both of these vendors publish `GET …/models` on.
-          readonly catalogBase: string;
-          // Where a person goes to mint the key. Printed as a link in the connect panel, because "paste your API
-          // key" is only actionable if you know which of a vendor's several consoles issues it.
-          readonly console: string;
-      };
+    | { readonly kind: "minted"; readonly variants: readonly MintedVariant[] };
+
+/* ONE IDENTITY PROVIDER A MINTED PROVIDER CAN BE SIGNED INTO, and the reason this is a list rather than three
+ * fields on the auth row: Z.ai is one product sold through two entirely separate estates. An international plan
+ * signs in at chat.z.ai and its key works against api.z.ai; a mainland GLM Coding Plan signs in at bigmodel.cn
+ * and its key works against open.bigmodel.cn. Same models, same picker row, same store, and a credential minted
+ * on one estate is refused by the other's endpoint.
+ *
+ * Which is why the bases live HERE and not on the provider: a key knows which variant minted it, and the turn
+ * has to dial that variant's host. A provider-wide base URL would send a mainland plan's key to a host that has
+ * never heard of it, and the failure would arrive as an authentication error the user cannot act on. */
+export interface MintedVariant {
+    // The stored account's record of where it came from, and what a `login/start` names. Never shown.
+    readonly id: string;
+    // What the connect row's estate control calls it, in the vendor's own words.
+    readonly label: string;
+    /* HOW THIS SIGN-IN ENDS, which decides the shape of the connect panel and nothing else.
+     *
+     *   "device"   , the daemon polls the vendor to completion and the account appears: nothing to paste back
+     *                (Cursor's shape). Some of these also carry a one-time code to read off the card, which is
+     *                a fact about the flow at RUNTIME, not about the provider, so it is not on this row.
+     *   "redirect" , the vendor sends the browser to a loopback address only this container could bind, so the
+     *                page dead-ends and the grant is in the address bar. The user brings that URL back
+     *                (Google's shape, picture and all). */
+    readonly flow: "device" | "redirect";
+    // What ANTHROPIC_BASE_URL is set to for a turn on an account minted here. WITHOUT a version segment: the
+    // harness appends `/v1/messages` itself (see the daemon's endpoint-config.ts for why the two ecosystems
+    // disagree here).
+    readonly anthropicBase: string;
+    // Where this estate's model catalog is read from, an OpenAI-compatible root WITH its version segment,
+    // because that is the surface these vendors publish `GET …/models` on.
+    readonly catalogBase: string;
+}
 
 export interface ProviderSpec {
     // The wire id, and the reserved capability id: an installed `agent` capability may not take one of these.
@@ -126,9 +158,9 @@ export interface ProviderSpec {
      * to: the api-call substitutes that token server-side like it does for the other two.
      *
      * Grok is one absence, because xAI's usable billing data needs a subject id CLIProxyAPI keeps out of its
-     * auth-file listing, and the fallback probe spends a token to answer. The keyed providers are the other:
-     * neither publishes a quota surface a stored key can read. Adding one is a reader and this flag, and
-     * nothing else. */
+     * auth-file listing, and the fallback probe spends a token to answer. The minted providers are the other:
+     * neither publishes a quota surface their own minted key can read. Adding one is a reader and this flag,
+     * and nothing else. */
     readonly planLimits: boolean;
     /* THE TWO RUNTIMES THIS PROVIDER RUNS ON, one per value of the harness axis. Equal records mean the harness
      * is not a choice for this provider, and every surface reads that from here rather than keeping its own
@@ -242,12 +274,12 @@ export const PROVIDER_SPECS = [
         // Cursor ignores the harness for the mirror of Gemini's reason: there is no route to it but its own SDK.
         runtimes: { native: CURSOR, claudeCode: CURSOR },
     },
-    /* THE TWO KEYED PROVIDERS, and the reason they cost no new runtime, no new adapter and no translator hop:
+    /* THE TWO MINTED PROVIDERS, and the reason they cost no new runtime, no new adapter and no translator hop:
      * both publish an ANTHROPIC MESSAGES endpoint of their own. The Claude Code loop is pointed straight at it
-     * with the user's key, which is exactly the road an `anthropic`-protocol endpoint capability already
-     * drives. So they are the Kimi shape — one record on both harnesses, no adapter, a catalog and a readiness
-     * rung — and everything that makes them feel first-class (the brand, the badge, the section, the account
-     * row) is these rows and nothing else. */
+     * with the key their sign-in minted, which is exactly the road an `anthropic`-protocol endpoint capability
+     * already drives. So they are the Kimi shape — one record on both harnesses, no adapter, a catalog and a
+     * readiness rung — and everything that makes them feel first-class (the brand, the badge, the section, the
+     * account row) is these rows and nothing else. */
     {
         id: "meta",
         label: "Meta",
@@ -255,18 +287,30 @@ export const PROVIDER_SPECS = [
         accountLabel: "Meta",
         destination: "Meta",
         brand: "meta",
-        // `key`, because the Model API is METERED: every call is real money, which is what ACCESS_COST's third
-        // rung means and what keeps an automatic helper from reaching for it to write a commit message.
-        access: { kind: "key", requirement: "Meta Model API key", runs: "Muse Spark under Claude Code" },
+        // A `subscription` like the rest, because that is what the sign-in connects: Muse Code's device login
+        // mints a plan key, and the plan is what a turn spends. It shipped as `key` for one day, which put it in
+        // the metered band and told automatic helpers every call here was real money — true of Meta's
+        // pay-per-token Model API, and not true of the thing this row now connects.
+        access: { kind: "subscription", requirement: "Muse Code subscription", runs: "Muse Spark under Claude Code" },
         auth: {
-            kind: "key",
-            // No version segment: the harness appends `/v1/messages` itself, and Meta serves the Anthropic
-            // surface there.
-            anthropicBase: "https://api.meta.ai",
-            catalogBase: "https://api.meta.ai/v1",
-            console: "https://dev.meta.ai/docs/getting-started/authentication",
+            kind: "minted",
+            // One estate, so no choice to offer: `login/start` takes no variant for Meta and the connect row
+            // shows no control. The id still exists because a stored account records which variant minted it.
+            variants: [
+                {
+                    id: "meta",
+                    label: "Meta",
+                    // Meta's is the textbook device flow (RFC 8628): a user code to read off the card, and a
+                    // poll that finishes without anything coming back here.
+                    flow: "device",
+                    // No version segment: the harness appends `/v1/messages` itself, and Meta serves the
+                    // Anthropic surface there beside the OpenAI one the catalog is read from.
+                    anthropicBase: "https://api.meta.ai",
+                    catalogBase: "https://api.meta.ai/v1",
+                },
+            ],
         },
-        // Nothing published that a stored key can read: no quota surface, so an account row shows no meter and
+        // Nothing published that a minted key can read: no quota surface, so an account row shows no meter and
         // says so, rather than showing an empty one that reads as "nothing left".
         planLimits: false,
         runtimes: { native: CLAUDE_CODE, claudeCode: CLAUDE_CODE },
@@ -278,21 +322,41 @@ export const PROVIDER_SPECS = [
         accountLabel: "Z.ai",
         destination: "Z.ai",
         brand: "zai",
-        /* `subscription` while the credential is a KEY, which is precisely the pair the two axes exist to keep
-         * apart. What is being spent is a GLM Coding Plan: prepaid, with a quota the user watches, which is
-         * what `subscription` means to ACCESS_COST and to the picker's ordering. What is being CONNECTED is an
-         * API key pasted into a field, which is what `auth` says. Collapsing the two into one word would have
-         * been wrong whichever word won. */
+        // A GLM Coding Plan: prepaid, with a quota the user watches, which is what `subscription` means to
+        // ACCESS_COST and to the picker's ordering. The sign-in mints the plan's own key, so the requirement
+        // names the plan rather than the credential — nobody has to go and find one.
         access: { kind: "subscription", requirement: "Z.ai GLM Coding Plan", runs: "GLM under Claude Code" },
         auth: {
-            kind: "key",
-            anthropicBase: "https://api.z.ai/api/anthropic",
-            /* THE CODING-PLAN ROOT, not the general one, and they are not interchangeable: a Coding Plan key
-             * reads its models from `/api/coding/paas/v4` and the general `/api/paas/v4` is a different
-             * entitlement. Pointing the catalog at the general root would list models the plan's own Anthropic
-             * endpoint then refuses, which is the worst shape a picker row can have. */
-            catalogBase: "https://api.z.ai/api/coding/paas/v4",
-            console: "https://z.ai/manage-apikey/apikey-list",
+            kind: "minted",
+            /* TWO ESTATES, and a key minted on one is refused by the other, which is why they are two variants
+             * rather than one base URL with a note. The catalog root is the CODING-PLAN one on both
+             * (`/api/coding/paas/v4`), not the general `/api/paas/v4`: that is a different entitlement, and
+             * pointing the catalog at it would list models the plan's own Anthropic endpoint then refuses,
+             * which is the worst shape a picker row can have. */
+            variants: [
+                {
+                    id: "zai",
+                    // Cased as the vendor cases it, which is also how the row this control sits under is
+                    // titled: a pill reading "Z.AI" under a row reading "Z.ai" is two spellings of one product
+                    // on one screen.
+                    label: "Z.ai international",
+                    // zcode.z.ai mediates the callback itself, so the daemon polls it and nothing dead-ends in
+                    // the user's browser.
+                    flow: "device",
+                    anthropicBase: "https://api.z.ai/api/anthropic",
+                    catalogBase: "https://api.z.ai/api/coding/paas/v4",
+                },
+                {
+                    id: "bigmodel",
+                    label: "BigModel (中国大陆)",
+                    // BigModel refuses that mediated callback and takes a loopback redirect instead, which no
+                    // browser outside this container can reach: the page dead-ends carrying the grant, and the
+                    // user brings the address back. Google's flow exactly, down to the picture.
+                    flow: "redirect",
+                    anthropicBase: "https://open.bigmodel.cn/api/anthropic",
+                    catalogBase: "https://open.bigmodel.cn/api/coding/paas/v4",
+                },
+            ],
         },
         planLimits: false,
         runtimes: { native: CLAUDE_CODE, claudeCode: CLAUDE_CODE },
@@ -330,10 +394,11 @@ export const TRANSLATOR_PROVIDERS: readonly TranslatorProvider[] = PROVIDER_SPEC
     (spec): spec is Extract<Spec, { auth: { kind: "translator" } }> => spec.auth.kind === "translator",
 ).map((spec) => spec.id);
 
-// The providers a pasted API key connects, served straight off the vendor's own Anthropic Messages endpoint.
-export type KeyProvider = Extract<Spec, { auth: { kind: "key" } }>["id"];
-export const KEY_PROVIDERS: readonly KeyProvider[] = PROVIDER_SPECS.filter(
-    (spec): spec is Extract<Spec, { auth: { kind: "key" } }> => spec.auth.kind === "key",
+// The providers whose sign-in mints the vendor's own API key, served straight off the vendor's own Anthropic
+// Messages endpoint.
+export type MintedProvider = Extract<Spec, { auth: { kind: "minted" } }>["id"];
+export const MINTED_PROVIDERS: readonly MintedProvider[] = PROVIDER_SPECS.filter(
+    (spec): spec is Extract<Spec, { auth: { kind: "minted" } }> => spec.auth.kind === "minted",
 ).map((spec) => spec.id);
 
 // This provider's CLIProxyAPI id, where it has one. Not always ours: the app says "grok" where the proxy says
@@ -343,10 +408,25 @@ export const cliProxyIdOf = (provider: string): string | undefined => {
     return auth?.kind === "translator" ? auth.cliProxy : undefined;
 };
 
-// The endpoint facts a keyed provider's turn and catalog are built from, or nothing when the provider is not
-// one. Returned whole rather than field by field, because a base URL read without its sibling is how a catalog
-// and a turn end up pointed at two different hosts.
-export const keyEndpointOf = (provider: string): Extract<ProviderAuth, { kind: "key" }> | undefined => {
+// Every estate a minted provider can be signed into, in the order the connect row offers them, or nothing when
+// the provider is not one of them. The head is the default: what a `login/start` that names no variant gets.
+export const mintedVariants = (provider: string): readonly MintedVariant[] | undefined => {
     const auth = providerSpec(provider)?.auth;
-    return auth?.kind === "key" ? auth : undefined;
+    return auth?.kind === "minted" ? auth.variants : undefined;
+};
+
+/* THE ESTATE ONE ACCOUNT BELONGS TO: its bases and its flow, whole, because a base URL read without its sibling
+ * is how a catalog and a turn end up pointed at two different hosts.
+ *
+ * An ABSENT id takes the default (the head of the list), which is what a connect row that offers no choice
+ * sends and what a store written before a second variant existed reads back as. An id that names no variant is
+ * `undefined` and NOT the default: silently falling back would dial a mainland key against api.z.ai and report
+ * the refusal as an authentication problem, when what happened is that we lost track of where the key came
+ * from. */
+export const mintedVariant = (provider: string, variant?: string): MintedVariant | undefined => {
+    const variants = mintedVariants(provider);
+    if (variants === undefined) {
+        return undefined;
+    }
+    return variant === undefined || variant === "" ? variants[0] : variants.find((entry) => entry.id === variant);
 };

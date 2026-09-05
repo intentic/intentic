@@ -139,6 +139,52 @@ export const TranslatorStartSchema = z.object({
             "Which shape this is. A device sign-in finishes by itself and you poll the account list; a redirect needs the address it landed on handed back. Said outright rather than guessed at from whether a code happens to exist.",
         ),
 });
+/* A MINTED PROVIDER'S SIGN-IN START (Meta's Muse Code device flow, Z.ai's ZCode flow on either estate). The
+ * fields of the three shapes above that this mechanism actually has, and no more.
+ *
+ * It is Cursor's bargain — the daemon runs the whole handshake and nothing redeemable travels — with two
+ * additions Cursor has no use for. `code` is the one-time code where the vendor issues one (Meta does, Z.ai does
+ * not), so the card can show what the page will ask for. `state` is present ONLY for a redirect flow, and it is
+ * not a credential: the grant dead-ends in the user's address bar, so this is what lets the panel recognise the
+ * URL they bring back as the one this handshake is waiting for. The daemon still matches the pasted URL against
+ * its OWN copy of the state, so an altered one is refused rather than trusted.
+ *
+ * `variant` is echoed back because the card offered a choice of estate and this says which one it started, so a
+ * panel re-rendered mid-handshake shows the estate the user picked rather than the default. */
+export const MintedLoginStartSchema = z.object({
+    url: z.string().describe("The page to open and sign in on."),
+    code: z.string().describe("The one-time code the page will ask for, where the vendor issues one. Blank when the page is already addressed to this attempt."),
+    state: z
+        .string()
+        .describe("For a redirect sign-in, the marker in the address the browser lands on, so a pasted URL can be recognised as this attempt's. Blank otherwise."),
+    flow: z
+        .enum(["device", "redirect"])
+        .describe(
+            "Which shape this is. A device sign-in finishes by itself and you watch the account list; a redirect needs the address it landed on handed back.",
+        ),
+    variant: z.string().describe("Which of the provider's estates this attempt signs in to."),
+    handshake: z
+        .string()
+        .describe("This attempt's id, for finishing or abandoning it. Not a credential and not redeemable: the proof that completes the sign-in never leaves the sandbox."),
+    expiresAt: z.number().describe("When this attempt stops being answerable, in milliseconds, so a card can stop waiting instead of spinning."),
+});
+export type MintedLoginStart = z.infer<typeof MintedLoginStartSchema>;
+/* The paste-back half of a minted provider's redirect sign-in. The whole landing address, and the handshake it
+ * belongs to — and NOT the state, unlike the translator's version below: that one addresses a session
+ * CLIProxyAPI holds, so the state has to travel, while this handshake is held right here and taking the
+ * caller's word for its own state would be checking a claim against itself. */
+export const MintedLoginCompleteSchema = z.object({
+    handshake: z.string().min(1).describe("Which attempt this address belongs to."),
+    redirectUrl: z.string().min(1).describe("The address the browser was sent to, whole. The grant is inside it."),
+});
+// Abandon a minted sign-in nobody completed, so the daemon stops polling for it. Ordinary tidiness rather than a
+// security boundary: an unanswered attempt also times out on its own (see `expiresAt`).
+export const MintedLoginCancelSchema = z.object({ handshake: z.string().min(1).describe("Which attempt to stop waiting on.") });
+// The estate to sign in to, where a provider has more than one (Z.ai's international and mainland plans). Absent
+// takes the provider's default, which is what a provider with a single estate always sends.
+export const MintedLoginRequestSchema = z.object({
+    variant: z.string().min(1).optional().describe("Which estate to sign in to. Absent takes the provider's default."),
+});
 // The paste-back half of a redirect login: the URL the provider sent the browser to, carrying the grant as
 // ?code=&state=. `state` ties it to the handshake that issued it, the translator rejects a mismatch.
 export const TranslatorCompleteSchema = z.object({

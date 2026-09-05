@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 import { cursorProvider } from "../cursor/cursor-provider.js";
 import { geminiProvider } from "../gemini/gemini-provider.js";
 import { grokProvider } from "../grok/grok-provider.js";
-import { KEYED_PROVIDER_MODULES } from "../keyed/keyed-provider.js";
+import { MINTED_PROVIDER_MODULES } from "../minted/minted-provider.js";
 import { kimiProvider } from "../kimi/kimi-provider.js";
 import type { AgentAdapter } from "./adapter.js";
 import type { BootRole, ProviderCatalog, ProviderModule, SharedProviderReads } from "./provider-module.js";
@@ -28,12 +28,12 @@ export const PROVIDER_MODULES: readonly ProviderModule[] = [
     grokProvider,
     geminiProvider,
     kimiProvider,
-    /* THE KEYED PROVIDERS ARE ONE LINE FOR ALL OF THEM, and that is the point of the family rather than an
-     * economy taken with it. Meta and Z.ai differ in two URLs and a seed list, all of which are on their spec
-     * rows, so their modules are generated from that table (keyed/keyed-provider.ts). Writing them out here
-     * would put the count of keyed providers in two places — this file and the contract — which is exactly the
+    /* THE MINTED PROVIDERS ARE ONE LINE FOR ALL OF THEM, and that is the point of the family rather than an
+     * economy taken with it. Meta and Z.ai differ in a seed list, a login driver and their estates' URLs, so
+     * their modules are generated from the spec table (minted/minted-provider.ts). Writing them out here would
+     * put the count of minted providers in two places — this file and the contract — which is exactly the
      * drift the guard below exists to catch, reintroduced one layer up. */
-    ...KEYED_PROVIDER_MODULES,
+    ...MINTED_PROVIDER_MODULES,
 ];
 
 /* THE DISCOVERY GUARD, at module init rather than only in a test: a native provider without a module would

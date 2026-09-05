@@ -11,7 +11,7 @@ import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { ControlScope } from "./auth/control-tokens.js";
 import { createMediaTickets } from "./auth/media-tickets.js";
-import { type KeyedStore, type StoredKeyAccount, toKeyedAccount } from "./keyed/keyed-credentials.js";
+import { type MintedStore, type StoredKeyAccount, toMintedAccount } from "./minted/minted-credentials.js";
 import { createWsTickets } from "./auth/ws-tickets.js";
 
 import { createORPCClient } from "@orpc/client";
@@ -323,25 +323,30 @@ export interface WideSeamOverrides {
 }
 export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
 
-/* One keyed provider's store, in memory, starting empty. A REAL implementation of the seam rather than a stub
- * that throws, because the thing a suite most often wants from it is to connect a key and then ask what a turn
- * resolves — and a double that refuses the first half forces every such test to hand-build a store, which is
- * how doubles drift from the contract they stand in for.
+/* One minted provider's store, in memory, starting empty. A REAL implementation of the seam rather than a stub
+ * that throws, because the thing a suite most often wants from it is to record a connected plan and then ask
+ * what a turn resolves — and a double that refuses the first half forces every such test to hand-build a store,
+ * which is how doubles drift from the contract they stand in for.
  *
  * Empty is still the default state, which matters: no guard depends on these providers, so the honest starting
- * point is a sandbox where nobody has pasted a key. */
-export const memoryKeyedStore = (providerName: string): KeyedStore => {
+ * point is a sandbox where nobody has signed in.
+ *
+ * `variant` is required, exactly as it is on the real store: a test that connects an account has to say which
+ * estate minted it, because that is what the turn dials.
+ */
+export const memoryMintedStore = (providerName: string): MintedStore => {
     let accounts: StoredKeyAccount[] = [];
-    const row = (stored: StoredKeyAccount) => toKeyedAccount(stored, providerName);
+    const row = (stored: StoredKeyAccount) => toMintedAccount(stored, providerName);
     return {
         list: async () => accounts.map(row),
         credentials: async () => accounts,
-        connect: async ({ apiKey, label }) => {
+        connect: async ({ apiKey, variant, email }) => {
             const stored: StoredKeyAccount = {
                 id: `${providerName}-${accounts.length + 1}`,
                 apiKey,
+                variant,
                 connectedAt: accounts.length + 1,
-                ...(label !== undefined && label.trim() !== "" ? { label: label.trim() } : {}),
+                ...(email !== undefined && email.trim() !== "" ? { email: email.trim() } : {}),
             };
             accounts = [...accounts, stored];
             return row(stored);
@@ -379,26 +384,34 @@ export const testProviderCatalogs: Services["providerCatalogs"] = {
     zai: { models: async () => ({ models: [{ id: "glm-5.3", label: "GLM-5.3" }], default: "glm-5.3" }) },
 };
 
-/* The keyed providers' slice, with no key connected: the ordinary state of a test sandbox, and the one a turn
+/* The minted providers' slice, with nothing connected: the ordinary state of a test sandbox, and the one a turn
  * on Meta or Z.ai is refused from. A FACTORY, not a constant, because the stores below hold state: two suites
- * sharing one instance would have the first suite's connected key still present in the second.
+ * sharing one instance would have the first suite's connected plan still present in the second.
  *
  * A test that wants a connected provider calls `store.connect` on the sandbox it built, which is the same call
- * the route makes — rather than hand-building a store, which is how a double stops resembling the thing it
- * stands in for. */
-export const testKeyedSlices = (): Services["keyed"] => ({
-    meta: {
-        store: memoryKeyedStore("Meta"),
-        catalog: {
-            models: async () => ({ models: [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }], default: "muse-spark-1.2" }),
-            forget: () => {},
-        },
-    },
-    zai: {
-        store: memoryKeyedStore("Z.ai"),
-        catalog: { models: async () => ({ models: [{ id: "glm-5.3", label: "GLM-5.3" }], default: "glm-5.3" }), forget: () => {} },
-    },
-});
+ * the sign-in makes — rather than hand-building a store, which is how a double stops resembling the thing it
+ * stands in for.
+ *
+ * The sign-in itself is a driver that refuses: these doubles serve route suites, and a suite that wants a real
+ * handshake stands up a fake vendor and passes its own driver (minted/minted-login.integration.test.ts). A
+ * driver that tried to reach auth.meta.com from a unit test is the one thing worse than one that throws. */
+export const testMintedSlices = (): Services["minted"] => {
+    const slice = (providerName: string, models: { id: string; label: string }[]): Services["minted"]["meta"] => {
+        const catalog = { models: async () => ({ models, default: models[0]?.id ?? "" }), forget: () => {} };
+        return {
+            store: memoryMintedStore(providerName),
+            login: async () => {
+                throw new Error(`${providerName} sign-in is not available in tests: pass a driver`);
+            },
+            catalogOf: () => catalog,
+            catalog,
+        };
+    };
+    return {
+        meta: slice("Meta", [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }]),
+        zai: slice("Z.ai", [{ id: "glm-5.3", label: "GLM-5.3" }]),
+    };
+};
 
 export const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
@@ -650,10 +663,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             }),
         },
         kimiModels: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
-        // The keyed providers' stores and catalogs. Nothing connected, for the same reason Cursor's double
+        // The minted providers' stores, sign-ins and catalogs. Nothing connected, for the same reason Cursor's double
         // below holds nothing: no guard depends on them, so the honest default is a sandbox where they were
         // never set up, and the suites that exercise them say so.
-        keyed: testKeyedSlices(),
+        minted: testMintedSlices(),
         /* NOTHING CONNECTED by default, which is the opposite of the Claude double above and deliberately so.
          * Claude's is populated because the /agent guard short-circuits every turn without it, so an empty one
          * would break suites that are not about accounts at all. Nothing guards on Cursor, so the honest
