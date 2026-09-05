@@ -387,7 +387,11 @@ const pins = useRailPins();
 const seatedTiles = computed<readonly AreaTile[]>(() =>
     tiles.value.filter((tile) => railSeated(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
 );
-const moreTiles = computed<readonly AreaTile[]>(() => tiles.value.filter((tile) => !seatedTiles.value.includes(tile)));
+const moreTiles = computed<readonly AreaTile[]>(() =>
+    tiles.value
+        .filter((tile) => !seatedTiles.value.includes(tile))
+        .toSorted((left, right) => left.label.localeCompare(right.label)),
+);
 
 /* THE SEATS WORTH REMEMBERING ARE THE ONES THAT WILL BE THERE TOMORROW: the permanent tiles and this reader's
  * pins. railMemory exists to stop the run assembling itself in front of the reader across a load (see its
@@ -558,6 +562,10 @@ const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
  *
  * ROWS ARE LINKS, same as the sandbox switcher and account menus: real URLs so middle-click, ⌘-click and "copy
  * link address" work on a place found through the menu rather than through the rail.
+ *
+ * ROWS ARE ALPHABETICAL BY LABEL, not in rail rank: the rail's order is editorial (Work before Judge before Set
+ * up), but a menu of eight quiet areas is scanned by name, so the reader should not have to remember which band
+ * a surface belongs to.
  *
  * IT NEVER BADGES, and it cannot: anything with something to say is seated by that very fact, so a count here
  * could only ever be zero. A More tile that lit up would mean the seat rule had stopped working. */
