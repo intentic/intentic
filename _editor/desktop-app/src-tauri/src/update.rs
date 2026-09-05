@@ -483,9 +483,7 @@ pub fn refusal(app: &AppHandle) -> Option<&'static str> {
         return Some("Intentic is already installing an update.");
     }
     if crate::scripts::busy() {
-        return Some(
-            "Something is running on this device. Intentic will update once it finishes.",
-        );
+        return Some("Something is running on this device. Intentic will update once it finishes.");
     }
     None
 }

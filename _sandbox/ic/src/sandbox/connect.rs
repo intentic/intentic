@@ -583,7 +583,9 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
     // has always looked like, and a log that reads differently for no reason is a log people re-learn.
     println!("intentic sandbox started.");
     if public_url.is_empty() {
-        println!("Your sandbox answers on this machine only — open it from the platform on this device.");
+        println!(
+            "Your sandbox answers on this machine only — open it from the platform on this device."
+        );
     } else {
         println!("Your sandbox will be reachable at {public_url} (DNS may take a few seconds to propagate).");
         println!(
