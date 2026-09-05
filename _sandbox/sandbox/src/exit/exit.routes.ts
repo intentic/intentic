@@ -8,7 +8,7 @@ import { checkExit, type ExitEntry, exitEntry, exitLink, exitLinks, rotateExit, 
 
 // The live geo-exit routes. Adding an exit is a capability add; STARTING, MOVING and ROTATING one is here,
 // because switching country is a runtime operation performed many times over one stored pool, by the operator
-// from the Status card and by the agent through the `exit` CLI, which calls these same routes. Both therefore
+// from the capability card and by the agent through the `exit` CLI, which calls these same routes. Both therefore
 // observe one implementation, and neither can move an exit without the other seeing it.
 
 export type ExitRoutesDeps = Pick<Services, "capabilities">;

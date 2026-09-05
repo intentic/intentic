@@ -9,7 +9,7 @@ import { exitStateDir, observationPath, selectionPath, upMarkerPath } from "./ex
  * None of this is the source of truth for whether an exit is up or where it comes out. Liveness is always
  * probed off the machine and the country is always the last OBSERVATION, made through the exit itself. What is
  * kept here is the intent behind those facts: which country was asked for, which server was picked to serve
- * it, and the last reading, so a Status card polling every few seconds can render "DE · 5.9.x.x, 2m ago"
+ * it, and the last reading, so a capability card polling every few seconds can render "DE · 5.9.x.x, 2m ago"
  * without sending a fresh request through a volunteer relay on every poll.
  *
  * Written per exit under its own state directory so erasing one capability erases exactly its own memory.

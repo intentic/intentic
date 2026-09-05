@@ -70,7 +70,12 @@ vi.mock(`../composables/terminal/useBackgroundProcesses`, () => ({
 vi.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
 }));
-vi.mock(`../composables/sandbox/useVpn`, () => ({ importForticlient: vi.fn(), useVpn: () => ({ links: ref([]) }) }));
+/* The vpn card's rows are <VpnConnections>, which dials as well as lists, so this stub is the whole composable
+ * rather than its list: `error` is read on every render, and a stub without it throws in the render function. */
+vi.mock(`../composables/sandbox/useVpn`, () => ({
+    importForticlient: vi.fn(),
+    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
+}));
 vi.mock(`../components/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../components/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 

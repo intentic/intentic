@@ -2,7 +2,7 @@
 // The in-sandbox VPN command — what the agent's skill teaches and what an owner can run in a terminal tab.
 //
 // It deliberately owns NO vpn logic: every subcommand is one call to the daemon's /vpn routes, which are the
-// same routes the browser's Status card drives. That is the whole point — a tunnel the agent dials appears in
+// same routes the browser's VPN card drives. That is the whole point — a tunnel the agent dials appears in
 // the UI, a tunnel the user drops disappears for the agent, and there is exactly one implementation of what
 // connecting means (see _sandbox/sandbox/src/vpn/).
 //

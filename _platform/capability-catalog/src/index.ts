@@ -540,7 +540,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "provider == 'ipsec'",
             },
 
-            // Shared: the only persisted connection intent. Connecting itself is a live action on the Status card.
+            // Shared: the only persisted connection intent. Connecting itself is a live action on this card.
             {
                 key: "autoConnect",
                 label: "Connect automatically",
@@ -551,14 +551,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
             },
         ],
-        hint: "Connect and disconnect from Sandbox ▸ Status (the agent can too).",
+        hint: "Connect and disconnect right here, on the connection you added (the agent can too).",
         guide: {
             steps: [
                 "Have a FortiClient file? `Import from FortiClient` fills this in.",
                 "WireGuard: paste the full `.conf` (`[Interface]` + `[Peer]`).",
                 "FortiGate: the gateway host and port FortiClient dials.",
                 "IPsec: pre-shared key, plus XAuth if the gateway asks.",
-                "2FA gateway? Connect from the `Status` card and enter the code there.",
+                "2FA gateway? Press `Connect` on its row below and enter the code there.",
             ],
         },
     },
@@ -648,7 +648,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 "Proton VPN free: `account.protonvpn.com` → `Downloads` → `WireGuard configuration`, one config per country.",
                 "Mullvad: `mullvad.net/account` → `WireGuard configuration`.",
                 "Paste several files in the one box: they become one pool.",
-                "Switch later from the `Status` card or `geo use <name> DE`.",
+                "Switch later from this card or `geo use <name> DE`.",
                 "These are datacenter addresses: sites that check will see a proxy.",
             ],
         },

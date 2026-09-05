@@ -6,7 +6,7 @@ import { OkSchema } from "../schemas/shared.js";
 // The live GEO EXIT surface. An exit is ADDED as an `exit` capability (which provider, a resting country,
 // whether it comes up on boot); it is STARTED, MOVED and ROTATED here. Same split as the vpn contract and for
 // the same reason: switching country is a runtime operation performed many times over one stored pool, by the
-// operator from the Status card and by the agent through `exit` on its PATH, which calls these very routes.
+// operator from the capability card and by the agent through `exit` on its PATH, which calls these very routes.
 //
 // The difference from vpn is what "success" means. A dial succeeds when the tunnel is up; a country switch
 // succeeds only when the egress ADDRESS has moved, which is why `use` and `rotate` end by fetching an
@@ -17,7 +17,7 @@ import { OkSchema } from "../schemas/shared.js";
 // the plain uplink no matter what is up.
 export const exitContract = {
     // Every configured exit with its live state, where it was asked to come out and where it actually does.
-    // Drives the Status card, the browser account picker and `geo list` (the CLI is `geo`: `exit` is a shell
+    // Drives the capability card, the browser account picker and `geo list` (the CLI is `geo`: `exit` is a shell
     // builtin, so a binary of that name is unreachable from a command line).
     list: oc
         .route({

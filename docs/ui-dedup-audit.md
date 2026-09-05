@@ -135,8 +135,8 @@ one-line delegation, because eight call sites spelling `{ days: true }` inline i
 It now rounds **down** everywhere: "1h ago" spans the whole hour after the first and never claims more time has
 passed than has. One test changed with it: a machine last seen 90 minutes ago reads "1h ago", not "2h ago".
 
-`_editor/web/src/components/VpnCard.vue`'s `ago` was genuinely different (an uptime *duration*, "3h 20m") and is
-renamed `uptime`; the collision was an invitation to substitute the wrong one.
+`_editor/web/src/components/VpnConnections.vue`'s `ago` was genuinely different (an uptime *duration*, "3h 20m")
+and is renamed `uptime`; the collision was an invitation to substitute the wrong one.
 `composables/chat/catalog.ts` `relativeTime` is deliberately distinct and stays.
 
 ---

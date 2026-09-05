@@ -6,7 +6,7 @@ import { type RouteLocationRaw, useRouter } from "vue-router";
  * <ContextMenu> renders its rows as anchors and honours `url`: the address the browser needs for its own
  * menu, for the status bar, for Ctrl/⌘-click and for middle-click, while `command` stays what an ordinary
  * click does. Both halves describe the same destination, so writing them apart is how they drift: a row would
- * keep pushing `/sandbox/status` long after the tab moved.
+ * keep pushing `/capabilities/vpn` long after the card moved.
  *
  * <ContextMenu> lives in @intentic/ui, which deliberately owns no router (a UI kit that resolves app routes is
  * a UI kit only this app can use), so the resolution happens here, on the app side, and the kit is handed a
@@ -15,7 +15,7 @@ import { type RouteLocationRaw, useRouter } from "vue-router";
  * Spread it into the row and add the label and icon around it:
  *
  *     const link = useMenuLink();
- *     { label: `Connect / disconnect`, icon: `wifi`, ...link(`/sandbox/status`) }
+ *     { label: `Open the VPN card`, icon: `wifi`, ...link(`/capabilities/vpn`) }
  *
  * `after` is for the row that has TIDYING to do on its way out: dismissing the popover it was opened from:
  * and it runs on the plain click only. A modified click is answered by the browser opening another tab, and

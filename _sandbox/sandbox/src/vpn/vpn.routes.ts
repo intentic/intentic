@@ -7,7 +7,7 @@ import { parseForticlientConfig } from "./forticlient-config.js";
 import { connectVpn, disconnectVpn, vpnLink, vpnLinks } from "./vpn-links.js";
 
 // The live VPN routes. Adding a VPN is a capability add; DIALLING one is here, because connecting is a runtime
-// operation performed many times over one stored connection, by the operator from the Status card and by the
+// operation performed many times over one stored connection, by the operator from the VPN card and by the
 // agent through the `vpn` CLI, which calls these same routes. Both therefore observe one implementation.
 
 export type VpnRoutesDeps = Pick<Services, "capabilities">;
@@ -36,7 +36,7 @@ export const createVpnRoutes = (services: VpnRoutesDeps) => {
             dialling.add(entry.id);
             try {
                 yield* connectVpn(entry, { otp: input.otp });
-                // The link's own state is the useful terminal frame: the caller (Status card or CLI) renders the
+                // The link's own state is the useful terminal frame: the caller (VPN card or CLI) renders the
                 // assigned address and routes without a second round-trip.
                 const link = await vpnLink(entry);
                 yield { kind: "log", message: `${link.id}: ${link.state}${link.address === undefined ? "" : ` · ${link.address}`}` };

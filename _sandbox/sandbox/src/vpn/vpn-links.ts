@@ -6,7 +6,7 @@ import { vpnDrivers } from "./vpn-drivers.js";
 import { upMarkerPath, vpnDir } from "./vpn-paths.js";
 
 // The one place the manifest ("which VPNs exist") is joined to the machine ("which are up"). Everything that
-// can dial a tunnel, the Sandbox ▸ Status card, the `vpn` CLI on the agent's PATH, the capability handler's
+// can dial a tunnel, the VPN capability card, the `vpn` CLI on the agent's PATH, the capability handler's
 // apply, and the boot restore, goes through these three functions, so there is exactly one definition of what
 // connecting means and no surface can drift from another.
 

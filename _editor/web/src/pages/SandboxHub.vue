@@ -6,7 +6,6 @@ import { useExtensions } from "../composables/extensions/useExtensions";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useRegistry } from "../composables/extensions/useRegistry";
 import { useRole } from "../composables/sandbox/useRole";
-import { useRunning } from "../composables/sandbox/useRunning";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useSyncHealth } from "../composables/sandbox/useDevices";
 import { type ActiveExtension, activationBadge, detectActivations } from "../core-views/registry";
@@ -22,7 +21,6 @@ import { toListing, updateCount } from "./sandbox/discoverListing";
 import SandboxPersonas from "./sandbox/SandboxPersonas.vue";
 import SandboxOverview from "./sandbox/SandboxOverview.vue";
 import SandboxSecrets from "./sandbox/SandboxSecrets.vue";
-import SandboxStatus from "./sandbox/SandboxStatus.vue";
 import SandboxUsage from "./sandbox/SandboxUsage.vue";
 
 /* The sandbox hub: one home for everything about the active sandbox, reached from the rail's sandbox chip. The
@@ -84,32 +82,31 @@ const reachRows = (contendedPorts: number): readonly HubTab[] => [
         badge: contendedPorts > 0 ? { count: contendedPorts, tone: `info` as const } : undefined,
     },
 ];
-/* Built per render rather than declared flat, because two of these rows wear a live count and the third does not.
+/* WHAT THIS BOX IS, AND WHAT IT COSTS. There used to be a third row here, "Status", carrying a live count of
+ * the dev servers and services that were up, and it is gone because every part of it was a second copy: the
+ * dev servers are the Preview panel's subject (with start, stop and the actual page), Ports names the same
+ * servers with what they expose, and a service-kind capability reporting `active` is a state badge its own row
+ * on Capabilities already wears, next to the controls this list never had. What was left was a tab that read
+ * "docker" on a healthy sandbox: the "Ready · Ready" pattern Overview deleted from itself for the same reason.
  *
- * BOTH COUNTS ARE TONED, and Status's is the reason the tone exists. It is an INVENTORY: how many services and
- * dev servers are up, and it was drawn in the same pill as every badge in the app that means "you owe this
- * something". Someone who saw "1 port couldn't be mirrored" on the sandbox chip came in here, found the one badge
- * in the index sitting on Status, followed it, and was told that docker is active: a badge that answered a
- * question nobody had asked, on the page they were sent to by a different one. Neutral ink settles it: the row
- * still says how many things are alive, in ink that does not claim to be an errand.
- *
- * Devices carries the errand instead, because it is where the port is explained and where the sandbox holding
- * it can be stopped. Info rather than warning: a contended port breaks nothing (the sandbox serves it fine, it
- * just isn't on localhost), but it is the one row in this index that a reader is looking FOR. */
-const boxRows = (running: number): readonly HubTab[] => [
+ * Its badge went with it, and the badge is the sharper lesson. It was an INVENTORY drawn in the pill every
+ * other badge in this app uses to mean "you owe this something": someone who saw "1 port couldn't be mirrored"
+ * on the sandbox chip came in here, found the one badge in the index, followed it, and was told that docker is
+ * active. Devices carries that errand now, and it is the only count left, because it is the only row in this
+ * index a reader is ever looking FOR. Info rather than warning: a contended port breaks nothing (the sandbox
+ * serves it fine, it just isn't on localhost). */
+const BOX_ROWS: readonly HubTab[] = [
     { slug: `overview`, label: `Overview`, icon: `info-circle` },
-    { slug: `status`, label: `Status`, icon: `wave-pulse`, badge: running > 0 ? { count: running, tone: `neutral` } : undefined },
     { slug: `usage`, label: `Usage`, icon: `credit-card` },
 ];
 // Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name.
-const BUILT_IN = new Set([...boxRows(0), ...configurationRows(0), ...reachRows(0)].map((tab) => tab.slug));
+const BUILT_IN = new Set([...BOX_ROWS, ...configurationRows(0), ...reachRows(0)].map((tab) => tab.slug));
 const DEFAULT = `overview`;
 
 const sandbox = useSandbox();
 /* Operating surfaces belong to the highest revokable grant as well as the owner. The daemon independently
  * enforces the same maintainer floor; this only keeps the index honest for lower roles. */
 const { canShip } = useRole();
-const { runningCount } = useRunning();
 // The one fact in this index that is looked FOR rather than looked at: the free /system/sync read the sandbox
 // chip already polls, so badging the row it belongs to costs no request.
 const { contendedPorts } = useSyncHealth();
@@ -142,7 +139,7 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
 });
 
 const groups = computed<readonly NavGroup<HubTab>[]>(() => [
-    { key: `box`, label: `This box`, items: boxRows(runningCount.value).filter((tab) => tab.slug !== `usage` || canShip.value) },
+    { key: `box`, label: `This box`, items: BOX_ROWS.filter((tab) => tab.slug !== `usage` || canShip.value) },
     {
         key: `configuration`,
         label: `Configuration`,
@@ -154,16 +151,9 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
 </script>
 
 <template>
-    <HubLayout
-        :title="sandbox.active.value?.name ?? `Sandbox`"
-        route-name="sandbox"
-        :default-slug="DEFAULT"
-        :groups="groups"
-        :ready="!isLoading"
-    >
+    <HubLayout :title="sandbox.active.value?.name ?? `Sandbox`" route-name="sandbox" :default-slug="DEFAULT" :groups="groups" :ready="!isLoading">
         <template #default="{ slug }">
             <SandboxOverview v-if="slug === `overview`" />
-            <SandboxStatus v-else-if="slug === `status`" />
             <SandboxUsage v-else-if="slug === `usage`" />
             <SandboxSecrets v-else-if="slug === `secrets`" />
             <SandboxEnvironment v-else-if="slug === `environment`" />

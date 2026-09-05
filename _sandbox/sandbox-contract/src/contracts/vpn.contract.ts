@@ -5,14 +5,14 @@ import { ForticlientImportInputSchema, ForticlientImportSchema, VpnConnectInputS
 
 // The live VPN surface. A VPN is ADDED as a `vpn` capability (credentials, autoConnect, capabilities.contract);
 // it is DIALLED here. The split is deliberate: connecting is a runtime operation that both the operator (the
-// Sandbox ▸ Status card) and the agent (`vpn` on its PATH, which calls these very routes) perform many times
+// VPN capability card) and the agent (`vpn` on its PATH, which calls these very routes) perform many times
 // over one stored connection, so it cannot be a capability re-add, and its result is richer than a
 // CapabilityStatus, which is why `list` returns VpnLinks instead of {state, detail}.
 //
 // Every route reads tunnel state back from the OS rather than from daemon memory, so the agent dropping a
 // tunnel from a shell and the UI dropping it are the same event, and a daemon restart observes the truth.
 export const vpnContract = {
-    // Every configured VPN with its live link state, the Status card, the rail indicator, and `vpn list`.
+    // Every configured VPN with its live link state, the VPN card, the rail indicator, and `vpn list`.
     list: oc
         .route({
             method: "GET",

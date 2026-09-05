@@ -57,9 +57,11 @@ vi.mock(`../components/HostConnectDialog.vue`, () => ({ default: defineComponent
 // The one daemon call the import makes. It takes XML and returns connections, so what the spy RECEIVES is the
 // proof the file was read here rather than handed over as a name the daemon could never open.
 const importForticlient = vi.fn<(xml: string) => Promise<ForticlientConnection[]>>();
+// The whole composable, not its list: the vpn card's rows are <VpnConnections>, which dials as well as lists,
+// and reads `error` on every render.
 vi.mock(`../composables/sandbox/useVpn`, () => ({
     importForticlient: (xml: string) => importForticlient(xml),
-    useVpn: () => ({ links: ref([]) }),
+    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
 }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");

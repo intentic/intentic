@@ -8,7 +8,7 @@ import { TUN_PRIVILEGES_FRAGMENT } from "./net-privileges.js";
 // The `vpn` capability: STORE a connection (credentials + whether it dials itself on boot). Everything about
 // dialling lives in the vpn/ subsystem behind a per-protocol driver, and the live surface is the /vpn routes,
 // so this handler is only the manifest's half of the story, and the same connect path serves the operator's
-// Status card, the agent's `vpn` CLI, this apply, and the boot restore.
+// VPN capability card, the agent's `vpn` CLI, this apply, and the boot restore.
 //
 // The tooling for all three protocols, and the container privileges they need, arrive via this capability's
 // environment-overlay fragment + runtime directives, applied by an owner-run rebuild; until then a link reads
@@ -171,7 +171,7 @@ export const vpnHandler: CapabilityHandler = {
         // config, drop it, then re-dial below if it should be up.
         await disconnectVpn(entry).catch(() => undefined);
         if (vpn.autoConnect !== "on") {
-            yield { kind: "log", message: `Stored ${id}. Connect it from the Sandbox ▸ Status card, or ask the agent to.` };
+            yield { kind: "log", message: `Stored ${id}. Connect it from its row on the VPN card, or ask the agent to.` };
             return;
         }
         const missing = await driver.missingTool();

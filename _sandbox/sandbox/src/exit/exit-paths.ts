@@ -68,7 +68,7 @@ export const upMarkerPath = (id: string): string => join(exitStateDir(id), "up")
  * daemon report which country a still-running client was aimed at. */
 export const selectionPath = (id: string): string => join(exitStateDir(id), "selection.json");
 // The last ExitObservation, so a `list` can render "DE · 5.9.x.x, checked 2m ago" without re-probing every
-// exit on every poll (a check goes out over the network and the Status card polls).
+// exit on every poll (a check goes out over the network and the capability card polls).
 export const observationPath = (id: string): string => join(exitStateDir(id), "observation.json");
 // A provider catalog, cached off the network. Refreshed on a miss or when stale; the baked fallback answers
 // when the provider cannot be reached at all.

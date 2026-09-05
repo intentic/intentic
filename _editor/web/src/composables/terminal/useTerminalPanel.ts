@@ -31,7 +31,7 @@ import { uuid } from "../uuid";
  *   · A TRANSCRIPT'S RECORD of a tool result (chat/ChatToolCard.vue's command body). That box is what the MODEL
  *     saw, frozen in the conversation, and it has to stay readable a week later when the tmux session is long
  *     reaped. It carries a "Watch in terminal" button to the live session, which is the pairing to copy.
- *   · A SETTLED FAILURE MESSAGE, a command's final words, bounded and actionable (components/VpnCard.vue's
+ *   · A SETTLED FAILURE MESSAGE, a command's final words, bounded and actionable (components/VpnConnections.vue's
  *     dial failure, which names the exact certificate digest to pin). That is a notice, and notices are text.
  * The line between them: is there more of it coming? Then it is a terminal.
  * ──────────────────────────────────────────────────────────────────────────────────────────────────────────── */

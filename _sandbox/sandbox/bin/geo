@@ -8,7 +8,7 @@
 // nothing shadows it. Only the command had to move.
 //
 // It deliberately owns NO exit logic: every subcommand is one call to the daemon's /exit routes, which are the
-// same routes the browser's Status card drives. That is the whole point — an exit the agent moves appears in
+// same routes the browser's Geo exit card drives. That is the whole point — an exit the agent moves appears in
 // the UI, one the user stops disappears for the agent, and there is exactly one implementation of what
 // switching country means (see _sandbox/sandbox/src/exit/).
 //

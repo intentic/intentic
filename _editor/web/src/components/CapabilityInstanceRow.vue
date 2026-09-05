@@ -26,7 +26,6 @@ import type { HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
 import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { useMenuLink } from "../composables/menuLink";
 import { type ConnectionState, rebuildStep, signsInByHand } from "../pages/capabilities/connections";
 
 const props = defineProps<{
@@ -104,7 +103,6 @@ const primary = computed<{ label: string; icon: IconName; run: () => void } | un
     return undefined;
 });
 
-const link = useMenuLink();
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 
 /* WHAT IS LEFT AFTER THE PRIMARY, in one order: the kind's own secondary verbs, then the three every connection
@@ -127,11 +125,6 @@ const items = computed<MenuItem[]>(() => {
     // and Connect re-pairs it. Removing the capability does both, which is a different intent.
     if (pairs.value && paired.value) {
         kindActions.push({ label: `Revoke access`, icon: `sign-out`, command: () => emit(`revoke`) });
-    }
-    // A VPN is dialled from the Status card, which owns the whole flow (progress, the gateway's own error text,
-    // a one-time code field). Going there beats a second, thinner set of controls that would handle 2FA worse.
-    if (props.entry.kind === `vpn`) {
-        kindActions.push({ label: `Connect / disconnect`, icon: `wifi`, ...link(`/sandbox/status`) });
     }
     return [
         ...kindActions,

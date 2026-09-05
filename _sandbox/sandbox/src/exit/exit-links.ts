@@ -9,7 +9,7 @@ import { forgetLiveState, markUp, readObservation, readSelection, upSince, write
 import { ensureProxy, proxyBound } from "./exit-tunnel.js";
 
 /* The one place the manifest ("which exits exist") is joined to the machine ("which are up, and where do they
- * actually come out"). Everything that can move an exit, the Status card, the `exit` CLI, the capability
+ * actually come out"). Everything that can move an exit, the capability card, the `exit` CLI, the capability
  * handler's apply, the browser wiring and the boot restore, goes through these functions, so there is exactly
  * one definition of what switching country means and no surface can drift from another.
  *
@@ -53,7 +53,7 @@ const observeWithRetry = async (entry: ExitEntry): Promise<ExitObservation> => {
 
 // One configured exit as the UI, the CLI and the browser wiring see it: manifest intent, the OS's answer, and
 // the last observation. Cheap by design, the stored observation is read rather than re-made, because the
-// Status card polls and every check is a real request through a volunteer relay.
+// capability card polls and every check is a real request through a volunteer relay.
 export const exitLink = async (entry: ExitEntry): Promise<ExitLink> => {
     const driver = exitDrivers[entry.config.provider];
     const probe = await driver.probe(entry.id, entry.config);
@@ -144,7 +144,7 @@ export async function* startExit(entry: ExitEntry, country: string | undefined):
  * that gives up waiting must leave the start in flight, and the next turn must join that one rather than
  * begin a second.
  *
- * Progress lines are dropped, not buffered. The callers that want them (the CLI, the Status card) stream
+ * Progress lines are dropped, not buffered. The callers that want them (the CLI, the capability card) stream
  * `startExit` directly; the callers that reach for this one only ever asked "is it up yet".
  */
 const starting = new Map<string, Promise<void>>();

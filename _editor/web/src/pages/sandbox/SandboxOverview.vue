@@ -20,15 +20,20 @@ import SandboxUpdateCard from "./SandboxUpdateCard.vue";
  *
  * IT DOES NOT INDEX THE OTHER TABS. It used to end in an "at a glance" block: five rows deep-linking to Agent,
  * Secrets, Capabilities, Status and Access, each with a status chip. Every one of those was a second way to say
- * something already on screen: four of the five pointed at tabs in the strip directly above them (and named
- * them differently: "Running now" for Status), the Status tab already wore the same running count as a pill
- * badge, presence is in the rail, and missing secrets badge the sandbox chip. The fifth left the hub entirely,
- * for a page the rail's "+" opens. What was left on a healthy sandbox read "Ready · Ready · 4 · 0 · -": five
- * rows and a chevron
- * each to report that nothing needs doing, which is the exact pattern this app rejects everywhere else (the
- * rail's VPN indicator, the Extensions tab's silent nominal case). The one condition it carried that had no
- * other home (nothing connected to run a turn with) is an attention item now (sandboxAttention), so it rides
- * the chip badge with the other four instead of a row that says "Ready" for the rest of the sandbox's life. */
+ * something already on screen: four of the five pointed at tabs in the strip directly above them, presence is
+ * in the rail, and missing secrets badge the sandbox chip. The fifth left the hub entirely, for a page the
+ * rail's "+" opens. What was left on a healthy sandbox read "Ready · Ready · 4 · 0 · -": five rows and a
+ * chevron each to report that nothing needs doing, which is the exact pattern this app rejects everywhere else
+ * (the rail's VPN indicator, the Extensions tab's silent nominal case). The one condition it carried that had
+ * no other home (nothing connected to run a turn with) is an attention item now (sandboxAttention), so it
+ * rides the chip badge with the other four instead of a row that says "Ready" for the rest of the sandbox's
+ * life.
+ *
+ * The Status tab it pointed at is gone for the same reason, one level up: its whole body was a running count
+ * that read "docker" on a healthy box. NOTHING REPLACES IT HERE. Overview is what this box IS, facts with a
+ * half-life of months, and a list that changes whenever a dev server restarts would only be that deleted block
+ * again with live numbers in it. What is running belongs where it can be acted on: the Preview panel and Ports
+ * for dev servers, a capability's own row for a service. */
 
 const sandbox = useSandbox();
 const { hasSnapshot } = useWorkspaceTree();

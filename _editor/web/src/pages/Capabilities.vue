@@ -42,6 +42,7 @@ import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CapabilityInstanceRow from "../components/CapabilityInstanceRow.vue";
 import CapabilityRenameDialog from "../components/CapabilityRenameDialog.vue";
 import CapabilityRail, { type CapabilityScope } from "../components/CapabilityRail.vue";
+import VpnConnections from "../components/VpnConnections.vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { auditBrief, updateBrief } from "./sandbox/extensionBrief";
@@ -119,8 +120,8 @@ import { useVpn } from "../composables/sandbox/useVpn";
 
 const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
 const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
-// VPN instances get live link state and connect/disconnect here too: the same daemon routes the Sandbox ▸
-// Status card drives, so a tunnel dialled from either place reads identically in both.
+// A tunnel's live address, for the Connected slice's rows. The VPN card's own rows come from <VpnConnections>,
+// which reads the same query, so the inventory and the card can never disagree about one tunnel.
 const { links: vpnLinks } = useVpn();
 
 // The identities the browser cards can be filed under: instance state, which the manifest cannot know.
@@ -821,13 +822,11 @@ const nothingMatches = computed(() => (showingConnections.value ? connectionGrou
  * vocabulary: both read their state from connectionState(), so a Reddit account cannot be "needs sign-in" in the
  * inventory and "pending" on its card.
  *
- * What the card's rows need on top is the two live facts a stored config cannot answer: the address a tunnel
- * was actually given, the OS a machine actually reported. connectionFacts() is the fallback for everything
- * else, so a Postgres row still names its host and database. */
+ * What the card's rows need on top are the live facts a stored config cannot answer: the OS a machine actually
+ * reported, the sites a browser may work on. connectionFacts() is the fallback for everything else, so a
+ * Postgres row still names its host and database. A VPN card is not served from here at all: <VpnConnections>
+ * draws its own rows, because a tunnel's facts change while you watch them. */
 const cardRowFacts = (instance: CapabilitySummary): string => {
-    if (selected.value?.kind === `vpn`) {
-        return vpnAddress(instance.id) ?? connectionFacts(instance);
-    }
     if (selected.value?.kind === `host`) {
         return hostFor(instance.id)?.facts?.os ?? connectionFacts(instance);
     }
@@ -1352,9 +1351,23 @@ const submitLabel = computed(() => {
                         <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                             <!-- WHAT YOU ALREADY HAVE OF THIS CARD: a list of accounts, and therefore a LIST.
                                  Suppressed entirely for a one-per-sandbox card, whose single instance is the
-                                 subject of the heading above rather than an entry under it. -->
+                                 subject of the heading above rather than an entry under it.
+
+                                 A VPN'S LIST IS ITS OWN, because a tunnel's state is not {state, detail}: it is
+                                 an assigned address and the networks it carries, and its one control streams
+                                 the client's progress and can stop to ask for a one-time code. It stands
+                                 exactly here, with the same verbs behind the same menu, so the tunnel is
+                                 dialled on the page that configures it. -->
+                            <VpnConnections
+                                v-if="selected.kind === 'vpn' && selectedInstances.length > 0"
+                                :instances="selectedInstances"
+                                :editing-id="editing?.id"
+                                @edit="openEdit"
+                                @rename="askRename"
+                                @remove="askRemove"
+                            />
                             <RowGroup
-                                v-if="selectedInstances.length > 0 && !selected.singleton"
+                                v-else-if="selectedInstances.length > 0 && !selected.singleton"
                                 label="Your connections"
                                 :count="selectedInstances.length"
                             >

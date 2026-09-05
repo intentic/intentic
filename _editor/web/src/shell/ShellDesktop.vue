@@ -776,11 +776,12 @@ useKeybindings();
 
             <!-- The VPN indicator: present ONLY while a tunnel is up, because that is a fact about the sandbox
                  the operator must be able to see from any view, while it is connected, the agent's traffic,
-                 git and package installs leave through someone else's network. Links to the Status card that
-                 owns the controls. -->
+                 git and package installs leave through someone else's network. Links to the VPN card, which
+                 owns the controls (and the "Disconnect" that ends it), the way this one's neighbour points at
+                 Ports. -->
             <RouterLink
                 v-if="connectedVpns.length > 0"
-                to="/sandbox/status"
+                to="/capabilities/vpn"
                 class="icon-rail-tile flex items-center justify-center rounded-lg text-success transition-colors hover:bg-overlay"
                 :aria-label="vpnLabel"
                 v-tooltip.right="vpnLabel"

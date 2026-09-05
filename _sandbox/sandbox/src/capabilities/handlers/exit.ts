@@ -8,7 +8,7 @@ import { TUN_PRIVILEGES_FRAGMENT } from "./net-privileges.js";
 /* The `exit` capability: STORE a pool to come out of (which provider, a resting country, whether it comes up
  * on boot). Everything about starting, moving and rotating lives in the exit/ subsystem behind a per-provider
  * driver, and the live surface is the /exit routes, so this handler is only the manifest's half of the story,
- * and the same path serves the operator's Status card, the agent's `geo` CLI, this apply, the browser wiring
+ * and the same path serves the operator's capability card, the agent's `geo` CLI, this apply, the browser wiring
  * and the boot restore.
  *
  * ONE FRAGMENT PER PROVIDER, not one for the kind, because the providers differ in the thing that costs the
@@ -155,7 +155,7 @@ export const exitHandler: CapabilityHandler = {
         // running: take it down, then bring it back below if it should be up.
         await stopExit(entry).catch(() => undefined);
         if (exit.autoStart !== "on") {
-            yield { kind: "log", message: `Stored ${id}. Start it from the Sandbox ▸ Status card, or ask the agent to.` };
+            yield { kind: "log", message: `Stored ${id}. Start it from its row on the Geo exit card, or ask the agent to.` };
             return;
         }
         const missing = await driver.missingTool();

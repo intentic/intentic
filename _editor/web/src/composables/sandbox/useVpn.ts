@@ -49,7 +49,7 @@ export function useVpn(): {
 
     const invalidate = async (): Promise<void> => {
         // A VPN's capability row carries the same state under a different shape, refresh both so the
-        // Capabilities page and the Status card never disagree about one tunnel.
+        // Capabilities page's inventory and the VPN card's own rows never disagree about one tunnel.
         await Promise.all([queryClient.invalidateQueries({ queryKey: QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CAPABILITIES.of() })]);
     };
 
