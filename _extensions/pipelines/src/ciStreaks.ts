@@ -1,4 +1,4 @@
-import type { PipelineRun } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 
 /* WHETHER A BRANCH IS RED RIGHT NOW, judged on its LAST COMMIT rather than on its last run.
  *
@@ -135,13 +135,17 @@ export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<Pipeline
     return open;
 };
 
-/* WHAT IS IN FLIGHT ON THE CODE AS IT STANDS: the still-running runs on the newest commit each branch has.
+/* WHAT IS IN FLIGHT ON THE CODE AS IT STANDS: the unfinished runs on the newest commit each branch has.
  *
  * Half of what the board opens for you (`arrivesOpen` below); `openFailures` above is the other half. A run that
  * is still going has a job graph worth the vertical space unasked, it is the answer arriving, and somebody who
  * came to watch it should not have to click for it. The freshness half is what keeps that from becoming noise: a
- * re-run somebody started on last week's commit is "running" too, and its diagram is not what anyone opened the
+ * re-run somebody started on last week's commit is unfinished too, and its diagram is not what anyone opened the
  * board for.
+ *
+ * QUEUED COUNTS AS IN FLIGHT HERE, and it is the case that pays for the graph most: on a run stuck waiting for a
+ * runner the diagram is the answer to the only question there is, which jobs are held and on what, and a rule
+ * that opened a run the moment a runner picked it up would keep it shut for exactly as long as it was stuck.
  *
  * DELIBERATELY NOT `commitsByBranch` ABOVE, which is why this is a second walk rather than another reader of
  * that one. That walk keeps only the runs that reached a VERDICT, which is right for judging a branch and wrong
@@ -155,7 +159,7 @@ export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<Pipeline
  *
  * Per BRANCH, not one commit for the whole board: two branches building at once are two answers arriving, and a
  * board that opened only the later push would hide a live run for no reason a reader could see. */
-export const runningOnHead = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => {
+export const inFlightOnHead = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => {
     const heads = new Map<string, PipelineRun>();
     for (const run of runs) {
         const key = branchKey(run);
@@ -164,7 +168,7 @@ export const runningOnHead = (runs: readonly PipelineRun[]): ReadonlySet<Pipelin
             heads.set(key, run);
         }
     }
-    return new Set(runs.filter((run) => run.status === `running` && heads.get(branchKey(run))?.sha === run.sha && !isTagRef(run.branch)));
+    return new Set(runs.filter((run) => isPipelineInFlight(run.status) && heads.get(branchKey(run))?.sha === run.sha && !isTagRef(run.branch)));
 };
 
 /* WHAT THE BOARD OPENS FOR YOU (PipelineRunRow's `autoOpen`): everything the newest commit on a branch has to
@@ -187,7 +191,7 @@ export const runningOnHead = (runs: readonly PipelineRun[]): ReadonlySet<Pipelin
  * might add to it. Note the two halves read `head` differently on purpose, off every run here and off the runs
  * with a verdict there, so a push that is still building shows its live graph AND the failure the last commit
  * left open, which is the branch's most recent word until this push has one of its own. */
-export const arrivesOpen = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => new Set([...runningOnHead(runs), ...openFailures(runs)]);
+export const arrivesOpen = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => new Set([...inFlightOnHead(runs), ...openFailures(runs)]);
 
 /* For each failed run, the run that put its branch back to green, the EARLIEST one on a LATER COMMIT that
  * passed clean, which is the one that actually recovered the branch rather than whichever green happens to be

@@ -31,9 +31,13 @@ export interface PipelineStage {
     readonly jobs: readonly PipelineJob[];
 }
 
-// Severity order for collapsing many job statuses into one stage status: a single failure dominates, and a
-// stage is only "success" when nothing in it did anything worse.
-const STATUS_WEIGHT: Record<PipelineStatus, number> = { failed: 0, running: 1, canceled: 2, skipped: 3, success: 4 };
+/* Severity order for collapsing many job statuses into one stage status: a single failure dominates, and a
+ * stage is only "success" when nothing in it did anything worse.
+ *
+ * `queued` sits behind `running` and ahead of the settled three, which is what makes a half-started stage read
+ * as started: one leg of a four-way matrix executing while three wait for a runner is a stage in progress, and
+ * a stage whose every job is still waiting is the one worth drawing as waiting. */
+const STATUS_WEIGHT: Record<PipelineStatus, number> = { failed: 0, running: 1, queued: 2, canceled: 3, skipped: 4, success: 5 };
 
 const worstStatus = (jobs: readonly PipelineJob[]): PipelineStatus =>
     jobs.reduce<PipelineStatus>((worst, job) => (STATUS_WEIGHT[job.status] < STATUS_WEIGHT[worst] ? job.status : worst), `success`);

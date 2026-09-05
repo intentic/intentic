@@ -25,6 +25,27 @@ export interface StatusTone {
 }
 
 export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
+    /* WAITING FOR A RUNNER, and drawn as waiting: a static clock, muted ink, a dashed ring. It used to be the
+     * `running` tone, spinner and all, which is the one reading a queued pipeline must never get, a board that
+     * animates over work nothing is doing says "nearly there" for as long as the runner stays offline.
+     *
+     * Dashed rather than a fourth colour. Colour on this board already means an outcome, and queued is the
+     * absence of one; the dash is the standard "not filled in yet" and separates it at a glance from `canceled`
+     * and `skipped`, which share its muted palette but are over. */
+    queued: {
+        icon: `clock`,
+        spin: false,
+        label: `queued`,
+        variant: `neutral`,
+        text: `text-muted`,
+        circle: `border-dashed border-muted/60 bg-transparent text-muted`,
+        tint: `bg-transparent`,
+        // At FULL opacity, unlike canceled and skipped: a stripe is how this board is scanned, and the /40 those
+        // two carry disappears into the canvas. They can afford it, they are over; a run somebody is waiting on
+        // has to be findable down the left edge.
+        rowBorder: `border-l-muted`,
+        bar: `bg-muted`,
+    },
     success: {
         icon: `check-circle`,
         spin: false,

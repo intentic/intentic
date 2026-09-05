@@ -201,7 +201,10 @@ const runningJobs = (base: number): PipelineJob[] => [
     { name: `e2e (chromium)`, status: `running`, needs: [`build`], startedAt: base + 213_000 },
     { name: `e2e (firefox)`, status: `running`, needs: [`build`], startedAt: base + 214_000 },
     { name: `bundle-size`, status: `running`, needs: [`build`], startedAt: base + 215_000 },
-    { name: `deploy preview`, status: `running`, needs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`, `unit`] },
+    // QUEUED, not running: it has no start because it has not started, and it is behind three legs that have
+    // not finished. A spinner over it would say the deploy was under way while the e2e it waits on was still
+    // going, which is the reading `queued` exists to stop.
+    { name: `deploy preview`, status: `queued`, needs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`, `unit`] },
 ];
 
 export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] => {

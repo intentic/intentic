@@ -1,6 +1,6 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { arrivesOpen, failureStreaks, openFailures, runningOnHead, streakTooltip, supersededBy } from "./ciStreaks";
+import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
 /* The rail badge's derivations. Both answer "is this branch red right now?", and both are worth pinning down
@@ -165,7 +165,7 @@ test("canceled and running runs after a failure do not supersede it", () => {
 test("a run still going on the branch's newest commit is what the board opens", () => {
     const live = run(1, "running", 50, "main", "head");
     const stale = run(2, "running", 40, "main", "before");
-    const open = runningOnHead([live, stale]);
+    const open = inFlightOnHead([live, stale]);
     expect(open.has(live)).toBe(true);
     // Still running, on code a later push replaced: a re-run somebody left behind, and not what anyone opened
     // the board to watch.
@@ -177,14 +177,25 @@ test("a run still going on the branch's newest commit is what the board opens", 
  * the head would be the commit before it — exactly the moment a live board has to open something. */
 test("a push whose pipelines are all still going is its own head commit", () => {
     const live = run(1, "running", 60, "main", "pushed");
-    expect(runningOnHead([live, run(2, "success", 50, "main", "before")]).has(live)).toBe(true);
+    expect(inFlightOnHead([live, run(2, "success", 50, "main", "before")]).has(live)).toBe(true);
+});
+
+test("a run held at the runner is opened too: that is when the graph answers the only question there is", () => {
+    // The case that pays for the graph most. A rule keyed on "running" would keep the row shut for exactly as
+    // long as the run was stuck, and open it the moment a runner finally picked it up.
+    const held = run(1, "queued", 50, "main", "head");
+    expect(inFlightOnHead([held]).has(held)).toBe(true);
+    expect(arrivesOpen([held]).has(held)).toBe(true);
+    // The freshness half still holds: a queued run on code a later push replaced stays shut.
+    const stale = run(2, "queued", 40, "main", "before");
+    expect(inFlightOnHead([held, stale]).has(stale)).toBe(false);
 });
 
 test("a finished run on the head commit is not opened, however new it is", () => {
     // The graph of a run that is over is evidence to go looking for, not an answer arriving, and every green row
     // opening itself would bury the board.
     const done = run(1, "success", 50, "main", "head");
-    expect(runningOnHead([done, run(2, "failed", 49, "main", "head")]).size).toBe(0);
+    expect(inFlightOnHead([done, run(2, "failed", 49, "main", "head")]).size).toBe(0);
 });
 
 test("every branch with something in flight gets its own row opened", () => {
@@ -192,7 +203,7 @@ test("every branch with something in flight gets its own row opened", () => {
     // the earlier push's live run would be a silence the reader cannot account for.
     const mine = run(1, "running", 40, "feat", "mine");
     const theirs = run(2, "running", 50, "main", "theirs");
-    expect(runningOnHead([theirs, mine, run(3, "success", 30, "feat", "older")])).toEqual(new Set([theirs, mine]));
+    expect(inFlightOnHead([theirs, mine, run(3, "success", 30, "feat", "older")])).toEqual(new Set([theirs, mine]));
 });
 
 /* …and the whole rule: everything the newest commit has to say that is not "fine". Both halves are head-commit
@@ -273,7 +284,7 @@ test("a running run on a tag ref does not auto-open", () => {
     // GitHub workflow_dispatch runs triggered from a release tag carry the tag as head_branch.
     const tagRun = run(1, "running", 50, "v1.245.0", "cee7a1d");
     const mainRun = run(2, "running", 40, "main", "abc1234");
-    const open = runningOnHead([tagRun, mainRun]);
+    const open = inFlightOnHead([tagRun, mainRun]);
     // The tag ref is excluded from auto-open, but the regular branch run opens.
     expect(open.has(tagRun)).toBe(false);
     expect(open.has(mainRun)).toBe(true);
@@ -305,12 +316,12 @@ test("tag ref detection matches semver patterns", () => {
     const tags = ["v1.0.0", "v1.245.0", "v0.0.1", "v10.20.30", "v1.0.0-alpha", "v2.0.0-beta.1"];
     for (const tag of tags) {
         const tagRun = run(1, "running", 50, tag);
-        expect(runningOnHead([tagRun]).size).toBe(0);
+        expect(inFlightOnHead([tagRun]).size).toBe(0);
     }
     // Non-tag branches should still work.
     const branches = ["main", "feat/v1-migration", "release-v1", "v1-branch", "version-1.0.0"];
     for (const branch of branches) {
         const branchRun = run(1, "running", 50, branch);
-        expect(runningOnHead([branchRun]).size).toBe(1);
+        expect(inFlightOnHead([branchRun]).size).toBe(1);
     }
 });

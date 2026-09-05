@@ -178,9 +178,11 @@ const ciUrl = (repo: CiRepo): string => (repo.host === `github` ? `${repo.url}/a
 // Worst first, and `passed` is the one that renders at zero: a board whose whole tally is silent reads as a
 // broken view rather than as a quiet one.
 const counts = computed<TallyItem[]>(() => {
-    const c = { running: 0, success: 0, failed: 0, other: 0 };
+    const c = { queued: 0, running: 0, success: 0, failed: 0, other: 0 };
     for (const run of scopedRuns.value) {
-        if (run.status === `running`) {
+        if (run.status === `queued`) {
+            c.queued++;
+        } else if (run.status === `running`) {
             c.running++;
         } else if (run.status === `success`) {
             c.success++;
@@ -193,6 +195,10 @@ const counts = computed<TallyItem[]>(() => {
     return [
         { label: `failed`, value: c.failed, variant: `danger` },
         { label: `running`, value: c.running, variant: `info` },
+        // Counted apart from `running` rather than beside it, which is the whole point: "4 running" over a board
+        // where nothing has a runner is the reading this line existed to prevent. Zero ⇒ no chip, so the tally
+        // only widens on a board that has something waiting, and reads exactly as before on one that does not.
+        { label: `queued`, value: c.queued, variant: `neutral` },
         { label: `passed`, value: c.success, variant: `success`, always: true },
         { label: `other`, value: c.other, variant: `neutral` },
     ];

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentSummary, PipelineRun } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type AgentSummary, type PipelineRun } from "@intentic/sandbox-contract";
 import {
     AgentRunButton,
     type AgentRunChoice,
@@ -81,6 +81,8 @@ const fullscreen = ref(false);
 const actionKey = `${props.run.host}:${props.run.project}:${props.run.runId}`;
 
 const tone = computed(() => STATUS_TONE[props.run.status]);
+// Queued or going: the two states with something left to stop, and so the two that keep Cancel rather than Re-run.
+const inFlight = computed(() => isPipelineInFlight(props.run.status));
 const duration = computed(() => formatDuration(props.run.durationSeconds));
 // The commit subject is the headline. Without one, the vendor's own name for an unnamed pipeline: its id:
 // beats repeating the branch and sha that the line below already carries.
@@ -386,8 +388,11 @@ const startFix = (): void => {
                             @run="startFix"
                             @pick="fixModel.choose"
                         />
+                        <!-- Cancel is offered for a QUEUED run as well as a going one: a pipeline waiting on a
+                             runner that is not coming is the case where the button is most wanted, and both
+                             forges accept the call before anything has started. -->
                         <Button
-                            v-if="run.status === `running`"
+                            v-if="inFlight"
                             label="Cancel"
                             size="small"
                             severity="secondary"

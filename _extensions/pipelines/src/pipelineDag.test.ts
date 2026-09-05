@@ -65,6 +65,30 @@ describe(`pipelineStages`, () => {
         ];
         expect(pipelineStages(overlapping).map((stage) => stage.jobs.map((job) => job.name))).toEqual([[`a`, `b`], [`c`]]);
     });
+
+    /* A RUN HELD AT THE RUNNER, which is the shape a nightly takes when its self-hosted workers are down: the
+     * cloud-hosted jobs finish in two minutes and the rest sit unclaimed for as long as the runners stay
+     * offline. The queued jobs carry no start (providers.ts drops the phantom one Actions reports), so the wave
+     * layering files them where they belong: one trailing layer of work that has not happened. */
+    it(`puts the jobs still waiting for a runner in a trailing wave`, () => {
+        const held: PipelineJob[] = [
+            { name: `ci-audit`, status: `success`, startedAt: 0, finishedAt: 100 },
+            { name: `e2e`, status: `queued` },
+            { name: `images`, status: `queued` },
+        ];
+        const stages = pipelineStages(held);
+        expect(stages.map((stage) => stage.jobs.map((job) => job.name))).toEqual([[`ci-audit`], [`e2e`, `images`]]);
+        // And the circle over them says so, rather than spinning: nothing in that wave is executing.
+        expect(stages.map((stage) => stage.status)).toEqual([`success`, `queued`]);
+    });
+
+    it(`reads a half-started stage as started, and a failure still dominates both`, () => {
+        const worstOf = (jobs: PipelineJob[]): string | undefined => pipelineStages(jobs)[0]?.status;
+        // One leg of a matrix on a runner while its siblings wait is a stage in progress.
+        expect(worstOf([{ name: `a`, status: `running`, stage: `test` }, { name: `b`, status: `queued`, stage: `test` }])).toBe(`running`);
+        expect(worstOf([{ name: `a`, status: `queued`, stage: `test` }, { name: `b`, status: `success`, stage: `test` }])).toBe(`queued`);
+        expect(worstOf([{ name: `a`, status: `queued`, stage: `test` }, { name: `b`, status: `failed`, stage: `test` }])).toBe(`failed`);
+    });
 });
 
 describe(`pipelineDag with declared dependencies`, () => {

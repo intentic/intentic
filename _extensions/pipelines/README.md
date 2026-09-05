@@ -42,6 +42,18 @@ inside the view rather than gating the tile.
 
 ## Conventions & gotchas
 
+- QUEUED IS ITS OWN STATE, not a flavour of running. The contract's `PipelineStatus` used to collapse every
+  non-terminal vendor word onto `running`, on the reasoning that a board only needs "still moving" against the
+  three ways a run stops. What that produced was a board spinning over work nothing was doing: a nightly whose
+  self-hosted jobs are waiting on offline runners read as jobs in progress, with a duration ticking up, for as
+  long as the runners stayed down. Queued draws as a static clock in a dashed ring, is counted apart in the tally
+  and in a repository's standing, keeps Cancel on offer, and carries no duration. The two are still one class
+  wherever the question is "has this said anything yet" — `isPipelineInFlight`, in the contract because the
+  daemon splits on it too.
+- ACTIONS REPORTS A `started_at` FOR A JOB THAT NEVER STARTED, set to the moment the run was queued, so the
+  daemon drops it (`providers.ts`). Everything here reads a present `startedAt` as "this began": it is what the
+  wave layering files jobs by and what a duration is measured from, so a job waiting an hour for a runner would
+  otherwise arrive claiming an hour of work and be drawn among the jobs that did it.
 - A branch is judged on its LAST COMMIT, not its last run. One push fires every workflow the repo has, they
   start in the same second, and reading the branch off whichever run carried the newest timestamp let a green
   sibling hide a red one: the rail's badge blinked out while main was broken. Any failure among a commit's runs
@@ -60,7 +72,8 @@ inside the view rather than gating the tile.
   sidebar badge still says that a branch is red wherever you are.
 - WHAT THE NEWEST COMMIT ON A BRANCH HAS TO SAY THAT IS NOT "FINE" ARRIVES EXPANDED, so the diagram this board
   exists to draw is on screen before anyone clicks (`arrivesOpen`). Two halves, and they are one event either
-  side of its ending: the runs still going there (`runningOnHead`, where the graph is the answer arriving), and
+  side of its ending: the runs that have not finished there (`inFlightOnHead`, where the graph is the answer
+  arriving — a run still waiting for a runner counts, and is the case the diagram pays for most), and
   the failures it left open (`openFailures`, where the same graph is which job broke, and is the evidence the
   "Fix with agent" button beside it acts on). Opening a pipeline while it ran and shutting it the instant it went
   red would close at the one moment there was something to read, and would leave everyone who arrived after the

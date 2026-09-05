@@ -36,7 +36,7 @@ const scriptedFetch = (script: Record<string, unknown>, calls: { method: string;
         return new Response(JSON.stringify(hit[1]), { status: 200, headers: { "content-type": "application/json" } });
     }) as FetchFn;
 
-test("status mapping collapses both vendors' vocabularies onto the five buckets", () => {
+test("status mapping collapses both vendors' vocabularies onto the six buckets", () => {
     expect(githubStatus("in_progress", null)).toBe("running");
     expect(githubStatus("completed", "success")).toBe("success");
     expect(githubStatus("completed", "failure")).toBe("failed");
@@ -44,11 +44,41 @@ test("status mapping collapses both vendors' vocabularies onto the five buckets"
     expect(githubStatus("completed", "cancelled")).toBe("canceled");
     expect(githubStatus("completed", "neutral")).toBe("skipped");
     expect(gitlabStatus("running")).toBe("running");
-    expect(gitlabStatus("manual")).toBe("running");
     expect(gitlabStatus("success")).toBe("success");
     expect(gitlabStatus("failed")).toBe("failed");
     expect(gitlabStatus("canceled")).toBe("canceled");
     expect(gitlabStatus("skipped")).toBe("skipped");
+});
+
+// The distinction the board is drawn from: waiting for a runner is not the same news as being on one.
+test("waiting for a runner is queued, not running", () => {
+    for (const status of ["queued", "waiting", "requested", "pending"]) {
+        expect(githubStatus(status, null)).toBe("queued");
+    }
+    for (const status of ["created", "waiting_for_resource", "preparing", "pending", "manual", "scheduled"]) {
+        expect(gitlabStatus(status)).toBe("queued");
+    }
+    // A non-terminal word neither vendor has shipped yet still reads as moving, which is the reading every
+    // status had before `queued` existed.
+    expect(githubStatus("some_new_phase", null)).toBe("running");
+    expect(gitlabStatus("some_new_phase")).toBe("running");
+});
+
+test("a queued run carries no duration: the span since it was queued is a wait, not work", () => {
+    const run = githubRun(githubProject, {
+        id: 9,
+        head_branch: "main",
+        head_sha: "abc1234def",
+        status: "queued",
+        conclusion: null,
+        html_url: "https://github.com/acme/web/actions/runs/9",
+        created_at: "2026-07-29T10:00:00Z",
+        run_started_at: "2026-07-29T10:00:00Z",
+        // An hour of sitting in the queue, which Actions reports by bumping updated_at.
+        updated_at: "2026-07-29T11:00:00Z",
+    });
+    expect(run.status).toBe("queued");
+    expect(run.durationSeconds).toBeUndefined();
 });
 
 test("githubRun normalizes a workflow_run object: duration only once terminal", () => {
@@ -340,6 +370,32 @@ test("github allJobs still returns the jobs when the workflow file cannot be rea
         expect(jobs.every((job) => job.needs === undefined)).toBe(true);
         expect(jobs[0]).toMatchObject({ name: "preflight", status: "success", durationSeconds: 60 });
     }
+});
+
+/* THE PHANTOM START. Actions reports a `started_at` on a job that has never started, set to the moment the RUN
+ * was queued, so a job waiting on an offline self-hosted runner comes back looking like an hour of work in
+ * progress. The view reads a present `startedAt` as "this began" — it lays the run out by it and clocks the
+ * elapsed time from it — so the lie is dropped at the edge rather than worked around six places downstream. */
+test("github allJobs drops the started_at Actions reports for a job that never started", async () => {
+    const queuedAt = "2026-09-05T07:15:42Z";
+    const fetchFn = (async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/jobs?")) {
+            const jobs = [
+                { id: 1, name: "ci-audit", status: "completed", conclusion: "success", started_at: queuedAt, completed_at: "2026-09-05T07:17:31Z" },
+                // Held for a self-hosted runner: never picked up, and still handed a started_at.
+                { id: 2, name: "e2e", status: "queued", conclusion: null, started_at: queuedAt, completed_at: null },
+            ].map((job) => ({ ...job, html_url: null }));
+            return new Response(JSON.stringify({ jobs }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response("nope", { status: 404 });
+    }) as FetchFn;
+
+    const [ran, waiting] = await ciClientFor("github", fetchFn).allJobs(githubProject, 7);
+    expect(ran).toMatchObject({ name: "ci-audit", status: "success", startedAt: Date.parse(queuedAt), durationSeconds: 109 });
+    expect(waiting?.status).toBe("queued");
+    expect(waiting?.startedAt).toBeUndefined();
+    expect(waiting?.durationSeconds).toBeUndefined();
 });
 
 /* THE FIX CONVERSATION'S EVIDENCE. A runner prints for a terminal: a coloured verdict, a progress line that

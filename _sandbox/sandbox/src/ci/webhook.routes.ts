@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { PipelineRun } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -70,7 +70,11 @@ export const createCiWebhookRoute =
                 c.req.header("x-gitlab-event") === "Pipeline Hook" &&
                 delivery.object_attributes !== undefined &&
                 delivery.project !== undefined &&
-                gitlabStatus(delivery.object_attributes.status) !== "running"
+                // GitLab's Pipeline Hook fires at every phase, so this is the "it has finished" gate: a pipeline
+                // that is pending or going has nothing for the `ci` listeners downstream yet. Asked as "not in
+                // flight" rather than "not running", which is what it said while queued WAS running: since the
+                // two split, that spelling would have let every `pending` delivery through as a conclusion.
+                !isPipelineInFlight(gitlabStatus(delivery.object_attributes.status))
             ) {
                 projectPath = delivery.project.path_with_namespace;
                 const user = delivery.user;

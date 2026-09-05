@@ -9,11 +9,25 @@ import { AgentRunPickSchema } from "./agent.js";
 
 export const CiHostSchema = z.enum(["github", "gitlab"]);
 export type CiHost = z.infer<typeof CiHostSchema>;
-// Terminal-or-not over both vendors' vocabularies: github's status+conclusion pair and gitlab's single status
-// both collapse onto these five. `running` covers everything non-terminal (queued, manual, preparing …), the
-// view only needs "still moving" vs the three ways it stopped.
-export const PipelineStatusSchema = z.enum(["running", "success", "failed", "canceled", "skipped"]);
+/* Both vendors' vocabularies over one enum: github's status+conclusion pair and gitlab's single status collapse
+ * onto these six.
+ *
+ * QUEUED IS ITS OWN STATE AND NOT A FLAVOUR OF RUNNING, which it used to be, on the reasoning that a view only
+ * needs "still moving" vs the three ways it stopped. What that produced is a board that spins over work nothing
+ * is doing: a nightly whose six self-hosted jobs are waiting for a runner that is offline reads as six jobs in
+ * progress, with a duration ticking up, for as long as the runner stays down. The distinction is not cosmetic,
+ * it is the difference between "wait" and "go look at your runners", and it is the only question a reader of a
+ * stuck pipeline actually has.
+ *
+ * The two are still one class for everything that asks "has this said anything yet": neither is a verdict, and
+ * the callers that care read them as a pair. */
+export const PipelineStatusSchema = z.enum(["queued", "running", "success", "failed", "canceled", "skipped"]);
 export type PipelineStatus = z.infer<typeof PipelineStatusSchema>;
+/* Whether a run or a job has yet to say anything, the pair against the three ways one stops. Here rather than
+ * in either consumer because both ends split on it and must split the same way: the daemon, to know that the
+ * span between two timestamps is not yet a duration, and the board, to count what is in flight, to keep a
+ * Cancel button on offer, and to leave a run out of a verdict walk. */
+export const isPipelineInFlight = (status: PipelineStatus): boolean => status === "queued" || status === "running";
 export const PipelineRunSchema = z.object({
     // The workspace repo dir (the panels `repo` convention), the join key back to the tree and to triggers.
     repo: z.string().describe("Which workspace repository it belongs to."),
@@ -45,7 +59,7 @@ export const PipelineRunSchema = z.object({
     branch: z.string().describe("Which branch."),
     sha: z.string().describe("Which commit."),
     status: PipelineStatusSchema.describe(
-        "How it is going. Running covers everything still moving, since the only distinction that matters is that against the three ways it can stop.",
+        "How it is going. Queued means the forge has accepted it and nothing is executing it yet, which is a different thing to wait on than a run actually in progress.",
     ),
     // The vendor's run page, the deep link out.
     url: z.string().describe("Its page on the forge."),
@@ -71,7 +85,10 @@ export type PipelineRun = z.infer<typeof PipelineRunSchema>;
  *   2. `stage`. GitLab's native sequential grouping, returned by its jobs API and used verbatim.
  *   3. The timestamps, the last resort, and GitHub's before `needs` existed: overlapping runtimes ⇒ the jobs
  *      ran in parallel. Honest about when things happened, silent about what actually gated what.
- * Both timestamps are epoch ms; absent while a job is still queued. */
+ * Both timestamps are epoch ms, and a `queued` job carries NEITHER. That is an invariant the normalizers hold
+ * up rather than something a vendor gives: GitHub reports a `started_at` on a job that has never started, set
+ * to the moment the run was queued, so a job waiting an hour for a runner arrives claiming an hour of work.
+ * Everything downstream reads a present `startedAt` as "this began", so the lie has to be dropped at the edge. */
 export const PipelineJobSchema = z.object({
     name: z.string().describe("The job's name."),
     status: PipelineStatusSchema.describe("How it went."),

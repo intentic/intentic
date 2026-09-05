@@ -40,6 +40,17 @@ test("running outranks green, and green outranks never-ran", () => {
     expect(standings.map((standing) => standing.repo.repo)).toEqual(["moving", "green", "never"]);
 });
 
+test("queued shares the in-flight tier but is counted, and said, apart from running", () => {
+    const [waiting, green] = repoStandings([repo("green"), repo("waiting")], [run("green", "success", 90), run("waiting", "queued", 10)]);
+    // Unfinished business outranks a settled repository whether or not a runner has picked it up yet.
+    expect(waiting?.repo.repo).toBe("waiting");
+    expect(green?.repo.repo).toBe("green");
+    expect(waiting).toMatchObject({ running: 0, queued: 1 });
+    // The words are the point: "1 queued" sends a reader to look at their runners, "1 running" tells them to wait.
+    expect(standingNote(waiting!)).toContain("1 queued");
+    expect(standingNote(waiting!)).not.toContain("running");
+});
+
 test("a webhook warning outranks green and keeps the repository off the silent list", () => {
     const [first, second] = repoStandings([repo("green"), repo("warned", "Could not register the hook")], [run("green", "success", 90)]);
     expect(first?.repo.repo).toBe("warned");

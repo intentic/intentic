@@ -1,4 +1,4 @@
-import type { PipelineJob, PipelineRun, PipelineStatus } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineStatus } from "@intentic/sandbox-contract";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
 import { plainText } from "../terminal/plain-text.js";
 import type { CiProject } from "./projects.js";
@@ -56,14 +56,25 @@ const epoch = (iso: string | undefined | null): number => {
     return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+// Whether a run or job is over, which is the only case in which the span between two of its timestamps is a
+// DURATION. While it is still moving that span is elapsed-so-far, and while it is queued it is time spent
+// waiting for a runner: neither is what a reader takes "3m 12s" beside a pipeline to mean.
+const isSettled = (status: PipelineStatus): boolean => !isPipelineInFlight(status);
+
 // ---- github: Actions workflow runs ----
 
-// status ≠ "completed" is every in-flight shape (queued, in_progress, waiting, pending, requested); a completed
-// run's conclusion fans out into the three terminal buckets, with everything that means "did not pass",
-// failure, timed_out, startup_failure, action_required, reading as failed.
+/* Actions' pre-run vocabulary, the words for "accepted, nothing is executing it": `queued` is the everyday one,
+ * `waiting` is a job held for a deployment approval, and `requested`/`pending` are the moments before a job is
+ * handed to a runner. Anything else non-terminal is `in_progress` or a word Actions has not shipped yet, and
+ * reads as running: overstating a novel status as moving is the safer of the two mistakes, since it is the
+ * reading this had for every status before queued existed. */
+const GITHUB_QUEUED = new Set(["queued", "waiting", "requested", "pending"]);
+
+// A completed run's conclusion fans out into the three terminal buckets, with everything that means "did not
+// pass", failure, timed_out, startup_failure, action_required, reading as failed.
 export const githubStatus = (status: string, conclusion: string | null | undefined): PipelineStatus => {
     if (status !== "completed") {
-        return "running";
+        return GITHUB_QUEUED.has(status) ? "queued" : "running";
     }
     switch (conclusion) {
         case "success":
@@ -117,7 +128,7 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
         status,
         url: run.html_url,
         createdAt: epoch(run.created_at),
-        ...(status !== "running" && ended > started ? { durationSeconds: Math.round((ended - started) / 1000) } : {}),
+        ...(isSettled(status) && ended > started ? { durationSeconds: Math.round((ended - started) / 1000) } : {}),
     };
 };
 
@@ -249,13 +260,18 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 if (job.html_url !== null) {
                     result.webUrl = job.html_url;
                 }
-                if (started > 0) {
+                /* A QUEUED JOB HAS NOT STARTED, whatever Actions says. Its `started_at` comes back set, to the
+                 * moment the RUN was queued rather than to anything this job did, so a job that has been waiting
+                 * an hour for an offline runner arrives looking like an hour of work in progress. Dropping it
+                 * here is what lets the view lay those jobs out as the trailing queued wave they are, and what
+                 * keeps a duration off a job that has done nothing. */
+                if (started > 0 && status !== "queued") {
                     result.startedAt = started;
                 }
                 if (completed > 0) {
                     result.finishedAt = completed;
                 }
-                if (status !== "running" && completed > started) {
+                if (isSettled(status) && completed > started) {
                     result.durationSeconds = Math.round((completed - started) / 1000);
                 }
                 return result;
@@ -314,8 +330,12 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
 
 // ---- gitlab: pipelines ----
 
-// gitlab's single status string: three terminal states map straight across, `manual`/`scheduled` and every
-// pre-run shape (created, waiting_for_resource, preparing, pending) read as still-moving.
+/* gitlab's single status string: the terminal states map straight across, and everything that has not been
+ * picked up by a runner yet is queued. `manual` and `scheduled` belong there too, they are jobs waiting on a
+ * person or a clock rather than on capacity, but "nothing is executing this" is the fact a reader needs and it
+ * is the same fact. An unrecognized word reads as running, for the same reason it does on the github side. */
+const GITLAB_QUEUED = new Set(["created", "waiting_for_resource", "preparing", "pending", "manual", "scheduled"]);
+
 export const gitlabStatus = (status: string): PipelineStatus => {
     switch (status) {
         case "success":
@@ -327,7 +347,7 @@ export const gitlabStatus = (status: string): PipelineStatus => {
         case "skipped":
             return "skipped";
         default:
-            return "running";
+            return GITLAB_QUEUED.has(status) ? "queued" : "running";
     }
 };
 
@@ -378,7 +398,7 @@ export const gitlabRun = (project: Pick<CiProject, "repo" | "project">, pipeline
         status,
         url: pipeline.web_url,
         createdAt: created,
-        ...(status !== "running" && updated > created ? { durationSeconds: Math.round((updated - created) / 1000) } : {}),
+        ...(isSettled(status) && updated > created ? { durationSeconds: Math.round((updated - created) / 1000) } : {}),
     };
 };
 
