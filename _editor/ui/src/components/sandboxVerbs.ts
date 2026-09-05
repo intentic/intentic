@@ -6,8 +6,13 @@
  *
  * `rebuild` is deliberately NOT here. It takes the owner-approved overlay's digest, which is knowable only where
  * that approval lives (the Environment card), so a button for it on a row that has no digest to send would be a
- * verb that fails on click. Both apps reach a rebuild from the same place, and neither offers it here. */
-export type SandboxVerb = `start` | `stop` | `restart` | `update` | `rollback` | `logs` | `remove`;
+ * verb that fails on click. Both apps reach a rebuild from the same place, and neither offers it here.
+ *
+ * `resources` is the one verb that opens a FORM rather than running: the sandbox's share of the machine (its
+ * memory and CPU caps, whether it runs privileged, whether the host's GPU rides along), applied as a recreate
+ * onto the same image. The web tab sends it down the machine route as the `reshape` op; the desktop app hands
+ * it to the same shim the swaps run through. */
+export type SandboxVerb = `start` | `stop` | `restart` | `update` | `rollback` | `resources` | `logs` | `remove`;
 
 /* ONE BUTTON ON THE ROW, AND THE REST BEHIND A MENU, decided once for both apps.
  *
@@ -22,25 +27,36 @@ export type SandboxVerb = `start` | `stop` | `restart` | `update` | `rollback` |
 export const primaryVerb = (running: boolean): Extract<SandboxVerb, `start` | `stop`> => (running ? `stop` : `start`);
 
 /* THE MENU, IN READING ORDER. Restart belongs beside the power button it is a variant of; the log tail is the
- * one that only READS and is reached most; then the two that move the container onto another image, newest-first
- * (`update`) then backwards (`rollback`). Removal is last, alone, and the caller draws the divider, it is the
- * only irreversible thing here and it should never be the neighbour of anything.
+ * one that only READS and is reached most; then the one that changes the container WITHOUT changing its image
+ * (`resources`); then the two that move it onto another image, newest-first (`update`) then backwards
+ * (`rollback`). Removal is last, alone, and the caller draws the divider, it is the only irreversible thing
+ * here and it should never be the neighbour of anything.
  *
  * Restart is absent on a stopped sandbox because Start already covers it, which is the same reasoning that keeps
- * Stop off that row. */
-export const menuVerbs = (running: boolean): readonly SandboxVerb[] => [...(running ? ([`restart`] as const) : []), `logs`, `update`, `rollback`];
+ * Stop off that row. Resources stays on a stopped one: the share is a fact about the container, and a reshape
+ * brings it up on the new share. */
+export const menuVerbs = (running: boolean): readonly SandboxVerb[] => [
+    ...(running ? ([`restart`] as const) : []),
+    `logs`,
+    `resources`,
+    `update`,
+    `rollback`,
+];
 
 // The one that stands apart, named rather than sliced off the list above so a reader of either app can see why
 // it is drawn where it is.
 export const DESTRUCTIVE_VERB = `remove` satisfies SandboxVerb;
 
 // What each one is called on the button. `logs` says which way the toggle goes, so it is labelled by its caller.
+// The ellipsis on `resources` is the menu convention for "opens a form rather than acting": every other row here
+// does its thing on the click, and this one asks first.
 export const VERB_LABEL: Record<Exclude<SandboxVerb, `logs`>, string> = {
     start: `Start`,
     stop: `Stop`,
     restart: `Restart`,
     update: `Update`,
     rollback: `Roll back`,
+    resources: `Resources…`,
     remove: `Remove`,
 };
 
@@ -54,7 +70,9 @@ export const VERB_LABEL: Record<Exclude<SandboxVerb, `logs`>, string> = {
  * "that device restarts", which is a much bigger thing to be asked to agree to than what happens.
  *
  * Only the three that are hard or slow to undo ask at all: start, stop, restart and a log tail are all undone by
- * doing the opposite, and a confirmation on those is a click tax that teaches people to dismiss dialogs. */
+ * doing the opposite, and a confirmation on those is a click tax that teaches people to dismiss dialogs.
+ * `resources` asks nothing HERE because its form is the confirmation: the dialog states the restart it costs
+ * beside the Apply button, and a second question after that would be the same click tax. */
 export interface SandboxVerbPrompt {
     /** The question, naming the sandbox: a dialog header, or a native dialog's title. */
     readonly header: string;

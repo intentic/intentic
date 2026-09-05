@@ -124,6 +124,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // rendering anything, so through the barrel a pure module's unit test would boot the component graph, whose
     // theme reader touches `document` at import time.
     "@intentic/ui/device": fromRoot("_editor/ui/src/components/deviceDetail.ts"),
+    // And its neighbour, for what a sandbox's SHARE of that device means: where the Resources form starts, what
+    // the engine will accept, and what changed when Apply is pressed. <SandboxResourcesDialog> draws it, and the
+    // test that pins the arithmetic must not have to boot the component graph to add two GiB.
+    "@intentic/ui/sandbox-resources": fromRoot("_editor/ui/src/components/sandboxResources.ts"),
     // And again, for the guard that keeps a stylesheet from being replaced by a write that changes nothing. The
     // dev-style manifest (vite.shared.ts) installs it on Vite's own `<style data-vite-dev-id>` nodes before the
     // app mounts, from a generated module that holds imports and one call — nothing there can afford the

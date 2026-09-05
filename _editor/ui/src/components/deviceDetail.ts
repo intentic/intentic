@@ -59,6 +59,24 @@ export interface DeviceAgentState {
     staleBuild?: { readonly running: string | undefined; readonly installed: string } | undefined;
 }
 
+/* ONE CONTAINER'S SHARE OF ITS MACHINE, as docker enforces it right now: the two cgroup caps, whether it runs
+ * privileged, whether the host's GPU rides along, and WHO asked for each privilege. The two token lists are the
+ * run contract's directive vocabulary split by asker: `overlayRuntime` is what the approved environment demands
+ * (a form draws those locked), `hostRuntime` is what the owner added and may withdraw. `privileged` and `gpu`
+ * are docker's own answer, which can differ from the ask: a host without the NVIDIA runtime drops the GPU.
+ *
+ * Structural mirror of the sandbox contract's SandboxResources, for the reason every shape in this file is. */
+export interface DeviceSandboxResources {
+    /** The memory ceiling in bytes; absent when docker imposes none. */
+    memoryBytes?: number | undefined;
+    /** The CPU ceiling in cores; absent when the container may use every core, which is the default. */
+    cpus?: number | undefined;
+    privileged: boolean;
+    gpu: boolean;
+    hostRuntime: readonly string[];
+    overlayRuntime: readonly string[];
+}
+
 /* One sandbox CONTAINER on the machine, the docker half of the same sandbox the two lists above describe. */
 export interface DeviceSandboxRow {
     slug: string;
@@ -66,7 +84,35 @@ export interface DeviceSandboxRow {
     running: boolean;
     image: string;
     tunnelRunning?: boolean | undefined;
+    // Its share of the machine, when the caller inspected the container for it. Absent from a reader that only
+    // listed (`docker ps` carries none of it), and the row then simply says nothing about its share.
+    resources?: DeviceSandboxResources | undefined;
 }
+
+/* WHAT A SANDBOX GETS OF ITS MACHINE, as one line: "12 GiB · 4 CPUs · privileged · GPU".
+ *
+ * Only what was SET is said. Every core is the resting state and needs no words on a row that is read for what
+ * differs; a cap is a decision somebody made and is worth the width. Whole GiB when the cap is one (docker's own
+ * `<n>g` spelling always is), a decimal otherwise, so a cap set by hand at 12.5 GiB does not read as 12. */
+const GIB = 1024 ** 3;
+const gibOf = (bytes: number): string => {
+    const value = bytes / GIB;
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+};
+
+export const resourcesSummary = (row: DeviceSandboxRow): string | undefined => {
+    const share = row.resources;
+    if (share === undefined) {
+        return undefined;
+    }
+    const parts = [
+        ...(share.memoryBytes === undefined ? [] : [`${gibOf(share.memoryBytes)} GiB`]),
+        ...(share.cpus === undefined ? [] : [`${share.cpus} ${share.cpus === 1 ? `CPU` : `CPUs`}`]),
+        ...(share.privileged ? [`privileged`] : []),
+        ...(share.gpu ? [`GPU`] : []),
+    ];
+    return parts.length === 0 ? undefined : parts.join(` · `);
+};
 
 /* ONE SANDBOX'S SHARE OF THE MACHINE, its container, its folder if it syncs one, and every port it asked for. */
 export interface DeviceSandboxGroup {

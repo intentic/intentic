@@ -4,7 +4,7 @@ import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { runAgentOp } from "./tools/agent.js";
-import { manageSandbox, removeSandbox, runnerFlow, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
+import { manageSandbox, removeSandbox, reshapeSandbox, runnerFlow, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
 
 /* What this device answers, as the oRPC SERVER on the socket it dialled out.
  *
@@ -76,12 +76,15 @@ async function* streamFlow(run: (onLine: (line: string) => void) => Promise<stri
 // lines ARE the answer, and the rest run `ic` and narrate themselves for minutes. One switch so the machine has a
 // single answer to "what does this op mean".
 const flowFor = (
-    { op, slug, hash, parentUrl, pair, definition, overlay, overlayHash }: DeviceSandboxFlow,
+    { op, slug, hash, resources, parentUrl, pair, definition, overlay, overlayHash }: DeviceSandboxFlow,
     scopes: HostScopes,
 ): ((onLine: (line: string) => void) => Promise<string>) => {
     switch (op) {
         case "remove":
             return (onLine) => removeSandbox(slug, scopes, onLine);
+        // The same image with a different share of this machine: the one op with a payload of its own.
+        case "reshape":
+            return (onLine) => reshapeSandbox(slug, resources, scopes, onLine);
         // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name.
         // The parent's shape (a settings definition, its approved overlay + pinning hash) rides to `ic` as
         // files, so the runner starts as the asking sandbox's twin instead of a bare base image.

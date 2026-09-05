@@ -189,7 +189,7 @@ export const systemContract = {
             path: "/system/devices/{id}/sandboxes/{slug}",
             summary: "Drive a sandbox on one of your own devices",
             description:
-                "Start, stop, restart, update, rebuild, roll back or remove a sandbox running on a machine you own, relayed over the connection that machine holds open. The answer is a stream because the slowest of these takes minutes, and it is the same stream whichever you ask for. The daemon adds no opinion: the machine enforces its own permissions and a refusal arrives as the last line, in the machine's words, naming the switch to flip.",
+                "Start, stop, restart, update, rebuild, roll back, reshape (its memory and CPU caps, privileged, GPU) or remove a sandbox running on a machine you own, relayed over the connection that machine holds open. The answer is a stream because the slowest of these takes minutes, and it is the same stream whichever you ask for. The daemon adds no opinion: the machine enforces its own permissions and a refusal arrives as the last line, in the machine's words, naming the switch to flip.",
         })
         .input(DeviceSandboxFlowInputSchema)
         .output(eventIterator(DeviceFlowLineSchema)),

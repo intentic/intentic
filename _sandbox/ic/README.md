@@ -1,7 +1,7 @@
 # ic
 
 The host-side CLI: the flows that must run on the machine that runs a sandbox, connect, prepare, update,
-rebuild, rollback, remove, and enrolling the machine as a deploy target.
+rebuild, rollback, reshape, remove, and enrolling the machine as a deploy target.
 
 A sandbox is a container, and it deliberately holds no host Docker socket, so it can never recreate itself.
 Every one of these flows therefore runs *outside*, on the user's machine. They used to be ~3,600 lines of
@@ -33,6 +33,14 @@ once, here, in Rust: a single static binary with no runtime to ship.
   judgement calls a timer must not make softened into skips — a pinned or locally-built sandbox is left
   alone, low disk means "not now" instead of a warning scrolled past, and a container parked by an
   interrupted recreate is never un-parked unattended.
+- `ic sandbox reshape <slug> --memory 12g|default --cpus 4|default --privileged on|off --gpus on|off`: the
+  same image with a different share of this machine. It is a recreate that pulls nothing and builds nothing:
+  the asks ride to the image's probe as seeds (`SANDBOX_MEMORY`, `SANDBOX_CPUS`, `SANDBOX_RUNTIME`; an empty
+  value means back to the default), the image's run contract validates and bounds them, and because they live
+  on the container as replayed env they survive every later update, rollback and rebuild. The two switches edit
+  only the owner's own directive list; a privilege the approved environment demands stays in force. At least
+  one flag, always a named slug (this changes a container's privileges). It is the flow behind the Resources…
+  verb on the Devices tab and in the desktop app, and the machine agent's `reshape_sandbox` tool.
 - `ic sandbox list / remove`: what is on this machine, and its careful removal (named volumes included).
 - `ic runner up / list / remove`, RUNNERS: sandbox-image containers that belong to a parent sandbox instead
   of a person, executing turns it dispatches. `up` is `sandbox connect` minus the platform — the same
@@ -57,7 +65,8 @@ once, here, in Rust: a single static binary with no runtime to ship.
 - [src/sandbox/doctor.rs](src/sandbox/doctor.rs), the reachability chain (postflight + `doctor`): patient
   during connect (fresh DNS propagating is ordinary), instant as a diagnosis.
 - [src/sandbox/connect.rs](src/sandbox/connect.rs): the setup flow.
-- [src/sandbox/recreate.rs](src/sandbox/recreate.rs): the four swap modes, the rollback record, and the seam
+- [src/sandbox/recreate.rs](src/sandbox/recreate.rs): the five modes (rebuild, update, rollback, dev, and
+  reshape, the one that keeps the image and changes the container's share), the rollback record, and the seam
   `prepare` stops at (everything above it builds an image; everything below it moves the sandbox onto one).
 - [src/sandbox/staged.rs](src/sandbox/staged.rs): telling the sandbox an update is downloaded and waiting.
   The daemon has no host Docker socket and cannot see the host's images or its records, so the fact is written

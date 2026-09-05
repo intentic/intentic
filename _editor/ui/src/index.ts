@@ -98,15 +98,24 @@ export {
     type DeviceFolderRow,
     type DevicePortRow,
     type DeviceSandboxGroup,
+    type DeviceSandboxResources,
     type DeviceSandboxRow,
     type DeviceAgentState,
     // Whether that device is off this sandbox's ports, for a caller that has to decide which way its own
     // button points: the Devices tab offers Stop or Start mirroring off exactly this answer.
     mirroringOff,
+    // One sandbox's share of its machine as one line, for a caller that says it somewhere the row does not.
+    resourcesSummary,
     // The same grouping the view draws, for a caller that has to COUNT what it is about to draw, the
     // Devices tab's folded machine line says how many sandboxes are under it and how many want attention.
     sandboxGroups,
 } from "./components/deviceDetail.js";
+/* The form behind the row's Resources… verb: a sandbox's memory and CPU caps, privileged, GPU, applied as a
+ * recreate onto the same image. Shared for the reason the row is, and its arithmetic ships beside it (and as
+ * `@intentic/ui/sandbox-resources`, so the tests that pin it need no DOM): the caller hands over the container's
+ * share and the machine's engine, and forwards the ask that comes back without reading it. */
+export { default as SandboxResourcesDialog } from "./components/SandboxResourcesDialog.vue";
+export { type EngineFacts, type ResourcesAsk } from "./components/sandboxResources.js";
 // The verb row on one sandbox's line, which buttons exist, their order, their words, and which one is red.
 // Here because the desktop manager and the web Devices tab render the same row and had drifted apart.
 export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";

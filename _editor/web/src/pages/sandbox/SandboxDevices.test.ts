@@ -36,6 +36,10 @@ let mirrorAnswer: { ok: boolean; message: string } = { ok: true, message: `Port 
 // Which machine's enrollment was revoked. The sandbox-side door, so unlike the commands above it needs no
 // device connection at all: that is the whole reason it exists beside Unpair.
 const revokeCalls: string[] = [];
+/* THE CONTAINER VERBS, recorded the same way: which op left for which machine, and, for the one verb that
+ * carries a payload, what the Resources form asked for. The real one streams the machine's own lines; what is
+ * worth pinning here is that a click on the form's Apply leaves as the `reshape` op with ONLY what changed. */
+const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
 vi.mock(`../../composables/sandbox/useDevices`, async () => {
     // reportStale is a plain function of the row and the clock: real, so a row's staleness line is decided the
     // way it is in the app rather than by this file's idea of it.
@@ -43,6 +47,10 @@ vi.mock(`../../composables/sandbox/useDevices`, async () => {
     return {
         ...real,
         useDevices: () => ({ devices, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
+        manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown }) => {
+            verbCalls.push({ hostId, slug, op, ...(payload?.resources === undefined ? {} : { resources: payload.resources }) });
+            return Promise.resolve(`Reshaped sandbox "${slug}".`);
+        },
         runDeviceCommand: (hostId: string, command: string, sandboxId?: string) => {
             mirrorCalls.push({ hostId, command, sandboxId });
             return Promise.resolve(mirrorAnswer);
@@ -152,6 +160,7 @@ afterEach(() => {
     capabilities.value = [];
     owner.value = true;
     mirrorCalls.length = 0;
+    verbCalls.length = 0;
     revokeCalls.length = 0;
     mirrorAnswer = { ok: true, message: `Port mirroring OFF for: work-abc` };
     app?.unmount();
@@ -310,8 +319,8 @@ it(`puts one verb on the row and everything else behind a menu`, () => {
     expect(found).toContain(`Stop`);
     // The overflow is a glyph, so it is named for assistive tech rather than in words on the row.
     expect(el.querySelector(`button[aria-label="More actions"]`)).not.toBeNull();
-    // The other five are one deliberate click away rather than sitting on the line.
-    for (const verb of [`Restart`, `Update`, `Roll back`, `Logs`, `Remove`]) {
+    // The other six are one deliberate click away rather than sitting on the line.
+    for (const verb of [`Restart`, `Update`, `Roll back`, `Resources…`, `Logs`, `Remove`]) {
         expect(found).not.toContain(verb);
     }
 });
@@ -329,14 +338,90 @@ it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
  * what both apps read, and asserting it here is what stops the desktop window and this tab drifting into two
  * different sets again: the failure the shared kit exists to prevent.
  *
- * Restart is absent on a stopped sandbox for the same reason Stop is; removal is separate from the rest because
- * it is the one thing here that nothing undoes, and the row draws it under a divider. */
+ * Restart is absent on a stopped sandbox for the same reason Stop is; Resources stays, because a share is a fact
+ * about the container and a reshape brings a stopped one up on the new share; removal is separate from the rest
+ * because it is the one thing here that nothing undoes, and the row draws it under a divider. */
 it(`keeps the menu's vocabulary the same for both apps`, () => {
     expect(primaryVerb(true)).toBe(`stop`);
     expect(primaryVerb(false)).toBe(`start`);
-    expect(menuVerbs(true)).toEqual([`restart`, `logs`, `update`, `rollback`]);
-    expect(menuVerbs(false)).toEqual([`logs`, `update`, `rollback`]);
+    expect(menuVerbs(true)).toEqual([`restart`, `logs`, `resources`, `update`, `rollback`]);
+    expect(menuVerbs(false)).toEqual([`logs`, `resources`, `update`, `rollback`]);
     expect(DESTRUCTIVE_VERB).toBe(`remove`);
+});
+
+/* ---- the sandbox's share of the machine, and the form that changes it -----------------------------------
+ *
+ * The machine agent reads each container's caps and privileges off `docker inspect` and the row says them once
+ * opened; the Resources… verb opens the kit's form on them, and Apply leaves as the `reshape` op carrying only
+ * what changed. Pinned through the tab rather than by mounting the form alone, because the wiring IS the
+ * subject: which row's share the form opened on, and where its answer went. */
+const GIB = 1024 ** 3;
+// A connected, permitted machine whose one sandbox has a 12 GiB cap and four cores, privileged because the approved
+// environment demands it, and whose engine has 20 GiB and twelve cores to bound the form with.
+const shared = (): Device => {
+    const row = managed(true);
+    return {
+        ...row,
+        facts: { os: `Ubuntu 24.04`, arch: `x64`, shell: `bash`, home: `/home/ada`, roots: [`/home/ada`], engine: { memoryBytes: 20 * GIB, cpus: 12 } },
+        report: {
+            ...row.report!,
+            sandboxes: [
+                {
+                    ...row.report!.sandboxes[0]!,
+                    resources: { memoryBytes: 12 * GIB, cpus: 4, privileged: true, gpu: false, hostRuntime: [], overlayRuntime: [`--privileged`] },
+                },
+            ],
+        },
+    };
+};
+
+// Behind the fold with the image, and in one line: the cap somebody set, the cores, the privilege.
+it(`says what a sandbox gets of the machine, once the row is open`, async () => {
+    granted();
+    const el = mount([shared()]);
+    expect(el.textContent ?? ``).not.toContain(`12 GiB`);
+    await openRow(el, `work`);
+    expect(el.textContent ?? ``).toContain(`12 GiB · 4 CPUs · privileged`);
+});
+
+// Everything on screen, the teleported dialog and menu included: both mount at the end of <body>, past `el`.
+const everything = (): string => document.body.textContent ?? ``;
+// A menu row is a link named by the verb's own label (ContextMenu.vue); a dialog's button teleports past the
+// row's, so the LAST match is the one in the modal.
+const menuRow = (label: string): HTMLAnchorElement | undefined =>
+    [...document.body.querySelectorAll(`a`)].find((row) => (row.textContent ?? ``).trim() === label);
+const dialogButton = (label: string): HTMLButtonElement | undefined =>
+    [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).trim() === label);
+
+/* THE FORM, FROM THE MENU TO THE MACHINE. It opens on the container's own numbers, draws the environment's
+ * privilege locked with the reason, refuses to apply until something changed, and what then leaves is the
+ * `reshape` op with the one field that did, not a restatement of the whole form. */
+it(`opens the Resources form on the row's own share and sends only what changed, as a reshape`, async () => {
+    granted();
+    const el = mount([shared()]);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    menuRow(`Resources…`)?.click();
+    await nextTick();
+    expect(everything()).toContain(`Resources for work`);
+
+    const memory = document.body.querySelector<HTMLInputElement>(`input[aria-label="Memory cap in GiB"]`);
+    expect(memory).toHaveProperty(`value`, `12`);
+    // The rails are the engine's: 20 GiB minus the 3 the host keeps.
+    expect(everything()).toContain(`4 to 17 on this computer`);
+    // The environment's privilege is not the owner's to withdraw, and the switch says why.
+    expect(document.body.querySelector(`input[aria-label="Run privileged"]`)).toHaveProperty(`disabled`, true);
+    expect(everything()).toContain(`approved environment requires this`);
+    // Nothing changed yet, so there is nothing the machine would accept.
+    expect(dialogButton(`Apply`)).toHaveProperty(`disabled`, true);
+
+    memory!.value = `16`;
+    memory!.dispatchEvent(new Event(`input`));
+    await nextTick();
+    expect(dialogButton(`Apply`)).toHaveProperty(`disabled`, false);
+    dialogButton(`Apply`)?.click();
+    await nextTick();
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 16 } }]);
 });
 
 // A fully connected and permitted machine says nothing at all about connecting or permissions: the whole point

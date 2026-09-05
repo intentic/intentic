@@ -61,6 +61,7 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "list_sandboxes",
         "manage_sandbox",
         "swap_sandbox",
+        "reshape_sandbox",
         "remove_sandbox",
         "sandbox_logs",
     ]);
@@ -205,4 +206,21 @@ test("an unknown tool answers plainly rather than throwing", async () => {
     const missing = await call("format_c_drive", {}, scopes());
     expect(missing.isError).toBe(true);
     expect(missing.text).toMatch(/no tool called/);
+});
+
+/* A reshape with nothing to change is refused before anything is spawned, and refused as a RESULT the model can
+ * read: the same shape a wrong op or a switched-off scope comes back in. The at-least-one rule lives on the
+ * machine (icReshapeArgs), which is why the tool's own schema is the bare fields. */
+test("reshape_sandbox refuses an empty ask as a readable result, not a transport fault", async () => {
+    const empty = await call("reshape_sandbox", { slug: "work" }, scopes());
+    expect(empty.isError).toBe(true);
+    expect(empty.text).toMatch(/change something/i);
+    // And a malformed cap is caught by the schema before the machine is touched: whole GiB, whole cores.
+    const fractional = await call("reshape_sandbox", { slug: "work", cpus: 1.5 }, scopes());
+    expect(fractional.isError).toBe(true);
+    expect(fractional.text).toMatch(/cpus/i);
+    // Scope refusal names the switch, like every other sandbox tool.
+    const refused = await call("reshape_sandbox", { slug: "work", memoryGib: 12 }, scopes({ sandboxes: "off" }));
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toMatch(/Manage sandboxes on this device/);
 });

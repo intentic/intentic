@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { browser } from "@intentic/browser";
 import { desktop, pngSize } from "@intentic/desktop";
-import { type HostScopes, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
+import { type HostScopes, MCP_PROTOCOL_VERSION, SandboxResourcesAskFieldsSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
@@ -16,6 +16,7 @@ import {
     manageSandbox,
     MAX_LOG_LINES,
     removeSandbox,
+    reshapeSandbox,
     SandboxOpSchema,
     SandboxSwapSchema,
     sandboxLogs,
@@ -317,7 +318,7 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "list_sandboxes",
         description:
-            "The Intentic sandboxes on this device, as JSON: each one's slug, whether it is running, and whether its tunnel is up. Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+            "The Intentic sandboxes on this device, as JSON: each one's slug, whether it is running, whether its tunnel is up, and its share of this machine under `resources` (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for). Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listSandboxes(scopes)),
     }),
@@ -342,6 +343,13 @@ const TOOLS: readonly Tool[] = [
             hash: required.optional().describe("sha256 of the approved overlay, required for 'rebuild', ignored otherwise."),
         }),
         run: async ({ op, slug, hash }, scopes) => textResult(await swapSandbox(op, slug, hash, scopes, () => {})),
+    }),
+    tool({
+        name: "reshape_sandbox",
+        description:
+            "Change how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give only what should change; `null` for a cap means back to the default (the memory share derived from this machine; every core). The sandbox RESTARTS onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the new values live on the container, surviving every later update. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
+        input: SandboxResourcesAskFieldsSchema.extend({ slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
+        run: async ({ slug, ...ask }, scopes) => textResult(await reshapeSandbox(slug, ask, scopes, () => {})),
     }),
     tool({
         name: "remove_sandbox",

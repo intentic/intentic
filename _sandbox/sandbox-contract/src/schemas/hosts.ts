@@ -18,6 +18,10 @@ export const HostFactsSchema = z.object({
     home: z.string(),
     // Roots in force right now (the capability's `roots`, or [home]), the agent sees its own boundary.
     roots: z.array(z.string()),
+    /* The Docker ENGINE's size — the WSL guest on Windows, the Desktop VM on macOS, the host on Linux — which
+     * is the ceiling a sandbox's share is bounded by, and the number a Resources dialog draws its limits from.
+     * Absent when the machine has no docker to ask, which is a machine that runs no sandboxes anyway. */
+    engine: z.object({ memoryBytes: z.number(), cpus: z.number() }).optional(),
 });
 export type HostFacts = z.infer<typeof HostFactsSchema>;
 export const HostSummarySchema = z.object({

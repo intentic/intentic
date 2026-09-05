@@ -1,4 +1,6 @@
-use serde::Serialize;
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
 use crate::scripts::{self, Host, ScriptRun};
@@ -449,6 +451,150 @@ pub struct SandboxStatus {
     pub image: String,
     /// None when no cloudflared sidecar exists for this sandbox at all.
     pub tunnel_running: Option<bool>,
+    /// Its share of this machine, read off `docker inspect`. None when the inspect failed, which the screen
+    /// reports as a row with nothing to say about its share rather than as a broken list.
+    pub resources: Option<SandboxResources>,
+}
+
+/* ONE CONTAINER'S SHARE OF THIS MACHINE, as docker enforces it right now — the same reading the machine agent
+ * makes for the web's Devices tab (`@intentic/ui/device` resourcesFrom), in the sandbox contract's own shape
+ * (SandboxResources) field for field, so the two screens describe one container in one vocabulary and the
+ * kit's Resources form opens on either. The two token lists are the run contract's directive vocabulary split
+ * by asker: what the approved environment demands (the form draws those locked) and what the owner asked for
+ * on top and may withdraw. `privileged` and `gpu` are docker's own answer, which can differ from the ask: a
+ * host without the NVIDIA runtime drops the GPU. */
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxResources {
+    /// The cgroup memory ceiling in bytes; ABSENT (not null: the shared row type spells absence as a missing
+    /// key) when docker imposes none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_bytes: Option<u64>,
+    /// The CFS quota in cores; absent when the container may use every core, which is the default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpus: Option<f64>,
+    pub privileged: bool,
+    pub gpu: bool,
+    pub host_runtime: Vec<String>,
+    pub overlay_runtime: Vec<String>,
+}
+
+/// A docker limit field: a positive number is a cap, 0 (docker's "unbounded") and anything unreadable is none.
+fn cap_of(value: &serde_json::Value) -> Option<u64> {
+    value.as_u64().filter(|limit| *limit > 0)
+}
+
+/// The whitespace-separated tokens of one `NAME=value` in a container's env list, or none.
+fn env_tokens(env: &serde_json::Value, name: &str) -> Vec<String> {
+    let prefix = format!("{name}=");
+    env.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .find_map(|entry| entry.strip_prefix(prefix.as_str()))
+        .map(|value| value.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
+/// Whether a HostConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`: the
+/// nvidia driver by name, or the `gpu` capability.
+fn gpu_requested(host: &serde_json::Value) -> bool {
+    host["DeviceRequests"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|request| {
+            request["Driver"] == "nvidia"
+                || request["Capabilities"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|set| {
+                        set.as_array()
+                            .into_iter()
+                            .flatten()
+                            .any(|capability| *capability == "gpu")
+                    })
+        })
+}
+
+/// Pure over one `docker inspect` object, so docker's shape is asserted without a daemon (the tests below).
+/// Anything unreadable reads as its default rather than as a guess.
+pub fn resources_from(inspected: &serde_json::Value) -> SandboxResources {
+    let host = &inspected["HostConfig"];
+    let env = &inspected["Config"]["Env"];
+    SandboxResources {
+        memory_bytes: cap_of(&host["Memory"]),
+        cpus: cap_of(&host["NanoCpus"]).map(|nanos| nanos as f64 / 1_000_000_000.0),
+        privileged: host["Privileged"] == true,
+        gpu: gpu_requested(host),
+        host_runtime: env_tokens(env, "SANDBOX_RUNTIME"),
+        overlay_runtime: env_tokens(env, "SANDBOX_OVERLAY_RUNTIME"),
+    }
+}
+
+/// `docker inspect --format '{{json .}}'` over several containers prints one object per line; each is keyed
+/// here by the name docker writes with a leading slash no other reader in this file uses. A line that is not
+/// one object is a warning riding along and is skipped, not thrown on.
+pub fn shares_from(listing: &str) -> HashMap<String, SandboxResources> {
+    listing
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter_map(|value| {
+            let name = value["Name"].as_str()?.trim_start_matches('/').to_string();
+            Some((name, resources_from(&value)))
+        })
+        .collect()
+}
+
+/// Each listed container's share, from ONE `docker inspect` over all of them. A container that vanished between
+/// the listing and this call fails the whole command, and that leaves every row without a share rather than
+/// failing the list: a row with nothing to say about its share is honest, a listing that died because one
+/// sandbox was being removed is not. The next refresh reads it again.
+fn shares_of(names: &[String]) -> HashMap<String, SandboxResources> {
+    if names.is_empty() {
+        return HashMap::new();
+    }
+    let mut args: Vec<&str> = vec!["inspect", "--format", "{{json .}}"];
+    args.extend(names.iter().map(String::as_str));
+    scripts::docker_output(&args)
+        .ok()
+        .map(|listing| shares_from(&listing))
+        .unwrap_or_default()
+}
+
+/* THE DOCKER ENGINE'S SIZE: the WSL guest on Windows, the Desktop VM on macOS, the host on Linux — the ceiling a
+ * sandbox's share is bounded by, and the rails the Resources form draws. `docker info` rather than this
+ * machine's own memory because on two of the three those are different computers: a 64 GiB laptop whose WSL
+ * guest was given 20. The same reading the machine agent makes for the web (`@intentic/machine` describe.ts),
+ * in the sandbox contract's HostFacts.engine shape. */
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerEngine {
+    pub memory_bytes: u64,
+    pub cpus: u32,
+}
+
+/// `{{.MemTotal}} {{.NCPU}}`, read back. Anything unreadable is None, never a guess: a machine that will not say
+/// its size is a form with no ceiling, which is honest, not a form with a wrong one.
+pub fn engine_from(info: &str) -> Option<DockerEngine> {
+    let mut fields = info.split_whitespace();
+    let memory_bytes: u64 = fields.next()?.parse().ok()?;
+    let cpus: u32 = fields.next()?.parse().ok()?;
+    (memory_bytes > 0 && cpus > 0).then_some(DockerEngine { memory_bytes, cpus })
+}
+
+/// Async for [`docker_ready`]'s reason: `docker info` against a stopped daemon spends tens of seconds on the
+/// socket, and nothing on the screen waits for this answer — the form draws its rails when it arrives.
+#[tauri::command]
+pub async fn docker_engine() -> Option<DockerEngine> {
+    tauri::async_runtime::spawn_blocking(|| {
+        scripts::docker_output(&["info", "--format", "{{.MemTotal}} {{.NCPU}}"])
+            .ok()
+            .and_then(|info| engine_from(&info))
+    })
+    .await
+    .unwrap_or(None)
 }
 
 struct ContainerRow {
@@ -501,9 +647,15 @@ fn newest_slug() -> Option<String> {
 
 #[tauri::command]
 pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<SandboxStatus>> {
-    let rows = tauri::async_runtime::spawn_blocking(containers)
-        .await
-        .map_err(|error| error.to_string())??;
+    // The listing, then one inspect over everything it named: the share is read for the sidecars too, which
+    // costs nothing and keeps this one call rather than a second filter that has to agree with the one below.
+    let (rows, mut shares) = tauri::async_runtime::spawn_blocking(|| -> Result<_, String> {
+        let rows = containers()?;
+        let names: Vec<String> = rows.iter().map(|row| row.name.clone()).collect();
+        Ok((rows, shares_of(&names)))
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
     // A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own
     // subdomain may legitimately BE `tunnel-something` — so a name is only a sidecar when the workspace
@@ -535,6 +687,7 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<SandboxStatus>> {
                 running: row.running,
                 image: row.image.clone(),
                 tunnel_running: tunnel.map(|tunnel| tunnel.running),
+                resources: shares.remove(*name),
                 slug,
             })
         })
@@ -618,6 +771,109 @@ pub async fn sandbox_recreate(
     rollback: bool,
 ) -> CommandResult<()> {
     let run = recreate_script(&slug, hash.as_deref(), rollback, Host::current(), VERSION);
+    let id = format!("recreate:{slug}");
+    tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/* WHAT THE RESOURCES FORM ASKED FOR: the sandbox contract's SandboxResourcesAsk, as the webview sends it. Every
+ * field is "leave it" when absent, and the two caps take `null` for "back to the default" (the share derived
+ * from this machine; every core), a THIRD state JSON can say and a plain Option cannot — hence the double
+ * Option, with [`present`] keeping an explicit null apart from a missing key. */
+#[derive(Deserialize, Default, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReshapeAsk {
+    #[serde(default, deserialize_with = "present")]
+    pub memory_gib: Option<Option<u32>>,
+    #[serde(default, deserialize_with = "present")]
+    pub cpus: Option<Option<u32>>,
+    pub privileged: Option<bool>,
+    pub gpu: Option<bool>,
+}
+
+/// A key that is THERE, whatever it holds: `Some(None)` for null, `Some(Some(v))` for a value. serde's own
+/// handling of an Option field folds null and absent together, which is exactly the distinction a cap's ask
+/// rides on.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+/// The reshape's flags in `ic`'s own spelling (`ic sandbox reshape --memory 12g|default --cpus 4|default
+/// --privileged on|off --gpus on|off`), which the shim forwards verbatim after its `--reshape` / `-Reshape`. A
+/// cap is `<n>g` / `<n>`, a cleared cap is ic's `default`, a switch is the explicit word (a bare flag could
+/// only ever ADD). Nothing is judged here: what a valid cap is belongs to the run contract inside the image,
+/// which refuses a bad one by name.
+pub fn reshape_flags(ask: &ReshapeAsk) -> Vec<String> {
+    fn cap(value: Option<u32>, spell: impl Fn(u32) -> String) -> String {
+        value.map_or_else(|| "default".to_string(), spell)
+    }
+    fn switch(on: bool) -> String {
+        (if on { "on" } else { "off" }).to_string()
+    }
+    let mut flags = Vec::new();
+    if let Some(memory) = ask.memory_gib {
+        flags.extend(["--memory".to_string(), cap(memory, |gib| format!("{gib}g"))]);
+    }
+    if let Some(cpus) = ask.cpus {
+        flags.extend(["--cpus".to_string(), cap(cpus, |cores| cores.to_string())]);
+    }
+    if let Some(privileged) = ask.privileged {
+        flags.extend(["--privileged".to_string(), switch(privileged)]);
+    }
+    if let Some(gpu) = ask.gpu {
+        flags.extend(["--gpus".to_string(), switch(gpu)]);
+    }
+    flags
+}
+
+/// Change a sandbox's share of this machine, or its privileges, through the same recreate shim the swaps run
+/// through: `recreate.sh <slug> --reshape <ic flags>` / `recreate.ps1 -Slug … -Reshape <ic flags>`. Named on
+/// PowerShell, positional on sh, for [`setup_script`]'s reason; `-Reshape` is a switch and everything after it
+/// binds to the shim's remaining-arguments parameter, forwarded whole so the shim never learns a flag `ic`
+/// could add later. Refused with nothing to change: `ic` would refuse it too, and a restart for nothing is
+/// what the refusal exists to prevent.
+pub fn reshape_script(
+    slug: &str,
+    ask: &ReshapeAsk,
+    host: Host,
+    version: &str,
+) -> Result<ScriptRun, String> {
+    let flags = reshape_flags(ask);
+    if flags.is_empty() {
+        return Err(
+            "nothing to change: a reshape needs a memory or CPU cap, or a privileged/GPU switch."
+                .to_string(),
+        );
+    }
+    let mut args = match host {
+        Host::Windows => vec![
+            "-Slug".to_string(),
+            slug.to_string(),
+            "-Reshape".to_string(),
+        ],
+        Host::Unix => vec![slug.to_string(), "--reshape".to_string()],
+    };
+    args.extend(flags);
+    Ok(ScriptRun {
+        file: host.script("recreate.sh", "recreate.ps1"),
+        args,
+        // The same shim as the swaps, so the same pin on this build's own `ic`.
+        env: app_env(version),
+        elevate: false,
+        host,
+    })
+}
+
+/// Under the recreate's own run id: it IS one (the same image, a different share of this machine), and the
+/// screen's pane for a row follows that id whichever verb started it.
+#[tauri::command]
+pub async fn sandbox_reshape(app: AppHandle, slug: String, ask: ReshapeAsk) -> CommandResult<()> {
+    let run = reshape_script(&slug, &ask, Host::current(), VERSION)?;
     let id = format!("recreate:{slug}");
     tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
         .await
@@ -911,6 +1167,15 @@ mod tests {
      * user next quits. An app that predates a protocol the CLI now speaks receives lines it has no parser
      * for and a first pass it does not know is meant to stop, which is a Windows install that reports
      * nothing at all. */
+    /// A reshape with something in it, for the lists below: every flow that runs the recreate shim is held to
+    /// the same pin and the same silence, this one included.
+    fn reshape_ask() -> ReshapeAsk {
+        ReshapeAsk {
+            memory_gib: Some(Some(12)),
+            ..ReshapeAsk::default()
+        }
+    }
+
     #[test]
     fn every_script_fetches_the_cli_from_this_apps_own_release() {
         let pinned = "https://github.com/intentic/intentic/releases/download/v1.2.3";
@@ -920,6 +1185,8 @@ mod tests {
             setup_script(&setup_args("c"), &context(Host::Unix, false)),
             recreate_script("work", None, false, Host::Windows, RELEASE),
             recreate_script("work", None, false, Host::Unix, RELEASE),
+            reshape_script("work", &reshape_ask(), Host::Windows, RELEASE).unwrap(),
+            reshape_script("work", &reshape_ask(), Host::Unix, RELEASE).unwrap(),
         ] {
             assert_eq!(
                 env_of(&run, "IC_URL"),
@@ -956,6 +1223,7 @@ mod tests {
             setup_script(&setup_args("c"), &context(Host::Windows, false)),
             setup_script(&setup_args("c"), &context(Host::Unix, false)),
             recreate_script("work", None, false, Host::Windows, RELEASE),
+            reshape_script("work", &reshape_ask(), Host::Windows, RELEASE).unwrap(),
             remove_script("work", Host::Windows, RELEASE),
             remove_script("work", Host::Unix, RELEASE),
             sync_script(
@@ -1151,6 +1419,149 @@ mod tests {
         );
     }
 
+    /* THE RESHAPE, PER HOST: the shim's own switch first, then `ic`'s flags verbatim behind it. The Windows
+     * spelling is the one worth pinning, being cross-built and first run on a user's PC: `-Reshape` is a
+     * [switch], so it takes no value, and every token after it binds to the shim's remaining-arguments list;
+     * a `-Reshape` written as `-Reshape:$true` or with a value between it and the flags would bind wrong. */
+    #[test]
+    fn reshape_forwards_ics_flags_behind_the_shims_own_switch_per_host() {
+        let asked = ReshapeAsk {
+            memory_gib: Some(Some(12)),
+            cpus: Some(Some(4)),
+            ..ReshapeAsk::default()
+        };
+        let unix = reshape_script("work", &asked, Host::Unix, RELEASE).unwrap();
+        assert_eq!(unix.file, "recreate.sh");
+        assert_eq!(
+            unix.args,
+            vec!["work", "--reshape", "--memory", "12g", "--cpus", "4"]
+        );
+
+        let windows = reshape_script("work", &asked, Host::Windows, RELEASE).unwrap();
+        assert_eq!(windows.file, "recreate.ps1");
+        assert_eq!(
+            windows.args,
+            vec!["-Slug", "work", "-Reshape", "--memory", "12g", "--cpus", "4"]
+        );
+    }
+
+    /// A cleared cap is `ic`'s own word for "back to what you derive", and a switch is spelled out both ways:
+    /// a bare `--privileged` could only ever add, and the same verb has to be able to withdraw the ask.
+    #[test]
+    fn a_cleared_cap_is_ics_default_and_a_switch_is_spelled_out() {
+        assert_eq!(
+            reshape_flags(&ReshapeAsk {
+                memory_gib: Some(None),
+                ..ReshapeAsk::default()
+            }),
+            vec!["--memory", "default"]
+        );
+        assert_eq!(
+            reshape_flags(&ReshapeAsk {
+                cpus: Some(None),
+                privileged: Some(true),
+                gpu: Some(false),
+                ..ReshapeAsk::default()
+            }),
+            vec!["--cpus", "default", "--privileged", "on", "--gpus", "off"]
+        );
+    }
+
+    #[test]
+    fn a_reshape_with_nothing_to_change_is_refused_before_anything_spawns() {
+        assert!(reshape_script("work", &ReshapeAsk::default(), Host::Unix, RELEASE).is_err());
+        assert!(reshape_flags(&ReshapeAsk::default()).is_empty());
+    }
+
+    /* THE THREE STATES OF A CAP'S ASK, off the wire. The form sends `null` for "back to the default" and no key
+     * at all for "leave it"; serde's ordinary Option folds the two together, and folding them would turn every
+     * untouched cap into a request to clear it. */
+    #[test]
+    fn a_reshape_ask_keeps_null_and_absent_apart() {
+        let parsed: ReshapeAsk =
+            serde_json::from_str(r#"{"memoryGib":null,"cpus":8,"gpu":true}"#).unwrap();
+        assert_eq!(
+            parsed,
+            ReshapeAsk {
+                memory_gib: Some(None),
+                cpus: Some(Some(8)),
+                privileged: None,
+                gpu: Some(true),
+            }
+        );
+        assert_eq!(
+            serde_json::from_str::<ReshapeAsk>("{}").unwrap(),
+            ReshapeAsk::default()
+        );
+    }
+
+    /* WHAT `docker inspect` SAYS ABOUT A CONTAINER'S SHARE, read the way the machine agent reads it for the web,
+     * so the two screens cannot disagree about one container: the cgroup caps (0 is docker's "unbounded", which
+     * is no cap anyone set), the privilege, the GPU in either spelling docker writes for `--gpus`, and the two
+     * env stamps the run contract leaves saying who asked for which directive. */
+    #[test]
+    fn a_containers_share_is_read_off_docker_inspect() {
+        let inspected = serde_json::json!({
+            "Name": "/intentic-sandbox-work",
+            "HostConfig": {
+                "Memory": 12_884_901_888u64,
+                "NanoCpus": 4_000_000_000u64,
+                "Privileged": true,
+                "DeviceRequests": [{ "Driver": "nvidia", "Count": -1, "Capabilities": [["gpu"]] }]
+            },
+            "Config": {
+                "Env": ["PATH=/usr/bin", "SANDBOX_RUNTIME=--gpus=all", "SANDBOX_OVERLAY_RUNTIME=--privileged"]
+            }
+        });
+        assert_eq!(
+            resources_from(&inspected),
+            SandboxResources {
+                memory_bytes: Some(12_884_901_888),
+                cpus: Some(4.0),
+                privileged: true,
+                gpu: true,
+                host_runtime: vec!["--gpus=all".to_string()],
+                overlay_runtime: vec!["--privileged".to_string()],
+            }
+        );
+        // Unbounded, unprivileged, and a GPU spelled by capability alone, with no stamps at all.
+        let bare = serde_json::json!({
+            "HostConfig": { "Memory": 0, "NanoCpus": 0, "Privileged": false, "DeviceRequests": [{ "Capabilities": [["gpu"]] }] },
+            "Config": { "Env": [] }
+        });
+        assert_eq!(
+            resources_from(&bare),
+            SandboxResources {
+                memory_bytes: None,
+                cpus: None,
+                privileged: false,
+                gpu: true,
+                host_runtime: vec![],
+                overlay_runtime: vec![],
+            }
+        );
+        // The listing keys each object by the name docker prints with a leading slash; an object with no name
+        // (or a warning line) is dropped rather than thrown on.
+        let shares = shares_from(&format!("{inspected}\nWARNING: something\n{bare}\n"));
+        assert_eq!(shares.len(), 1);
+        assert!(shares.contains_key("intentic-sandbox-work"));
+    }
+
+    /// The engine's size as `docker info` prints it for the form's rails. Unreadable is None, never a guess.
+    #[test]
+    fn the_engines_size_is_read_off_docker_info() {
+        assert_eq!(
+            engine_from("21474836480 12\n"),
+            Some(DockerEngine {
+                memory_bytes: 21_474_836_480,
+                cpus: 12
+            })
+        );
+        assert_eq!(engine_from(""), None);
+        assert_eq!(engine_from("0 12"), None);
+        assert_eq!(engine_from("not numbers"), None);
+    }
+
     #[test]
     fn remove_confirms_itself_per_host() {
         let unix = remove_script("work", Host::Unix, RELEASE);
@@ -1165,6 +1576,11 @@ mod tests {
     #[test]
     fn no_flow_but_setup_ever_elevates() {
         assert!(!recreate_script("work", None, false, Host::Unix, RELEASE).elevate);
+        assert!(
+            !reshape_script("work", &reshape_ask(), Host::Unix, RELEASE)
+                .unwrap()
+                .elevate
+        );
         assert!(!remove_script("work", Host::Unix, RELEASE).elevate);
         assert!(!sync_script(&sync_args(), Some("/home/ada"), Host::Unix, RELEASE).elevate);
     }

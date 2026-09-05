@@ -4,11 +4,14 @@ import { ScopeError } from "../policy.js";
 import {
     icCandidates,
     icRemoveArgs,
+    icReshapeArgs,
     icRunnerArgs,
     icSwapArgs,
     listSandboxes,
     manageSandbox,
     removeSandbox,
+    reshapeSandbox,
+    resourcesFrom,
     runnerFlow,
     rowsFrom,
     sandboxesFrom,
@@ -91,6 +94,72 @@ test("a rebuild without the approved digest is refused rather than built against
     // a missing one has to stop the flow rather than fall through to an unpinned rebuild.
     expect(() => icSwapArgs("rebuild", "work", undefined)).toThrow(/hash.*required/i);
     expect(() => icSwapArgs("rebuild", "work", "")).toThrow(/approved/);
+});
+
+/* The RESHAPE argv: the dialog's closed form spelled as `ic sandbox reshape` takes it. Every value is a flag
+ * with a word after it, never a bare flag, and `null` becomes ic's own `default`: the shape a browser dialog and
+ * an agent's tool call both produce, and the one place the two spellings meet. */
+test("a reshape builds ic's flags from the ask, with null as default and switches spelled out", () => {
+    expect(icReshapeArgs("work", { memoryGib: 12, cpus: 4, privileged: true, gpu: false })).toEqual([
+        "sandbox",
+        "reshape",
+        "work",
+        "--memory",
+        "12g",
+        "--cpus",
+        "4",
+        "--privileged",
+        "on",
+        "--gpus",
+        "off",
+    ]);
+    expect(icReshapeArgs("work", { memoryGib: null, cpus: null })).toEqual(["sandbox", "reshape", "work", "--memory", "default", "--cpus", "default"]);
+    // Only what was asked rides: an untouched switch must not be re-stated as either state.
+    expect(icReshapeArgs("work", { gpu: true })).toEqual(["sandbox", "reshape", "work", "--gpus", "on"]);
+});
+
+test("a reshape with nothing to change is refused before anything is spawned", () => {
+    expect(() => icReshapeArgs("work", undefined)).toThrow(/change something/i);
+    expect(() => icReshapeArgs("work", {})).toThrow(/change something/i);
+});
+
+test("reshaping is refused by the sandboxes switch, like the swaps it shares a door with", async () => {
+    await expect(reshapeSandbox("work", { memoryGib: 12 }, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
+        /Manage sandboxes on this device/,
+    );
+});
+
+/* WHAT A CONTAINER RUNS WITH, off docker's own inspect object. The two zeros are the reading that matters:
+ * docker writes 0 for "no limit", and 0 GiB is not a cap anyone set, so it must read as absent. */
+test("a container's share of the machine is read off its HostConfig and its two directive stamps", () => {
+    const inspected = {
+        Name: "/intentic-sandbox-work",
+        HostConfig: {
+            Memory: 12 * 1024 ** 3,
+            NanoCpus: 4_000_000_000,
+            Privileged: true,
+            DeviceRequests: [{ Driver: "", Count: -1, Capabilities: [["gpu"]] }],
+        },
+        Config: { Env: ["PATH=/usr/bin", "SANDBOX_RUNTIME=--gpus=all", "SANDBOX_OVERLAY_RUNTIME=--privileged"] },
+    };
+    expect(resourcesFrom(inspected)).toEqual({
+        memoryBytes: 12 * 1024 ** 3,
+        cpus: 4,
+        privileged: true,
+        gpu: true,
+        hostRuntime: ["--gpus=all"],
+        overlayRuntime: ["--privileged"],
+    });
+});
+
+test("an unbounded container reads as having no caps, no privileges and no asks", () => {
+    const bare = resourcesFrom({ Name: "/intentic-sandbox-work", HostConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null }, Config: { Env: [] } });
+    expect(bare).toEqual({ privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] });
+    expect(bare).not.toHaveProperty("memoryBytes");
+    expect(bare).not.toHaveProperty("cpus");
+    // The nvidia driver spelling counts as a GPU too, and a non-object is no reading at all.
+    expect(resourcesFrom({ HostConfig: { DeviceRequests: [{ Driver: "nvidia" }] } })?.gpu).toBe(true);
+    expect(resourcesFrom("not an object")).toBeUndefined();
 });
 
 test("removal confirms itself, because there is no terminal on this end to answer ic's prompt", () => {

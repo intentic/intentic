@@ -30,7 +30,11 @@ const scopes = [
         state: `off`,
         detail: `GUI work, for things with no command-line way in. Its own switch because looking and touching are not the same permission: a screenshot is bounded by what's on screen, one click can confirm a dialog nobody read.`,
     },
-    { name: `Manage sandboxes`, state: `off`, detail: `Start, stop and restart the sandboxes on this machine: narrower than a shell, and named rather than improvised.` },
+    {
+        name: `Manage sandboxes`,
+        state: `off`,
+        detail: `Start, stop, restart and resize the sandboxes on this machine (their memory and CPU caps, privileged, GPU), and move them between images: narrower than a shell, and named rather than improvised.`,
+    },
     { name: `Remove a sandbox`, state: `off`, detail: `Separate again, because everything the switch above grants is undone by doing it again and this is undone by nothing.` },
 ];
 ---

@@ -43,6 +43,7 @@ import {
     mirroringOff,
     portHolder,
     portNote,
+    resourcesSummary,
     sandboxGroups,
     shortCommand,
 } from "./deviceDetail.js";
@@ -543,6 +544,15 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <template v-if="group.sandbox">
                         <span class="text-2xs text-subtle">Image</span>
                         <span class="truncate font-mono text-xs text-subtle" :title="group.sandbox.image">{{ group.sandbox.image }}</span>
+                    </template>
+
+                    <!-- WHAT IT GETS OF THIS MACHINE: the caps and privileges docker enforces on it, which the
+                         Resources… verb changes. Only when the caller inspected the container for them, and
+                         only the parts somebody set (deviceDetail.ts). Under the image rather than above it:
+                         it is the second-least-read line here, and the one an Update leaves alone. -->
+                    <template v-if="group.sandbox && resourcesSummary(group.sandbox)">
+                        <span class="text-2xs text-subtle">Share</span>
+                        <span class="truncate text-xs text-subtle">{{ resourcesSummary(group.sandbox) }}</span>
                     </template>
                 </div>
 

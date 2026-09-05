@@ -21,8 +21,10 @@ const CLI = join(packageRoot, "src", "cli.ts");
  * stdout the assertions then misattribute. */
 const runProbes = async (args: string[]): Promise<{ stdout: string }> => exec(TSX, [CLI, "sandbox", "host-probes", ...args]);
 
-const runVerb = async (args: string[], stdin: string): Promise<{ stdout: string; stderr: string; code: number }> => {
-    const child = exec(TSX, [CLI, "sandbox", "run-command", ...args]);
+/* `env` is the probe's OWN environment, which is how a runner seeds a standing ask (see `seeded` in the verb):
+ * merged over the test runner's so tsx still finds node, and never read by anything but the seed names. */
+const runVerb = async (args: string[], stdin: string, env: Record<string, string> = {}): Promise<{ stdout: string; stderr: string; code: number }> => {
+    const child = exec(TSX, [CLI, "sandbox", "run-command", ...args], { env: { ...process.env, ...env } });
     child.child.stdin?.end(stdin);
     try {
         const { stdout, stderr } = await child;
@@ -133,10 +135,12 @@ test("--unsupported drops those directives and records why, leaving the rest of 
         runVerb([...args, "--unsupported", "--gpus=all"], ""),
     ]);
 
-    expect(honoured.stdout).toContain("--gpus=all");
+    // The FLAG, space-delimited on the command line: the same token also appears inside the overlay's
+    // provenance stamp (SANDBOX_OVERLAY_RUNTIME), which records what was ASKED whatever became of it.
+    expect(honoured.stdout).toMatch(/ --gpus=all /u);
     expect(honoured.stdout).toContain("SANDBOX_GPU=all");
 
-    expect(unsupported.stdout).not.toContain("--gpus");
+    expect(unsupported.stdout).not.toMatch(/ --gpus=all /u);
     expect(unsupported.stdout).toContain("SANDBOX_GPU=unsupported");
     // The privilege the nested engine actually needs is not collateral damage: only the optional one comes off.
     expect(unsupported.stdout).toContain("--privileged");
@@ -153,4 +157,44 @@ test("an unallowlisted runtime directive fails the whole verb: never a command m
     expect(stdout).toBe("");
     // Named, so the refusal is the allowlist speaking, not any other crash that happens to exit non-zero.
     expect(stderr).toContain("--cap-add=SYS_PTRACE");
+});
+
+/* THE SEED PROTOCOL through a real `-e`: a value on the probe's env replaces what stdin carried, an EMPTY one
+ * clears it, and either way the answer is re-emitted onto the container — which is what makes `ic sandbox
+ * reshape` a standing change rather than a one-run argument. Three spawns, so they go out together. */
+test("a seed on the probe's env replaces or clears what the old container carried, and is re-emitted", async () => {
+    const args = ["--slug", "s7", "--image", "i", "--base-image", "i"];
+    const carried = "SANDBOX_MEMORY=10g\0SANDBOX_CPUS=2\0SANDBOX_RUNTIME=--privileged\0";
+    const [replayed, replaced, cleared] = await Promise.all([
+        runVerb(args, carried),
+        runVerb(args, carried, { SANDBOX_CPUS: "1", SANDBOX_RUNTIME: "--privileged --gpus=all" }),
+        runVerb(args, carried, { SANDBOX_MEMORY: "", SANDBOX_CPUS: "", SANDBOX_RUNTIME: "" }),
+    ]);
+    // Untouched: what the container carried rides again, as flags and as env.
+    expect(replayed.stdout).toContain("--cpus 2");
+    expect(replayed.stdout).toContain("-e SANDBOX_CPUS=2");
+    expect(replayed.stdout).toContain("--privileged");
+    // Replaced: the fresh ask wins, once, and the new directive is probed-shaped like any other.
+    expect(replaced.stdout).toContain("--cpus 1");
+    expect(replaced.stdout).not.toContain("SANDBOX_CPUS=2");
+    expect(replaced.stdout).toContain("-e 'SANDBOX_RUNTIME=--privileged --gpus=all'");
+    expect(replaced.stdout).toContain("--gpus=all");
+    // Cleared: no CPU ceiling, no owner directives, and the memory cap back to the derived one (not 10g).
+    expect(cleared.stdout).not.toContain("--cpus");
+    expect(cleared.stdout).not.toContain("--privileged");
+    expect(cleared.stdout).not.toContain("SANDBOX_RUNTIME");
+    expect(cleared.stdout).not.toContain("SANDBOX_MEMORY=10g");
+    expect(cleared.stdout).toMatch(/--memory \d+g/u);
+});
+
+test("host-probes asks about the owner's optional directives exactly as the overlay's", async () => {
+    // ATTACHED, like `--unsupported`: the values are docker flags, and the detached spelling reads `--gpus=all`
+    // as a flag of ours that does not exist. The flows write it this way for the same reason.
+    const [owner, both] = await Promise.all([
+        runProbes(["--host-runtime=--privileged --gpus=all"]),
+        // One line, not two: the union is deduped before it is probed.
+        runProbes(["--runtime", "# intentic:runtime --gpus=all", "--host-runtime=--gpus=all"]),
+    ]);
+    expect(owner.stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
+    expect(both.stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
 });

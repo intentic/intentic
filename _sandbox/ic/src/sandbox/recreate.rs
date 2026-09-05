@@ -17,9 +17,18 @@ use crate::util::{bail, sha256_hex, Fail, Result};
  *   ic sandbox update [slug]              the fresh :<channel> base, overlay re-applied on top
  *   ic sandbox rollback [slug]            back to the image this sandbox came from
  *   ic sandbox dev [slug]                 the locally-built dev image (the dogfood loop)
+ *   ic sandbox reshape <slug> …           the SAME image, with a different share of this machine
  *
  * The sandbox holds no HOST Docker socket (its own engine is nested — it cannot recreate its own
  * container), which is why every mode runs HERE, on the machine that runs the container.
+ *
+ * `reshape` is the fifth mode and the odd one: it moves the container onto no new image at all. A memory or
+ * CPU cap, `--privileged`, the host's GPU — every one of those is a `docker run` flag, and a container's flags
+ * are fixed for its life, so changing one IS a recreate: the same cutover as an update (park, run, health,
+ * unpark on failure), with the pull and the overlay build skipped because the image is the one already here.
+ * The asks ride to the image as SEEDS (contract.rs) and come back onto the new container as replayed env, which
+ * is what makes a reshape a standing change rather than a one-run argument — and why `docker update`, which
+ * retunes the running cgroup and is forgotten by the next recreate, is not used.
  *
  * HOW THE CONTAINER IS RUN is deliberately not written in this file — see contract.rs.
  *
@@ -52,7 +61,27 @@ pub enum Mode {
     Update { channel: Option<String> },
     Rollback,
     Dev,
+    Reshape(Reshape),
 }
+
+/// What `ic sandbox reshape` was asked to change. Every field is "leave it" when None. The two caps carry the
+/// contract's own spellings (`12g`, `4`) or the EMPTY string, which is the contract's "clear this" — main.rs
+/// maps the verb's `default` onto it. The two switches edit the owner's directive tokens (SANDBOX_RUNTIME):
+/// they add or withdraw the OWNER's ask only, never what the approved overlay demands, which rides beside them
+/// untouched and is unioned back in by the image.
+#[derive(Default, Clone)]
+pub struct Reshape {
+    pub memory: Option<String>,
+    pub cpus: Option<String>,
+    pub privileged: Option<bool>,
+    pub gpus: Option<bool>,
+}
+
+// The directive tokens the two switches stand for, in the contract's single-token spelling
+// (@intentic/sandbox-run RUNTIME_DIRECTIVES). Named here only to EDIT the owner's list; validated in the image.
+const PRIVILEGED_TOKEN: &str = "--privileged";
+const GPUS_TOKEN: &str = "--gpus=all";
+const HOST_RUNTIME_ENV: &str = "SANDBOX_RUNTIME";
 
 impl Mode {
     fn name(&self) -> &'static str {
@@ -61,6 +90,7 @@ impl Mode {
             Mode::Update { .. } => "update",
             Mode::Rollback => "rollback",
             Mode::Dev => "dev",
+            Mode::Reshape(_) => "reshape",
         }
     }
 }
@@ -314,6 +344,15 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
                 std::fs::write(&overlay_path, rewrite_from(&overlay, &registry_image))?;
             }
         }
+        Mode::Reshape(_) => {
+            /* Nothing to fetch and nothing to build: the target is the image this container already runs.
+             * The overlay is still staged, for its DIRECTIVE lines alone — the run must carry what the
+             * approved recipe demands beside what the owner is asking for — and the hash the container was
+             * built with rides through unchanged, so the daemon inside keeps reporting its environment as
+             * Applied rather than waking up to a rebuild it does not need. */
+            stage_overlay(&container, &overlay_path)?;
+            env_hash = container_env(&container, "SANDBOX_ENVIRONMENT_HASH");
+        }
         Mode::Dev => {
             if !docker::image_exists(DEV_TAG) {
                 bail!("image {DEV_TAG} not found — run 'pnpm build:sandbox' first.");
@@ -417,6 +456,20 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
                 build_overlay(&target_image, &overlay_path, false, &log);
             }
         }
+        Mode::Reshape(_) => {
+            // The image the container runs NOW (SANDBOX_IMAGE, stamped by whichever runner made it) and the
+            // base it composes against — both replayed as they are, because nothing about the image changes.
+            let Some(running) = sandbox_image.clone() else {
+                bail!("this sandbox predates the run contract (no SANDBOX_IMAGE on its container) — run `ic sandbox update {slug}` once, then reshape it.");
+            };
+            target_image = running;
+            if base_image.is_empty() {
+                base_image = current_base.clone().unwrap_or_else(|| target_image.clone());
+            }
+            if !docker::image_exists(&target_image) {
+                bail!("the image this sandbox runs ({target_image}) is no longer on this machine, so it cannot be recreated as it is — run `ic sandbox update {slug}` first. The sandbox is untouched.");
+            }
+        }
     }
     if !docker::image_exists(&target_image) {
         bail!("{target_image} is not available (pull or overlay build failed) — the sandbox is untouched. Log: {}", log.path.display());
@@ -489,12 +542,25 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         .filter(|line| line.starts_with("# intentic:runtime "))
         .collect::<Vec<_>>()
         .join("\n");
+    /* THE OWNER'S OWN DIRECTIVES, the second source beside the overlay's: what the container carries now
+     * (SANDBOX_RUNTIME, replayed by every other mode), or what a reshape is about to make it carry. Read
+     * here rather than trusted to the replay alone because the host has to be PROBED about them first: a GPU
+     * the owner asked for is dropped on a machine without the runtime exactly as the docker card's would be,
+     * and the probe cannot ask about a token it was not shown.
+     *
+     * The seeds are a reshape's whole payload to the image (contract.rs): the caps as given, and the edited
+     * token list when a switch was touched. Every other mode seeds nothing and replays what is there. */
+    let carried_runtime = container_env(&container, HOST_RUNTIME_ENV).unwrap_or_default();
+    let (host_runtime, seeds) = match &mode {
+        Mode::Reshape(ask) => reshape_seeds(ask, &carried_runtime),
+        _ => (carried_runtime, Vec::new()),
+    };
     // Which asks this host cannot honour — probed via the image (the list lives in the run contract), so
     // the sandbox starts without an optional extra instead of `docker run` refusing the whole launch.
-    let probes = if runtime_lines.is_empty() {
+    let probes = if runtime_lines.is_empty() && host_runtime.is_empty() {
         Vec::new()
     } else {
-        contract::host_probes(&target_image, &runtime_lines, &log)
+        contract::host_probes(&target_image, &runtime_lines, &host_runtime, &log)
     };
     let unsupported = contract::unsupported_on_this_host(&probes);
 
@@ -538,7 +604,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         // keeps, and the daemon guards against replays anyway (workspaceArrivedEmpty).
         definition_b64: None,
     };
-    let argv = contract::run_command(&request, &env_nul, false, &unsupported, &log)?;
+    let argv = contract::run_command(&request, &env_nul, false, &unsupported, &seeds, &log)?;
 
     println!("intentic: recreating the sandbox from {target_image}…");
     log.section(&format!("previous container logs ({container})"));
@@ -551,13 +617,21 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
      * either the thing it is taking or something it has moved past, and both mean nothing is waiting any
      * more. (A failed launch rewinds to `saved`, which still carries them — the prepared image is untouched
      * on this machine and still worth swapping onto.) */
+    /* EXCEPT on a reshape, which takes no image at all: whatever `prepare` left staged is still the right thing
+     * to swap onto afterwards (same base, same recipe), and dropping it would cost the owner the download they
+     * already waited for — so the staged keys, and the sandbox's own copy of the offer, both survive. */
+    let reshaping = matches!(mode, Mode::Reshape(_));
     record::write(
         &slug,
         &record::ChannelRecord {
             channel: Some(channel.clone()),
             current: Some(base_image.clone()),
             previous: next.clone(),
-            ..record::ChannelRecord::default()
+            ..(if reshaping {
+                saved.clone()
+            } else {
+                record::ChannelRecord::default()
+            })
         },
     )?;
 
@@ -579,14 +653,14 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     if !docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
-        let retry_argv = match contract::run_command(&request, &env_nul, true, &all_optional, &log)
-        {
-            Ok(retry_argv) => retry_argv,
-            Err(err) => {
-                restore_parked(&container, &parked, &slug, &saved);
-                return Err(err);
-            }
-        };
+        let retry_argv =
+            match contract::run_command(&request, &env_nul, true, &all_optional, &seeds, &log) {
+                Ok(retry_argv) => retry_argv,
+                Err(err) => {
+                    restore_parked(&container, &parked, &slug, &saved);
+                    return Err(err);
+                }
+            };
         if !docker::run_argv(&retry_argv, &log) {
             restore_parked(&container, &parked, &slug, &saved);
             let tail = log.tail(5);
@@ -615,7 +689,9 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
      * the old one was told, and without this the update card would keep offering an image the sandbox is
      * already running. Done here rather than before the cutover for the same reason the record is rewound on
      * failure: until health answers, the prepared image is still the thing worth swapping onto. */
-    staged::withdraw(&container);
+    if !reshaping {
+        staged::withdraw(&container);
+    }
 
     /* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a
      * whole extra image, forever. Never the pin the record still names, and never the base just moved
@@ -641,12 +717,90 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         }
         Mode::Rollback => println!("intentic: sandbox rolled back to {target_image} — run rollback again to return."),
         Mode::Dev => println!("intentic: sandbox is live on {target_image} — docker logs -f {container}"),
+        // What is IN FORCE, read back off the container rather than echoed from the ask: the contract may have
+        // bounded a cap to the machine, and a host without the runtime may have dropped the GPU.
+        Mode::Reshape(_) => println!(
+            "intentic: sandbox reshaped — {}. The values live on the sandbox and survive every later update.",
+            describe_shape(&container)
+        ),
     }
     println!(
         "Logs: docker logs -f {container} (recreate log: {})",
         log.path.display()
     );
     Ok(())
+}
+
+/// `ic sandbox reshape` — the same image, a different share of this machine. Always a named slug: the verb
+/// changes a container's privileges, and "the one sandbox here" is not a thing to guess at for that.
+pub fn reshape(slug: String, ask: Reshape) -> Result<()> {
+    if ask.memory.is_none() && ask.cpus.is_none() && ask.privileged.is_none() && ask.gpus.is_none()
+    {
+        bail!("nothing to change — give at least one of --memory, --cpus, --privileged, --gpus.");
+    }
+    recreate(Mode::Reshape(ask), Some(slug), Reach::Applied, false)
+}
+
+/* THE RESHAPE'S PAYLOAD, as pure arithmetic on strings so it can be asserted without a container.
+ *
+ * Returns the owner's directive tokens the new container will carry (for the host probe) and the seeds that
+ * carry every touched ask to the image. A cap is forwarded exactly as given — `12g`, `4`, or the empty string
+ * main.rs maps `default` onto — because what a valid value is belongs to the contract. The token list is
+ * seeded only when a switch was touched: an untouched list must replay off the old container like every other
+ * pair rather than be re-stated here, or a token this binary has never heard of would be dropped in passing. */
+fn reshape_seeds(ask: &Reshape, carried: &str) -> (String, Vec<contract::Seed>) {
+    let tokens = apply_switches(carried, ask.privileged, ask.gpus);
+    let mut seeds: Vec<contract::Seed> = Vec::new();
+    if let Some(memory) = &ask.memory {
+        seeds.push(("SANDBOX_MEMORY".to_string(), memory.clone()));
+    }
+    if let Some(cpus) = &ask.cpus {
+        seeds.push(("SANDBOX_CPUS".to_string(), cpus.clone()));
+    }
+    if ask.privileged.is_some() || ask.gpus.is_some() {
+        seeds.push((HOST_RUNTIME_ENV.to_string(), tokens.clone()));
+    }
+    (tokens, seeds)
+}
+
+/// The owner's token list with the two switches applied: `Some(true)` adds the token once, `Some(false)`
+/// withdraws it, `None` leaves it. Order is kept, so an unrelated token the owner carries rides on unchanged.
+fn apply_switches(carried: &str, privileged: Option<bool>, gpus: Option<bool>) -> String {
+    let mut tokens: Vec<String> = carried
+        .split_whitespace()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    tokens.dedup();
+    for (token, switch) in [(PRIVILEGED_TOKEN, privileged), (GPUS_TOKEN, gpus)] {
+        match switch {
+            Some(true) if !tokens.iter().any(|have| have == token) => {
+                tokens.push(token.to_string())
+            }
+            Some(false) => tokens.retain(|have| have != token),
+            _ => {}
+        }
+    }
+    tokens.join(" ")
+}
+
+/// The container's share of this machine as docker now enforces it, for the reshape's closing line: the
+/// cgroup caps (0 = unbounded) and whether it runs privileged. Read, not echoed — see the caller.
+fn describe_shape(container: &str) -> String {
+    let field = |format: &str| docker::inspect(container, format).unwrap_or_default();
+    let memory = match field("{{.HostConfig.Memory}}").parse::<u64>() {
+        Ok(0) | Err(_) => "memory unbounded".to_string(),
+        Ok(bytes) => format!("memory {}g", bytes / (1024 * 1024 * 1024)),
+    };
+    let cpus = match field("{{.HostConfig.NanoCpus}}").parse::<u64>() {
+        Ok(0) | Err(_) => "every CPU".to_string(),
+        Ok(nanos) => format!("{} CPUs", nanos / 1_000_000_000),
+    };
+    let privileged = if field("{{.HostConfig.Privileged}}") == "true" {
+        "privileged"
+    } else {
+        "unprivileged"
+    };
+    format!("{memory}, {cpus}, {privileged}")
 }
 
 /* WHAT `prepare` LEAVES BEHIND: a built image, the host record naming it, and the sandbox told about it.
@@ -960,6 +1114,84 @@ mod tests {
             staged_version: Some("1.4.2".to_string()),
             ..saved(Some("ghcr.io/intentic/sandbox:stable"), None)
         }
+    }
+
+    /* THE RESHAPE'S ARITHMETIC. The seeds are the whole of what a reshape says to the image, and the failure
+     * mode of getting them wrong is silent: a cap seeded under the wrong name is ignored and replayed around,
+     * a token list re-stated when untouched drops whatever this binary has not heard of. */
+    #[test]
+    fn switches_edit_only_their_own_token_and_leave_the_rest_of_the_owners_list_alone() {
+        assert_eq!(apply_switches("", Some(true), None), "--privileged");
+        assert_eq!(
+            apply_switches("--privileged", Some(true), None),
+            "--privileged"
+        );
+        assert_eq!(
+            apply_switches("--privileged --gpus=all", Some(false), None),
+            "--gpus=all"
+        );
+        assert_eq!(
+            apply_switches("--privileged", None, Some(true)),
+            "--privileged --gpus=all"
+        );
+        // A token the owner carries that this binary knows nothing about rides on untouched.
+        assert_eq!(
+            apply_switches(
+                "--device=/dev/net/tun --privileged",
+                Some(false),
+                Some(true)
+            ),
+            "--device=/dev/net/tun --gpus=all"
+        );
+        assert_eq!(apply_switches("--gpus=all", Some(false), Some(false)), "");
+        assert_eq!(
+            apply_switches("  --privileged   --privileged ", None, None),
+            "--privileged"
+        );
+    }
+
+    #[test]
+    fn a_reshape_seeds_exactly_what_was_asked_and_re_states_the_token_list_only_when_a_switch_moved(
+    ) {
+        let caps_only = Reshape {
+            memory: Some("12g".into()),
+            cpus: Some(String::new()),
+            ..Reshape::default()
+        };
+        let (runtime, seeds) = reshape_seeds(&caps_only, "--gpus=all");
+        // The carried list is still what the host is probed about…
+        assert_eq!(runtime, "--gpus=all");
+        // …but it is NOT re-stated as a seed: it replays off the old container like every other pair.
+        assert_eq!(
+            seeds,
+            vec![
+                ("SANDBOX_MEMORY".to_string(), "12g".to_string()),
+                ("SANDBOX_CPUS".to_string(), String::new()),
+            ]
+        );
+
+        let switch = Reshape {
+            privileged: Some(true),
+            ..Reshape::default()
+        };
+        let (runtime, seeds) = reshape_seeds(&switch, "--gpus=all");
+        assert_eq!(runtime, "--gpus=all --privileged");
+        assert_eq!(
+            seeds,
+            vec![(
+                "SANDBOX_RUNTIME".to_string(),
+                "--gpus=all --privileged".to_string()
+            )]
+        );
+
+        // Withdrawing the last token seeds an EMPTY list, which is the contract's "clear", not "leave it".
+        let withdraw = Reshape {
+            gpus: Some(false),
+            ..Reshape::default()
+        };
+        let (runtime, seeds) = reshape_seeds(&withdraw, "--gpus=all");
+        assert_eq!(runtime, "");
+        assert_eq!(seeds, vec![("SANDBOX_RUNTIME".to_string(), String::new())]);
     }
 
     #[test]

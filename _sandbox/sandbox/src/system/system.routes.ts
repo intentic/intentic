@@ -468,6 +468,8 @@ export const createSystemRoutes = (services: Services) => {
                 op: input.op,
                 slug: input.slug,
                 ...(input.hash === undefined ? {} : { hash: input.hash }),
+                // The reshape's payload: a closed form the machine spells into `ic` flags, never a command line.
+                ...(input.resources === undefined ? {} : { resources: input.resources }),
             });
         }),
         /* One named CLI action on one connected device — the Devices tab's Stop-mirroring button, and the

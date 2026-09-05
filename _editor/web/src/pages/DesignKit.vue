@@ -57,6 +57,7 @@ import {
     Row,
     RowGroup,
     RowNote,
+    SandboxResourcesDialog,
     SandboxVerbs,
     SearchBar,
     SegmentedControl,
@@ -123,7 +124,16 @@ const STATUS_VARIANTS: readonly StatusVariant[] = [`success`, `danger`, `warning
  * every state the row has: the running dot and the stopped word, a resting sync and a halted one, a mirrored
  * port and a contested one, and both halves of the power slot. */
 const KIT_SANDBOXES: readonly DeviceSandboxRow[] = [
-    { slug: `work`, name: `work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
+    // The one row with its share reported, so the Share line is on this page: a cap somebody set, and a privilege
+    // the approved environment demands rather than the owner asked for, which is the case the form draws locked.
+    {
+        slug: `work`,
+        name: `work`,
+        running: true,
+        image: `ghcr.io/intentic/sandbox:2.3.1`,
+        tunnelRunning: true,
+        resources: { memoryBytes: 12 * 1024 ** 3, cpus: 4, privileged: true, gpu: false, hostRuntime: [], overlayRuntime: [`--privileged`] },
+    },
     { slug: `lab`, name: `lab`, running: false, image: `ghcr.io/intentic/sandbox:2.2.9`, tunnelRunning: false },
     { slug: `hold`, name: `hold`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
 ];
@@ -171,6 +181,7 @@ const modalOpen = ref(false);
 const confirmOpen = ref(false);
 const anchoredOpen = ref(false);
 const responsiveOpen = ref(false);
+const resourcesOpen = ref(false);
 const anchoredTrigger = ref<HTMLButtonElement | null>(null);
 const responsiveTrigger = ref<HTMLButtonElement | null>(null);
 const segment = ref(`all`);
@@ -762,6 +773,7 @@ const pickedTier = ref(`collaborator`);
                     <button ref="responsiveTrigger" type="button" :class="ui.addTile(`px-3 py-1.5`)" @click="responsiveOpen = !responsiveOpen">
                         Responsive overlay
                     </button>
+                    <Button size="small" label="Open resources" @click="resourcesOpen = true" />
                 </div>
             </section>
         </div>
@@ -792,6 +804,19 @@ const pickedTier = ref(`collaborator`);
             >
             <p class="mt-3 text-xs text-muted">This can't be undone.</p>
         </ConfirmDialog>
+
+        <!-- The form behind a sandbox row's Resources… verb, on the SAME fixture the row above draws its Share
+             line from: the share and the form are two views of one container, and a kit that fixtured them
+             separately could drift them apart. The engine is 32 GiB / 8 cores, so the rails read back as real
+             numbers, and `work`'s overlay demands --privileged, which is the case that draws a switch locked. -->
+        <SandboxResourcesDialog
+            :open="resourcesOpen"
+            name="work"
+            :current="KIT_SANDBOXES[0]?.resources"
+            :engine="{ memoryBytes: 32 * 1024 ** 3, cpus: 8 }"
+            @cancel="resourcesOpen = false"
+            @apply="resourcesOpen = false"
+        />
 
         <AnchoredOverlay v-model="anchoredOpen" :anchor="anchoredTrigger ?? undefined" side="bottom" cross="start">
             <div class="flex w-64 flex-col gap-1 p-2">

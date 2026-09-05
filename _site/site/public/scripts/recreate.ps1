@@ -5,7 +5,9 @@
   binary and forwards the parameter shapes the platform's cards hand out: -Slug alone = update, -Slug + -Hash =
   rebuild (the SHA256 is the trust anchor - only overlay content that still hashes to what the owner
   reviewed is ever built), -Slug + -Rollback = back to the image it ran before its last update, and
-  -Slug + -Prepare = download and build the next update without applying it.
+  -Slug + -Prepare = download and build the next update without applying it, and -Slug + -Reshape <ic flags> =
+  the same image with a different share of this machine (--memory/--cpus/--privileged/--gpus are ic's own
+  flags, forwarded verbatim after -Reshape).
 
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123        # update
@@ -15,6 +17,8 @@
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Rollback   # roll back
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Prepare    # download it now
+.EXAMPLE
+  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Reshape --memory 12g --cpus 4
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Slug,
@@ -25,7 +29,12 @@ param(
     [switch]$Rollback,
     # The fourth, matching recreate.sh's --prepare: download and build the next update and stop there. The
     # container is never touched, so this is safe to run while the sandbox is being used.
-    [switch]$Prepare
+    [switch]$Prepare,
+    # The fifth, matching recreate.sh's --reshape: the same image, a different share of this machine. What
+    # follows the switch is ic's own flag surface (--memory 12g, --cpus 4, --privileged on, --gpus off),
+    # captured whole and forwarded verbatim so this shim never learns a flag ic could add later.
+    [switch]$Reshape,
+    [Parameter(ValueFromRemainingArguments = $true)][string[]]$ReshapeArgs
 )
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -112,6 +121,8 @@ if ($Rollback) {
     & $Ic sandbox rollback $Slug
 } elseif ($Prepare) {
     & $Ic sandbox prepare $Slug
+} elseif ($Reshape) {
+    & $Ic sandbox reshape $Slug @ReshapeArgs
 } elseif ($Hash) {
     & $Ic sandbox rebuild $Slug $Hash
 } else {

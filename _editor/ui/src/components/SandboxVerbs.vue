@@ -44,15 +44,16 @@ const {
 
 const emit = defineEmits<{ act: [verb: SandboxVerb] }>();
 
-// A glyph per row, because a menu of five bare words is read line by line and a menu with a gutter is read by
+// A glyph per row, because a menu of six bare words is read line by line and a menu with a gutter is read by
 // shape. They are the app's own vocabulary for the same ideas elsewhere: history for a rollback, undo for the
-// image before it, terminal for output.
+// image before it, terminal for output, sliders for a share that is set rather than switched.
 const VERB_ICON: Record<SandboxVerb, IconName> = {
     start: `play`,
     stop: `stop`,
     restart: `refresh`,
     update: `download`,
     rollback: `undo`,
+    resources: `sliders-h`,
     logs: `terminal`,
     remove: `trash`,
 };

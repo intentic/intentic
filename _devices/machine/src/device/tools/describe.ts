@@ -36,13 +36,30 @@ const osName = async (): Promise<string> => {
     return pretty === "" ? `${type()} ${release()}` : `${pretty} (kernel ${release()})`;
 };
 
-export const hostFacts = async (scopes: HostScopes): Promise<HostFacts> => ({
-    os: await osName(),
-    arch: arch(),
-    shell: shellFor(platform()).label,
-    home: homedir(),
-    roots: rootsOf(scopes),
-});
+/* HOW BIG THE DOCKER ENGINE IS, which is the ceiling every sandbox here is bounded by: the WSL guest on
+ * Windows, the Desktop VM on macOS, the host on Linux. `docker info` rather than this machine's own /proc,
+ * because on two of the three those are different computers — a 64 GiB laptop whose WSL guest was given 20.
+ * Bounded by a short timeout: `docker info` aggregates CLI plugins and has been seen to hang on them, and a
+ * machine that will not say its size is still a machine worth describing. Absent, never guessed. */
+const engineFacts = async (): Promise<HostFacts["engine"]> => {
+    const { stdout } = await exec("docker", ["info", "--format", "{{.MemTotal}} {{.NCPU}}"], { timeout: 5_000, windowsHide: true }).catch(() => ({
+        stdout: "",
+    }));
+    const [memoryBytes, cpus] = stdout.trim().split(/\s+/).map(Number);
+    return memoryBytes !== undefined && cpus !== undefined && memoryBytes > 0 && cpus > 0 ? { memoryBytes, cpus } : undefined;
+};
+
+export const hostFacts = async (scopes: HostScopes): Promise<HostFacts> => {
+    const [os, engine] = await Promise.all([osName(), engineFacts()]);
+    return {
+        os,
+        arch: arch(),
+        shell: shellFor(platform()).label,
+        home: homedir(),
+        roots: rootsOf(scopes),
+        ...(engine === undefined ? {} : { engine }),
+    };
+};
 
 // The agent-facing rendering. Includes the session type on Linux (Wayland vs X11 decides every clipboard,
 // screenshot and input idiom) and the machine's own name, which is how the user refers to it out loud.
@@ -58,6 +75,10 @@ export const describeText = async (scopes: HostScopes): Promise<string> => {
             `Home: ${facts.home}`,
             `Folders you may read and write: ${facts.roots.join(", ")}`,
             `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}, manage sandboxes ${scopes.sandboxes}`,
+            // The ceiling a sandbox's share is held to, so a reshape is asked for in numbers this engine has.
+            ...(facts.engine === undefined
+                ? []
+                : [`Docker engine: ${(facts.engine.memoryBytes / 1024 ** 3).toFixed(1)} GiB of memory, ${facts.engine.cpus} CPUs (what a sandbox's caps are bounded by)`]),
         ].join("\n") + session
     );
 };

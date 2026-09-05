@@ -3,7 +3,9 @@ import {
     type DeviceAgentOp,
     type DeviceCommand,
     type DeviceCommandResult,
+    type DeviceSandboxFlowInput,
     type DeviceSandboxOp,
+    type SandboxResourcesAsk,
     DevicesListSchema,
     DeviceCommandResultSchema,
     SyncStatusSchema,
@@ -66,32 +68,39 @@ const frameText = (line: Record<string, unknown>, key: string): string | undefin
 
 /* One action on one machine's sandbox, and every one of them takes this door.
  *
- * They differ enormously underneath, three are a docker call that returns in a second, three run a flow that
+ * They differ enormously underneath, three are a docker call that returns in a second, four run a flow that
  * pulls an image for minutes, one deletes, and not at all to the person clicking. So there is one call, and it
  * STREAMS: `onLine` is handed each line the machine prints while it prints it, which is the difference between a
  * button that shows an update happening and one that spins in silence for four minutes.
  *
- * The machine enforces which of these it will do ("Manage sandboxes" for six, a separate switch for removal), and
- * a refusal arrives as this promise's rejection carrying the machine's own sentence naming the switch to flip. */
-export async function manageDeviceSandbox(
-    hostId: string,
-    slug: string,
-    op: DeviceSandboxOp,
-    { hash, onLine }: { hash?: string; onLine?: (line: string) => void } = {},
-): Promise<string> {
-    const response = await sandboxRequest(`/system/devices/${encodeURIComponent(hostId)}/sandboxes/${encodeURIComponent(slug)}`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify({ id: hostId, slug, op, ...(hash === undefined ? {} : { hash }) }),
-    });
-    if (!response.ok || !response.body) {
-        throw await sandboxError(response, { method: `POST`, path: `/system/devices/{id}/sandboxes/{slug}` });
-    }
-    // The terminal frame is the answer. A stream that ends without one means the connection dropped mid-flight,
-    // which does NOT mean the operation stopped: it is running on the machine, and the fleet re-read that follows
-    // is what tells the truth about it.
+ * Two ops carry a payload of their own: `rebuild` the approved overlay's digest, `reshape` what to change about
+ * the sandbox's share of the machine (a closed form the machine spells into `ic` flags, never a command line).
+ *
+ * The machine enforces which of these it will do ("Manage sandboxes" for all but one, a separate switch for
+ * removal), and a refusal arrives as this promise's rejection carrying the machine's own sentence naming the
+ * switch to flip. */
+export interface DeviceSandboxPayload {
+    hash?: string | undefined;
+    resources?: SandboxResourcesAsk | undefined;
+    onLine?: ((line: string) => void) | undefined;
+}
+
+// The flow as the daemon's schema names it, carrying only the payloads this op has: an absent key rather than an
+// explicit undefined, which the schema would reject.
+const flowInput = (hostId: string, slug: string, op: DeviceSandboxOp, { hash, resources }: DeviceSandboxPayload): DeviceSandboxFlowInput => ({
+    id: hostId,
+    slug,
+    op,
+    ...(hash === undefined ? {} : { hash }),
+    ...(resources === undefined ? {} : { resources }),
+});
+
+// The terminal frame is the answer. A stream that ends without one means the connection dropped mid-flight,
+// which does NOT mean the operation stopped: it is running on the machine, and the fleet re-read that follows
+// is what tells the truth about it.
+const outcomeOf = async (body: ReadableStream<Uint8Array>, onLine: ((line: string) => void) | undefined): Promise<string> => {
     let outcome: string | undefined;
-    for await (const line of readIntenticLines(response.body)) {
+    for await (const line of readIntenticLines(body)) {
         if (line[`kind`] === `line`) {
             const text = frameText(line, `text`);
             if (text !== undefined) {
@@ -110,6 +119,18 @@ export async function manageDeviceSandbox(
         throw new Error(`Lost contact with that device while this was running: it may still have finished. Refresh to see where it got to.`);
     }
     return outcome;
+};
+
+export async function manageDeviceSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string> {
+    const response = await sandboxRequest(`/system/devices/${encodeURIComponent(hostId)}/sandboxes/${encodeURIComponent(slug)}`, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify(flowInput(hostId, slug, op, payload)),
+    });
+    if (!response.ok || !response.body) {
+        throw await sandboxError(response, { method: `POST`, path: `/system/devices/{id}/sandboxes/{slug}` });
+    }
+    return outcomeOf(response.body, payload.onLine);
 }
 
 /* UPDATING OR RESTARTING THE AGENT ON ONE DEVICE, from the block that reports its version.

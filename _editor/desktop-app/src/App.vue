@@ -8,6 +8,8 @@ import {
     type DeviceSandboxRow,
     type DeviceAgentState,
     Notice,
+    type ResourcesAsk,
+    SandboxResourcesDialog,
     type SandboxVerb,
     SandboxVerbs,
     sandboxVerbPrompt,
@@ -26,6 +28,7 @@ import {
     // Aliased: the ref holding the answer wants the plain name, this being the one place that asks the
     // question. See the ref's own comment for why the answer is a state of its own rather than a boolean.
     dockerReady as dockerReadyProbe,
+    dockerEngine,
     expectedStop,
     folderEntries,
     forgetResumableSetup,
@@ -46,6 +49,7 @@ import {
     sandboxPower,
     sandboxRecreate,
     sandboxRemove,
+    sandboxReshape,
     setupAlert,
     setupRun,
     signOutForSetup,
@@ -58,6 +62,7 @@ import {
     workspaceOpen,
     type DesktopInfo,
     type DeviceStatus,
+    type DockerEngine,
     type Requirement,
     type RequirementProgress,
     type RunEvent,
@@ -113,6 +118,10 @@ const info = ref<DesktopInfo | undefined>(undefined);
 const dockerReady = ref<boolean | undefined>(undefined);
 const sandboxes = ref<SandboxStatus[]>([]);
 const listError = ref<string | undefined>(undefined);
+/* THE ENGINE'S SIZE, the rails the Resources form draws its two caps between. Undefined until docker has said,
+ * or when it would not: the form then has no ceiling rather than a wrong one, and the machine's own contract
+ * clamps whatever arrives. Read beside the list and never waited for, being the slow `docker info` call. */
+const engine = ref<DockerEngine | undefined>(undefined);
 // What desktop sync is doing here. Undefined = no agent on this device, which is a fact about the machine and
 // not a failure; a string = the agent is installed but would not answer, which is.
 const status = ref<DeviceStatus | undefined>(undefined);
@@ -296,6 +305,11 @@ watch(
 );
 
 const refresh = async (): Promise<void> => {
+    // Alongside the list rather than in front of it: the answer only sizes a form nobody has opened yet, and
+    // this is the call that spends tens of seconds when Docker is installed and stopped.
+    void dockerEngine()
+        .then((facts) => (engine.value = facts ?? undefined))
+        .catch(() => (engine.value = undefined));
     try {
         sandboxes.value = await sandboxList();
         listError.value = undefined;
@@ -328,6 +342,8 @@ const sandboxRows = computed<DeviceSandboxRow[]>(() =>
         image: sandbox.image,
         ...(sandbox.name === null ? {} : { name: sandbox.name }),
         ...(sandbox.tunnelRunning === null ? {} : { tunnelRunning: sandbox.tunnelRunning }),
+        // The share docker enforces, in the kit's own shape already: the Rust side spells it the same way.
+        ...(sandbox.resources === null ? {} : { resources: sandbox.resources }),
     })),
 );
 
@@ -695,6 +711,8 @@ const RUN_OF: Record<Exclude<SandboxVerb, `logs`>, (slug: string) => string> = {
     restart: (slug) => `power:${slug}`,
     update: (slug) => `recreate:${slug}`,
     rollback: (slug) => `recreate:${slug}`,
+    // A reshape IS a recreate (the same image, a different share), and runs under its id (commands.rs).
+    resources: (slug) => `recreate:${slug}`,
     remove: (slug) => `remove:${slug}`,
 };
 
@@ -712,6 +730,45 @@ const recreate = async (slug: string, hash: string | undefined, rollback: boolea
     track(`desktop_recreate_finished`, { mode, source, ...runOutcome(`recreate:${slug}`, failure === undefined, startedAt) });
     rowFailure.value = failure === undefined ? undefined : { slug, message: failure };
     busy.value = undefined;
+};
+
+/* THE SAME RECREATE, ASKED FOR BY THE RESOURCES FORM: the same image with a different share of this machine.
+ * It runs under the recreate's own id, because that is what it is, and reports as one with `mode: "reshape"`,
+ * so the funnel that counts restarts counts this one with them. The ask is the kit's own diff (only what the
+ * form changed) and reaches `ic`'s flags on the Rust side without this file reading it. */
+const reshape = async (slug: string, ask: ResourcesAsk): Promise<void> => {
+    busy.value = { slug, verb: `resources` };
+    const startedAt = Date.now();
+    track(`desktop_recreate_started`, { mode: `reshape`, source: `manager` });
+    const failure = await start(RUN_OF.resources(slug), () => sandboxReshape(slug, ask));
+    track(`desktop_recreate_finished`, { mode: `reshape`, source: `manager`, ...runOutcome(RUN_OF.resources(slug), failure === undefined, startedAt) });
+    rowFailure.value = failure === undefined ? undefined : { slug, message: failure };
+    busy.value = undefined;
+};
+
+/* THE RESOURCES FORM, parked on the row it is about until Apply or Cancel answers it. The kit's dialog does the
+ * asking (the caps against this engine's rails, the switches, the restart it costs); what comes back is only
+ * what changed, and the row then narrates the restart the way it narrates an update. */
+const reshaping = ref<DeviceSandboxGroup | undefined>(undefined);
+// The form rather than a run: nothing happens until it is applied. A container docker did not describe (its
+// inspect failed) has nothing to open the form on, and says so where every other refusal on this row lands.
+const openResources = (group: DeviceSandboxGroup, slug: string): void => {
+    if (group.sandbox?.resources === undefined) {
+        rowFailure.value = { slug, message: `Docker didn't describe this sandbox's share of this computer. Refresh and try again.` };
+        return;
+    }
+    reshaping.value = group;
+};
+const applyReshape = async (ask: ResourcesAsk): Promise<void> => {
+    const slug = reshaping.value === undefined ? undefined : slugOf(reshaping.value);
+    reshaping.value = undefined;
+    if (slug === undefined || busy.value !== undefined || running.value) {
+        return;
+    }
+    // A pane holding the log this row printed a moment ago is about a container that is now being changed.
+    openLog.value = undefined;
+    rowFailure.value = undefined;
+    await reshape(slug, ask);
 };
 
 /* The SPA's "paste this on the machine that runs your sandbox" cards, arriving as a click instead: the Update
@@ -811,25 +868,33 @@ const retrySync = async (): Promise<void> => {
  *
  * The question is asked in the OS's own dialog rather than one this window draws, and its words are the kit's,
  * so the two apps warn about the same thing in the same sentence. */
+/* The log tail, a toggle: a pane the reader opened is theirs to close, and re-reading is the same click again.
+ * Opened before the lines arrive, so an empty pane says "reading" rather than the row looking like it ignored
+ * the click. This one does NOT go through `start`: nothing is spawned, so there is no run. */
+const toggleLogs = async (slug: string): Promise<void> => {
+    if (openLog.value === slug) {
+        openLog.value = undefined;
+        return;
+    }
+    openLog.value = slug;
+    logLines.value = { ...logLines.value, [slug]: [] };
+    busy.value = { slug, verb: `logs` };
+    const text = await sandboxLogs(slug, LOG_TAIL_LINES).catch(String);
+    logLines.value = { ...logLines.value, [slug]: text.split(/\r?\n/).filter(Boolean) };
+    busy.value = undefined;
+};
+
 const act = async (group: DeviceSandboxGroup, verb: SandboxVerb): Promise<void> => {
     const slug = slugOf(group);
     if (slug === undefined || busy.value !== undefined || running.value) {
         return;
     }
     if (verb === `logs`) {
-        // A toggle: a pane the reader opened is theirs to close, and re-reading is the same click again.
-        if (openLog.value === slug) {
-            openLog.value = undefined;
-            return;
-        }
-        // Opened before the lines arrive, so an empty pane says "reading" rather than the row looking like it
-        // ignored the click. This one does NOT go through `start`: nothing is spawned, so there is no run.
-        openLog.value = slug;
-        logLines.value = { ...logLines.value, [slug]: [] };
-        busy.value = { slug, verb };
-        const text = await sandboxLogs(slug, LOG_TAIL_LINES).catch(String);
-        logLines.value = { ...logLines.value, [slug]: text.split(/\r?\n/).filter(Boolean) };
-        busy.value = undefined;
+        await toggleLogs(slug);
+        return;
+    }
+    if (verb === `resources`) {
+        openResources(group, slug);
         return;
     }
     // The question is the dialog's title and the consequence its message — the two slots a native dialog has,
@@ -1250,6 +1315,19 @@ onUnmounted(() => {
                 </Button>
                 <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
             </footer>
+
+            <!-- THE SANDBOX'S SHARE OF THIS MACHINE, as the kit's form: the container's current caps and
+                 privileges as docker describes them, this engine's size for the rails, and no self-warning,
+                 because this screen is never served by the sandbox it manages. What comes back is only what
+                 changed, and the row narrates the restart. -->
+            <SandboxResourcesDialog
+                :open="reshaping !== undefined"
+                :name="reshaping?.title ?? ``"
+                :current="reshaping?.sandbox?.resources"
+                :engine="engine"
+                @cancel="reshaping = undefined"
+                @apply="applyReshape"
+            />
         </div>
     </div>
 </template>

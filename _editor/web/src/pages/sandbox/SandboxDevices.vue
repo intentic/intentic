@@ -21,9 +21,11 @@ import {
     mirroringOff,
     Notice,
     type NoticeModel,
+    type ResourcesAsk,
     RowGroup,
     RowNote,
     sandboxGroups,
+    SandboxResourcesDialog,
     type SandboxVerb,
     sandboxVerbPrompt,
     SandboxVerbs,
@@ -503,8 +505,24 @@ const runningVerb = (device: Device, group: DeviceSandboxGroup): SandboxVerb | u
     return busy.value?.startsWith(prefix) === true ? (busy.value.slice(prefix.length) as SandboxVerb) : undefined;
 };
 
+/* WHICH MACHINE OP EACH VERB IS. They coincide for every verb but one: `resources` is the kit's word for the
+ * FORM the row opens, and `reshape` is the machine's word for what Apply then does to the container. Spelled once,
+ * the way HostRecreate.vue spells its own action→op map, so the verb a row spins on and the op the machine
+ * receives cannot drift apart. */
+const OP: Record<SandboxVerb, DeviceSandboxOp> = {
+    start: `start`,
+    stop: `stop`,
+    restart: `restart`,
+    update: `update`,
+    rollback: `rollback`,
+    resources: `reshape`,
+    logs: `logs`,
+    remove: `remove`,
+};
+
 // The ops that end this browser's own connection when they are aimed at the sandbox serving it. Not `start`,
-// which can only ever help, and not `logs`, which changes nothing at all.
+// which can only ever help, and not `logs`, which changes nothing at all. `reshape` is one of them and is not
+// listed: its form carries the warning itself (`selfWarning`), so it never reaches the confirmation below.
 const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`]);
 
 /* THE STOP-MOMENT, in the app's own dialog rather than the browser's confirm(): a native popup captioned
@@ -526,7 +544,7 @@ const actPrompt = computed(() => {
         // The self-warning rides the confirmation rather than replacing it: "this deletes everything" and
         // "this also closes the page you are on" are two different things to know, and the second never
         // cancels the first.
-        severing: isSelf(pending.device, pending.group) && SEVERING.has(pending.op),
+        severing: isSelf(pending.device, pending.group) && SEVERING.has(OP[pending.op]),
         // `logs` never confirms (no prompt, never severing), so the label indexes safely past it.
         label: VERB_LABEL[pending.op as Exclude<SandboxVerb, `logs`>],
         destructive: pending.op === `remove`,
@@ -540,8 +558,41 @@ const confirmAct = (): void => {
     }
 };
 
+/* THE RESOURCES FORM, parked on the row it is about until Apply or Cancel answers it. The kit's dialog does the
+ * asking (the caps, the switches, the restart it costs, and the self-warning, which is this page's one fact
+ * about the row); what comes back is only what changed, and it travels down the same door as every other verb,
+ * as the `reshape` op with its payload. The row then narrates the restart the way it narrates an update. */
+const reshaping = ref<{ device: Device; group: DeviceSandboxGroup } | undefined>();
+const applyReshape = (ask: ResourcesAsk): void => {
+    const pending = reshaping.value;
+    reshaping.value = undefined;
+    if (pending !== undefined) {
+        void runAct(pending.device, pending.group, `resources`, ask);
+    }
+};
+// The form rather than the machine: nothing runs until it is applied. A row whose share the machine did not
+// report has nothing to open the form on, and says so where every other refusal on this row lands.
+const openResources = (device: Device, group: DeviceSandboxGroup): void => {
+    if (group.sandbox?.resources === undefined) {
+        actionError.value = {
+            key: rowKey(device, group),
+            notice: {
+                tone: `warning`,
+                title: `That device didn't report this sandbox's share of it.`,
+                detail: `Refresh and try again. If it keeps happening, run intentic-machine upgrade on that computer: its agent is too old to say.`,
+            },
+        };
+        return;
+    }
+    reshaping.value = { device, group };
+};
+
 const act = (device: Device, group: DeviceSandboxGroup, op: SandboxVerb): void => {
     if (device.hostId === undefined || group.sandbox === undefined || working.value) {
+        return;
+    }
+    if (op === `resources`) {
+        openResources(device, group);
         return;
     }
     // The log button is a toggle: a pane the reader opened is theirs to close, and re-reading is the same click
@@ -553,14 +604,15 @@ const act = (device: Device, group: DeviceSandboxGroup, op: SandboxVerb): void =
         actionDone.value = undefined;
         return;
     }
-    if (sandboxVerbPrompt(op, group.title) !== undefined || (isSelf(device, group) && SEVERING.has(op))) {
+    if (sandboxVerbPrompt(op, group.title) !== undefined || (isSelf(device, group) && SEVERING.has(OP[op]))) {
         confirmingAct.value = { device, group, op };
         return;
     }
     void runAct(device, group, op);
 };
 
-const runAct = async (device: Device, group: DeviceSandboxGroup, op: SandboxVerb): Promise<void> => {
+// `resources` is the one verb with something to say beyond its name: the form's answer, forwarded unread.
+const runAct = async (device: Device, group: DeviceSandboxGroup, op: SandboxVerb, resources?: ResourcesAsk): Promise<void> => {
     if (device.hostId === undefined || group.sandbox === undefined || working.value) {
         return;
     }
@@ -574,7 +626,8 @@ const runAct = async (device: Device, group: DeviceSandboxGroup, op: SandboxVerb
     // the click. Every other op's pane closes when it ends; this one is the answer.
     openLog.value = op === `logs` ? key : undefined;
     try {
-        const message = await manageDeviceSandbox(device.hostId, slug, op, {
+        const message = await manageDeviceSandbox(device.hostId, slug, OP[op], {
+            resources,
             onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
         });
         // A log tail's own result line only restates what the pane above it already is ("the last 200 lines
@@ -1491,6 +1544,19 @@ const runRevoke = async (): Promise<void> => {
                 This is the sandbox you are using right now — this page will lose it.
             </p>
         </ConfirmDialog>
+
+        <!-- THE SANDBOX'S SHARE OF ITS MACHINE, as the kit's form: the container's current caps and privileges
+             as the machine read them, the engine's size for the rails (the machine's own connect-time facts),
+             and whether the row is the sandbox serving this page. What comes back is only what changed. -->
+        <SandboxResourcesDialog
+            :open="reshaping !== undefined"
+            :name="reshaping?.group.title ?? ``"
+            :current="reshaping?.group.sandbox?.resources"
+            :engine="reshaping?.device.facts?.engine"
+            :self-warning="reshaping !== undefined && isSelf(reshaping.device, reshaping.group)"
+            @cancel="reshaping = undefined"
+            @apply="applyReshape"
+        />
 
         <!-- ENDING ONE PAIRING. What survives is named as carefully as what goes: the folder is the thing people
              are actually worried about, and it is untouched. -->

@@ -26,6 +26,45 @@ import { DEV_VERSION } from "../versions.js";
  * `mirror` enrollment, a collaborator's own laptop, drops `localDir` with it. So a member who mirrors one
  * dev-server port does not hand the sandbox's owner a map of their machine. */
 
+/* ONE SANDBOX'S SHARE OF ITS MACHINE, as docker enforces it right now: read off the container's HostConfig
+ * and env by the machine agent, never asked of the sandbox (which cannot see its own cgroup ceiling as a
+ * docker flag, only as a number in /sys/fs/cgroup).
+ *
+ * The two `*Runtime` lists are the same directive vocabulary the run contract allowlists
+ * (@intentic/sandbox-run RUNTIME_DIRECTIVES), split by WHO asked: `overlayRuntime` is what the approved
+ * environment demands (a view draws those locked — "required by the Docker capability"), `hostRuntime` is
+ * what the owner asked for on top and may withdraw. `privileged` and `gpu` are the docker-side truth of the
+ * union: what the container actually got, after a host without the nvidia runtime dropped the GPU. */
+export const SandboxResourcesSchema = z.object({
+    // The cgroup memory ceiling in bytes; absent when docker imposes none (the hosted shape).
+    memoryBytes: z.number().optional(),
+    // The CFS quota as whole cores; absent when the container may use every core (the default).
+    cpus: z.number().optional(),
+    privileged: z.boolean(),
+    gpu: z.boolean(),
+    hostRuntime: z.array(z.string()),
+    overlayRuntime: z.array(z.string()),
+});
+export type SandboxResources = z.infer<typeof SandboxResourcesSchema>;
+
+/* WHAT A RESHAPE ASKS FOR: the Resources dialog's answer, the `reshape` op's payload, and the shape the
+ * machine turns into `ic sandbox reshape` flags. Every key is "leave it" when absent; the two caps take
+ * `null` for "back to the default" (the machine-derived memory share; every core), which `ic` spells as
+ * `default` and the run contract as an empty seed. At least one key, because a reshape with nothing to change
+ * is a restart for nothing, and the machine refuses it before anything is spawned. */
+export const SandboxResourcesAskFieldsSchema = z.object({
+    memoryGib: z.int().positive().nullable().optional(),
+    cpus: z.int().positive().nullable().optional(),
+    privileged: z.boolean().optional(),
+    gpu: z.boolean().optional(),
+});
+// The fields alone are exported too, for a caller that composes them into a wider object (the machine's MCP
+// tool adds the slug beside them) and applies the at-least-one rule itself.
+export const SandboxResourcesAskSchema = SandboxResourcesAskFieldsSchema.refine((ask) => Object.values(ask).some((value) => value !== undefined), {
+    message: "a reshape must change at least one thing",
+});
+export type SandboxResourcesAsk = z.infer<typeof SandboxResourcesAskSchema>;
+
 // One sandbox container on the machine, the docker half, filled in by the reader, never by the sync agent.
 export const DeviceSandboxSchema = z.object({
     slug: z.string(),
@@ -37,6 +76,9 @@ export const DeviceSandboxSchema = z.object({
     // Absent when the sandbox has no cloudflared sidecar AT ALL (reached over the user's own proxy), which is
     // not the same fact as a sidecar that is down, and must not render as one.
     tunnelRunning: z.boolean().optional(),
+    // Its share of the machine (above). Absent from a reader that did not inspect the container: the cheap
+    // `docker ps` listing the machine's own fleet reads use carries none of it.
+    resources: SandboxResourcesSchema.optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 /* ONE OPERATION ON ONE SANDBOX ON ONE MACHINE, the Devices view's buttons, and the only thing that changes a
@@ -56,6 +98,11 @@ export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
  * same row as the others, on a container that may be too broken to answer any other way, and the stream shape
  * already carries "many lines, then an outcome" exactly as a log tail wants to arrive.
  *
+ * `reshape` is the one that changes the CONTAINER without changing its image: its share of the machine (memory
+ * and CPU caps) and its privileges (privileged, the host's GPU), recreated onto the same image so the values
+ * live on the container and outlive every later swap. It carries `resources`, the only op with a payload of
+ * its own besides `rebuild`'s hash.
+ *
  * The machine enforces which of them it will do: `sandboxes` covers everything but removal, which takes its own
  * switch, and a refusal comes back as the machine's own sentence naming the control to flip. */
 /* `runner-up` / `runner-remove` are the same door for a container that belongs to THIS SANDBOX rather than to
@@ -72,6 +119,7 @@ export const DeviceSandboxOpSchema = z.enum([
     "update",
     "rebuild",
     "rollback",
+    "reshape",
     "remove",
     "logs",
     "runner-up",
@@ -86,6 +134,8 @@ export const DeviceSandboxFlowSchema = z.object({
     // The approved overlay's sha256, required by `rebuild` and meaningless to the rest. It is the trust anchor:
     // only content that still hashes to what the owner reviewed is ever built.
     hash: z.string().optional(),
+    // What `reshape` should change, required by it and meaningless to the rest.
+    resources: SandboxResourcesAskSchema.optional(),
     /* `runner-up` only, and both are filled in by the DAEMON, never by the caller: where the runner dials
      * (this sandbox's public URL) and the single-use pairing it redeems there. The browser asks for a runner
      * on a machine; it never holds the credential that makes one, which is what keeps a pairing out of every

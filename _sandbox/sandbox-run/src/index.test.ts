@@ -1,12 +1,15 @@
 import { expect, test } from "vitest";
 import {
     HEALTH,
+    hostRuntimeOf,
     LOCAL_SANDBOX_MEMORY,
     localDaemonPort,
     localDaemonUrlInsecure,
+    localSandboxCpus,
     localSandboxMemory,
     OPTIONAL_DIRECTIVES,
     ORIGIN_HOST,
+    OVERLAY_RUNTIME_ENV,
     parseNulEnv,
     replayableEnv,
     runtimeDirectivesOf,
@@ -364,4 +367,93 @@ test("neither name survives the replay allowlist", () => {
     ]);
     expect(replayed.map(([name]) => name)).not.toContain("SANDBOX_CHANNEL");
     expect(replayed.map(([name]) => name)).not.toContain("SANDBOX_PREVIOUS_IMAGE");
+});
+
+/* --- The owner's other two standing asks: a CPU ceiling and their own runtime directives --------------------
+ *
+ * Both arrive the way the memory cap does (an env var on the container, replayed) and both are bounded and
+ * validated HERE, because ic forwards and never interprets. What differs is the default: memory has a derived
+ * cap, CPUs have none, so "nothing asked" must produce no flag at all — a sandbox has always had every core. */
+test("no CPU ask means no --cpus flag: every core, as a sandbox has always run", () => {
+    expect(localSandboxCpus(8)).toBeUndefined();
+    expect(localSandboxCpus(8, "")).toBeUndefined();
+    expect(sandboxRunArgv({ names, image: "i", baseImage: "i" })).not.toContain("--cpus");
+});
+
+test("a CPU ask is whole cores, held between one and the engine's own count", () => {
+    expect(localSandboxCpus(8, "4")).toBe("4");
+    // A cap the engine cannot honour is docker's "invalid range" at launch: a whole recreate lost to a typo.
+    expect(localSandboxCpus(8, "16")).toBe("8");
+    // Unmeasured: honoured as typed, the same rule as the memory override.
+    expect(localSandboxCpus(0, "16")).toBe("16");
+    for (const bad of ["0", "0.5", "2.5", "four", "-2", "4 "]) {
+        if (bad === "4 ") {
+            // Surrounding whitespace is a shell accident, not a different number.
+            expect(localSandboxCpus(8, bad)).toBe("4");
+            continue;
+        }
+        expect(() => localSandboxCpus(8, bad), bad).toThrowError(/SANDBOX_CPUS/u);
+    }
+});
+
+test("--cpus rides after the memory cap on the local shape and never on the hosted one", () => {
+    const local = sandboxRunArgv({ names, image: "i", baseImage: "i", memory: "10g", cpus: "4" });
+    expect(local.join(" ")).toContain("--memory 10g --memory-swap -1 --cpus 4");
+    const hosted = sandboxRunArgv({ names, image: "i", baseImage: "i", init: false, cpus: "4" });
+    expect(hosted).not.toContain("--cpus");
+});
+
+test("SANDBOX_CPUS and SANDBOX_RUNTIME survive the replay allowlist: said once, on the sandbox itself", () => {
+    expect(
+        replayableEnv([
+            ["SANDBOX_CPUS", "4"],
+            ["SANDBOX_RUNTIME", "--privileged"],
+        ]),
+    ).toEqual([
+        ["SANDBOX_CPUS", "4"],
+        ["SANDBOX_RUNTIME", "--privileged"],
+    ]);
+});
+
+test("the owner's directives are held to the same allowlist as the overlay's, and named by their own var", () => {
+    expect(hostRuntimeOf("--privileged --gpus=all")).toEqual(["--privileged", "--gpus=all"]);
+    expect(hostRuntimeOf(undefined)).toEqual([]);
+    expect(hostRuntimeOf("  ")).toEqual([]);
+    expect(hostRuntimeOf("--privileged --privileged")).toEqual(["--privileged"]);
+    expect(() => hostRuntimeOf("--cap-add=SYS_PTRACE")).toThrowError(/SYS_PTRACE.*SANDBOX_RUNTIME/u);
+    expect(() => hostRuntimeOf("--gpus all")).toThrowError(/SANDBOX_RUNTIME/u);
+});
+
+/* THE UNION, which is the whole relationship between the two sources: the owner adds to what the overlay
+ * demands, and withdrawing their own ask never withdraws the overlay's. Deduped, because docker accepts
+ * `--privileged` twice but not every repeated flag. */
+test("the run carries the union of the overlay's directives and the owner's, once each", () => {
+    const argv = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged"], hostRuntime: ["--privileged", "--gpus=all"] });
+    expect(argv.filter((arg) => arg === "--privileged")).toHaveLength(1);
+    expect(argv).toContain("--gpus=all");
+    // The overlay's demand stands with the owner asking for nothing.
+    expect(sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged"], hostRuntime: [] })).toContain("--privileged");
+});
+
+/* A GPU the OWNER asked for is optional in exactly the way the docker card's is: probed, dropped on a host
+ * without the runtime, and its fate stamped — or the daemon inside would offer a rebuild that can never work. */
+test("an owner-asked optional directive is dropped and stamped exactly as an overlay-asked one", () => {
+    const dropped = sandboxRunArgv({ names, image: "i", baseImage: "i", hostRuntime: ["--gpus=all"], unsupported: ["--gpus=all"] });
+    expect(dropped).not.toContain("--gpus=all");
+    expect(dropped.join(" ")).toContain("SANDBOX_GPU=unsupported");
+    const honoured = sandboxRunArgv({ names, image: "i", baseImage: "i", hostRuntime: ["--gpus=all"] });
+    expect(honoured).toContain("--gpus=all");
+    expect(honoured.join(" ")).toContain("SANDBOX_GPU=all");
+});
+
+/* WHOSE PRIVILEGE IT IS. From outside, `docker inspect` shows a privileged container and cannot say whether the
+ * docker capability demanded it (a view must draw that locked) or the owner asked (theirs to withdraw). The
+ * overlay's half is stamped on its own so a reader can tell; runner-set, so it is never replayed. */
+test("the overlay's directives are stamped as provenance, alone, and never replayed", () => {
+    const both = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged"], hostRuntime: ["--gpus=all"] });
+    expect(both.join(" ")).toContain(`${OVERLAY_RUNTIME_ENV}=--privileged`);
+    expect(both.join(" ")).not.toContain(`${OVERLAY_RUNTIME_ENV}=--privileged --gpus`);
+    // Nothing from the overlay ⇒ no stamp: an owner-only privilege must not read as a capability's.
+    expect(sandboxRunArgv({ names, image: "i", baseImage: "i", hostRuntime: ["--privileged"] }).join(" ")).not.toContain(OVERLAY_RUNTIME_ENV);
+    expect(replayableEnv([[OVERLAY_RUNTIME_ENV, "--privileged"]])).toEqual([]);
 });

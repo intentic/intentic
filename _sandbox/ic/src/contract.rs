@@ -31,6 +31,11 @@ pub struct RunRequest<'a> {
     pub definition_b64: Option<&'a str>,
 }
 
+/// One of the owner's standing asks, handed to the probe once (see `run_command_argv`). An EMPTY value is an
+/// instruction too: it clears the ask, back to whatever the contract derives — the shape `ic sandbox reshape
+/// … default` produces and nothing else does.
+pub type Seed = (String, String);
+
 /// The `docker run … sandbox run-command …` argv that ASKS the image for its run command. Split from the
 /// call below so it can be asserted without a docker daemon: this is the highest-risk, least-observable
 /// logic in the binary — every flag here decides something about the container that is then invisible
@@ -40,28 +45,30 @@ fn run_command_argv(
     request: &RunRequest,
     no_local_publish: bool,
     unsupported: &[String],
-    memory_seed: Option<&str>,
+    seeds: &[Seed],
 ) -> Vec<String> {
     let mut args: Vec<String> = ["run", "-i", "--rm"]
         .iter()
         .map(|s| s.to_string())
         .collect();
-    /* A ONE-TIME SEED for the owner's cgroup cap, forwarded from this host's environment into the probe.
+    /* ONE-TIME SEEDS for the owner's standing asks — the memory cap, the CPU cap, their own runtime
+     * directives — forwarded into the probe as its environment.
      *
-     * The cap itself lives ON the sandbox — SANDBOX_MEMORY is in the contract's replay allowlist, so it is
-     * emitted onto the container it sizes and every later recreate reads the same number back. But "said
-     * once" needs a first time, and a container that does not carry it yet has nowhere to be read from. So
-     * `SANDBOX_MEMORY=10g ic …` hands it to the image here, exactly once, and the image writes it onto the
-     * container it emits. (`docker update --memory` is the tempting alternative and the wrong one: it retunes
-     * a RUNNING cgroup and is discarded by the next recreate, which is how an owner ends up re-widening the
-     * same container after every rebuild.)
+     * Each ask lives ON the sandbox: SANDBOX_MEMORY / SANDBOX_CPUS / SANDBOX_RUNTIME are in the contract's
+     * replay allowlist, so they are emitted onto the container they shape and every later recreate reads the
+     * same values back. But "said once" needs a first time, and a container that does not carry a value yet
+     * has nowhere to be read from. So `SANDBOX_MEMORY=10g ic …` (or `ic sandbox reshape`) hands it to the
+     * image here, exactly once, and the image writes it onto the container it emits. (`docker update` is the
+     * tempting alternative and the wrong one: it retunes a RUNNING cgroup and is discarded by the next
+     * recreate, which is how an owner ends up re-widening the same container after every rebuild.)
      *
-     * FORWARDED, NEVER INTERPRETED. What a valid cap is, and how much of a machine one may claim, is the
-     * contract's business (@intentic/sandbox-run), which is also where a malformed value is rejected by name.
-     * Parsing it here would be the hand-copied second opinion this whole module exists to not have. */
-    if let Some(memory) = memory_seed {
+     * FORWARDED, NEVER INTERPRETED. What a valid cap is, how much of a machine one may claim, and which
+     * directives exist, is the contract's business (@intentic/sandbox-run), which is also where a malformed
+     * value is rejected by name. Parsing any of it here would be the hand-copied second opinion this whole
+     * module exists to not have. An empty value rides too: it is the contract's spelling for "clear this". */
+    for (name, value) in seeds {
         args.push("-e".to_string());
-        args.push(format!("SANDBOX_MEMORY={memory}"));
+        args.push(format!("{name}={value}"));
     }
     args.extend(
         [
@@ -123,14 +130,15 @@ pub fn run_command(
     env_nul: &[u8],
     no_local_publish: bool,
     unsupported: &[String],
+    seeds: &[Seed],
     log: &Log,
 ) -> Result<Vec<String>> {
-    // Empty reads as unset: an exported-but-blank SANDBOX_MEMORY is a shell accident, not an ask, and passing
-    // it on would trade the derived share for a value the contract must then reject.
-    let seed = std::env::var("SANDBOX_MEMORY")
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-    let args = run_command_argv(request, no_local_publish, unsupported, seed.as_deref());
+    let args = run_command_argv(
+        request,
+        no_local_publish,
+        unsupported,
+        &with_env_seed(seeds, std::env::var("SANDBOX_MEMORY").ok()),
+    );
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = docker::capture_with_stdin(&arg_refs, env_nul, log).map_err(|_| {
         crate::util::Fail(format!(
@@ -156,17 +164,43 @@ pub fn run_command(
     Ok(argv)
 }
 
+/* The one seed a flow may pick up from ITS OWN environment: `SANDBOX_MEMORY=10g ic sandbox connect`, the
+ * headless spelling that predates `reshape`. Appended behind the explicit seeds and only when none of them
+ * already names it — a verb that was handed a value on its command line was told something more specific
+ * than the shell around it. Empty reads as unset here: an exported-but-blank variable is a shell accident,
+ * not an ask, and forwarding it would CLEAR a cap nobody asked to clear. */
+fn with_env_seed(seeds: &[Seed], env_memory: Option<String>) -> Vec<Seed> {
+    let mut all: Vec<Seed> = seeds.to_vec();
+    if let Some(memory) = env_memory.filter(|value| !value.trim().is_empty()) {
+        if !all.iter().any(|(name, _)| name == "SANDBOX_MEMORY") {
+            all.push(("SANDBOX_MEMORY".to_string(), memory));
+        }
+    }
+    all
+}
+
 pub struct Probe {
     pub token: String,
     pub kind: String,
     pub target: String,
 }
 
-/// Which of the overlay's asks this host has to be quizzed about — one TSV line per optional directive
-/// (`--gpus=all<TAB>runtime<TAB>nvidia`). An image too old to know the verb answers nothing, which reads as
-/// "nothing optional to probe" — the flow then behaves exactly as it did before probes existed.
-pub fn host_probes(image: &str, runtime_lines: &str, log: &Log) -> Vec<Probe> {
-    let args = [
+/// Which of the sandbox's asks this host has to be quizzed about — one TSV line per optional directive
+/// (`--gpus=all<TAB>runtime<TAB>nvidia`), from BOTH sources: the overlay's directive lines and the owner's
+/// own tokens (the container's SANDBOX_RUNTIME, or the value a reshape is about to give it). An image too old
+/// to know the verb answers nothing, which reads as "nothing optional to probe" — the flow then behaves exactly
+/// as it did before probes existed.
+pub fn host_probes(image: &str, runtime_lines: &str, host_runtime: &str, log: &Log) -> Vec<Probe> {
+    let args = host_probes_argv(image, runtime_lines, host_runtime);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let Ok(output) = docker::capture_with_stdin(&arg_refs, &[], log) else {
+        return Vec::new();
+    };
+    parse_probes(&output)
+}
+
+fn host_probes_argv(image: &str, runtime_lines: &str, host_runtime: &str) -> Vec<String> {
+    let mut args: Vec<String> = [
         "run",
         "-i",
         "--rm",
@@ -177,11 +211,17 @@ pub fn host_probes(image: &str, runtime_lines: &str, log: &Log) -> Vec<Probe> {
         "host-probes",
         "--runtime",
         runtime_lines,
-    ];
-    let Ok(output) = docker::capture_with_stdin(&args, &[], log) else {
-        return Vec::new();
-    };
-    parse_probes(&output)
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    // ATTACHED, like `--unsupported`: the tokens ARE docker flags, and a CLI reading `--host-runtime
+    // --gpus=all` sees a flag it has never heard of. Omitted when empty, so an image that predates the flag
+    // is still asked the question it knows.
+    if !host_runtime.trim().is_empty() {
+        args.push(format!("--host-runtime={}", host_runtime.trim()));
+    }
+    args
 }
 
 /// TSV → probes. Split out so the tolerance is assertable: a malformed line is DROPPED rather than
@@ -265,7 +305,7 @@ mod tests {
             &request("ghcr.io/intentic/sandbox:stable", "abc123"),
             false,
             &[],
-            None,
+            &[],
         );
         // -i, because the env pairs ride stdin; --rm, because this container only prints and exits;
         // --entrypoint intentic, because the image's default entrypoint is the daemon.
@@ -286,31 +326,82 @@ mod tests {
         assert_eq!(value_of(&argv, "--format"), Some("json"));
     }
 
-    /* The seed rides as a docker `-e` on the PROBE, which is a different thing from the `--flag` every other
+    /* A seed rides as a docker `-e` on the PROBE, which is a different thing from the `--flag` every other
      * input here uses, and the difference is load-bearing: the image reads it as an environment variable and
      * writes it back onto the sandbox it emits, which is what makes one `SANDBOX_MEMORY=10g` outlive every
      * later recreate. A flag would be read, used once, and forgotten. */
     #[test]
-    fn the_memory_seed_rides_as_probe_env_before_the_image_and_is_absent_when_unset() {
-        let seeded = run_command_argv(&request("img", "abc"), false, &[], Some("10g"));
-        let at = seeded
-            .iter()
-            .position(|arg| arg == "SANDBOX_MEMORY=10g")
-            .expect("the seed must ride the probe");
-        assert_eq!(seeded[at - 1], "-e");
-        // Docker stops reading options at the image name, so an -e after it would be an argument TO the image.
-        assert!(at < seeded.iter().position(|arg| arg == "img").unwrap());
+    fn seeds_ride_as_probe_env_before_the_image_and_are_absent_when_none_were_given() {
+        let seeds = vec![
+            ("SANDBOX_MEMORY".to_string(), "10g".to_string()),
+            ("SANDBOX_CPUS".to_string(), "4".to_string()),
+            // Empty is an instruction (clear), and it must reach the probe as exactly that.
+            ("SANDBOX_RUNTIME".to_string(), String::new()),
+        ];
+        let seeded = run_command_argv(&request("img", "abc"), false, &[], &seeds);
+        for pair in ["SANDBOX_MEMORY=10g", "SANDBOX_CPUS=4", "SANDBOX_RUNTIME="] {
+            let at = seeded
+                .iter()
+                .position(|arg| arg == pair)
+                .unwrap_or_else(|| panic!("{pair} must ride the probe"));
+            assert_eq!(seeded[at - 1], "-e");
+            // Docker stops reading options at the image name, so an -e after it would be an argument TO the image.
+            assert!(at < seeded.iter().position(|arg| arg == "img").unwrap());
+        }
         // Unset stays unset: nothing invented, so an owner who never asked keeps the derived share.
-        let bare = run_command_argv(&request("img", "abc"), false, &[], None);
-        assert!(!bare.iter().any(|arg| arg.starts_with("SANDBOX_MEMORY")));
+        let bare = run_command_argv(&request("img", "abc"), false, &[], &[]);
+        assert!(!bare.iter().any(|arg| arg.starts_with("SANDBOX_")));
         assert!(!bare.contains(&"-e".to_string()));
+    }
+
+    /* The headless spelling, `SANDBOX_MEMORY=10g ic sandbox connect`, still works — and loses to a value the
+     * verb was handed explicitly, because the command line is the more specific of the two. A blank export is
+     * a shell accident and must not become a CLEAR. */
+    #[test]
+    fn the_shell_memory_seed_is_appended_only_when_no_explicit_seed_names_it_and_never_when_blank()
+    {
+        let explicit = vec![("SANDBOX_MEMORY".to_string(), "12g".to_string())];
+        assert_eq!(
+            with_env_seed(&explicit, Some("10g".to_string())),
+            explicit.clone()
+        );
+        assert_eq!(
+            with_env_seed(&[], Some("10g".to_string())),
+            vec![("SANDBOX_MEMORY".to_string(), "10g".to_string())]
+        );
+        assert!(with_env_seed(&[], Some("  ".to_string())).is_empty());
+        assert!(with_env_seed(&[], None).is_empty());
+        // Other seeds are untouched by it.
+        let cpus = vec![("SANDBOX_CPUS".to_string(), String::new())];
+        assert_eq!(
+            with_env_seed(&cpus, Some("10g".to_string())),
+            vec![
+                ("SANDBOX_CPUS".to_string(), String::new()),
+                ("SANDBOX_MEMORY".to_string(), "10g".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn host_probes_ask_about_the_owners_tokens_in_the_attached_form_and_omit_them_when_empty() {
+        let bare = host_probes_argv("img", "# intentic:runtime --privileged", "");
+        assert!(!bare.iter().any(|arg| arg.starts_with("--host-runtime")));
+        assert_eq!(
+            bare[bare.len() - 2..],
+            ["--runtime", "# intentic:runtime --privileged"]
+        );
+        let asked = host_probes_argv("img", "", " --gpus=all ");
+        // Attached and trimmed: the value is itself a docker flag, and a detached `--host-runtime --gpus=all`
+        // reads as a flag the CLI has never heard of.
+        assert_eq!(asked.last().unwrap(), "--host-runtime=--gpus=all");
+        assert!(!asked.contains(&"--host-runtime".to_string()));
     }
 
     #[test]
     fn optional_flags_ride_only_when_they_carry_something() {
         // The bare shape: nothing optional invented, and no empty-valued flags (an empty `--channel` would
         // pin the sandbox to a channel named "" on the next update).
-        let bare = run_command_argv(&request("img", "abc"), false, &[], None);
+        let bare = run_command_argv(&request("img", "abc"), false, &[], &[]);
         for absent in [
             "--channel",
             "--previous-image",
@@ -335,7 +426,7 @@ mod tests {
         full.mounts = Some("vol:/agent-auth");
         full.dns = Some("1.1.1.1 1.0.0.1");
         full.definition_b64 = Some("c2NoZW1hVmVyc2lvbiA9IDEK");
-        let argv = run_command_argv(&full, false, &[], None);
+        let argv = run_command_argv(&full, false, &[], &[]);
         assert_eq!(value_of(&argv, "--slug"), Some("abc"));
         assert_eq!(value_of(&argv, "--base-image"), Some("img"));
         assert_eq!(value_of(&argv, "--channel"), Some("core-stable"));
@@ -356,12 +447,12 @@ mod tests {
 
     #[test]
     fn unsupported_uses_the_attached_form_and_is_omitted_when_empty() {
-        assert!(!run_command_argv(&request("img", "a"), false, &[], None)
+        assert!(!run_command_argv(&request("img", "a"), false, &[], &[])
             .iter()
             .any(|arg| arg.starts_with("--unsupported")));
         // ATTACHED, not separated: the values ARE docker flags, and a CLI reading `--unsupported --gpus=all`
         // sees a flag it has never heard of rather than a value, and refuses the whole verb.
-        let argv = run_command_argv(&request("img", "a"), false, &["--gpus=all".into()], None);
+        let argv = run_command_argv(&request("img", "a"), false, &["--gpus=all".into()], &[]);
         assert!(argv.contains(&"--unsupported=--gpus=all".to_string()));
         assert!(!argv.contains(&"--unsupported".to_string()));
         // Several tokens stay in one attached element, space-joined.
@@ -369,7 +460,7 @@ mod tests {
             &request("img", "a"),
             true,
             &["--gpus=all".into(), "--device=/dev/net/tun".into()],
-            None,
+            &[],
         );
         assert!(many.contains(&"--unsupported=--gpus=all --device=/dev/net/tun".to_string()));
         // The retry's shape: the loopback shortcut dropped, everything else identical.

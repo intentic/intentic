@@ -187,7 +187,8 @@ pub fn up(args: Up) -> Result<()> {
     let probes = if runtime_lines.is_empty() {
         Vec::new()
     } else {
-        contract::host_probes(&run_image, &runtime_lines, &log)
+        // A runner is a fresh container with no owner asks of its own: only the overlay's directives to probe.
+        contract::host_probes(&run_image, &runtime_lines, "", &log)
     };
     let unsupported = contract::unsupported_on_this_host(&probes);
 
@@ -214,7 +215,7 @@ pub fn up(args: Up) -> Result<()> {
     };
     // no_local_publish unconditionally: the loopback shortcut exists for a browser on this machine, and
     // nobody browses to a runner — claiming a port here could only collide with the sandbox someone uses.
-    let argv = contract::run_command(&request, &env_pairs, true, &unsupported, &log)?;
+    let argv = contract::run_command(&request, &env_pairs, true, &unsupported, &[], &log)?;
     log.section(&format!("docker run {run_image}"));
     if !docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);

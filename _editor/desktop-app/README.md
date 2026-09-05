@@ -34,7 +34,8 @@ from any device. The app adds no third plane. It is three thin native things aro
 2. **A script runner.** Every machine operation is one of the scripts the copy-paste one-liners already run,
    spawned as a child process with its output streamed into the app's own screen.
 3. **A lifecycle manager.** Setup progress, then one row per sandbox carrying its folder, its localhost ports,
-   its image and its verbs: start, stop, restart, update, roll back, logs, remove. What **desktop sync** is
+   its image, its share of this machine and its verbs: start, stop, restart, resources (the memory and CPU caps,
+   privileged, GPU, applied as a recreate onto the same image), update, roll back, logs, remove. What **desktop sync** is
    doing here is read by spawning `intentic-machine status --json` exactly as the lifecycle actions spawn their
    scripts, and the whole row is `@intentic/ui`'s `DeviceDetail` with `@intentic/ui`'s `SandboxVerbs` on it:
    the same two components the web app's Devices tab uses, so the two cannot describe one machine
@@ -182,8 +183,9 @@ needs, and say what it is doing to a window instead of a terminal
 | --- | --- |
 | A handed-over setup (runs on arrival) | `connect.sh` (through `pkexec` only when Docker is missing) / `connect.ps1` |
 | Update · Rebuild · Roll back | `recreate.sh <slug> [<sha256>\|--rollback]` / `recreate.ps1 -Slug … [-Hash …\|-Rollback]` |
+| Resources | `recreate.sh <slug> --reshape <ic flags>` / `recreate.ps1 -Slug … -Reshape <ic flags>`: the same shim, forwarding `ic sandbox reshape`'s own `--memory`/`--cpus`/`--privileged`/`--gpus`, spelled in Rust from the form's ask (`commands.rs`) |
 | Remove | `cleanup.sh <slug> -y` / `cleanup.ps1 -Slug … -Yes` |
-| Start · Stop · Restart · Logs | `docker` directly: there is no script that lists, cycles or tails |
+| Start · Stop · Restart · Logs · the list itself | `docker` directly: there is no script that lists, inspects, cycles or tails. The list reads each container's share off one `docker inspect`, and the form's rails off `docker info` |
 | The machine-agent panel | `intentic-machine status --json` (its own install under `~/.intentic/machine/bin` first, then PATH) |
 
 The scripts are **bundled as resources** from `_site/site/public/scripts/`, by way of a staging directory:

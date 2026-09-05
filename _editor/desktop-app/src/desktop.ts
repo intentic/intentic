@@ -33,6 +33,19 @@ export interface SyncArgs {
     mirror: boolean;
 }
 
+/* One sandbox's share of this machine as docker enforces it (commands.rs `SandboxResources`): the caps, the
+ * privilege, the GPU, and who asked for which directive. It is the shape the kit's row and Resources form read
+ * (`DeviceSandboxResources`), so the containers this app lists go to the shared view untranslated, and the
+ * same shape the machine agent reports to the web, so the two screens describe one container alike. */
+export interface SandboxResources {
+    memoryBytes?: number;
+    cpus?: number;
+    privileged: boolean;
+    gpu: boolean;
+    hostRuntime: string[];
+    overlayRuntime: string[];
+}
+
 export interface SandboxStatus {
     slug: string;
     container: string;
@@ -40,6 +53,26 @@ export interface SandboxStatus {
     running: boolean;
     image: string;
     tunnelRunning: boolean | null;
+    // Null when the inspect behind it failed: a row with nothing to say about its share, not a broken list.
+    resources: SandboxResources | null;
+}
+
+/* The Docker engine's size (commands.rs `DockerEngine`): the ceiling a sandbox's share is bounded by, and the
+ * rails the Resources form draws. Null when docker would not say, and the form then has no ceiling rather than
+ * a wrong one. Read apart from the list for `dockerReady`'s reason: `docker info` is the slow call. */
+export interface DockerEngine {
+    memoryBytes: number;
+    cpus: number;
+}
+
+/* What the Resources form asked for: only what changed, with `null` on a cap meaning back to the default (the
+ * share derived from this machine; every core). The sandbox contract's SandboxResourcesAsk, which this app
+ * mirrors rather than depends on, and the shape the Rust side spells into `ic`'s flags. */
+export interface ReshapeAsk {
+    memoryGib?: number | null;
+    cpus?: number | null;
+    privileged?: boolean;
+    gpu?: boolean;
 }
 
 /* The three docker verbs this window offers. Named rather than a boolean because the row offers three, the
@@ -179,6 +212,11 @@ export const sandboxPower = (slug: string, action: PowerAction): Promise<void> =
 // :stable base, a hash builds the owner-approved environment overlay pinned to that digest, and `rollback`
 // returns it to the image before the last update.
 export const sandboxRecreate = (slug: string, hash?: string, rollback = false): Promise<void> => invoke(`sandbox_recreate`, { slug, hash, rollback });
+/* The same recreate shim with `--reshape` / `-Reshape` and the ask spelled into `ic`'s flags on the Rust side:
+ * the same image, a different share of this machine. Streams under the recreate's own run id (`recreate:<slug>`),
+ * because that is what it is. */
+export const sandboxReshape = (slug: string, ask: ReshapeAsk): Promise<void> => invoke(`sandbox_reshape`, { slug, ask });
+export const dockerEngine = (): Promise<DockerEngine | null> => invoke(`docker_engine`);
 export const sandboxRemove = (slug: string): Promise<void> => invoke(`sandbox_remove`, { slug });
 export const sandboxLogs = (slug: string, tail: number): Promise<string> => invoke(`sandbox_logs`, { slug, tail });
 /* The machine agent's status, or undefined when this device has no agent, an ordinary state (a machine set

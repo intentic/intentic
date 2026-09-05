@@ -10,12 +10,19 @@ app); this package is why they cannot disagree about what one is.
 
 - Define the container's identity: its name, image, labels and volumes.
 - Define its posture: which capabilities it gets, and which it is denied.
-- Bound a local workspace to a share of its machine (35%, held between 4 and 24 GiB, plus a swap allowance),
-  so a runaway build or local model is killed inside its cgroup instead of exhausting the desktop or WSL VM.
-  A share rather than a number because the cap is per container and the host pays cap x count: two sandboxes
-  have to fit. `localSandboxMemory` is the policy, pure arithmetic on a byte count so this package stays
-  browser-importable; the caller that can measure passes the result as `memory`/`memorySwap`, and one that
-  cannot gets `LOCAL_SANDBOX_MEMORY`. Hosted providers keep owning their machine limits.
+- Bound a local workspace to its share of the machine, and carry the owner's own asks about that share. The
+  derived memory cap is everything the docker engine has minus a fixed 3 GiB the host keeps (floor 4 GiB,
+  swap unbounded; `index.ts` says why each of those replaced a fraction and a no-swap rule that froze real
+  machines). CPUs are unbounded unless asked. Three replayed env vars carry what the owner asked for instead,
+  said once ON the container and re-emitted onto every container that replaces it: `SANDBOX_MEMORY` (whole
+  GiB, held inside the same bounds), `SANDBOX_CPUS` (whole cores, at most the engine's), and `SANDBOX_RUNTIME`
+  (allowlisted directives the owner added beyond the approved overlay's, `--privileged`, `--gpus=all`). The
+  run carries the UNION of the overlay's directives and the owner's, and stamps the overlay's half on the
+  container as `SANDBOX_OVERLAY_RUNTIME`, so a reader can tell a capability's demand (which a view draws locked)
+  from an owner's ask (which they may withdraw). The policy is pure arithmetic so this package stays
+  browser-importable; the caller that can measure (`intentic sandbox run-command`, inside the image) reads
+  /proc and the probe's own env for the seeds and passes the results in. Hosted providers keep owning their
+  machine limits.
 - Define the environment allowlist: what is allowed to cross into the box.
 - Carry an optional sandbox definition (`definition`, a `sandbox.toml` text) into the box as
   `SANDBOX_DEFINITION_SEED` (base64, so its quotes and newlines never meet a shell): the daemon seeds an EMPTY

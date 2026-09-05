@@ -79,6 +79,21 @@ test("reads the fleet the machine's own tool answered", () => {
     expect(sandboxesFromTool(JSON.stringify(fleet, undefined, 2), false)).toEqual(fleet);
 });
 
+// A machine that inspected its containers reports each one's share of itself, and it rides through verbatim:
+// the Resources dialog pre-fills from it, so a dropped field there is a dialog that lies about what is set.
+test("a container's resources ride through the fleet reading untouched", () => {
+    const fleet = [
+        {
+            slug: "work",
+            container: "intentic-sandbox-work",
+            running: true,
+            image: "img",
+            resources: { memoryBytes: 12 * 1024 ** 3, cpus: 4, privileged: true, gpu: false, hostRuntime: ["--privileged"], overlayRuntime: [] },
+        },
+    ];
+    expect(sandboxesFromTool(JSON.stringify(fleet), false)).toEqual(fleet);
+});
+
 test("an agent without the tool, or an answer that is not the fleet, contributes no sandboxes", () => {
     expect(sandboxesFromTool(`This device has no tool called "list_sandboxes".`, true)).toEqual([]);
     expect(sandboxesFromTool("not json", false)).toEqual([]);

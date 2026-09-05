@@ -19,6 +19,14 @@ The **device half** (`src/device/`, the machine side of the `host` capability):
   recoverable) as MCP carried verbatim, so a machine can learn a tool without a daemon release.
 - Enforce the owner's scopes **here**, never in the sandbox, and append every call to an audit log that
   survives uninstall.
+- Manage this machine's sandboxes for a browser button or a model, under the `sandboxes` switch: list them
+  with their **share of the machine** (one `docker inspect` per listing: memory and CPU caps, privileged, GPU,
+  and who asked for each directive, the approved environment or the owner), start/stop/restart, run the `ic`
+  flows (prepare, update, rebuild, rollback, reshape, remove) narrating their output line by line, and tail
+  their logs. `reshape` changes a sandbox's share or privileges through `ic sandbox reshape` on the same
+  switch as the swaps, because another reshape undoes it; its ask is a closed form (two caps, two switches)
+  spelled into `ic` flags here, so nothing a browser or a model sends reaches docker as text. `describe`
+  reports the docker engine's size beside the OS, which is the ceiling those caps are held to.
 - Keep each local sandbox's **next update downloaded** (`src/device/auto-prepare.ts`): a background tick
   runs `ic sandbox prepare <slug> --auto` every few hours, so the web app's update card offers a half-minute
   restart instead of minutes of pulling. On by default; the switch is `intentic-machine device updates
@@ -104,6 +112,7 @@ its loop posts to and its installed build to one reading over a `host` capabilit
 - [src/device/auto-prepare.ts](src/device/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
 - [src/device/policy.ts](src/device/policy.ts) — what the sandbox is permitted to do here; the security surface.
+- [src/device/tools/sandboxes.ts](src/device/tools/sandboxes.ts) — the fleet: the `docker ps`/`inspect` readers, the docker verbs, and the `ic` flows (swap, reshape, remove, runners) with the pure argv builders beside them.
 - [src/sync/mirror.ts](src/sync/mirror.ts) — the sync tick: ports reconcile, git bridge, revocation handling.
 - [src/sync/mutagen.ts](src/sync/mutagen.ts) — driving the Mutagen binary, sessions and its daemon's autostart.
 

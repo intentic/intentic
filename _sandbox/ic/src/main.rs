@@ -17,7 +17,7 @@ mod tty;
 mod ui;
 mod util;
 
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 
 /* ic — intentic's host-side CLI: the flows that must run on the machine that runs the sandbox, because the
  * sandbox holds no host Docker socket and cannot recreate its own container. The curl-served scripts
@@ -118,6 +118,26 @@ enum SandboxCommand {
         /// The sandbox to swap (omit when this machine runs exactly one)
         slug: Option<String>,
     },
+    /// Change a sandbox's share of this machine, or its privileges — a restart of about a minute onto the
+    /// same image. The values live on the container and survive every later update, rollback and rebuild.
+    #[command(group = ArgGroup::new("ask").required(true).multiple(true))]
+    Reshape {
+        /// The sandbox to reshape (always named: this changes a container's privileges)
+        slug: String,
+        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this machine
+        #[arg(long, group = "ask")]
+        memory: Option<String>,
+        /// CPU cap in whole cores, e.g. 4 — or `default` for every core the engine has
+        #[arg(long, group = "ask")]
+        cpus: Option<String>,
+        /// Run the container privileged (on/off). Withdraws only the owner's own ask: a privilege the
+        /// approved environment demands (the Docker capability's) stays in force
+        #[arg(long, value_enum, group = "ask")]
+        privileged: Option<Switch>,
+        /// Pass this machine's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
+        #[arg(long, value_enum, group = "ask")]
+        gpus: Option<Switch>,
+    },
     /// Check every link of a sandbox's reachability chain and name what is broken, with its fix (read-only)
     Doctor {
         /// The sandbox to diagnose (omit when this machine runs exactly one)
@@ -139,6 +159,26 @@ enum SandboxCommand {
         #[arg(long = "agent-auth")]
         agent_auth: bool,
     },
+}
+
+/// A two-state flag spelled out (`--privileged on`), because a bare `--privileged` could only ever ADD: the
+/// same verb has to be able to withdraw the ask, and `--no-privileged` is a spelling nobody guesses.
+#[derive(Clone, Copy, PartialEq, Debug, ValueEnum)]
+enum Switch {
+    On,
+    Off,
+}
+
+/// The verb's `default` is a person's word for the contract's empty value ("clear this, back to what you
+/// derive"); every other spelling is forwarded as typed, because what a valid cap is belongs to the contract.
+fn seed_value(given: Option<String>) -> Option<String> {
+    given.map(|value| {
+        if value.trim() == "default" {
+            String::new()
+        } else {
+            value
+        }
+    })
 }
 
 // The runner verb surface (runner.rs says what each will do; all refuse until Phase 1 lands). Spellings are
@@ -221,6 +261,21 @@ fn main() {
             SandboxCommand::Dev { slug } => {
                 sandbox::recreate::run(sandbox::recreate::Mode::Dev, slug)
             }
+            SandboxCommand::Reshape {
+                slug,
+                memory,
+                cpus,
+                privileged,
+                gpus,
+            } => sandbox::recreate::reshape(
+                slug,
+                sandbox::recreate::Reshape {
+                    memory: seed_value(memory),
+                    cpus: seed_value(cpus),
+                    privileged: privileged.map(|switch| switch == Switch::On),
+                    gpus: gpus.map(|switch| switch == Switch::On),
+                },
+            ),
             SandboxCommand::Doctor { slug } => sandbox::doctor::run(slug),
             SandboxCommand::List => sandbox::list(),
             SandboxCommand::Remove {
@@ -506,6 +561,74 @@ mod tests {
         assert!(yes && dry_run);
         // No positionals: a stray argument must be refused rather than silently ignored.
         assert!(parse(&["docker", "prepare", "extra"]).is_err());
+    }
+
+    /* `reshape` changes a container's PRIVILEGES, so its surface is held tighter than the swaps': the slug is
+     * never inferred, at least one ask is required (a bare reshape would be a restart for nothing), and the
+     * switches take an explicit on/off rather than being flags that could only ever add. The machine agent
+     * builds this exact command line from a browser dialog (@intentic/machine icReshapeArgs). */
+    #[test]
+    fn reshape_names_its_sandbox_and_requires_at_least_one_ask() {
+        assert!(parse(&["sandbox", "reshape"]).is_err());
+        assert!(
+            parse(&["sandbox", "reshape", "abc123"]).is_err(),
+            "a reshape with nothing to change must be refused"
+        );
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Reshape {
+                    slug,
+                    memory,
+                    cpus,
+                    privileged,
+                    gpus,
+                }),
+        }) = parse(&[
+            "sandbox",
+            "reshape",
+            "abc123",
+            "--memory",
+            "12g",
+            "--cpus",
+            "4",
+            "--privileged",
+            "on",
+            "--gpus",
+            "off",
+        ])
+        else {
+            panic!("reshape did not parse")
+        };
+        assert_eq!(slug, "abc123");
+        assert_eq!(memory.as_deref(), Some("12g"));
+        assert_eq!(cpus.as_deref(), Some("4"));
+        assert_eq!(privileged, Some(Switch::On));
+        assert_eq!(gpus, Some(Switch::Off));
+        // One ask is enough, and an untouched switch stays None rather than defaulting to either state.
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Reshape {
+                    privileged, gpus, ..
+                }),
+        }) = parse(&["sandbox", "reshape", "abc123", "--memory", "default"])
+        else {
+            panic!("a memory-only reshape did not parse")
+        };
+        assert!(privileged.is_none() && gpus.is_none());
+        // A switch needs its word: a bare `--privileged` must not be read as "on".
+        assert!(parse(&["sandbox", "reshape", "abc123", "--privileged"]).is_err());
+        assert!(parse(&["sandbox", "reshape", "abc123", "--privileged", "yes"]).is_err());
+    }
+
+    #[test]
+    fn default_is_the_persons_word_for_the_contracts_empty_value() {
+        // Forwarded, never interpreted: only the one word this verb documents is translated; a cap's own
+        // spelling (right or wrong) reaches the contract as typed, where it is validated by name.
+        assert_eq!(seed_value(Some("default".into())), Some(String::new()));
+        assert_eq!(seed_value(Some(" default ".into())), Some(String::new()));
+        assert_eq!(seed_value(Some("12g".into())), Some("12g".to_string()));
+        assert_eq!(seed_value(Some("12G".into())), Some("12G".to_string()));
+        assert_eq!(seed_value(None), None);
     }
 
     #[test]

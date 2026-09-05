@@ -50,6 +50,10 @@
             "types": "./src/components/deviceDetail.ts",
             "default": "./src/components/deviceDetail.ts"
         },
+        "./sandbox-resources": {
+            "types": "./src/components/sandboxResources.ts",
+            "default": "./src/components/sandboxResources.ts"
+        },
         "./notice": {
             "types": "./src/components/notice.ts",
             "default": "./src/components/notice.ts"

@@ -3,7 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { HostScopes, DeviceSandbox } from "@intentic/sandbox-contract";
+import type { HostScopes, DeviceSandbox, SandboxResources, SandboxResourcesAsk } from "@intentic/sandbox-contract";
+import { HOST_RUNTIME_ENV, OVERLAY_RUNTIME_ENV } from "@intentic/sandbox-run";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
 
@@ -97,6 +98,93 @@ const docker = async (args: readonly string[]): Promise<string> => {
 export const fleet = async (): Promise<DeviceSandbox[]> =>
     sandboxesFrom(rowsFrom(await docker(["ps", "-a", "--filter", `name=^${PREFIX}`, "--format", "{{json .}}"])));
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// One `NAME=value` out of a container's env list, or undefined when it carries none by that name.
+const envOf = (env: unknown, name: string): string | undefined =>
+    Array.isArray(env) ? env.find((entry): entry is string => typeof entry === "string" && entry.startsWith(`${name}=`))?.slice(name.length + 1) : undefined;
+
+const tokensOf = (value: string | undefined): string[] => (value ?? "").split(/\s+/).filter((token) => token !== "");
+
+/* ONE CONTAINER'S SHARE OF THE MACHINE, read off its `docker inspect` object. Pure, so the reading of
+ * docker's shape is asserted without a daemon: `Memory` and `NanoCpus` are 0 for "unbounded" (absent here,
+ * because 0 GiB is not a cap anyone set), a GPU is a DeviceRequest for the nvidia driver or the `gpu`
+ * capability (both spellings docker writes for `--gpus`), and WHO asked for which directive is the pair of
+ * env stamps the run contract leaves on the container (SANDBOX_RUNTIME the owner's, SANDBOX_OVERLAY_RUNTIME
+ * the approved environment's). Anything unreadable reads as its default rather than as a guess. */
+// A docker limit field: a positive number is a cap, 0 (docker's "unbounded") and anything else is none.
+const capOf = (value: unknown): number | undefined => (typeof value === "number" && value > 0 ? value : undefined);
+
+// Whether a HostConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`.
+const gpuRequested = (host: Record<string, unknown>): boolean =>
+    (Array.isArray(host["DeviceRequests"]) ? host["DeviceRequests"] : []).some(
+        (request) =>
+            isRecord(request) &&
+            (request["Driver"] === "nvidia" ||
+                (Array.isArray(request["Capabilities"]) && request["Capabilities"].some((set) => Array.isArray(set) && set.includes("gpu")))),
+    );
+
+export const resourcesFrom = (inspected: unknown): SandboxResources | undefined => {
+    if (!isRecord(inspected)) {
+        return undefined;
+    }
+    const host = isRecord(inspected["HostConfig"]) ? inspected["HostConfig"] : {};
+    const env = isRecord(inspected["Config"]) ? inspected["Config"]["Env"] : undefined;
+    const memory = capOf(host["Memory"]);
+    const nanos = capOf(host["NanoCpus"]);
+    return {
+        ...(memory === undefined ? {} : { memoryBytes: memory }),
+        ...(nanos === undefined ? {} : { cpus: nanos / 1_000_000_000 }),
+        privileged: host["Privileged"] === true,
+        gpu: gpuRequested(host),
+        hostRuntime: tokensOf(envOf(env, HOST_RUNTIME_ENV)),
+        overlayRuntime: tokensOf(envOf(env, OVERLAY_RUNTIME_ENV)),
+    };
+};
+
+/* The fleet WITH each container's share of the machine: one `docker inspect` for all of them on top of the
+ * `docker ps` above, which is why it is a second reader rather than the default one. `fleet()` answers "which
+ * slug is this" for every op and the auto-prepare tick, none of which need a HostConfig; this is for the
+ * listing a person or a model reads, where the caps and privileges are the point.
+ *
+ * A container that vanished between the two calls makes `docker inspect` exit non-zero with the OTHERS still
+ * on stdout, so the partial answer is kept rather than thrown away — a row with no `resources` is honest;
+ * a listing that failed because one sandbox was being removed is not. */
+export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {
+    const boxes = await fleet();
+    if (boxes.length === 0) {
+        return boxes;
+    }
+    const inspected = await exec("docker", ["inspect", "--format", "{{json .}}", ...boxes.map((box) => box.container)], {
+        timeout: DOCKER_TIMEOUT_MS,
+        maxBuffer: 8 * 1024 * 1024,
+        windowsHide: true,
+    })
+        .then(({ stdout }) => stdout)
+        .catch((error: { stdout?: string }) => error.stdout ?? "");
+    const byContainer = new Map<string, SandboxResources>();
+    for (const line of inspected.split(/\r?\n/)) {
+        if (!line.trim().startsWith("{")) {
+            continue;
+        }
+        try {
+            const parsed: unknown = JSON.parse(line);
+            const resources = resourcesFrom(parsed);
+            // docker names the inspected container with a leading slash, which no other reader here uses.
+            const name = isRecord(parsed) && typeof parsed["Name"] === "string" ? parsed["Name"].replace(/^\//, "") : undefined;
+            if (name !== undefined && resources !== undefined) {
+                byContainer.set(name, resources);
+            }
+        } catch {
+            // A line that is not one inspect object is a warning riding along; the rows it did print still count.
+        }
+    }
+    return boxes.map((box) => {
+        const resources = byContainer.get(box.container);
+        return resources === undefined ? box : { ...box, resources };
+    });
+};
+
 /* WHICH SLUGS AN `ic` FLOW IS TOUCHING RIGHT NOW, in this process. The background auto-prepare tick reads it
  * so a timer never starts a pull under an update someone is watching stream; the flows below write it. Only
  * advisory, and only one-way on purpose: a PERSON's click is never made to wait on the timer's work — the
@@ -110,7 +198,7 @@ export const listSandboxes = async (scopes: HostScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }
-    return JSON.stringify(await fleet(), undefined, 2);
+    return JSON.stringify(await fleetDetailed(), undefined, 2);
 };
 
 // The ops themselves, in the one place that spells them: the MCP tool advertises this schema to the model and
@@ -187,6 +275,31 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 // Removal confirms itself: there is no terminal on this end, so `ic`'s own "are you sure" would hang forever.
 // The consent happened in the browser, on a card that named what is lost.
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
+
+/* The RESHAPE argv, the dialog's answer spelled the way `ic sandbox reshape` takes it: a cap as `<n>g` /
+ * `<n>`, `null` as ic's `default` (back to the derived share; every core), a switch as an explicit on/off.
+ * Nothing is interpreted here — what a valid cap is belongs to the run contract inside the image, which is
+ * where a bad one is refused by name. The one rule this side keeps is ic's own: a reshape with nothing to
+ * change is refused before anything is spawned, because it would be a restart for nothing. */
+// A cap's flag value: absent ⇒ no flag, null ⇒ ic's `default`, a number ⇒ spelled the way ic takes it.
+const capFlag = (value: number | null | undefined, spell: (value: number) => string): string | undefined =>
+    value === undefined ? undefined : value === null ? "default" : spell(value);
+// A switch's flag value: absent ⇒ no flag, otherwise the explicit word ic requires (a bare flag could only add).
+const switchFlag = (value: boolean | undefined): string | undefined => (value === undefined ? undefined : value ? "on" : "off");
+
+export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined): string[] => {
+    const flags: readonly (readonly [string, string | undefined])[] = [
+        ["--memory", capFlag(ask?.memoryGib, (gib) => `${gib}g`)],
+        ["--cpus", capFlag(ask?.cpus, String)],
+        ["--privileged", switchFlag(ask?.privileged)],
+        ["--gpus", switchFlag(ask?.gpu)],
+    ];
+    const given = flags.flatMap(([flag, value]) => (value === undefined ? [] : [flag, value]));
+    if (given.length === 0) {
+        throw new Error(`A reshape has to change something: give a memory or CPU cap, or a privileged/GPU switch.`);
+    }
+    return ["sandbox", "reshape", slug, ...given];
+};
 
 /* The parent sandbox's SHAPE, riding along on runner-up so the container starts as its twin: a settings-only
  * definition the runner boots with, and the parent's approved overlay with the sha256 that pins it. All
@@ -356,6 +469,34 @@ export const swapSandbox = async (
     }
     const verb = { update: "Updated", rebuild: "Rebuilt", rollback: "Rolled back" }[swap];
     return `${verb} sandbox "${slug}". Its files and its history were kept.`;
+};
+
+/* Change a sandbox's share of this machine, or its privileges — `ic sandbox reshape`, the same `ic` door as
+ * the swaps and narrated the same way. It rides the `sandboxes` switch, like the swaps and unlike removal,
+ * because it is undone by doing it again: every value it changes is a `docker run` flag the next reshape sets
+ * back. The privileges it can grant are real, which is why the ask is a closed form (two caps, two switches)
+ * rather than flags: nothing a model or a browser sends here reaches docker as text. */
+export const reshapeSandbox = async (
+    slug: string,
+    ask: SandboxResourcesAsk | undefined,
+    scopes: HostScopes,
+    onLine: (line: string) => void,
+): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    // Built before the fleet is read, for icSwapArgs' reason: an empty ask was already wrong when it arrived.
+    const args = icReshapeArgs(slug, ask);
+    await find(slug);
+    icInFlight.add(slug);
+    let run: { code: number; output: string };
+    try {
+        run = await runIc(args, onLine);
+    } finally {
+        icInFlight.delete(slug);
+    }
+    if (run.code !== 0) {
+        throw new Error(`That reshape failed on this device.\n\n${run.output}`);
+    }
+    return `Reshaped sandbox "${slug}". Its files and its history were kept, and the new share survives every later update.`;
 };
 
 export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {

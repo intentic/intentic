@@ -165,6 +165,34 @@ export const localSandboxMemory = (totalBytes: number, override?: string): strin
     return capString(Math.max(totalBytes - SANDBOX_MEMORY_RESERVE, SANDBOX_MEMORY_FLOOR));
 };
 
+/* THE OWNER'S CPU CAP, docker's `--cpus <n>`, and unlike memory there is NO derived one.
+ *
+ * A sandbox has always run with every core the engine has (no `--cpus` at all), and that stays the default: the
+ * CFS quota this flag sets is a hard ceiling, not a share, and a box that idles beside a build it may not use
+ * is worse than a box that races the host for a minute. So this returns undefined for "nothing asked", and the
+ * emitter puts no flag on the run. The cap exists for the machine the default is wrong about — a laptop whose
+ * owner wants to keep working while the sandbox compiles — and it arrives the same way the memory ask does:
+ * SANDBOX_CPUS on the container, replayed, so it is said once and outlives every recreate.
+ *
+ * Whole cores only, held between one and the engine's own count. Fractions are a real docker spelling and a
+ * poor one to offer a person: `0.5` reads as "half speed" and means "stopped for half of every 100ms period",
+ * which is a stall pattern, not a slower machine. A malformed or out-of-range ask THROWS, for the reason the
+ * memory override does: an ask that silently fell back would leave an owner believing they hold a bound they do
+ * not. Bounded ABOVE by the engine's count when the caller could measure it — a cap of 16 on an 8-core engine
+ * is docker's "invalid range" at launch, which is a whole recreate lost to a typo — and honoured as typed when
+ * it could not. */
+export const localSandboxCpus = (engineCpus: number, override?: string): string | undefined => {
+    if (override === undefined || override.trim() === "") {
+        return undefined;
+    }
+    const asked = /^(\d+)$/u.exec(override.trim());
+    if (asked === null || Number(asked[1]) < 1) {
+        throw new Error(`SANDBOX_CPUS must be a whole number of CPUs, at least 1 (e.g. '4'), got '${override}'`);
+    }
+    const measured = Number.isFinite(engineCpus) && engineCpus >= 1;
+    return String(measured ? Math.min(Number(asked[1]), Math.floor(engineCpus)) : Number(asked[1]));
+};
+
 // Extra privileges ride in ONLY through "# intentic:runtime" directive lines in the owner-approved overlay
 // (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's isolated nested engine needs
 // --privileged, and its optional GPU passthrough needs --gpus), allowlisted hard so an overlay can't smuggle
@@ -225,28 +253,60 @@ export const OPTIONAL_DIRECTIVES: readonly OptionalDirective[] = [
 
 export const optionalDirective = (token: string): OptionalDirective | undefined => OPTIONAL_DIRECTIVES.find((entry) => entry.token === token);
 
-// The allowlisted runtime tokens of an overlay, or a throw naming the first token that is not, an unknown
-// directive is either a typo'd capability fragment or an escape attempt, and both must stop the recreate
-// rather than be skipped into a sandbox that silently lacks (or exceeds) its privileges.
-//
-// DEDUPED, first appearance wins: two capabilities may legitimately ask for the same grant (the docker card's
-// GPU option and a local model's both emit `--gpus=all`), and docker run accepts `--privileged` twice but not
-// every repeated flag, so the emitters downstream must never see one token per asker.
-export const runtimeDirectivesOf = (overlay: string): string[] => {
-    const tokens = new Set<string>();
-    for (const line of overlay.split("\n")) {
-        if (!line.startsWith(RUNTIME_DIRECTIVE_PREFIX)) {
+/* Tokens against the allowlist, or a throw naming the first that is not: an unknown directive is either a
+ * typo'd capability fragment or an escape attempt, and both must stop the recreate rather than be skipped into
+ * a sandbox that silently lacks (or exceeds) its privileges. `source` names where the token came from in the
+ * refusal, because the two askers below are fixed in two different places.
+ *
+ * DEDUPED, first appearance wins: two capabilities may legitimately ask for the same grant (the docker card's
+ * GPU option and a local model's both emit `--gpus=all`), and docker run accepts `--privileged` twice but not
+ * every repeated flag, so the emitters downstream must never see one token per asker. */
+const allowlistedTokens = (tokens: readonly string[], source: string): string[] => {
+    const seen = new Set<string>();
+    for (const token of tokens) {
+        if (token === "") {
             continue;
         }
-        for (const token of line.slice(RUNTIME_DIRECTIVE_PREFIX.length).trim().split(/\s+/)) {
-            if (!(RUNTIME_DIRECTIVES as readonly string[]).includes(token)) {
-                throw new Error(`unsupported runtime directive '${token}' in the approved overlay`);
-            }
-            tokens.add(token);
+        if (!(RUNTIME_DIRECTIVES as readonly string[]).includes(token)) {
+            throw new Error(`unsupported runtime directive '${token}' in ${source}`);
         }
+        seen.add(token);
     }
-    return [...tokens];
+    return [...seen];
 };
+
+// The allowlisted runtime tokens of an overlay: what the CAPABILITIES the owner approved need.
+export const runtimeDirectivesOf = (overlay: string): string[] =>
+    allowlistedTokens(
+        overlay
+            .split("\n")
+            .filter((line) => line.startsWith(RUNTIME_DIRECTIVE_PREFIX))
+            .flatMap((line) => line.slice(RUNTIME_DIRECTIVE_PREFIX.length).trim().split(/\s+/)),
+        "the approved overlay",
+    );
+
+/* THE OWNER'S OWN RUNTIME ASKS, the second source of directives and the only one a person sets directly.
+ *
+ * The overlay's directives are what capabilities NEED (dockerd does not run unprivileged); these are what the
+ * owner WANTS beyond that, asked for on the machine that runs the container — a privileged box for a tool the
+ * catalog has no card for, the host's GPU for a workload that is not the nested engine's. They ride as
+ * SANDBOX_RUNTIME on the container, space-separated tokens from the same allowlist, replayed for the memory
+ * cap's reason: said once, on the sandbox itself, and re-emitted onto every container that replaces it.
+ *
+ * The run carries the UNION of both sources, and the union is the whole relationship between them: an owner
+ * can add to what the overlay demands and can withdraw only their own asks, never the overlay's. A directive
+ * the docker capability baked in stays in force with `SANDBOX_RUNTIME` empty, which is what lets a view offer
+ * the toggle honestly as "locked: required by the Docker capability". */
+export const HOST_RUNTIME_ENV = "SANDBOX_RUNTIME";
+export const hostRuntimeOf = (value: string | undefined): string[] => allowlistedTokens((value ?? "").trim().split(/\s+/), HOST_RUNTIME_ENV);
+
+/* WHAT THE OVERLAY DEMANDED, stamped on the container as provenance rather than as an ask.
+ *
+ * From outside, `docker inspect` shows a privileged container and cannot say whose privilege it is: the
+ * capability's, which a view must draw locked, or the owner's, which it may offer to withdraw. This var answers
+ * that. It is a fact about the run that made the container, so like SANDBOX_GPU it is runner-set and never
+ * replayed: the next runner reads the next overlay. */
+export const OVERLAY_RUNTIME_ENV = "SANDBOX_OVERLAY_RUNTIME";
 
 // --- Env ----------------------------------------------------------------------------------------------
 /* The vars a recreate replays from the running container, the union of what every creator sets, in one
@@ -296,6 +356,10 @@ export const REPLAY_ENV = [
      * Unlike SANDBOX_CHANNEL and the directive-fate vars above, this one SHOULD outlive the run that set it: it
      * describes the machine's standing arrangement with its owner, not a decision the runner makes per launch. */
     "SANDBOX_MEMORY",
+    // The owner's other two standing asks, replayed for exactly the reason the cap above is: the CPU ceiling
+    // (localSandboxCpus) and the runtime directives they added beyond the overlay's (hostRuntimeOf).
+    "SANDBOX_CPUS",
+    "SANDBOX_RUNTIME",
     /* A RUNNER's identity seed (the runner mode of the daemon, sandbox/src/runners/): which parent sandbox
      * this container belongs to, and the single-use pairing it redeems on first boot. Replayed for the host
      * seed's reason — a recreate does not move the container off its parent, and the daemon cannot re-derive
@@ -390,8 +454,15 @@ export interface SandboxRun {
     readonly definition?: string;
     // Replayed/wizard env pairs, already filtered through replayableEnv.
     readonly env?: readonly (readonly [string, string])[];
-    // Allowlisted runtime directive tokens (runtimeDirectivesOf).
+    // Allowlisted runtime directive tokens the OVERLAY asks for (runtimeDirectivesOf): what its capabilities need.
     readonly runtime?: readonly string[];
+    // Allowlisted runtime directive tokens the OWNER asks for (hostRuntimeOf, off SANDBOX_RUNTIME): what they
+    // want beyond the overlay. The run carries the union; only this half is theirs to withdraw.
+    readonly hostRuntime?: readonly string[];
+    /* The owner's CPU ceiling, docker's `--cpus` figure as a string, from localSandboxCpus() — or absent, which
+     * is the default and means no flag: every core the engine has, as a sandbox has always run. Like `memory`
+     * it governs the local shape only; the hosted shape sizes its machine elsewhere. */
+    readonly cpus?: string;
     // Extra -v specs, verbatim: the /agent-auth replay, the dev flow's compiled-tree binds.
     readonly mounts?: readonly string[];
     /* The local shape's cgroup cap, as a docker `<n>g` string, from localSandboxMemory() against the engine's
@@ -430,13 +501,66 @@ export interface SandboxRun {
 // The `docker …` argv for a sandbox container, ordered the way connect.sh always wrote it. One builder for
 // every dialect: sh consumers quote it (sandboxRunCommand), PowerShell splats it as an array, the provider
 // joins it into its SSH line.
-export const sandboxRunArgv = (run: SandboxRun): string[] => {
-    /* Each optional ask and its fate, resolved once from the two things the caller already has: the directives
-     * it read out of the overlay, and the tokens its preflight came back unhappy about. No flow filters a
-     * token or stamps an env var itself, the same choice the rest of this module makes, for the same reason.
-     * A directive not in the table is untouched: everything else is all-or-nothing and stays that way. */
-    const asked = OPTIONAL_DIRECTIVES.filter((entry) => (run.runtime ?? []).includes(entry.token));
+/* THE CGROUP CEILINGS, local shape only: the hosted shape (`init: false`) carries none and sizes its machine
+ * elsewhere. `--memory-swap -1` rides with every cap: the cgroup may page into whatever swap the engine has, so
+ * a peak that clears the cap degrades into paging instead of a reclaim livelock (doctrine above). `--cpus` only
+ * when the owner asked (localSandboxCpus): docker's default, every core, is the sandbox's default too. */
+const resourceArgs = (run: SandboxRun): string[] =>
+    run.init === false
+        ? []
+        : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", SANDBOX_MEMORY_SWAP, ...(run.cpus === undefined ? [] : ["--cpus", run.cpus])];
+
+/* BOTH SOURCES OF DIRECTIVES, resolved once: the overlay's (what its capabilities need) and the owner's (what
+ * they asked for beyond that), as one deduped union. Everything downstream — the flags, the optional-directive
+ * fate, the probe a host was quizzed with — sees the union and nothing else, so a GPU the owner asked for is
+ * probed and dropped exactly as one the docker card asked for.
+ *
+ * Each optional ask and its fate come from the two things the caller already has: the directives, and the
+ * tokens its preflight came back unhappy about. No flow filters a token or stamps an env var itself, the same
+ * choice the rest of this module makes, for the same reason. A directive not in the table is untouched:
+ * everything else is all-or-nothing and stays that way.
+ *
+ * `flags` are the run flags that ride; `stamps` are the `-e` pairs recording what became of each ask, plus
+ * OVERLAY_RUNTIME_ENV naming the overlay's half alone, so a reader can tell a capability's demand from the
+ * owner's ask. Absent when the overlay asked for nothing. */
+const directiveArgs = (run: SandboxRun): { readonly flags: string[]; readonly stamps: string[] } => {
+    const overlay = run.runtime ?? [];
+    const union = new Set<string>([...overlay, ...(run.hostRuntime ?? [])]);
+    const asked = OPTIONAL_DIRECTIVES.filter((entry) => union.has(entry.token));
     const dropped = new Set(asked.filter((entry) => (run.unsupported ?? []).includes(entry.token)).map((entry) => entry.token));
+    return {
+        flags: Array.from(union).filter((token) => !dropped.has(token)),
+        stamps: [
+            ...asked.flatMap((entry) => ["-e", `${entry.env}=${dropped.has(entry.token) ? "unsupported" : "all"}`]),
+            ...(overlay.length === 0 ? [] : ["-e", `${OVERLAY_RUNTIME_ENV}=${Array.from(new Set(overlay)).join(" ")}`]),
+        ],
+    };
+};
+
+// The hosted provider's real ingress ports, then the loopback shortcut (see localDaemonPort): the one part of
+// the run that may be dropped on a retry, because it is the one part whose failure does not mean a broken sandbox.
+const publishArgs = (run: SandboxRun): string[] => [
+    ...(run.ports ?? []).flatMap((port) => ["-p", port]),
+    ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
+];
+
+// What this container IS, stamped as env: its name, the image it runs and the base it composes overlays
+// against, plus the runner-decided facts (hash, channel, rollback target, first-boot seed) when the runner set them.
+const identityEnv = (run: SandboxRun): string[] => [
+    "-e",
+    `SANDBOX_NAME=${run.names.container}`,
+    "-e",
+    `SANDBOX_IMAGE=${run.image}`,
+    "-e",
+    `SANDBOX_BASE_IMAGE=${run.baseImage}`,
+    ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
+    ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
+    ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
+    ...(run.definition === undefined ? [] : ["-e", `SANDBOX_DEFINITION_SEED=${Buffer.from(run.definition, "utf8").toString("base64")}`]),
+];
+
+export const sandboxRunArgv = (run: SandboxRun): string[] => {
+    const directives = directiveArgs(run);
     return [
         "run",
         "-d",
@@ -456,13 +580,10 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         "max-size=10m",
         "--log-opt",
         "max-file=3",
-        // `--memory-swap -1` rides with every cap: the cgroup may page into whatever swap the engine has, so
-        // a peak that clears the cap degrades into paging instead of a reclaim livelock (doctrine above).
-        ...(run.init === false ? [] : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", SANDBOX_MEMORY_SWAP]),
+        ...resourceArgs(run),
         ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
-        ...(run.runtime ?? []).filter((token) => !dropped.has(token)),
-        ...(run.ports ?? []).flatMap((port) => ["-p", port]),
-        ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
+        ...directives.flags,
+        ...publishArgs(run),
         "-v",
         `${run.names.workspaceVolume}:/work`,
         // /history is never optional: it holds the fleet registry, transcripts, every repo's real git dir and
@@ -474,17 +595,8 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         "-v",
         `${run.names.dockerVolume}:/var/lib/docker`,
         ...(run.mounts ?? []).flatMap((mount) => ["-v", mount]),
-        "-e",
-        `SANDBOX_NAME=${run.names.container}`,
-        "-e",
-        `SANDBOX_IMAGE=${run.image}`,
-        "-e",
-        `SANDBOX_BASE_IMAGE=${run.baseImage}`,
-        ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
-        ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
-        ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
-        ...(run.definition === undefined ? [] : ["-e", `SANDBOX_DEFINITION_SEED=${Buffer.from(run.definition, "utf8").toString("base64")}`]),
-        ...asked.flatMap((entry) => ["-e", `${entry.env}=${dropped.has(entry.token) ? "unsupported" : "all"}`]),
+        ...identityEnv(run),
+        ...directives.stamps,
         ...(run.env ?? []).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
         run.image,
     ];

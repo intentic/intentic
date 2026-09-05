@@ -435,14 +435,14 @@ fn connect(
         // A person's sandbox is set up by its owner in the browser; the seed is the runner/fleet door.
         definition_b64: None,
     };
-    let argv = contract::run_command(&request, &env_pairs, false, &[], &log)?;
+    let argv = contract::run_command(&request, &env_pairs, false, &[], &[], &log)?;
     log.section(&format!("docker run {sandbox_image}"));
     // Two attempts: the loopback shortcut (127.0.0.1:<derived port>:8787, a browser on this machine skipping
     // the tunnel) is the one part whose failure doesn't mean a broken sandbox — docker refuses the WHOLE
     // launch when the port is held, so the retry drops just the shortcut.
     if !docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
-        let retry = contract::run_command(&request, &env_pairs, true, &[], &log)?;
+        let retry = contract::run_command(&request, &env_pairs, true, &[], &[], &log)?;
         if !docker::run_argv(&retry, &log) {
             let tail = log.tail(5);
             bail!(

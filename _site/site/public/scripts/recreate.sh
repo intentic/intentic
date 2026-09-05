@@ -8,6 +8,7 @@
 #   sh recreate.sh <SLUG> --prepare                                      # download the next update, apply later
 #   sh recreate.sh <SLUG> --channel <tag>                                # move onto a release channel
 #   sh recreate.sh <SLUG> --rollback                                     # back to the previous image
+#   sh recreate.sh <SLUG> --reshape --memory 12g --cpus 4 …              # same image, a different share of the machine
 #   sh recreate.sh --dev [SLUG]                                          # dev: the locally-built dev image
 #
 # The binary is downloaded on EVERY run, so re-running a card's command upgrades an existing install; only a
@@ -129,6 +130,12 @@ case "${1:-}" in
             # Download and build the next update without applying it — the sandbox keeps running, and the
             # update that follows is a restart rather than a wait.
             --prepare) exec "$IC" sandbox prepare "$slug" ;;
+            # Everything after --reshape is ic's own flag surface (--memory, --cpus, --privileged, --gpus),
+            # forwarded verbatim: the desktop app builds this shape, and ic is where it is validated.
+            --reshape)
+                shift
+                exec "$IC" sandbox reshape "$slug" "$@"
+                ;;
             --channel)
                 shift
                 exec "$IC" sandbox update "$slug" --channel "${1:?--channel needs a tag, e.g. --channel stable}"
