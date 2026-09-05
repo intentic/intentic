@@ -97,6 +97,21 @@ const agentReach = (method: string, path: string): boolean =>
     (method === "POST" && path === "/children/send") ||
     (method === "POST" && path === "/children/answer") ||
     (method === "GET" && path === "/children") ||
+    /* THE FLEET READ SURFACE the same CLI drives (agents/fleet.routes.ts): which conversations this workspace
+     * has run, what one of them is, and which ones said a phrase.
+     *
+     * NOTHING NEW IS REACHED, only cheaply. Every byte behind these is already on the history volume and
+     * already readable by the turn asking: agents.json, the per-conversation records, the worktrees. The
+     * measured behaviour this replaces is agents reading exactly those files by hand — one session in seven,
+     * a median of three shell calls and up to thirty-five, because nothing ever told them the layout. So this
+     * is a grant over cost, not over reach, and it stays honest by being unable to do anything else: two GETs,
+     * no credential, no write.
+     *
+     * WHY NOT `/agents`, which answers the same questions. Because its neighbours on that router land,
+     * discard, archive, rename and place words in an agent's mouth, and an allowlist entry admitting two reads
+     * out of that set is one careless regex away from admitting the presses beside them. A read-only namespace
+     * cannot grow teeth by accident. */
+    (method === "GET" && (path === "/fleet" || /^\/fleet\/[^/]+$/.test(path))) ||
     /* THE CREDENTIAL-APPROVAL SURFACE the `secrets` CLI drives, and the ONLY two doors under `/secrets` this
      * token has ever been given. The comment above used to say the agent may never read `/secrets` at all,
      * and the reason it said so still holds for every other route there: they answer with, or write, values.

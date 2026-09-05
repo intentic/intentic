@@ -40,6 +40,37 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     expect(await agent.authorize("intruder", "GET", "/capabilities/npm/otp")).toBe("unauthorized");
 });
 
+/* The fleet READ surface (agents/fleet.routes.ts) is the one place this token reaches the conversation record,
+ * and it is the shape of the grant that keeps it honest: two GETs answering about what the workspace has run,
+ * nothing that writes, and nothing on `/agents`, whose neighbours land, discard, archive, rename and place
+ * words in an agent's mouth. Pinned because the whole argument for admitting it — "these can only read" —
+ * stops being true the first time a verb is added without anyone re-reading this. */
+test("the agent grant reaches the fleet reads and never the board's presses", async () => {
+    const grants = grantsOf({
+        panelToken: "panel",
+        agentToken: "agent",
+        controlTokens: { scopeOf: async () => undefined } as unknown as ControlTokens,
+        verifySync: async () => false,
+        verifyExtension: () => undefined,
+    });
+    const agent = grants.find((grant) => grant.header === "x-intentic-agent");
+    if (agent === undefined) {
+        throw new Error("no agent grant in the table");
+    }
+    expect(await agent.authorize("agent", "GET", "/fleet")).toBe("ok");
+    expect(await agent.authorize("agent", "GET", "/fleet/fair-sage-ey2r")).toBe("ok");
+    // Every other verb on the same paths, so a route added later cannot ride in on this grant.
+    expect(await agent.authorize("agent", "POST", "/fleet")).toBe("out-of-scope");
+    expect(await agent.authorize("agent", "POST", "/fleet/fair-sage-ey2r")).toBe("out-of-scope");
+    expect(await agent.authorize("agent", "DELETE", "/fleet/fair-sage-ey2r")).toBe("out-of-scope");
+    // And the glob stays one segment deep: nothing under a conversation is in reach, only the conversation.
+    expect(await agent.authorize("agent", "GET", "/fleet/fair-sage-ey2r/land")).toBe("out-of-scope");
+    // The board's own router is untouched by this: reading the fleet never becomes acting on it.
+    expect(await agent.authorize("agent", "GET", "/agents")).toBe("out-of-scope");
+    expect(await agent.authorize("agent", "GET", "/agents/fair-sage-ey2r")).toBe("out-of-scope");
+    expect(await agent.authorize("agent", "POST", "/agents/fair-sage-ey2r/land")).toBe("out-of-scope");
+});
+
 /* The sync grant is the narrowest in the table and has to stay that way: it belongs to a token that lives on a
  * laptop, so what it can reach is what a stolen laptop can reach. Three things and nothing else: the port
  * listing, the machine's own report, and the SSH byte pipe desktop sync runs on. The pipe is pinned to the GET

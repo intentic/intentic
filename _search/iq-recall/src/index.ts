@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
+import { type Conversation, conversationsBySession } from "./fleet/conversations.js";
 import { selectForkPoint } from "./fork/fork-point.js";
 import { materializeFork } from "./fork/fork.js";
 import { ingest } from "./ingest/ingest.js";
@@ -24,12 +25,17 @@ export type { TopicFile, TopicOptions } from "./rank/files.js";
 export { readLines } from "./transcript/line-reader.js";
 export { parseLine, typedPromptOf } from "./transcript/lines.js";
 export { projectsDirOf } from "./transcript/slug.js";
+export type { Conversation } from "./fleet/conversations.js";
 
 export interface RecallOptions {
     readonly root: string;
     // Override ~/.claude (tests point this at a fixture dir).
     readonly claudeDir?: string;
     readonly dbPath?: string;
+    // Override the daemon's history volume, where the fleet registry that names these sessions' conversations
+    // lives (fleet/conversations.ts). Absent ⇒ the sandbox's own; absent FILE ⇒ no conversations, which is
+    // every run of iq outside a sandbox.
+    readonly historyRoot?: string;
 }
 
 export interface SessionSummary {
@@ -37,6 +43,11 @@ export interface SessionSummary {
     readonly title: string | undefined;
     readonly lastTs: number;
     readonly promptCount: number;
+    /* WHICH CONVERSATION RAN THIS SESSION, when a fleet registry says so. Present for a session an agent turn
+     * produced (the ordinary case inside a sandbox), absent for one a person ran in a terminal and for every
+     * run of iq outside a sandbox. It is what turns a column of uuids into something a reader can act on:
+     * the id here is the handle `agents show` takes. */
+    readonly conversation?: Conversation;
 }
 
 export interface Recall {
@@ -63,6 +74,10 @@ export const createRecall = (options: RecallOptions): Recall => {
     const dbPath = options.dbPath ?? join(options.root, `${STATE_DIR}/local/cache/iq/recall.db`);
     let opened: RecallDb | undefined;
     const db = (): RecallDb => (opened ??= openRecallDb(dbPath));
+    // Read once per Recall, on the one path that needs it: a listing joins every row against it, and the
+    // registry is a single file whose absence is the answer for every run outside a sandbox.
+    let fleet: Map<string, Conversation> | undefined;
+    const conversations = (): Map<string, Conversation> => (fleet ??= conversationsBySession(options.historyRoot));
     return {
         ingest: (ingestOptions) =>
             ingest(db(), {
@@ -119,12 +134,17 @@ export const createRecall = (options: RecallOptions): Recall => {
                     // Sliced after the FTS filter, not in SQL: the filter is applied in JS, so a SQL LIMIT would
                     // cut the candidates rather than the answers.
                     .slice(0, listOptions.limit ?? Number.POSITIVE_INFINITY)
-                    .map((row): SessionSummary => ({
-                        sessionId: row["sid"] as string,
-                        title: typeof row["title"] === "string" ? row["title"] : undefined,
-                        lastTs: Number(row["last_ts"]),
-                        promptCount: Number(row["prompts"]),
-                    }))
+                    .map((row): SessionSummary => {
+                        const sessionId = row["sid"] as string;
+                        const conversation = conversations().get(sessionId);
+                        return {
+                            sessionId,
+                            title: typeof row["title"] === "string" ? row["title"] : undefined,
+                            lastTs: Number(row["last_ts"]),
+                            promptCount: Number(row["prompts"]),
+                            ...(conversation === undefined ? {} : { conversation }),
+                        };
+                    })
             );
         },
         transcriptPathOf: (sessionId) => join(projectsDir, `${sessionId}.jsonl`),

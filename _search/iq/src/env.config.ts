@@ -15,6 +15,10 @@ const configSchema = z.object({
     iqRgPath: z.string().default(""),
     // Override ~/.claude for session recall (tests point this at a fixture dir).
     iqClaudeDir: z.string().default(""),
+    // Override the daemon's history volume, where the fleet registry naming each session's conversation lives.
+    // Empty = the sandbox's own (/history); outside a sandbox there is no such file and a listing simply has no
+    // conversations to name, which is the pre-existing behaviour.
+    iqHistoryRoot: z.string().default(""),
     // Retrieval-stage toggles for benchmarking (see parseFeatures): "bm25" = only BM25; "-rerank,-prf" = all
     // stages except those. Empty = full pipeline. The --features flag overrides this.
     iqFeatures: z.string().default(""),

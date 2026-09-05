@@ -4,7 +4,11 @@ import { loadConfig } from "../../env.config.js";
 
 const recallFor = (root: string): Recall => {
     const config = loadConfig();
-    return createRecall({ root, ...(config.iqClaudeDir !== "" ? { claudeDir: config.iqClaudeDir } : {}) });
+    return createRecall({
+        root,
+        ...(config.iqClaudeDir !== "" ? { claudeDir: config.iqClaudeDir } : {}),
+        ...(config.iqHistoryRoot !== "" ? { historyRoot: config.iqHistoryRoot } : {}),
+    });
 };
 
 const rootFromEnv = (): string => {
@@ -56,9 +60,21 @@ const list = buildCommand({
                 this.process.stdout.write(`${JSON.stringify(sessions, undefined, 4)}\n`);
             } else {
                 for (const session of sessions) {
-                    this.process.stdout.write(
-                        `${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${session.title ?? "(untitled)"}\n`,
-                    );
+                    /* WHAT NAMES THE ROW. A session an agent turn produced belongs to a conversation, and the
+                     * conversation's own id and title are what a reader can act on — `agents show <id>` takes
+                     * exactly that id. Without the join every agent-run row printed a bare uuid and the word
+                     * "(untitled)", which is how one spelling of a conversation stopped leading to the other. */
+                    const named =
+                        session.conversation === undefined
+                            ? (session.title ?? "(untitled)")
+                            : `${session.conversation.id}${session.conversation.title === undefined ? "" : ` · ${session.conversation.title}`}`;
+                    this.process.stdout.write(`${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${named}\n`);
+                }
+                /* The breadcrumb, printed where the confusion happens rather than as a standing line in a
+                 * prompt: someone reading this list is one step from wanting the conversation behind a row,
+                 * and this is the verb that answers it whole. */
+                if (sessions.some((session) => session.conversation !== undefined)) {
+                    this.process.stdout.write("conversations: agents show <id> · agents ls · agents find '<text>'\n");
                 }
             }
             (this.process as { exitCode?: number | string | null }).exitCode = sessions.length > 0 ? 0 : 1;

@@ -53,6 +53,7 @@ import { soleLiveConversation, turnRunOf } from "./agent/turn-runs.js";
 import { relayServiceCatalog, relayServiceRun, relayServiceWant } from "./platform/pool-services.js";
 import { gatedServiceRun } from "./platform/service-offer.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
+import { createFleetRoutes } from "./agents/fleet.routes.js";
 import { createChildrenRoutes } from "./children/children.routes.js";
 import { readEnvironmentContents } from "./environment/contents.js";
 import { opt } from "./agent/opt.js";
@@ -1536,6 +1537,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/children/send", childrenRoutes.send);
     app.post("/children/answer", childrenRoutes.answer);
     app.get("/children", childrenRoutes.list);
+
+    /* The FLEET READ surface the same CLI drives (agents/fleet.routes.ts): which conversations exist, what one
+     * of them is, and which ones said a phrase — the registry, the per-conversation record, the worktree
+     * composition and the phrase index joined into one answer. Its own namespace rather than a widening of
+     * `/agents`, whose neighbours land, discard and archive; these two can only read, which is what lets them
+     * be scoped to the agent token in auth/grants.ts beside `services` and `capabilities`. */
+    const fleetRoutes = createFleetRoutes(services);
+    app.get("/fleet", fleetRoutes.list);
+    app.get("/fleet/:handle", fleetRoutes.show);
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via
     // /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),

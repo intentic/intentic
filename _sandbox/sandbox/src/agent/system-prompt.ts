@@ -1,4 +1,5 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import { HISTORY_ROOT } from "@intentic/constants";
 import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sandbox-contract";
 import { PERSONA_NOTE_TITLE } from "../personas/personas.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
@@ -302,15 +303,39 @@ const DIAGNOSTICS_GUIDANCE =
 const TERSE_NOTE =
     "Response style: be concise. Don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision. This governs your PROSE, not your work: never skip a step, a check or a tool call to make a turn shorter.";
 
+/* HOW TO LOOK UP ANOTHER CONVERSATION (agents/fleet-recall.ts, bin/agents), and this one is here because of
+ * what its absence measurably cost.
+ *
+ * A turn regularly needs to know what a sibling conversation did — the user names one, a handoff points at
+ * one, a failure has to be traced to the branch that caused it. Everything needed has always been on the
+ * history volume and readable: the fleet registry, a record per conversation, the phrase index over all of
+ * them. Nothing named any of it, so agents found it by excavation. Over this workspace's own Claude sessions:
+ * one in seven contains such a hunt, a median of three shell calls and as many as thirty-five, ~2 600 tokens
+ * apiece, almost all of it `ls /history`, `find`, and a throwaway JSON reducer written from scratch each time.
+ *
+ * Two sentences against that. The first is the shape of the answer, and it leads with `show` rather than the
+ * roster because the question is nearly always about ONE conversation somebody already named. Spelling out
+ * what a handle may be is the load-bearing half: the hunt that prompted this began with a worktree directory
+ * name and no way to turn it into anything. The second says what these read, because an agent that thinks the
+ * verb is a convenience wrapper around the same directory walk will keep doing the directory walk. */
+const FLEET_GUIDANCE =
+    "Another conversation in this workspace — what it was asked, where it got to, its branch, worktree, delta " +
+    "and record — is one call: `agents show <handle>`, where the handle is its id, its branch, an id prefix, " +
+    "its session id, or words from its title (`agents ls` is the fleet, `agents find '<text>'` is who said a " +
+    `phrase, \`--transcript\` adds the messages). Reach for those instead of searching \`${HISTORY_ROOT}\` by hand: ` +
+    "they answer from the daemon's own registry, per-conversation records and phrase index, which no directory " +
+    "walk can join.";
+
 /* THE CONVENTIONS THAT BELONG TO THE WORKSPACE, not to whoever is reading it. Each describes something enforced
  * elsewhere, the scanners that exclude `refs/`, the server that publishes `public/`, the land route that moves
  * a worktree's delta into the owner's tree, so they are as true of a Codex turn as of a Claude one, and a
  * runtime that has never been told is one that will eventually commit a clone or publish a log. Everything else
  * in this file names a mechanism only the Claude Code loop is wired for; these are why the split exists. */
-// SEARCH_GUIDANCE rides with them for the same reason, one step further out: which binary is installed is a fact
-// about the IMAGE, so it is as true of a Codex turn as of a Claude one, and a runtime told nothing pays grep's
-// 30× on every orientation call it makes.
-const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE, LANDING_GUIDANCE, SEARCH_GUIDANCE];
+// SEARCH_GUIDANCE and FLEET_GUIDANCE ride with them for the same reason, one step further out: which binary is
+// installed is a fact about the IMAGE, so both are as true of a Codex turn as of a Claude one. A runtime told
+// nothing pays grep's 30× on every orientation call it makes, and excavates /history for a conversation the
+// `agents` CLI on its own PATH would have answered whole.
+const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE, LANDING_GUIDANCE, SEARCH_GUIDANCE, FLEET_GUIDANCE];
 
 export interface TurnPromptInput {
     // The record for the pair serving this turn: `instructions` decides what may be placed at all, and the

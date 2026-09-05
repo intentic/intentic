@@ -9,11 +9,12 @@ const SESSION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 let root: string;
 let projectsDir: string;
+let historyRoot: string;
 let cleanup: () => Promise<void>;
 
 beforeAll(async () => {
     const fixture = await makeRecallFixture();
-    ({ root, projectsDir, cleanup } = fixture);
+    ({ root, projectsDir, historyRoot, cleanup } = fixture);
     process.env["WORKSPACE_ROOT"] = root;
     process.env["IQ_CLAUDE_DIR"] = fixture.claudeDir;
 });
@@ -51,6 +52,28 @@ test("sessions list shows recent sessions and filters by query", async () => {
     const filtered = await invoke(["sessions", "list", "jwt"]);
     expect(filtered.out).toContain("Fix JWT refresh rotation");
     expect(filtered.out).not.toContain("Unify workspace file icons");
+    // With no fleet registry in reach — every run of iq outside a sandbox — a row is named by its own
+    // transcript and the conversation breadcrumb is not offered at all.
+    expect(all.out).not.toContain("agents show");
+});
+
+/* THE CONVERSATION BEHIND A SESSION. Inside a sandbox almost every session was produced by an agent turn, and
+ * the daemon's registry is the only thing that knows which: without the join a listing is a column of uuids
+ * and the word "(untitled)", which is precisely how one spelling of a conversation stopped leading to the
+ * other. The breadcrumb rides along because the reader of this list is one step from wanting the whole thing. */
+test("sessions list names the conversation behind each session when a fleet registry is in reach", async () => {
+    process.env["IQ_HISTORY_ROOT"] = historyRoot;
+    try {
+        const { out, exitCode } = await invoke(["sessions", "list"]);
+        expect(exitCode).toBe(0);
+        expect(out).toContain("fixture-agent-1 · Fixture conversation 1");
+        expect(out).toContain("fixture-agent-2 · Fixture conversation 2");
+        // The conversation's title replaces the transcript's own, which is the one a reader cannot act on.
+        expect(out).not.toContain("Fix JWT refresh rotation");
+        expect(out).toContain("agents show <id>");
+    } finally {
+        delete process.env["IQ_HISTORY_ROOT"];
+    }
 });
 
 test("sessions files ranks topical files; hits → 0, none → 1", async () => {

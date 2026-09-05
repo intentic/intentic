@@ -1,10 +1,20 @@
 #!/usr/bin/env node
-// The in-sandbox child-agent command — the SHELL door onto the daemon's spawn service
-// (src/children/children.routes.ts), which is what lets an agent on ANY runtime with a shell — a native
-// Codex, OpenCode, Kimi, Pi or ACP turn, or a person in a terminal — start a full agent on any connected
-// provider and supervise it, exactly as the Claude loop's `spawn`/`wait` MCP tools and Cursor's custom tools
-// do in-process. Same engine, same budgets, same roster: a child spawned from here is indistinguishable from
-// one a tool call started.
+// The in-sandbox FLEET command, and it does two things: it looks conversations up, and it starts and
+// supervises new ones.
+//
+// LOOKING UP (src/agents/fleet.routes.ts) is the half added last and the half most turns want. An agent that
+// needs to know what another conversation did used to go looking for it by hand — `ls /history`, `find`, a
+// throwaway `node -e` reducer over a three-megabyte agents.json, then a raw read of a transcript file the
+// size of a small book. Measured across this workspace's own sessions: one in seven did it, a median of three
+// shell calls each and as many as thirty-five, all of them rediscovering a layout the daemon has always
+// known. `ls`, `show` and `find` are that hunt, answered once, from the registry, the per-conversation
+// records and the phrase index the daemon already maintains. They only ever READ.
+//
+// SPAWNING (src/children/children.routes.ts) is the SHELL door onto the child-agent service, which is what
+// lets an agent on ANY runtime with a shell — a native Codex, OpenCode, Kimi, Pi or ACP turn, or a person in
+// a terminal — start a full agent on any connected provider and supervise it, exactly as the Claude loop's
+// `spawn`/`wait` MCP tools and Cursor's custom tools do in-process. Same engine, same budgets, same roster: a
+// child spawned from here is indistinguishable from one a tool call started.
 //
 // It owns NO policy: whether this conversation may spawn was decided when its turn was planned, where the
 // persona was in hand, and recorded daemon-side (children.ts armSpawn). This command only relays, and a
@@ -15,7 +25,7 @@
 // park at five minutes with the child still working.
 //
 // Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
-// three /children routes this command drives, and nothing credential-shaped.
+// five /children routes and the two /fleet reads this command drives, and nothing credential-shaped.
 
 import { readFileSync } from "node:fs";
 import { request } from "node:http";
@@ -27,8 +37,25 @@ const PORT = process.env.SANDBOX_PORT ?? "8787";
 // WHOSE children these are. The daemon falls back to the sole live turn when it is unset.
 const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
 
-const USAGE = `agents — start and supervise full agents on any connected provider
+const USAGE = `agents — every conversation in this workspace: look one up, or start and supervise a new one
 
+LOOK UP — reach for these instead of searching /history by hand
+  agents show <handle>                 ONE conversation, whole: what it was asked, where it got to, how it
+                                       ended, its branch and worktree, its per-repo delta and whether that
+                                       landed, and where its record is. The HANDLE is anything that names
+                                       it — the id (\`fair-sage-ey2r\`), the branch (\`agent/fair-sage-ey2r\`),
+                                       an id prefix, its runtime session id, or words from its title
+          [--transcript] [--last <n>] [--grep <text>]
+                                       add the record itself: the last <n> messages (default 20), or only
+                                       the ones carrying a phrase
+          [--no-diff] [--json]         skip the per-repo git counts, or answer as JSON
+  agents ls [--all] [--limit <n>] [--repo <name>] [--json]
+                                       the fleet, most recently active first. --all includes the archive;
+                                       --repo narrows to conversations spanning one repo
+  agents find '<text>' [--all] [--limit <n>] [--json]
+                                       which conversations said this, with the line that proves it
+
+SPAWN AND SUPERVISE
   agents spawn [--provider <id>] [--model <id>] [--effort <tier>] [--on <runner|here>]
                [--harness native|claude-code] [--description "one line"] '<task>'
                                        start a child agent; prints its id and returns immediately.
@@ -45,7 +72,8 @@ const USAGE = `agents — start and supervise full agents on any connected provi
   agents answer <id> --json '<obj>'    or pass picks keyed by question text: {"<question>": ["<pick>"]}.
                                        Questions only: permission and plan cards are the owner's to
                                        answer, and the daemon refuses them here
-  agents list                          this conversation's children, live first
+  agents list                          the children THIS conversation started, live first. Not \`ls\`, which
+                                       is every conversation in the workspace
 
 The child runs as its own conversation in an isolated copy of the repos, on the named provider's connected
 account (claude, codex, grok, kimi, gemini, cursor — e.g. --provider cursor --model composer-2.5), and its
@@ -103,8 +131,10 @@ const refusalOf = (text) => {
 };
 
 // Flags then one positional, in any order: `--provider cursor 'do X'` and `'do X' --provider cursor` both
-// parse, because an agent writes commands by meaning, not by grammar memory.
-const parseFlags = (argv, known) => {
+// parse, because an agent writes commands by meaning, not by grammar memory. `booleans` are the flags that
+// stand alone (`--json`, `--all`); everything else consumes the argument after it. Per-verb rather than
+// global, because `--json` is a switch on a lookup and carries the answer object on `agents answer`.
+const parseFlags = (argv, known, booleans = []) => {
     const flags = {};
     const positional = [];
     for (let i = 0; i < argv.length; i += 1) {
@@ -113,6 +143,10 @@ const parseFlags = (argv, known) => {
             const name = arg.slice(2);
             if (!known.includes(name)) {
                 return die(`agents: unknown flag --${name}\n\n${USAGE}`);
+            }
+            if (booleans.includes(name)) {
+                flags[name] = true;
+                continue;
             }
             const value = argv[i + 1];
             if (value === undefined) {
@@ -125,6 +159,224 @@ const parseFlags = (argv, known) => {
         }
     }
     return { flags, positional };
+};
+
+/* ---------------------------------------------------------------------------------------------------------
+ * LOOKING UP. The daemon answers data; the writing-out lives here, because this is the half that knows it is
+ * talking to a terminal and to a context window. Two rules run through all of it:
+ *
+ *   · THE CAPSULE FIRST. Everything a caller needs to decide "is this the conversation I meant" comes before
+ *     anything long, and every answer that has more behind it ends with the exact command that gets it. The
+ *     whole point of the surface is to cost less than the hunt it replaces, and an answer nobody can stop
+ *     reading halfway costs the same as the hunt.
+ *   · `--json` IS THE ROUTE'S OWN ANSWER, unedited, so a caller that wants to compute rather than read never
+ *     has to parse this formatting back.
+ * ------------------------------------------------------------------------------------------------------- */
+
+// Whole units, biggest that fits: a token count is read for its order of magnitude, and "5.0M" says that
+// where "5005546" makes the reader do the work. One decimal only below ten units, where it is the difference
+// between 2.8K and 3K; above that it is noise on a number nobody reads that closely.
+const scaled = (value, unit, suffix) => {
+    const scaledValue = value / unit;
+    return `${scaledValue < 10 ? scaledValue.toFixed(1) : Math.round(scaledValue)}${suffix}`;
+};
+
+const compact = (value) => {
+    if (typeof value !== "number") return "?";
+    if (Math.abs(value) >= 1e6) return scaled(value, 1e6, "M");
+    if (Math.abs(value) >= 1e3) return scaled(value, 1e3, "K");
+    return `${value}`;
+};
+
+// `claude/claude-opus-5` says the word twice. A model id that already carries its provider stands alone.
+const modelOf = (agent) =>
+    agent.model === undefined ? agent.provider : agent.model.startsWith(agent.provider) ? agent.model : `${agent.provider}/${agent.model}`;
+
+const ago = (ms) => {
+    const seconds = Math.max(0, Date.now() - ms) / 1000;
+    if (seconds < 90) return `${Math.round(seconds)}s`;
+    if (seconds < 5400) return `${Math.round(seconds / 60)}m`;
+    if (seconds < 172_800) return `${Math.round(seconds / 3600)}h`;
+    return `${Math.round(seconds / 86_400)}d`;
+};
+
+const stamp = (ms) => new Date(ms).toISOString().slice(0, 16).replace("T", " ");
+
+// Pads and never truncates: the widest column here holds ids, and an id cut to fit is one the reader cannot
+// paste into the next command. A long one costs a ragged row, which is the cheaper of the two.
+const pad = (text, width) => (text.length >= width ? text : text + " ".repeat(width - text.length));
+
+const query = (params) =>
+    Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== false)
+        .map(([key, value]) => `${key}=${encodeURIComponent(value === true ? "1" : value)}`)
+        .join("&");
+
+const read = async (path) => {
+    const { status, text } = await call("GET", path);
+    if (status !== 200) {
+        // A 409 carries the candidates behind an ambiguous handle: print them, because the next call is one
+        // of them and making the caller search again is exactly the cost this command exists to remove.
+        let parsed;
+        try {
+            parsed = JSON.parse(text);
+        } catch {
+            parsed = undefined;
+        }
+        process.stderr.write(`agents: ${refusalOf(text)}\n`);
+        for (const candidate of parsed?.candidates ?? []) {
+            process.stderr.write(`  ${pad(candidate.id, 22)} ${pad(candidate.status ?? "", 10)} ${candidate.title ?? ""}\n`);
+        }
+        process.exit(1);
+    }
+    return JSON.parse(text);
+};
+
+// One roster line. Running is marked on the status rather than in a column of its own: it is the same fact,
+// and a column that is empty for all but one row is a column nobody reads.
+const rosterLine = (agent) =>
+    `${pad(agent.id, 22)} ${pad(agent.running ? `${agent.status}*` : agent.status, 11)} ${pad(modelOf(agent), 24)} ${pad(`${agent.turns ?? 0}t`, 5)} ${pad(ago(agent.updatedAt), 5)} ${agent.title ?? "(untitled)"}`;
+
+const writeRoster = (agents) => {
+    for (const agent of agents) {
+        process.stdout.write(`${rosterLine(agent)}\n`);
+        if (agent.snippet !== undefined) {
+            process.stdout.write(`${" ".repeat(23)}${agent.snippet.speaker === "user" ? "asked" : "said"}: ${agent.snippet.text}\n`);
+        }
+    }
+};
+
+const ls = async (argv) => {
+    const { flags } = parseFlags(argv, ["all", "limit", "repo", "json"], ["all", "json"]);
+    const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo })}`);
+    if (flags.json === true) {
+        process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
+    } else if (answer.agents.length === 0) {
+        process.stdout.write("No conversations.\n");
+    } else {
+        writeRoster(answer.agents);
+        process.stdout.write(`more: agents show <id>${flags.all === true ? "" : " · agents ls --all includes the archive"}\n`);
+    }
+    process.exitCode = answer.agents.length > 0 ? 0 : 1;
+};
+
+const find = async (argv) => {
+    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "json"], ["all", "json"]);
+    const text = positional.join(" ").trim();
+    if (text === "") {
+        return die(`agents: find needs something to look for\n\n${USAGE}`);
+    }
+    const answer = await read(`/fleet?${query({ q: text, all: flags.all, limit: flags.limit, repo: flags.repo })}`);
+    if (flags.json === true) {
+        process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
+    } else if (answer.agents.length === 0) {
+        process.stdout.write(`Nothing said "${text}"${flags.all === true ? "" : " (--all searches the archive too)"}.\n`);
+    } else {
+        writeRoster(answer.agents);
+        process.stdout.write("more: agents show <id>\n");
+    }
+    /* The index can still be filling on a fresh sandbox, so a search that found nothing has two possible
+     * meanings. Saying which is the difference between a caller that tries again and one that concludes the
+     * conversation never existed. */
+    if (answer.indexing === true) {
+        process.stderr.write("The phrase index is still building; this answer can still grow.\n");
+    }
+    process.exitCode = answer.agents.length > 0 ? 0 : 1;
+};
+
+const repoLine = (repo) => {
+    const delta =
+        repo.unavailable !== undefined
+            ? `delta unknown (${repo.unavailable})`
+            : repo.files === undefined
+              ? "delta not read"
+              : repo.files === 0
+                ? "clean"
+                : `${repo.files} files +${repo.additions ?? 0} −${repo.deletions ?? 0}`;
+    return `${repo.repo} @${repo.base.slice(0, 8)} · ${delta} · ${repo.landed ? `landed ${ago(repo.landedAt)} ago` : "not landed"}`;
+};
+
+const writeRecall = (agent) => {
+    const failure = agent.failureCode === undefined ? agent.status : `${agent.status} (${agent.failureCode})`;
+    process.stdout.write(`${agent.id} · "${agent.title ?? "(untitled)"}" · ${agent.running ? "working" : failure}\n`);
+    const settings = [modelOf(agent), agent.effort, agent.harness].filter(Boolean);
+    process.stdout.write(
+        `  ${settings.join(" ")} · ${agent.turns ?? 0} turns · ${agent.toolUses ?? 0} tool uses · ${compact(agent.inputTokens)} in / ${compact(agent.outputTokens)} out · $${(agent.costUsd ?? 0).toFixed(2)}\n`,
+    );
+    process.stdout.write(`  active ${stamp(agent.createdAt)} → ${stamp(agent.updatedAt)} (${ago(agent.updatedAt)} ago)${agent.archived ? " · archived" : ""}\n`);
+    if (agent.branch !== undefined) {
+        process.stdout.write(`  branch ${agent.branch} · worktree ${agent.worktree}\n`);
+    }
+    if (agent.runner !== undefined) {
+        process.stdout.write(`  runs on ${agent.runner}\n`);
+    }
+    if (agent.failure !== undefined) {
+        process.stdout.write(`  failure: ${agent.failure}\n`);
+    }
+    if (agent.landedSubject !== undefined) {
+        process.stdout.write(`  landed as: ${agent.landedSubject}\n`);
+    }
+    /* Only the repos with something to say, and a count for the rest. A conversation here spans seven repos
+     * and touches one of them; listing the six untouched ones is six lines of "clean" between the reader and
+     * the line they came for. */
+    const interesting = agent.repoStates.filter((repo) => repo.files !== 0 || repo.landed);
+    for (const [index, repo] of interesting.entries()) {
+        process.stdout.write(`  ${index === 0 ? "repos:" : "      "} ${repoLine(repo)}\n`);
+    }
+    const quiet = agent.repoStates.length - interesting.length;
+    if (quiet > 0) {
+        process.stdout.write(`  ${interesting.length === 0 ? "repos:" : "      "} ${quiet} more, unchanged\n`);
+    }
+    process.stdout.write(`  record ${agent.record} · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
+    for (const [index, asked] of agent.digest.asked.entries()) {
+        process.stdout.write(`${index === 0 ? "asked:\n" : ""}  ${index + 1}. ${asked}\n`);
+    }
+    if (agent.digest.lastSaid !== undefined) {
+        process.stdout.write(`last said:\n  ${agent.digest.lastSaid}\n`);
+    }
+    if (agent.digest.lastNotice !== undefined) {
+        process.stdout.write(`last notice:\n  ${agent.digest.lastNotice}\n`);
+    }
+};
+
+const writeTranscript = (agent, transcript) => {
+    process.stdout.write(`transcript: ${transcript.messages.length} of ${transcript.total} messages\n`);
+    for (const message of transcript.messages) {
+        const who = message.role === "user" ? "user" : message.role === "assistant" ? agent.id : "note";
+        process.stdout.write(`  [${message.at}] ${who}: ${message.text}\n`);
+    }
+};
+
+const show = async (argv) => {
+    const { flags, positional } = parseFlags(argv, ["transcript", "last", "grep", "no-diff", "json"], ["transcript", "no-diff", "json"]);
+    const handle = positional.join(" ").trim();
+    if (handle === "") {
+        return die(`agents: show needs a conversation to look up\n\n${USAGE}`);
+    }
+    // `--last`/`--grep` are what a transcript is for, so asking for either IS asking for one: a caller that
+    // spelled the narrowing and forgot the switch meant the record, not the capsule again.
+    const wantsTranscript = flags.transcript === true || flags.last !== undefined || flags.grep !== undefined;
+    const answer = await read(
+        `/fleet/${encodeURIComponent(handle)}?${query({
+            diff: flags["no-diff"] === true ? "0" : undefined,
+            transcript: wantsTranscript,
+            last: flags.last,
+            grep: flags.grep,
+        })}`,
+    );
+    if (flags.json === true) {
+        process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
+        return;
+    }
+    writeRecall(answer.agent);
+    if (answer.transcript === undefined) {
+        process.stdout.write(`more: agents show ${answer.agent.id} --transcript [--last <n>] [--grep <text>]\n`);
+        return;
+    }
+    writeTranscript(answer.agent, answer.transcript);
+    if (answer.transcript.total > answer.transcript.messages.length) {
+        process.stdout.write(`more: agents show ${answer.agent.id} --transcript --last ${answer.transcript.total}\n`);
+    }
 };
 
 const spawn = async (argv) => {
@@ -221,7 +473,9 @@ const list = async () => {
     }
     const { sessions } = JSON.parse(text);
     if (!Array.isArray(sessions) || sessions.length === 0) {
-        process.stdout.write("No children. Start one with `agents spawn '<task>'`.\n");
+        // Naming `ls` here because the two verbs answer questions a caller regularly confuses: this one is
+        // "what did I start", and an empty answer to it is not an empty workspace.
+        process.stdout.write("No children of this conversation. Start one with `agents spawn '<task>'`, or see every conversation with `agents ls`.\n");
         return;
     }
     for (const session of sessions) {
@@ -233,6 +487,9 @@ const list = async () => {
 
 const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
+    if (command === "show") return show(rest);
+    if (command === "ls") return ls(rest);
+    if (command === "find") return find(rest);
     if (command === "spawn") return spawn(rest);
     if (command === "wait") return wait(rest);
     if (command === "send") return send(rest);

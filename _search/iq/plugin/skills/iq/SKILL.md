@@ -32,3 +32,5 @@ iq "where do we enforce the secrets floor?"
 Every answer opens with a capsule (`answer:`, `candidates:`, `more:`). Read that and stop — do not pipe through `head`; `--budget` already caps output. Scope with `--in`, `--repo`, `--lang`, `--glob`. Wrong grep habits (`iq search`, `iq ask`) are rewritten to `q`; use canonical forms next time. Full verb list: `iq --help`.
 
 **Session recall:** `iq sessions grab "topic"` for ranked excerpts from past sessions; `iq sessions files "topic"` for files those sessions touched. Verify load-bearing hits against current code.
+
+**Another conversation**, rather than what past sessions touched, is the `agents` CLI: `agents show <handle>` answers one whole (its task, where it got to, branch, worktree, delta, record) from any spelling of its name — id, branch, id prefix, session id, or title words. `agents ls` is the fleet, `agents find '<text>'` is who said a phrase. Never search `/history` by hand for one.
