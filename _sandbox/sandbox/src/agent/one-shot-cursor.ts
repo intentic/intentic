@@ -22,26 +22,22 @@ export type CursorOneShotDeps = Pick<Services, "cursorStore" | "cursorModels">;
 
 const DEADLINE_MS = 20_000;
 
-/* Every built-in the SDK exposes, switched off. A commit subject is a rewrite of material already in the
- * prompt; a tool call here is the model wandering off rather than answering. */
-const NO_TOOLS: readonly ToolName[] = [
-    "askQuestion",
-    "shell",
-    "read",
-    "edit",
-    "write",
-    "delete",
-    "ls",
-    "glob",
-    "grep",
-    "semSearch",
-    "readLints",
-    "createPlan",
-    "generateImage",
-    "recordScreen",
-    "task",
-    "updateTodos",
-];
+/* NO BUILT-IN TOOLS AT ALL, named as an EMPTY ALLOWLIST rather than a list of everything to switch off. A
+ * commit subject is a rewrite of material already in the prompt; a tool call here is the model wandering off
+ * rather than answering, so the toolset this run wants is the empty one.
+ *
+ * `tools: []` is the SDK's own spelling for that, and the denylist it replaces is why this rung was never
+ * spent: Cursor derives its tool vocabulary from the agent proto at runtime and REJECTS `Agent.create` outright
+ * on a name it does not know ("Unknown tool name(s) in `disallowedTools`: write"). The list here carried
+ * `write`, which is not in that vocabulary (the file tool is `edit`), so every quick-model walk that reached
+ * Composer threw before asking it, memoised the refusal for ten minutes, and paid a Claude rung instead — a
+ * connected subscription with a full allowance skipped for a typo the type could not catch, since ToolName is
+ * open (`string & {}`) for the proto names it cannot enumerate.
+ *
+ * An allowlist has no names to get wrong, so it cannot drift out of that vocabulary again, and it is closed
+ * rather than exhaustive: a tool Cursor adds tomorrow is off by default instead of on until someone remembers
+ * to deny it. */
+const NO_TOOLS: readonly ToolName[] = [];
 
 const textOf = (updates: readonly InteractionUpdate[]): string =>
     updates
@@ -106,7 +102,7 @@ export const runCursorOneShot = async (params: {
     const options: AgentOptions = {
         model: selection,
         apiKey: account.apiKey,
-        disallowedTools: [...NO_TOOLS],
+        tools: [...NO_TOOLS],
         local: { cwd: params.cwd, settingSources: [] },
     };
 

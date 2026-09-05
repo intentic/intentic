@@ -50,16 +50,21 @@ beforeEach(() => {
     cancel.mockResolvedValue(undefined);
 });
 
-test("asks on Cursor's own runtime with every tool switched off", async () => {
+/* The empty ALLOWLIST is the assertion, and `disallowedTools` being absent is half of it. Cursor validates tool
+ * names against a vocabulary it reads from its own proto at runtime and refuses the whole run on one it does not
+ * know; the denylist this replaced named `write`, which is not in it, so every walk that reached Composer threw
+ * before asking it and fell through to a Claude rung. A list of names is a list of things to get wrong. */
+test("asks on Cursor's own runtime with no tools rather than a list of names to deny", async () => {
     await expect(ask()).resolves.toBe(`fix: tree truncation`);
 
     expect(created).toHaveBeenCalledWith(
         expect.objectContaining({
             apiKey: `key`,
-            disallowedTools: expect.arrayContaining([`shell`, `read`, `askQuestion`]),
+            tools: [],
             local: expect.objectContaining({ cwd: `/work`, settingSources: [] }),
         }),
     );
+    expect(created.mock.calls[0]?.[0]).not.toHaveProperty(`disallowedTools`);
     expect(send).toHaveBeenCalledWith(`fix: name the change`, expect.objectContaining({ onDelta: expect.any(Function) }));
     expect(close).toHaveBeenCalledOnce();
 });
