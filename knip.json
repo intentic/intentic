@@ -56,7 +56,7 @@
         "_deploy/cli": {
             "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts", "doh-lookup.mjs"]
         },
-        "_computers/machine": {
+        "_devices/machine": {
             "entry": ["src/cli.ts", "src/**/*.test.ts"]
         },
         "_sandbox/gate-action": {
@@ -99,13 +99,13 @@
         "_search/iq-engine": {
             "entry": ["src/index.ts", "scripts/*.mjs", "src/**/*.test.ts"]
         },
-        // The browser extension has no library entry point, so the `_computers/*` default (src/index.ts) would
+        // The browser extension has no library entry point, so the `_devices/*` default (src/index.ts) would
         // read every file in it as unreachable. Its three real roots — the service worker, the content script,
         // the popup — are already found in its build script, so what is left to declare is the suite.
-        "_computers/webext": {
+        "_devices/webext": {
             "entry": ["src/**/*.test.ts"]
         },
-        "_computers/*": {
+        "_devices/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
         "_deploy/*": {

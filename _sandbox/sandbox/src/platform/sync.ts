@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { MachineReport } from "@intentic/sandbox-contract";
+import type { DeviceReport } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
@@ -223,10 +223,10 @@ export const isKeyEnrolled = async (historyRoot: string): Promise<boolean> => (a
  *
  * The store has always been a list of machines each holding a mode. What was PUBLISHED collapsed it: `syncingFrom`
  * named the one file-syncing machine and `mirroredBy` listed the names of the rest, because the card reading it
- * believed a sandbox has A desktop sync. It does not. It has as many enrolled computers as the user pointed at it,
+ * believed a sandbox has A desktop sync. It does not. It has as many enrolled devices as the user pointed at it,
  * and each of them is a row somebody wants to read and act on: which half it holds, whether it has ever checked
  * in, and the name to revoke it by. So the projection is the list itself now, one entry per enrollment, and the
- * Computers view folds each into the machine's own row.
+ * Devices view folds each into the machine's own row.
  *
  * A machine belongs on that list because it is ENROLLED, not because it has managed to report: one that never
  * posts is exactly the case worth showing (an agent too old to report, or a setup that never finished).
@@ -248,16 +248,16 @@ const labelsOf = (enrollments: readonly SyncEnrollment[]): string[] => enrollmen
  * it even alive. Those are facts only the machine holds (SYNC_DIR never reaches the daemon), so the machine
  * volunteers them, on the ports poll it was already making.
  *
- * IN MEMORY, deliberately, unlike the enrollments beside it. A report is a snapshot of a computer that may since
+ * IN MEMORY, deliberately, unlike the enrollments beside it. A report is a snapshot of a device that may since
  * have closed its lid, and a daemon restart re-learns it within one poll of every machine still there. Persisting
  * it would mean serving a laptop's folder list back for as long as the record survived, the exact "green over a
  * machine that stopped hours ago" lie the seenAt heartbeat exists to prevent. */
-const reports = new Map<string, { readonly report: MachineReport; readonly receivedAt: number }>();
+const reports = new Map<string, { readonly report: DeviceReport; readonly receivedAt: number }>();
 
 /* Record a machine's report, authorized by the same sync token its ports poll uses. The token decides WHICH
  * machine this is: a report is filed under the enrollment that presented it, never under the hostname it claims,
  * so no machine can post a report in another's name. An unknown token stores nothing and says so. */
-export const recordMachineReport = async (historyRoot: string, presented: string, report: MachineReport): Promise<boolean> => {
+export const recordDeviceReport = async (historyRoot: string, presented: string, report: DeviceReport): Promise<boolean> => {
     const matched = matchEnrollment(await readEnrollments(historyRoot), presented);
     if (matched === undefined) {
         return false;
@@ -273,7 +273,7 @@ export const recordMachineReport = async (historyRoot: string, presented: string
  *
  * Filtered against the live enrollments rather than returned wholesale: revoking a machine's access has to stop
  * the sandbox showing its folders too, and the in-memory map has no revocation hook of its own. */
-const reportsFor = (enrollments: readonly SyncEnrollment[]): { machine: string; report: MachineReport }[] => {
+const reportsFor = (enrollments: readonly SyncEnrollment[]): { machine: string; report: DeviceReport }[] => {
     const enrolled = new Set(labelsOf(enrollments));
     return [...reports.entries()]
         .filter(([machine]) => enrolled.has(machine))
@@ -281,15 +281,15 @@ const reportsFor = (enrollments: readonly SyncEnrollment[]): { machine: string; 
         .map(([machine, entry]) => ({ machine, report: entry.report }));
 };
 
-export const machineReports = async (historyRoot: string): Promise<{ machine: string; report: MachineReport }[]> =>
+export const deviceReports = async (historyRoot: string): Promise<{ machine: string; report: DeviceReport }[]> =>
     reportsFor(await readEnrollments(historyRoot));
 
-/* BOTH ENROLLMENT LISTS OFF ONE READ OF THE FILE, for the Computers view, which needs the labels and the reports
+/* BOTH ENROLLMENT LISTS OFF ONE READ OF THE FILE, for the Devices view, which needs the labels and the reports
  * together and used to ask for them separately, reading and parsing sync-enrollments.json twice per request.
  * Trivial next to a round trip to a laptop, and free to stop doing now that the round trip is off that path. */
 export const enrolledFleet = async (
     historyRoot: string,
-): Promise<{ machines: SyncEnrollmentRow[]; reports: { machine: string; report: MachineReport }[] }> => {
+): Promise<{ machines: SyncEnrollmentRow[]; reports: { machine: string; report: DeviceReport }[] }> => {
     const enrollments = await readEnrollments(historyRoot);
     return { machines: rowsOf(enrollments), reports: reportsFor(enrollments) };
 };
@@ -310,7 +310,7 @@ export const revokeEnrollmentByToken = async (historyRoot: string, token: string
 /* THE OWNER'S REVOKE, AIMED AT ONE MACHINE, which is the door the browser has and used not to.
  *
  * The only revoke a browser could reach cleared EVERY enrollment at once, because it sat under a card that
- * believed a sandbox has A desktop sync: "Disable sync" therefore meant "cut off every computer, including the
+ * believed a sandbox has A desktop sync: "Disable sync" therefore meant "cut off every device, including the
  * three that were only mirroring ports for people who are not you". A reader who wanted their old laptop
  * unpaired had to take everyone else's sync with it, or go to that laptop and uninstall from there. Every other
  * connection in this product revokes one at a time (`DELETE /system/hosts/:id`); this is that, for the sync door.

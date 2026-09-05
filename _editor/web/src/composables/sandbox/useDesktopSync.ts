@@ -4,11 +4,11 @@ import { computed, ref, watch } from "vue";
 import { desktopSyncLink } from "../../environments/desktop";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { onRuntimeChanged } from "./runtimeEvents";
-import { COMPUTERS } from "../queryKeys";
+import { DEVICES } from "../queryKeys";
 import { sandboxRequest } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
 
-/* ADDING A COMPUTER TO THIS SANDBOX: minting a pairing, and rendering the one-liner that spends it.
+/* ADDING A DEVICE TO THIS SANDBOX: minting a pairing, and rendering the one-liner that spends it.
  *
  * "Enable" mints a short-lived, single-use pairing token from the daemon; the copy-paste one-liner carries it,
  * and the agent redeems it once to enroll its SSH key. No Google sign-in on the laptop.
@@ -19,10 +19,10 @@ import { useSandbox } from "./useSandbox";
  *
  * WHAT THIS NO LONGER DOES IS THE POINT. It used to carry the whole subject: which machine holds sync, the
  * folder on it, whether that machine had gone quiet, who was mirroring, and one Disable that revoked every
- * paired computer at once. All of it read from /system/sync, which flattened a LIST of enrolled machines into
+ * paired device at once. All of it read from /system/sync, which flattened a LIST of enrolled machines into
  * one holder plus some names, because the card it fed presented desktop sync as a property of the sandbox. It
- * is a property of each COMPUTER, so every one of those facts now rides on that computer's row in the Computers
- * list (ComputerSync), beside the switches that change it. What is left here is the one job that genuinely
+ * is a property of each DEVICE, so every one of those facts now rides on that device's row in the Devices
+ * list (DeviceSync), beside the switches that change it. What is left here is the one job that genuinely
  * belongs to the sandbox: handing out a pairing.
  *
  * `available` is still read rather than assumed: the card branches on it, and a daemon too old to answer is one
@@ -151,7 +151,7 @@ export function useDesktopSync() {
      * appears out-of-band, as the agent on the other machine redeems the token. Just viewing the card (no
      * pairToken, the common /sandbox case) subscribes to nothing.
      *
-     * WHAT IT REFRESHES IS THE COMPUTERS LIST, not this card, and that is the whole shape of the change: the new
+     * WHAT IT REFRESHES IS THE DEVICES LIST, not this card, and that is the whole shape of the change: the new
      * machine is a ROW, so the moment it enrolls it has to appear in the list above with its folder, its ports
      * and its switches. The card has nothing left to re-read — it knows what it minted.
      *
@@ -161,7 +161,7 @@ export function useDesktopSync() {
     watch(pairToken, (token) => {
         stop();
         if (token !== undefined) {
-            unsubscribe = onRuntimeChanged([`hosts`], () => void client.invalidateQueries({ queryKey: COMPUTERS.of() }));
+            unsubscribe = onRuntimeChanged([`hosts`], () => void client.invalidateQueries({ queryKey: DEVICES.of() }));
         }
     });
     // Mount: one-shot read of whether this sandbox can carry sync at all (no steady polling; the list above

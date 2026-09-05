@@ -3,7 +3,7 @@
 # install one-liners download (computer.sh/computer.ps1 and sync.sh/sync.ps1 both fetch intentic-machine).
 # Runs after `pnpm turbo run build`; expects <package-dir>/dist/cli.js and `bun` on PATH.
 #
-#   bash _tools/scripts/build/build-agent-binaries.sh _computers/machine intentic-machine linux-x64 linux-arm64 darwin-x64 …
+#   bash _tools/scripts/build/build-agent-binaries.sh _devices/machine intentic-machine linux-x64 linux-arm64 darwin-x64 …
 #
 # Targets are explicit per agent rather than a shared list: shipping a binary for a platform no card can hand a
 # command for implies support that does not exist.

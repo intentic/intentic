@@ -101,7 +101,7 @@ hides the console the PowerShell host owns while the window on the desktop belon
 different process that never gets the request. Measured by enumerating top-level windows every 25 ms: a task
 started that way maps a Terminal window and keeps it for as long as its child runs, which for this task is the
 runner's entire life. So the action is now
-[`intentic-launch.exe`](../_computers/win-launcher) `--wait -- cmd.exe /c run.cmd`: a GUI-subsystem program,
+[`intentic-launch.exe`](../_devices/win-launcher) `--wait -- cmd.exe /c run.cmd`: a GUI-subsystem program,
 which the loader never gives a console at all, starting `run.cmd` with `CREATE_NO_WINDOW`. `--wait` is what
 keeps the task in the `Running` state for the listener's lifetime, which is what `IgnoreNew`, `Stop-ScheduledTask`
 and `doctor`'s supervision check all read. Re-run `setup-windows-runner.ps1 -Repair` on a machine registered

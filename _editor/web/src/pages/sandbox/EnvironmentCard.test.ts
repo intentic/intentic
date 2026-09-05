@@ -123,8 +123,8 @@ it(`falls back to the recipe on a daemon that predates the contents route, and s
     expect(el.textContent).not.toContain(`Could not read what the sandbox has installed`);
 });
 
-/* WHICH EXECUTOR A PENDING OVERLAY GETS. A sandbox on the owner's own computer rebuilds by a command or a
- * button that runs `ic` there; a hosted sandbox is a machine the platform runs and has no such computer, so
+/* WHICH EXECUTOR A PENDING OVERLAY GETS. A sandbox on the owner's own device rebuilds by a command or a
+ * button that runs `ic` there; a hosted sandbox is a machine the platform runs and has no such device, so
  * it gets the button the platform answers instead. The card decides by the platform's own row. */
 it(`hands a pending overlay to the host executor on a sandbox the owner runs`, () => {
     pending.value = { content: OVERLAY, hash: `pending` };

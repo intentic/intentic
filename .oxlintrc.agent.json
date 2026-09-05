@@ -116,7 +116,7 @@
                             {
                                 "group": [
                                     "@intentic-app/*",
-                                    "**/_computers/**",
+                                    "**/_devices/**",
                                     "**/_deploy/**",
                                     "**/_editor/**",
                                     "**/_platform/**",

@@ -134,7 +134,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             },
         },
     ],
-    // A connected browser, like a connected computer: every field is a permission and none is a credential, so
+    // A connected browser, like a connected device: every field is a permission and none is a credential, so
     // the echo must be total or a switch would be vaulted and the entry unreadable afterwards.
     webext: [
         {

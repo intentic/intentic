@@ -6,7 +6,7 @@
  * (contract.rs — nothing here states a docker-run shape), with the runner seed in the env instead of a
  * setup code, no tunnel grant, no Google client, no local publish. The container boots as a loopback
  * daemon, redeems its pairing against the parent over HTTPS, and dials the parent's WebSocket; from there
- * the parent's Computers/agents surfaces are where it is watched, not this terminal.
+ * the parent's Devices/agents surfaces are where it is watched, not this terminal.
  *
  * A runner may also arrive wearing its PARENT'S SHAPE, two optional files the parent's daemon shipped here
  * through the host agent: the parent's approved environment overlay with the sha256 that pins it (built

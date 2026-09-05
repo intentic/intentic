@@ -407,7 +407,7 @@ third credential-persisting checkout fails the lint, and stops unrelated edits f
 ### 3. Finish the shared test-budget rollout, and make it the only option — done, and wider than planned
 
 **41 packages converted**, not the 30 the count above predicted: eleven more ran `vitest run` with no config
-file at all, so they never appeared in a survey of configs. `_computers/local-agent` and `_computers/host` were
+file at all, so they never appeared in a survey of configs. `_devices/local-agent` and `_devices/host` were
 running `*.integration.test.ts` files — real git, real subprocesses — under the 5s detector, and had simply not
 lost the race yet. `_editor/web` keeps its own measured 20s/30s ceilings.
 

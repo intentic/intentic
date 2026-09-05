@@ -10,10 +10,10 @@
  *
  * WHAT THAT LOOKED LIKE, which is how it was reported: the Sandbox hub changed row language as you tabbed
  * through it. Personas, Extensions, Environment and Access drew their titles at 14px/500; Agent, Status and
- * Computers drew theirs at 16px/600 with a 18px glyph against a 14px one. Settings did the same — Keybindings
+ * Devices drew theirs at 16px/600 with a 18px glyph against a 14px one. Settings did the same — Keybindings
  * against Appearance, Notifications and Data. Agent contradicted itself inside one tab: Skills and Rules
  * compact, Models and Instructions not. The taxonomy was never decidable ("Models" is three rows with a picker;
- * "Computers" is machines with switches), so it was decided by whoever edited the file last.
+ * "Devices" is machines with switches), so it was decided by whoever edited the file last.
  *
  * The other three families the first pass fixed, kept here because they are the ways the size can still drift:
  *

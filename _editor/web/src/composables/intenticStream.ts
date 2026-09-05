@@ -6,7 +6,7 @@ import { acquireStreamSlot } from "./sandbox/streamBudget";
  * sandbox client). Malformed frames are skipped.
  *
  * ONE PERMIT PER READ, because these are the app's LONGEST connections and nothing was counting them. A
- * capability apply, a VPN dial, an infra apply and, worst of all, `manageMachineSandbox` rebuilding a sandbox
+ * capability apply, a VPN dial, an infra apply and, worst of all, `manageDeviceSandbox` rebuilding a sandbox
  * all hold a socket for the MINUTES their image takes to pull, and a browser has six per origin on http/1.1.
  * A rebuild started from the UI was therefore enough, on its own, to take the last connection the workspace had
  * left and freeze every other read in every window until it finished, which is precisely the report this

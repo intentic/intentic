@@ -393,7 +393,7 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
 # the grid.
 COPY _extensions/connectors /opt/extensions/connectors
 COPY _extensions/social /opt/extensions/social
-COPY _extensions/computers /opt/extensions/computers
+COPY _extensions/devices /opt/extensions/devices
 COPY _extensions/browsers /opt/extensions/browsers
 COPY _extensions/acp-agents /opt/extensions/acp-agents
 COPY _extensions/pi-agent /opt/extensions/pi-agent

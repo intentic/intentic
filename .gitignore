@@ -5,7 +5,7 @@
 **/.turbo
 **/dist
 **/dist-*
-# The browser extension's packed artifact (_computers/webext/scripts/pack.mjs). `**/dist` does not cover it:
+# The browser extension's packed artifact (_devices/webext/scripts/pack.mjs). `**/dist` does not cover it:
 # that pattern matches a path component called `dist`, and this is a file called `dist.zip`.
 **/dist.zip
 **/deploy
@@ -26,7 +26,7 @@ _editor/desktop-app/src-tauri/staged-scripts
 _site/site/public/desktop
 # ic (the host-side CLI) and the Windows launcher stub: their Rust build trees.
 _sandbox/ic/target
-_computers/win-launcher/target
+_devices/win-launcher/target
 /tmp
 **/tmp
 **/.astro-indexnow-cache.json

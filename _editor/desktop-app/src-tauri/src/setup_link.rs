@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 /* WHO SENT THIS LINK — the whole of what this app can know about whether to believe it.
  *
- * `App` is a navigation the workspace window made itself: the SPA's setup page handing this computer the
+ * `App` is a navigation the workspace window made itself: the SPA's setup page handing this device the
  * code it just minted, which is what the app was opened to do. `External` is everything else — the OS protocol handler
  * and a second instance's argv — where the link is one ANYBODY can put on a page, in an email or in a chat
  * message, and all the OS showed the user before handing it over was "Open Intentic?".
@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
  * and neither is anything the user is shown:
  *   • `platform` names the server the setup code is redeemed against, and that server's answer decides the
  *     new sandbox's own token, the tunnel that puts it on the internet, and WHICH ACCOUNT OWNS IT. Honouring
- *     a stranger's copy stands up a sandbox on this computer that answers to them. Nothing real loses
+ *     a stranger's copy stands up a sandbox on this device that answers to them. Nothing real loses
  *     anything: the SPA only ever sets it when the platform is served from localhost, in local dev.
  *   • `cfToken` is dropped back to where this file's own doc comment already put it — riding the link only
  *     from the in-app webview, where the navigation is cancelled in-process and never reaches the OS. That
@@ -34,7 +34,7 @@ pub enum Source {
     External,
 }
 
-/// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this computer.
+/// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupArgs {
@@ -67,7 +67,7 @@ pub struct RecreateArgs {
     pub rollback: bool,
 }
 
-/// `intentic://sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` — enroll THIS computer in desktop sync:
+/// `intentic://sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` — enroll THIS device in desktop sync:
 /// the SPA's Desktop sync card handing over the enrollment it just minted, so the app can ask for the folder
 /// in a system dialog and run the same sync script the copy-paste one-liner runs. No folder rides the link —
 /// choosing one natively is the whole point of the handoff.

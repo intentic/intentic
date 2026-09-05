@@ -1,4 +1,4 @@
-import type { MachineFolderRow, MachinePortRow, MachineWatcherState } from "@intentic/ui";
+import type { DeviceFolderRow, DevicePortRow, DeviceAgentState } from "@intentic/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -43,7 +43,7 @@ export interface SandboxStatus {
 }
 
 /* The three docker verbs this window offers. Named rather than a boolean because the row offers three, the
- * same three the web's Computers tab offers, which is the point of them being one list. */
+ * same three the web's Devices tab offers, which is the point of them being one list. */
 export type PowerAction = `start` | `stop` | `restart`;
 
 /* What the app is, and nothing about the machine — see the Rust side for why that line is drawn here. Every
@@ -65,37 +65,39 @@ export interface DesktopInfo {
  * closing its own window, which changes nothing. */
 export type CloseAction = `tray` | `quit`;
 
-/* What desktop sync is doing on this computer, the sync half of `intentic-machine status --json`.
+/* What desktop sync is doing on this device, the sync half of `intentic-machine status --json`.
  *
  * The row types come from `@intentic/ui`, because the component that renders them is the reason this app reads
  * any of it, there is no second shape to keep in step. `sandboxes` is deliberately absent: the agent never
  * reports containers (it has no business enumerating a machine's other sandboxes), and this app has `sandboxList`
  * for that anyway. */
-export interface MachineReport {
+export interface DeviceReport {
     hostname: string;
     os: string;
-    /** The agent INSTALLED on this machine — the file. What is running is `watcher.build`, and the two drift. */
-    agents: { sync?: string };
-    pairings: MachineFolderRow[];
-    ports: MachinePortRow[];
-    /* `build` is the report's own field (the build the loop is running) rather than the view's `staleBuild`,
-     * which is the comparison against `agents.sync` above — made where the report is read, beside every other
-     * derivation this app makes for the shared view. */
-    watcher: MachineWatcherState & { build?: string };
+    pairings: DeviceFolderRow[];
+    ports: DevicePortRow[];
+    /* THE AGENT, one block, because it is one binary and one process: `installed` is the file on disk, `build`
+     * is what the loop that claimed the pidfile is actually running, and the two drift the moment the binary is
+     * replaced under a live loop. The view's `staleBuild` is the COMPARISON between them, made where the report
+     * is read, beside every other derivation this app makes for the shared view.
+     *
+     * It replaced an `agents: { sync }` map plus a `watcher` beside it, which was one binary's version filed as
+     * a map of agents and its process filed as a watcher — two shapes for the one thing this whole block is. */
+    agent: DeviceAgentState & { build?: string; installed?: string };
     // When the agent took the reading. This app asks on demand, so it is always moments old, carried because the
     // shape is the contract's, and a reader that ignores it is not a reader that may drop it.
     capturedAt: number;
 }
 
-/* Everything the machine agent knows, both halves: the sandboxes that may WORK ON this computer (the computer
+/* Everything the machine agent knows, both halves: the sandboxes that may WORK ON this device (the device
  * capability's links, tokens never included) and the sync report above. `summary` is the same one-liner the
  * tray row shows — composed by the agent, beside its other sentences, so no surface re-derives it. */
-export interface MachineStatus {
+export interface DeviceStatus {
     version: string;
     running?: number;
     summary: string;
-    computer: { links: { sandboxUrl: string; id: string }[] };
-    sync: MachineReport;
+    device: { links: { sandboxUrl: string; id: string }[] };
+    sync: DeviceReport;
 }
 
 /* What a running script says, as it says it. `run` is the operation's own id (`setup`, `recreate:<slug>`,
@@ -179,15 +181,15 @@ export const sandboxPower = (slug: string, action: PowerAction): Promise<void> =
 export const sandboxRecreate = (slug: string, hash?: string, rollback = false): Promise<void> => invoke(`sandbox_recreate`, { slug, hash, rollback });
 export const sandboxRemove = (slug: string): Promise<void> => invoke(`sandbox_remove`, { slug });
 export const sandboxLogs = (slug: string, tail: number): Promise<string> => invoke(`sandbox_logs`, { slug, tail });
-/* The machine agent's status, or undefined when this computer has no agent, an ordinary state (a machine set
+/* The machine agent's status, or undefined when this device has no agent, an ordinary state (a machine set
  * up before either capability existed), which the screen states rather than treats as a failure. Rust hands
  * back the raw JSON because that process has no schema for it; parsing belongs on the side that does. */
-export const machineStatus = async (): Promise<MachineStatus | undefined> => {
+export const deviceStatus = async (): Promise<DeviceStatus | undefined> => {
     const raw = await invoke<string | null>(`machine_report`);
-    return raw === null ? undefined : (JSON.parse(raw) as MachineStatus);
+    return raw === null ? undefined : (JSON.parse(raw) as DeviceStatus);
 };
 /* Hand the window back to the workspace, at the app's root or at a path under it. The path is how this window
- * reaches the SPA's Computers tab, the same machine's containers through the other door, so the two screens
+ * reaches the SPA's Devices tab, the same machine's containers through the other door, so the two screens
  * that manage them are one click apart instead of each pretending to be the only one. */
 export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });
 /* Bring this window back to the front and ask the OS to point at it. For a run that stopped while nobody was
@@ -243,7 +245,7 @@ export const parseStep = (line: string): Step | undefined => {
     return found === null ? undefined : { phase: found[1] ?? ``, message: (found[2] ?? ``).trim() };
 };
 
-/* SOMETHING THIS COMPUTER NEEDS BEFORE A SANDBOX CAN RUN, the other thing the installer prints, and the
+/* SOMETHING THIS DEVICE NEEDS BEFORE A SANDBOX CAN RUN, the other thing the installer prints, and the
  * only one this window turns into a control rather than a line of text.
  *
  * Windows is the reason this exists. On Linux and macOS "you need Docker" is one sentence with one fix; on

@@ -99,7 +99,7 @@ for (const name of imagePayload) {
 note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", ")}`);
 
 /* ── what the graph cannot answer ─────────────────────────────────────────────────────────────────────────
- *   ic          two Rust crates (_sandbox/ic, _computers/win-launcher), neither a workspace package at all.
+ *   ic          two Rust crates (_sandbox/ic, _devices/win-launcher), neither a workspace package at all.
  *   shims       _site/site/public/scripts holds the connect/recreate one-liners, bundled into the installer.
  *   recipes     Dockerfiles and feature packs: the image's own contents, invisible to pnpm.
  *   assembly    the shell scripts that build, verify and publish the artifacts.
@@ -115,7 +115,7 @@ note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", "
 const LOOSE = {
     desktop:
         /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(desktop\/|build\/build-ic\.sh|lib\/desktop-artifacts\.sh)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
-    ic: /^(_sandbox\/ic\/|_computers\/win-launcher\/|_site\/site\/public\/scripts\/)/,
+    ic: /^(_sandbox\/ic\/|_devices\/win-launcher\/|_site\/site\/public\/scripts\/)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     platform: /^(_tools\/scripts\/platform\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     "ci-base-changed": /^_tools\/ci-base\//,

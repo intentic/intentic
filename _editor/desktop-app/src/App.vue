@@ -2,11 +2,11 @@
 import {
     Button,
     Card,
-    MachineDetail,
-    MachineRunLog,
-    type MachineSandboxGroup,
-    type MachineSandboxRow,
-    type MachineWatcherState,
+    DeviceDetail,
+    DeviceRunLog,
+    type DeviceSandboxGroup,
+    type DeviceSandboxRow,
+    type DeviceAgentState,
     Notice,
     type SandboxVerb,
     SandboxVerbs,
@@ -29,7 +29,7 @@ import {
     expectedStop,
     folderEntries,
     forgetResumableSetup,
-    machineStatus,
+    deviceStatus,
     onPendingRecreate,
     onPendingSetup,
     onPendingSync,
@@ -57,7 +57,7 @@ import {
     updateState,
     workspaceOpen,
     type DesktopInfo,
-    type MachineStatus,
+    type DeviceStatus,
     type Requirement,
     type RequirementProgress,
     type RunEvent,
@@ -89,11 +89,11 @@ import {
  * The checklist is gone because the scripts do the reconciling and narrate it as they go; the wizard is gone
  * because it was a second copy of the SPA's setup screen.
  *
- * ONE LIST, AND IT IS THE WEB'S. This screen and the SPA's Computers tab manage the same containers on the same
+ * ONE LIST, AND IT IS THE WEB'S. This screen and the SPA's Devices tab manage the same containers on the same
  * machine, and they had drifted into two answers: this one printed its sandboxes as cards with their own buttons
  * and then printed the SAME sandboxes again underneath as folders and ports, under a second heading, with
- * nothing on screen relating the two: the exact double-rendering the Computers tab was rebuilt to remove. It
- * now hands its containers to <MachineDetail>, the way that tab does, so a sandbox is one row carrying its
+ * nothing on screen relating the two: the exact double-rendering the Devices tab was rebuilt to remove. It
+ * now hands its containers to <DeviceDetail>, the way that tab does, so a sandbox is one row carrying its
  * folder, its ports, its image and its verbs. The verbs are the kit's too (<SandboxVerbs>), so "which buttons
  * exist here" is no longer a thing two apps can disagree about: this window had a log tail and no Restart, the
  * tab had a Restart and no log tail, and neither offered the rollback both of their backends could already do. */
@@ -113,9 +113,9 @@ const info = ref<DesktopInfo | undefined>(undefined);
 const dockerReady = ref<boolean | undefined>(undefined);
 const sandboxes = ref<SandboxStatus[]>([]);
 const listError = ref<string | undefined>(undefined);
-// What desktop sync is doing here. Undefined = no agent on this computer, which is a fact about the machine and
+// What desktop sync is doing here. Undefined = no agent on this device, which is a fact about the machine and
 // not a failure; a string = the agent is installed but would not answer, which is.
-const status = ref<MachineStatus | undefined>(undefined);
+const status = ref<DeviceStatus | undefined>(undefined);
 const reportError = ref<string | undefined>(undefined);
 const busy = ref<{ slug: string; verb: SandboxVerb } | undefined>(undefined);
 
@@ -179,7 +179,7 @@ const setupExit = ref<number | null | undefined>(undefined);
  * screen with no error, no requirements and no buttons: the same dead end, reached politely. */
 const wasStopped = computed(() => stopping.value && setupExit.value !== undefined);
 
-/* WHAT THIS COMPUTER STILL NEEDS: the Windows half of a failed setup, and the reason one exists at all.
+/* WHAT THIS DEVICE STILL NEEDS: the Windows half of a failed setup, and the reason one exists at all.
  *
  * On Linux and macOS a setup that stops has usually hit something unforeseeable, and four lines of stderr is
  * the right thing to show. On Windows the common stops are none of them accidental: WSL2 is not turned on,
@@ -201,11 +201,11 @@ const consented = ref(false);
 const resuming = ref(false);
 const expired = ref(false);
 
-/* WHERE THE OTHER HALF OF THIS SCREEN LIVES. The SPA's Computers tab manages the same containers on the same
- * machine: through the machine's own connection rather than natively, and it shows every computer the sandbox
+/* WHERE THE OTHER HALF OF THIS SCREEN LIVES. The SPA's Devices tab manages the same containers on the same
+ * machine: through the machine's own connection rather than natively, and it shows every device the sandbox
  * can see, not only this one. Linked rather than duplicated, which is the same argument the manager makes for
- * handing its rows to <MachineDetail>: one screen per subject, reachable from wherever the reader started. */
-const COMPUTERS_PATH = `/sandbox/computers`;
+ * handing its rows to <DeviceDetail>: one screen per subject, reachable from wherever the reader started. */
+const DEVICES_PATH = `/sandbox/devices`;
 
 /* Wrapped rather than bound straight to a click: `workspaceOpen` takes an optional path now, and a bare
  * `@click="workspaceOpen"` would hand it a MouseEvent to navigate to. */
@@ -244,7 +244,7 @@ const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`)
  *
  * `setupMode` is derived from a handed-over setup that is READ, asynchronously, after this component mounts
  * (`loadPending`). Until that read lands it is `false`, which is not "the manager is up" but "nobody has
- * looked yet". Titling the window on that guess puts `This computer` in the taskbar for the length of one
+ * looked yet". Titling the window on that guess puts `This device` in the taskbar for the length of one
  * IPC round trip on every arriving install, and a label that changes twice in half a second is one nobody
  * can read. So the title is only ever changed here on a real transition.
  *
@@ -264,7 +264,7 @@ watchEffect(() => {
     if (!faceKnown.value) {
         return;
     }
-    void getCurrentWindow().setTitle(setupMode.value ? `Intentic, Setting up your sandbox` : `Intentic, This computer`);
+    void getCurrentWindow().setTitle(setupMode.value ? `Intentic, Setting up your sandbox` : `Intentic, This device`);
 });
 
 /* --- HOW FAR THROUGH THE INSTALL IT IS (setupPlan.ts) ---
@@ -306,10 +306,10 @@ const refresh = async (): Promise<void> => {
         listError.value = String(error);
     }
     /* The agent half, read separately and allowed to fail separately: the two answers come from different
-     * places (docker, and the machine agent) and either can be absent on a perfectly working computer. Folding
+     * places (docker, and the machine agent) and either can be absent on a perfectly working device. Folding
      * them into one try would let a machine with no agent read as a machine with no sandboxes. */
     try {
-        status.value = await machineStatus();
+        status.value = await deviceStatus();
         reportError.value = undefined;
     } catch (error) {
         status.value = undefined;
@@ -320,8 +320,8 @@ const refresh = async (): Promise<void> => {
 /* THE CONTAINERS, IN THE SHAPE THE SHARED VIEW READS. Docker's own answer carries `null` for the two facts it
  * may not have; the row type spells the same absence as an absent KEY, because absent and false are different
  * things there (no tunnel sidecar at all, versus a sidecar that is down). The join between a container and the
- * sync agent's pairing is <MachineDetail>'s own: this app used to make it here, by hand, into one line of text. */
-const sandboxRows = computed<MachineSandboxRow[]>(() =>
+ * sync agent's pairing is <DeviceDetail>'s own: this app used to make it here, by hand, into one line of text. */
+const sandboxRows = computed<DeviceSandboxRow[]>(() =>
     sandboxes.value.map((sandbox) => ({
         slug: sandbox.slug,
         running: sandbox.running,
@@ -334,28 +334,28 @@ const sandboxRows = computed<MachineSandboxRow[]>(() =>
 /* THE AGENT'S OWN STATE, with the one comparison the shared view cannot make for itself: the loop keeps the
  * build it started with, so a machine whose binary was replaced (by `upgrade`, by re-running setup, by this very
  * app) goes on serving the old one until it is restarted. The window says which, in the same words the browser
- * and `intentic-machine status` use (watcherBuildSkew in the sandbox contract, which this app deliberately does
+ * and `intentic-machine status` use (agentBuildSkew in the sandbox contract, which this app deliberately does
  * not depend on — it mirrors the shapes it reads). */
-const machineWatcher = computed<MachineWatcherState | undefined>(() => {
-    const watcher = status.value?.sync.watcher;
-    if (watcher === undefined) {
+const deviceAgent = computed<DeviceAgentState | undefined>(() => {
+    const agent = status.value?.sync.agent;
+    if (agent === undefined) {
         return undefined;
     }
-    const runningBuild = watcher.build;
-    const installed = status.value?.sync.agents.sync;
+    const runningBuild = agent.build;
+    const installed = agent.installed;
     /* An UNSTAMPED running build is the loudest case, not a missing one: the loop stamps its build into the
      * pidfile, so one that reports none predates the stamp and is therefore older than whatever is installed
      * beside it. Only two things withhold the sentence — a loop that is not running (said in louder words a
      * line above) and a working-tree agent, `0.0.0` here as it is in the contract this app mirrors, which is
      * not a version and must never be told it is behind. */
-    if (!watcher.running || installed === undefined || installed === `0.0.0` || runningBuild === installed) {
-        return watcher;
+    if (!agent.running || installed === undefined || installed === `0.0.0` || runningBuild === installed) {
+        return agent;
     }
-    return { ...watcher, staleBuild: { running: runningBuild, installed } };
+    return { ...agent, staleBuild: { running: runningBuild, installed } };
 });
 
 // The docker row behind one of the view's groups, which is what every verb below needs and the group carries.
-const slugOf = (group: MachineSandboxGroup): string | undefined => group.sandbox?.slug;
+const slugOf = (group: DeviceSandboxGroup): string | undefined => group.sandbox?.slug;
 
 /* Whether the shared view would draw anything at all. It groups containers, folders and ports, and a machine can
  * have the last two and none of the first (a pairing whose container is stopped and pruned), so "is there a row"
@@ -574,12 +574,12 @@ const dismissSetup = async (): Promise<void> => {
 
 /* THE WAY OUT THAT IS NOT "GIVE UP".
  *
- * This app's whole premise is that the sandbox runs on THIS computer, and for most people it should. But the
+ * This app's whole premise is that the sandbox runs on THIS device, and for most people it should. But the
  * list this button sits under is the moment where that premise is being tested hardest: a PC with no WSL2
  * and no Docker is being asked for administrator, a 600 MB download and a restart, and some of those readers
  * are on a machine where none of that is going to happen: a work laptop, a locked-down build, a PC too
  * small for it. Until now the app had nothing to say to them, while the browser has handed that reader a
- * machine we host all along; it was hidden here on the argument that "this computer" is the whole point of
+ * machine we host all along; it was hidden here on the argument that "this device" is the whole point of
  * being in the app.
  *
  * It is the point right up until it cannot work, and then it is a dead end. Local stays the loud default and
@@ -656,9 +656,9 @@ const loadResumable = async (): Promise<void> => {
 };
 
 /* A parked setup RUNS on arrival rather than waiting to be asked, and inside the app nothing asked for it
- * either: the SPA's setup page hands this computer the code the moment one mints, because "which machine?"
+ * either: the SPA's setup page hands this device the code the moment one mints, because "which machine?"
  * was never a real question in a window somebody downloaded, installed and signed into in order to run a
- * sandbox on this computer (setupArrival.ts). Downloading and opening the app IS the consent; repeating the
+ * sandbox on this device (setupArrival.ts). Downloading and opening the app IS the consent; repeating the
  * question on a screen the user did not open is what made the handoff read as a second, unrelated installer.
  * The one thing still asked for separately is administrator, on the requirements screen, because that is a
  * different ask from "install my sandbox here". The guard in `runSetup` is what keeps the two ways in here
@@ -806,12 +806,12 @@ const retrySync = async (): Promise<void> => {
 /* ONE CLICK ON ONE ROW, whichever of the shared verbs it was.
  *
  * The kit decides which buttons exist and what the destructive ones ask; this decides what each one DOES here,
- * which is the whole of what differs between this window and the SPA's Computers tab: there, a verb is a
+ * which is the whole of what differs between this window and the SPA's Devices tab: there, a verb is a
  * message to a machine over a socket; here it is a script or a docker call on the machine this window is on.
  *
  * The question is asked in the OS's own dialog rather than one this window draws, and its words are the kit's,
  * so the two apps warn about the same thing in the same sentence. */
-const act = async (group: MachineSandboxGroup, verb: SandboxVerb): Promise<void> => {
+const act = async (group: DeviceSandboxGroup, verb: SandboxVerb): Promise<void> => {
     const slug = slugOf(group);
     if (slug === undefined || busy.value !== undefined || running.value) {
         return;
@@ -853,12 +853,12 @@ const act = async (group: MachineSandboxGroup, verb: SandboxVerb): Promise<void>
 
 // Which of THIS row's buttons is the one spinning, and what its pane is showing. A run's lines are the script's
 // own output; a log tail's are the container's: one pane, because a row only ever has one thing to say.
-const busyVerb = (group: MachineSandboxGroup): SandboxVerb | undefined => {
+const busyVerb = (group: DeviceSandboxGroup): SandboxVerb | undefined => {
     const inFlight = busy.value;
     return inFlight !== undefined && inFlight.slug === slugOf(group) ? inFlight.verb : undefined;
 };
-const logOpen = (group: MachineSandboxGroup): boolean => openLog.value !== undefined && openLog.value === slugOf(group);
-const paneLines = (group: MachineSandboxGroup): string[] => {
+const logOpen = (group: DeviceSandboxGroup): boolean => openLog.value !== undefined && openLog.value === slugOf(group);
+const paneLines = (group: DeviceSandboxGroup): string[] => {
     const slug = slugOf(group);
     const verb = busyVerb(group);
     if (slug === undefined) {
@@ -934,7 +934,7 @@ onMounted(async () => {
                 setupExit.value = event.code;
                 return;
             }
-            // What this computer still needs, collected as the installer names it. Keyed by id so a run that
+            // What this device still needs, collected as the installer names it. Keyed by id so a run that
             // reports the same requirement twice (the fixer re-examines between passes) draws one row.
             const requirement = marker?.kind === `requirement` ? marker.requirement : undefined;
             if (requirement !== undefined) {
@@ -998,7 +998,7 @@ onUnmounted(() => {
                 <div class="flex items-start gap-2.5">
                     <Icon name="bolt" class="mt-0.5 text-primary-400" />
                     <div class="min-w-0 flex-1">
-                        <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this computer</h1>
+                        <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this device</h1>
                         <p class="text-2xs text-subtle">
                             Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your
                             workspace once it answers.
@@ -1017,7 +1017,7 @@ onUnmounted(() => {
                  the one thing that fixes it, instead of letting the run fail at the claim with something that
                  reads like a bad code. -->
                 <Notice v-if="expired" tone="warning" class="text-2xs">
-                    Your setup code ran out while this computer restarted. Open the setup page again for a fresh one: everything the restart was for
+                    Your setup code ran out while this device restarted. Open the setup page again for a fresh one: everything the restart was for
                     is already done.
                 </Notice>
                 <p v-else-if="resuming" class="flex items-start gap-2 text-2xs text-subtle">
@@ -1025,7 +1025,7 @@ onUnmounted(() => {
                     <span>Picking up where the restart left off.</span>
                 </p>
                 <!-- `=== false`, not `!`: unknown is a third state here now (see the ref), and a warning about
-                     this computer must not be drawn on a question nobody has answered yet. -->
+                     this device must not be drawn on a question nobody has answered yet. -->
                 <p v-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2 text-2xs text-warning">
                     <Icon name="box" class="mt-0.5 shrink-0" />
                     <span v-if="info?.os === `windows`"
@@ -1062,7 +1062,7 @@ onUnmounted(() => {
                      being. -->
                 <p v-if="wasStopped" class="flex items-start gap-2 text-2xs text-subtle">
                     <Icon name="times" class="mt-0.5 shrink-0" />
-                    <span>You stopped this install. Nothing else is running on this computer.</span>
+                    <span>You stopped this install. Nothing else is running on this device.</span>
                 </p>
 
                 <SetupProgress
@@ -1107,7 +1107,7 @@ onUnmounted(() => {
         <!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->
         <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 p-5">
             <header class="flex items-center gap-3">
-                <h1 class="flex-1 text-base font-semibold">This computer</h1>
+                <h1 class="flex-1 text-base font-semibold">This device</h1>
                 <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
                 <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
                     <template #icon><Icon name="refresh" /></template>
@@ -1158,7 +1158,7 @@ onUnmounted(() => {
                         <h2 class="text-sm font-semibold leading-tight">
                             {{
                                 syncSetup.args.mirror
-                                    ? `Mirroring ports from ${syncSetup.args.name ?? `your sandbox`} to this computer`
+                                    ? `Mirroring ports from ${syncSetup.args.name ?? `your sandbox`} to this device`
                                     : `Connecting a folder to ${syncSetup.args.name ?? `your sandbox`}`
                             }}
                         </h2>
@@ -1176,10 +1176,10 @@ onUnmounted(() => {
                     </Button>
                 </div>
                 <Notice v-if="syncSetup.error" tone="danger" class="text-2xs">{{ syncSetup.error }}</Notice>
-                <MachineRunLog
+                <DeviceRunLog
                     :lines="syncLines"
                     :running="activeRun === `sync-setup`"
-                    empty="Starting on this computer…"
+                    empty="Starting on this device…"
                     note="Installing the sync agent and starting the first sync."
                 />
                 <!-- The pairing inside is single-use: a run that failed after enrolling needs a fresh one,
@@ -1193,20 +1193,20 @@ onUnmounted(() => {
                 </div>
             </section>
 
-            <!-- WHAT THIS COMPUTER IS RUNNING: one row per sandbox, carrying its folder, its ports, its
-                     image and its verbs, exactly as the SPA's Computers tab draws the same machine.
+            <!-- WHAT THIS DEVICE IS RUNNING: one row per sandbox, carrying its folder, its ports, its
+                     image and its verbs, exactly as the SPA's Devices tab draws the same machine.
                      `syncDir` rides the setup link into connect.sh and was never heard from again, so the app
                      whose whole premise is not needing a terminal could say a container was up and nothing about
                      the sync the same setup had just configured: the folders and ports below are that half, and
                      they belong ON the sandbox they are for rather than under a heading of their own. -->
             <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                 <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-                <MachineDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :watcher="machineWatcher">
+                <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :agent="deviceAgent">
                     <!-- What the list is, and the state of the agent behind it, on one line: the watcher is
                              a fact about the MACHINE rather than about any row under it. -->
                     <template #heading>
                         <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">
-                            Sandboxes on this computer
+                            Sandboxes on this device
                             <span v-if="status?.version" class="font-mono normal-case">agent v{{ status.version }}</span>
                         </span>
                     </template>
@@ -1223,18 +1223,18 @@ onUnmounted(() => {
                     <!-- The machine's own output: while a row works, and afterwards for as long as a log tail
                              is being read. -->
                     <template #footer="{ group }">
-                        <MachineRunLog
+                        <DeviceRunLog
                             v-if="busyVerb(group) || logOpen(group)"
                             :lines="paneLines(group)"
                             :running="busyVerb(group) !== undefined"
-                            empty="Starting on this computer…"
-                            note="Running on this computer: it keeps going even if you close this window."
+                            empty="Starting on this device…"
+                            note="Running on this device: it keeps going even if you close this window."
                         />
                         <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
                             {{ rowFailure.message }}
                         </Notice>
                     </template>
-                </MachineDetail>
+                </DeviceDetail>
             </section>
 
             <footer class="mt-auto flex flex-wrap items-center gap-2 pt-2">
@@ -1242,10 +1242,10 @@ onUnmounted(() => {
                     <template #icon><Icon name="arrow-up-right" /></template>
                 </Button>
                 <!-- THE OTHER SCREEN THAT MANAGES THESE SAME CONTAINERS. This window reaches them natively and
-                     the SPA's Computers tab reaches them through the machine's own connection, and until now
+                     the SPA's Devices tab reaches them through the machine's own connection, and until now
                      neither admitted the other existed, so a reader who found one concluded the product had
                      only that one. Secondary and text: the workspace is still the way out of here. -->
-                <Button size="small" severity="secondary" :text="true" label="See all your computers" @click="openWorkspace(COMPUTERS_PATH)">
+                <Button size="small" severity="secondary" :text="true" label="See all your devices" @click="openWorkspace(DEVICES_PATH)">
                     <template #icon><Icon name="desktop" /></template>
                 </Button>
                 <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>

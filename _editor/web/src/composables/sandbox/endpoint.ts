@@ -84,7 +84,7 @@ export interface Addressing {
  * Worth its own gate rather than being left to the probe, because a probe here is not free. It is the app's
  * only reach for the machine the browser runs on, and Chrome answers that reach with a Local Network Access
  * prompt, so probing a sandbox that provably cannot be local spends the user's permission dialog, and their
- * reading of what this app does with their computer, on an address that could never have answered.
+ * reading of what this app does with their device, on an address that could never have answered.
  *
  * Anything else genuinely might be local: a `docker run` on the desktop in front of them, a sandbox attached
  * behind their own domain. Those keep the probe. */

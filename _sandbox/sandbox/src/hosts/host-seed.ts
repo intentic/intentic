@@ -3,20 +3,20 @@ import { capabilityCtx } from "../capabilities/capability.js";
 import { hostHandler } from "../capabilities/handlers/host.js";
 import type { Services } from "../composition.js";
 
-/* THE COMPUTER THAT RAN THE INSTALLER, CONNECTED WITHOUT ANYONE ASKING FOR IT.
+/* THE DEVICE THAT RAN THE INSTALLER, CONNECTED WITHOUT ANYONE ASKING FOR IT.
  *
  * Setting a sandbox up has always connected desktop sync, and desktop sync deliberately never reports containers
  *, a sync agent enumerating a machine's OTHER sandboxes to one of them is the disclosure that design avoids by
- * construction. So the machine that just installed this sandbox appeared in the Computers view with its folders
+ * construction. So the machine that just installed this sandbox appeared in the Devices view with its folders
  * and its ports and no sandboxes at all, and the one thing a person goes there to do, restart the sandbox that
  * has wedged, was a command to paste on a machine they might not be sitting at.
  *
  * This closes that: the setup flow installs the machine agent too, and this is the daemon's half, it creates the
- * computer's own capability card and arms the one-time pairing the flow carries.
+ * device's own capability card and arms the one-time pairing the flow carries.
  *
  * WHAT IT GRANTS IS THE WHOLE ARGUMENT. Nothing about the machine except its sandboxes: no shell, no files, no
  * screen, no keyboard, and not removal either. That is narrower than the card's own defaults (`shell` is `on`
- * when a person adds a computer deliberately, because that is what they came for) and it has to be, a person
+ * when a person adds a device deliberately, because that is what they came for) and it has to be, a person
  * who installed a sandbox consented to running a sandbox, not to handing the agent inside it a shell on their
  * laptop. The card is right there in Capabilities, saying exactly this, and every wider switch is one click away
  * for someone who wants it. Making that click is a decision; making it FOR them is not ours to make.
@@ -24,7 +24,7 @@ import type { Services } from "../composition.js";
  * The token is armed once, ever. See HostsStore.seedPairing for why that matters more here than it does for
  * sync's equivalent. */
 
-// What a setup-connected computer may do. Written out in full rather than spread over the schema's defaults,
+// What a setup-connected device may do. Written out in full rather than spread over the schema's defaults,
 // because "which switches are on when nobody chose" is the security posture of this whole feature and belongs
 // where it can be read in one line.
 export const SETUP_HOST_SCOPES = {
@@ -49,10 +49,10 @@ export const hostIdFrom = (label: string): string => {
         .split(".")[0]
         ?.replaceAll(/[^a-z0-9-]+/g, "-")
         .replaceAll(/^-+|-+$/g, "");
-    return cleaned === undefined || cleaned === "" ? "this-computer" : cleaned;
+    return cleaned === undefined || cleaned === "" ? "this-device" : cleaned;
 };
 
-// The OS slugs the bundled computers extension declares cards for. A setup on anything else connects no computer
+// The OS slugs the bundled devices extension declares cards for. A setup on anything else connects no device
 // rather than writing a card whose apply would fail on the extension lookup.
 const KNOWN_PLATFORMS = new Set(["linux", "windows"]);
 

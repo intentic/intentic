@@ -26,7 +26,7 @@ export interface SafetyPolicyStore {
     readonly set: (text: string) => Promise<void>;
     /* ADD ONE LINE, which is what the permission card's "add this to my policy" button does. Appends under a
      * heading of its own rather than at the end of whatever section happens to be last: a line landing under
-     * "On my computers" because that section was written last would silently change what it means.
+     * "On my devices" because that section was written last would silently change what it means.
      *
      * Appending to the SHIPPED text when there is no file yet is deliberate — the alternative is a file holding
      * one line, which reads as a policy that permits one thing and says nothing about anything else. The owner
@@ -58,7 +58,7 @@ const terminated = (text: string): string => (text.endsWith(`\n`) ? text : `${te
  *
  * Placed INSIDE its own section rather than simply appended, because appending to the end of the file puts the
  * line under whichever heading happens to be last — and this document's sections are addressed to different
- * subjects ("In this sandbox", "On my computers"). A line meant for the sandbox landing under the machines
+ * subjects ("In this sandbox", "On my devices"). A line meant for the sandbox landing under the machines
  * heading does not read as a mistake to the judge; it reads as a rule about the owner's laptop.
  *
  * The section ends at the next heading or at the end of the text, and the line is placed on the last non-empty

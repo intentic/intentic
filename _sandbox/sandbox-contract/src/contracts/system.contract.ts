@@ -2,11 +2,12 @@ import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { SessionTranscriptSchema, SystemEventSchema } from "../events.js";
 import {
-    MachineCommandInputSchema,
-    MachineCommandResultSchema,
-    MachineFlowLineSchema,
-    MachineSandboxFlowInputSchema,
-} from "../schemas/computers.js";
+    DeviceAgentFlowInputSchema,
+    DeviceCommandInputSchema,
+    DeviceCommandResultSchema,
+    DeviceFlowLineSchema,
+    DeviceSandboxFlowInputSchema,
+} from "../schemas/devices.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema } from "../schemas/system.js";
@@ -175,37 +176,55 @@ export const systemContract = {
         })
         .input(SubagentIdParamSchema)
         .output(SessionTranscriptSchema),
-    /* Start, stop, restart, update, rebuild, roll back or remove a sandbox on one of the user's own computers,
-     * the Computers view's buttons, relayed to the machine over the socket it holds open to us.
+    /* Start, stop, restart, update, rebuild, roll back or remove a sandbox on one of the user's own devices,
+     * the Devices view's buttons, relayed to the machine over the socket it holds open to us.
      *
      * Streamed because the slowest of these takes minutes, and it is the same stream whatever the op: one door
      * for one decision, so the view has one shape to render rather than one per duration. The daemon adds no
      * judgement, the machine enforces its own switches and its refusal arrives as the terminal `error` line,
      * in its own words, naming the control to flip. */
-    manageMachineSandbox: oc
+    manageDeviceSandbox: oc
         .route({
             method: "POST",
-            path: "/system/computers/{id}/sandboxes/{slug}",
-            summary: "Drive a sandbox on one of your own computers",
+            path: "/system/devices/{id}/sandboxes/{slug}",
+            summary: "Drive a sandbox on one of your own devices",
             description:
                 "Start, stop, restart, update, rebuild, roll back or remove a sandbox running on a machine you own, relayed over the connection that machine holds open. The answer is a stream because the slowest of these takes minutes, and it is the same stream whichever you ask for. The daemon adds no opinion: the machine enforces its own permissions and a refusal arrives as the last line, in the machine's words, naming the switch to flip.",
         })
-        .input(MachineSandboxFlowInputSchema)
-        .output(eventIterator(MachineFlowLineSchema)),
-    /* Run one of this product's own CLI actions on a connected computer, from a button rather than through an
+        .input(DeviceSandboxFlowInputSchema)
+        .output(eventIterator(DeviceFlowLineSchema)),
+    /* Run one of this product's own CLI actions on a connected device, from a button rather than through an
      * agent. A closed set of names, and the daemon builds the command line from the name (see the schema): the
      * browser never sends one, because the socket underneath also carries `run_command`.
      *
      * Not a stream, unlike the sandbox ops beside it: these are seconds-long CLI calls whose whole answer is the
      * sentence they print at the end, and a stream for that is a shape with nothing to put in it. */
-    runMachineCommand: oc
+    runDeviceCommand: oc
         .route({
             method: "POST",
-            path: "/system/computers/{id}/commands/{command}",
-            summary: "Run one of your computer's own CLI actions",
+            path: "/system/devices/{id}/commands/{command}",
+            summary: "Run one of your device's own CLI actions",
             description:
-                "Performs a named action on a machine you own by running its own intentic-machine command there — turning that computer's port mirroring off, say — over the connection it holds open. The set of actions is fixed and the command line is built here from the name, never sent by the caller. The machine enforces its own permissions and a refusal comes back as its own sentence, naming the switch to flip.",
+                "Performs a named action on a machine you own by running its own intentic-machine command there — turning that device's port mirroring off, say — over the connection it holds open. The set of actions is fixed and the command line is built here from the name, never sent by the caller. The machine enforces its own permissions and a refusal comes back as its own sentence, naming the switch to flip.",
         })
-        .input(MachineCommandInputSchema)
-        .output(MachineCommandResultSchema),
+        .input(DeviceCommandInputSchema)
+        .output(DeviceCommandResultSchema),
+    /* Update or restart the agent on one of the user's own devices — the remedy the Devices view used to print
+     * as a command to go and type, on the view built to replace that terminal.
+     *
+     * Streamed like the sandbox ops, and for a reason of its own: this is the one call whose transport the work
+     * destroys. Both ops stop the resident process holding the socket, so the stream ends WITHOUT a terminal
+     * frame in the ordinary, successful case, and callers must read that as "it started" rather than as a
+     * failure (DeviceAgentFlowSchema has the whole argument). The confirmation is the device's agent version
+     * moving on the next read of the fleet. */
+    runDeviceAgentFlow: oc
+        .route({
+            method: "POST",
+            path: "/system/devices/{id}/agent/{op}",
+            summary: "Update or restart the agent on one of your own devices",
+            description:
+                "Updates a machine you own to the current intentic-machine agent, or restarts the loop it is running, over the connection that machine holds open. The answer is a stream of the run's own output — and it normally stops mid-run, because the agent's loop is what carries this connection: the work is detached from it first, so it finishes regardless, and the device's reported version is what confirms it. Takes the machine's \"Run commands\" permission, the same one a command typed there would.",
+        })
+        .input(DeviceAgentFlowInputSchema)
+        .output(eventIterator(DeviceFlowLineSchema)),
 };

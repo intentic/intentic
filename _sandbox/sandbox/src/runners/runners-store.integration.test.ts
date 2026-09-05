@@ -54,9 +54,9 @@ test("revoke drops the runner; verify, enrolled and list all stop reporting it",
 });
 
 /* WHICH MACHINE HOLDS IT, carried from the pairing onto the enrollment: it is the only way back to the
- * computer that can stop or remove the container, and the runner itself cannot supply it (from inside, a
+ * device that can stop or remove the container, and the runner itself cannot supply it (from inside, a
  * container knows its hostname and nothing about the capability its host is filed under). */
-test("a runner remembers the computer that was asked to create it, and one made by hand simply has none", async () => {
+test("a runner remembers the device that was asked to create it, and one made by hand simply has none", async () => {
     const { store } = tempStore();
     await store.enroll(store.mintPairing("rig", "rog").token);
     await store.enroll(store.mintPairing("hand-made").token);

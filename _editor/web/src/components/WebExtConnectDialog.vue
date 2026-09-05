@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, watch } from "vue";
 import { useWebExtConnect } from "../composables/sandbox/useWebExtConnect";
 
 /* "Connect this browser" for a `webext`-kind capability. The machine dialog's sibling: that one hands over a
- * command to run on a computer this tab cannot reach, and this one hands over a code to paste into a browser
+ * command to run on a device this tab cannot reach, and this one hands over a code to paste into a browser
  * this tab may not be running in.
  *
  * It is blunt about what the connection can and cannot do, because this is the moment a person decides to let

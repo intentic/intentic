@@ -42,7 +42,7 @@ import { FRONT_DESK_GUIDANCE } from "./front-desk.js";
  * a card renamed in one place and not the other, so this is a state to REPORT loudly, not to assume away.
  *
  * NOTE ON WHAT THIS BOUNDS. Everything capability-shaped is enforced by ABSENCE: a filtered account has no
- * browser, a filtered connector has no credential in the shell's environment, a filtered computer and MCP
+ * browser, a filtered connector has no credential in the shell's environment, a filtered device and MCP
  * connection have no server mounted. The plain switches are enforced by taking tools out of the turn, which
  * holds for every tool the harness owns. Neither is a barrier against a session that has a SHELL and goes
  * looking, see PersonaPowersSchema, which says the same thing where the switch is set. */
@@ -93,7 +93,7 @@ const NONE_POWERS: PersonaPowers = {
     delegate: false,
     sandbox: false,
     connectors: [],
-    computers: [],
+    devices: [],
     mcp: [],
 };
 
@@ -101,7 +101,7 @@ const NONE_POWERS: PersonaPowers = {
  *
  * `ACCOUNTS_ONLY_DENIED` is the important one and the reason these are not two constants: an unattended wake
  * that named no persona loses every logged-in ACCOUNT and keeps everything else. A blanket deny here would take
- * its connectors, its computers and its MCP connections with them, which is the opposite of the powers rule in
+ * its connectors, its devices and its MCP connections with them, which is the opposite of the powers rule in
  * the header, and would have silently disarmed every automation already running the day this shipped. */
 const EVERYTHING = (): boolean => true;
 const NOTHING = (): boolean => false;
@@ -131,7 +131,7 @@ const allowsCapability = (capability: Capability, card: Persona, powers: Persona
         case "cli":
             return powers.connectors === undefined || powers.connectors.includes(capability.id);
         case "host":
-            return powers.computers === undefined || powers.computers.includes(capability.id);
+            return powers.devices === undefined || powers.devices.includes(capability.id);
         case "mcp":
             return powers.mcp === undefined || powers.mcp.includes(capability.id);
         default:
@@ -166,7 +166,7 @@ export const turnPersona = ({ personas, actsAs, unattended }: TurnPersonaInput):
  * Narrowed HERE, before anything is built from it, rather than by trimming tool names afterwards. An account
  * filtered out is absent from the browser router's per-turn manifest, so its Chromium never launches, its
  * profile is never opened, and a call naming it is refused with the granted set spelled out; a connector
- * filtered out has no credential in the shell's environment; a computer or an MCP connection filtered out has
+ * filtered out has no credential in the shell's environment; a device or an MCP connection filtered out has
  * no server mounted. Each is absent from the turn rather than present-and-discouraged, which is the only
  * version of this that survives an agent misreading its instructions.
  *
@@ -229,7 +229,7 @@ const DELEGATE_TOOLS = ["Agent", "Task", "Workflow"];
  * and the ones the image bakes in. That list is exactly the kind that goes stale by silently removing something,
  * which is the failure this whole change exists to stop repeating.
  *
- * EVERY denied kind, not just accounts. A connector's cheatsheet without its credential and a computer's skill
+ * EVERY denied kind, not just accounts. A connector's cheatsheet without its credential and a device's skill
  * without its server fail the same way, the skill reads as an offer and the tools behind it are not there. */
 const deniedSkills = (persona: TurnPersona, capabilities: readonly Capability[]): string[] =>
     capabilities.filter((capability) => !persona.allows(capability)).map((capability) => `Skill(${capability.id})`);

@@ -159,10 +159,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const status = (await (await fetch(`${base}/system/sync`)).json()) as { enrolled: boolean; available?: boolean };
         expect(status.enrolled).toBe(true);
         expect(status.available).toBe(true);
-        // WHICH machine, and what it holds, is a fact about that computer, so it is read off the computer list:
+        // WHICH machine, and what it holds, is a fact about that device, so it is read off the device list:
         // /system/sync stopped flattening the enrollment store into one holder's name (see SyncStatusSchema).
-        const fleet = (await (await fetch(`${base}/system/computers`)).json()) as { computers: { sync?: { machine: string; mode: string } }[] };
-        expect(fleet.computers.map((row) => row.sync)).toEqual([{ machine: "e2e-laptop", mode: "sync" }]);
+        const fleet = (await (await fetch(`${base}/system/devices`)).json()) as { devices: { sync?: { machine: string; mode: string } }[] };
+        expect(fleet.devices.map((row) => row.sync)).toEqual([{ machine: "e2e-laptop", mode: "sync" }]);
 
         // The enrolled key really opens the container's sshd: the transport Mutagen rides.
         await new Promise<void>((resolve, reject) => {

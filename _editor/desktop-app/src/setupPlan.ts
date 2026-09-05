@@ -60,7 +60,7 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         : [{ phase: `installing-docker`, label: windows ? `Set up Docker` : `Install Docker`, weight: windows ? 600 : 420 }];
     return [
         ...(windows ? [fetch, check, ...install] : [check, ...install, fetch]),
-        { phase: `preflight`, label: `Check this computer`, weight: 10 },
+        { phase: `preflight`, label: `Check this device`, weight: 10 },
         { phase: `claiming-code`, label: `Redeem your setup code`, weight: 5 },
         // The second long one, and the one people meet on every first install. It reports real progress (docker
         // names each layer as it lands), so this weight only has to be right about its share of the whole.
@@ -80,7 +80,7 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
          * Still sized for the download, because a first install is what this plan draws: the installers now
          * skip it entirely when the machine already has the published agent, so on a RE-RUN this step lands in
          * about a second and the bar simply arrives early — which is the harmless direction. */
-        { phase: `connecting-machine`, label: `Connect this computer`, weight: 75 },
+        { phase: `connecting-machine`, label: `Connect this device`, weight: 75 },
     ];
 };
 

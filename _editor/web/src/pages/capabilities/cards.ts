@@ -22,7 +22,7 @@ export const CATEGORY_ICONS: Readonly<Record<CapabilityCategory, IconName>> = {
     data: `database`,
     communication: `comments`,
     business: `credit-card`,
-    machines: `desktop`,
+    devices: `desktop`,
     servers: `server`,
     deploy: `cloud-upload`,
     extend: `th-large`,

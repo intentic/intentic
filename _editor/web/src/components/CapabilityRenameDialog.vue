@@ -5,7 +5,7 @@
      a sentence saying so and a button to press, which is exactly what a dialog is.
 
      WHAT IT PROMISES IS THAT NOTHING IS LOST. The daemon carries the state the old name keyed: a signed-in
-     browser profile, a paired computer's enrollment, an extension's checkout, and repoints whatever named it.
+     browser profile, a paired device's enrollment, an extension's checkout, and repoints whatever named it.
      That promise is the whole reason this is a route and not an add-then-remove, so the dialog says it plainly:
      the alternative people would otherwise reach for silently signs accounts out.
 
@@ -72,7 +72,7 @@ const unchanged = computed(() => renamed.value === props.id);
             </label>
             <p class="text-2xs text-muted">
                 This is the name your agent knows the connection by, so its skill and tools are renamed with it. Everything else is kept: a signed-in
-                browser stays signed in, a connected computer stays paired, and anything pointing at this connection is updated to follow it.
+                browser stays signed in, a connected device stays paired, and anything pointing at this connection is updated to follow it.
             </p>
         </form>
         <template #footer>

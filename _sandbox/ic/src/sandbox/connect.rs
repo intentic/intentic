@@ -93,7 +93,7 @@ fn connect(
      * claim, so it is listed on the strength of every code-carrying setup getting one. */
     let mut plan = vec![ui::PlanStep {
         phase: "preflight",
-        label: "Check this computer",
+        label: "Check this device",
         weight: 10,
     }];
     if setup_code.is_some() {
@@ -141,7 +141,7 @@ fn connect(
     }
     plan.push(ui::PlanStep {
         phase: "connecting-machine",
-        label: "Connect this computer",
+        label: "Connect this device",
         weight: 20,
     });
     ui::begin("intentic · setting up your sandbox", plan);
@@ -399,7 +399,7 @@ fn connect(
         ("SANDBOX_PUBLIC_URL", &sandbox_public_url),
         ("PLATFORM_URL", &platform_url_container),
         ("SYNC_PAIR_TOKEN", &sync_pair_token),
-        // The connected-computer seed: the pairing the machine agent below redeems, plus what to call this
+        // The connected-device seed: the pairing the machine agent below redeems, plus what to call this
         // machine and which OS card it gets. The daemon cannot learn either for itself — it is in a container
         // with its own hostname, on a Linux however this machine is spelled.
         ("HOST_PAIR_TOKEN", &host_pair_token),
@@ -516,18 +516,18 @@ fn connect(
         }
     }
 
-    /* Connect this machine as a computer — not gated on an opt-in, unlike sync above, because it needs no
+    /* Connect this machine as a device — not gated on an opt-in, unlike sync above, because it needs no
      * decision from the user: sync asks which FOLDER to mirror and there is no sensible default for that, while
      * this asks for nothing and grants only what the machine already does for this sandbox. The permission it
      * arrives with covers this machine's sandboxes and nothing else, and it is stated on the card.
      *
-     * Never fails the setup. A machine that does not finish this is a machine whose Computers view says its
+     * Never fails the setup. A machine that does not finish this is a machine whose Devices view says its
      * sandboxes are not visible — exactly what every sandbox said before this existed. */
     if !host_pair_token.is_empty()
         && !sandbox_public_url.is_empty()
         && !run_host_agent(&container, &sandbox_public_url, &host_pair_token)
     {
-        ui::warn("this computer wasn't connected, so its sandboxes won't be manageable from your browser. Add it any time from Capabilities.");
+        ui::warn("this device wasn't connected, so its sandboxes won't be manageable from your browser. Add it any time from Capabilities.");
     }
 
     ending(&slug, &container, &sandbox_public_url, self_host);
@@ -567,7 +567,7 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
         let (address, instruction) = if public_url.is_empty() {
             (
                 None,
-                "Your sandbox answers on this machine only — open it from the platform on this computer.",
+                "Your sandbox answers on this machine only — open it from the platform on this device.",
             )
         } else {
             (
@@ -583,7 +583,7 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
     // has always looked like, and a log that reads differently for no reason is a log people re-learn.
     println!("intentic sandbox started.");
     if public_url.is_empty() {
-        println!("Your sandbox answers on this machine only — open it from the platform on this computer.");
+        println!("Your sandbox answers on this machine only — open it from the platform on this device.");
     } else {
         println!("Your sandbox will be reachable at {public_url} (DNS may take a few seconds to propagate).");
         println!(
@@ -664,7 +664,7 @@ fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_di
     )
 }
 
-/// Connect this machine as a COMPUTER, so its sandboxes can be seen and managed from the browser.
+/// Connect this machine as a DEVICE, so its sandboxes can be seen and managed from the browser.
 ///
 /// The same bootstrap as desktop sync above and deliberately so — it is the second half of the same promise.
 /// Sync makes the machine's FOLDERS reachable from the sandbox; this makes the machine's own fleet reachable,
@@ -673,21 +673,21 @@ fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_di
 ///
 /// What the sandbox may then do here is decided in the sandbox and enforced by the agent this installs: it
 /// arrives allowed to start, stop and update this machine's sandboxes and nothing else — no shell, no files,
-/// no screen. Widening it is a switch on the computer's own card.
+/// no screen. Widening it is a switch on the device's own card.
 fn run_host_agent(container: &str, public_url: &str, pair_token: &str) -> bool {
     step(
         "connecting-machine",
-        "connecting this computer so you can manage its sandboxes from your browser…",
+        "connecting this device so you can manage its sandboxes from your browser…",
     );
     if !wait_local_health(container) {
         return false;
     }
     run_agent_bootstrap(
         AgentBootstrap {
-            what: "this computer",
+            what: "this device",
             url_var: "HOST_SCRIPT_URL",
-            unix_url: "https://intentic.dev/computer",
-            windows_url: "https://intentic.dev/computer.ps1",
+            unix_url: "https://intentic.dev/device",
+            windows_url: "https://intentic.dev/device.ps1",
         },
         &[("SANDBOX_URL", public_url), ("PAIR_TOKEN", pair_token)],
     )
@@ -822,7 +822,7 @@ fn run_agent_script(url: &str, what: &str, vars: &[(&str, &str)]) -> bool {
     }
 }
 
-/// The card this machine gets in the sandbox — one of the OS slugs the bundled computers extension declares.
+/// The card this machine gets in the sandbox — one of the OS slugs the bundled devices extension declares.
 fn host_platform() -> &'static str {
     if cfg!(windows) {
         "windows"
@@ -858,7 +858,7 @@ fn machine_label() -> String {
                 .and_then(named)
         })
         .map(|name| name.trim().to_string())
-        .unwrap_or_else(|| "this-computer".to_string())
+        .unwrap_or_else(|| "this-device".to_string())
 }
 
 /// The Windows deploy target: a privileged dind-host container on the shared network. Returns the private

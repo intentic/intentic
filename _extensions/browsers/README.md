@@ -15,8 +15,8 @@ The browser families a user can connect their own copy of, as something the agen
 
 ## How it fits
 
-Purely declarative, like [ext-computers](../computers). The extension that makes this possible lives in
-[`_computers/webext`](../../_computers/webext), the socket and the tool bridge in the daemon's `webext/`, and the
+Purely declarative, like [ext-devices](../devices). The extension that makes this possible lives in
+[`_devices/webext`](../../_devices/webext), the socket and the tool bridge in the daemon's `webext/`, and the
 enforcement in neither of them: per-site permission is the browser's own, granted by the person in the popup.
 
 ## Conventions & gotchas

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The command in this dialog is the one command in the app that is READ here and PASTED somewhere else. A local
-// dev build renders every script by repo path, which is right everywhere else and wrong here: the computer being
+// dev build renders every script by repo path, which is right everywhere else and wrong here: the device being
 // connected is a second machine, and the checkout is not on it. So the dialog carries the switch, and what is
 // pinned is that flipping it actually rewrites the line the user copies.
 import PrimeVue from "primevue/config";
@@ -59,7 +59,7 @@ it(`rewrites the command between the working-tree script and the released one`, 
 
     // The token is minted on open, so the command only exists after that round trip.
     await vi.waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
-    expect(document.body.textContent).toContain(`sh _site/site/public/scripts/computer.sh`);
+    expect(document.body.textContent).toContain(`sh _site/site/public/scripts/device.sh`);
 
     pill(`Standard`).click();
 
@@ -69,7 +69,7 @@ it(`rewrites the command between the working-tree script and the released one`, 
      * promise, and holds the PREVIOUS markup while the next pass is in flight rather than flashing back to an
      * unhighlighted block (Code.vue's `v-if="html"` and its stale-result guard). So the rewritten command lands
      * a microtask later than the click, not a render tick later, and a bare nextTick reads the old command. */
-    await vi.waitFor(() => expect(document.body.textContent).toContain(`curl -fsSL https://intentic.dev/computer |`));
+    await vi.waitFor(() => expect(document.body.textContent).toContain(`curl -fsSL https://intentic.dev/device |`));
     expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`);
-    expect(document.body.textContent).not.toContain(`_site/site/public/scripts/computer.sh`);
+    expect(document.body.textContent).not.toContain(`_site/site/public/scripts/device.sh`);
 });

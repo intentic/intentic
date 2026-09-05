@@ -6,7 +6,7 @@ description: Ask the owner, on a card in chat, to connect a capability the task 
 # Missing capabilities
 
 The sandbox connects to outside things through capability cards: connectors (GitHub, Notion, Stripe…),
-browser accounts, databases, Docker, the owner's own computers. When a task needs one that isn't connected,
+browser accounts, databases, Docker, the owner's own devices. When a task needs one that isn't connected,
 **raise the ask in chat** with the `capabilities` command rather than telling the owner to go set something
 up by hand. The card does the setup handoff, and your command resumes the moment the connection is live.
 

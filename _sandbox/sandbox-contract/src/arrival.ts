@@ -30,7 +30,7 @@ export const ArrivalSourceSchema = z.enum(["definition", "bundle", "hermes", "op
 export type ArrivalSource = z.infer<typeof ArrivalSourceSchema>;
 
 // The subset a foreign assistant's home directory can be. Narrower than ArrivalSource on purpose: a connected
-// computer is scanned for these two and never for a bundle, which is a file, not a setup.
+// device is scanned for these two and never for a bundle, which is a file, not a setup.
 export const AssistantSourceSchema = z.enum(["hermes", "openclaw"]);
 export type AssistantSource = z.infer<typeof AssistantSourceSchema>;
 
@@ -138,7 +138,7 @@ export const ArrivalReportSchema = z.object({
 });
 export type ArrivalReport = z.infer<typeof ArrivalReportSchema>;
 
-/* ONE OF THE OWNER'S OWN COMPUTERS, as an arrival source that needs no packing at all: the daemon walks the
+/* ONE OF THE OWNER'S OWN DEVICES, as an arrival source that needs no packing at all: the daemon walks the
  * machine's home folder over the socket it already holds. Read on the card's first render for every enrolled
  * machine, so the offer appears before the owner has read a single instruction.
  *
@@ -154,7 +154,7 @@ export const ArrivalHostSchema = z.object({
 export type ArrivalHost = z.infer<typeof ArrivalHostSchema>;
 export const ArrivalHostsSchema = z.object({ hosts: z.array(ArrivalHostSchema) });
 
-// Read a setup off a connected computer instead of an upload. Answers with a plan exactly as the upload door
+// Read a setup off a connected device instead of an upload. Answers with a plan exactly as the upload door
 // does; everything after this point is identical whichever door the arrival came through.
 export const ArrivalScanSchema = z.object({ host: z.string().min(1) });
 export type ArrivalScan = z.infer<typeof ArrivalScanSchema>;

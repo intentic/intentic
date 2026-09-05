@@ -34,7 +34,7 @@
         // nesting starts, which is what the metric is for.
         //
         // NOT the same meter as the builtin `complexity` in .oxlintrc.agent.json: that one also counts `?.`
-        // (describeAction in _computers/machine: 19 there, 14 here), so the two cannot be made to agree by
+        // (describeAction in _devices/machine: 19 there, 14 here), so the two cannot be made to agree by
         // sharing a number. The builtin is off here so a function is measured once, by the rule that also names
         // the lines that cost the most.
         "complexity/complexity": ["error", { "cyclomatic": 20, "cognitive": 20 }],

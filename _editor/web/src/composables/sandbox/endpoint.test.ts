@@ -63,7 +63,7 @@ it(`ranks by multiplexing, not by distance: the HTTP/1.1 address is last`, async
 
 it(`offers no loopback candidate for a machine the platform put somewhere this browser is not`, async () => {
     // The lane where the platform created the machine itself and knows where it is. Probing it would spend the
-    // browser's Local Network Access prompt: the "is this app looking around my computer" dialog: on an
+    // browser's Local Network Access prompt: the "is this app looking around my device" dialog: on an
     // address that could never have answered.
     const hosted = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } });
     expect(hosted).toEqual([{ kind: `public`, base: TUNNEL }]);

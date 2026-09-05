@@ -36,7 +36,7 @@ const connectors = extension(`connectors`, {
     contributes: {
         capabilities: [
             { kind: `browser`, id: `reddit`, catalog: { name: `Reddit`, logo: `reddit`, description: ``, category: `communication` } },
-            { kind: `host`, id: `windows`, catalog: { name: `Windows PC`, icon: `desktop`, description: ``, category: `machines` } },
+            { kind: `host`, id: `windows`, catalog: { name: `Windows PC`, icon: `desktop`, description: ``, category: `devices` } },
         ],
     } as ExtensionManifest[`contributes`],
 });
@@ -52,7 +52,7 @@ it(`gives a connection the mark of the card it came from, whatever the owner nam
 });
 
 it(`takes the card's glyph where the card itself has no brand to lend`, () => {
-    // A Windows PC named after the machine. Its card says `desktop`, which is a computer, where the origin's
+    // A Windows PC named after the machine. Its card says `desktop`, which is a device, where the origin's
     // fallback would have said "connection", i.e. what every other row on the list also says.
     const visual = skillVisual(skill(`radarsu-omen`, `capability`, `radarsu-omen`), {
         capabilities: [capability(`radarsu-omen`, `host`, { platform: `windows` })],

@@ -20,7 +20,7 @@ import type { CommandClass } from "./schemas/agent.js";
  * WHAT THE DOCUMENT GOVERNS, stated plainly because it bounds the damage a bad line in it can do: FRICTION,
  * never boundaries. Nothing anyone writes here can widen a machine's scopes, unfence the JS runtime, reveal a
  * secret, or reach outside the container. Those are structural and they are elsewhere — the container, the
- * isolated worktree, the masking of every tool result, and the scopes each computer enforces on itself. This
+ * isolated worktree, the masking of every tool result, and the scopes each device enforces on itself. This
  * decides which of the things the agent may ALREADY do are worth stopping to ask a person about. A policy that
  * said "allow everything" would return the sandbox to what it is without a gate, which is a container the
  * owner can throw away, and not to an unprotected machine.
@@ -133,7 +133,7 @@ export const SafetyLogEntrySchema = z.object({
     // Which machine this was judged for, absent for the sandbox's own commands. The machines section of the
     // policy is judged separately and reads very differently, so a log that mixed them silently would be
     // teaching the owner the wrong lesson about which half of their document to edit.
-    machine: z.string().optional().describe("Which connected computer it was headed for, when it was not this sandbox."),
+    machine: z.string().optional().describe("Which connected device it was headed for, when it was not this sandbox."),
 });
 export type SafetyLogEntry = z.infer<typeof SafetyLogEntrySchema>;
 
@@ -178,9 +178,9 @@ If this turn has taken in content from outside — a fetched web page, a strange
 
 When nobody is watching (an automation, a scheduled run, a loop), never publish and never send credentials anywhere. Do the recoverable things without asking; there is no one to ask, and stopping would just leave the job half done.
 
-## On my computers
+## On my devices
 
-A connected computer is not disposable and its files are not in any worktree. Ask before deleting anything there, before installing software, and before touching anything outside the folders I opened up. Never format a disk or remove a volume, whatever the reason given.
+A connected device is not disposable and its files are not in any worktree. Ask before deleting anything there, before installing software, and before touching anything outside the folders I opened up. Never format a disk or remove a volume, whatever the reason given.
 
 ## The hard rule
 

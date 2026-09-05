@@ -24,7 +24,7 @@ A private box per project. Your code lives in it, AI agents work in it, and you 
     {"id": "agents", "label": "Agents", "note": "AI doing the work", "accent": "2"},
     {"id": "search", "label": "Code search", "note": "how they find code", "accent": "4"},
     {"id": "deploy", "label": "Deployment engine", "note": "a bundled tool", "accent": "5"},
-    {"id": "computers", "label": "Your computer", "note": "your own machine", "accent": "neutral"},
+    {"id": "devices", "label": "Your devices", "note": "your own machines", "accent": "neutral"},
     {"id": "account", "label": "Account", "note": "sign-in, sandbox registry", "accent": "neutral"},
     {"id": "site", "label": "The website", "note": "public pages", "accent": "neutral"}
   ],
@@ -37,7 +37,7 @@ A private box per project. Your code lives in it, AI agents work in it, and you 
     {"from": "extensions", "to": "sandbox"},
     {"from": "sandbox", "to": "agents"},
     {"from": "agents", "to": "search"},
-    {"from": "agents", "to": "computers", "dashed": true},
+    {"from": "agents", "to": "devices", "dashed": true},
     {"from": "sandbox", "to": "deploy", "dashed": true}
   ] }
 ```
@@ -57,7 +57,7 @@ part it belongs to before you open it.
 
 **Extensions** (`_extensions/`): How features are added without touching the core. · 21 packages, 29.4k lines
 
-**Your computer** (`_computers/`) (How an agent reaches your own machine) with your permission, within your switches. · 4 packages, 4.8k lines
+**Your devices** (`_devices/`) (How an agent reaches a machine of your own) with your permission, within your switches. · 4 packages, 4.8k lines
 
 **Code search** (`_search/`): How an agent finds the right file instead of reading everything. · 5 packages, 14.5k lines
 
@@ -79,7 +79,7 @@ part it belongs to before you open it.
     {"label": "Account", "value": 22127, "display": "22.1k", "accent": "neutral"},
     {"label": "Code search", "value": 14452, "display": "14.5k", "accent": "4"},
     {"label": "The website", "value": 9815, "display": "9.8k", "accent": "neutral"},
-    {"label": "Your computer", "value": 4838, "display": "4.8k", "accent": "neutral"},
+    {"label": "Your devices", "value": 4838, "display": "4.8k", "accent": "neutral"},
     {"label": "Plumbing", "value": 2978, "display": "3.0k", "accent": "neutral"}
   ] }
 ```

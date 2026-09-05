@@ -430,7 +430,7 @@ async fn check_now(app: &AppHandle) {
             app,
             settled,
             Some(version),
-            "this computer has no writable cache directory",
+            "this device has no writable cache directory",
         );
     };
     let file = dir.join(format!("intentic-{version}"));
@@ -484,7 +484,7 @@ pub fn refusal(app: &AppHandle) -> Option<&'static str> {
     }
     if crate::scripts::busy() {
         return Some(
-            "Something is running on this computer. Intentic will update once it finishes.",
+            "Something is running on this device. Intentic will update once it finishes.",
         );
     }
     None

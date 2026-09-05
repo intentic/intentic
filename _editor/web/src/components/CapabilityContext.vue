@@ -5,7 +5,7 @@
      It used to be only the guide that sat beside the form, and the other two were stacked INSIDE it: the
      effects panel between the last field and the submit, the paragraph under that. Two consequences, both
      visible on the cards people actually open. The form grew a scrollbar on any card with more than three
-     fields: Docker, GitHub, both computers, so the submit button was below the fold on the one screen whose
+     fields: Docker, GitHub, both devices, so the submit button was below the fold on the one screen whose
      entire purpose is pressing it. And the right-hand column existed only for the cards whose catalog author
      had written a `guide`, which left the other half of the catalog rendering a 36rem column of form against
      36rem of empty page.

@@ -544,7 +544,7 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<SandboxStatus>> {
 /// Start, stop or restart the sandbox and its sidecar together — a workspace with a stopped tunnel is reachable
 /// from this machine's loopback and from nowhere else, which is not a state anyone asks for on purpose.
 ///
-/// Three verbs rather than a boolean because the manager offers three: Restart is what the web's Computers tab
+/// Three verbs rather than a boolean because the manager offers three: Restart is what the web's Devices tab
 /// has always had here and this window had not, and a bool cannot say it. Anything else is refused rather than
 /// forwarded — this argument reaches `docker` as its subcommand.
 #[tauri::command]
@@ -711,7 +711,7 @@ pub async fn folder_entries(path: String) -> CommandResult<u32> {
     .map_err(|error| error.to_string())?
 }
 
-/// What this machine's agent is doing — the sandboxes that may work on this computer, the folders sync keeps in
+/// What this machine's agent is doing — the sandboxes that may work on this device, the folders sync keeps in
 /// step, the ports it put on localhost, and whether the one resident loop behind all of it is alive.
 ///
 /// None of it was reachable from this app before. `syncDir` rides the setup link into `connect.sh` and is never
@@ -721,7 +721,7 @@ pub async fn folder_entries(path: String) -> CommandResult<u32> {
 ///
 /// Returned as the agent's raw JSON rather than parsed here: this process has no schema for it (no Node), the
 /// webview does, and re-stating the shape in Rust would be one more thing to keep in lockstep. `None` means no
-/// machine agent is installed — which the screen renders as a fact about the computer, not as a failure.
+/// machine agent is installed — which the screen renders as a fact about the device, not as a failure.
 #[tauri::command]
 pub async fn machine_report() -> CommandResult<Option<String>> {
     tauri::async_runtime::spawn_blocking(scripts::sync_report)
@@ -741,7 +741,7 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
 /// Hand the window back to the workspace — at the app's root, or at a path under it.
 ///
 /// The path is what makes the manager's own screen reachable from the product: this window and the SPA's
-/// Computers tab manage the same containers on the same machine through two different doors, and until now
+/// Devices tab manage the same containers on the same machine through two different doors, and until now
 /// neither said the other existed. `show_workspace_at` already navigates an open workspace window, so
 /// "Open in Intentic" is the same swap the footer's other button does, one URL further along.
 #[tauri::command]

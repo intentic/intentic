@@ -5,11 +5,11 @@ import { onRuntimeChanged } from "./runtimeEvents";
 import { sandboxRequest } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
 
-/* Drives the "Connect this computer" flow on a host capability's card, the desktop-sync card's shape, narrowed
+/* Drives the "Connect this device" flow on a host capability's card, the desktop-sync card's shape, narrowed
  * to one machine.
  *
  * Connect mints a single-use pairing token BOUND TO THIS CAPABILITY, so the one-liner it produces can only ever
- * connect the computer the user is looking at. The machine coming online is the thing the user is waiting for
+ * connect the device the user is looking at. The machine coming online is the thing the user is waiting for
  * and it happens out-of-band, so the daemon pushes it: the moment they paste the command into their laptop and
  * its socket lands, the `hosts` domain frame arrives and this card re-reads itself, without a refresh and
  * without a timer.
@@ -31,12 +31,12 @@ export function useHostConnect() {
     const linuxCommand = computed(() =>
         url.value === `` || pairToken.value === undefined
             ? ``
-            : bashCommand(`computerSh`, `env SANDBOX_URL='${url.value}' PAIR_TOKEN='${pairToken.value}' `, ``),
+            : bashCommand(`deviceSh`, `env SANDBOX_URL='${url.value}' PAIR_TOKEN='${pairToken.value}' `, ``),
     );
     const windowsCommand = computed(() =>
         url.value === `` || pairToken.value === undefined
             ? ``
-            : psCommand(`computerPs1`, `$env:SANDBOX_URL='${url.value}'; $env:PAIR_TOKEN='${pairToken.value}'; `),
+            : psCommand(`devicePs1`, `$env:SANDBOX_URL='${url.value}'; $env:PAIR_TOKEN='${pairToken.value}'; `),
     );
 
     const refresh = async (): Promise<void> => {
@@ -60,7 +60,7 @@ export function useHostConnect() {
             if (!response.ok) {
                 error.value =
                     response.status === 403
-                        ? `Only the sandbox's owner can connect a computer.`
+                        ? `Only the sandbox's owner can connect a device.`
                         : `Couldn't start the connection (${response.status}).`;
                 return;
             }
@@ -72,7 +72,7 @@ export function useHostConnect() {
     };
 
     let unsubscribe: (() => void) | undefined;
-    /* PUSHED, not polled, and the difference is the whole of this card's job. "Is that computer up" is a socket
+    /* PUSHED, not polled, and the difference is the whole of this card's job. "Is that device up" is a socket
      * in the daemon (hosts/host-hub.ts) and nothing else, so the daemon knows the instant the laptop answers and
      * says so on the `hosts` domain. What stood here was a three-second timer, which meant a machine that came
      * up promptly still looked absent for up to three seconds, on the one screen whose entire content is

@@ -374,7 +374,7 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             /* The connections themselves, and the entry that took the longest to earn its place: it was classed
              * `secret` on the strength of holding each capability's credential, which stopped being true when the
              * vault took the values out and left the shape behind. Connecting a deployment orchestrator, or
-             * granting a connected computer shell and screen control, is the largest change made to what this
+             * granting a connected device shell and screen control, is the largest change made to what this
              * sandbox can DO, and it used to leave no diff. */
             `${STATE_DIR}/config/capabilities.json`,
             `${STATE_DIR}/config/capability-dismissals.json`,

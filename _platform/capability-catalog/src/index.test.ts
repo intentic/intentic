@@ -105,7 +105,7 @@ describe("contributionCard", () => {
         const pack: CapabilityContribution = {
             id: "windows",
             kind: "host",
-            catalog: { name: "Windows PC", description: "Your Windows computer", category: "machines" },
+            catalog: { name: "Windows PC", description: "Your Windows device", category: "devices" },
             fields: [],
             skill: "skills/windows/SKILL.md",
         };

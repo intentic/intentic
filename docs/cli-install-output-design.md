@@ -386,12 +386,12 @@ The question is not whether to start; it is how much further to go, and in which
 | --- | --- | --- | --- | --- |
 | `ic` | Rust | 10,742 | 3.65 MB static binary | on the user's machine, **re-downloaded every run** |
 | `_sandbox/sync` | TypeScript | 3,076 | `bun --compile` binary | on the user's machine, installed once |
-| `_computers/host` | TypeScript | 1,991 | `bun --compile` binary | on the user's machine, installed once |
+| `_devices/host` | TypeScript | 1,991 | `bun --compile` binary | on the user's machine, installed once |
 | `_deploy/cli` | TypeScript | 3,957 | node | inside the sandbox |
 | served shims | sh + PowerShell | 1,930 | HTTP | once, then hand over |
 
 The three TypeScript CLIs are not three ecosystems. They already share a CLI framework (`@stricli/core`) and
-the platform's own typed contract (`@intentic/sandbox-contract`); `_computers/host` additionally shares
+the platform's own typed contract (`@intentic/sandbox-contract`); `_devices/host` additionally shares
 `@intentic/browser` and `@intentic/desktop`. They are one ecosystem with three entry points.
 
 ### 11.3 Why "all Rust" is the wrong trade
@@ -459,8 +459,8 @@ sharing the **contract** rather than the code. That is what shipped. No agent lo
 | | |
 | --- | --- |
 | `docs/cli-output-protocol.md` | The line format, the three modes, the row vocabulary and the rules for adding a phase: promoted from comments in two languages to one normative page both implementations point at. |
-| `_computers/local-agent/src/ui.ts` | The renderer, ~460 lines. The TypeScript twin of `ui.rs`, in the package whose stated job is "the plumbing every intentic CLI that lives on a user's own computer needs". |
-| `_sandbox/sync`, `_computers/host` | Both `setup` commands render through it, declare a plan, and emit phases. Their hand-rolled `out()` closures are gone. |
+| `_devices/local-agent/src/ui.ts` | The renderer, ~460 lines. The TypeScript twin of `ui.rs`, in the package whose stated job is "the plumbing every intentic CLI that lives on a user's own computer needs". |
+| `_sandbox/sync`, `_devices/host` | Both `setup` commands render through it, declare a plan, and emit phases. Their hand-rolled `out()` closures are gone. |
 | `_sandbox/ic` | Sets `INTENTIC_UI=nested` on the agent installers it spawns. |
 
 `@intentic/local-agent` was the right home and not a new package: `sync`, `host` and `acp-bridge` already

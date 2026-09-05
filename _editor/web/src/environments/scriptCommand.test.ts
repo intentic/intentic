@@ -46,8 +46,8 @@ test("local dev runs the PowerShell script by path, arguments appended", async (
 test("a dev build renders the published form when the developer asks for it", async () => {
     const { bashCommand, psCommand, scriptSource } = await load(false);
     scriptSource.value = `published`;
-    expect(bashCommand(`computerSh`, `env PAIR_TOKEN='t' `, ``)).toBe(`curl -fsSL https://intentic.dev/computer | env PAIR_TOKEN='t' sh`);
-    expect(psCommand(`computerPs1`, `$env:PAIR_TOKEN='t'; `)).toBe(`$env:PAIR_TOKEN='t'; irm https://intentic.dev/computer.ps1 | iex`);
+    expect(bashCommand(`deviceSh`, `env PAIR_TOKEN='t' `, ``)).toBe(`curl -fsSL https://intentic.dev/device | env PAIR_TOKEN='t' sh`);
+    expect(psCommand(`devicePs1`, `$env:PAIR_TOKEN='t'; `)).toBe(`$env:PAIR_TOKEN='t'; irm https://intentic.dev/device.ps1 | iex`);
 });
 
 // The switch is a dev affordance, not a second production mode: production has only the fetched delivery, so
@@ -55,7 +55,7 @@ test("a dev build renders the published form when the developer asks for it", as
 test("a deployed build ignores the preference entirely", async () => {
     const { bashCommand, scriptSource } = await load(true);
     scriptSource.value = `checkout`;
-    expect(bashCommand(`computerSh`, ``, ``)).toBe(`curl -fsSL https://intentic.dev/computer | sh`);
+    expect(bashCommand(`deviceSh`, ``, ``)).toBe(`curl -fsSL https://intentic.dev/device | sh`);
 });
 
 test("every script key points at a file that exists in the repo", async () => {

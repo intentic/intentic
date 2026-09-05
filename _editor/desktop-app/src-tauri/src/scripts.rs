@@ -154,7 +154,7 @@ pub fn stop(id: &str) -> Result<(), String> {
         .lock()
         .ok()
         .and_then(|live| live.get(id).copied())
-        .ok_or_else(|| format!("nothing called {id} is running on this computer"))?;
+        .ok_or_else(|| format!("nothing called {id} is running on this device"))?;
     let killed = if cfg!(windows) {
         quiet(Command::new("taskkill.exe"))
             .args(["/PID", &pid.to_string(), "/T", "/F"])
@@ -301,14 +301,14 @@ fn own_group(command: Command) -> Command {
 /* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever.
  *
  * A run ends when the script exits. It does NOT end when the pipes close, because on Windows those are not the
- * same event: setup installs resident background agents (the connected-computer loop, the sync mirror watcher),
+ * same event: setup installs resident background agents (the connected-device loop, the sync mirror watcher),
  * each spawned detached so it outlives the terminal that started it — and a detached process on Windows inherits
  * the inheritable handles of the process that spawned it, this app's stdout/stderr pipes among them. The agent
  * then holds the write end open for as long as it runs, which is forever by design.
  *
  * Joining the pump threads before reporting the exit therefore hung the whole screen: connect.ps1 had printed
- * its last line and exited, the sandbox was up, the computer was connected — and the setup card span on
- * "connecting this computer…" with no exit event, no error, and no way out but quitting the app.
+ * its last line and exited, the sandbox was up, the device was connected — and the setup card span on
+ * "connecting this device…" with no exit event, no error, and no way out but quitting the app.
  *
  * So the exit is emitted on the CHILD's exit and the pipes get a short window to hand over whatever is still
  * buffered in them. Threads still blocked on a read after that are abandoned rather than joined; they are
@@ -495,14 +495,14 @@ pub fn sync_agent_candidates(host: Host, home: Option<&str>) -> Vec<String> {
 }
 
 /// This machine's agent status — `intentic-machine status --json`, the SAME producer the terminal command
-/// prints: the sandbox links the computer half holds, the sync half's whole machine report, and whether the one
+/// prints: the sandbox links the device half holds, the sync half's whole machine report, and whether the one
 /// resident loop behind both is alive.
 ///
 /// Running the agent rather than reading its state files is the whole point: the files hold links and pairings,
 /// but the status also asks Mutagen what each session is doing and checks whether the loop is alive, and a
 /// second implementation of that in Rust is precisely the lockstep this app exists to avoid (see the header).
 ///
-/// `Ok(None)` is "no machine agent on this computer" — an ordinary state for a machine set up before either
+/// `Ok(None)` is "no machine agent on this device" — an ordinary state for a machine set up before either
 /// capability, and not an error. Only a machine that HAS the agent and could not be asked is one.
 pub fn sync_report() -> Result<Option<String>, String> {
     let home = std::env::var("HOME")
@@ -525,7 +525,7 @@ pub fn sync_report() -> Result<Option<String>, String> {
     match last {
         None => Ok(None),
         Some(error) => Err(format!(
-            "the sync agent on this computer could not be read: {error}"
+            "the sync agent on this device could not be read: {error}"
         )),
     }
 }
@@ -581,7 +581,7 @@ mod tests {
     /* THE HANG THIS APP SHIPPED WITH, AS TWO ASSERTIONS.
      *
      * A setup run installs resident background agents, and on Windows a detached process inherits the pipes of
-     * whoever spawned it — so the app's stdout pipe stays open for as long as the connected-computer agent
+     * whoever spawned it — so the app's stdout pipe stays open for as long as the connected-device agent
      * runs. Waiting on the readers before reporting the exit meant the setup card span forever on a machine
      * whose sandbox was already up. The second test is the one that matters: a reader that never finishes must
      * cost the grace and nothing more. */
@@ -791,7 +791,7 @@ mod tests {
      * ~/.local/bin, which is exactly why the gap survived: the shell side was right, so the shape looked
      * finished from both directions.
      *
-     * What that cost, on the first Windows computer to connect: two green checkmarks, "This computer is
+     * What that cost, on the first Windows device to connect: two green checkmarks, "This device is
      * connected", then `intentic-host status` answering `The term 'intentic-host' is not recognized`. The
      * install had worked perfectly and every instruction it printed was wrong.
      *
@@ -799,8 +799,8 @@ mod tests {
      * identical — same reasoning as the ic download above, and the same reason it has to be a test: these
      * files are handed to `irm | iex` one at a time and can never import anything. The function itself is the
      * delicate part (a user's PATH is not ours to corrupt), which is what makes three hand-kept copies worth
-     * holding down. Only three: the two AGENT installers (computer.ps1, sync.ps1) are bootstrap shims now,
-     * and the agent's own `setup` repairs PATH on every run (_computers/machine/src/install.ts) — the same
+     * holding down. Only three: the two AGENT installers (device.ps1, sync.ps1) are bootstrap shims now,
+     * and the agent's own `setup` repairs PATH on every run (_devices/machine/src/install.ts) — the same
      * promise, kept from one tested place instead of two more copies of this block. */
     #[test]
     fn every_downloading_installer_puts_its_binary_on_path() {
@@ -853,7 +853,7 @@ mod tests {
      * the entry silent, and the agent uses it ONLY if it is sitting next to the binary.
      *
      * The two agent installers used to fetch it, in two hand-identical copies this test held together. The
-     * agent's `setup` and `upgrade` fetch and refresh it themselves now (_computers/machine/src/install.ts),
+     * agent's `setup` and `upgrade` fetch and refresh it themselves now (_devices/machine/src/install.ts),
      * which is strictly better: a machine that never re-runs a card's command still gets a fixed stub with
      * its next agent update. What is left to hold is the boundary: a script that grows its own launcher fetch
      * is a second copy of that decision on its way back into shell, where fixes stop reaching machines. */
@@ -863,7 +863,7 @@ mod tests {
             assert!(
                 !text.contains("intentic-launch"),
                 "{} fetches or names intentic-launch.exe — the agent keeps its own launcher stub fresh \
-                 (setup and upgrade, _computers/machine/src/install.ts). A script copy is the drift this \
+                 (setup and upgrade, _devices/machine/src/install.ts). A script copy is the drift this \
                  test exists to prevent.",
                 path.display(),
             );
@@ -880,7 +880,7 @@ mod tests {
     }
 
     /// The `$Ic = $env:IC_BIN` block, up to the brace that closes it, minus the one line that is allowed to
-    /// differ. None for a script that has no such block (cleanup, sync, computer).
+    /// differ. None for a script that has no such block (cleanup, sync, device).
     fn ic_fetch_block(text: &str) -> Option<String> {
         let start = text.find("$Ic = $env:IC_BIN")?;
         let rest = &text[start..];

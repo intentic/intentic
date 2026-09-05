@@ -86,7 +86,7 @@ const split = [
 
     <h2>Add a runner to a computer</h2>
     <p>
-        First connect the computer from <strong>Sandbox → Computers</strong> and allow it to <strong>Manage sandboxes</strong>. That switch is
+        First connect the computer from <strong>Sandbox → Devices</strong> and allow it to <strong>Manage sandboxes</strong>. That switch is
         the machine-local permission to create and update containers; adding a runner does not widen shell, screen or file access.
     </p>
     <p>
@@ -129,7 +129,7 @@ const split = [
 
     <h2>Credentials and capabilities</h2>
     <p>
-        A runner does not inherit the parent's browser sessions, connected computers, capabilities or secret values. Model access is the
+        A runner does not inherit the parent's browser sessions, connected devices, capabilities or secret values. Model access is the
         narrow exception required to execute the selected turn: Claude Code-family harnesses resolve against the parent's connected account,
         receiving a per-turn access token or using the parent's authenticated model translator as a service. Long-lived refresh credentials
         stay at the origin.

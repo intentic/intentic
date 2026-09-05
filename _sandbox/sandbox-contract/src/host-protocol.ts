@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /* The handshake on /system/hosts/connect, the ONE message that is not oRPC.
  *
- * Everything a connected computer is asked lives in `hostContract` (contracts/host.contract.ts), spoken over
+ * Everything a connected device is asked lives in `hostContract` (contracts/host.contract.ts), spoken over
  * this socket by oRPC's websocket adapter: the machine hosts the server, the daemon holds the client. But a
  * socket has to prove whose it is before it can be given a typed client, and that proof cannot itself be an
  * oRPC call, the daemon has nothing to call yet, and would be attaching a link to a stranger.

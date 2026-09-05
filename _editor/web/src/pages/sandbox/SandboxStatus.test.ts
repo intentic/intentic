@@ -9,7 +9,7 @@ import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// What this component's import chain reads at module eval: the same edge SandboxComputers.test.ts cuts.
+// What this component's import chain reads at module eval: the same edge SandboxDevices.test.ts cuts.
 
 const panels = ref<PanelSummary[]>([]);
 const capabilities = ref<CapabilitySummary[]>([]);

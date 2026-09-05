@@ -406,7 +406,7 @@ test("git.fileDiff routes each side to its own diff and BAD_REQUESTs a path esca
 });
 
 /* THE PANEL MUST BE ABLE TO OPEN EVERY ROW IT DRAWS. `changes` lists what git reports, and the root repo tracks
- * `.intentic/config/capabilities.json` (it is `versioned`: connecting this sandbox to a computer or an orchestrator is
+ * `.intentic/config/capabilities.json` (it is `versioned`: connecting this sandbox to a device or an orchestrator is
  * the largest change made to what it can do, and that belongs in review). The path is also control-plane, so the
  * diff guard used to refuse it and the row 404'd on click: a file deliberately made reviewable, with no way to
  * review it. The lock is about the WRITE, which is why only these two diff routes carve it out. */

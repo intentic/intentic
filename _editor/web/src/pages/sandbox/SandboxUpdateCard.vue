@@ -40,7 +40,7 @@ const { cmdOs } = useOsPreference();
 /* A HOSTED SANDBOX HAS NO HOST TO HAND A COMMAND TO. Its machine is the platform's: a restart replaces the
  * machine's config with the image the platform currently runs (and keeps any environment overlay the
  * machine had, rebuilding it on the new base in the background), so "update" here is one button that asks the
- * platform, not a one-liner for a computer nobody is at. Rollback is not offered: the platform keeps no
+ * platform, not a one-liner for a device nobody is at. Rollback is not offered: the platform keeps no
  * previous image for a hosted machine. */
 const { active } = useSandbox();
 const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
@@ -127,7 +127,7 @@ const updateHeading = computed(() => {
                          different decision from an unbounded "a few minutes", and until the host started reporting
                          what it had already downloaded there was no way to tell the two apart. -->
                     <template v-else-if="updateStaged">
-                        It is already downloaded and built on the computer that runs this sandbox. Applying it restarts your sandbox for about half a
+                        It is already downloaded and built on the device that runs this sandbox. Applying it restarts your sandbox for about half a
                         minute: your files (in /work) are kept.
                     </template>
                     <template v-else>

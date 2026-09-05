@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cross-compile the Windows launcher stub (_computers/win-launcher, Rust) — the ~200 KB GUI-subsystem program
+# Cross-compile the Windows launcher stub (_devices/win-launcher, Rust) — the ~200 KB GUI-subsystem program
 # that starts a machine-side agent at logon without putting a console window on the desktop. Downloaded beside
 # the agent it launches by computer.ps1 / sync.ps1, and named in the HKCU\…\Run value those agents register.
 #
@@ -8,7 +8,7 @@
 # Same cargo-xwin toolchain (MSVC) the desktop release and build-ic.sh already use, same explicit-target rule:
 # the launcher ships for exactly the platforms the AGENTS ship for, because it is useless without one beside it.
 #
-# Artifacts land in _computers/win-launcher/dist-bin/ as intentic-launch-windows-<arch>.exe, from where
+# Artifacts land in _devices/win-launcher/dist-bin/ as intentic-launch-windows-<arch>.exe, from where
 # publish-github.sh attaches them to the GitHub Release.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
@@ -16,12 +16,12 @@ cd "$(repo_root)"
 
 [ $# -ge 1 ] || { echo "usage: build-win-launcher.sh <target>... (windows-x64)" >&2; exit 2; }
 
-MANIFEST="_computers/win-launcher/Cargo.toml"
-OUT="_computers/win-launcher/dist-bin"
+MANIFEST="_devices/win-launcher/Cargo.toml"
+OUT="_devices/win-launcher/dist-bin"
 # CARGO_TARGET_DIR wins over the crate-local target/ wherever it is set (the release job points it at the
 # shared /ci-cache store), so the copy below reads where cargo actually wrote — build-ic.sh's line, learned the
 # same way.
-TARGET_DIR="${CARGO_TARGET_DIR:-_computers/win-launcher/target}"
+TARGET_DIR="${CARGO_TARGET_DIR:-_devices/win-launcher/target}"
 mkdir -p "$OUT"
 
 command -v cargo >/dev/null 2>&1 || { echo "error: cargo (rustup) is required — https://rustup.rs" >&2; exit 1; }

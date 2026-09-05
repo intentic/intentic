@@ -60,7 +60,7 @@ export { gitContract } from "./contracts/git.contract.js";
 export { grokContract } from "./contracts/grok.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
 /* Deliberately NOT part of `sandboxContract` below: that map is the daemon's own HTTP surface, and this one is
- * spoken the other way round, over a connected computer's WebSocket, with the MACHINE implementing it. */
+ * spoken the other way round, over a connected device's WebSocket, with the MACHINE implementing it. */
 export { hostContract } from "./contracts/host.contract.js";
 // The same inversion again, one layer in: spoken over the socket a BROWSER EXTENSION opened, with the
 // extension implementing it (contracts/webext.contract.ts).
@@ -159,7 +159,7 @@ export * from "./schemas/capabilities.js";
 export * from "./schemas/ci.js";
 export * from "./schemas/claude-gate.js";
 export * from "./schemas/codebase-health.js";
-export * from "./schemas/computers.js";
+export * from "./schemas/devices.js";
 export * from "./schemas/engines.js";
 export * from "./schemas/environment.js";
 export * from "./schemas/exit.js";

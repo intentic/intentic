@@ -39,7 +39,7 @@
                 "_extensions/activity",
                 "_extensions/automations",
                 "_extensions/browsers",
-                "_extensions/computers",
+                "_extensions/devices",
                 "_extensions/connectors",
                 "_extensions/deployments",
                 "_extensions/discord",
@@ -62,16 +62,16 @@
         },
         {
             "accent": "neutral",
-            "id": "computers",
-            "name": "Your computer",
-            "oneLiner": "How an agent reaches your own machine — with your permission, within your switches.",
+            "id": "devices",
+            "name": "Your devices",
+            "oneLiner": "How an agent reaches a machine of your own — with your permission, within your switches.",
             "packages": [
-                "_computers/browser",
-                "_computers/desktop",
-                "_computers/local-agent",
-                "_computers/machine",
-                "_computers/webext",
-                "_computers/win-launcher"
+                "_devices/browser",
+                "_devices/desktop",
+                "_devices/local-agent",
+                "_devices/machine",
+                "_devices/webext",
+                "_devices/win-launcher"
             ]
         },
         {

@@ -21,7 +21,7 @@ import type { Services } from "../composition.js";
  *
  * So a sandbox on the platform's hub, one behind its owner's own domain, and one reached at a plain loopback
  * address all sync the same way, through the same code, with nothing to provision. The laptop needs no tunnel
- * client of its own and no account on anybody's fabric, which is also why it is per-computer and revocable for
+ * client of its own and no account on anybody's fabric, which is also why it is per-device and revocable for
  * free: the credential on this socket is the enrolled machine's sync token, and revoking that enrollment
  * (uninstall, or the owner's "Disable desktop sync") closes the door on that machine alone.
  *

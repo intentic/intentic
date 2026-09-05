@@ -137,7 +137,7 @@ describe(`routeShapes`, () => {
 describe(`the real sandbox contract`, () => {
     it(`fingerprints all but the streaming routes`, () => {
         const unshaped = SANDBOX_ROUTE_NAMES.filter((name) => !(name in SANDBOX_ROUTE_SHAPES));
-        // oRPC wraps an event iterator's output in an opaque type with no schema under it, so these ten
+        // oRPC wraps an event iterator's output in an opaque type with no schema under it, so these eleven
         // cannot be fingerprinted and are assumed compatible. Named rather than counted: a NEW entry here is
         // a route that quietly lost its shape check, which is worth failing a test over.
         expect(unshaped.toSorted()).toEqual([
@@ -152,14 +152,17 @@ describe(`the real sandbox contract`, () => {
             `intentic.applyEvents`,
             `intentic.run`,
             `system.events`,
-            `system.manageMachineSandbox`,
+            `system.manageDeviceSandbox`,
+            // The device's own agent updating or restarting itself: minutes of download and swap, and the
+            // stream dies with the process it is reporting on, so the lines have to arrive as they happen.
+            `system.runDeviceAgentFlow`,
             `vpn.connect`,
         ]);
     });
 
     it(`fingerprints every other route exactly once`, () => {
         expect(Object.keys(SANDBOX_ROUTE_SHAPES).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
-        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length - 10);
+        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length - 11);
     });
 
     it(`derives a route table with no duplicate names`, () => {

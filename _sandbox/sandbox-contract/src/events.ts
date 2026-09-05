@@ -93,7 +93,7 @@ export const PermissionAskSchema = z.object({
      * the title (the judge read the owner's policy and the program, and its account of why this needs asking is
      * the only account there is), so this is left off rather than printing the same words twice. It carries the
      * sentence on the two cards whose title says something the sentence cannot: the hard rule's, which names the
-     * consequence that stopped it, and a machine command's, which names the computer.
+     * consequence that stopped it, and a machine command's, which names the device.
      *
      * Written by the quick model from the program text and the policy, never by the agent being gated — a card
      * whose persuasive half was authored by the thing it is stopping argues for its own approval, and the turns

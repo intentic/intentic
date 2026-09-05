@@ -16,7 +16,7 @@ pub struct Claim {
     /// Replaces the Cloudflare connector token this flow used to carry.
     pub sandbox_hostname: Option<String>,
     pub sync_pair_token: Option<String>,
-    /// The one-shot pairing the CONNECTED-COMPUTER agent redeems, so this machine's sandboxes can be managed
+    /// The one-shot pairing the CONNECTED-DEVICE agent redeems, so this machine's sandboxes can be managed
     /// from the browser instead of from a terminal here. Minted per claim like the sync one beside it, and inert
     /// when the flow installs no agent.
     pub host_pair_token: Option<String>,

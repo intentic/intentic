@@ -8,7 +8,7 @@
 # to `intentic-machine sync setup`, which decides everything else - self-updating an installed agent,
 # putting the bin folder on your PATH, fetching the windowless launcher - so re-running this command still
 # upgrades a machine. The decisions used to live here, copied across four scripts in two shell dialects; they
-# now live once, in the agent (_computers/machine/src/install.ts), where they are compiled and tested.
+# now live once, in the agent (_devices/machine/src/install.ts), where they are compiled and tested.
 #
 # Usage (the platform's Desktop sync card hands you this):
 #   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; $env:SYNC_DIR="$HOME\intentic\<name>-<id>"; irm https://intentic.dev/sync.ps1 | iex
@@ -17,10 +17,10 @@
 # Optional: SYNC_DIR - local folder to sync (default: ~/intentic/<id>, the same id the sandbox's own URL carries)
 #           TAKEOVER - any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #           AGENT_BIN - local dev / dogfooding an unreleased build: run this command instead of the installed
-#           agent, whitespace-separated (e.g. "node C:\intentic\_computers\machine\dist\cli.js").
+#           agent, whitespace-separated (e.g. "node C:\intentic\_devices\machine\dist\cli.js").
 $ErrorActionPreference = 'Stop'
 
-# ---- bootstrap the agent binary (identical in computer.ps1 and sync.ps1: standalone irm|iex files, no shared code) ----
+# ---- bootstrap the agent binary (identical in device.ps1 and sync.ps1: standalone irm|iex files, no shared code) ----
 #
 # Only when NO working agent is installed: a machine that has one skips straight to `setup`, which asks the
 # release channel itself and self-updates first. The download is pinned to the tag `releases/latest` resolves

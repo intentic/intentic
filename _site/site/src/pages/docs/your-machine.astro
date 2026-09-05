@@ -3,7 +3,7 @@ import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
-/* Four different connections that meet on Sandbox → Computers and are constantly confused: syncing files INTO
+/* Four different connections that meet on Sandbox → Devices and are constantly confused: syncing files INTO
  * the sandbox, letting the agent operate the machine, running a sandbox conversation on its compute, and
  * driving the sandbox's agents from an editor. The direction and trust boundary of each is the distinction. */
 
@@ -38,18 +38,18 @@ const scopes = [
 <DocsLayout
     pageId="your-machine"
     heading="Your own machine"
-    lead="Four connections between a sandbox and a computer you own: files going in, the agent reaching out, a runner executing there, and your editor driving the agents. They point in different directions and grant different powers."
+    lead="Four connections between a sandbox and a device you own: files going in, the agent reaching out, a runner executing there, and your editor driving the agents. They point in different directions and grant different powers."
 >
     <h2>The four connections</h2>
-    <p>All four live on <strong>Sandbox → Computers</strong>.</p>
+    <p>All four live on <strong>Sandbox → Devices</strong>.</p>
     <table>
         <thead>
             <tr><th>Connection</th><th>Direction</th></tr>
         </thead>
         <tbody>
             <tr><td><strong>Desktop sync</strong></td><td>Your folder appears in the sandbox's workspace, and the sandbox's ports appear on your localhost.</td></tr>
-            <tr><td><strong>A connected computer</strong></td><td>The agent operates <em>your</em> machine: runs commands, handles files, sees the screen.</td></tr>
-            <tr><td><strong>A runner</strong></td><td>The parent sends an isolated turn to a sandbox container on this computer; review and landing stay at the parent.</td></tr>
+            <tr><td><strong>A connected device</strong></td><td>The agent operates <em>your</em> machine: runs commands, handles files, sees the screen.</td></tr>
+            <tr><td><strong>A runner</strong></td><td>The parent sends an isolated turn to a sandbox container on this device; review and landing stay at the parent.</td></tr>
             <tr><td><strong>The editor bridge</strong></td><td>Your editor drives the sandbox's agents, with the transcript in your editor's own chat panel.</td></tr>
         </tbody>
     </table>
@@ -63,17 +63,17 @@ const scopes = [
     </p>
     <p>Two modes, and which you get depends on who you are:</p>
     <ul>
-        <li><strong>Sync</strong>: files and ports. Owner only, and one machine at a time: two computers writing the same workspace is not a thing anyone wants.</li>
-        <li><strong>Mirror</strong>: ports only, on any number of machines. What a member is offered, and what an owner can add on a second computer while the first holds sync.</li>
+        <li><strong>Sync</strong>: files and ports. Owner only, and one machine at a time: two devices writing the same workspace is not a thing anyone wants.</li>
+        <li><strong>Mirror</strong>: ports only, on any number of machines. What a member is offered, and what an owner can add on a second device while the first holds sync.</li>
     </ul>
     <p>
         Disabling revokes the machine's access but leaves the agent installed: removing it is <code>intentic-machine sync uninstall</code> on that
         machine, so nothing uninstalls software behind your back.
     </p>
 
-    <h2>Letting the agent use your computer</h2>
+    <h2>Letting the agent use your device</h2>
     <p>
-        The opposite direction: add your machine as a capability and the agent can work <em>on</em> it. Your computer dials the sandbox rather than the reverse: a personal machine sits behind NAT with a closing lid, so it can only be the side that connects, even though it is the side being asked.
+        The opposite direction: add your machine as a capability and the agent can work <em>on</em> it. Your device dials the sandbox rather than the reverse: a personal machine sits behind NAT with a closing lid, so it can only be the side that connects, even though it is the side being asked.
     </p>
     <p>
         What it may do is a set of switches on the machine's card, and the grants are narrow by default:
@@ -96,17 +96,17 @@ const scopes = [
     </table>
     <p>
         File access is bounded to folders you name: your home directory if you name none. The switches are enforced{" "}
-        <strong>on your machine</strong>, not in the sandbox: they are pushed down on every connect and the agent on your computer refuses out-of-scope calls itself. A compromised sandbox, or an agent talked into something by a page it read, cannot exceed what you ticked.
+        <strong>on your machine</strong>, not in the sandbox: they are pushed down on every connect and the agent on your device refuses out-of-scope calls itself. A compromised sandbox, or an agent talked into something by a page it read, cannot exceed what you ticked.
     </p>
 
-    <h2>Using the computer as a runner</h2>
+    <h2>Using the device as a runner</h2>
     <p>
         A runner is different from letting an agent operate the host. It is a sandbox container that uses the machine's compute to execute an
         isolated conversation; the agent works inside that container, not across the host's files or desktop. Creating and updating one rides
-        the connected computer's <strong>Manage sandboxes</strong> grant, without granting shell, screen or file access.
+        the connected device's <strong>Manage sandboxes</strong> grant, without granting shell, screen or file access.
     </p>
     <p>
-        Add one under <strong>Runners for this sandbox</strong> on the computer's card, then choose it from a new agent's{" "}
+        Add one under <strong>Runners for this sandbox</strong> on the device's card, then choose it from a new agent's{" "}
         <strong>Where this runs</strong> picker. The parent sandbox remains the owner of the conversation, transcript, branch mirror, diff and
         land door. See <a href="/docs/remote-runners/">Remote runners</a> for workspace sync, environment parity, credentials and failure
         behavior.
@@ -127,14 +127,14 @@ const scopes = [
         against the sandbox rather than only the ones it minted, so a revoke surface can't hide the token somebody made elsewhere.
     </p>
 
-    <h2>Servers, as opposed to computers</h2>
+    <h2>Servers, as opposed to devices</h2>
     <p>
-        A server is something the sandbox <em>dials</em>; a computer of yours dials the sandbox, and the difference you feel is that one of them is the machine you are sitting at. Remote machines over SSH and private networks over VPN are ordinary capabilities; see <a href="/docs/capabilities/">Capabilities</a>.
+        A server is something the sandbox <em>dials</em>; a device of yours dials the sandbox, and the difference you feel is that one of them is the machine you are sitting at. Remote machines over SSH and private networks over VPN are ordinary capabilities; see <a href="/docs/capabilities/">Capabilities</a>.
     </p>
 
     <DocsRelated
         links={[
-            { href: "/docs/remote-runners/", title: "Remote runners", why: "executing conversations on this computer without moving control." },
+            { href: "/docs/remote-runners/", title: "Remote runners", why: "executing conversations on this device without moving control." },
             { href: "/docs/access/", title: "Access & sharing", why: "who else may connect a machine, and what a member is offered." },
             { href: "/api/auth/", title: "Authorising a call", why: "control tokens, their scopes, and minting one without the UI." },
             { href: "/guides/where-your-code-goes-with-cloud-coding-agents/", title: "Guide: where your code goes", why: "whose machine holds the checkout and whose account holds the keys, across the field." },

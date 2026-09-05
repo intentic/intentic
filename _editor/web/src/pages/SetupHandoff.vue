@@ -58,7 +58,7 @@ const send = async (): Promise<void> => {
              One clause, because the button under it says the rest: a second sentence telling the reader to
              send themselves the link, directly above a button labelled "Email me the link", is the label read
              twice. And it goes away once the mail is out: the confirmation names the same machine, so keeping
-             it would be the third line in a row to say "computer". -->
+             it would be the third line in a row to say "device". -->
         <p v-if="!sent" class="flex items-start gap-2.5 text-xs text-muted">
             <Icon name="desktop" class="mt-0.5 shrink-0 text-link" />
             <span class="min-w-0">Not on your phone: this needs a terminal and Docker.</span>
@@ -75,7 +75,7 @@ const send = async (): Promise<void> => {
                         >Sent to <span class="break-words">{{ email }}</span
                         >.</span
                     >
-                    Open it on the computer that will host your sandbox. Your workspace opens the moment it connects.
+                    Open it on the device that will host your sandbox. Your workspace opens the moment it connects.
                 </span>
             </p>
             <!-- Quiet, because the common reason to press it twice is impatience with a mail that is already on

@@ -2,116 +2,6 @@
   "edges": [
     {
       "dev": false,
-      "from": "_computers/browser",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_computers/browser",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_computers/browser",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": true,
-      "from": "_computers/desktop",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_computers/desktop",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_computers/local-agent",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_computers/local-agent",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_computers/local-agent",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_computers/machine",
-      "to": "_computers/browser"
-    },
-    {
-      "dev": false,
-      "from": "_computers/machine",
-      "to": "_computers/desktop"
-    },
-    {
-      "dev": false,
-      "from": "_computers/machine",
-      "to": "_computers/local-agent"
-    },
-    {
-      "dev": false,
-      "from": "_computers/machine",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_computers/machine",
-      "to": "_sandbox/sandbox-run"
-    },
-    {
-      "dev": false,
-      "from": "_computers/machine",
-      "to": "_tools/base"
-    },
-    {
-      "dev": false,
-      "from": "_computers/machine",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_computers/machine",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_computers/machine",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_computers/webext",
-      "to": "_computers/browser"
-    },
-    {
-      "dev": false,
-      "from": "_computers/webext",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_computers/webext",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_computers/webext",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_computers/webext",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
       "from": "_deploy/cli",
       "to": "_deploy/engine"
     },
@@ -338,6 +228,116 @@
     {
       "dev": true,
       "from": "_deploy/state-resolver",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_devices/browser",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_devices/browser",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_devices/browser",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": true,
+      "from": "_devices/desktop",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_devices/desktop",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_devices/local-agent",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_devices/local-agent",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_devices/local-agent",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_devices/machine",
+      "to": "_devices/browser"
+    },
+    {
+      "dev": false,
+      "from": "_devices/machine",
+      "to": "_devices/desktop"
+    },
+    {
+      "dev": false,
+      "from": "_devices/machine",
+      "to": "_devices/local-agent"
+    },
+    {
+      "dev": false,
+      "from": "_devices/machine",
+      "to": "_sandbox/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_devices/machine",
+      "to": "_sandbox/sandbox-run"
+    },
+    {
+      "dev": false,
+      "from": "_devices/machine",
+      "to": "_tools/base"
+    },
+    {
+      "dev": false,
+      "from": "_devices/machine",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_devices/machine",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_devices/machine",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_devices/webext",
+      "to": "_devices/browser"
+    },
+    {
+      "dev": false,
+      "from": "_devices/webext",
+      "to": "_sandbox/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_devices/webext",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_devices/webext",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_devices/webext",
       "to": "_tools/tsconfig"
     },
     {
@@ -1308,7 +1308,7 @@
     {
       "dev": false,
       "from": "_sandbox/acp-bridge",
-      "to": "_computers/local-agent"
+      "to": "_devices/local-agent"
     },
     {
       "dev": false,
@@ -1963,7 +1963,7 @@
     {
       "dev": false,
       "from": "_tools/desktop-smoke-windows",
-      "to": "_computers/desktop"
+      "to": "_devices/desktop"
     },
     {
       "dev": false,
@@ -2112,257 +2112,6 @@
     }
   ],
   "entries": [
-    {
-      "anchors": [
-        {
-          "path": "_computers/browser/src/index.ts",
-          "what": ": the public surface."
-        },
-        {
-          "path": "_computers/browser/src/cdp.ts",
-          "what": ": the hand-rolled Chrome DevTools Protocol client."
-        },
-        {
-          "path": "_computers/browser/src/snapshot.ts",
-          "what": ": a page as structured text with stable element references."
-        },
-        {
-          "path": "_computers/browser/src/launch.ts",
-          "what": ": finding and starting a browser."
-        }
-      ],
-      "behind": 0,
-      "component": "computers",
-      "dir": "_computers/browser",
-      "files": 8,
-      "hasTests": true,
-      "loc": 674,
-      "name": "@intentic/browser",
-      "oneLiner": "Drive a Chromium-family browser from Node over CDP: open pages, read them as structured text, and click and type by element reference.",
-      "readmeRev": "82ef10981747800b36bf5377f8591256d19e46ab",
-      "stale": false,
-      "updatedAt": 1788470526000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_computers/desktop/src/index.ts",
-          "what": ": the public surface."
-        },
-        {
-          "path": "_computers/desktop/src/input-linux.ts",
-          "what": "/ src/input-windows.ts: pointer, keys and text, per platform."
-        },
-        {
-          "path": "_computers/desktop/src/apps-linux.ts",
-          "what": "/ src/apps-windows.ts: windows, focus, launching and the clipboard, per platform."
-        },
-        {
-          "path": "_computers/desktop/src/screen.ts",
-          "what": ": capturing the screen."
-        },
-        {
-          "path": "_computers/desktop/src/keys.ts",
-          "what": ": chord and key-name parsing, shared by both platforms."
-        },
-        {
-          "path": "_computers/desktop/src/run.ts",
-          "what": ": how commands are invoked without a native module."
-        }
-      ],
-      "behind": 0,
-      "component": "computers",
-      "dir": "_computers/desktop",
-      "files": 13,
-      "hasTests": true,
-      "loc": 1340,
-      "name": "@intentic/desktop",
-      "oneLiner": "Drive a desktop from Node, on Windows and Linux, with no native modules.",
-      "readmeRev": "7c015ae734c922501dab2b5c7d4a6b4566a3acf0",
-      "stale": false,
-      "updatedAt": 1788027974000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_computers/local-agent/src/index.ts",
-          "what": ": the public surface."
-        },
-        {
-          "path": "_computers/local-agent/src/home.ts",
-          "what": ": the ~/.intentic/<agent> directory and its 0600 floor."
-        },
-        {
-          "path": "_computers/local-agent/src/autostart.ts",
-          "what": ": login autostart, per platform."
-        },
-        {
-          "path": "_computers/local-agent/src/detached.ts",
-          "what": ": the background loop, and surviving a closed terminal."
-        },
-        {
-          "path": "_computers/local-agent/src/launcher.ts",
-          "what": ": cliLauncher() and the Windows launcher stub, including the"
-        },
-        {
-          "path": "_computers/local-agent/src/ui.ts",
-          "what": ", the renderer: the pipe/terminal/nested split, the checklist, the ranked ending."
-        }
-      ],
-      "behind": 5,
-      "component": "computers",
-      "dir": "_computers/local-agent",
-      "files": 12,
-      "hasTests": true,
-      "loc": 1986,
-      "name": "@intentic/local-agent",
-      "oneLiner": "The plumbing every intentic CLI that lives on a user's own computer needs, and none of what any of them does.",
-      "readmeRev": "7c015ae734c922501dab2b5c7d4a6b4566a3acf0",
-      "reason": "5 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788027974000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_computers/machine/src/commands.ts",
-          "what": "the CLI surface: computer setup|uninstall|updates, sync setup|pause|resume|mirror|uninstall, shared run|status|version|upgrade|uninstall."
-        },
-        {
-          "path": "_computers/machine/src/install.ts",
-          "what": "what every setup runs first: self-update (then re-exec), PATH repair, the Windows launcher stub. Everything the install scripts used to decide, decided once here."
-        },
-        {
-          "path": "_computers/machine/src/upgrade.ts",
-          "what": "upgrade: what is published, then download → probe → stop → swap → start, with a rollback behind every step, and a restart when the file is current but the loop is not."
-        },
-        {
-          "path": "_computers/machine/src/installed.ts",
-          "what": "which build the file at bin/intentic-machine is, as opposed to the one running: free while the two agree, one probe per swap after they stop."
-        },
-        {
-          "path": "_computers/machine/src/daemon-base.ts",
-          "what": "where a sandbox's daemon is dialled, for both halves: loopback first when /health proves it is ours, the public URL as the floor."
-        },
-        {
-          "path": "_computers/machine/src/resident.ts",
-          "what": "the one loop, its pidfile, and reconcileResidency."
-        },
-        {
-          "path": "_computers/machine/src/computer/auto-prepare.ts",
-          "what": "the background update-download tick; the judgement about what to download stays in ic sandbox prepare --auto, on purpose."
-        },
-        {
-          "path": "_computers/machine/src/status.ts",
-          "what": "both halves as one answer; --json is what the desktop app and tray read."
-        },
-        {
-          "path": "_computers/machine/src/computer/policy.ts",
-          "what": "what the sandbox is permitted to do here; the security surface."
-        },
-        {
-          "path": "_computers/machine/src/sync/mirror.ts",
-          "what": "the sync tick: ports reconcile, git bridge, revocation handling."
-        },
-        {
-          "path": "_computers/machine/src/sync/mutagen.ts",
-          "what": "driving the Mutagen binary, sessions and its daemon's autostart."
-        }
-      ],
-      "behind": 1,
-      "component": "computers",
-      "dir": "_computers/machine",
-      "files": 63,
-      "hasTests": true,
-      "loc": 11661,
-      "name": "@intentic/machine",
-      "oneLiner": "The one agent that lives on a user's own computer: it lets a sandbox's agent work on the machine, and keeps the machine's folders and ports mirrored with the sandbox — one binary, one resident loop,…",
-      "readmeRev": "79cf74aa33bfc67682f3f47466a4ab17a34a0a86",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788519804000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_computers/webext/src/background/link.ts",
-          "what": ": the one socket, and why reconnection is shaped by the worker's lifetime."
-        },
-        {
-          "path": "_computers/webext/src/background/mcp.ts",
-          "what": ": the tool surface the agent sees. Adding a tool is a store release, not a daemon one."
-        },
-        {
-          "path": "_computers/webext/src/background/policy.ts",
-          "what": ": the enforcement point. Every refusal a person will read starts here."
-        },
-        {
-          "path": "_computers/webext/src/background/tools/session.ts",
-          "what": ": handing a site's session TO the sandbox — the one place a credential leaves this browser."
-        },
-        {
-          "path": "_computers/webext/src/background/tools/lend.ts",
-          "what": ": borrowing one back, for the steps no remote browser can perform, and why the cookies ride an HTTPS response rather than the socket."
-        },
-        {
-          "path": "_computers/webext/src/page/driver.ts",
-          "what": ": what runs inside the page — the walk, the actions, the banner, the confirmation."
-        },
-        {
-          "path": "_computers/webext/src/popup/popup.ts",
-          "what": ": the 340 pixels that make this installable, and the only place a permission is ever asked for."
-        },
-        {
-          "path": "_computers/webext/static/manifest.json",
-          "what": ": four permissions, one optional host pattern, one content script."
-        },
-        {
-          "path": "_computers/webext/scripts/pack.mjs",
-          "what": ": dist/ as one zip, written by hand because the CI image has no zip."
-        },
-        {
-          "path": "_computers/webext/scripts/render-icons.mjs",
-          "what": ": the four PNGs, read out of the site's lotus rather than redrawn."
-        },
-        {
-          "path": "_computers/webext/scripts/render-store-assets.mjs",
-          "what": ": the mandatory promotional tile, from that same lotus."
-        }
-      ],
-      "behind": 0,
-      "component": "computers",
-      "dir": "_computers/webext",
-      "files": 27,
-      "hasTests": true,
-      "loc": 3263,
-      "name": "@intentic/webext",
-      "oneLiner": "The browser extension that lets your sandbox work in the browser you are already signed into, on the sites you allow, while you watch it happen.",
-      "readmeRev": "1d6ac035f515dea5dff94bb579dcf3bbc4c3aa36",
-      "stale": false,
-      "updatedAt": 1788552808000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_computers/win-launcher/src/main.rs",
-          "what": ": all of it — the parser, the spawn, and the measurements behind both."
-        },
-        {
-          "path": "_computers/win-launcher/Cargo.toml",
-          "what": ": no dependencies, and the size-first release profile that keeps it in the low"
-        }
-      ],
-      "behind": 0,
-      "component": "computers",
-      "dir": "_computers/win-launcher",
-      "files": 1,
-      "hasTests": false,
-      "loc": 331,
-      "oneLiner": "The ~200 KB Windows program that starts another program without putting a window on anybody's desktop.",
-      "readmeRev": "1d6ac035f515dea5dff94bb579dcf3bbc4c3aa36",
-      "stale": false,
-      "updatedAt": 1788552808000
-    },
     {
       "anchors": [
         {
@@ -2648,6 +2397,255 @@
     {
       "anchors": [
         {
+          "path": "_devices/browser/src/index.ts",
+          "what": ": the public surface."
+        },
+        {
+          "path": "_devices/browser/src/cdp.ts",
+          "what": ": the hand-rolled Chrome DevTools Protocol client."
+        },
+        {
+          "path": "_devices/browser/src/snapshot.ts",
+          "what": ": a page as structured text with stable element references."
+        },
+        {
+          "path": "_devices/browser/src/launch.ts",
+          "what": ": finding and starting a browser."
+        }
+      ],
+      "behind": 0,
+      "component": "devices",
+      "dir": "_devices/browser",
+      "files": 8,
+      "hasTests": true,
+      "loc": 674,
+      "name": "@intentic/browser",
+      "oneLiner": "Drive a Chromium-family browser from Node over CDP: open pages, read them as structured text, and click and type by element reference.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_devices/desktop/src/index.ts",
+          "what": ": the public surface."
+        },
+        {
+          "path": "_devices/desktop/src/input-linux.ts",
+          "what": "/ src/input-windows.ts: pointer, keys and text, per platform."
+        },
+        {
+          "path": "_devices/desktop/src/apps-linux.ts",
+          "what": "/ src/apps-windows.ts: windows, focus, launching and the clipboard, per platform."
+        },
+        {
+          "path": "_devices/desktop/src/screen.ts",
+          "what": ": capturing the screen."
+        },
+        {
+          "path": "_devices/desktop/src/keys.ts",
+          "what": ": chord and key-name parsing, shared by both platforms."
+        },
+        {
+          "path": "_devices/desktop/src/run.ts",
+          "what": ": how commands are invoked without a native module."
+        }
+      ],
+      "behind": 0,
+      "component": "devices",
+      "dir": "_devices/desktop",
+      "files": 13,
+      "hasTests": true,
+      "loc": 1340,
+      "name": "@intentic/desktop",
+      "oneLiner": "Drive a desktop from Node, on Windows and Linux, with no native modules.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_devices/local-agent/src/index.ts",
+          "what": ": the public surface."
+        },
+        {
+          "path": "_devices/local-agent/src/home.ts",
+          "what": ": the ~/.intentic/<agent> directory and its 0600 floor."
+        },
+        {
+          "path": "_devices/local-agent/src/autostart.ts",
+          "what": ": login autostart, per platform."
+        },
+        {
+          "path": "_devices/local-agent/src/detached.ts",
+          "what": ": the background loop, and surviving a closed terminal."
+        },
+        {
+          "path": "_devices/local-agent/src/launcher.ts",
+          "what": ": cliLauncher() and the Windows launcher stub, including the"
+        },
+        {
+          "path": "_devices/local-agent/src/ui.ts",
+          "what": ", the renderer: the pipe/terminal/nested split, the checklist, the ranked ending."
+        }
+      ],
+      "behind": 0,
+      "component": "devices",
+      "dir": "_devices/local-agent",
+      "files": 12,
+      "hasTests": true,
+      "loc": 1986,
+      "name": "@intentic/local-agent",
+      "oneLiner": "The plumbing every intentic CLI that lives on a user's own computer needs, and none of what any of them does.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_devices/machine/src/commands.ts",
+          "what": "the CLI surface: device setup|uninstall|updates, sync setup|pause|resume|mirror|uninstall, shared run|status|version|upgrade|uninstall."
+        },
+        {
+          "path": "_devices/machine/src/install.ts",
+          "what": "what every setup runs first: self-update (then re-exec), PATH repair, the Windows launcher stub. Everything the install scripts used to decide, decided once here."
+        },
+        {
+          "path": "_devices/machine/src/upgrade.ts",
+          "what": "upgrade: what is published, then download → probe → stop → swap → start, with a rollback behind every step, and a restart when the file is current but the loop is not."
+        },
+        {
+          "path": "_devices/machine/src/installed.ts",
+          "what": "which build the file at bin/intentic-machine is, as opposed to the one running: free while the two agree, one probe per swap after they stop."
+        },
+        {
+          "path": "_devices/machine/src/daemon-base.ts",
+          "what": "where a sandbox's daemon is dialled, for both halves: loopback first when /health proves it is ours, the public URL as the floor."
+        },
+        {
+          "path": "_devices/machine/src/resident.ts",
+          "what": "the one loop, its pidfile, and reconcileResidency."
+        },
+        {
+          "path": "_devices/machine/src/device/auto-prepare.ts",
+          "what": "the background update-download tick; the judgement about what to download stays in ic sandbox prepare --auto, on purpose."
+        },
+        {
+          "path": "_devices/machine/src/status.ts",
+          "what": "both halves as one answer; --json is what the desktop app and tray read."
+        },
+        {
+          "path": "_devices/machine/src/device/policy.ts",
+          "what": "what the sandbox is permitted to do here; the security surface."
+        },
+        {
+          "path": "_devices/machine/src/sync/mirror.ts",
+          "what": "the sync tick: ports reconcile, git bridge, revocation handling."
+        },
+        {
+          "path": "_devices/machine/src/sync/mutagen.ts",
+          "what": "driving the Mutagen binary, sessions and its daemon's autostart."
+        }
+      ],
+      "behind": 0,
+      "component": "devices",
+      "dir": "_devices/machine",
+      "files": 65,
+      "hasTests": true,
+      "loc": 11809,
+      "name": "@intentic/machine",
+      "oneLiner": "The one agent that lives on a user's own device: it lets a sandbox's agent work on the machine, and keeps the machine's folders and ports mirrored with the sandbox — one binary, one resident loop,…",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_devices/webext/src/background/link.ts",
+          "what": ": the one socket, and why reconnection is shaped by the worker's lifetime."
+        },
+        {
+          "path": "_devices/webext/src/background/mcp.ts",
+          "what": ": the tool surface the agent sees. Adding a tool is a store release, not a daemon one."
+        },
+        {
+          "path": "_devices/webext/src/background/policy.ts",
+          "what": ": the enforcement point. Every refusal a person will read starts here."
+        },
+        {
+          "path": "_devices/webext/src/background/tools/session.ts",
+          "what": ": handing a site's session TO the sandbox — the one place a credential leaves this browser."
+        },
+        {
+          "path": "_devices/webext/src/background/tools/lend.ts",
+          "what": ": borrowing one back, for the steps no remote browser can perform, and why the cookies ride an HTTPS response rather than the socket."
+        },
+        {
+          "path": "_devices/webext/src/page/driver.ts",
+          "what": ": what runs inside the page — the walk, the actions, the banner, the confirmation."
+        },
+        {
+          "path": "_devices/webext/src/popup/popup.ts",
+          "what": ": the 340 pixels that make this installable, and the only place a permission is ever asked for."
+        },
+        {
+          "path": "_devices/webext/static/manifest.json",
+          "what": ": four permissions, one optional host pattern, one content script."
+        },
+        {
+          "path": "_devices/webext/scripts/pack.mjs",
+          "what": ": dist/ as one zip, written by hand because the CI image has no zip."
+        },
+        {
+          "path": "_devices/webext/scripts/render-icons.mjs",
+          "what": ": the four PNGs, read out of the site's lotus rather than redrawn."
+        },
+        {
+          "path": "_devices/webext/scripts/render-store-assets.mjs",
+          "what": ": the mandatory promotional tile, from that same lotus."
+        }
+      ],
+      "behind": 0,
+      "component": "devices",
+      "dir": "_devices/webext",
+      "files": 27,
+      "hasTests": true,
+      "loc": 3263,
+      "name": "@intentic/webext",
+      "oneLiner": "The browser extension that lets your sandbox work in the browser you are already signed into, on the sites you allow, while you watch it happen.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_devices/win-launcher/src/main.rs",
+          "what": ": all of it — the parser, the spawn, and the measurements behind both."
+        },
+        {
+          "path": "_devices/win-launcher/Cargo.toml",
+          "what": ": no dependencies, and the size-first release profile that keeps it in the low"
+        }
+      ],
+      "behind": 0,
+      "component": "devices",
+      "dir": "_devices/win-launcher",
+      "files": 1,
+      "hasTests": false,
+      "loc": 331,
+      "oneLiner": "The ~200 KB Windows program that starts another program without putting a window on anybody's desktop.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
           "path": "_editor/android-app/twa-manifest.json",
           "what": ", the whole app: package id, origin, colors, start URL; what Bubblewrap builds from."
         },
@@ -2678,12 +2676,12 @@
       "dir": "_editor/desktop-app",
       "files": 14,
       "hasTests": true,
-      "loc": 2845,
+      "loc": 2847,
       "name": "@intentic/desktop-app",
       "oneLiner": "The no-terminal way to run an intentic sandbox on your own computer.",
-      "readmeRev": "1d6ac035f515dea5dff94bb579dcf3bbc4c3aa36",
+      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
       "stale": false,
-      "updatedAt": 1788552808000
+      "updatedAt": 1788598120000
     },
     {
       "anchors": [
@@ -2704,14 +2702,14 @@
           "what": ": the Rust dependencies."
         }
       ],
-      "behind": 18,
+      "behind": 19,
       "dir": "_editor/desktop-app/src-tauri",
       "files": 11,
       "hasTests": false,
       "loc": 5032,
       "oneLiner": "The Rust half of the desktop app: the native window, the tray, and the permissions the webview is allowed.",
       "readmeRev": "4a1136063a6db1d3bec96653c5532c38137566ef",
-      "reason": "18 commits have touched this package since its README was written",
+      "reason": "19 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306217000
     },
@@ -2799,18 +2797,17 @@
           "what": ": design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the two sheets only some consumers pay for (prose.css, extension-surface.css)."
         }
       ],
-      "behind": 7,
+      "behind": 0,
       "component": "editor",
       "dir": "_editor/ui",
       "files": 144,
       "hasTests": false,
-      "loc": 17838,
+      "loc": 17848,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
-      "readmeRev": "1f9a725f6942351de592801a3090f2e362e3963d",
-      "reason": "7 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788516606000
+      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
+      "stale": false,
+      "updatedAt": 1788598120000
     },
     {
       "anchors": [
@@ -2839,18 +2836,18 @@
           "what": ": the full route table."
         }
       ],
-      "behind": 18,
+      "behind": 3,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 1118,
+      "files": 1123,
       "hasTests": true,
-      "loc": 198910,
+      "loc": 200396,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue), the platform's workspace UI.",
-      "readmeRev": "1dd85d9c0741c634996898a11b8140541b2747bf",
-      "reason": "18 commits have touched this package since its README was written",
+      "readmeRev": "655a5786e29e11526ea53d54d0a2c7a2a51e4eba",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788543476000
+      "updatedAt": 1788562266000
     },
     {
       "anchors": [
@@ -3054,34 +3051,6 @@
     {
       "anchors": [
         {
-          "path": "_extensions/computers/intentic-extension.json",
-          "what": ": the two capabilities. This file IS the package; there is no src/."
-        },
-        {
-          "path": "_extensions/computers/skills/linux",
-          "what": ": how an agent operates a Linux machine."
-        },
-        {
-          "path": "_extensions/computers/skills/windows",
-          "what": ": the same for Windows, and where the two genuinely differ."
-        }
-      ],
-      "behind": 1,
-      "component": "extensions",
-      "dir": "_extensions/computers",
-      "files": 0,
-      "hasTests": false,
-      "loc": 0,
-      "name": "@intentic/ext-computers",
-      "oneLiner": "The user's own machines (Windows and Linux) as something the agent can operate.",
-      "readmeRev": "7c015ae734c922501dab2b5c7d4a6b4566a3acf0",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788027974000
-    },
-    {
-      "anchors": [
-        {
           "path": "_extensions/connectors/intentic-extension.json",
           "what": ": the fifteen connectors, and what each one grants. This"
         },
@@ -3166,6 +3135,33 @@
       "reason": "16 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306242000
+    },
+    {
+      "anchors": [
+        {
+          "path": "_extensions/devices/intentic-extension.json",
+          "what": ": the two capabilities. This file IS the package; there is no src/."
+        },
+        {
+          "path": "_extensions/devices/skills/linux",
+          "what": ": how an agent operates a Linux machine."
+        },
+        {
+          "path": "_extensions/devices/skills/windows",
+          "what": ": the same for Windows, and where the two genuinely differ."
+        }
+      ],
+      "behind": 0,
+      "component": "extensions",
+      "dir": "_extensions/devices",
+      "files": 0,
+      "hasTests": false,
+      "loc": 0,
+      "name": "@intentic/ext-devices",
+      "oneLiner": "The user's own machines (Windows and Linux) as something the agent can operate.",
+      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
+      "stale": false,
+      "updatedAt": 1788598120000
     },
     {
       "anchors": [
@@ -3586,18 +3582,18 @@
           "what": ": what an agent's state says on a red row, in the fleet's own words."
         }
       ],
-      "behind": 2,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/pipelines",
       "files": 30,
       "hasTests": true,
-      "loc": 3835,
+      "loc": 3893,
       "name": "@intentic/ext-pipelines",
       "oneLiner": "CI as it actually went: runs, their jobs, and which failures are a streak rather than a blip.",
-      "readmeRev": "3ee91d957645a512fec2ea763e3033e09e1d2e7d",
-      "reason": "2 commits have touched this package since its README was written",
+      "readmeRev": "f06644da45edb48bb16639beba464d80165e5b75",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788464328000
+      "updatedAt": 1788560847000
     },
     {
       "anchors": [
@@ -3618,7 +3614,7 @@
           "what": ": activation, and why neither view is a rail tile."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "extensions",
       "dir": "_extensions/preview",
       "files": 12,
@@ -3627,7 +3623,7 @@
       "name": "@intentic/ext-preview",
       "oneLiner": "What the outside world can reach: the ports the box is forwarding, and the files in public/.",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306246000
     },
@@ -3938,7 +3934,7 @@
           "what": ": what a capability changes once it is on."
         }
       ],
-      "behind": 10,
+      "behind": 11,
       "component": "platform",
       "dir": "_platform/capability-catalog",
       "files": 5,
@@ -3947,7 +3943,7 @@
       "name": "@intentic-app/capability-catalog",
       "oneLiner": "The product catalogs of what a sandbox can be connected to: which capabilities exist, what each one's add-form asks for, and how its card reads: rendered by the web app, and read by the sandbox…",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "10 commits have touched this package since its README was written",
+      "reason": "11 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306246000
     },
@@ -4205,18 +4201,17 @@
           "what": "the whole surface driven in-process against a temp workspace."
         }
       ],
-      "behind": 6,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/fileq",
       "files": 31,
       "hasTests": true,
-      "loc": 2344,
+      "loc": 2377,
       "name": "@intentic/fileq",
       "oneLiner": "Agent-native file reading: any binary workspace file — docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.",
-      "readmeRev": "61142da000ca3afaf5693c2fc87a7dded54d8d19",
-      "reason": "6 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788008368000
+      "readmeRev": "e1ce7da708173056bcd3803ffdc46ac7d3059a5d",
+      "stale": false,
+      "updatedAt": 1788561317000
     },
     {
       "anchors": [
@@ -4323,7 +4318,7 @@
           "what": ": the root-side machine mutations connect's SELFHOST and machine"
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "sandbox",
       "dir": "_sandbox/ic",
       "files": 28,
@@ -4331,7 +4326,7 @@
       "loc": 12067,
       "oneLiner": "The host-side CLI: the flows that must run on the machine that runs a sandbox, connect, prepare, update, rebuild, rollback, remove, and enrolling the machine as a deploy target.",
       "readmeRev": "4f7174e0f9fc32a2e474ed41b326c7f664f0db4c",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788106517000
     },
@@ -4414,7 +4409,7 @@
         },
         {
           "path": "_sandbox/sandbox/src/minted",
-          "what": ": the providers whose SIGN-IN MINTS their key (Meta's Muse Code, Z.ai's GLM Coding Plan). The token their sign-in issues is not an inference credential — either vendor's model endpoint refuses it — so the flow has a second half the user never sees: mint the vendor's own API key from it and store that, which is exactly what those vendors' own CLIs do. Nobody pastes a key; a raw key against somebody's own gateway is still an `endpoint` capability and always was. The key then points the Claude Code loop straight at the vendor's Anthropic Messages endpoint — no translator hop, no adapter, no new runtime, the same road an `anthropic`-protocol endpoint capability takes. One store, one login machine, one catalog per ESTATE and one module FACTORY serve all of them: what differs between two minted providers is a login driver and a seed list, and Z.ai's two estates (api.z.ai and open.bigmodel.cn, whose hosts refuse each other's keys) differ only in a pair of URLs on the spec row. A third provider is a contract row, a seed and a driver."
+          "what": ": the providers whose SIGN-IN MINTS their key (Meta's Muse Code, Z.ai's GLM Coding Plan). The token their sign-in issues is not an inference credential — either vendor's model endpoint refuses it — so the flow has a second half the user never sees: mint the vendor's own API key from it and store that, which is exactly what those vendors' own CLIs do. Nobody pastes a key; a raw key against somebody's own gateway is still an endpoint capability and always was. The key then points the Claude Code loop straight at the vendor's Anthropic Messages endpoint — no translator hop, no adapter, no new runtime, the same road an anthropic-protocol endpoint capability takes. One store, one login machine, one catalog per ESTATE and one module FACTORY serve all of them: what differs between two minted providers is a login driver and a seed list, and Z.ai's two estates (api.z.ai and open.bigmodel.cn, whose hosts refuse each other's keys) differ only in a pair of URLs on the spec row. A third provider is a contract row, a seed and a driver."
         },
         {
           "path": "_sandbox/sandbox/src/agent/model-catalog.ts",
@@ -4422,7 +4417,7 @@
         },
         {
           "path": "_sandbox/sandbox/src/agents",
-          "what": ", plural: the fleet. The registry, worktrees.ts, isolation.ts, land.ts, origins.ts, landed-presence.ts, landed-history.ts."
+          "what": ", plural: the fleet. The registry, worktrees.ts, isolation.ts, land.ts, origins.ts, landed-presence.ts, landed-history.ts, and fleet-recall.ts + fleet.routes.ts (what one conversation can learn about another, see below)."
         },
         {
           "path": "_sandbox/sandbox/src/cursor",
@@ -4482,7 +4477,7 @@
         },
         {
           "path": "_sandbox/sandbox/src/hosts",
-          "what": ", the user's own computers: the socket each one holds open, the Computers view's data"
+          "what": ", the user's own computers: the socket each one holds open, the Devices view's data"
         },
         {
           "path": "_sandbox/sandbox/src/webext",
@@ -4561,18 +4556,17 @@
           "what": ": workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 1196,
+      "files": 1205,
       "hasTests": true,
-      "loc": 215732,
+      "loc": 218864,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon, a Docker image that runs as the project's workspace container on the customer's host.",
-      "readmeRev": "1d6ac035f515dea5dff94bb579dcf3bbc4c3aa36",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788552808000
+      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
+      "stale": false,
+      "updatedAt": 1788598120000
     },
     {
       "anchors": [
@@ -4641,18 +4635,18 @@
           "what": "and contract.lock.json: every exported"
         }
       ],
-      "behind": 8,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 201,
       "hasTests": true,
-      "loc": 36519,
+      "loc": 36813,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client: change it here, and both sides follow.",
-      "readmeRev": "41fcda1d8b6b2dacec9409757cc84a93ccfff5ea",
-      "reason": "8 commits have touched this package since its README was written",
+      "readmeRev": "7879727d167da914223136658689dd06fb443bb6",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788543379000
+      "updatedAt": 1788597992000
     },
     {
       "anchors": [
@@ -4709,16 +4703,16 @@
           "what": ": which secrets a workspace will be asked for."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "sandbox",
       "dir": "_sandbox/scaffold",
       "files": 19,
       "hasTests": true,
-      "loc": 2525,
+      "loc": 2569,
       "name": "@intentic/scaffold",
       "oneLiner": "The starter files a new intentic workspace gets, shared by the two programs that create one.",
       "readmeRev": "e1177efbdce3587b11d466b0531ec1d8ff30a661",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306249000
     },
@@ -4865,16 +4859,16 @@
           "what": ": the entry point."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "search",
       "dir": "_search/iq",
       "files": 29,
       "hasTests": true,
-      "loc": 2228,
+      "loc": 2271,
       "name": "@intentic/iq",
       "oneLiner": "Agent-native workspace search: one intent-first CLI over lexical, structural, semantic, and git engines.",
       "readmeRev": "e1177efbdce3587b11d466b0531ec1d8ff30a661",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306249000
     },
@@ -4981,22 +4975,25 @@
           "what": ": the node:sqlite index."
         },
         {
+          "path": "_search/iq-recall/src/fleet",
+          "what": ": whose CONVERSATION a runtime session belonged to. A recall row is keyed on the"
+        },
+        {
           "path": "_search/iq-recall/src/index.ts",
           "what": ": the public surface."
         }
       ],
-      "behind": 4,
+      "behind": 0,
       "component": "search",
       "dir": "_search/iq-recall",
-      "files": 23,
+      "files": 24,
       "hasTests": true,
-      "loc": 2109,
+      "loc": 2208,
       "name": "@intentic/iq-recall",
       "oneLiner": "Session recall behind the iq CLI: what past sessions already worked out.",
-      "readmeRev": "e1177efbdce3587b11d466b0531ec1d8ff30a661",
-      "reason": "4 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306249000
+      "readmeRev": "2960b16dd74ef2b651659f0786adbcfc9b413223",
+      "stale": false,
+      "updatedAt": 1788598025000
     },
     {
       "anchors": [
@@ -5180,7 +5177,7 @@
           "what": ": where the build-time integrations are wired in."
         }
       ],
-      "behind": 0,
+      "behind": 2,
       "component": "site",
       "dir": "_site/site",
       "files": 29,
@@ -5220,7 +5217,7 @@
           "what": ": the JSON-LD the site emits."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "site",
       "dir": "_site/site-content",
       "files": 17,
@@ -5229,7 +5226,7 @@
       "name": "@intentic-dev/site-content",
       "oneLiner": "Every word on the public website, as data.",
       "readmeRev": "3f9e0da5a2076a577c770d7acae1ac0a8bcb87f1",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788464300000
     },
@@ -5320,7 +5317,7 @@
           "what": ", src/contract-shrink.mjs,"
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "tools",
       "dir": "_tools/constants",
       "files": 10,
@@ -5329,7 +5326,7 @@
       "name": "@intentic/constants",
       "oneLiner": "The ports, paths and image references the daemon, the CLIs and the desktop app all have to agree on.",
       "readmeRev": "219b22d15d08371106b12f82f5f09444e2a026bd",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788518666000
     },
@@ -5344,7 +5341,7 @@
           "what": ": what the installer is put through once the image is up."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "tools",
       "dir": "_tools/desktop-smoke",
       "files": 0,
@@ -5353,7 +5350,8 @@
       "name": "@intentic/desktop-smoke",
       "oneLiner": "The image that meets a desktop installer the way a user's machine does.",
       "readmeRev": "1d6ac035f515dea5dff94bb579dcf3bbc4c3aa36",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1788552808000
     },
     {
@@ -5383,7 +5381,7 @@
           "what": ": what Windows, Docker, and the desktop say is true."
         }
       ],
-      "behind": 8,
+      "behind": 9,
       "dir": "_tools/desktop-smoke-windows",
       "files": 18,
       "hasTests": true,
@@ -5391,7 +5389,7 @@
       "name": "@intentic/desktop-smoke-windows",
       "oneLiner": "The tiers that meet the Windows installer the way a user's machine does: by running it.",
       "readmeRev": "d228d2676c5dae2482c9716a81394bfcc514d83e",
-      "reason": "8 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787353077000
     },
@@ -5756,7 +5754,7 @@
       "updatedAt": 1787306252000
     }
   ],
-  "generatedAt": 1788557577482,
+  "generatedAt": 1788598164125,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

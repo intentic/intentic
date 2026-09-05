@@ -1,7 +1,7 @@
 /* COMPARING THE VERSIONS THIS SYSTEM STAMPS ON WHAT IT SHIPS, the daemon, the sandbox image, and the two agents
- * that run on a user's own computer. One release stamps all of them to the SAME version, so "is this one behind
+ * that run on a user's own device. One release stamps all of them to the SAME version, so "is this one behind
  * that one" is one question with one answer, and it lives here because both ends ask it: the daemon compares its
- * own build against the latest published release, and the browser compares a computer's agent against the same.
+ * own build against the latest published release, and the browser compares a device's agent against the same.
  *
  * Shared rather than copied because the two copies would not disagree until the day it mattered: 1.9.0 against
  * 1.10.0 is where a hand-rolled comparator goes wrong, and it goes wrong by reporting "up to date". */

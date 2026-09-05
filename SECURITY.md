@@ -45,7 +45,7 @@ The parts where a bug is most likely to matter to someone other than the operato
 | `_sandbox/sandbox` | the daemon: the workspace API, terminals, the preview proxy, the public-files outbox |
 | `_sandbox/sandbox/src/secrets` | credential storage and the redaction that keeps secrets out of transcripts |
 | `_sandbox/sandbox/src/guard` | the admission floor, the in-turn command and outbound gates, and the envelope that marks content the owner did not write |
-| `_computers/machine` | the one agent behind the connect-this-computer and desktop-sync install commands, and the tunnel it opens |
+| `_devices/machine` | the one agent behind the connect-this-computer and desktop-sync install commands, and the tunnel it opens |
 | `_platform/ingress` | the edge every sandbox is reached through: it verifies the signed grant a sandbox presents when it dials in, routes each request to a tunnel by hostname, and for a hosted sandbox tells Fly's proxy which app to deliver the request to |
 | `_editor/desktop-app` | the installer and auto-updater |
 | `_platform/api` · `_editor/web` | the hosted platform: identity and the browser workspace |

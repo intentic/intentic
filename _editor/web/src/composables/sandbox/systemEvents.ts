@@ -169,7 +169,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
                 void queryClient.invalidateQueries({ queryKey: key });
             }
             /* THE SAME FRAME, ANNOUNCED, for the readers an invalidation can never reach, exactly as the
-             * workspace batch below is announced for the rail badges. The pairing cards (a computer, a browser,
+             * workspace batch below is announced for the rail badges. The pairing cards (a device, a browser,
              * a desktop sync enrolling) hold plain refs rather than queries, so evicting a cache entry moves
              * nothing on them; this is what lets those three stop polling. */
             emitRuntimeChanged(event.domains);

@@ -178,7 +178,7 @@ reports the profile.
   not, so a fresh sandbox is not one mistyped path away from it. An explicit `allow` still outranks the floor,
   everything recoverable is still never asked about, and the cost is stated where it is paid: the vendor
   runtimes whose gate is their own approval channel now ask per command rather than never.
-  The same classifier runs a second time on a different machine: `_computers/machine` reads it beside its scopes,
+  The same classifier runs a second time on a different machine: `_devices/machine` reads it beside its scopes,
   so a destructive command sent to somebody's own laptop needs that computer's `destructive` switch, which is
   off until they turn it on. The sandbox can afford to hold only what nothing undoes because the container is
   disposable; a laptop has no image to be recreated from, and the two defaults differ for exactly that reason.
@@ -531,7 +531,7 @@ reports the profile.
   the baked `fileq` CLI (`_sandbox/fileq`) to keep a markdown shadow of every binary workspace file (docx,
   pdf, images, audio) converged under `.intentic/local/cache/derived/` — gated by the `sidecars` setting,
   serialized to one child at a time, and sweeping the whole tree when the setting flips on.
-- [src/hosts](src/hosts), the user's own computers: the socket each one holds open, the Computers view's data
+- [src/hosts](src/hosts), the user's own computers: the socket each one holds open, the Devices view's data
   (`machine-reports.ts`), and `host-seed.ts`: the card the setup flow creates for the machine that installed
   this sandbox, granted its sandboxes and nothing else. Acting on one of those sandboxes STREAMS, because the
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never

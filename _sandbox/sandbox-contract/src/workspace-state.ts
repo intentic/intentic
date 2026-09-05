@@ -135,7 +135,7 @@ const STATE_FILES = [
      * withSecretVault keeps credential VALUES off /work entirely, the manifest holds `__intentic_vaulted__`
      * where one used to be, reads rehydrate so no caller noticed, and main.ts sweeps a hand-written value out at
      * boot. What is left is the SHAPE of a connection: a kind, a URL, a username, a purpose, which permissions a
-     * connected computer was granted.
+     * connected device was granted.
      *
      * WHICH KEYS THOSE ARE IS DERIVED, not listed a second time: `echo` already answers "what of this config may
      * a browser see", and the credential keys are exactly its complement (capabilities/secret-fields.ts). A kind
@@ -149,7 +149,7 @@ const STATE_FILES = [
      * one credential apiece, the shape personas.json has had all along, for the same reason.
      *
      * `versioned`, which is the point. Connecting this sandbox to a deployment orchestrator, or granting a
-     * connected computer shell and screen control, is the largest change anyone makes to what it can DO, and it
+     * connected device shell and screen control, is the largest change anyone makes to what it can DO, and it
      * left a diff nowhere. One consequence worth stating rather than discovering: an identifier that pairs with a
      * credential. Komodo's api key beside its api secret, which its own connector card calls "like a database
      * user", is echoed, and therefore lands in the diff exactly as a database username would. */

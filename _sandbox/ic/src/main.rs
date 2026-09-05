@@ -46,7 +46,7 @@ enum Command {
     Sandbox(SandboxCommand),
     /// This machine as a deploy target for a sandbox
     #[command(subcommand)]
-    Machine(MachineCommand),
+    Machine(DeviceCommand),
     /// Runners on this machine — execution containers a parent sandbox dispatches turns to
     #[command(subcommand)]
     Runner(RunnerCommand),
@@ -183,7 +183,7 @@ enum RunnerCommand {
 }
 
 #[derive(Subcommand)]
-enum MachineCommand {
+enum DeviceCommand {
     /// Enroll this machine as a deploy target for an existing sandbox (the Infra screen's one-liner)
     Enroll,
     /// Remove everything intentic put on this deploy target — stacks, volumes, state, tunnel, service user
@@ -269,10 +269,10 @@ fn main() {
 }
 
 #[cfg(unix)]
-fn run_machine(command: MachineCommand) -> util::Result<()> {
+fn run_machine(command: DeviceCommand) -> util::Result<()> {
     match command {
-        MachineCommand::Enroll => machine::enroll::run(),
-        MachineCommand::Remove { yes, keep_user } => {
+        DeviceCommand::Enroll => machine::enroll::run(),
+        DeviceCommand::Remove { yes, keep_user } => {
             machine::remove::run(machine::remove::Args { yes, keep_user })
         }
     }
@@ -281,7 +281,7 @@ fn run_machine(command: MachineCommand) -> util::Result<()> {
 /// Windows can't be a native SSH+Docker deploy target — its stand-in is the Docker-in-Docker container
 /// `ic sandbox connect` starts with SELF_HOST=1, not an enrolment of the machine itself.
 #[cfg(windows)]
-fn run_machine(_command: MachineCommand) -> util::Result<()> {
+fn run_machine(_command: DeviceCommand) -> util::Result<()> {
     Err(util::Fail(
         "machine enrolment connects Linux servers. On Windows, deploy locally instead: re-run the sandbox setup with $env:SELF_HOST='1', which stands up a Docker-in-Docker deploy target beside the sandbox.".to_string(),
     ))
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn preparing_takes_the_same_shape_as_updating_because_it_is_the_same_flow_stopped_early() {
-        // The card and the connected-computer agent build `prepare` and `update` command lines from one
+        // The card and the connected-device agent build `prepare` and `update` command lines from one
         // place; an argument that binds differently between them would download for one channel and swap
         // onto another.
         let Ok(Cli {
@@ -471,7 +471,7 @@ mod tests {
     fn machine_verbs_parse_and_removal_never_implies_consent() {
         assert!(parse(&["machine", "enroll"]).is_ok());
         let Ok(Cli {
-            command: Command::Machine(MachineCommand::Remove { yes, keep_user }),
+            command: Command::Machine(DeviceCommand::Remove { yes, keep_user }),
         }) = parse(&["machine", "remove"])
         else {
             panic!("machine remove did not parse")

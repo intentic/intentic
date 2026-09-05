@@ -14,7 +14,7 @@ import { registry } from "./registry.js";
  * the cli kind reads it, but a per-kind signature that varied by kind would defeat the dispatch. */
 
 // The config key holding this capability's secret, or undefined when it carries none, an unset optional token, a
-// kind with no credential at all, or one whose credential is not in the manifest (a connected computer's
+// kind with no credential at all, or one whose credential is not in the manifest (a connected device's
 // enrollment token lives on /history). Drives the /secrets inventory, reveal, and setSecret.
 export const secretField = (capability: Capability, connectors: Map<string, ResolvedContribution>): string | undefined =>
     registry[capability.kind].secret?.(capability.config, connectors);

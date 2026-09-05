@@ -3,17 +3,17 @@
 // jsdom because the subject is WHAT THE CARD PUTS ON SCREEN, and what it no longer does is half of it.
 //
 // This card used to hold the whole of desktop sync in the singular: "Syncing from radarsu-rog", the folder on
-// that machine, a warning when it went quiet, and a Disable that revoked EVERY paired computer from the corner
-// of a card people opened to READ their state. Desktop sync is a property of each COMPUTER, so all of that is a
-// row in the Computers list above (SandboxComputers.test.ts pins it there). What is left here is the one job
-// that happens before there is a computer to put anything on: minting a pairing.
-import type { Computer } from "@intentic/sandbox-contract";
+// that machine, a warning when it went quiet, and a Disable that revoked EVERY paired device from the corner
+// of a card people opened to READ their state. Desktop sync is a property of each DEVICE, so all of that is a
+// row in the Devices list above (SandboxDevices.test.ts pins it there). What is left here is the one job
+// that happens before there is a device to put anything on: minting a pairing.
+import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
-// query (the UI barrel's useDevice), exactly as SandboxComputers.test.ts cuts the same edge.
+// query (the UI barrel's useDevice), exactly as SandboxDevices.test.ts cuts the same edge.
 
 const canOperate = ref(true);
 const pairToken = ref<string | undefined>(undefined);
@@ -39,18 +39,18 @@ vi.mock(`../../composables/sandbox/useDesktopSync`, () => ({
     }),
 }));
 
-/* WHETHER A COMPUTER ALREADY HOLDS FILE SYNC, which the card now reads off the LIST rather than a status call of
+/* WHETHER A DEVICE ALREADY HOLDS FILE SYNC, which the card now reads off the LIST rather than a status call of
  * its own. It is the one fact about other machines this card still needs, because file sync is single-holder and
  * enrolling a second machine for it is a takeover the reader has to be warned about by name. */
-const computers = ref<Computer[]>([]);
-vi.mock(`../../composables/sandbox/useComputers`, () => ({
-    useComputers: () => ({ computers, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
+const devices = ref<Device[]>([]);
+vi.mock(`../../composables/sandbox/useDevices`, () => ({
+    useDevices: () => ({ devices, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
 }));
 vi.mock(`../../components/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: DesktopSyncCard } = await import("./DesktopSyncCard.vue");
 
-const holder = (label: string): Computer => ({ key: label, label, sync: { machine: label, mode: `sync`, seenAt: Date.now() } });
+const holder = (label: string): Device => ({ key: label, label, sync: { machine: label, mode: `sync`, seenAt: Date.now() } });
 
 let app: App | undefined;
 const mount = (): HTMLElement => {
@@ -73,7 +73,7 @@ const clickButton = async (label: string): Promise<void> => {
 
 afterEach(() => {
     canOperate.value = true;
-    computers.value = [];
+    devices.value = [];
     pairToken.value = undefined;
     pairMode.value = undefined;
     takeover.value = false;
@@ -90,7 +90,7 @@ it(`reveals the agent one-liner once a pairing is minted`, () => {
     pairMode.value = `sync`;
     expect(shown()).not.toContain(`Linux / macOS`);
     mount();
-    expect(shown()).toContain(`Run this on your computer`);
+    expect(shown()).toContain(`Run this on your device`);
     expect(shown()).toContain(`Linux / macOS`);
     expect(shown()).toContain(`Windows (PowerShell)`);
 });
@@ -108,7 +108,7 @@ it(`mints a ports-only pairing and stops asking for a folder`, async () => {
     expect(el.querySelector(`#desktop-sync-folder`)).not.toBeNull();
     await clickButton(`Mirror ports only`);
     expect(el.querySelector(`#desktop-sync-folder`)).toBeNull();
-    await clickButton(`Mirror ports to a computer`);
+    await clickButton(`Mirror ports to a device`);
     expect(enable).toHaveBeenCalledWith(`mirror`);
 });
 
@@ -123,31 +123,31 @@ it(`offers a member the mirror flow alone`, () => {
 
 /* TAKEOVER IS OFFERED ONLY WHEN A MACHINE ACTUALLY HOLDS FILE SYNC, and it names it — that machine's sync stops,
  * which is the whole reason it is an opt-in rather than something Enable does quietly. The holder is read off
- * the computers list, so this is also what pins that the card stopped keeping its own idea of who is syncing. */
-it(`offers to take file sync over, naming the computer that holds it`, async () => {
-    computers.value = [holder(`radarsu-rog`)];
+ * the devices list, so this is also what pins that the card stopped keeping its own idea of who is syncing. */
+it(`offers to take file sync over, naming the device that holds it`, async () => {
+    devices.value = [holder(`radarsu-rog`)];
     mount();
-    await clickButton(`Sync from a different computer instead`);
+    await clickButton(`Sync from a different device instead`);
     expect(shown()).toContain(`takes over from radarsu-rog`);
 });
 
-it(`does not offer a takeover when no computer holds file sync`, () => {
+it(`does not offer a takeover when no device holds file sync`, () => {
     mount();
-    expect(shown()).not.toContain(`Sync from a different computer instead`);
+    expect(shown()).not.toContain(`Sync from a different device instead`);
 });
 
 // A mirror-only machine is not a file-sync holder, so it must not produce a takeover prompt: adding a second
 // mirror contends with nothing.
-it(`does not treat a ports-only computer as the sync holder`, () => {
-    computers.value = [{ key: `colleague`, label: `colleague-pc`, sync: { machine: `colleague`, mode: `mirror`, seenAt: Date.now() } }];
+it(`does not treat a ports-only device as the sync holder`, () => {
+    devices.value = [{ key: `colleague`, label: `colleague-pc`, sync: { machine: `colleague`, mode: `mirror`, seenAt: Date.now() } }];
     mount();
-    expect(shown()).not.toContain(`Sync from a different computer instead`);
+    expect(shown()).not.toContain(`Sync from a different device instead`);
 });
 
 /* WHERE THE STATUS WENT. A reader arriving with the old card in mind is told, once, rather than left hunting for
  * a "Syncing from" line that is now a row above. Cheap to say and it is the one navigational fact this card
  * still owes anybody. */
-it(`points at the list for computers that are already paired`, () => {
+it(`points at the list for devices that are already paired`, () => {
     mount();
     expect(shown()).toContain(`Anything already paired is a row in`);
     // And it holds none of the old singular claims itself.

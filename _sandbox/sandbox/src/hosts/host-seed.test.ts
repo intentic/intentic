@@ -11,7 +11,7 @@ import { hostIdFrom, SETUP_HOST_SCOPES } from "./host-seed.js";
  *
  * If a switch is ever added to the host scopes, this test fails until someone decides: deliberately, whether a
  * machine that was connected automatically should have it. That failure is the feature. */
-test("a computer connected by setup may manage sandboxes and do nothing else", () => {
+test("a device connected by setup may manage sandboxes and do nothing else", () => {
     expect(SETUP_HOST_SCOPES).toEqual({
         shell: "off",
         write: "off",
@@ -34,7 +34,7 @@ test("setup never grants removal or destructive commands", () => {
 
 /* Every switch the card knows about is decided here. A scope added to the contract and forgotten here would be
  * absent from the seeded config, and the schema's own default would quietly answer for it, which is how a
- * default nobody chose ends up on somebody's computer. */
+ * default nobody chose ends up on somebody's device. */
 test("the seeded grant answers for every switch the card has", () => {
     const parsed = HostConfigSchema.parse({ platform: "linux", ...SETUP_HOST_SCOPES });
     const decided = new Set(Object.keys(SETUP_HOST_SCOPES));
@@ -58,7 +58,7 @@ test("the machine's name becomes an id the agent can address it by", () => {
 
 // An unnamed card is one nobody can find again, so there is no such thing as an empty id.
 test("a machine that reports no usable name still gets one", () => {
-    expect(hostIdFrom("")).toBe("this-computer");
-    expect(hostIdFrom("   ")).toBe("this-computer");
-    expect(hostIdFrom("!!!")).toBe("this-computer");
+    expect(hostIdFrom("")).toBe("this-device");
+    expect(hostIdFrom("   ")).toBe("this-device");
+    expect(hostIdFrom("!!!")).toBe("this-device");
 });

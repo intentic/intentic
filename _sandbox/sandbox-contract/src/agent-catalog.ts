@@ -82,7 +82,7 @@ export const isTrialProvider = (provider: AgentProvider): boolean => provider ==
  *
  * The trial used to publish whatever the upstream listed. Two things were wrong with that and neither could be
  * fixed by filtering harder. Google lists ~54 models on a fresh key and declares `generateContent` for many that
- * cannot serve an agent turn, deep-research, antigravity, gemma, robotics and computer-use previews all pass a
+ * cannot serve an agent turn, deep-research, antigravity, gemma, robotics and device-use previews all pass a
  * capability check and then fail the first message, so the picker was full of rows whose only outcome was an
  * error. And the list MOVED: the translator's routing table is written at boot and on capability edits, while
  * the picker re-reads the catalog every minute, so a model discovered in between was pickable and unroutable,

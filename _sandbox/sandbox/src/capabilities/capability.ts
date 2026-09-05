@@ -43,7 +43,7 @@ export interface CapabilityCtx {
     };
     readonly config: ConfigStore;
     readonly capabilities: CapabilitiesStore;
-    // The user's own connected computers. Both are passed whole rather than narrowed: the hub IS the handler's
+    // The user's own connected devices. Both are passed whole rather than narrowed: the hub IS the handler's
     // subject (a scope edit has to reach a live machine while the user is still looking at the card), and the
     // store's enrollment state is the difference between "added" and "actually connected", which is the only
     // thing this kind's status can usefully say.

@@ -204,7 +204,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Your own machine · intentic docs",
                                 description:
-                                    "Sync a folder, let an agent operate your computer, use its compute as a remote runner, or drive sandbox agents from Zed or JetBrains over ACP.",
+                                    "Sync a folder, let an agent operate your device, use its compute as a remote runner, or drive sandbox agents from Zed or JetBrains over ACP.",
                                 datePublished: "2026-08-07",
                             },
                         },
@@ -249,7 +249,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Remote runners · intentic docs",
                                 description:
-                                    "Place agent conversations on runner containers on your other computers while the parent sandbox keeps the transcript, branch, review and land workflow.",
+                                    "Place agent conversations on runner containers on your other devices while the parent sandbox keeps the transcript, branch, review and land workflow.",
                                 datePublished: "2026-08-25",
                             },
                         },

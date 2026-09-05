@@ -4,12 +4,12 @@ import { computed, onBeforeUnmount, watch } from "vue";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
 
-/* "Connect this computer" for a `host`-kind capability. The counterpart of the browser-profile dialog: that one
+/* "Connect this device" for a `host`-kind capability. The counterpart of the browser-profile dialog: that one
  * signs a session in FOR the user, this one hands them a command to run ON the machine they want connected:
- * because the one thing a browser tab cannot do is install something on a computer that isn't this one.
+ * because the one thing a browser tab cannot do is install something on a device that isn't this one.
  *
  * The dialog is deliberately blunt about what the command does and what the machine will then be allowed to do,
- * since it is the moment a person decides to give an agent hands on their computer. The permissions shown are
+ * since it is the moment a person decides to give an agent hands on their device. The permissions shown are
  * the capability's own config, so the sentence they read here is the same grant the machine will enforce.
  *
  * Once the machine connects, this flips to a confirmation without a refresh: the composable polls while a
@@ -71,14 +71,14 @@ onBeforeUnmount(stop);
                 <ScriptSourceSwitch />
                 <Code :code="command" :lang="platform === `windows` ? `powershell` : `bash`" :wrap="true" />
                 <p class="text-2xs text-subtle">
-                    The code in this command works once and expires in about ten minutes. This window updates by itself when the computer connects.
+                    The code in this command works once and expires in about ten minutes. This window updates by itself when the device connects.
                 </p>
             </template>
 
             <div class="rounded-md border border-subtle px-3 py-2">
                 <p class="text-2xs text-muted">
                     Once connected, the agent may: <b>{{ permissions }}</b
-                    >, and nothing else. Those switches live on this card, the computer enforces them itself, and Revoke here cuts it off immediately.
+                    >, and nothing else. Those switches live on this card, the device enforces them itself, and Revoke here cuts it off immediately.
                 </p>
             </div>
         </div>

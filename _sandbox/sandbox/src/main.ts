@@ -336,22 +336,22 @@ const main = async (): Promise<void> => {
             .catch((error: unknown) => logger.warn({ err: error }, "setup pairing not armed, enable desktop sync from the browser instead"));
     }
 
-    /* Setup-time CONNECTED COMPUTER: create the card for the machine that ran the installer and arm its pairing,
+    /* Setup-time CONNECTED DEVICE: create the card for the machine that ran the installer and arm its pairing,
      * so the agent that same flow installed can enroll. A no-op on every boot after the first, the token is
      * burned on /history when it is redeemed, and on every sandbox that was set up before this existed.
      *
      * Detached like the sync seed above: the machine agent retries its enroll on its own backoff, so nothing here
-     * needs to hold the boot. A failure leaves the computer unconnected and the Computers view saying so, which
+     * needs to hold the boot. A failure leaves the device unconnected and the Devices view saying so, which
      * is exactly what it said before this existed. */
     if (config.hostPairToken !== "") {
         void seedSetupHost(services, { token: config.hostPairToken, platform: config.hostPlatform, label: config.hostLabel })
             .then(({ armed, id }) => {
                 if (armed) {
-                    logger.info({ host: id }, "setup computer armed: it may manage this machine's sandboxes; widen or revoke on its capability card");
+                    logger.info({ host: id }, "setup device armed: it may manage this machine's sandboxes; widen or revoke on its capability card");
                 }
             })
             .catch((error: unknown) =>
-                logger.warn({ err: error }, "setup computer not connected, add it from Capabilities to manage this machine's sandboxes"),
+                logger.warn({ err: error }, "setup device not connected, add it from Capabilities to manage this machine's sandboxes"),
             );
     }
 
@@ -773,7 +773,7 @@ const main = async (): Promise<void> => {
             /* On a RUNNER, settings only, whatever the seed carries: a runner has no owner to reconnect a
              * capability, approve an overlay proposal, or fill a secret slot, so those items would land as
              * dead weight wearing "needs action" nobody can take. The parent scopes the seed before sending
-             * (hosts/machine-reports.ts); this filter is the belt to that braces, holding even for a seed
+             * (hosts/device-reports.ts); this filter is the belt to that braces, holding even for a seed
              * stamped by hand. Repos stay out too — a runner's repos arrive through the parent's git door
              * (runner-sync.ts), which carries the parent's exact branches where a remote clone cannot. */
             const pick = runnerEnv !== undefined ? (item: ArrivalItem): boolean => item.group === "settings" : (): boolean => true;

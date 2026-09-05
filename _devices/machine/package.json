@@ -1,0 +1,51 @@
+{
+    "name": "@intentic/machine",
+    "version": "0.0.0",
+    "description": "The one agent that lives on a user's own device: lets an intentic sandbox work on it (outbound WebSocket, MCP tools, scopes enforced here) and keeps folders and ports mirrored with it (Mutagen over tunnel SSH)",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_devices/machine"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "bin": {
+        "intentic-machine": "./dist/cli.js"
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/browser": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/desktop": "workspace:*",
+        "@intentic/local-agent": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*",
+        "@orpc/server": "catalog:",
+        "@stricli/core": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@orpc/client": "catalog:",
+        "@orpc/contract": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

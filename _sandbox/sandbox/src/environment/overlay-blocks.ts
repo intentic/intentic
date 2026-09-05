@@ -147,7 +147,7 @@ const firstSentenceEnd = (text: string): number => {
  * These explanations open with the point and then qualify it at length ("ffmpeg, encoding screen recordings
  * (Playwright records VP8/WebM; its bundled ffmpeg cannot encode H.264, so …)"). The qualification is worth
  * keeping and worth not leading with, so it stays in the prose behind the disclosure and the row gets the part
- * somebody reads. Same trade the Computers rows make with a machine's OS string. */
+ * somebody reads. Same trade the Devices rows make with a machine's OS string. */
 /* Beyond this, a "one-line purpose" is two or three lines of the row and stops being one. Not every opening
  * sentence is short, "The desktop app is a Tauri 2 shell, so its whole native half is Rust that nothing in this
  * image can compile: there is no cargo, no pkg-config, and no webview headers." is one sentence and three

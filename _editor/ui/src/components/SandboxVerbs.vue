@@ -1,5 +1,5 @@
 <!-- THE CONTROLS ON ONE SANDBOX'S ROW, drawn once for both apps.
-     The desktop app's manager window and the web's Computers tab do the same job to the same containers, and
+     The desktop app's manager window and the web's Devices tab do the same job to the same containers, and
      they had drifted into two different sets: the window had a log tail and no Restart, the tab had a Restart and
      no log tail, and neither offered the rollback both of their backends could already do. Which verbs exist,
      what they are called, what order they sit in and which of them is red is one decision, so it is made here

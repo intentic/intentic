@@ -110,7 +110,7 @@ tile came to read `21` over a workspace that had two.
 | `viewers` | UI viewers | **Every file format the app can show that isn't source code**: images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), docx, xlsx, via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. |
 | `connectors` | data-only | CLI-tool connectors as manifest data: no code. |
 | `social` | data-only | The platforms the agent acts on **as the owner** through the shared logged-in Chromium (Reddit, X, YouTube): a card, a login URL and a cheatsheet each. The browser itself is core, this pack buys identity, not tooling. |
-| `computers` | data-only | The OS skill packs a connected computer installs (Windows PowerShell, Linux shell + Wayland/X11). The tool surface, the enrollment and the scope enforcement are core; only the pack varies. |
+| `devices` | data-only | The OS skill packs a connected device installs (Windows PowerShell, Linux shell + Wayland/X11). The tool surface, the enrollment and the scope enforcement are core; only the pack varies. |
 | `acp-agents` | data-only | The ACP agents offered as chat providers (OpenCode, Gemini CLI, any custom command): presets over one config shape. |
 | `pi-agent` | data-only + environment fragment | The Pi coding agent as a chat provider under the reserved `pi` id: served by the daemon's own Pi RPC runtime (not ACP), with the image fragment that bakes the Pi CLI in. |
 | `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon, plus the discord connector. |
@@ -137,7 +137,7 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   miss the middle one and it shows as `missing`. (Note the three *core* view contributions in
   `_editor/web/src/core-views/coreViews.ts` are **not** extensions: they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
-- **Baked into the sandbox image** (`connectors`, `social`, `computers`, `acp-agents`, `discord`, `slack`,
+- **Baked into the sandbox image** (`connectors`, `social`, `devices`, `acp-agents`, `discord`, `slack`,
   `telegram`, `whatsapp`, `imap`, `google-workspace`): the whole checkout copied to `/opt/extensions` by the sandbox
   [Dockerfile](../_sandbox/sandbox/Dockerfile) and read via `EXTENSIONS_DIR`: present in every sandbox,
   `builtin: true` on `GET /extensions`, not removable, no capability entry. This is how the `/capabilities`

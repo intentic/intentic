@@ -18,7 +18,7 @@
          come and go, and on the ports list it sat one mis-click from the button that publishes a port to the
          public internet.
        · The chevron and the row's own mark are ONE hit area. A disclosure whose only target is a 12px arrow
-         is a disclosure nobody finds — the argument <MachineDetail> and the activity feed had both already
+         is a disclosure nobody finds — the argument <DeviceDetail> and the activity feed had both already
          written down, and the one thing every hand-rolled version got right.
 
      THE OPENED BLOCK IS INDENTED AND RAILED, and the indent is DERIVED. `#below` is full-width by <Row>'s

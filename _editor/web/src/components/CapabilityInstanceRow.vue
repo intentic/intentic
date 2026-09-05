@@ -9,7 +9,7 @@
      lines by design (name and state above, the address that identifies it below, both free to use the full
      width), and the right-hand side carries at most ONE button.
 
-     THAT ONE BUTTON IS THE STEP THIS CONNECTION IS WAITING ON: connect the computer, sign the account in, or,
+     THAT ONE BUTTON IS THE STEP THIS CONNECTION IS WAITING ON: connect the device, sign the account in, or,
      once nothing is outstanding, the thing people actually come back to do (open the browser). Everything else
      lives behind the row's overflow menu, which is also where the two verbs every connection has go: rename it,
      remove it. A menu is the right home for them precisely because they are rare and identical on every row:
@@ -46,7 +46,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; edit: []; rename: []; remove: [] }>();
 
-/* A computer is connected by running a command ON IT; a browser, by pasting a code INTO IT. Either way the
+/* A device is connected by running a command ON IT; a browser, by pasting a code INTO IT. Either way the
  * connection is made at the far end, so one that has never checked in is waiting on that step, and one that HAS
  * is merely asleep (a closed lid, a quit browser) — which a fresh pairing does not wake. The button says which.
  *

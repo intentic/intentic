@@ -53,7 +53,7 @@ const settled = computed(() => conversation.registered.value);
 
 /* What the row says under the name. An OUTDATED runner is still offered, and says so: it runs turns, it is
  * simply behind this sandbox's build, and the choice between "run it there now" and "update it first" is the
- * user's (the Computers view has the button). */
+ * user's (the Devices view has the button). */
 const detail = (runner: { online: boolean; parity: string; facts?: { cpus: number; load: number } }): string => {
     if (!runner.online) {
         return `Offline — wake that machine to use it`;
@@ -156,7 +156,7 @@ const place = (at: { box?: string; runner?: string }): void => {
         </template>
 
         <p v-if="runners.length === 0 && otherBoxes.length === 0" class="px-2.5 py-1.5 text-2xs text-subtle">
-            No runners yet. Add one on a connected computer under Sandbox ▸ Computers to run agents there.
+            No runners yet. Add one on a connected computer under Sandbox ▸ Devices to run agents there.
         </p>
         <p v-else-if="settled" class="px-2.5 py-1.5 text-2xs text-subtle">
             This conversation already runs {{ placedAt }}. Start a new agent to work somewhere else.

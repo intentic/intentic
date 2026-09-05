@@ -4,7 +4,7 @@ import { createHostHub, type HostClient } from "./host-hub.js";
 
 /* What is left of the hub once oRPC owns the wire: the roster, liveness, and what to do when a machine goes.
  * Request/response correlation is not tested here any more because it is not implemented here any more: the
- * link does it, and _computers/machine/src/computer/link.test.ts proves it over a real handler.
+ * link does it, and _devices/machine/src/device/link.test.ts proves it over a real handler.
  *
  * The `mcp` calls below therefore assert PLUMBING (does the right machine get it, what happens when it is gone),
  * never protocol. */

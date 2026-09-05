@@ -24,8 +24,8 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 }));
 
 // Both cards are CONTRIBUTED, not static: there is no `linux` or `reddit` entry in the catalog to route to
-// unless an enabled extension declares one. These are the computers and social manifests narrowed to what a
-// card needs; the permission switches a computer carries are added by the catalog itself, not by the manifest.
+// unless an enabled extension declares one. These are the devices and social manifests narrowed to what a
+// card needs; the permission switches a device carries are added by the catalog itself, not by the manifest.
 vi.mock(`../composables/extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
@@ -33,14 +33,14 @@ vi.mock(`../composables/extensions/useExtensions`, () => ({
         settled: ref(true),
         enabled: ref([
             {
-                id: `intentic.computers`,
+                id: `intentic.devices`,
                 manifest: {
                     contributes: {
                         capabilities: [
                             {
                                 id: `linux`,
                                 kind: `host`,
-                                catalog: { name: `Linux PC`, category: `machines`, description: `Let the agent work on your Linux computer.` },
+                                catalog: { name: `Linux PC`, category: `devices`, description: `Let the agent work on your Linux device.` },
                                 fields: [],
                             },
                         ],
@@ -97,7 +97,7 @@ vi.mock(`../composables/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
     viewProcessLogs: vi.fn(),
 }));
-// No machine has ever checked in, which is what a just-added computer looks like.
+// No machine has ever checked in, which is what a just-added device looks like.
 vi.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
 }));
@@ -173,8 +173,8 @@ const start = (onCard: string, status: CapabilityStatus): HTMLElement => {
     return mount();
 };
 
-it(`hands over the machine's command when a computer is added, instead of returning to the catalog`, async () => {
-    const el = start(`linux`, { state: `pending`, detail: `click Connect and run the one-liner on that computer` });
+it(`hands over the machine's command when a device is added, instead of returning to the catalog`, async () => {
+    const el = start(`linux`, { state: `pending`, detail: `click Connect and run the one-liner on that device` });
 
     await submitForm(el);
 

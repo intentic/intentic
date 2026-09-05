@@ -70,7 +70,7 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
     const seen = new Map<string, { parity: RunnerParity; facts: RunnerFacts | undefined; lastSeen: number }>();
 
     /* Say so on every transition, the host hub's line again. What it saves here is the composer's placement
-     * picker and the Computers view agreeing about a runner the moment its machine wakes, rather than up to
+     * picker and the Devices view agreeing about a runner the moment its machine wakes, rather than up to
      * fifteen seconds later, which was the interval a row's only two moving facts used to be re-asked on. */
     const said = (): void => publishRuntimeChange("runners");
 

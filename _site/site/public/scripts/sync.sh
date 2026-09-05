@@ -2,7 +2,7 @@
 # intentic desktop sync — enable desktop sync on THIS machine: two-way sync a local folder with your
 # sandbox's /work (block-delta, near-real-time), and mirror the sandbox's dev-server ports onto this machine's
 # localhost (both powered by Mutagen). Runs as YOU (no sudo): it installs the one machine agent into
-# ~/.intentic/machine (shared with the connected-computer capability, if you enable that too) and registers
+# ~/.intentic/machine (shared with the connected-device capability, if you enable that too) and registers
 # per-user login entries (the agent + the Mutagen daemon) so both resume after a reboot.
 # `intentic-machine sync uninstall` removes everything.
 #
@@ -10,7 +10,7 @@
 # to `intentic-machine sync setup`, which decides everything else — including moving an already-installed
 # agent onto the current release, so re-running this command still upgrades a machine. The decisions used to
 # live here, copied across four scripts in two shell dialects; they now live once, in the agent
-# (_computers/machine/src/install.ts), where they are compiled and tested.
+# (_devices/machine/src/install.ts), where they are compiled and tested.
 #
 # Usage (the platform's Desktop sync card hands you this):
 #   curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://sandbox-<id>.<zone>' PAIR_TOKEN='<token>' SYNC_DIR="$HOME/intentic/<name>-<id>" sh
@@ -22,7 +22,7 @@
 #   SYNC_DIR     local folder to sync (default: ~/intentic/<id>, the same id the sandbox's own URL carries)
 #   TAKEOVER     any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #   AGENT_BIN    run THIS agent command instead of the installed one — for local dev / dogfooding an
-#                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_computers/machine/dist/cli.js".
+#                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_devices/machine/dist/cli.js".
 set -eu
 
 URL="${SANDBOX_URL:-}"
@@ -51,7 +51,7 @@ case "$arch" in
         ;;
 esac
 
-# ---- bootstrap the agent binary (identical in computer.sh and sync.sh: standalone `curl | sh` files, no shared code) ----
+# ---- bootstrap the agent binary (identical in device.sh and sync.sh: standalone `curl | sh` files, no shared code) ----
 #
 # Only when NO working agent is installed: a machine that has one skips straight to `setup`, which asks the
 # release channel itself and self-updates first. The download is pinned to the tag `releases/latest` resolves

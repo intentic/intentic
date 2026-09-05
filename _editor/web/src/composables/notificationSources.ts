@@ -330,7 +330,7 @@ export const startNotificationSources = (): void => {
             kind: `question`,
             tone: `info`,
             icon: `bolt`,
-            title: `Faster if this sandbox runs on this computer`,
+            title: `Faster if this sandbox runs on this device`,
             detail: `Your browser will ask to allow it.`,
             actions: [
                 { label: `No`, severity: `secondary` as const, run: (): void => decline(sandboxId) },

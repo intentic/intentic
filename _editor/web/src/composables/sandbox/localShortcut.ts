@@ -2,7 +2,7 @@ import { computed, ref } from "vue";
 import { storedKeys, storedValue, storeValue } from "../browserStorage";
 import { activeSandboxId } from "./activeSandbox";
 
-/* WHETHER THIS BROWSER MAY REACH FOR A SANDBOX RUNNING ON THIS COMPUTER, asked in the app's own words, once,
+/* WHETHER THIS BROWSER MAY REACH FOR A SANDBOX RUNNING ON THIS DEVICE, asked in the app's own words, once,
  * before the browser asks in its own.
  *
  * The loopback shortcut (endpoint.ts) is the only thing in this app that touches the machine the browser runs
@@ -23,7 +23,7 @@ import { activeSandboxId } from "./activeSandbox";
  * sandbox may use the shortcut and nothing asks again, asking a second time would be asking for something we
  * already have.
  *
- * A no is about THIS SANDBOX. The real question underneath is "is this one on this computer", and for a
+ * A no is about THIS SANDBOX. The real question underneath is "is this one on this device", and for a
  * sandbox on a colleague's desktop the answer is a permanent no that should never be raised again. But it is
  * not permanent for the USER: the day they set a new sandbox up on the laptop in front of them, the answer
  * changes, and scoping the no to the sandbox is what lets that day arrive on its own, no settings page to

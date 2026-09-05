@@ -68,15 +68,15 @@ test("a second line joins the first instead of starting a second section", async
 
 /* WHERE A LINE LANDS, and why it is placed rather than simply appended. This document's sections address
  * different subjects — the disposable container, and the owner's own laptop — so a line meant for the sandbox
- * that fell under "On my computers" would not read as a mistake to the judge. It would read as a rule about
+ * that fell under "On my devices" would not read as a mistake to the judge. It would read as a rule about
  * the laptop. */
 test("a line lands in its own section even when another section was written after it", () => {
-    const policy = [`## In this sandbox`, ``, `Ordinary work is fine.`, ``, `## Added from permission cards`, ``, `- First.`, ``, `## On my computers`, ``, `Ask before anything.`, ``].join(`\n`);
+    const policy = [`## In this sandbox`, ``, `Ordinary work is fine.`, ``, `## Added from permission cards`, ``, `- First.`, ``, `## On my devices`, ``, `Ask before anything.`, ``].join(`\n`);
     const next = withAddedLine(policy, `Second.`);
     expect(next.indexOf(`- Second.`)).toBeGreaterThan(next.indexOf(`- First.`));
-    expect(next.indexOf(`- Second.`)).toBeLessThan(next.indexOf(`## On my computers`));
+    expect(next.indexOf(`- Second.`)).toBeLessThan(next.indexOf(`## On my devices`));
     // The section it was NOT meant for is untouched.
-    expect(next).toContain(`## On my computers\n\nAsk before anything.`);
+    expect(next).toContain(`## On my devices\n\nAsk before anything.`);
 });
 
 test("the heading and its note are written once, on the first line added", () => {

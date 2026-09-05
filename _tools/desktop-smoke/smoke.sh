@@ -124,7 +124,7 @@ SETUP_TITLE="Setting up"
 # and it says it better than the setup screen ever did: it is a window that exists for no other reason, where
 # the old assertion had to lean on a title to tell "the link arrived" apart from "the link was dropped and the
 # app opened on the workspace".
-CONFIRM_TITLE="Set up a sandbox on this computer"
+CONFIRM_TITLE="Set up a sandbox on this device"
 
 # Say yes to it. GTK focuses the first button in the action area and rfd adds the affirmative one first, so
 # Return is "Set up" — which this never assumes: the setup-screen assertion after it is what proves it landed.

@@ -44,7 +44,7 @@ import { SkillDraftSchema, SkillNameSchema, SystemPromptModeSchema } from "./set
  * what it said after the SDK renames something.
  *
  * TWO STRENGTHS, AND THE DIFFERENCE IS VISIBLE FROM HERE. Everything capability-shaped (`connectors`,
- * `computers`, `mcp`, and the accounts in `capabilities`) is enforced by ABSENCE, the credential is never
+ * `devices`, `mcp`, and the accounts in `capabilities`) is enforced by ABSENCE, the credential is never
  * injected, the server never mounted, the browser never launched, which is the same mechanism the account
  * filter already uses and needs no cooperation from the model. The plain switches are enforced by taking the
  * tools out of the turn's context, which holds for every tool the harness owns and cannot reach a program the
@@ -99,7 +99,7 @@ export const PersonaPowersSchema = z.object({
      * whole reason these are optional rather than defaulted arrays, "all" and "none" are both real answers and
      * an empty default could only spell one of them. */
     connectors: z.array(entryId).max(100).optional(),
-    computers: z.array(entryId).max(50).optional(),
+    devices: z.array(entryId).max(50).optional(),
     mcp: z.array(entryId).max(50).optional(),
 });
 export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
@@ -218,7 +218,7 @@ export const personaBounds = (persona: Persona): string => {
         !resolved.delegate,
         !resolved.sandbox,
         resolved.connectors !== undefined,
-        resolved.computers !== undefined,
+        resolved.devices !== undefined,
         resolved.mcp !== undefined,
     ].filter(Boolean).length;
     return limits === 0 ? "Full powers" : `${limits} limit${limits === 1 ? "" : "s"}`;

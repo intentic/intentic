@@ -3,7 +3,7 @@ import { Button, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { Requirement, RequirementAction, RequirementProgress } from "../desktop";
 
-/* WHAT THIS COMPUTER NEEDS, AS SOMETHING YOU CAN ACT ON.
+/* WHAT THIS DEVICE NEEDS, AS SOMETHING YOU CAN ACT ON.
  *
  * A stopped install used to end here as four lines of stderr in a red box. That is the right shape for a
  * failure nobody could have predicted: a network that dropped, an image that would not pull, and the wrong
@@ -108,7 +108,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
 <template>
     <div class="flex flex-col gap-3">
         <p class="text-2xs text-content">
-            {{ stuck ? `This computer can't run a sandbox yet:` : `Before your sandbox can run here:` }}
+            {{ stuck ? `This device can't run a sandbox yet:` : `Before your sandbox can run here:` }}
         </p>
 
         <ul class="flex flex-col gap-2">
@@ -189,12 +189,12 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
         <!-- THE WAY OUT THAT IS NOT GIVING UP, and the only place in this app that offers one.
              Everything above is a machine being asked for administrator, a 600 MB download and a restart, and
              some of the people reading it are on a PC where none of that is going to happen. The browser hands
-             that reader a machine we run, in seconds; the app hid it on the argument that "this computer" is
-             the whole point of being here: true until this computer cannot, and then it is a dead end. One
+             that reader a machine we run, in seconds; the app hid it on the argument that "this device" is
+             the whole point of being here: true until this device cannot, and then it is a dead end. One
              quiet line, under the loud default. -->
         <button v-if="!busy" type="button" :class="ui.textAction(`text-2xs`)" @click="emit(`elsewhere`)">
             <Icon name="server" class="shrink-0" />
-            <span>Not on this computer? Run it on a machine we host</span>
+            <span>Not on this device? Run it on a machine we host</span>
         </button>
     </div>
 </template>

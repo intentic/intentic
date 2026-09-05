@@ -1,14 +1,14 @@
 import { join } from "node:path";
 import { enrollments, pairings } from "../store/enrollment.js";
 
-/* The credential half of a `host` capability, the user's own computer, enrolled once and then holding a
+/* The credential half of a `host` capability, the user's own device, enrolled once and then holding a
  * long-lived socket to this daemon (hosts/host-hub.ts is the live half).
  *
  * The mechanic is store/enrollment.ts, which four doors share; what is here is what is true of THIS door. The
  * owner mints a single-use, short-lived pairing in the browser and the one-liner carries it, or the setup
  * flow arms one it was given in the container's env, and the @intentic/machine agent redeems either exactly
  * once for a durable per-machine token. Nothing about the machine's identity is asserted by the machine: the
- * pairing already names WHICH capability it enrolls, so a redeemed token can only ever become the computer
+ * pairing already names WHICH capability it enrolls, so a redeemed token can only ever become the device
  * the owner was looking at when they clicked Connect.
  *
  * WHERE THIS LIVES IS THE POINT. On /history, not /work/.intentic: this token is a key to somebody's actual
@@ -34,7 +34,7 @@ export interface HostsStore {
     // Which machine is presenting this token, or undefined. The only authorization on the WebSocket.
     readonly verify: (presented: string) => Promise<string | undefined>;
     readonly enrolled: (id: string) => Promise<boolean>;
-    // Move an enrollment onto a new capability id, keeping the machine's key valid, a renamed computer must
+    // Move an enrollment onto a new capability id, keeping the machine's key valid, a renamed device must
     // not have to be re-paired by hand at the far end.
     readonly rename: (from: string, to: string) => Promise<void>;
     // Drop a machine's enrollment, its next connect is refused and its live socket is closed by the caller.

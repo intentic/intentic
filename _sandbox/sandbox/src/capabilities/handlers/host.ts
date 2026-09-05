@@ -4,7 +4,7 @@ import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../sett
 import type { CapabilityHandler } from "../capability.js";
 import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
-// A computer of the user's OWN, one capability per machine, the id being its name. `apply` writes the platform's
+// A device of the user's OWN, one capability per machine, the id being its name. `apply` writes the platform's
 // skill pack and pushes the scopes to the machine if it is up; the machine itself is connected out-of-band, by
 // running the card's one-liner on it (which enrolls over /system/hosts/enroll and dials back in). Distinct from
 // `ssh`, where the sandbox does the dialling and there is nothing to install on the far end.
@@ -13,7 +13,7 @@ import { contributedSkill, contributionKey, contributionRegistry, hostOf } from 
 // enrollment and the scope enforcement are core (host-skills.ts, hosts/).
 
 export const hostHandler: CapabilityHandler = {
-    // A connected computer's credential is its enrollment token, which lives on /history (hosts-store.ts) and is
+    // A connected device's credential is its enrollment token, which lives on /history (hosts-store.ts) and is
     // never in the manifest, rotating it is re-running the installer there, not an edit in /secrets. So: no secret.
     echo: (config) => {
         // Every field is a permission and none is secret: the card renders the grant back to the owner.
@@ -30,13 +30,13 @@ export const hostHandler: CapabilityHandler = {
             ...(host.roots !== undefined ? { roots: host.roots } : {}),
         };
     },
-    /* The enrollment travels with the name, so a renamed computer is not a computer somebody has to walk over
+    /* The enrollment travels with the name, so a renamed device is not a device somebody has to walk over
      * to and re-pair. Its live socket is cut instead: the machine is authenticated by a token this daemon still
      * honours, and reconnecting is what makes it announce itself under the name it now has. */
     rename: {
         carry: async (ctx, from, to) => {
             await ctx.hosts.rename(from, to);
-            ctx.hostHub.disconnect(from, "this computer was renamed: reconnecting under its new name");
+            ctx.hostHub.disconnect(from, "this device was renamed: reconnecting under its new name");
             await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
@@ -54,37 +54,37 @@ export const hostHandler: CapabilityHandler = {
         if (!(await ctx.hosts.enrolled(id))) {
             yield {
                 kind: "log",
-                message: `Added "${id}". Run the one-time command its card is offering on that computer, the agent can work on it from the next turn.`,
+                message: `Added "${id}". Run the one-time command its card is offering on that device, the agent can work on it from the next turn.`,
             };
             return;
         }
-        // An edit of the scopes is a decision about what may happen on somebody's computer RIGHT NOW, so it
+        // An edit of the scopes is a decision about what may happen on somebody's device RIGHT NOW, so it
         // travels immediately rather than at the machine's next reconnect. The machine is the enforcement point;
         // this is the only thing that moves the boundary it enforces.
         const pushed = await ctx.hostHub.pushScopes(id, host);
         yield {
             kind: "log",
             message: pushed
-                ? `Updated "${id}": the new permissions are in force on that computer now.`
+                ? `Updated "${id}": the new permissions are in force on that device now.`
                 : `Saved. "${id}" is offline; the new permissions apply the moment it reconnects.`,
         };
     },
     // Four distinct states, because the user's next action differs in each: nothing applied yet, applied but the
-    // computer was never connected (run the one-liner), connected but asleep (open the lid), working.
+    // device was never connected (run the one-liner), connected but asleep (open the lid), working.
     status: async (ctx, id) => {
         if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
         if (!(await ctx.hosts.enrolled(id))) {
-            return { state: "pending", detail: "click Connect and run the one-liner on that computer" };
+            return { state: "pending", detail: "click Connect and run the one-liner on that device" };
         }
-        return ctx.hostHub.online(id) ? { state: "active" } : { state: "pending", detail: "the computer is offline" };
+        return ctx.hostHub.online(id) ? { state: "active" } : { state: "pending", detail: "the device is offline" };
     },
     // Removing the capability revokes the machine's key and cuts its socket. What stays is the agent binary
     // installed over there, only somebody at that machine can uninstall it, and with its enrollment gone it can
     // no longer reach this sandbox at all.
     remove: async (ctx, id) => {
-        ctx.hostHub.disconnect(id, "this computer was disconnected from the sandbox");
+        ctx.hostHub.disconnect(id, "this device was disconnected from the sandbox");
         await ctx.hosts.revoke(id);
         await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },

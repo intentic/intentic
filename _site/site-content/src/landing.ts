@@ -298,7 +298,7 @@ export const landingContent: LandingContent = {
                 line: "Move the workspace to a server so it runs without your laptop, and invite your team into the same one.",
                 shot: {
                     name: "stage-host",
-                    alt: "The acme-shop sandbox's Access page: the owner, a field to invite a teammate by email with their role beside it, the browsers currently signed in and a control that signs every one of them out, and under Here now a collaborator, Grace Hopper, looking at the agents board. The list on the left is everything else the box holds: environment, secrets, agent account, extensions, personas and computers.",
+                    alt: "The acme-shop sandbox's Access page: the owner, a field to invite a teammate by email with their role beside it, the browsers currently signed in and a control that signs every one of them out, and under Here now a collaborator, Grace Hopper, looking at the agents board. The list on the left is everything else the box holds: environment, secrets, agent account, extensions, personas and devices.",
                     label: "acme-shop · /sandbox/access",
                 },
             },

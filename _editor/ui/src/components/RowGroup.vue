@@ -36,7 +36,7 @@ import { provideRowDensity, type RowDensity } from "./row.js";
  * wherever nobody had thought about it.
  *
  * WHAT THAT COST IS A HUB THAT CHANGES LANGUAGE AS YOU TAB THROUGH IT. In the Sandbox hub, Personas, Extensions,
- * Environment and Access drew their row titles at 14px/500; Agent, Status and Computers drew theirs at 16px/600,
+ * Environment and Access drew their row titles at 14px/500; Agent, Status and Devices drew theirs at 16px/600,
  * with a 18px glyph beside a 14px one. In Settings, Keybindings was 14px/500 and Appearance, Notifications and
  * Data were 16px/600 — one nav rail, two row languages, and which one you got depended on which file somebody
  * had edited last. Inside a SINGLE tab it contradicted itself: Agent ▸ Skills and Agent ▸ Rules were compact
@@ -44,7 +44,7 @@ import { provideRowDensity, type RowDensity } from "./row.js";
  *
  * THE QUESTION WAS NOT DECIDABLE, WHICH IS WHY IT KEPT BEING DECIDED DIFFERENTLY. "Models" is three rows with a
  * picker on each: a settings list, or a record list of model tiers? "Your listings" is five services with a
- * badge and four verbs. "Computers" is machines with switches on them. Every one of those reads both ways, so
+ * badge and four verbs. "Devices" is machines with switches on them. Every one of those reads both ways, so
  * the taxonomy was never doing the work — a reader tabbing between them is not classifying anything, they are
  * looking at rows, and rows on one surface have one size.
  *

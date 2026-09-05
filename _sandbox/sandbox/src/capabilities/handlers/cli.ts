@@ -117,7 +117,7 @@ export const cliHandler: CapabilityHandler = {
         const suffix = envSuffix(id);
         const keys = connector.spec.kind === "cli" ? Object.keys(connector.spec.env).toSorted((a, b) => b.length - a.length) : [];
         // No `${tools}` slot for cli: a connector's cheatsheet is about ITS tool, and there is no shared surface
-        // behind it the way a browser or a connected computer has one.
+        // behind it the way a browser or a connected device has one.
         let skill = await contributedSkill(connector, id, "");
         if (skill === undefined) {
             // Two very different reasons the cheatsheet isn't readable, and only one of them is anybody's fault.

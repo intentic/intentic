@@ -1,5 +1,5 @@
 /* WHAT IS WORTH READING OUT OF A FOREIGN HOME DIRECTORY, and what must never be read at all, one policy, so
- * the two ways in (an uploaded archive, a connected computer read directly) can never disagree about what a
+ * the two ways in (an uploaded archive, a connected device read directly) can never disagree about what a
  * setup contains. A user who packs a tarball and a user who lets us read the folder must get the same plan.
  *
  * The segments below are not a size optimization. `credentials/` holds channel state whose ratcheting keys

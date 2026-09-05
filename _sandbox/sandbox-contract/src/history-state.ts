@@ -151,7 +151,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
      * with THIS sandbox — carried into another one it would either be dead weight or, worse, a second sandbox
      * holding a live key to a browser its owner never connected it to. Re-pairing is a code and one click. */
     { path: "webext-enrollments.json", portability: "identity", note: "Pair your browser again from its card: the extension is still installed." },
-    // The burn list for setup-time computer pairings. Identity, like sync's beside it, and for a sharper reason:
+    // The burn list for setup-time device pairings. Identity, like sync's beside it, and for a sharper reason:
     // carrying it into another sandbox would mark that sandbox's own fresh pairing as already spent.
     { path: "host-pair-consumed.json", portability: "identity" },
     // A runner's enrollment names THIS sandbox as its parent (runners/runners-store.ts): in another sandbox the

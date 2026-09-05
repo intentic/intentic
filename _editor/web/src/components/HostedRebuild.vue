@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { useHostedBuild } from "../composables/sandbox/useHostedBuild";
 
 /* REBUILDING A HOSTED SANDBOX'S ENVIRONMENT, the counterpart of HostRecreate for the one lane with no host.
- * A sandbox on the owner's own computer rebuilds by a command or a button that runs `ic` THERE; a hosted
+ * A sandbox on the owner's own device rebuilds by a command or a button that runs `ic` THERE; a hosted
  * sandbox is a machine the platform runs, so the platform builds the approved overlay on a machine of its
  * own and switches the sandbox to the result. One button, then the three things a build can be doing:
  * running (minutes, the sandbox stays up throughout), built (the sandbox is restarting onto it), failed

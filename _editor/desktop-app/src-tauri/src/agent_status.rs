@@ -5,11 +5,11 @@ use tauri::{AppHandle, Manager, Wry};
 
 use crate::scripts;
 
-/* THE MACHINE AGENT'S OWN ROW IN THE TRAY — whether this computer's `intentic-machine` loop is alive, and what
+/* THE MACHINE AGENT'S OWN ROW IN THE TRAY — whether this device's `intentic-machine` loop is alive, and what
  * it is serving, on the one surface that is there when no window is.
  *
  * The agent runs headless and invisible on purpose (its logon entry maps no window, by design), which leaves it
- * with no face at all: a stopped sync or a disconnected computer was discoverable only by opening a terminal or
+ * with no face at all: a stopped sync or a disconnected device was discoverable only by opening a terminal or
  * noticing that files had quietly stopped moving. This app already sits in the tray on the same machine, so the
  * agent's one-line status belongs here, always present and always true, on the same reasoning as the update row
  * above it — a menu that changes shape is a menu nobody learns.
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn displays_the_agents_own_sentence_verbatim() {
-        let raw = r#"{"version":"1.0.0","running":4242,"summary":"1 sandbox connected · syncing 2 sandboxes","computer":{"links":[]},"sync":{}}"#;
+        let raw = r#"{"version":"1.0.0","running":4242,"summary":"1 sandbox connected · syncing 2 sandboxes","device":{"links":[]},"sync":{}}"#;
         assert_eq!(
             row_text(Ok(Some(raw.to_string()))),
             "Machine agent: 1 sandbox connected · syncing 2 sandboxes"

@@ -112,7 +112,7 @@ test("a title matches on its distinctive half, so reworded copy does not go red"
     const open = [`Intentic, Setting up your sandbox`, `Program Manager`];
     expect(titled(open, `Setting up`)).toBe(true);
     expect(titled(open, `Intentic`)).toBe(true);
-    expect(titled(open, `Set up a sandbox on this computer`)).toBe(false);
+    expect(titled(open, `Set up a sandbox on this device`)).toBe(false);
     expect(titled([], `Intentic`)).toBe(false);
 });
 

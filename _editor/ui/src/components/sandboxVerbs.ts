@@ -1,6 +1,6 @@
-/* WHAT CAN BE DONE TO ONE SANDBOX ON ONE COMPUTER, the vocabulary behind SandboxVerbs.vue.
+/* WHAT CAN BE DONE TO ONE SANDBOX ON ONE DEVICE, the vocabulary behind SandboxVerbs.vue.
  *
- * Structural rather than the sandbox contract's own `MachineSandboxOp`, for the reason machineDetail.ts states:
+ * Structural rather than the sandbox contract's own `DeviceSandboxOp`, for the reason deviceDetail.ts states:
  * `@intentic/ui` carries no domain dependency. The two callers do, the web tab sends these straight down the
  * machine route, the desktop app maps them onto its own Tauri commands, and both satisfy this by shape.
  *
@@ -50,8 +50,8 @@ export const VERB_LABEL: Record<Exclude<SandboxVerb, `logs`>, string> = {
  * ConfirmDialog takes a header and body, and the desktop app's native dialog takes a title and message —
  * one `\n\n`-joined string forced both to re-split it or render it wrong.
  *
- * Every consequence keeps the SANDBOX as its subject. "It restarts on that computer" read to real people as
- * "that computer restarts", which is a much bigger thing to be asked to agree to than what happens.
+ * Every consequence keeps the SANDBOX as its subject. "It restarts on that device" read to real people as
+ * "that device restarts", which is a much bigger thing to be asked to agree to than what happens.
  *
  * Only the three that are hard or slow to undo ask at all: start, stop, restart and a log tail are all undone by
  * doing the opposite, and a confirmation on those is a click tax that teaches people to dismiss dialogs. */
@@ -67,7 +67,7 @@ export const sandboxVerbPrompt = (verb: SandboxVerb, name: string): SandboxVerbP
         case `remove`:
             return {
                 header: `Remove ${name}?`,
-                body: `This deletes the sandbox and everything in it — its files and its history — from that computer. This cannot be undone.`,
+                body: `This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.`,
             };
         case `update`:
             return {

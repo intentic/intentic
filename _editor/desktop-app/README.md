@@ -36,8 +36,8 @@ from any device. The app adds no third plane. It is three thin native things aro
 3. **A lifecycle manager.** Setup progress, then one row per sandbox carrying its folder, its localhost ports,
    its image and its verbs: start, stop, restart, update, roll back, logs, remove. What **desktop sync** is
    doing here is read by spawning `intentic-machine status --json` exactly as the lifecycle actions spawn their
-   scripts, and the whole row is `@intentic/ui`'s `MachineDetail` with `@intentic/ui`'s `SandboxVerbs` on it:
-   the same two components the web app's Computers tab uses, so the two cannot describe one machine
+   scripts, and the whole row is `@intentic/ui`'s `DeviceDetail` with `@intentic/ui`'s `SandboxVerbs` on it:
+   the same two components the web app's Devices tab uses, so the two cannot describe one machine
    differently or offer different buttons for it.
 
    That third item was the app's largest blind spot: `SYNC_DIR` rides the setup link into `connect.sh` and was
@@ -55,7 +55,7 @@ from any device. The app adds no third plane. It is three thin native things aro
    Sharing the *component* was not enough on its own, and the second half of that is newer: this window drew
    its containers as cards with their own buttons and then drew the same sandboxes again underneath as folders
    and ports, under a second heading, with nothing on screen relating the two: the exact double-rendering the
-   Computers tab had already been rebuilt to remove. It now hands its containers to the same view, so a
+   Devices tab had already been rebuilt to remove. It now hands its containers to the same view, so a
    sandbox is one row here too. The verbs likewise: this window had a log tail and no Restart, the tab had a
    Restart and no log tail, and neither offered the rollback both of their backends could already run.
 

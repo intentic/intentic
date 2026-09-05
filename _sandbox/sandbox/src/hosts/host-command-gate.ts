@@ -8,10 +8,10 @@ import { guard } from "../guard/guard.js";
 import { excerptProgram } from "../safety/safety-log.js";
 import { conversationTaintSource, conversationUnattended } from "../guard/turn-taint.js";
 
-/* THE OWNER'S SAFETY POLICY, APPLIED TO A COMMAND HEADED FOR THEIR OWN COMPUTER, before it crosses the tunnel.
+/* THE OWNER'S SAFETY POLICY, APPLIED TO A COMMAND HEADED FOR THEIR OWN DEVICE, before it crosses the tunnel.
  *
  * WHAT THIS FIXED, and it is the sharpest gap the old design had. Enforcement for a connected machine lives on
- * the machine (machine/src/computer/policy.ts), which is correct and does not change here: the sandbox can be
+ * the machine (machine/src/device/policy.ts), which is correct and does not change here: the sandbox can be
  * compromised, so it must not be the thing that decides. But the machine has exactly two answers — the
  * `destructive` scope is on, or it is off — and it cannot park a card, because there is no person at the far end
  * of a WebSocket. So the owner's only choices were "this agent may delete things on my laptop, always" and "it
@@ -35,7 +35,7 @@ import { conversationTaintSource, conversationUnattended } from "../guard/turn-t
  * the turn is read from the published live-turn state rather than taken on the caller's word.
  */
 
-// How long a card about somebody's own computer waits for an answer. The supervisor's window (children.ts) and
+// How long a card about somebody's own device waits for an answer. The supervisor's window (children.ts) and
 // for its reason: long enough that somebody who stepped away can still come back, short enough that a dead
 // client cannot hold an MCP call open for the hub's whole ceiling.
 const DEADLINE_MS = 10 * 60_000;

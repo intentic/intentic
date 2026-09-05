@@ -50,7 +50,7 @@ const {
     folderBound = false,
 } = defineProps<{
     draft: PersonaPowersDraft;
-    /** The connectors, computers and MCP connections this sandbox has, for the per-id grants. */
+    /** The connectors, devices and MCP connections this sandbox has, for the per-id grants. */
     grantables: readonly PersonaGrantable[];
     /** Whether the parent's form has ALSO fenced this card to a set of folders: the shell caveat's third case. */
     folderBound?: boolean;
@@ -126,11 +126,11 @@ const GRANT_GROUPS = [
     // `link` over a wrench: the reader maps the glyph to the word beside it, and the word is Connectors.
     { key: `connectors` as const, kind: `cli` as const, icon: `link` as const, label: `Connectors`, empty: `No connectors added yet.` },
     {
-        key: `computers` as const,
+        key: `devices` as const,
         kind: `host` as const,
         icon: `desktop` as const,
-        label: `Your computers`,
-        empty: `No computers connected yet.`,
+        label: `Your devices`,
+        empty: `No devices connected yet.`,
     },
     { key: `mcp` as const, kind: `mcp` as const, icon: `server` as const, label: `MCP connections`, empty: `No MCP connections added yet.` },
 ];
@@ -139,14 +139,14 @@ const groupItems = (kind: PersonaGrantable[`kind`]): PersonaGrantable[] => grant
 
 // `undefined` is "every one of them", so an unset group reads as all-picked: including anything connected
 // later, which is what the tri-state buys and what a materialised list of today's ids would silently lose.
-const grantsAll = (key: `connectors` | `computers` | `mcp`): boolean => draft[key] === undefined;
-const granted = (key: `connectors` | `computers` | `mcp`, id: string): boolean => draft[key]?.includes(id) ?? true;
-const toggleGrant = (key: `connectors` | `computers` | `mcp`, id: string, kind: PersonaGrantable[`kind`]): void => {
+const grantsAll = (key: `connectors` | `devices` | `mcp`): boolean => draft[key] === undefined;
+const granted = (key: `connectors` | `devices` | `mcp`, id: string): boolean => draft[key]?.includes(id) ?? true;
+const toggleGrant = (key: `connectors` | `devices` | `mcp`, id: string, kind: PersonaGrantable[`kind`]): void => {
     // The first click off "all" has to materialise the list before it can remove one from it.
     const current = draft[key] ?? groupItems(kind).map((entry) => entry.id);
     draft[key] = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
 };
-const setGrantsAll = (key: `connectors` | `computers` | `mcp`, all: boolean): void => {
+const setGrantsAll = (key: `connectors` | `devices` | `mcp`, all: boolean): void => {
     draft[key] = all ? undefined : [];
 };
 
@@ -156,7 +156,7 @@ const setGrantsAll = (key: `connectors` | `computers` | `mcp`, all: boolean): vo
  * the only one who can decide whether that trade is fine for this persona. Raised by any bound the shell can
  * walk around, which is every per-id grant and the folder fence the parent may have set. */
 const shellCaveat = computed(
-    () => draft.shell && (draft.connectors !== undefined || draft.computers !== undefined || draft.mcp !== undefined || folderBound),
+    () => draft.shell && (draft.connectors !== undefined || draft.devices !== undefined || draft.mcp !== undefined || folderBound),
 );
 </script>
 

@@ -231,7 +231,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
          * The id is the agent's handle for the thing: its skill file, its tool prefix, the `$VAR_<NAME>` its
          * credential arrives in, the alias `ssh <name>` resolves, the directory its logged-in browser lives in.
          * Add-and-remove would produce the right manifest and lose all of it, signing an account out of every
-         * site, un-pairing a computer, re-cloning an extension. So each kind says what its own name keys
+         * site, un-pairing a device, re-cloning an extension. So each kind says what its own name keys
          * (capability.ts `rename`): what has to be carried by hand, and whether re-running `apply` is how the
          * derived half gets rewritten.
          *

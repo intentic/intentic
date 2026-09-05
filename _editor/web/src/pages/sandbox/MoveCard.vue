@@ -17,7 +17,7 @@ import MoveOutPanel from "./MoveOutPanel.vue";
  *
  * THE HIERARCHY IS EYEBROW → PANEL → GROUP. The card's own name is <RowGroup>'s uppercase label, floating above
  * the surface; each half opens with a one-word heading and nothing else; and the lists inside
- * (Workspace, Exports, Your computers) keep the small uppercase group labels they always had. Three registers,
+ * (Workspace, Exports, Your devices) keep the small uppercase group labels they always had. Three registers,
  * so nothing has to compete with anything, and <RowGroup>'s own hairline between direct children draws the seam
  * between the halves for free.
  *

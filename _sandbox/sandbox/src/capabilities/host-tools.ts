@@ -1,7 +1,7 @@
 import type { Capability } from "@intentic/sandbox-contract";
 import type { AgentTool } from "../agent/agent-tools.js";
 
-/* The agent's tools for the user's own computers, the parallel to mcpToolsOf, with one difference that is the
+/* The agent's tools for the user's own devices, the parallel to mcpToolsOf, with one difference that is the
  * whole security design: the URL points at THIS DAEMON, not at the machine.
  *
  * A laptop behind NAT has no address to put in an MCP config, so the daemon's loopback bridge (/mcp/hosts/<id>,
@@ -11,7 +11,7 @@ import type { AgentTool } from "../agent/agent-tools.js";
  * read it. What the handle can actually do is bounded on the far end, by the scopes that machine enforces.
  *
  * The tool NAME is the capability id, so the model sees mcp__laptop__run_command and mcp__desktop__run_command
- * as distinct tools on distinct machines, the `ssh` alias precedent, and what makes several connected computers
+ * as distinct tools on distinct machines, the `ssh` alias precedent, and what makes several connected devices
  * usable in one turn.
  *
  * WHY THE CONVERSATION RIDES IN THE URL. The bridge now judges a `run_command` against the owner's safety policy
@@ -21,7 +21,7 @@ import type { AgentTool } from "../agent/agent-tools.js";
  *
  * It is NOT a credential and it grants nothing. The bridge token is still the only thing that opens this route,
  * and an agent that rewrote its own conversation id would only misaddress its own card — every scope on the far
- * end is enforced on the machine regardless (machine/src/computer/policy.ts), which is the property that lets
+ * end is enforced on the machine regardless (machine/src/device/policy.ts), which is the property that lets
  * this be a routing hint rather than an authorisation one. */
 export const hostToolsOf = (
     capabilities: readonly Capability[],

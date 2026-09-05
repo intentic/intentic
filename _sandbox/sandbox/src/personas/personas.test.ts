@@ -14,7 +14,7 @@ const powers = (partial: Record<string, unknown>): PersonaPowers => PersonaPower
 
 const browser = (id: string): Capability => ({ id, kind: "browser", config: { platform: "reddit" } });
 const connector = (id: string): Capability => ({ id, kind: "cli", config: { provider: id } });
-const computer = (id: string): Capability => ({
+const device = (id: string): Capability => ({
     id,
     kind: "host",
     config: {
@@ -101,9 +101,9 @@ test("an unpinned wake keeps the full toolbox even though it has lost every acco
     // Both execution backends: the JS backend defaults open like every other shelf.
     expect(persona.powers.code).toBe(true);
     expect(personaDisallowedTools(persona, [])).toEqual([]);
-    // Connectors, computers and MCP connections all pass, because "absent" means "every one of them".
+    // Connectors, devices and MCP connections all pass, because "absent" means "every one of them".
     expect(persona.allows(connector("github"))).toBe(true);
-    expect(persona.allows(computer("laptop"))).toBe(true);
+    expect(persona.allows(device("laptop"))).toBe(true);
     expect(persona.allows(mcp("linear"))).toBe(true);
 });
 
@@ -168,14 +168,14 @@ test("a card keeps its own accounts' skills and loses everyone else's", () => {
 });
 
 test("every denied kind loses its skill, not just accounts", () => {
-    // A cheatsheet whose credential was stripped from the shell, and a computer whose server was never
+    // A cheatsheet whose credential was stripped from the shell, and a device whose server was never
     // mounted, are unusable in exactly the way an account's browser is.
     const persona = turnPersona({
-        personas: [card("narrow", ["github"], { powers: powers({ connectors: ["github"], computers: [], mcp: [] }) })],
+        personas: [card("narrow", ["github"], { powers: powers({ connectors: ["github"], devices: [], mcp: [] }) })],
         actsAs: "narrow",
         unattended: true,
     });
-    const denied = personaDisallowedTools(persona, [connector("github"), connector("linear"), computer("laptop"), mcp("notion")]);
+    const denied = personaDisallowedTools(persona, [connector("github"), connector("linear"), device("laptop"), mcp("notion")]);
     expect(denied).not.toContain("Skill(github)");
     expect(denied).toEqual(expect.arrayContaining(["Skill(linear)", "Skill(laptop)", "Skill(notion)"]));
 });
@@ -184,18 +184,18 @@ test("every denied kind loses its skill, not just accounts", () => {
 
 /* Kinds the card has no opinion about pass straight through. Narrowing those would break unrelated work every
  * time a turn wore a persona, and (worse) would silently deny a capability kind added tomorrow. */
-test("a card filters accounts, connectors, computers and MCP; other kinds pass through", () => {
+test("a card filters accounts, connectors, devices and MCP; other kinds pass through", () => {
     const installed: Capability[] = [
         browser("reddit-work"),
         browser("reddit-personal"),
         connector("github"),
         connector("komodo"),
-        computer("laptop"),
+        device("laptop"),
         mcp("linear"),
         { id: "pi", kind: "agent", config: { command: "pi" } },
     ];
     const persona = turnPersona({
-        personas: [card("work", ["reddit-work"], { powers: powers({ connectors: ["github"], computers: [], mcp: [] }) })],
+        personas: [card("work", ["reddit-work"], { powers: powers({ connectors: ["github"], devices: [], mcp: [] }) })],
         actsAs: "work",
         unattended: true,
     });

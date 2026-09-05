@@ -298,15 +298,15 @@ test("events: the hello names the daemon's build and where its boot is, then str
     controller.abort();
 });
 
-/* WHO IS ENROLLED FOR DESKTOP SYNC, READ OFF THE COMPUTER LIST, which is where that fact lives now.
+/* WHO IS ENROLLED FOR DESKTOP SYNC, READ OFF THE DEVICE LIST, which is where that fact lives now.
  *
  * /system/sync used to answer it as `syncingFrom` plus `mirroredBy`: the enrollment store flattened into one
  * holder and the names of everybody else, the shape a card wanted when it presented desktop sync as a single
- * property of the sandbox. It is a property of each COMPUTER, so each row carries its own, and these tests ask
+ * property of the sandbox. It is a property of each DEVICE, so each row carries its own, and these tests ask
  * the same question of the same route the view does. */
 const enrollments = async (app: { request: (path: string) => Promise<Response> | Response }): Promise<{ machine: string; mode: string }[]> => {
-    const body = (await (await app.request("/system/computers")).json()) as { computers: { sync?: { machine: string; mode: string } }[] };
-    return body.computers.flatMap((row) => (row.sync === undefined ? [] : [{ machine: row.sync.machine, mode: row.sync.mode }]));
+    const body = (await (await app.request("/system/devices")).json()) as { devices: { sync?: { machine: string; mode: string } }[] };
+    return body.devices.flatMap((row) => (row.sync === undefined ? [] : [{ machine: row.sync.machine, mode: row.sync.mode }]));
 };
 
 test("POST /system/authorized-key authorizes via the pairing token alone (no bearer)", async () => {
@@ -387,10 +387,10 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     // An explicit takeover replaces the key; the status route now reports the new holder.
     expect((await enroll(KEY_B, { "x-intentic-sync-takeover": "1" })).status).toBe(200);
     expect(await (await app.request("/system/sync")).json()).toMatchObject({ enrolled: true });
-    /* WHO HOLDS SYNC IS A FACT ABOUT A COMPUTER, so it is read off the computer list rather than off the sync
+    /* WHO HOLDS SYNC IS A FACT ABOUT A DEVICE, so it is read off the device list rather than off the sync
      * status, which used to flatten the enrollment store into one `syncingFrom` name for a card that thought a
      * sandbox has one desktop sync. The displaced machine is gone from the list entirely: a takeover revokes
-     * its key, so it is no longer a computer of this sandbox's at all. */
+     * its key, so it is no longer a device of this sandbox's at all. */
     expect(await enrollments(app)).toEqual([{ machine: "machine-b", mode: "sync" }]);
 });
 
@@ -418,7 +418,7 @@ test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll: n
     expect(c.status).toBe(200);
     expect(await c.json()).toMatchObject({ ok: true, mode: "mirror" });
     // Three rows, each mirroring, none of them holding file sync: the list IS the answer now, one entry per
-    // enrolled computer, rather than a holder plus the names of everybody else.
+    // enrolled device, rather than a holder plus the names of everybody else.
     expect(await enrollments(app)).toEqual([
         { machine: "laptop-a", mode: "mirror" },
         { machine: "laptop-b", mode: "mirror" },
@@ -474,7 +474,7 @@ test("DELETE /system/authorized-key: a sync token self-revokes just its own enro
 
     /* THE OWNER'S REVOKE, WHICH IS PER MACHINE. What it replaced cleared the whole store, because the only
      * surface that could reach it treated desktop sync as one property of the sandbox: unpairing one old laptop
-     * cost every other computer its access. Now the name of the row IS the address of the revoke. */
+     * cost every other device its access. Now the name of the row IS the address of the revoke. */
     expect((await app.request("/system/authorized-key/laptop-b", { method: "DELETE" })).status).toBe(200);
     expect(await enrollments(app)).toEqual([]);
     // A machine nobody is enrolled under is a 404 rather than a cheerful no-op.

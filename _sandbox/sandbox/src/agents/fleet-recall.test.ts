@@ -1,3 +1,4 @@
+import { HISTORY_ROOT } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { PersistedAgentSchema, type PersistedAgent } from "./agents-store.js";
@@ -119,7 +120,7 @@ test("the digest keeps the opening prompts, the last word and the last notice, e
             row("notice", "Claude usage limit reached."),
         ],
     });
-    const recall = await fleetRecall(deps, ROSTER[0] as PersistedAgent, "/history", { diff: false });
+    const recall = await fleetRecall(deps, ROSTER[0] as PersistedAgent, HISTORY_ROOT, { diff: false });
     expect(recall.digest.messages).toBe(7);
     // Whitespace collapsed, three prompts at most, and the fourth is behind --transcript rather than in here.
     expect(recall.digest.asked).toEqual(["fix the autoopen bug", "second ask", "third ask"]);
@@ -134,7 +135,7 @@ test("the digest keeps the opening prompts, the last word and the last notice, e
 });
 
 test("a conversation with no record digests to nothing rather than failing", async () => {
-    const recall = await fleetRecall(depsOver(ROSTER), ROSTER[2] as PersistedAgent, "/history", { diff: false });
+    const recall = await fleetRecall(depsOver(ROSTER), ROSTER[2] as PersistedAgent, HISTORY_ROOT, { diff: false });
     expect(recall.digest).toEqual({ messages: 0, asked: [] });
 });
 

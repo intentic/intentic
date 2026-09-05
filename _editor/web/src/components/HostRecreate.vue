@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { MachineSandboxOp } from "@intentic/sandbox-contract";
+import type { DeviceSandboxOp } from "@intentic/sandbox-contract";
 import {
     Button,
     ui,
     Code,
     commandLang,
     ConfirmDialog,
-    MachineRunLog,
+    DeviceRunLog,
     Notice,
     type NoticeModel,
     SegmentedControl,
@@ -14,7 +14,7 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { manageMachineSandbox, useHostRunning } from "../composables/sandbox/useComputers";
+import { manageDeviceSandbox, useHostRunning } from "../composables/sandbox/useDevices";
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 
@@ -26,8 +26,8 @@ import { bashCommand, psCommand } from "../environments/scriptCommand";
  * that separately and hand out a bash-only one-liner each; this is the one place that says it.
  *
  * Four renderings of the same operation, in the order of how little work they ask for:
- *   • the machine is a CONNECTED COMPUTER: a button, from any browser on any device, with the machine's own
- *     output streaming in beneath it. Nothing about this needs the user to be at that computer.
+ *   • the machine is a CONNECTED DEVICE: a button, from any browser on any device, with the machine's own
+ *     output streaming in beneath it. Nothing about this needs the user to be at that device.
  *   • inside the desktop app: a button, because the app IS a process on that machine (intentic://recreate)
  *   • in a browser on Windows/Linux/macOS: the command, for the shell that machine actually has
  *   • in a browser with no app: the same command, plus where to get the app so the next one is a button
@@ -71,7 +71,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
 
 // The machine, when it is one this sandbox can ask directly.
 const hostId = useHostRunning(() => props.slug);
-const OP: Record<Action, MachineSandboxOp> = { Download: `prepare`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
+const OP: Record<Action, DeviceSandboxOp> = { Download: `prepare`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
 
 /* WHAT IT COSTS, said in the one place all four renderings read from, and said accurately, which it was not.
  *
@@ -117,9 +117,9 @@ const runOnMachine = (): void => {
     confirming.value = true;
 };
 
-/* WHAT THE DIALOG SAYS. The confirm() this replaces opened with "It restarts on that computer" — which real
- * readers parsed as "that computer restarts", a far bigger thing to be asked to agree to than what happens.
- * So every sentence here keeps the SANDBOX as its subject, and the computer appears exactly once, in the
+/* WHAT THE DIALOG SAYS. The confirm() this replaces opened with "It restarts on that device" — which real
+ * readers parsed as "that device restarts", a far bigger thing to be asked to agree to than what happens.
+ * So every sentence here keeps the SANDBOX as its subject, and the device appears exactly once, in the
  * fixed line underneath, to say it is left alone. */
 const confirmHeader = computed(() => (props.action === `Roll back` ? `Roll this sandbox back?` : `${props.action} this sandbox?`));
 const confirmBody = computed(() => {
@@ -144,7 +144,7 @@ const execute = async (): Promise<void> => {
     done.value = undefined;
     lines.value = [];
     try {
-        done.value = await manageMachineSandbox(id, props.slug, OP[props.action], {
+        done.value = await manageDeviceSandbox(id, props.slug, OP[props.action], {
             ...(props.hash === undefined ? {} : { hash: props.hash }),
             onLine: (line) => lines.value.push(line),
         });
@@ -198,13 +198,13 @@ const command = computed(() => {
             >
                 <template #icon><Icon :name="action === `Download` ? `download` : `bolt`" /></template>
             </Button>
-            <p class="text-2xs text-subtle">Runs on the computer hosting this sandbox. {{ cost }}</p>
-            <MachineRunLog
+            <p class="text-2xs text-subtle">Runs on the device hosting this sandbox. {{ cost }}</p>
+            <DeviceRunLog
                 v-if="running || lines.length > 0"
                 :lines="lines"
                 :running="running"
-                empty="Starting on that computer…"
-                note="Running on that computer: it keeps going even if you leave this page."
+                empty="Starting on that device…"
+                note="Running on that device: it keeps going even if you leave this page."
             />
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
@@ -222,7 +222,7 @@ const command = computed(() => {
             >
                 <p>{{ confirmBody }}</p>
                 <p class="mt-3 text-xs text-muted">
-                    Only the sandbox restarts — nothing else on that computer is touched. Your files (in /work) are kept.
+                    Only the sandbox restarts — nothing else on that device is touched. Your files (in /work) are kept.
                 </p>
             </ConfirmDialog>
         </template>
@@ -243,12 +243,12 @@ const command = computed(() => {
             >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <p class="text-2xs text-subtle">Runs here, on this computer. {{ cost }}</p>
+            <p class="text-2xs text-subtle">Runs here, on this device. {{ cost }}</p>
         </template>
 
         <template v-else>
             <ol class="ml-4 list-decimal text-2xs text-subtle">
-                <li>Open a terminal on the computer that runs your sandbox.</li>
+                <li>Open a terminal on the device that runs your sandbox.</li>
                 <li>Copy and run the command below. {{ cost }}</li>
             </ol>
             <SegmentedControl

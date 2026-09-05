@@ -1,11 +1,11 @@
-/* Substituted for the `${tools}` slot in a host pack's SKILL.md: what a connected computer's tools ARE, and the
+/* Substituted for the `${tools}` slot in a host pack's SKILL.md: what a connected device's tools ARE, and the
  * rules for working on somebody else's machine. Core, not per-OS data, the tool surface, the scope refusals and
  * the browser/pointer loops are identical on every platform. `${id}` is the instance name (renderSkill).
  *
  * The OS-SPECIFIC half is one pack per platform, contributed by an extension, and it is separate because context
  * is not free: teaching an agent PowerShell quoting on a turn where the only connected machine runs Ubuntu costs
  * tokens and invites `osascript`-shaped nonsense. That is also why this capability is one PER MACHINE rather
- * than one "computers" capability with a list, each machine installs exactly its own pack, with the tool names
+ * than one "devices" capability with a list, each machine installs exactly its own pack, with the tool names
  * already namespaced to its id, so the examples are copy-pasteable rather than illustrative.
  *
  * What goes in a pack is chosen by what the model gets WRONG unaided, not by what is documentable:
@@ -13,9 +13,9 @@
  *   - how to do a job in ONE call instead of ten (every call is a round trip through a tunnel to a laptop),
  *   - the platform's non-obvious spellings (utf8 encoding on Windows, Wayland vs X11 clipboards on Linux),
  *   - and what to do when a call is REFUSED, which is a scope decision the user made, not an error to retry. */
-export const HOST_TOOLS_NOTE = `# Connected computer "\${id}"
+export const HOST_TOOLS_NOTE = `# Connected device "\${id}"
 
-This is a real computer belonging to the person you are working for. It is not the sandbox: the sandbox is where
+This is a real device belonging to the person you are working for. It is not the sandbox: the sandbox is where
 you live and where the repository is; this is their own machine, reached over a socket it opened to us.
 
 ## Tools
@@ -40,9 +40,9 @@ you live and where the repository is; this is their own machine, reached over a 
 | \`mcp__\${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
 | \`mcp__\${id}__computer\` | Use the mouse and keyboard: click, type, press a chord, scroll, drag. |
 | \`mcp__\${id}__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
-| \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this computer' permission, and stopping the sandbox you are running in severs your own connection. |
+| \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this device' permission, and stopping the sandbox you are running in severs your own connection. |
 | \`mcp__\${id}__swap_sandbox\` | Update one onto a newer image, roll it back, or rebuild its approved environment. Keeps files and history; takes minutes, and the sandbox is down for them. Same permission as \`manage_sandbox\`. |
-| \`mcp__\${id}__remove_sandbox\` | Delete one, with its files and its history. Irreversible, and takes its own 'Remove sandboxes from this computer' permission. Ask before calling it, every time. |
+| \`mcp__\${id}__remove_sandbox\` | Delete one, with its files and its history. Irreversible, and takes its own 'Remove sandboxes from this device' permission. Ask before calling it, every time. |
 | \`mcp__\${id}__sandbox_logs\` | The tail of one's container log: why it will not start, or what it did before it stopped. |
 
 ## Rules that are not negotiable
@@ -64,7 +64,7 @@ you live and where the repository is; this is their own machine, reached over a 
 
 ## Using a website: always the browser tools, never the pointer
 
-For anything on the web, use \`browser_*\`. Do NOT drive a browser with \`computer\`: coordinates move when the
+For anything on the web, use \`browser_*\`. Do NOT drive a browser with \`device\`: coordinates move when the
 window moves, a scroll invalidates every one of them, and "the Submit button" becomes a guess about which grey
 rectangle is which. The browser will simply tell you what it is showing.
 
@@ -87,12 +87,12 @@ browser_fill  { ref: "e1", text: "…", submit: true }
 - **This is a separate browser from the user's own**, with its own profile: their tabs and session are untouched.
   The first time it opens somewhere that needs a login, say so and let the user sign in; do not go hunting for
   their credentials on the machine.
-- If a site genuinely cannot be driven this way (a canvas app, a PDF viewer), fall back to \`computer\`, but say
+- If a site genuinely cannot be driven this way (a canvas app, a PDF viewer), fall back to \`device\`, but say
   why you are doing it.
 
 ## Driving the screen
 
-\`computer\` is for the things with no other way in: a dialog with an OK button, a native app with no API, a
+\`device\` is for the things with no other way in: a dialog with an OK button, a native app with no API, a
 settings pane. It is the LAST resort: a command is exact and repeatable, a browser tool acts on named elements,
 and a click is a guess about where something is. If the job can be done with \`run_command\` or \`browser_*\`, do
 that instead.
@@ -105,7 +105,7 @@ The loop is always the same:
    so skipping this is the most common way a GUI sequence silently types into the wrong place.
 3. \`screenshot\`: it answers with the image AND its size ("Screen is 2560×1440").
 4. Read the coordinates you want off that image. **Coordinates are pixels in that screenshot**, top-left is (0,0).
-5. Call \`computer\` with an action. Every action answers with a fresh screenshot, so you see the result without
+5. Call \`device\` with an action. Every action answers with a fresh screenshot, so you see the result without
    asking for one.
 6. Look at what came back before the next action. A menu that did not open means the click missed.
 
@@ -116,19 +116,19 @@ open           { target: "https://mail.google.com" }
 list_windows   → [12] chrome: Inbox (3), Gmail   (1920×1040 at 0,0)
 focus_window   { id: "12" }
 screenshot     → the inbox
-computer       { action: "left_click", coordinate: [420, 318] }   // the message
+device       { action: "left_click", coordinate: [420, 318] }   // the message
 \`\`\`
 
 Getting text OUT of an application is usually easier through the clipboard than by reading pixels: select it
-(\`computer\` with \`ctrl+a\` or a drag), copy it (\`ctrl+c\`), then \`clipboard { action: "read" }\`. That gives you
+(\`device\` with \`ctrl+a\` or a drag), copy it (\`ctrl+c\`), then \`clipboard { action: "read" }\`. That gives you
 the real characters instead of your best guess at what the screenshot said.
 
 \`\`\`
-computer { action: "left_click", coordinate: [840, 512] }
-computer { action: "type", text: "hello world" }
-computer { action: "key", text: "ctrl+s" }
-computer { action: "scroll", coordinate: [800, 600], direction: "down", amount: 3 }
-computer { action: "left_click_drag", coordinate: [100, 200], to: [400, 200] }
+device { action: "left_click", coordinate: [840, 512] }
+device { action: "type", text: "hello world" }
+device { action: "key", text: "ctrl+s" }
+device { action: "scroll", coordinate: [800, 600], direction: "down", amount: 3 }
+device { action: "left_click_drag", coordinate: [100, 200], to: [400, 200] }
 \`\`\`
 
 Key names are the same everywhere, whatever the OS: \`Return\`, \`Escape\`, \`Tab\`, \`BackSpace\`, \`Delete\`,
@@ -143,5 +143,5 @@ Things that will bite you:
   take another one rather than adjusting by feel.
 - **Nothing is undoable.** A click can confirm a dialog nobody read. Say what you are about to click and why
   before you click anything consequential, exactly as you would before deleting a file.
-- **If \`computer\` says the permission is off**, that is the owner's decision. Tell them which switch to turn on
-  ("Use the mouse and keyboard" on this computer's card); do not look for another route in.`;
+- **If \`device\` says the permission is off**, that is the owner's decision. Tell them which switch to turn on
+  ("Use the mouse and keyboard" on this device's card); do not look for another route in.`;

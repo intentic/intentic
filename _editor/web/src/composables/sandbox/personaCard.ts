@@ -20,7 +20,7 @@ export interface PersonaGrantable {
 }
 
 /* WHICH OF THIS SANDBOX'S CAPABILITIES A CARD MAY GRANT BY ID, the connectors whose credentials reach the shell,
- * the computers the agent can drive, and the MCP connections it can call.
+ * the devices the agent can drive, and the MCP connections it can call.
  *
  * Kinds the card has no opinion about (the agent runtimes, the platform entries) are deliberately absent: a
  * persona that could switch off the runtime serving its own turn is a card that can only confuse. Read from the
@@ -45,7 +45,7 @@ export interface PersonaPowersDraft {
     /* Per-id grants. `undefined` means every one of them, including any connected tomorrow, which is a real
      * answer and the default, and the reason these are not just arrays. */
     connectors: string[] | undefined;
-    computers: string[] | undefined;
+    devices: string[] | undefined;
     mcp: string[] | undefined;
 }
 
@@ -61,7 +61,7 @@ export const FULL_POWERS: PersonaPowersDraft = {
     delegate: true,
     sandbox: true,
     connectors: undefined,
-    computers: undefined,
+    devices: undefined,
     mcp: undefined,
 };
 
@@ -86,7 +86,7 @@ export const powersDraftOf = (persona: Persona): PersonaPowersDraft => ({
     delegate: persona.powers?.delegate ?? FULL_POWERS.delegate,
     sandbox: persona.powers?.sandbox ?? FULL_POWERS.sandbox,
     connectors: persona.powers?.connectors === undefined ? undefined : [...persona.powers.connectors],
-    computers: persona.powers?.computers === undefined ? undefined : [...persona.powers.computers],
+    devices: persona.powers?.devices === undefined ? undefined : [...persona.powers.devices],
     mcp: persona.powers?.mcp === undefined ? undefined : [...persona.powers.mcp],
 });
 
@@ -103,7 +103,7 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
         !draft.delegate ||
         !draft.sandbox ||
         draft.connectors !== undefined ||
-        draft.computers !== undefined ||
+        draft.devices !== undefined ||
         draft.mcp !== undefined;
     if (!bounded) {
         return undefined;
@@ -117,7 +117,7 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
         delegate: draft.delegate,
         sandbox: draft.sandbox,
         ...(draft.connectors !== undefined ? { connectors: draft.connectors } : {}),
-        ...(draft.computers !== undefined ? { computers: draft.computers } : {}),
+        ...(draft.devices !== undefined ? { devices: draft.devices } : {}),
         ...(draft.mcp !== undefined ? { mcp: draft.mcp } : {}),
     };
 };

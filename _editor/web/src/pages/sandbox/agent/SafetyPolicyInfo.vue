@@ -30,7 +30,7 @@ const TIERS = [
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What this can and cannot do</h3>
         <p class="mt-2 text-2xs text-muted">
             It decides <span class="font-medium text-content">how often you are interrupted</span>, not what the assistant is capable of. Nothing
-            written here can let it out of its container, widen what one of your computers allows, or show it a credential — those are enforced
+            written here can let it out of its container, widen what one of your devices allows, or show it a credential — those are enforced
             elsewhere and are not editable from this page. The worst a bad line can do is stop asking you about something you wanted to see.
         </p>
         <p class="mt-2 text-2xs text-muted">

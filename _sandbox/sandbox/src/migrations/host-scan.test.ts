@@ -5,7 +5,7 @@ import { probeHost, scanHost } from "./host-scan.js";
 import { planHermes, detectHermes } from "./hermes.js";
 
 /* The direct read, against a fake machine that answers the two tools it needs. The point of these is that a
- * connected computer produces the SAME map an archive does, so the adapters, and everything after them, are
+ * connected device produces the SAME map an archive does, so the adapters, and everything after them, are
  * untouched by which door the setup came through. */
 
 // A pretend home directory, keyed by absolute path the way the machine's own tools are addressed.

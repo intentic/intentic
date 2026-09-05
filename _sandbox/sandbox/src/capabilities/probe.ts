@@ -168,7 +168,7 @@ const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
     return { checked: true, ok: true, message: who === undefined ? reached : `Reached ${probe.subject}, authenticated as ${who}.` };
 };
 
-/* NOT TESTABLE IS NOT A FAILURE, and the two must never be drawn alike: an ssh box, a paired computer and a
+/* NOT TESTABLE IS NOT A FAILURE, and the two must never be drawn alike: an ssh box, a paired device and a
  * signed-in browser are all connections whose check is the thing itself, and a red "could not verify" on one
  * would be the form inventing a problem. */
 const NO_TEST: CapabilityProbe = {

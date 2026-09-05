@@ -65,7 +65,7 @@ const { draft, accounts, connected, grantables, error } = defineProps<{
     accounts: readonly BrowserAccount[];
     /** Which of those are signed in far enough to act. */
     connected: readonly string[];
-    /** The connectors, computers and MCP connections this sandbox has, for the per-id grants. */
+    /** The connectors, devices and MCP connections this sandbox has, for the per-id grants. */
     grantables: readonly PersonaGrantable[];
     error?: NoticeModel;
 }>();

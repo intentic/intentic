@@ -296,7 +296,7 @@ jobs:
       - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
       # The one machine-side agent (computer links + desktop sync), for every platform either capability's card
       # can land on: the sync half has always covered macOS, the computer half rides along there.
-      - run: bash _tools/scripts/build/build-agent-binaries.sh _computers/machine intentic-machine linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
+      - run: bash _tools/scripts/build/build-agent-binaries.sh _devices/machine intentic-machine linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
       # The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims
       # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
       # image, with no Apple SDK anywhere in it (build-ic.sh header).
@@ -317,8 +317,8 @@ jobs:
         with:
           name: linux-release-artifacts
           path: |
-            _computers/machine/dist-bin
-            _computers/win-launcher/dist-bin
+            _devices/machine/dist-bin
+            _devices/win-launcher/dist-bin
             _sandbox/ic/dist-bin
             _editor/desktop-app/dist-bin
           if-no-files-found: error
@@ -491,8 +491,8 @@ jobs:
           # stub the agent registers at logon. Those one-liners are the single most trust-hungry thing this
           # project asks anyone to run.
           subject-path: |
-            _computers/machine/dist-bin/*
-            _computers/win-launcher/dist-bin/*
+            _devices/machine/dist-bin/*
+            _devices/win-launcher/dist-bin/*
             _sandbox/ic/dist-bin/*
             _editor/desktop-app/dist-bin/*
 

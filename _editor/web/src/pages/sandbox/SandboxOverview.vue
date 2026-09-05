@@ -403,7 +403,7 @@ const save = async (): Promise<void> => {
             <div class="flex items-center gap-2 text-sm font-medium text-content"><Icon name="bolt" class="text-link" /> Need more power?</div>
             <p class="text-xs leading-relaxed text-muted">
                 This sandbox is a small starter machine we host for you. When it feels tight, move it to
-                <span class="text-content">your own computer</span>: no hour limit, nothing metered, and the only place your GPU is.
+                <span class="text-content">your own device</span>: no hour limit, nothing metered, and the only place your GPU is.
             </p>
             <RouterLink to="/setup" class="text-xs text-link hover:underline">Set it up there →</RouterLink>
         </Card>

@@ -102,7 +102,7 @@ test(`names an address nothing answers at, without a stack trace`, async () => {
     expect(answer.message).toContain(`127.0.0.1:1`);
 });
 
-/* NOT TESTABLE IS NOT A FAILURE. An ssh box, a paired computer and a signed-in browser are connections whose
+/* NOT TESTABLE IS NOT A FAILURE. An ssh box, a paired device and a signed-in browser are connections whose
  * check is the thing itself, and the page hides its Test button on this answer rather than drawing a refusal. */
 test(`says plainly when a card has no test, and never calls it a failure`, async () => {
     const answer = await probeCapability(new Map(), {

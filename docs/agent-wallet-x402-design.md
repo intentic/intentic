@@ -286,7 +286,7 @@ expires unused); a 200-without-receipt is recorded as an anomaly against that en
 | `_sandbox/sandbox/src/wallet/` | `x402-client.ts` (three challenge parsers → normalized quote; payload builders v2/v1/MPP), `payment-offer.ts` (the gate: `createRequest` + `turnRunOf` + `agents.observe`, non-journalled, `OFFER_DEADLINE_MS` 10 min), `wallet-ledger.ts`, `wallet.routes.ts` |
 | `_sandbox/sandbox/src/capabilities/handlers/wallet.ts` | the capability handler (`apply` = signer handshake + address fetch; `status` = balance probe; `echo` = full config) |
 | `_platform/api/src/wallet/` | signer service: `POST /wallet/sign-transfer` (connect-token auth, policy re-check, audit), custody-API integration, withdraw endpoint; Prisma: `Wallet`, `WalletPayment` |
-| `_computers/host` | optional `wallet.sign` oRPC verb + `policy.ts` scope, local keystore (option B) |
+| `_devices/host` | optional `wallet.sign` oRPC verb + `policy.ts` scope, local keystore (option B) |
 | `_editor/web` | `turnReducer.ts` + `ChatMessageView.vue` card branches; `SettingsWallet.vue`; `WalletMeter.vue` beside `AccountCredits.vue` |
 | `_platform/capability-catalog` | `wallet` card, category `business`, guide covering funding and test mode |
 

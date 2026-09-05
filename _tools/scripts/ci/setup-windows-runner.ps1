@@ -260,7 +260,7 @@ Step "registering a logon task that runs the listener in $Account's own desktop 
 # kept it for as long as its child ran, which for this task is the runner's entire life. The one thing this
 # comment promised was the one thing it did not do.
 #
-# intentic-launch.exe (_computers/win-launcher) is what actually holds it: a GUI-subsystem program, so the
+# intentic-launch.exe (_devices/win-launcher) is what actually holds it: a GUI-subsystem program, so the
 # loader creates no console for it at all, starting `run.cmd` with CREATE_NO_WINDOW. Its own header carries the
 # full measurement table, including the Task Scheduler variants.
 #

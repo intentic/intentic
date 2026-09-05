@@ -49,7 +49,7 @@ const report = ref<ArrivalReport | undefined>(undefined);
 const { busy: planning, notice: planError, run: runPlan } = useAsyncAction();
 const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
 
-/* Probed on mount, and again whenever the owner asks, not polled: enrolling a computer is not something that
+/* Probed on mount, and again whenever the owner asks, not polled: enrolling a device is not something that
  * happens while this panel is open, but WAKING one is. A laptop is asleep more often than not, so the row for
  * an offline machine carries its own re-check rather than making the owner reload the page to use the very
  * shortcut the panel just told them about. */
@@ -101,7 +101,7 @@ const readFromHost = (host: ArrivalHost): Promise<void> =>
                 }),
             ),
         );
-    }, `Could not read the setup from that computer.`);
+    }, `Could not read the setup from that device.`);
 
 const chooseFile = ref<HTMLInputElement>();
 const readFile = (event: Event): Promise<void> =>
@@ -150,14 +150,14 @@ const cancel = (): Promise<void> =>
 <template>
     <div class="flex flex-col gap-4">
         <template v-if="plan === undefined">
-            <!-- THE OFFER THAT DELETES THE INSTRUCTIONS. A connected computer needs no archive, no transfer and
+            <!-- THE OFFER THAT DELETES THE INSTRUCTIONS. A connected device needs no archive, no transfer and
                  no file dialog, so it goes above everything and reads as the answer rather than as a shortcut.
                  EVERY CONNECTED MACHINE GETS A ROW, not only the ones holding a setup: an owner whose laptop is
                  simply ASLEEP (the ordinary state of a laptop) would otherwise see a panel that had never heard
-                 of their computers and no reason to think reading one was possible at all. A row saying
+                 of their devices and no reason to think reading one was possible at all. A row saying
                  "asleep, wake it and check again" is not a dead-end offer; it is the difference between a
                  feature that is missing and one that is waiting. -->
-            <RowGroup v-if="hosts.length > 0" flat label="Your computers">
+            <RowGroup v-if="hosts.length > 0" flat label="Your devices">
                 <Row
                     v-for="host in hosts"
                     :key="host.id"
@@ -176,7 +176,7 @@ const cancel = (): Promise<void> =>
                             v-else
                             type="button"
                             :class="ui.iconButton()"
-                            aria-label="Check this computer again"
+                            aria-label="Check this device again"
                             v-tooltip.top="'Check again'"
                             v-action="recheck"
                         >

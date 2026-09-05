@@ -154,7 +154,7 @@ export type RunnerParity = z.infer<typeof RunnerParitySchema>;
 // HostSummary shape retold for a runner (no platform/scopes, parity instead).
 export const RunnerSummarySchema = z.object({
     id: z.string(),
-    // The connected computer holding it, when this sandbox is what asked for it (the Computers view's create
+    // The connected device holding it, when this sandbox is what asked for it (the Devices view's create
     // flow). Absent for one started by hand on a machine, which this sandbox can dispatch to but not manage.
     host: z.string().optional(),
     online: z.boolean(),

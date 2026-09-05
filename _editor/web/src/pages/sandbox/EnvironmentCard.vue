@@ -48,7 +48,7 @@ const { state, query, isFetching, proposal, pending, applied, recurring, serverM
 
 /* WHICH EXECUTOR THIS SANDBOX HAS. A hosted sandbox is a machine the platform runs and has no host to run
  * `ic` on, so its rebuild is a button the platform answers (HostedRebuild) rather than a command for a
- * computer the owner is at (HostRecreate). Read off the platform's row for the active sandbox, the same fact
+ * device the owner is at (HostRecreate). Read off the platform's row for the active sandbox, the same fact
  * the wake reflex keys on. */
 const { active } = useSandbox();
 const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
@@ -171,7 +171,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             </template>
 
             <template v-if="pending">
-                <!-- The platform builds it: no command, no computer of the owner's involved. Owner-gated on the
+                <!-- The platform builds it: no command, no device of the owner's involved. Owner-gated on the
                  platform side, so a member sees the state of the build but has no button. -->
                 <template v-if="hosted">
                     <HostedRebuild v-if="canOperate" :sandbox-id="hosted" :hash="pending.hash" :content="pending.content" />

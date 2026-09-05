@@ -382,17 +382,16 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
             },
         ],
     });
-    /* The one WRITE the token carries: the machine's own report, the folders/ports/watcher half of desktop sync
+    /* The one WRITE the token carries: the device's own report, the folders/ports/agent half of desktop sync
      * that the daemon has no other way to learn (SYNC_DIR never reaches it). Filed under the enrollment that
      * presented the token, so the `hostname` in the body is a label and never an identity. */
     const report = {
         hostname: "laptop",
         os: "linux",
-        agents: { sync: "0.1.0" },
         sandboxes: [],
         pairings: [{ sandboxId: "sandbox-abc.example.com", mode: "mirror" }],
         ports: [{ port: 3000, host: "127.0.0.1", sandboxId: "sandbox-abc.example.com", state: "mirrored" }],
-        watcher: { running: true, pid: 42 },
+        agent: { running: true, pid: 42, installed: "0.1.0" },
         capturedAt: 1_700_000_000_000,
     };
     const filed = await app.request("/system/sync/report", {

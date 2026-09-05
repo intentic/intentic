@@ -1,11 +1,11 @@
 import type { HostHub } from "../hosts/host-hub.js";
 import { isReadableName, skipReason } from "./scan-policy.js";
 
-/* READING A SETUP OFF ONE OF THE OWNER'S OWN COMPUTERS, the path that deletes the packing step entirely.
+/* READING A SETUP OFF ONE OF THE OWNER'S OWN DEVICES, the path that deletes the packing step entirely.
  *
  * The whole instruction the card used to give ("run this archive command, find the file it made, bring it to
  * the machine your browser is on, pick it out of a file dialog") exists only because the bytes were on the
- * wrong computer. When that computer is already connected here as a `host` capability, they are not: the
+ * wrong device. When that device is already connected here as a `host` capability, they are not: the
  * daemon can walk the directory itself over the socket the machine holds open, and the owner clicks once.
  *
  * IT READS, IT NEVER RUNS. A shell command would be one call instead of many, and it is deliberately not used:
@@ -62,11 +62,11 @@ const callTool = async (hub: HostHub, id: string, name: string, args: Record<str
         error?: { message?: string };
     };
     if (answer.error !== undefined) {
-        throw new Error(answer.error.message ?? "the computer refused the request");
+        throw new Error(answer.error.message ?? "the device refused the request");
     }
     const text = answer.result?.content?.find((entry) => entry.type === "text")?.text ?? "";
     if (answer.result?.isError === true) {
-        throw new Error(text === "" ? "the computer refused the request" : text);
+        throw new Error(text === "" ? "the device refused the request" : text);
     }
     return text;
 };

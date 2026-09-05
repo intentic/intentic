@@ -179,7 +179,7 @@ export const ICONS: Record<IconName, string> = {
     copy: "ri:file-copy-line",
     "credit-card": "ri:bank-card-line",
     database: "ri:database-2-line",
-    desktop: "ri:computer-line",
+    desktop: "ri:device-line",
     download: "ri:download-line",
     // The row-overflow glyph: the actions a row has that don't earn a button of their own.
     ellipsis: "ri:more-fill",

@@ -2,7 +2,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import type { HostFacts, hostContract, HostScopes, HostSummary } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 
-/* The live half of the `host` capability: which of the user's computers are holding a socket right now, and the
+/* The live half of the `host` capability: which of the user's devices are holding a socket right now, and the
  * typed client for each.
  *
  * There is no request/response plumbing in here, and that is the point of the shape. The socket speaks
@@ -53,7 +53,7 @@ export interface HostHub {
      *
      * `signal` is how a caller states its OWN deadline, and a caller serving a browser needs one: CALL_TIMEOUT_MS
      * is sized for a tool call an agent made on purpose and will wait minutes for, which is the wrong ceiling
-     * entirely for a read behind a page (see machine-reports.ts PULL_TIMEOUT_MS). Absent ⇒ the fifteen-minute
+     * entirely for a read behind a page (see device-reports.ts PULL_TIMEOUT_MS). Absent ⇒ the fifteen-minute
      * backstop, which is right for everything that is genuinely a tool call. */
     readonly mcp: (id: string, payload: unknown, options?: { readonly signal?: AbortSignal }) => Promise<unknown>;
     // Push the grant. False ⇒ nobody to push to; the machine gets it on its next connect instead.
@@ -62,7 +62,7 @@ export interface HostHub {
     readonly disconnect: (id: string, reason: string) => void;
     /* The last tool list this machine answered with, remembered across disconnects. A turn loads its MCP servers
      * up front, so a laptop that is asleep at that moment would otherwise fail the handshake and take its tools
-     * out of the turn entirely; with the list cached the agent still SEES them and gets a readable "this computer
+     * out of the turn entirely; with the list cached the agent still SEES them and gets a readable "this device
      * is asleep" when it calls one, the difference between a model that tells the user to open their laptop and
      * one that reports a broken sandbox. Undefined until the machine has connected once. */
     readonly rememberTools: (id: string, result: unknown) => void;
@@ -145,7 +145,7 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
             host.facts = facts;
             host.lastSeen = Date.now();
             // Both of these run ONCE, off the hello, and describing a machine is the rest of what its card
-            // draws. Safe to publish from precisely because no reader path reaches them: were `/system/computers`
+            // draws. Safe to publish from precisely because no reader path reaches them: were `/system/devices`
             // to call `observe`, this line and the domain's own invalidation would be a refetch loop.
             said();
         },
@@ -153,7 +153,7 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
         mcp: async (id, payload, options) => {
             const host = live.get(id);
             if (host === undefined) {
-                throw new Error(`"${id}" is not connected right now: the computer is asleep, offline, or its agent isn't running.`);
+                throw new Error(`"${id}" is not connected right now: the device is asleep, offline, or its agent isn't running.`);
             }
             host.lastSeen = Date.now();
             return await host.client.mcp(payload, { signal: options?.signal ?? AbortSignal.timeout(CALL_TIMEOUT_MS) });

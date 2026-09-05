@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../chat/providerAccounts";
 import { acpProviders } from "../chat/providerCatalog";
 import { useMissingSecretCount } from "../secrets/useSecrets";
-import { useSyncHealth } from "./useComputers";
+import { useSyncHealth } from "./useDevices";
 import { useEnvironment } from "./useEnvironment";
 import { useSandboxVersion } from "./useSandboxVersion";
 
@@ -56,7 +56,7 @@ export interface SandboxAttentionItem {
      * the one that mattered.
      *
      * A note is not hidden; it is REHOUSED. It keeps its popover row, and the count moves to the hub row that
-     * explains it (SandboxHub's Computers), where the sentence and the verb both live. A badge belongs on the
+     * explains it (SandboxHub's Devices), where the sentence and the verb both live. A badge belongs on the
      * thing it is about, and the sandbox chip is about the whole box. */
     readonly kind: "needs" | "note";
     // The whole fact, phrased to stand alone in a popover row AND to read as a clause when the chip's tooltip
@@ -78,7 +78,7 @@ export interface SandboxAttentionItem {
 }
 
 /* The update, in the two shapes it now comes in. Merely AVAILABLE stays the quiet note it always was: the
- * machine's background download (auto-prepare on the host agent) makes this state brief wherever a computer
+ * machine's background download (auto-prepare on the host agent) makes this state brief wherever a device
  * is connected, and nothing about it is quick to act on yet. Once it is STAGED the fact changes character —
  * the download already happened, applying it is one click and a half-minute restart on the hub card — and
  * that is the one note allowed to badge the chip (`badges` above): the whole point of downloading in the
@@ -161,7 +161,7 @@ export function useSandboxAttention() {
                       icon: `desktop` as const,
                       tone: `warning` as const,
                       message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)}, its folder isn't syncing`,
-                      to: `/sandbox/computers`,
+                      to: `/sandbox/devices`,
                       kind: `needs` as const,
                   },
               ]),
@@ -182,7 +182,7 @@ export function useSandboxAttention() {
          * A contended port is not a fault: the sandbox is fine and so is the machine, one number went to
          * whichever sandbox asked for it first. Worth saying, because the symptom (a dev server missing from
          * localhost) otherwise sends people hunting a process that does not exist. Not worth a counter on the
-         * chip, because on any machine running two sandboxes it is true every day, and it is the Computers row
+         * chip, because on any machine running two sandboxes it is true every day, and it is the Devices row
          * that carries the number now, beside the sentence and the button that free the port.
          *
          * A new version is the same shape from the other end: nothing is wrong until you want it, and the
@@ -196,7 +196,7 @@ export function useSandboxAttention() {
                       icon: `desktop` as const,
                       tone: `info` as const,
                       message: `${contendedPorts.value.length} port${contendedPorts.value.length === 1 ? `` : `s`} couldn't be mirrored to your localhost`,
-                      to: `/sandbox/computers`,
+                      to: `/sandbox/devices`,
                       count: contendedPorts.value.length,
                       kind: `note` as const,
                   },

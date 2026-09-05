@@ -1,4 +1,4 @@
-// hosts: the user's own connected computers (the `host` capability's live half)
+// hosts: the user's own connected devices (the `host` capability's live half)
 import { z } from "zod";
 // The manifest says which machines the user INTENDS to have connected; this says which are actually holding a
 // socket right now. Nothing here is remembered across a daemon restart except the enrollment itself: a machine

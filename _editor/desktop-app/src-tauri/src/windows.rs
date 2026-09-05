@@ -663,7 +663,7 @@ fn park_setup(app: &AppHandle, args: SetupArgs) {
 /* A SETUP THIS APP NEVER SAW ITS OWN WINDOW ASK FOR — so ask, before anything runs.
  *
  * A parked setup runs immediately, and the consent for that is having installed, opened and signed into this
- * app to run a sandbox on this computer: its setup page hands the code over on arrival rather than asking
+ * app to run a sandbox on this device: its setup page hands the code over on arrival rather than asking
  * again (setupArrival.ts). That argument holds for exactly one of the three directions a link arrives from,
  * the app's own window. An `intentic://setup` from the OS is a link ANY page can navigate to, and all the
  * user was shown before it got here is the browser's "Open Intentic?" — a question about opening an app,
@@ -679,20 +679,20 @@ fn park_setup(app: &AppHandle, args: SetupArgs) {
 fn confirm_setup(app: &AppHandle, args: SetupArgs) {
     let sync = match args.sync_dir.as_deref() {
         Some(dir) => {
-            format!("\n\nIt will also keep {dir} on this computer in sync with that sandbox.")
+            format!("\n\nIt will also keep {dir} on this device in sync with that sandbox.")
         }
         None => String::new(),
     };
     let handle = app.clone();
     app.dialog()
         .message(format!(
-            "Something asked Intentic to set up a sandbox on this computer.\n\n\
+            "Something asked Intentic to set up a sandbox on this device.\n\n\
              That starts a container here and publishes it on the internet, where it is reachable by whoever \
              the setup link came from.{sync}\n\n\
              Intentic sets itself up from its own window, so nothing you did in the app asked for this. \
              If you were not expecting it, cancel.",
         ))
-        .title("Set up a sandbox on this computer?")
+        .title("Set up a sandbox on this device?")
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom(
             "Set up".into(),

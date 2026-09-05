@@ -49,7 +49,7 @@ const FRONT_DESK_CARD: Persona = {
         delegate: false,
         sandbox: false,
         connectors: [],
-        computers: [],
+        devices: [],
         mcp: [],
     },
     /* No `systemPromptMode`, so the desk runs on the sandbox's own prompt whatever that is. The desk's MANNER is

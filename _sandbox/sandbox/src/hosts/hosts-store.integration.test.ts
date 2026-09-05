@@ -54,7 +54,7 @@ test("an empty token never verifies: a missing credential must not read as a mat
     expect(await store.verify("")).toBeUndefined();
 });
 
-// The file is a key to somebody's computer if it holds tokens: it must hold only digests.
+// The file is a key to somebody's device if it holds tokens: it must hold only digests.
 test("the enrollment file stores no usable credential", async () => {
     const { store, root } = tempStore();
     const enrolled = await store.enroll(store.mintPairing("laptop").token);

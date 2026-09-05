@@ -191,7 +191,7 @@ if ($disabled -and -not $Check) {
 # desktop tiers assert on window titles: a console window appearing on it every three minutes is a flake
 # generator, not a cosmetic problem.
 #
-# `powershell -WindowStyle Hidden` DOES NOT HOLD on a current Windows 11, and _computers/win-launcher/README.md
+# `powershell -WindowStyle Hidden` DOES NOT HOLD on a current Windows 11, and _devices/win-launcher/README.md
 # has the measurement: with Windows Terminal as the default console host, the hidden flag hides the console the
 # PowerShell host owns while the window on the desktop belongs to WindowsTerminal.exe, which never gets the
 # hint. Only a GUI-subsystem parent starting the child with CREATE_NO_WINDOW maps nothing, which is what
@@ -199,7 +199,7 @@ if ($disabled -and -not $Check) {
 #
 # DISCOVERED, NOT DOWNLOADED. setup-windows-runner.ps1 fetches this stub from the latest release; that asset is
 # not published there today, so a download would be a hard failure in the middle of a repair. Every intentic
-# machine has a copy under the host install, which is the same binary built from _computers/win-launcher.
+# machine has a copy under the host install, which is the same binary built from _devices/win-launcher.
 if (-not $LauncherPath) {
     $LauncherPath = @(
         (Join-Path $env:USERPROFILE '.intentic\host\bin\intentic-launch.exe'),

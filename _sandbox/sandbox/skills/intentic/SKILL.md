@@ -21,7 +21,7 @@ What the daemon does around you:
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or
   an ACP agent, chosen per conversation. Which model actually ran is recorded (`mcp__diagnostics__turns`).
 - **Capabilities** are the connections the owner made: connectors (GitHub, Notion, databases…), browser
-  accounts and identities, their own computers, Docker, MCP servers, a wallet. Each connected one ships a
+  accounts and identities, their own devices, Docker, MCP servers, a wallet. Each connected one ships a
   skill and its tools. A missing one is asked for with the `capabilities` skill, never set up by hand.
 - **Personas** are cards the owner writes that decide what a turn IS and MAY DO: which accounts it speaks
   through, which shelves of the toolbox are open (files, shell, web, browser, connectors, delegation…), which
@@ -60,7 +60,7 @@ description of the product, and it may describe a project that has nothing to do
 
 | The owner wants… | Do |
 |---|---|
-| a service, account, computer, database or Docker this sandbox is not connected to | `capabilities` skill: `capabilities list`, then `capabilities request <card> --why …` |
+| a service, account, device, database or Docker this sandbox is not connected to | `capabilities` skill: `capabilities list`, then `capabilities request <card> --why …` |
 | a tool, toolchain or system package that survives a rebuild | `environment` skill: propose overlay Dockerfile steps the owner approves |
 | a repo they can open, run and preview from the sidebar | `panels` skill: give the repo an `operator/` web app |
 | a heavy or premium capability (research, data, compute) | `services` skill: the `services` CLI; the owner approves the spend on a card |
@@ -74,7 +74,7 @@ description of the product, and it may describe a project that has nothing to do
 | a file handed over by link | `/work/public/`, and say the link is public |
 | an outside codebase studied | clone it into `/work/refs/` |
 | a recurring or event-triggered task | an automation (`.intentic/config/automations.json`, managed from the editor); draft the prompt and trigger for the owner |
-| the sandbox itself changed (image, packages, the dormant Docker engine, the browser pack) | `environment` skill; the rebuild is the owner's. On a HOSTED sandbox (`SANDBOX_VM=1` here) it is one press of **Rebuild now** on the Environment card and the platform builds it — never a command to paste; elsewhere they run one on the computer the sandbox lives on |
+| the sandbox itself changed (image, packages, the dormant Docker engine, the browser pack) | `environment` skill; the rebuild is the owner's. On a HOSTED sandbox (`SANDBOX_VM=1` here) it is one press of **Rebuild now** on the Environment card and the platform builds it — never a command to paste; elsewhere they run one on the device the sandbox lives on |
 
 ## Key paths
 
@@ -140,9 +140,9 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   payment approvals render here.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status.
   **Land** applies a conversation's delta to the main tree; a conflict card names the paths.
-- **Capabilities** (`/capabilities`): the connections; each card is a connector, account, computer or service.
+- **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
 - **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
-  settings above), Extensions, Discover, Access, Personas, Computers.
+  settings above), Extensions, Discover, Access, Personas, Devices.
 - **Workspace** (`/workspace/<path>`): the file tree. **Browsers** (`/browsers`): watch a live browser
   session. **Subagents** (`/subagents`): the children a turn started. **Settings** (`/settings`): the owner's
   own preferences, not the sandbox's.

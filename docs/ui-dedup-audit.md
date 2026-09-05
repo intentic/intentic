@@ -89,7 +89,7 @@ export), `pages/workspace/WorkspaceTree.vue`, `WorkspaceDesktop.vue`, `Workspace
 
 Still not exported (no demand yet): `PullToRefresh`, `BrandMark`, `PickerPanel`, `placeAnchored`,
 `useHighlighter`, `withinWindow`, `initialsOf`, `formatWeekdayTime`, `vTw`, `useTextSize`, `useExplorerStyle`,
-`useOsPreference`, `MachineDetail`.
+`useOsPreference`, `DeviceDetail`.
 
 ---
 

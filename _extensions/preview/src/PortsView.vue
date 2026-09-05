@@ -81,12 +81,12 @@ const openTerminal = (session: string): void => host().terminal.open(session);
                     </span>
                     <!-- WHICH PORTS THIS PAGE IS NOT ABOUT. Two different things are called "ports" here: sending
                          one out to the public internet (this view) and mirroring one onto the localhost of the
-                         computer on your desk (Computers). Somebody whose dev server is missing from
+                         computer on your desk (Devices). Somebody whose dev server is missing from
                          localhost:3000 reads the word in the index, arrives here, finds their port listed and
                          apparently healthy, and leaves no wiser: the row was right, it was just answering a
                          different question. One sentence is cheaper than the hunt. -->
                     <span class="mt-2 block text-xs text-muted">
-                        Looking for a port on your own <b>localhost</b> instead? That is desktop sync mirroring it onto your machine: Computers says
+                        Looking for a port on your own <b>localhost</b> instead? That is desktop sync mirroring it onto your machine: Devices says
                         which ports made it, and which one another sandbox got to first.
                     </span>
                 </InfoHint>

@@ -122,7 +122,7 @@ pub fn run() {
             }
 
             /* BEFORE the link, nothing opens. A first-time user's very first act is clicking "Set up on this
-             * computer" in their browser, which starts this process WITH that link — and opening the workspace
+             * device" in their browser, which starts this process WITH that link — and opening the workspace
              * first would load app.intentic.dev only for the setup face to take the frame a moment later. What
              * they would see is the app opening something and immediately throwing it away.
              *
@@ -158,9 +158,9 @@ pub fn run() {
 /// `Quit` is offered there too, rather than only here.
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Intentic").build(app)?;
-    // "This computer", matching the window it opens — the screen covers the machine's sandboxes AND its desktop
+    // "This device", matching the window it opens — the screen covers the machine's sandboxes AND its desktop
     // sync, and a tray entry naming only half of that is the reason nobody looked there for the other half.
-    let manager = MenuItemBuilder::with_id("manager", "This computer").build(app)?;
+    let manager = MenuItemBuilder::with_id("manager", "This device").build(app)?;
     /* THE APP'S OWN VERSION, ON THE ONE SURFACE THAT IS THERE WHEN NO WINDOW IS.
      *
      * This app spends most of its life as a tray icon with nothing on screen, so a "an update is ready" that
@@ -177,7 +177,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
      * no face of its own (its logon start maps no window, by design), and the tray is the one surface a user
      * meets without opening anything. The sentence is the agent's own `status --json` summary (agent_status.rs),
      * so this row and `intentic-machine status` in a terminal cannot disagree. Clickable, and the click opens
-     * the "This computer" screen, which renders the full report behind the sentence. */
+     * the "This device" screen, which renders the full report behind the sentence. */
     let agent = MenuItemBuilder::with_id("agent", "Machine agent: checking…").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)

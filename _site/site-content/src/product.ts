@@ -144,7 +144,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Fan out across models and machines",
-                body: "A turn can start full child agents on any connected provider, each as an isolated conversation you can watch and review. Connect runner containers on your other computers and the fleet spreads those children across ready capacity while their transcript and land door stay here.",
+                body: "A turn can start full child agents on any connected provider, each as an isolated conversation you can watch and review. Connect runner containers on your other devices and the fleet spreads those children across ready capacity while their transcript and land door stay here.",
                 bullets: [
                     "Cross-provider meta-harness: Claude can delegate to Cursor, Codex to Claude, or any other connected pair",
                     "Remote runners replicate the approved environment and return git branches, not a second control plane",
@@ -367,11 +367,11 @@ export const productPages: ProductPage[] = [
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
         menuShot: {
             name: "menu-host",
-            alt: "The sandbox hub: the acme-shop box online with its installed version and its own URL, over the list of what it holds, environment, secrets, agent account, extensions, access, personas and computers.",
+            alt: "The sandbox hub: the acme-shop box online with its installed version and its own URL, over the list of what it holds, environment, secrets, agent account, extensions, access, personas and devices.",
         },
         hero: {
             name: "sandbox-overview",
-            alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and computers.",
+            alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and devices.",
             frame: "browser",
             label: "acme-shop · /sandbox",
         },

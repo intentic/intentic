@@ -1,5 +1,5 @@
 packages:
-  - "_computers/*"
+  - "_devices/*"
   - "_deploy/*"
   - "_editor/*"
   # The store shells are deliberately NOT workspace packages: their dependencies are consumed by Xcode/

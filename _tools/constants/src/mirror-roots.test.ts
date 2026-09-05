@@ -30,7 +30,7 @@ test("removing the CONTENTS of a mirror root is the sanctioned operation and is 
 });
 
 test("a removal that cannot take a directory at all is not a replacement", () => {
-    // `_computers/webext` removes `dist.zip` beside its `dist`, and a bare `rm` refuses a directory outright.
+    // `_devices/webext` removes `dist.zip` beside its `dist`, and a bare `rm` refuses a directory outright.
     expect(replacedMirrorRoots("rm -f dist.zip")).toEqual([]);
     expect(replacedMirrorRoots("rm dist")).toEqual([]);
     // Every recursive spelling is one, though, including the long flag and the capital.

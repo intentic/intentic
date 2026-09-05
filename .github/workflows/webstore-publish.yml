@@ -17,7 +17,7 @@
 # INERT UNTIL THE LISTING EXISTS. The five CHROME_WEBSTORE_* values are the store's OAuth client, a refresh
 # token for the publisher account, and the publisher/item ids from the dashboard. Without them the publish
 # step SKIPS loudly (a warning annotation on the run) rather than failing: an unlisted extension must not take
-# a release red. _computers/webext/PUBLISHING.md is the one-time setup, and STORE-LISTING.md is what goes in
+# a release red. _devices/webext/PUBLISHING.md is the one-time setup, and STORE-LISTING.md is what goes in
 # the listing form.
 #
 # ON THE FLEET, unlike npm-publish.yml. That one is GitHub-hosted because npm's provenance attestation refuses
@@ -68,7 +68,7 @@ jobs:
       # `--filter` pulls the dependency closure through turbo's ^build edge: the extension inlines the
       # contract's and the browser vocabulary's dist.
       - name: Build the extension
-        run: pnpm turbo run build --filter=./_computers/webext
+        run: pnpm turbo run build --filter=./_devices/webext
 
       # dist/ as one zip, written by node rather than by `zip`, which ci-base does not have (scripts/pack.mjs).
       - name: Pack it

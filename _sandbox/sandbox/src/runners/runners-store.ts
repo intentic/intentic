@@ -25,7 +25,7 @@ export interface RunnerRecord {
 
 export interface RunnersStore {
     // Bind a pairing to one runner id. Single-use, expiring; the raw token is handed to the provisioner once.
-    // `host` is the computer being asked to create it, carried onto the enrollment when the pairing is spent.
+    // `host` is the device being asked to create it, carried onto the enrollment when the pairing is spent.
     readonly mintPairing: (id: string, host?: string) => { token: string; expiresIn: number };
     // Redeem a pairing: the runner gets its durable token, the pairing is spent and burned whether or not the
     // runner ever connects. Undefined ⇒ unknown, expired, or replayed, which the route answers as 401.
@@ -46,8 +46,8 @@ export const runnerPairBurnPath = (historyRoot: string): string => join(historyR
 
 export const fileRunnersStore = (historyRoot: string): RunnersStore => {
     const pending = pairings<RunnerRecord>(runnerPairBurnPath(historyRoot));
-    /* WHICH CONNECTED COMPUTER HOLDS IT, when this sandbox is the one that asked for it (the Computers view's
-     * create flow, hosts/machine-reports.ts). It is the only way back to the machine that can stop or remove
+    /* WHICH CONNECTED DEVICE HOLDS IT, when this sandbox is the one that asked for it (the Devices view's
+     * create flow, hosts/device-reports.ts). It is the only way back to the machine that can stop or remove
      * this container, and the runner itself cannot supply it: from inside, a container knows its own hostname
      * and nothing about the capability its host is filed under. Absent for a runner somebody started by hand
      * with `ic runner up`, which is not a lesser runner, only one this sandbox cannot offer machine buttons

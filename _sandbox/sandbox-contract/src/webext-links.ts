@@ -35,7 +35,7 @@ export const webextLendUrl = (sandboxUrl: string): string => `${sandboxUrl.repla
 
 /* ---- the pairing code: the one string that travels from the sandbox's card into the extension ----
  *
- * A connected computer is paired by a shell one-liner, which can carry two values in two environment variables
+ * A connected device is paired by a shell one-liner, which can carry two values in two environment variables
  * because a terminal is a place where long strings are normal. A browser extension's popup is not: what a
  * person will actually do there is paste ONE thing, once, and anything that asks them to copy a URL into one
  * box and a token into another is a flow that fails on the second box.

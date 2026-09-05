@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 /* EVERY BYTE THIS BINARY SHOWS A PERSON, IN ONE PLACE — and the reason it can be pretty at all.
  *
  * The shapes below are a CONTRACT, not house style: docs/cli-output-protocol.md writes down the line format,
- * the three modes and the row vocabulary, and _computers/local-agent/src/ui.ts is this module's TypeScript
- * twin — the sync and computer agents render through it, so an install reads as one program.
+ * the three modes and the row vocabulary, and _devices/local-agent/src/ui.ts is this module's TypeScript
+ * twin — the sync and device agents render through it, so an install reads as one program.
  *
  * The install output is read by two audiences that want opposite things. The desktop app spawns this binary
  * with piped stdio (desktop-app/src-tauri/src/scripts.rs) and turns `intentic: [phase] …` markers into a

@@ -33,7 +33,7 @@ describe(`storedPowers`, () => {
     /* The tri-state is the reason these are optional rather than defaulted arrays: "all of them, including new
      * ones" and "none of them" are both real answers, and only the second is a list. */
     it(`treats a materialised grant list as a bound, and keeps an empty one`, () => {
-        expect(storedPowers({ ...FULL_POWERS, computers: [] })).toMatchObject({ computers: [] });
+        expect(storedPowers({ ...FULL_POWERS, devices: [] })).toMatchObject({ devices: [] });
         expect(storedPowers({ ...FULL_POWERS, connectors: [`github`] })).toMatchObject({ connectors: [`github`] });
     });
 
@@ -56,7 +56,7 @@ describe(`powersDraftOf`, () => {
         const card: Persona = {
             id: `visitor`,
             capabilities: [],
-            powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: false, computers: [] },
+            powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: false, devices: [] },
         };
         expect(storedPowers(powersDraftOf(card))).toEqual(card.powers);
     });

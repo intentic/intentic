@@ -4,7 +4,7 @@ import { type CommandClass, CommandClassSchema } from "./schemas/agent.js";
  *
  * IT LIVES IN THE CONTRACT PACKAGE because there are TWO enforcement points and they must not drift. The
  * sandbox's own gate (sandbox/src/guard/command-gate.ts) judges what the agent types here; the machine agent's
- * shell tool (_computers/machine/src/computer/tools/shell.ts) judges what it sends to somebody's laptop. Those answer to
+ * shell tool (_devices/machine/src/device/tools/shell.ts) judges what it sends to somebody's laptop. Those answer to
  * different policy (a rulebook with a permission card here, a scope switch on the card there) but they must
  * agree on WHAT A COMMAND IS, or a class the owner thought they had covered turns out to mean something else on
  * the surface where it mattered most. One table, two consults.
@@ -18,7 +18,7 @@ import { type CommandClass, CommandClassSchema } from "./schemas/agent.js";
  * A creatively quoted command, a path assembled from a variable, or a script written in one call and run in the
  * next goes past it untouched. So a gate built on this is friction and a prompt for well-behaved work, never a
  * boundary, the boundaries are structural and elsewhere: the container, the isolated worktree, the land gate,
- * an automation's tool allowlist, and, on somebody's own computer, the scope switches enforced there.
+ * an automation's tool allowlist, and, on somebody's own device, the scope switches enforced there.
  *
  * WHICH IS WHY THIS NO LONGER DECIDES ANYTHING. A match used to BE the verdict: whatever fired here became the
  * permission card, so `echo "rm -rf /"`, `rg 'rm -rf'` and an actual delete were one question with one answer.
@@ -370,7 +370,7 @@ const SYSTEM_DESTRUCTIVE = [
      * unused one with it, and `compose down -v` is the spelling people reach for without reading the flag.
      * In this sandbox these hit the nested engine (the host's socket is never mounted, see
      * capabilities/handlers/docker.ts), so the blast radius is the dev databases the agent has been working
-     * against. Sent to somebody's own computer through the host agent, it is whatever they run on it. */
+     * against. Sent to somebody's own device through the host agent, it is whatever they run on it. */
     /\b(?:docker|podman)\s+volume\s+(?:rm|remove|prune)\b/,
     /\b(?:docker|podman)\s+system\s+prune\b/,
     /\b(?:docker(?:\s+compose|-compose)?|podman-compose)\s+down\b[^|;&]*\s(?:-v\b|--volumes\b)/,
@@ -511,5 +511,5 @@ export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {
 /* No verdict set lives here any more. Which classes are worth stopping for is a POLICY question now, and it is
  * answered in two places that are honest about being different: safety-policy.ts's HARD_RULE_CLASSES for the
  * one thing nothing recovers, and the owner's own written policy for everything else. The machine agent keeps
- * its own set beside its scope switches (machine/src/computer/tools/shell.ts), because "which commands need
+ * its own set beside its scope switches (machine/src/device/tools/shell.ts), because "which commands need
  * the destructive switch" is a question about that capability card rather than about this catalog. */

@@ -12,8 +12,8 @@ import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, type Caller, bearerFrom } from "../auth/auth.js";
 import { listSubagentSessions } from "../agent/subagents.js";
-import { runMachineCommand } from "../hosts/machine-commands.js";
-import { manageMachineSandbox } from "../hosts/machine-reports.js";
+import { runDeviceCommand } from "../hosts/device-commands.js";
+import { manageDeviceSandbox, runDeviceAgentFlow } from "../hosts/device-reports.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
 import { readSubagentTranscript } from "../sessions/subagent-transcript.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
@@ -450,39 +450,53 @@ export const createSystemRoutes = (services: Services) => {
                 input.id,
             ),
         })),
-        /* Act on a sandbox running on one of the user's own computers, streaming what the machine says as it says
+        /* Act on a sandbox running on one of the user's own devices, streaming what the machine says as it says
          * it. Operating-tier only, and this is the door that can also DELETE one of them.
          *
          * Everything past the gate belongs to the machine, including whether it will do this at all. Its refusal
-         * ("Remove sandboxes from this computer is switched off") arrives as the stream's terminal error line, in
+         * ("Remove sandboxes from this device is switched off") arrives as the stream's terminal error line, in
          * its own words, because the machine is the only place a scope is ever checked. */
-        manageMachineSandbox: i.manageMachineSandbox.handler(async function* ({ input, context }) {
+        manageDeviceSandbox: i.manageDeviceSandbox.handler(async function* ({ input, context }) {
             if (services.auth !== undefined) {
                 try {
                     await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
                 } catch {
-                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can act on connected computers" });
+                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can act on connected devices" });
                 }
             }
-            yield* manageMachineSandbox(services, input.id, {
+            yield* manageDeviceSandbox(services, input.id, {
                 op: input.op,
                 slug: input.slug,
                 ...(input.hash === undefined ? {} : { hash: input.hash }),
             });
         }),
-        /* One named CLI action on one connected computer — the Computers tab's Stop-mirroring button, and the
-         * door every button like it should take (hosts/machine-commands.ts). Maintainer-floored like the sandbox
+        /* One named CLI action on one connected device — the Devices tab's Stop-mirroring button, and the
+         * door every button like it should take (hosts/device-commands.ts). Maintainer-floored like the sandbox
          * ops above: acting on somebody's own machine is operator territory, and the same check is written here
          * rather than inferred from the method so the two routes refuse identically. */
-        runMachineCommand: i.runMachineCommand.handler(async ({ input, context }) => {
+        runDeviceCommand: i.runDeviceCommand.handler(async ({ input, context }) => {
             if (services.auth !== undefined) {
                 try {
                     await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
                 } catch {
-                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can act on connected computers" });
+                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can act on connected devices" });
                 }
             }
-            return await runMachineCommand(services, input);
+            return await runDeviceCommand(services, input);
+        }),
+        /* Update or restart the agent on one connected device. Maintainer-floored like the two routes above, and
+         * for a stronger reason than either: this replaces the binary that everything else on that machine runs
+         * through, so it is squarely operator territory. Everything past the gate is the machine's, including
+         * whether "Run commands" lets it happen at all. */
+        runDeviceAgentFlow: i.runDeviceAgentFlow.handler(async function* ({ input, context }) {
+            if (services.auth !== undefined) {
+                try {
+                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
+                } catch {
+                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can update a connected device's agent" });
+                }
+            }
+            yield* runDeviceAgentFlow(services, input.id, { op: input.op });
         }),
         // Destroy one session (its tab's close button). Validate the name before it reaches the `kill-session`
         // argv, the security guard against a name like `-C` being read as a flag. Killing a session that already

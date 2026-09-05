@@ -36,12 +36,12 @@ import {
     InfoDialog,
     InfoHint,
     InfoTable,
-    MachineDetail,
-    type MachineFolderRow,
-    MachineRunLog,
+    DeviceDetail,
+    type DeviceFolderRow,
+    DeviceRunLog,
     mirroringOff,
-    type MachinePortRow,
-    type MachineSandboxRow,
+    type DevicePortRow,
+    type DeviceSandboxRow,
     Modal,
     Notice,
     Page,
@@ -122,7 +122,7 @@ const STATUS_VARIANTS: readonly StatusVariant[] = [`success`, `danger`, `warning
 /* One machine, invented: a healthy sandbox and a stopped one that lost a port to it, which between them show
  * every state the row has: the running dot and the stopped word, a resting sync and a halted one, a mirrored
  * port and a contested one, and both halves of the power slot. */
-const KIT_SANDBOXES: readonly MachineSandboxRow[] = [
+const KIT_SANDBOXES: readonly DeviceSandboxRow[] = [
     { slug: `work`, name: `work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
     { slug: `lab`, name: `lab`, running: false, image: `ghcr.io/intentic/sandbox:2.2.9`, tunnelRunning: false },
     { slug: `hold`, name: `hold`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
@@ -132,10 +132,10 @@ const KIT_SANDBOXES: readonly MachineSandboxRow[] = [
  * an omitted one reads as "not backed up" and would draw a warning on the sample whose whole job is to show
  * what a well pairing looks like, which is how a fixture starts lying about the component it demonstrates. */
 /* THE THIRD ROW IS THE ONE WITH MIRRORING OFF, and it carries no ports for the same reason the real thing does:
- * a computer told to keep its localhost clear reports none. That is exactly why the state has to be on the row
+ * a device told to keep its localhost clear reports none. That is exactly why the state has to be on the row
  * at all, an empty port list is also what a sandbox serving nothing looks like, and it is the variant worth
  * having here: healthy-and-quiet reads as a fault unless you can see the two next to each other. */
-const KIT_PAIRINGS: readonly MachineFolderRow[] = [
+const KIT_PAIRINGS: readonly DeviceFolderRow[] = [
     { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching`, backupStatus: `watching` },
     { sandboxId: `lab-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/lab`, mutagenStatus: `halted-on-root-emptied`, conflicts: 2 },
     {
@@ -151,7 +151,7 @@ const KIT_PAIRINGS: readonly MachineFolderRow[] = [
  * four, and the layout that broke was exactly that: a wrapping row of tinted chips each trailed by a program
  * name, running together as a single string. A kit fixture that shows one port per sandbox hides the only
  * arrangement worth checking on this page. */
-const KIT_PORTS: readonly MachinePortRow[] = [
+const KIT_PORTS: readonly DevicePortRow[] = [
     { port: 5173, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/node_modules/.bin/vite` },
     { port: 33177, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/backend-host-main.js` },
     { port: 33679, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `node main.js` },
@@ -487,20 +487,20 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── ONE COMPUTER'S SANDBOXES ──────────────────────────────────────────────────────────── -->
-            <!-- Here because TWO apps draw this: the Computers tab and the desktop app's manager window. That
+            <!-- ── ONE DEVICE'S SANDBOXES ──────────────────────────────────────────────────────────── -->
+            <!-- Here because TWO apps draw this: the Devices tab and the desktop app's manager window. That
                  window cannot be opened in a browser, so this is the only place the two can be compared side by
                  side, which is exactly how they drifted into different button sets in the first place. -->
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">A machine's sandboxes</h2>
+                <h2 :class="ui.sectionLabel()">A device's sandboxes</h2>
                 <div class="rounded-xl border border-line bg-canvas p-4">
-                    <MachineDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES" :watcher="{ running: true, pid: 4821 }">
-                        <template #heading><span :class="ui.sectionLabel()">Sandboxes on this computer</span></template>
+                    <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES" :agent="{ running: true, pid: 4821 }">
+                        <template #heading><span :class="ui.sectionLabel()">Sandboxes on this device</span></template>
                         <template #actions="{ group }">
                             <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
                         </template>
                         <!-- The ports' own verb, which is NOT one of the container's above: it clears this
-                             computer's localhost and stops nothing in the sandbox. Both directions are on this
+                             device's localhost and stops nothing in the sandbox. Both directions are on this
                              page at once (the third row's mirroring is off), which is the whole reason the
                              fixture has three rows rather than two. -->
                         <template #ports="{ group }">
@@ -511,12 +511,12 @@ const pickedTier = ref(`collaborator`);
                                 :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
                             />
                         </template>
-                    </MachineDetail>
+                    </DeviceDetail>
                 </div>
-                <MachineRunLog
+                <DeviceRunLog
                     :lines="[`intentic: pulling ghcr.io/intentic/sandbox:stable`, `intentic: recreating the container`, `ready`]"
                     :running="true"
-                    note="Running on that computer: it keeps going even if you leave this page."
+                    note="Running on that device: it keeps going even if you leave this page."
                 />
             </section>
 

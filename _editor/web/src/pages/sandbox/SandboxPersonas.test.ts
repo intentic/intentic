@@ -45,7 +45,7 @@ vi.mock(`../../composables/extensions/useBrowserAccounts`, () => ({
     useBrowserAccounts: () => ({ accounts, accountOf: (id: string) => accounts.value.find((entry) => entry.id === id) }),
 }));
 
-// The connectors, computers and MCP connections a card can grant by id. Mocked rather than left real because
+// The connectors, devices and MCP connections a card can grant by id. Mocked rather than left real because
 // the composable behind it reaches the sandbox client at import time, which has no environment under jsdom.
 const capabilities = ref<{ id: string; kind: string }[]>([]);
 vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));

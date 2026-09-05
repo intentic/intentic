@@ -163,7 +163,7 @@ describe("capabilityEffects", () => {
         ]);
     });
 
-    it("spells out what a connected computer grants, defaulting writes OFF", () => {
+    it("spells out what a connected device grants, defaulting writes OFF", () => {
         // An untouched form posts nothing for the switches, so the defaults ARE the disclosure the user reads.
         expect(capabilityEffects({ kind: "host", id: "laptop", config: { platform: "windows" } })).toEqual([
             { kind: "machine", platform: "windows", grants: ["run commands", "read files", "capture the screen"] },
@@ -172,7 +172,7 @@ describe("capabilityEffects", () => {
         ]);
     });
 
-    it("follows the switches the user set on a connected computer", () => {
+    it("follows the switches the user set on a connected device", () => {
         const [machine] = capabilityEffects({
             kind: "host",
             id: "desktop",

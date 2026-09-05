@@ -85,30 +85,30 @@ export { type ImageViewState, isRenderableImage } from "./components/imageView.j
 export { default as InfoDialog } from "./components/InfoDialog.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as InfoTable } from "./components/InfoTable.vue";
-// One computer's desktop-sync detail, folders, localhost ports, watcher liveness. The BODY only: the desktop
-// app and the web's Computers tab frame it differently and state exactly the same facts inside.
-export { default as MachineDetail } from "./components/MachineDetail.vue";
+// One device's desktop-sync detail, folders, localhost ports, watcher liveness. The BODY only: the desktop
+// app and the web's Devices tab frame it differently and state exactly the same facts inside.
+export { default as DeviceDetail } from "./components/DeviceDetail.vue";
 // The pane under a working row: the machine's own output, verbatim. Shared for the same reason the row above
 // it is, both apps drive the same containers and had grown their own.
-export { default as MachineRunLog } from "./components/MachineRunLog.vue";
+export { default as DeviceRunLog } from "./components/DeviceRunLog.vue";
 export {
     type GroupSummary,
     groupNeedsAttention,
     groupSummary,
-    type MachineFolderRow,
-    type MachinePortRow,
-    type MachineSandboxGroup,
-    type MachineSandboxRow,
-    type MachineWatcherState,
-    // Whether that computer is off this sandbox's ports, for a caller that has to decide which way its own
-    // button points: the Computers tab offers Stop or Start mirroring off exactly this answer.
+    type DeviceFolderRow,
+    type DevicePortRow,
+    type DeviceSandboxGroup,
+    type DeviceSandboxRow,
+    type DeviceAgentState,
+    // Whether that device is off this sandbox's ports, for a caller that has to decide which way its own
+    // button points: the Devices tab offers Stop or Start mirroring off exactly this answer.
     mirroringOff,
     // The same grouping the view draws, for a caller that has to COUNT what it is about to draw, the
-    // Computers tab's folded machine line says how many sandboxes are under it and how many want attention.
+    // Devices tab's folded machine line says how many sandboxes are under it and how many want attention.
     sandboxGroups,
-} from "./components/machineDetail.js";
+} from "./components/deviceDetail.js";
 // The verb row on one sandbox's line, which buttons exist, their order, their words, and which one is red.
-// Here because the desktop manager and the web Computers tab render the same row and had drifted apart.
+// Here because the desktop manager and the web Devices tab render the same row and had drifted apart.
 export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";
 export {
     DESTRUCTIVE_VERB,

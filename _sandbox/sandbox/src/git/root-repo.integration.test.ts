@@ -98,7 +98,7 @@ test("the baseline commits the config slice and still refuses every credential a
     await writeFile(join(work, `${STATE_DIR}`, "records", "approvals", "wake-1.json"), "{}\n");
     /* WHAT THIS SANDBOX IS CONNECTED TO: tracked, and the entry that reads most like a credential without being
      * one. The values are in the vault off /work and the manifest keeps the shape (an id, a kind, an address);
-     * granting a connected computer shell access is a decision, and it belongs in the same review as the rules
+     * granting a connected device shell access is a decision, and it belongs in the same review as the rules
      * that decide how the agent behaves. */
     await writeFile(join(work, `${STATE_DIR}`, "config", "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
     // Credentials and identity: never tracked, whatever else changes.

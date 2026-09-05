@@ -119,11 +119,11 @@ export const sourceAliases = (): Record<string, string> => ({
     // is how a 20s budget meant to bound a HANG became a budget that a slow machine could lose to.
     "@intentic/ui/theme": fromRoot("_editor/ui/src/composables/useTheme.ts"),
     // And again, for what a computer's report MEANS: folding a machine's flat folder and port lists into one
-    // block per sandbox, and the small judgements about what a folded row still has to say. <MachineDetail>
-    // draws it, and the Computers tab's own derivations (computerFacts.ts) reason over the same shapes without
+    // block per sandbox, and the small judgements about what a folded row still has to say. <DeviceDetail>
+    // draws it, and the Devices tab's own derivations (deviceFacts.ts) reason over the same shapes without
     // rendering anything, so through the barrel a pure module's unit test would boot the component graph, whose
     // theme reader touches `document` at import time.
-    "@intentic/ui/machine": fromRoot("_editor/ui/src/components/machineDetail.ts"),
+    "@intentic/ui/device": fromRoot("_editor/ui/src/components/deviceDetail.ts"),
     // And again, for the guard that keeps a stylesheet from being replaced by a write that changes nothing. The
     // dev-style manifest (vite.shared.ts) installs it on Vite's own `<style data-vite-dev-id>` nodes before the
     // app mounts, from a generated module that holds imports and one call — nothing there can afford the

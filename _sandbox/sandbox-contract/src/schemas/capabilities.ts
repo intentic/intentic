@@ -277,7 +277,7 @@ export const IdentityConfigSchema = z.object({
     exit: z.string().optional(),
 });
 export type IdentityConfig = z.infer<typeof IdentityConfigSchema>;
-/* A connected COMPUTER of the user's own, the inverse of `ssh`, which reaches a server the sandbox can dial.
+/* A connected DEVICE of the user's own, the inverse of `ssh`, which reaches a server the sandbox can dial.
  * A machine behind NAT can't be dialled, so it dials US: the @intentic/machine agent (installed by a one-liner,
  * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool
  * surface, shell, files, screenshots, from the far end. The daemon tunnels the agent's JSON-RPC over it and
@@ -331,7 +331,7 @@ export const HostScopesSchema = z.object({
      * and cannot park it while somebody thinks, so the honest form of "ask me" here is "refuse until they
      * ticked it", which is exactly what a scope is.
      *
-     * Default off, with `shell` default ON, which is the pairing to read carefully: a connected computer runs
+     * Default off, with `shell` default ON, which is the pairing to read carefully: a connected device runs
      * commands out of the box, because that is what people connect one for, and the ones that delete are the
      * ones they have to say yes to. */
     destructive: hostScope.default("off"),
@@ -342,7 +342,7 @@ export type HostScopes = z.infer<typeof HostScopesSchema>;
 export const HostConfigSchema = HostScopesSchema.extend({ platform: z.string().min(1) });
 /* THE USER'S OWN BROWSER, reached through the extension they installed in it: the `webext` capability's config.
  *
- * The sibling of `host` and deliberately not an arm of it. A connected computer runs commands; a connected
+ * The sibling of `host` and deliberately not an arm of it. A connected device runs commands; a connected
  * browser has one power a sandbox's own Chromium can never have, and it is the whole reason this kind exists:
  * it is ALREADY SIGNED IN, as the person, with their passkeys, their hardware second factor, their corporate
  * SSO and their genuine fingerprint. That is the set of sites the sandbox's browser cannot reach at all, and
@@ -361,7 +361,7 @@ export const WebExtScopesSchema = z.object({
     // Read a granted page: its elements, its text, its tabs. The floor of usefulness, so it defaults on; with
     // it off the connection is inert and the card says so rather than pretending.
     read: webextScope.default("on"),
-    /* Click, type, press keys, navigate. ON by default, unlike a computer's `control`, and the difference is
+    /* Click, type, press keys, navigate. ON by default, unlike a device's `control`, and the difference is
      * what the two things ARE: driving a desktop is the last resort after every command-line route failed,
      * while driving the page IS this connector — a browser connection that may only look is a worse version
      * of fetching the URL. The grant that actually bounds it is per-site and lives in the browser. */

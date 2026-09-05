@@ -49,13 +49,13 @@ const missing = Object.entries({
     .map(([name]) => name);
 if (missing.length > 0) {
     console.log(`::warning title=Chrome Web Store publish skipped::${missing.join(", ")} not set — the listing/API has not been configured yet.`);
-    console.log("skipped: nothing was uploaded. _computers/webext/PUBLISHING.md has the one-time setup.");
+    console.log("skipped: nothing was uploaded. _devices/webext/PUBLISHING.md has the one-time setup.");
     process.exit(0);
 }
 
 // Found rather than counted: `new URL("../../…")` was right only while this file sat directly in
 // `_tools/scripts`, and a wrong answer here reads a manifest that is not there rather than failing usefully.
-const webext = join(repoRoot(import.meta.url), "_computers/webext");
+const webext = join(repoRoot(import.meta.url), "_devices/webext");
 const packedVersion = JSON.parse(readFileSync(join(webext, "dist", "manifest.json"), "utf8")).version;
 if (packedVersion !== version) {
     console.error(`error: the built manifest says ${packedVersion}, not ${version} — this tree was not stamped for this release.`);

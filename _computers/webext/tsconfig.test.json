@@ -1,6 +1,0 @@
-// The suite as well as the source. Same compiler options; the test files are excluded from nothing here
-// because this package emits nothing — `build` is esbuild, and tsgo's only job in it is to say no.
-{
-    "extends": "./tsconfig.json",
-    "include": ["./src/**/*", "./vitest.config.ts"]
-}

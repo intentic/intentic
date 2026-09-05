@@ -143,7 +143,7 @@ export interface AddCapabilityInput {
 // The logical section a card sits under in the "+" grid, a display grouping (by what it's for), not the
 // technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
 export type CapabilityCategory =
-    "platform" | "code" | "observability" | "data" | "communication" | "business" | "machines" | "servers" | "deploy" | "extend";
+    "platform" | "code" | "observability" | "data" | "communication" | "business" | "devices" | "servers" | "deploy" | "extend";
 
 // The grid's sections, in render order, with their headers. Cards are grouped by `category` under these.
 export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; readonly label: string; readonly hint: string }[] = [
@@ -153,10 +153,10 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "data", label: "Data", hint: "Let the agent query your SQL databases." },
     { id: "communication", label: "Communication", hint: "Let the agent read and send messages." },
     { id: "business", label: "Business & docs", hint: "Connect payments and knowledge bases." },
-    // Distinct from Servers on purpose: a server is something the sandbox DIALS, a computer of yours is
+    // Distinct from Servers on purpose: a server is something the sandbox DIALS, a device of yours is
     // something that dials the sandbox, and the difference the user feels is that one of them is the machine
     // they are sitting at.
-    { id: "machines", label: "Your computers", hint: "Let the agent work on your own computer, run commands, handle files, see the screen." },
+    { id: "devices", label: "Your devices", hint: "Let the agent work on your own device, run commands, handle files, see the screen." },
     { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH and private networks over VPN." },
     { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments, stacks, services and releases." },
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
@@ -222,7 +222,7 @@ export interface CapabilityCatalogEntry {
     readonly singleton?: boolean | undefined;
 }
 
-// The permission switches every connected-computer card carries, identical across platforms, the grant is about
+// The permission switches every connected-device card carries, identical across platforms, the grant is about
 // what the agent may DO, which does not vary by OS. Shared so the two cards can't drift into different defaults.
 const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
     {
@@ -263,7 +263,7 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
     },
     {
         key: "sandboxes",
-        label: "Manage sandboxes on this computer",
+        label: "Manage sandboxes on this device",
         default: "off",
         options: [
             { value: "off", label: "Blocked" },
@@ -273,7 +273,7 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
     },
     {
         key: "sandboxRemove",
-        label: "Remove sandboxes from this computer",
+        label: "Remove sandboxes from this device",
         default: "off",
         options: [
             { value: "off", label: "Blocked" },
@@ -978,7 +978,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
 
 const isCapabilityCategory = (category: string): category is CapabilityCategory => CAPABILITY_CATEGORIES.some((entry) => entry.id === category);
 
-/* Fields the CORE contributes to a kind's form rather than the card declaring them. The connected-computer
+/* Fields the CORE contributes to a kind's form rather than the card declaring them. The connected-device
  * switches are the whole example, and they are here rather than in the manifest on purpose: the grant is about
  * what the agent may DO, which does not vary by OS, so a card that could restate them is a card that could
  * quietly weaken them. Two platform packs therefore cannot drift, and neither can a third-party one.

@@ -30,7 +30,7 @@ export const SETUP_LINK = `${SCHEME}://setup?code=windows-smoke-code&name=Window
  * The confirmation is the better proof of the two and is asserted first: it is a window that exists for no
  * other reason, where the setup screen has to be told apart from "the link was dropped and the app opened on
  * the workspace", a window appears either way, and only the title says which. */
-export const CONFIRM_TITLE = `Set up a sandbox on this computer`;
+export const CONFIRM_TITLE = `Set up a sandbox on this device`;
 export const SETUP_TITLE = `Setting up`;
 export const WORKSPACE_TITLE = `Intentic`;
 

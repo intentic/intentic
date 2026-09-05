@@ -11,7 +11,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
 const lifecycle = [
     {
         title: "Choose where the sandbox lives",
-        body: "Use a computer you own, or a machine we host. Every route boots the same sandbox image from the same run contract.",
+        body: "Use a device you own, or a machine we host. Every route boots the same sandbox image from the same run contract.",
     },
     {
         title: "The sandbox connects out",
@@ -34,7 +34,7 @@ const lifecycle = [
 const daemonSurfaces = [
     { area: "Agents", owns: "Provider accounts, harness selection, detached turns, questions, permissions, transcripts and usage." },
     { area: "Workspace", owns: "Repositories, files, search, terminals, dev servers, previews, worktrees, diffs and landing." },
-    { area: "Connections", owns: "Capabilities, secrets, connected computers, extensions, VPNs and browser profiles." },
+    { area: "Connections", owns: "Capabilities, secrets, connected devices, extensions, VPNs and browser profiles." },
     { area: "Unattended work", owns: "Schedules, webhooks, listeners, workflows, loops, watches and restart recovery." },
 ];
 
@@ -221,7 +221,7 @@ const state = [
     <p>
         A <a href="/docs/capabilities/">capability</a> is a declared connection the daemon knows how to enforce: a provider account, MCP server,
         database, SSH host, VPN, browser identity or connected computer. Its credential is stored inside the sandbox and its effects are shown
-        before approval. A connected computer enforces its own folder and action switches locally, so the sandbox cannot widen the grant it was
+        before approval. A connected device enforces its own folder and action switches locally, so the sandbox cannot widen the grant it was
         given.
     </p>
     <p>

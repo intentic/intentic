@@ -9,7 +9,7 @@ import { bearerFrom, tokenEquals } from "../auth/auth.js";
 import { commandInCall, judgeHostCommand } from "./host-command-gate.js";
 import type { HostClient } from "./host-hub.js";
 
-/* The three surfaces of a connected computer:
+/* The three surfaces of a connected device:
  *
  *   /system/hosts/connect  the machine's own WebSocket (authenticated by its first frame, see host-protocol).
  *   /mcp/hosts/:id         the loopback MCP endpoint the AGENT's tools point at, which tunnels JSON-RPC to it.
@@ -108,7 +108,7 @@ export const createHostMcpRoute =
         }
         const id = c.req.param("id") ?? "";
         if (!(await services.hosts.enrolled(id))) {
-            return c.json({ error: `no connected computer named "${id}"` }, 404);
+            return c.json({ error: `no connected device named "${id}"` }, 404);
         }
         if (c.req.method === "GET") {
             return c.json({ error: "this endpoint has no server-initiated stream" }, 405);
@@ -121,7 +121,7 @@ export const createHostMcpRoute =
             return c.json({ error: "invalid json" }, 400);
         }
         /* THE OWNER'S SAFETY POLICY, BEFORE THE TUNNEL. This route is the last thing that sees a call while a
-         * person can still be asked about it, so a `run_command` headed for somebody's own computer is judged
+         * person can still be asked about it, so a `run_command` headed for somebody's own device is judged
          * here (hosts/host-command-gate.ts argues the whole shape). The scopes on the machine remain the floor
          * underneath and are untouched by any of this; a refusal here only ever stops a call the machine might
          * otherwise have run. */
@@ -149,12 +149,12 @@ export const createHostMcpRoute =
             void services.hostHub.mcp(id, payload).catch(() => undefined);
             return c.body(null, 202);
         }
-        /* A turn loads its MCP servers before it does anything, and half the time a personal computer is asleep
+        /* A turn loads its MCP servers before it does anything, and half the time a personal device is asleep
          * at that moment. Forwarding the handshake to a machine that cannot answer would fail the connection and
          * take the whole machine out of the turn, the agent would not even know it exists. So the two questions
-         * that are ABOUT the connection rather than about the computer are answered here when it is offline: the
+         * that are ABOUT the connection rather than about the device are answered here when it is offline: the
          * handshake, and the tool list as the machine last reported it. Everything else still goes to the machine,
-         * where a call arrives as a plain "this computer is asleep" the model can read and pass on. */
+         * where a call arrives as a plain "this device is asleep" the model can read and pass on. */
         if (!services.hostHub.online(id)) {
             if (request.method === "initialize") {
                 return c.json({
@@ -179,7 +179,7 @@ export const createHostMcpRoute =
             return c.json(answer);
         } catch (error) {
             /* An offline machine is a normal state, not a fault: laptops sleep. Answering as a JSON-RPC ERROR
-             * rather than an HTTP one is what makes that legible to the model, it reads "this computer is
+             * rather than an HTTP one is what makes that legible to the model, it reads "this device is
              * asleep" as a tool result and can say so, where a 503 surfaces as an MCP transport failure that
              * looks like a broken sandbox and invites a retry loop. */
             return c.json({

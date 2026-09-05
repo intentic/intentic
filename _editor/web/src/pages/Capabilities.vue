@@ -504,7 +504,7 @@ const formSummary = computed<string | undefined>(() => {
     return undefined;
 });
 
-/* A connected computer's grant, driven as a posture rather than six switches: the preset row sets them all,
+/* A connected device's grant, driven as a posture rather than six switches: the preset row sets them all,
  * the sentence states what they currently spell (in the same words the connect dialog and the row will use),
  * and the switches stay underneath for fine-tuning. A hand-tuned mix matches no preset and the row shows it
  * by holding nothing selected. */
@@ -606,7 +606,7 @@ const instanceEffects = (instance: CapabilitySummary): readonly CapabilityEffect
         manifest: instance.kind === `extension` ? extensions.value.find((extension) => extension.id === instance.id)?.manifest : undefined,
     });
 
-/* Connecting a computer of the user's own (host-kind): the machine can't be reached from here, so the flow is a
+/* Connecting a device of the user's own (host-kind): the machine can't be reached from here, so the flow is a
  * one-time command they run over there. This page owns the dialog's identity (which machine, which grant); the
  * live roster + revoke live in the composable, shared with the dialog. */
 const { hostFor, revoke: revokeHost, refresh: refreshHosts, start: startHosts, stop: stopHosts } = useHostConnect();
@@ -672,7 +672,7 @@ const removeHostAccess = async (id: string): Promise<void> => {
     await revokeHost(id);
     void refetch();
 };
-// One read of the roster while this page is open, so a connected computer's row can say "online" without
+// One read of the roster while this page is open, so a connected device's row can say "online" without
 // waiting for a dialog to be opened. The steady polling only runs while a pairing is live (see the composable).
 onMounted(startHosts);
 onBeforeUnmount(stopHosts);
@@ -888,7 +888,7 @@ const pickForticlient = (connection: ForticlientConnection): void => {
  *
  * Offered only where a check exists. A `checked: false` answer retires the button for this card rather than
  * printing "cannot verify", because not-testable is not a failure and must not be dressed as one: an ssh box,
- * a paired computer and a signed-in browser are all connections whose test IS the thing itself. */
+ * a paired device and a signed-in browser are all connections whose test IS the thing itself. */
 const probing = ref(false);
 const probeResult = ref<CapabilityProbe>();
 // Hidden once a card has answered "no test exists": the button would only ever say so again.
@@ -1197,7 +1197,7 @@ const askRemove = (id: string): void => {
 /* RENAMING A CONNECTION. The one edit a card could not make: every other field is re-typed into the form and
  * saved over the same name, but the name itself had no path at all: the closest thing was removing the
  * connection and setting it up again, which for the kinds people most want to rename (a signed-in account, a
- * paired computer) is the one operation that throws away what makes them worth keeping. The daemon carries that
+ * paired device) is the one operation that throws away what makes them worth keeping. The daemon carries that
  * state across; this only has to ask which name, and to hold onto its refusals.
  *
  * The refusal is kept BESIDE the dialog rather than in the page's top notice: it is an answer about the name
@@ -1540,7 +1540,7 @@ const submitLabel = computed(() => {
                              From @3xl it is docked in a column of its own (see the aside below) and this one is
                              hidden: exactly one of the two is ever on screen. -->
                             <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
-                            <!-- A computer's grant as a posture: the preset row sets the six switches at once,
+                            <!-- A device's grant as a posture: the preset row sets the six switches at once,
                                  and the sentence under it states what they currently spell, in the same words
                                  the connect dialog and the machine's row will use. The switches stay below for
                                  fine-tuning; a hand-tuned mix selects no preset. -->
@@ -1635,7 +1635,7 @@ const submitLabel = computed(() => {
                             </Notice>
 
                             <!-- THE SUBMIT STAYS ON SCREEN. A few cards are genuinely long: a VPN carries three
-                                 protocols' worth of fields, a computer seven permissions, and no amount of moving
+                                 protocols' worth of fields, a device seven permissions, and no amount of moving
                                  prose out of this column makes those short. What made a long one unusable was not
                                  its length but that scrolling took the only button on the page out of view, so the
                                  reader had to scroll back down through what they had just filled in to press it.
@@ -1913,7 +1913,7 @@ const submitLabel = computed(() => {
                 @done="onBrowserDone"
             />
 
-            <!-- The one-time command that connects a computer of the user's own (host-kind capabilities). -->
+            <!-- The one-time command that connects a device of the user's own (host-kind capabilities). -->
             <HostConnectDialog
                 v-model:visible="connectVisible"
                 :id="connectId"

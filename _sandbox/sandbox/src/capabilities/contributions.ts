@@ -128,7 +128,7 @@ export const contributionPackName = (contribution: ResolvedContribution): string
 /* THE CARD'S SKILL.md, read and rendered for ONE instance, the cli and host kinds, whose skills stay
  * per-entry (a browser pack's renders once per SITE instead: capabilities/account-skills.ts). Three
  * substitutions:
- *   `${tools}`   → the kind's core tool-surface note (what a connected computer's tools are and what a
+ *   `${tools}`   → the kind's core tool-surface note (what a connected device's tools are and what a
  *                  refused scope means), core because the tools are, and because a note duplicated across N
  *                  packs is a note that drifts;
  *   `${id}`      → this instance's name, so the examples are copy-pasteable rather than illustrative;

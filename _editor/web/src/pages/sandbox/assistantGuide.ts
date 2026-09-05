@@ -1,6 +1,6 @@
 import type { AssistantSource } from "@intentic-app/api-contract";
 
-/* WHAT TO TELL SOMEONE WHOSE SETUP IS ON ANOTHER COMPUTER, the instructions the migration card renders, as
+/* WHAT TO TELL SOMEONE WHOSE SETUP IS ON ANOTHER DEVICE, the instructions the migration card renders, as
  * data, so the copy is testable and the card stays about layout.
  *
  * The first version of this was one grey caption holding both tools' archive commands. It assumed six things
@@ -56,8 +56,8 @@ export interface HelpTopic {
  * on the same machine as their browser should never have to read past the two steps. */
 export const helpTopics = (guide: SourceGuide): HelpTopic[] => [
     {
-        title: `It runs on a server, not on this computer`,
-        body: `Usual case. Run the command over SSH on the server, then bring the file down to the computer you are reading this on, replace the parts in capitals with yours.`,
+        title: `It runs on a server, not on this device`,
+        body: `Usual case. Run the command over SSH on the server, then bring the file down to the device you are reading this on, replace the parts in capitals with yours.`,
         command: `scp YOU@YOUR-SERVER:~/${guide.folder === `.hermes` ? `hermes` : `openclaw`}-setup.tar.gz ~/Downloads/`,
     },
     {

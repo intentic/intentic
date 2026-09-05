@@ -12,11 +12,11 @@ import { contributionRegistry } from "../contributions.js";
 import { echoConfig, secretField } from "../summary.js";
 import { hostHandler } from "./host.js";
 
-// The real first-party `computers` extension provides each OS pack; the tool surface it wraps is core.
+// The real first-party `devices` extension provides each OS pack; the tool surface it wraps is core.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // A ctx exposing only what hostHandler touches. The machine is never enrolled here, which is the pre-Connect
-// state every add starts in: enrolling one needs a real socket from a real computer.
+// state every add starts in: enrolling one needs a real socket from a real device.
 const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "host-cap-"));
     const ctx = {
@@ -76,7 +76,7 @@ test("apply installs the contributed OS pack with the core tools note and this i
     // Added but never connected: the user's next action is running the one-liner over there, and the card says so.
     expect(await hostHandler.status(ctx, "my-laptop", laptop.config)).toEqual({
         state: "pending",
-        detail: "click Connect and run the one-liner on that computer",
+        detail: "click Connect and run the one-liner on that device",
     });
 });
 

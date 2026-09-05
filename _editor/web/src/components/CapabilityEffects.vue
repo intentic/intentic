@@ -69,10 +69,10 @@ const describe = (effect: CapabilityEffect): EffectRow => {
             return { icon: `globe`, label: `Keeps a logged-in ${effect.platform} browser profile, and any passkey you enroll, in your sandbox` };
         case "machine":
             // The one effect that reaches OUTSIDE the sandbox, so it is warned and spelled out: the row names
-            // the verbs the agent gets on a computer of the user's, not the mechanism that carries them.
+            // the verbs the agent gets on a device of the user's, not the mechanism that carries them.
             return {
                 icon: `desktop`,
-                label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} computer`,
+                label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} device`,
                 warn: true,
             };
         case "own-browser":

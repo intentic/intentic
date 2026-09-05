@@ -20,7 +20,7 @@ import {
  *
  * They used to be exported functions (`syncHolder`, `mirrorMachines`) because a card downstream needed exactly
  * those two shapes: one machine holding file sync, and the names of everybody else. That card is gone — desktop
- * sync is per COMPUTER now, so the daemon publishes the enrollment list itself and each row picks its own facts
+ * sync is per DEVICE now, so the daemon publishes the enrollment list itself and each row picks its own facts
  * out of it. What the two shapes assert about the STORE is unchanged and worth keeping, so they live here, where
  * the last thing that wanted them is. */
 const holderOf = async (historyRoot: string): Promise<{ machine: string; seenAt?: number } | undefined> => {
@@ -276,7 +276,7 @@ describe("enrollment store", () => {
 
     /* THE OWNER'S REVOKE, AND THE WHOLE POINT OF IT BEING PER MACHINE. What this replaced cleared the entire
      * store, because it sat under a card that treated desktop sync as one property of the sandbox: "I don't use
-     * that laptop any more" cost every other computer its access, mirror-only collaborators included. */
+     * that laptop any more" cost every other device its access, mirror-only collaborators included. */
     it("the owner's revoke takes one machine and leaves the rest syncing", async () => {
         const holder = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
         const mirror = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "mirror", takeover: false }));

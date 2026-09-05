@@ -933,7 +933,7 @@ mod tests {
 
     /* THE VERDICT WITH NO WAY BACK, AND THE MACHINE THAT PROVOKED IT. `SecondLevelAddressTranslationExtensions`
      * reads false under a running Hyper-V exactly as the firmware flag does, so the one requirement that tells
-     * somebody to go and use a different computer must never be reachable from it alone. */
+     * somebody to go and use a different device must never be reachable from it alone. */
     #[test]
     fn no_running_machine_is_ever_declared_unsupported_hardware() {
         for proof in [

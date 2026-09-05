@@ -8,14 +8,14 @@ import { useRegistry } from "../composables/extensions/useRegistry";
 import { useRole } from "../composables/sandbox/useRole";
 import { useRunning } from "../composables/sandbox/useRunning";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { useSyncHealth } from "../composables/sandbox/useComputers";
+import { useSyncHealth } from "../composables/sandbox/useDevices";
 import { type ActiveExtension, activationBadge, detectActivations } from "../core-views/registry";
 import ExtensionView from "../core-views/ExtensionView.vue";
 import HubLayout from "../hub/HubLayout.vue";
 import type { HubTab } from "../hub/hubNav";
 import SandboxAccess from "./sandbox/SandboxAccess.vue";
 import SandboxAgent from "./sandbox/SandboxAgent.vue";
-import SandboxComputers from "./sandbox/SandboxComputers.vue";
+import SandboxDevices from "./sandbox/SandboxDevices.vue";
 import SandboxEnvironment from "./sandbox/SandboxEnvironment.vue";
 import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
 import { toListing, updateCount } from "./sandbox/discoverListing";
@@ -75,11 +75,11 @@ const reachRows = (contendedPorts: number): readonly HubTab[] => [
      * opposite in consequence (which subscription pays for a turn, versus whose name is on what it posts), and
      * neighbouring them is how someone eventually pins a nightly job to the right billing and the wrong Reddit. */
     { slug: `personas`, label: `Personas`, icon: `user` },
-    // "Computers", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
+    // "Devices", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
     // enrollment this tab used to be named after is one property of one of them.
     {
-        slug: `computers`,
-        label: `Computers`,
+        slug: `devices`,
+        label: `Devices`,
         icon: `desktop`,
         badge: contendedPorts > 0 ? { count: contendedPorts, tone: `info` as const } : undefined,
     },
@@ -93,7 +93,7 @@ const reachRows = (contendedPorts: number): readonly HubTab[] => [
  * question nobody had asked, on the page they were sent to by a different one. Neutral ink settles it: the row
  * still says how many things are alive, in ink that does not claim to be an errand.
  *
- * Computers carries the errand instead, because it is where the port is explained and where the sandbox holding
+ * Devices carries the errand instead, because it is where the port is explained and where the sandbox holding
  * it can be stopped. Info rather than warning: a contended port breaks nothing (the sandbox serves it fine, it
  * just isn't on localhost), but it is the one row in this index that a reader is looking FOR. */
 const boxRows = (running: number): readonly HubTab[] => [
@@ -148,7 +148,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         label: `Configuration`,
         items: configurationRows(updatable.value).filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || canShip.value),
     },
-    { key: `reach`, label: `Reach`, items: reachRows(contendedPorts.value.length).filter((tab) => tab.slug !== `computers` || canShip.value) },
+    { key: `reach`, label: `Reach`, items: reachRows(contendedPorts.value.length).filter((tab) => tab.slug !== `devices` || canShip.value) },
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>
@@ -171,7 +171,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxPersonas v-else-if="slug === `personas`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
-            <SandboxComputers v-else-if="slug === `computers`" />
+            <SandboxDevices v-else-if="slug === `devices`" />
             <!-- The extension-contributed sections, rendered with the same error boundary and lazy-view cache
                  the rail's routed host uses. `ActiveExtension` is exactly ExtensionView's two props. -->
             <ExtensionView v-else-if="extensionFor(slug) !== undefined" v-bind="extensionFor(slug)!" />

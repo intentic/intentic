@@ -24,7 +24,7 @@ import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
  * This file used to hold a whole import feature: its own held upload, its own token, its own plan/apply pair
  * and its own routes, beside two other features doing the same four things to different artifacts. What is
  * left here is only the part that is particular to a foreign assistant — recognizing one, reading it off an
- * upload or straight off a connected computer, translating it, and writing it through native paths. The
+ * upload or straight off a connected device, translating it, and writing it through native paths. The
  * holding, the token, the ticked ids and the report belong to the arrival pipeline
  * (portability/arrival.ts), which does them once for all four sources.
  *
@@ -116,7 +116,7 @@ export const assistantHosts = async (services: Services): Promise<ArrivalHost[]>
 export const scanAssistantHost = async (services: Services, hostId: string): Promise<AssistantSetup> => {
     const capability = (await hostCapabilities(services)).find((entry) => entry.id === hostId);
     if (capability === undefined) {
-        throw new MigrationFormatError(`"${hostId}" is not one of your connected computers`);
+        throw new MigrationFormatError(`"${hostId}" is not one of your connected devices`);
     }
     const facts = services.hostHub.state(hostId).facts;
     if (!services.hostHub.online(hostId) || facts === undefined) {

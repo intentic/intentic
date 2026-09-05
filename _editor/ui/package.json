@@ -46,9 +46,9 @@
             "types": "./src/composables/useHighlighter.ts",
             "default": "./src/composables/useHighlighter.ts"
         },
-        "./machine": {
-            "types": "./src/components/machineDetail.ts",
-            "default": "./src/components/machineDetail.ts"
+        "./device": {
+            "types": "./src/components/deviceDetail.ts",
+            "default": "./src/components/deviceDetail.ts"
         },
         "./notice": {
             "types": "./src/components/notice.ts",
