@@ -249,7 +249,11 @@ export const createAgentsRoutes = (services: Services) => {
         transcript: i.transcript.handler(async ({ input }) => {
             const agent = entryOf(input.id);
             const sessionId = sdkSessionIdOf(agent);
-            const messages = await services.transcripts.read(agent);
+            /* ONE PAGE, newest turns first time and further back on each `before`. The record is the whole
+             * conversation and a conversation is as long as somebody has been working: served whole it was
+             * megabytes down a tunnel to redraw a screenful, and paid again for every card the board warms
+             * behind it. `from`/`more` are what let the chat go back for the rest. */
+            const { rows: messages, from, more } = await services.transcripts.page(agent, { ...opt("before", input.before), ...opt("turns", input.turns) });
             /* WHAT THAT SESSION IS BOUND TO rides with it: the runtime and the credential it was minted under,
              * which is the entry's own record of the last turn (the registry files the account with the id, see
              * its `session` case). The client cannot work these out — its tab holds the picks the NEXT turn
@@ -270,6 +274,8 @@ export const createAgentsRoutes = (services: Services) => {
                 // window that watched it stop used to keep to itself (see endingOf).
                 ...opt("ending", endingOf(input.id)),
                 messages,
+                from,
+                more,
             };
         }),
         /* SPEAK AS THE AGENT, the user's words appended to the record as an assistant row, no turn behind them,

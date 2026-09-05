@@ -4124,3 +4124,120 @@ describe(`Conversation sent time`, () => {
         });
     });
 });
+
+/* PAGING BACK THROUGH A CONVERSATION LONGER THAN ONE WINDOW.
+ *
+ * The daemon answers a transcript read with the most recent turns and says where they start
+ * (sessions/transcript-record.ts): a 400-turn conversation used to arrive whole, 3.74 MB of it, for every tab
+ * that opened it and every card the board warmed behind it. What the chat owes in return is a way back through
+ * the rest that cannot cost the reader what is already on screen. */
+describe(`older history`, () => {
+    // The daemon's answer to `GET /agents/{id}/transcript?before=N`, as the fetch layer reads it.
+    const olderPage = (messages: readonly TranscriptRow[], from: number, more: boolean): Response =>
+        new Response(JSON.stringify({ messages, from, more }), { status: 200, headers: { "content-type": `application/json` } });
+
+    const opened = (): Conversation => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([{ role: `user`, text: `turn 20` }, { role: `assistant`, text: `answer 20` }], { from: 40, more: true });
+        return conversation;
+    };
+
+    it(`opens on a window that knows it is one`, () => {
+        const conversation = opened();
+        expect(conversation.historyFrom.value).toBe(40);
+        expect(conversation.historyMore.value).toBe(true);
+    });
+
+    // A conversation that fits in one window says so, and is the case that must offer nothing: most of them.
+    it(`offers nothing to page back through when the record arrived whole`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([{ role: `user`, text: `hello` }], { from: 0, more: false });
+
+        await conversation.loadOlder();
+
+        expect(conversation.historyMore.value).toBe(false);
+        expect(pathsAimedAt(undefined)).toEqual([]);
+    });
+
+    it(`puts the older page above what is drawn and moves the cursor to it`, async () => {
+        const conversation = opened();
+        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 19` }, { role: `assistant`, text: `answer 19` }], 38, true));
+
+        await conversation.loadOlder();
+
+        expect(conversation.messages.value.map(({ text }) => text)).toEqual([`turn 19`, `answer 19`, `turn 20`, `answer 20`]);
+        expect(conversation.historyFrom.value).toBe(38);
+        expect(conversation.historyMore.value).toBe(true);
+        expect(pathsAimedAt(undefined)).toEqual([`/agents/c1/transcript?before=40`]);
+    });
+
+    /* Ids are identity here, never order, and a prepended page must not hand an older bubble the id of one
+     * already on screen: a patch from a turn streaming into this same transcript addresses messages by id, and
+     * a collision would apply the live turn's words to a message from last week. */
+    it(`gives the arriving rows ids of their own`, async () => {
+        const conversation = opened();
+        const standing = conversation.messages.value.map((message) => message.id);
+        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 19` }, { role: `assistant`, text: `answer 19` }], 38, true));
+
+        await conversation.loadOlder();
+
+        const ids = conversation.messages.value.map((message) => message.id);
+        expect(new Set(ids).size).toBe(ids.length);
+        // And the rows that were already drawn keep the ids they had, so nothing addressing them goes stale.
+        expect(ids.slice(2)).toEqual(standing);
+    });
+
+    // Reaching the beginning retires the offer, so the top of the record reads as the top of the record.
+    it(`stops offering once the first page of the record lands`, async () => {
+        const conversation = opened();
+        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 1` }], 0, false));
+
+        await conversation.loadOlder();
+
+        expect(conversation.historyFrom.value).toBe(0);
+        expect(conversation.historyMore.value).toBe(false);
+    });
+
+    // Two presses against one cursor are the same page twice; the second is refused rather than queued.
+    it(`reads one page per cursor however many times it is asked`, async () => {
+        const conversation = opened();
+        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 19` }], 38, true));
+
+        await Promise.all([conversation.loadOlder(), conversation.loadOlder()]);
+
+        expect(pathsAimedAt(undefined)).toEqual([`/agents/c1/transcript?before=40`]);
+        expect(conversation.messages.value.map(({ text }) => text)).toEqual([`turn 19`, `turn 20`, `answer 20`]);
+    });
+
+    /* A failed read costs nothing. The reader asked for this by hand over a transcript they are looking at, so
+     * the transcript stays exactly as it was and the offer stands: the retry is the same press again. */
+    it(`leaves the transcript and the offer alone when the read fails`, async () => {
+        const conversation = opened();
+        sandboxRequestMock.mockRejectedValue(new Error(`tunnel closed`));
+
+        await expect(conversation.loadOlder()).resolves.toBeUndefined();
+
+        expect(conversation.messages.value.map(({ text }) => text)).toEqual([`turn 20`, `answer 20`]);
+        expect(conversation.historyFrom.value).toBe(40);
+        expect(conversation.historyMore.value).toBe(true);
+        expect(conversation.loadingOlder.value).toBe(false);
+    });
+
+    /* A REDRAW REPLACES THE WINDOW, so the cursor has to move with it. A rewind or a runtime handoff hands the
+     * chat a fresh page; a `historyFrom` left over from the old one would fetch rows that no longer sit above
+     * anything on screen. */
+    it(`re-aims the cursor when the transcript is redrawn under it`, () => {
+        const conversation = opened();
+        conversation.restoreMessages([{ role: `user`, text: `only turn` }], { from: 0, more: false });
+        expect(conversation.historyFrom.value).toBe(0);
+        expect(conversation.historyMore.value).toBe(false);
+    });
+
+    // A caller with no page to report (the local mirror, a fork's inherited rows) cannot vouch for where its
+    // rows sit, and says so by leaving the cursor at "this is all of it" rather than keeping a stale one.
+    it(`drops the cursor for a redraw that cannot say where its rows sit`, () => {
+        const conversation = opened();
+        conversation.restoreMessages([{ role: `user`, text: `from the mirror` }]);
+        expect(conversation.historyMore.value).toBe(false);
+    });
+});

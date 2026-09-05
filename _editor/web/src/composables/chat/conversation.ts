@@ -26,7 +26,7 @@ import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
 import { sandboxError, sandboxRequestVia } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { invalidateAgentTranscript } from "./agentTranscript";
+import { invalidateAgentTranscript, olderTranscriptPage } from "./agentTranscript";
 import { AUTO_CONTINUE_PROGRESS_MS, AUTO_CONTINUE_TRIES, autoContinueDelay } from "./autoContinue";
 import type { PickUp } from "./pickUp";
 import { clampEffort } from "./effortScale";
@@ -177,6 +177,17 @@ export class Conversation {
     // its loading state on it instead of the "Start a conversation" invitation, which over a chat that merely
     // hasn't arrived yet reads as data loss.
     readonly loading = ref(false);
+    /* WHERE WHAT IS DRAWN SITS IN THE RECORD. The daemon answers a transcript read with the most recent turns,
+     * not the whole conversation: `historyFrom` is where the oldest drawn message sits in the record, and
+     * `historyMore` says there is more above it. Handing `historyFrom` back as `before` fetches the page above.
+     *
+     * Zero and false is both a fresh conversation and one that fits inside a single window, which is most of
+     * them — the pair only starts saying anything on a conversation long enough to have been the problem. */
+    readonly historyFrom = ref(0);
+    readonly historyMore = ref(false);
+    // A page of older turns is on its way. Separate from `loading`, which means "nothing is painted at all":
+    // paging back happens over a full transcript the reader is looking at, and must not blank it.
+    readonly loadingOlder = ref(false);
     // This conversation's slash commands, replaced whole per `commands` frame, listed by the composer's `/`
     // popover. Both provider families publish them: an ACP agent mid-session, Claude at each turn's init (plus
     // a republish whenever the session's list changes).
@@ -1262,14 +1273,58 @@ export class Conversation {
     // provider and isolation from the tab snapshot, and overwriting those with the history-menu defaults below
     // would quietly move an isolated agent's next turn onto the main tree. The rows are drawn as they arrive:
     // they are the same rows every window watched being written, so there is nothing to translate.
-    restoreMessages(messages: readonly TranscriptRow[]): void {
+    restoreMessages(messages: readonly TranscriptRow[], page?: { readonly from: number; readonly more: boolean }): void {
         // A replayed record is a different transcript wearing the same ids (see `editing`), so an edit armed
         // against the one being replaced cannot survive it, the message it named may not be in the new record
         // at all, and the id it named certainly means something else now.
         this.editing.value = undefined;
         this.transcript.rebuild(messages);
+        /* And the cursor moves with them. A redraw REPLACES what is drawn, so whatever was paged in before it
+         * is gone from the pane and the offer to page back has to describe the new window rather than the old
+         * one — a stale `historyFrom` would fetch a page that no longer sits above anything on screen. A caller
+         * with no page to report (a local mirror, a fork's inherited rows) is holding rows whose position in
+         * the record it cannot vouch for, and says so by leaving the cursor at "this is all of it". */
+        this.historyFrom.value = page?.from ?? 0;
+        this.historyMore.value = page?.more ?? false;
         this.error.value = null;
         this.persist(true);
+    }
+
+    /* THE PAGE ABOVE WHAT IS DRAWN, for a reader who has reached the top of the window the chat opened on.
+     *
+     * Rows are PREPENDED, never rebuilt: the reader is looking at this transcript, a turn may be streaming into
+     * it, and rebuilding would drop the live turn on the floor for the same reason restoreMessages is refused
+     * mid-stream. Concurrent presses are held off by `loadingOlder` rather than queued, because two pages
+     * fetched against the same cursor are the same page twice.
+     *
+     * A failed read leaves the cursor alone and says nothing: the button comes back, and pressing it again is
+     * the retry. Nothing here can cost the reader what is already on screen.
+     *
+     * Deliberately NOT persisted to the local mirror. The mirror exists to paint an opening tab in the same
+     * tick (transcriptCache.ts), and what a tab opens on is the window the daemon serves — growing it by a
+     * page every time somebody reads back through a long conversation would mirror the whole record to disk
+     * one press at a time, which is the cost this window exists to stop paying. */
+    async loadOlder(): Promise<void> {
+        if (this.loadingOlder.value || !this.historyMore.value || this.historyFrom.value <= 0) {
+            return;
+        }
+        this.loadingOlder.value = true;
+        try {
+            const page = await olderTranscriptPage(this.conversationId, this.historyFrom.value, this.at);
+            if (page === `gone` || page.messages.length === 0) {
+                // Nothing above after all: stop offering, rather than leaving a button that answers with nothing.
+                this.historyMore.value = false;
+                return;
+            }
+            this.transcript.prepend(page.messages);
+            this.historyFrom.value = page.from;
+            this.historyMore.value = page.more;
+        } catch {
+            // A tunnel hiccup on a read the reader asked for by hand. The transcript is untouched and the offer
+            // stands, so the retry is the same press again.
+        } finally {
+            this.loadingOlder.value = false;
+        }
     }
 
     /* HOW THE LAST TURN ENDED, AS THE DAEMON HAS IT (AgentTranscriptSchema.ending), taken by a tab that never

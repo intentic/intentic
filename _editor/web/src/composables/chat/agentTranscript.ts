@@ -40,7 +40,11 @@ import type { SessionRef } from "./turnRequest";
  * `ending` is the daemon's account of how the last turn ENDED, already folded into the pick-up state the chat
  * decides with, and the reason a tab that never watched it stop can still offer to pick it up
  * (Conversation.adoptEnding). */
-export type AgentTranscript = { readonly session?: SessionRef; readonly ending?: PickUp; readonly messages: TranscriptRow[] } | "gone";
+/* `from` and `more` are the paging cursor: the daemon answers with the most recent turns, `from` says where
+ * they start in the whole record, and handing that back as `before` asks for the page above. A conversation
+ * shorter than one window arrives with `from: 0` and `more: false`, which is every conversation that has not
+ * been running for days. */
+export type AgentTranscript = { readonly session?: SessionRef; readonly ending?: PickUp; readonly messages: TranscriptRow[]; readonly from: number; readonly more: boolean } | "gone";
 
 /* `at` is the box holding the conversation, undefined for the active one, and it belongs in the KEY as much as
  * in the request: two sandboxes can hold one conversation id (a workspace cloned onto a second machine, a
@@ -56,8 +60,21 @@ export const agentTranscriptKey = (conversationId: string, at?: string): unknown
 export const invalidateAgentTranscript = (conversationId: string, at?: string): void =>
     void queryClient.invalidateQueries({ queryKey: agentTranscriptKey(conversationId, at) });
 
-const read = async (conversationId: string, at: string | undefined): Promise<AgentTranscript> => {
-    const response = await sandboxRequestVia(at, `/agents/${encodeURIComponent(conversationId)}/transcript`);
+/* The id WITH the runtime that minted it, or nothing: a session that cannot say where it resumes cannot
+ * answer the only question it is read for ("does my next message resume this?"), and half-answering it is
+ * what the caller used to paper over with its own picks. A daemon that sends the id alone (one older than
+ * this browser) is left to the tab's own recorded ref, which at least came from a turn that really ran.
+ *
+ * The account rides along and is allowed to be absent, because absent is a real answer: no stored account
+ * served this conversation (the container's env token, a translator subscription). */
+const boundSession = (body: { sessionId?: string; provider?: AgentProvider; harness?: AgentHarness; account?: string }): SessionRef | undefined =>
+    body.sessionId !== undefined && body.provider !== undefined && body.harness !== undefined
+        ? { id: body.sessionId, provider: body.provider, harness: body.harness, account: body.account }
+        : undefined;
+
+const read = async (conversationId: string, at: string | undefined, before?: number): Promise<AgentTranscript> => {
+    const query = before === undefined ? `` : `?before=${before}`;
+    const response = await sandboxRequestVia(at, `/agents/${encodeURIComponent(conversationId)}/transcript${query}`);
     /* The 404 is only believed when the daemon ADVERTISES this route. A daemon older than this browser answers
      * 404 for a route it simply doesn't have (see useDaemonRoutes), and reading that as "your agent is gone"
      * would unregister every open agent tab in the app against a sandbox that is merely behind. */
@@ -74,18 +91,10 @@ const read = async (conversationId: string, at: string | undefined): Promise<Age
         account?: string;
         ending?: TurnEnding;
         messages?: TranscriptRow[];
+        from?: number;
+        more?: boolean;
     };
-    /* The id WITH the runtime that minted it, or nothing: a session that cannot say where it resumes cannot
-     * answer the only question it is read for ("does my next message resume this?"), and half-answering it is
-     * what the caller used to paper over with its own picks. A daemon that sends the id alone (one older than
-     * this browser) is left to the tab's own recorded ref, which at least came from a turn that really ran.
-     *
-     * The account rides along and is allowed to be absent, because absent is a real answer: no stored account
-     * served this conversation (the container's env token, a translator subscription). */
-    const bound =
-        body.sessionId !== undefined && body.provider !== undefined && body.harness !== undefined
-            ? { id: body.sessionId, provider: body.provider, harness: body.harness, account: body.account }
-            : undefined;
+    const bound = boundSession(body);
     /* A daemon older than this browser sends nothing here, which reads as "nothing to pick up" and is the right
      * way for this to be missing: the offer is an ADDITION to a chat that works without it, so a box that cannot
      * say leaves the tab exactly where it was before the field existed. */
@@ -93,6 +102,11 @@ const read = async (conversationId: string, at: string | undefined): Promise<Age
         ...(bound !== undefined ? { session: bound } : {}),
         ...(body.ending !== undefined ? { ending: pickUpOf(body.ending) } : {}),
         messages: body.messages ?? [],
+        /* A daemon that predates the window answered with the WHOLE record, which is exactly what "starts at
+         * the beginning, nothing above it" describes — so the absent fields read correctly rather than needing
+         * a branch: the chat draws it all and offers no page back, because there is none. */
+        from: body.from ?? 0,
+        more: body.more ?? false,
     };
 };
 
@@ -117,3 +131,10 @@ export const agentTranscriptQuery = (conversationId: string, at?: string) => ({
 
 export const agentTranscript = (conversationId: string, at?: string): Promise<AgentTranscript> =>
     queryClient.fetchQuery(agentTranscriptQuery(conversationId, at));
+
+/* ONE PAGE FURTHER BACK, for a chat whose reader has scrolled to the top of what it holds. Deliberately NOT a
+ * cached query: the entry above keys the conversation's OPENING page, which the warm loader fills and a
+ * settled turn invalidates, and filing older pages under it would make the next open paint the middle of a
+ * conversation. An older page is answered once, appended to the conversation that asked, and lives in that
+ * conversation's state for as long as the tab holds it. */
+export const olderTranscriptPage = (conversationId: string, before: number, at?: string): Promise<AgentTranscript> => read(conversationId, at, before);

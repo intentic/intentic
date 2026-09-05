@@ -12,6 +12,8 @@ import type { Services } from "../composition.js";
 
 import { extensionProcessKey } from "../extensions/extension-processes.js";
 
+import { windowOf } from "../sessions/transcript-record.js";
+
 import {
     clientFor,
     codexConnectedProxy,
@@ -248,6 +250,10 @@ test("agents.search matches titles and later lines, across the archive", async (
             { role: "user", text: "restored words" },
             { role: "assistant", text: "landAgent lives in laneDrop.ts" },
         ],
+        // Where this page sits: a two-row conversation is inside the window, so it starts at the record's
+        // beginning and there is nothing above it to page back to.
+        from: 0,
+        more: false,
     });
     /* WHICH DIR, not how many reads. The fake derives `count` from `read` on purpose (route-testing), so the
      * number of store reads tracks the daemon's own bookkeeping — a turn reads its start index, and a settled one
@@ -389,6 +395,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 fork: async () => {},
                 append: async () => {},
                 // Derived from the same record `read` answers from, so the fake cannot contradict itself.
+                page: async (agent, window = {}) => windowOf(codexSearchTranscript(agent.id), window),
                 count: async (agent) => codexSearchTranscript(agent.id).length,
                 truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
             },
@@ -585,6 +592,8 @@ test("agents.place appends the user's words as the agent's, retires the session,
                     read: async (agent) => records.get(agent.id) ?? [],
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
+                    // Through production's own window rule, so a route test cannot agree with a client the daemon then disagrees with.
+                    page: async (agent, window = {}) => windowOf(records.get(agent.id) ?? [], window),
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
                 },
@@ -641,6 +650,8 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                     read: async (agent) => records.get(agent.id) ?? [],
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
+                    // Through production's own window rule, so a route test cannot agree with a client the daemon then disagrees with.
+                    page: async (agent, window = {}) => windowOf(records.get(agent.id) ?? [], window),
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
                 },
@@ -776,4 +787,52 @@ test("agents.place is refused while the agent's turn is running", async () => {
     expect(await errorCode(client.agents.place({ id: "conv1", text: "planted" }))).toBe("CONFLICT");
     release?.();
     await collect(await client.agent.attach({ conversationId: "conv1" }));
+});
+
+/* PAGING OVER THE WIRE, which is a different question from paging in the record. The browser builds this URL by
+ * hand rather than through the typed client (composables/chat/agentTranscript.ts), so what matters here is that
+ * a query string the daemon never sees as a path parameter actually reaches the window: a `before` silently
+ * dropped would serve the newest page forever and the chat would page back into itself. */
+test("agents.transcript serves the newest turns by default and walks back through `before`", async () => {
+    const record: TranscriptRow[] = Array.from({ length: 60 }, (_, index) =>
+        index % 2 === 0 ? { role: "user", text: `ask ${index / 2}` } : { role: "assistant", text: `answer ${(index - 1) / 2}` },
+    );
+    const app = createApp(
+        services({
+            async *agent() {
+                yield { kind: "done" };
+            },
+            transcripts: {
+                read: async () => record,
+                fork: async () => {},
+                append: async () => {},
+                page: async (_agent, window = {}) => windowOf(record, window),
+                count: async () => record.length,
+                truncate: async () => 0,
+            },
+        }),
+    );
+    await runAgentTurn(clientFor(app), { prompt: "seed the registry", conversationId: "conv1" });
+
+    const page = async (query: string): Promise<{ messages: TranscriptRow[]; from: number; more: boolean }> =>
+        (await (await app.request(`/agents/conv1/transcript${query}`)).json()) as { messages: TranscriptRow[]; from: number; more: boolean };
+
+    // Thirty turns, a twenty-turn window: the newest twenty, starting ten turns in, with the rest above.
+    const newest = await page("");
+    expect(newest.messages).toHaveLength(40);
+    expect(newest.messages[0]).toMatchObject({ role: "user", text: "ask 10" });
+    expect(newest.from).toBe(20);
+    expect(newest.more).toBe(true);
+
+    // And its `from` handed straight back reaches the beginning, which then says there is nothing above it.
+    const oldest = await page(`?before=${newest.from}`);
+    expect(oldest.messages[0]).toMatchObject({ role: "user", text: "ask 0" });
+    expect(oldest.from).toBe(0);
+    expect(oldest.more).toBe(false);
+
+    // The two pages are the record, once: no row lost at the seam and none served twice.
+    expect([...oldest.messages, ...newest.messages].map(({ text }) => text)).toEqual(record.map(({ text }) => text));
+
+    // `turns` narrows it, so a surface that wants less than a chat's window can say so.
+    expect((await page("?turns=2")).messages).toHaveLength(4);
 });

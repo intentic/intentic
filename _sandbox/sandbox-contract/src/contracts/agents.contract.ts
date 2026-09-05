@@ -5,6 +5,7 @@ import {
     AgentAutoLandSchema,
     AgentFileDiffQuerySchema,
     AgentIdSchema,
+    AgentTranscriptQuerySchema,
     AgentIdsSchema,
     AgentLandSchema,
     AgentPlaceSchema,
@@ -94,11 +95,11 @@ export const agentsContract = {
         .route({
             method: "GET",
             path: "/agents/{id}/transcript",
-            summary: "The full conversation record",
+            summary: "One page of a conversation",
             description:
-                "Every message in one conversation, in order, including the tool calls and their results. This is the record the chat replays and the next turn is seeded from.",
+                "The most recent turns of one conversation, in order, including the tool calls and their results: what the chat replays and the next turn is seeded from. A page, not the whole record — pass the answer's `from` back as `before` to walk further back, until `more` reads false.",
         })
-        .input(AgentIdSchema)
+        .input(AgentTranscriptQuerySchema)
         .output(AgentTranscriptSchema),
     /* SPEAK AS THE AGENT, append the user's words to the conversation's record as an assistant row, with no
      * turn behind them and no reply. The row is marked `placed` for human readers (TranscriptRowSchema); the

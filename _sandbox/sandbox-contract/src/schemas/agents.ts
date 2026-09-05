@@ -618,6 +618,22 @@ export type AgentWatch = NonNullable<AgentSummary["watches"]>[number];
 // AgentsListSchema lives further down, after AutomationApprovalSchema, the fleet list carries the held wakes,
 // and zod declaration order forces the ride-along to be declared first.
 export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which conversation.") });
+
+/* ASKING FOR ONE PAGE OF A CONVERSATION. A transcript read answers with the most recent turns and says where
+ * they start (`from`); handing that number back as `before` asks for the page above it, and so on to the
+ * beginning. Both are optional: a tab opening a chat sends neither and gets the tail.
+ *
+ * A cursor is never an error. It can be stale by the time it arrives — a rewind truncated the record under it,
+ * a fork re-cut it, the tab slept through both — and the daemon clamps rather than refusing, because failing
+ * to open a conversation is a worse answer than opening it at the end. */
+export const AgentTranscriptQuerySchema = AgentIdSchema.extend({
+    before: z.coerce
+        .number()
+        .int()
+        .optional()
+        .describe("Return the messages before this position in the record: the `from` of the page below. Absent asks for the most recent turns."),
+    turns: z.coerce.number().int().min(1).max(200).optional().describe("How many of the user's turns to return, newest first. Absent takes the daemon's default."),
+});
 // archive's input: the agents to take off the board. Absent `ids` ⇒ every finished agent that is archivable
 // right now (the lane header's "Clear"); unarchive always names its ids (a restore, or a bulk archive's undo).
 export const AgentArchiveSchema = z.object({

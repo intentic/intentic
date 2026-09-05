@@ -280,6 +280,20 @@ export class TranscriptClock {
         this.state.value = rows.reduce((state, row) => appendMessage(state, row), emptyTranscriptState);
     }
 
+    /* Put an older page ABOVE what is already drawn, for a reader who has scrolled to the top of the window the
+     * chat opened on. Everything standing keeps its id and its position, which is what makes this safe to do
+     * while a turn is streaming: a patch addresses the message it has always addressed, and `pending` (the
+     * typewriter's half-revealed bubble) is untouched.
+     *
+     * The arriving rows allocate ABOVE the current high-water mark rather than below the first drawn message.
+     * Ids here are identity, never order — order is the array's — so counting upwards costs nothing and keeps
+     * the allocator monotonic, where reserving a block underneath would collide the moment two pages land. */
+    prepend(rows: readonly TranscriptRow[]): void {
+        const state = this.state.value;
+        const older = rows.reduce((built, row) => appendMessage(built, row), { ...emptyTranscriptState, nextId: state.nextId });
+        this.state.value = { ...state, messages: [...older.messages, ...state.messages], nextId: older.nextId };
+    }
+
     // Replace the transcript with messages that keep the ids they already carry (the local mirror's), resuming
     // the allocator ABOVE them, otherwise the next notice would collide with a restored bubble.
     adopt(messages: readonly ChatMessage[]): void {

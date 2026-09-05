@@ -2126,6 +2126,11 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     // by conversation/worktree identity, then adopt the SDK session that actually supplied the transcript so the
     // next turn resumes what the user is looking at. History-menu tabs still mean one exact runtime session.
     let restored: TranscriptRow[] | undefined;
+    /* WHERE THOSE ROWS SIT IN THE RECORD, when the daemon's own record is what supplied them. The read answers
+     * with the most recent turns, so the chat has to know it is holding a window before it can offer to go
+     * back through the rest. Absent for the SDK-session fallback below, which reads a foreign store with no
+     * notion of the daemon's record positions and is therefore all it will ever have. */
+    let page: { readonly from: number; readonly more: boolean } | undefined;
     // How the last turn ENDED, as the daemon has it, applied once the transcript below is in place: an offer to
     // carry on belongs under the work it is offering to carry on (see Conversation.adoptEnding).
     let ending: PickUp | undefined;
@@ -2153,6 +2158,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
             setConversations(conversations.value, activeId.value, `unlatch-registered`);
         } else {
             restored = transcript.messages;
+            page = { from: transcript.from, more: transcript.more };
             ending = transcript.ending;
             /* THE SESSION AS THE DAEMON HAS IT, binding included, which is the only place the binding exists.
              *
@@ -2199,7 +2205,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
      * makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
      * daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty. */
     if (restored.length > 0 && !conversation.streaming.value) {
-        conversation.restoreMessages(restored);
+        conversation.restoreMessages(restored, page);
     }
     /* AND THE OFFER TO PICK IT BACK UP, last, so it lands over a painted transcript rather than over the blank
      * pane a tab holds for the length of this read. Handed the verdict rather than gated on it: what a record

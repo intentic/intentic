@@ -185,8 +185,8 @@ import { readSessionLines, spokenLinesOf, transcriptSearchMetrics } from "./sess
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { openSearchIndex, type SearchIndex } from "./sessions/search-index.js";
 import { backfillSearchIndex, type BackfillSource } from "./sessions/search-backfill.js";
-import { agentTranscript, type AgentTranscriptDeps, spokenTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
-import { fileTranscriptRecord } from "./sessions/transcript-record.js";
+import { agentTranscript, agentTranscriptPage, type AgentTranscriptDeps, spokenTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
+import { fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./sessions/transcript-record.js";
 import { fileShareStore, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
 import { purgeConversationState } from "./sessions/conversation-purge.js";
@@ -755,7 +755,12 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
      * provider with no session store at all). Written by every settled turn, read by /agents/:id/transcript.
      * See sessions/transcript-record.ts for why this stopped being the provider's job. */
     readonly transcripts: {
+        /* THE WHOLE RECORD, for the readers that cannot be handed a piece of one: a published share, a runtime
+         * handoff seeding a replacement session, a subagent's transcript, an agent recalling what was said. */
         readonly read: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
+        // ONE PAGE of it, newest turns by default, `window` walking back through the rest: what a tab opening
+        // a chat asks for, and the only transcript read on the click path.
+        readonly page: (agent: TranscriptAgent, window?: TranscriptWindow) => Promise<TranscriptPage>;
         // Opens a BRANCH's record, as a copy of the first `keep` rows of the conversation it was cut from; a
         // no-op once the record exists. Every other record is created by its first settled turn's append.
         readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
@@ -1530,6 +1535,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         transcripts: {
             read: (agent) => agentTranscript(transcriptDeps, agent),
+            page: (agent, window) => agentTranscriptPage(transcriptDeps, agent, window),
             // A branch's opening history is by definition the source conversation's record, copied once.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
             /* THE INDEX IS WRITTEN HERE, on the same call that records the turn, because this is the moment the

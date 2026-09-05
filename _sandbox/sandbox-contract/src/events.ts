@@ -857,6 +857,16 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
     ending: TurnEndingSchema.optional().describe(
         "How the last turn ended, when it left work behind that one press finishes. Absent for a conversation whose last turn ended on its own, and for the failures that name something to repair first.",
     ),
+    /* WHERE THIS PAGE SITS IN THE CONVERSATION. `messages` is the tail, not the whole record: a conversation
+     * that ran all week used to be served entire to every tab that opened it and to every card the board warms
+     * behind it, which is megabytes over a tunnel to redraw a screenful.
+     *
+     * `from` is the position of the first message in the WHOLE record, which makes it two things at once: the
+     * offset every `rewindIndex` in this page is counted against, and the `before` that asks for the page above
+     * it. `more` says whether there is one, so a client can offer to go back without spending a round trip
+     * finding out. */
+    from: z.number().int().nonnegative().describe("Where the first message sits in the whole record, and the `before` that asks for the page above this one."),
+    more: z.boolean().describe("Whether older messages precede this page."),
 });
 
 /* WHAT A PUBLISHED CONVERSATION'S PAGE IS HANDED, the whole of it, baked into the page as one JSON block.

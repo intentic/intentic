@@ -1302,9 +1302,29 @@ watch(
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <div class="chat-turns flex flex-1 flex-col pt-4">
+                    <!-- THE REST OF THE CONVERSATION, above the window it opened on. A chat is served its most
+                         recent turns, so a long one begins mid-history; this is the way back through it, one
+                         page per press. Drawn only where there IS more, which on most conversations is never.
+                         Quiet, and shaped like the day marker rather than like an action in the transcript:
+                         it is a statement about where the reader is, that happens to be pressable. -->
+                    <div v-if="conversation.historyMore.value" class="flex justify-center py-2">
+                        <!-- The press is the WORDS, not the row: a button stretched across the column is a
+                             700px hover band that lights up whenever the pointer crosses the top of the
+                             transcript, from a target the reader cannot see the edges of. -->
+                        <button
+                            type="button"
+                            class="cursor-pointer text-2xs text-subtle transition-colors hover:text-content disabled:cursor-default disabled:text-subtle"
+                            :disabled="conversation.loadingOlder.value"
+                            @click="conversation.loadOlder()"
+                        >
+                            {{ conversation.loadingOlder.value ? `Loading earlier turns…` : `Load earlier turns` }}
+                        </button>
+                    </div>
                     <!-- Where a forked chat says so: above the turns it inherited, which without it read as
-                         this conversation's own beginning. -->
-                    <ChatForkLine />
+                         this conversation's own beginning. Held back until the reader has actually reached that
+                         beginning: over a window that starts mid-history the line would name the wrong turn as
+                         the fork point, which is exactly the misreading it exists to prevent. -->
+                    <ChatForkLine v-if="!conversation.historyMore.value" />
                     <template v-if="messages.length > 0">
                         <!-- One section per turn, purely so each prompt's sticky range ends where its answer
                              does. A bare "continue" and an app errand both fold into the turn they serve

@@ -43,6 +43,7 @@ import { createBootTracker } from "./platform/boot.js";
 import { createPerfTracker } from "./platform/perf.js";
 
 import { spokenLinesOf } from "./sessions/transcript-search.js";
+import { windowOf } from "./sessions/transcript-record.js";
 import { IN_MEMORY, openSearchIndex } from "./sessions/search-index.js";
 import type { ThreadSession, ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
@@ -873,6 +874,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                     capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? merged.agents.sessionIdOf(agent.id) : undefined;
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
+            // Derived from `read` through production's own window rule, not a hand-rolled slice: a fake that
+            // paged differently than the daemon would let a route test agree with a client that the real
+            // daemon then disagrees with.
+            page: async (agent, window = {}) => windowOf(await merged.transcripts.read(agent), window),
             // Inert, and present because it is on the turn path: a fork's first turn opens through THIS door
             // (openTurnTranscript), so a fake without it fails every forkOf turn with a bare "Internal server
             // error", and nothing catches that from the types: tsconfig excludes *.test.ts, so the fake rots in
