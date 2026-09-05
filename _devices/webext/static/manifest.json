@@ -1,0 +1,37 @@
+{
+    "manifest_version": 3,
+    "name": "Intentic — your agent, in your browser",
+    "version": "0.0.0.1",
+    "description": "Let your intentic sandbox work in this browser, on the sites you allow, while you watch it happen.",
+    "minimum_chrome_version": "116",
+    "homepage_url": "https://intentic.dev/docs/your-browser",
+    "permissions": ["storage", "scripting", "alarms", "cookies"],
+    "optional_host_permissions": ["*://*/*"],
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Intentic",
+        "default_icon": {
+            "16": "icons/icon-16.png",
+            "32": "icons/icon-32.png",
+            "48": "icons/icon-48.png",
+            "128": "icons/icon-128.png"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": ["*://*.intentic.dev/*"],
+            "js": ["pair-bridge.js"],
+            "run_at": "document_idle"
+        }
+    ],
+    "icons": {
+        "16": "icons/icon-16.png",
+        "32": "icons/icon-32.png",
+        "48": "icons/icon-48.png",
+        "128": "icons/icon-128.png"
+    }
+}

@@ -1,0 +1,55 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "devices",
+    "version": "1.0.0",
+    "category": "connections",
+    "icon": "desktop",
+    "engines": { "intentic": "^2.0.0" },
+    "contributes": {
+        "capabilities": [
+            {
+                "id": "windows",
+                "kind": "host",
+                "catalog": {
+                    "name": "Windows PC",
+                    "icon": "desktop",
+                    "description": "Your Windows PC, shell, files, screen.",
+                    "category": "devices",
+                    "hint": "The name is how you both refer to it (\"check the logs on my-laptop\"). Adding hands you a one-liner to run there.",
+                    "guide": {
+                        "steps": [
+                            "Add the device here: a one-time command appears straight away, and `Connect` on its card brings it back later.",
+                            "Run it in `PowerShell` on that device: it installs a small agent.",
+                            "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
+                            "Revoke any time from this card; `intentic-machine device uninstall` removes the agent."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/windows/SKILL.md"
+            },
+            {
+                "id": "linux",
+                "kind": "host",
+                "catalog": {
+                    "name": "Linux PC",
+                    "logo": "linux",
+                    "description": "Your Linux PC, shell, files, desktop.",
+                    "category": "devices",
+                    "hint": "The name is how you both refer to it (\"run the tests on my-desktop\"). Adding hands you a one-liner to run there.",
+                    "guide": {
+                        "steps": [
+                            "Add the device here: a one-time command appears straight away, and `Connect` on its card brings it back later.",
+                            "Run it in a terminal on that device: it installs a small agent.",
+                            "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
+                            "Revoke any time from this card; `intentic-machine device uninstall` removes the agent."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/linux/SKILL.md"
+            }
+        ]
+    }
+}
