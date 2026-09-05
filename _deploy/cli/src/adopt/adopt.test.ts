@@ -39,7 +39,10 @@ test("creates the repo when missing, commits a dirty tree, adds the public origi
     const pushed = await adoptRepos({ baseUrl, originBaseUrl, user: "intentic", password: "pw", repos, log: () => {}, api, git });
 
     expect(created).toMatchObject({ owner: "intentic", name: "intent", private: true, autoInit: false });
-    expect(calls).toContainEqual(["/w/intent", "add", "-A"]);
+    // Staging is scaffold's gitStageAll: `--ignore-errors` so one unstageable path (an embedded repo with no
+    // commit) is skipped rather than aborting the whole adopt, and the embedded-repo advice off because nested
+    // repos are ordinary here.
+    expect(calls).toContainEqual(["/w/intent", "-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"]);
     expect(calls.some((c) => c.includes("commit"))).toBe(true);
     // origin carries the durable public url; the push targets the transport url directly, so adopt works
     // with the tunnel down or before public DNS exists.
