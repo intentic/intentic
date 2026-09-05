@@ -287,6 +287,32 @@ const settleLandBooks = async (services: Services, conversationId: string): Prom
     }
 };
 
+/* THE PLAN DOES NOT COVER THIS MODEL, filed against the MODEL rather than the provider, which is the whole
+ * reason it is a store of its own: the same subscription serves the provider's other models perfectly well
+ * (Kimi refusing K2.7 HighSpeed says nothing about K3), and marking the provider refused would take them down
+ * with it.
+ *
+ * Filed here rather than where the frame is minted (sdk-stream.ts) for the reason every write on the turn's
+ * error path is: the provider and the resolved model are in hand on this side, and the stream layer is
+ * deliberately free of the daemon's stores. A no-op for every other ending, which is what lets the caller run
+ * it unconditionally.
+ *
+ * Fire-and-forget, the same contract as every other turn-end write: a record of a refusal must never be able to
+ * fail the turn that is already reporting it. */
+const recordModelRefusal = (
+    services: Pick<Services, "modelRefusals" | "logger">,
+    provider: string,
+    model: string | undefined,
+    event: { readonly code?: string | undefined; readonly message: string },
+): void => {
+    if (event.code !== "model-unavailable" || model === undefined || model === "") {
+        return;
+    }
+    void services.modelRefusals
+        .record(provider, model, { at: Date.now(), message: event.message })
+        .catch((error: unknown) => services.logger.warn({ err: error }, "model refusal: write failed"));
+};
+
 /* THIS TURN'S BEFORE-STATE, in the currency an isolated conversation has: its own branch. Pinned, filed under
  * the message, and SAID OUT LOUD, which is the part that has to happen in one place for the two isolated arms
  * (local worktree, runner mirror) to behave the same.
@@ -929,7 +955,16 @@ const VERIFICATION_CHECK_CHARS = 200;
  *
  * Anything NOT in this set is an unclassified turn failure, which is the case nothing downstream knows how to
  * handle and the one worth waking up for. */
-const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set(["rate_limit", "provider-outage", "claude-token-refused", "claude-not-entitled"]);
+const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set([
+    "rate_limit",
+    "provider-outage",
+    "claude-token-refused",
+    "claude-not-entitled",
+    // A model the plan does not cover: filed against the model (model-refusals.json) and read back by the
+    // catalog seam, so it has the durable trace this set is about. It is also, by construction, a condition
+    // that happens exactly once per model — the picker stops offering it afterwards.
+    "model-unavailable",
+]);
 
 // How fresh a routed provider's readings must be before a settled turn re-reads them. Ten seconds: a fleet of
 // parallel routed turns settling together costs one sweep, and a lone turn's ring is current by the time the
@@ -1722,6 +1757,8 @@ async function* runTurn(
                         maxAgeMs: 0,
                     });
                 }
+                // The plan does not cover this model: file it so the picker stops offering it (recordModelRefusal).
+                recordModelRefusal(services, provider, request.model, event);
                 /* The provider failed us, not the workspace. Open (or re-observe) its outage and tell the client
                  * where the resume stands: which attempt this is, when the next one is due, and whether it is
                  * armed or merely on offer behind the setting. Past the attempt budget nothing more will fire, so

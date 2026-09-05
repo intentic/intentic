@@ -167,6 +167,10 @@ vi.mock("../composables/sandbox/useSandboxSettings", async () => {
 });
 
 const { default: ChatMessageView } = await import("./ChatMessageView.vue");
+// The live turn's status line, which this row mounts under the bubble a turn is writing into and ChatPane
+// mounts at the foot of the column when there is no bubble yet. Imported here so the last test in the loader
+// suite can assert the second of those: the line stands up with no message at all.
+const { default: ChatTurnStatus } = await import("./ChatTurnStatus.vue");
 
 const message: ChatMessage = { id: 1, role: `assistant`, text: `` };
 let app: App | undefined;
@@ -263,6 +267,24 @@ describe(`ChatMessageView loader`, () => {
         app = undefined;
         clock.turnStartedAt = undefined;
         expect(mount().textContent).not.toContain(`(`);
+    });
+
+    /* IT DOES NOT NEED A MESSAGE, which is the property the whole line was moved out of this row for. A turn
+     * has no assistant bubble until the provider's first frame opens one, so while it is being planned, spawned
+     * and waited on, this row does not exist — and the line lived inside it, so neither did the spinner, the
+     * word, the elapsed, or the "provider is retrying" notice written to make exactly that wait legible. The
+     * chat drew nothing at all, which on a conversation's first turn is its entire visible state.
+     *
+     * Mounted on its own here to pin that: same words, same clock, no message anywhere. ChatPane mounts it this
+     * way at the foot of the column whenever the live turn has opened no bubble (its `showTurnStatus`). */
+    it(`says the same thing mounted on its own, with no message to hang off`, () => {
+        const element = document.createElement(`div`);
+        document.body.append(element);
+        app = createApp({ render: () => h(ChatTurnStatus) });
+        app.use(VueQueryPlugin, { queryClient: new QueryClient() });
+        app.component(`Icon`, defineComponent({ render: () => h(`i`) }));
+        app.mount(element);
+        expect(element.textContent).toContain(`(35s)`);
     });
 });
 

@@ -191,6 +191,37 @@ export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
     return turns;
 };
 
+/* THE BUBBLE A LIVE TURN IS WRITING INTO, or undefined when it has not opened one yet.
+ *
+ * Read from the tail back to the last thing the USER said, rather than as "the last assistant message
+ * anywhere", and the difference is two bugs that shared one line.
+ *
+ * A conversation's later turn already has assistant rows above the message that started it, so the plain
+ * reading marked the PREVIOUS turn's answer as live: its tools and its thinking went on reading as in-flight,
+ * and the turn's status line hung under an answer that had finished minutes ago — above the prompt it was
+ * supposedly answering. On a conversation's FIRST turn the same reading finds nothing at all, which is how the
+ * entire window between the send and the model's first frame came to draw no status: the only surface that
+ * could say a turn was running was a bubble the turn had not opened yet. That window is the ordinary opening
+ * of every turn, and on a routed provider refusing the request it is the whole two minutes the harness spends
+ * retrying (sdk-stream.ts) — the exact stretch a user reads as a hang.
+ *
+ * Stopping at the user row is what makes both cases right: everything below the last thing the user said
+ * belongs to the turn answering it. A NOTICE is stepped over rather than stopped at (a control action, a
+ * provider switch, written by this window below the bubble the turn is still writing into), which is the one
+ * case the plain reading got right and this keeps. */
+export const liveBubbleOf = (messages: readonly ChatMessage[]): ChatMessage | undefined => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const entry = messages[index]!;
+        if (entry.role === `user`) {
+            return undefined;
+        }
+        if (entry.role === `assistant`) {
+            return entry;
+        }
+    }
+    return undefined;
+};
+
 /* WHERE THE CONVERSATION CAN BE CUT, one boundary per turn, keyed by the turn it hangs off (ChatForkCut).
  *
  * A cut is a boundary, and a boundary can be named from either side: "redo this prompt differently" and "carry

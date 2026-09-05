@@ -1344,6 +1344,23 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "unknown-command",
                 "grok-model-invalid",
                 "codex-model-invalid",
+                /* THE MODEL IS REAL, LISTED, AND NOT THIS PLAN'S TO RUN. A routed provider's catalog is the set
+                 * the vendor publishes, not the set the connected subscription pays for, so a picker row can be
+                 * a model the upstream refuses on sight ("Your current subscription does not have access to
+                 * kimi-for-coding-highspeed. Upgrade to higher-tier Kimi Code plans.").
+                 *
+                 * Its own code because every neighbour's recovery is wrong for it. It is not `provider-outage`,
+                 * though that is what it wore: the translator answers a refused model with a 503, the harness
+                 * reads a 5xx as an outage, and rides it out for the whole in-turn retry budget — two minutes of
+                 * a spinner for a request that was refused in five milliseconds and will be refused identically
+                 * forever, followed by an auto-resume schedule for a turn that cannot come back. It is not
+                 * `*-model-invalid` either: nothing is misspelled and reloading the catalog re-offers the same
+                 * row, because the vendor really does serve it — to somebody else.
+                 *
+                 * What changes the outcome is picking another model or buying the plan, so the sentence is the
+                 * upstream's own (it names the tier), the client holds the words, and the daemon files the model
+                 * as refused so the picker stops offering it (usage/model-refusals.ts). */
+                "model-unavailable",
                 /* THE MODEL CANNOT HOLD A TURN OF THIS AGENT LOOP, so the daemon refused before sending
                  * (agent/context-budget.ts). Its own code because none of the neighbours describes it: nothing is
                  * disconnected, nothing is spent, nothing comes back on a clock, and re-sending the same request

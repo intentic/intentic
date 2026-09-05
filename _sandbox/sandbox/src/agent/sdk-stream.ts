@@ -10,7 +10,8 @@ import { screenshotImage } from "../browser/browser-artifacts.js";
 import { browserServerOfTool } from "../browser/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
-import { errorFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
+import { errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
+import { probeRoutedEndpoint, type RoutedEndpoint } from "./routed-refusal.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import { opt } from "./opt.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "./subagents.js";
@@ -271,6 +272,11 @@ export interface StreamSdkArgs {
     // Whose allowance this turn spends and when it reopens; absent on a native Claude turn, whose harness
     // answers both by itself. See TurnAllowance.
     readonly allowance: TurnAllowance | undefined;
+    /* The translator endpoint this turn runs against, on a ROUTED turn only (absent on a native Claude one,
+     * which has nothing to ask). Carried so a retry storm can be asked what it actually is: the harness reports
+     * a 5xx and no body, and the body is the only thing that separates a provider having a bad minute from a
+     * model this subscription will never serve (routed-refusal.ts). */
+    readonly routed: RoutedEndpoint | undefined;
     // A platform-owned trial turn has already walked its whole key pool before a retry reaches this stream.
     readonly trial: boolean;
     // The turn handle children are filed under; absent ⇒ no conversation to file them against (the bench).
@@ -304,6 +310,10 @@ class TurnFold {
     // list off this handle at `init` (see onSystem).
     private readonly session: AgentQuery;
     private sessionSent = false;
+    // Whether this turn has already asked its routed endpoint what it is actually refusing (endRetrying). Once
+    // per turn: the answer cannot change mid-turn (a plan is not bought inside one), and a probe per retry
+    // would put a request of our own on top of a storm.
+    private routedProbed = false;
     // The agent's live tmux terminal is surfaced twice: once at the first Bash tool_use (so a long command is
     // watchable live) and once at that command's tool_result (by then tmux-run has definitely created the
     // session, so a first-command cold-start that outran the tool_use relist still gets a tab). surface() is
@@ -645,6 +655,36 @@ class TurnFold {
         };
     }
 
+    /* WHEN A RETRY IS NOT WORTH WAITING OUT, and which of the two reasons it is. Undefined means the harness is
+     * right to keep going and the caller forwards the ordinary `provider_retry` status.
+     *
+     * IS THIS AN OUTAGE AT ALL? is the first question, and the one the harness cannot answer about its own
+     * retry: it buckets every 5xx as `server_error` and forwards no body, and the body is where a translator
+     * says whether the subscription covers this model. So the endpoint is asked directly, ONCE per turn and
+     * only from in here, where something is already failing: on a healthy provider this never runs, and on a
+     * refused model it answers instantly with the vendor's own sentence (routed-refusal.ts holds the mechanism
+     * and the measurements).
+     *
+     * Asked at the FIRST retry rather than at the storm cap, which is the whole point of it: the cap is two
+     * minutes away, and those two minutes are the symptom — a spinner with nothing behind it, over a request
+     * that was refused in five milliseconds and will be refused identically forever. Undefined on doubt (a slow
+     * endpoint, an unreadable body, a probe that threw), and the ladder then runs exactly as before.
+     *
+     * THE STORM CAP is the second: it is not clearing, so stop riding it out in here. The frame the harness
+     * would have ended on eventually goes out now, agent.routes files it as the outage it is, and the resume
+     * scheduler owns the waiting from this point (MAX_IN_TURN_RETRIES has the argument). */
+    private async endRetrying(attempt: number, status: number | undefined): Promise<AgentEvent | undefined> {
+        const routed = this.args.routed;
+        if (routed !== undefined && !this.routedProbed) {
+            this.routedProbed = true;
+            const refusal = await probeRoutedEndpoint(routed);
+            if (refusal !== undefined) {
+                return modelUnavailableFrame(routed.model, refusal);
+            }
+        }
+        return attempt >= MAX_IN_TURN_RETRIES ? retryStormFrame(attempt, status) : undefined;
+    }
+
     // Returns true when the message ends the whole stream, see the api_retry rate_limit path.
     private async *onSystem(message: SdkOf<"system">, parent: string | undefined): AsyncGenerator<AgentEvent, boolean> {
         switch (message.subtype) {
@@ -756,11 +796,11 @@ class TurnFold {
                     );
                     return true;
                 }
-                /* The storm is not clearing, so stop riding it out in here: the frame the harness would have
-                 * ended on eventually goes out now, agent.routes files it as the outage it is, and the resume
-                 * scheduler owns the waiting from this point (MAX_IN_TURN_RETRIES has the argument). */
-                if (message.attempt >= MAX_IN_TURN_RETRIES) {
-                    yield retryStormFrame(message.attempt, message.error_status ?? undefined);
+                // The two ways a retry stops being one: the endpoint is refusing this model outright, or the
+                // storm has gone on long enough that the waiting belongs outside this process (endRetrying).
+                const terminal = await this.endRetrying(message.attempt, message.error_status ?? undefined);
+                if (terminal !== undefined) {
+                    yield terminal;
                     return true;
                 }
                 /* Every other retry is still happening INSIDE this turn, so nothing has failed yet and there is

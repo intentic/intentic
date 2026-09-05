@@ -2125,6 +2125,29 @@ describe(`Conversation`, () => {
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`codex`);
     });
 
+    /* A MODEL THE PLAN DOES NOT COVER, which is neither of the two above: nothing is misspelled, the vendor
+     * serves the model, and the subscription is not allowed to. The daemon files it and drops it from the
+     * catalog, so the reload here is what takes the dead row off this chat's picker; and the words are HELD,
+     * because the endpoint refused the request before a token was spent and nobody should retype a prompt over
+     * a billing tier. */
+    it(`holds the message and reloads the catalog when the plan does not cover the model`, async () => {
+        loadProviderModelsMock.mockClear();
+        const conversation = new Conversation(`c1`);
+        conversation.provider.value = `kimi`;
+        conversation.model.value = `kimi-k2.7-code-highspeed`;
+        const refusal = `Your current subscription does not have access to kimi-for-coding-highspeed. Upgrade to higher-tier Kimi Code plans.`;
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code: `model-unavailable`, message: refusal }, { kind: `done` }]));
+        await conversation.send(`hi`, { ...settings, agent: `kimi`, model: `kimi-k2.7-code-highspeed` });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(conversation.error.value).toContain(`does not have access`);
+        expect(loadProviderModelsMock).toHaveBeenCalledWith(`kimi`);
+        // The prompt is back in the queue rather than sitting in the transcript as a message nothing will ever
+        // answer: the same bargain every refusal that ran nothing strikes.
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`hi`]);
+        expect(conversation.messages.value.some((message) => message.role === `user`)).toBe(false);
+    });
+
     it(`renders a codex-advisory as a muted notice under the answer the turn actually produced`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.provider.value = `codex`;

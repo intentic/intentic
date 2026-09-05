@@ -22,7 +22,7 @@ import {
 import type { Conversation } from "../composables/chat/conversation";
 import { modelLabelFor, providerDisplayLabel } from "../composables/chat/providerCatalog";
 import { pickUpReady } from "../composables/chat/pickUp";
-import { type ChatMessage, cutsAboveOf, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
+import { type ChatMessage, cutsAboveOf, dayMarksOf, forkCutsOf, liveBubbleOf, turnsOf } from "../composables/chat/transcript";
 import { withShortcut } from "../composables/commands/useCommands";
 import { navigateInApp } from "../composables/mainWindow";
 import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
@@ -58,6 +58,7 @@ import ChatPaneStatus from "./ChatPaneStatus.vue";
 import ChatPersonaMenu from "./ChatPersonaMenu.vue";
 import ChatRunThroughMenu from "./ChatRunThroughMenu.vue";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
+import ChatTurnStatus from "./ChatTurnStatus.vue";
 import ComposerEffort from "./ComposerEffort.vue";
 import ComposerModelPill from "./ComposerModelPill.vue";
 import ComposerMoreMenu from "./ComposerMoreMenu.vue";
@@ -294,11 +295,24 @@ watch(fleetTurn, (now, before) => {
     hydrateOnce(props.conversation);
 });
 
-// True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not simply
-// the last message: a notice this window wrote (a control action, a provider switch) sits below the bubble the
-// turn is still writing into.
-const isStreaming = (message: ChatMessage): boolean =>
-    streaming.value && message.role === `assistant` && messages.value.findLast((entry) => entry.role === `assistant`)?.id === message.id;
+// The bubble this turn is writing into, when it has opened one (liveBubbleOf holds the rule and the two bugs
+// it fixes). Recomputed per streamed frame like the list it is read against, and just as shallow: it scans the
+// tail back to the turn's own prompt, never the transcript.
+const liveBubble = computed(() => liveBubbleOf(messages.value));
+
+// True for the assistant bubble currently being streamed into.
+const isStreaming = (message: ChatMessage): boolean => streaming.value && liveBubble.value?.id === message.id;
+
+/* …AND THE SAME LINE WITH NO BUBBLE TO HANG IT ON: a turn that has been sent and has not produced a frame yet.
+ * It is the ordinary opening of every turn (a worktree to cut, a harness to spawn, a first token to wait for),
+ * it is the entire visible state of a conversation's first one, and on a routed provider refusing the turn it
+ * can last the two minutes the harness spends retrying (sdk-stream.ts). Drawn at the foot of the column, where
+ * the bubble is about to open, so the spinner does not jump when it does.
+ *
+ * Mutually exclusive with the per-message mount by construction: exactly one of "the turn has a live bubble"
+ * and "it has none" is true. `awaitingDecision` is excluded here for the reason ChatMessageView excludes it —
+ * a parked card is the prompt, and a spinner over it claims work that is not happening. */
+const showTurnStatus = computed(() => streaming.value && !awaitingDecision.value && liveBubble.value === undefined);
 
 // The transcript as prompt-headed groups. Each group is the box its own prompt is sticky WITHIN (see
 // .chat-prompt), which is what ends the pin where the answer ends: rendered flat, every prompt would pin to
@@ -1415,6 +1429,9 @@ watch(
                     <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">
                         {{ onTrial ? `Ask anything, this chat is free and needs nothing connected.` : `Start a conversation with ${providerName}.` }}
                     </p>
+                    <!-- The live turn before it has written anything (see showTurnStatus). Outside the turn
+                         sections because it belongs to no message: it stands where the answer is about to. -->
+                    <ChatTurnStatus v-if="showTurnStatus" />
                     <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                 </div>
 

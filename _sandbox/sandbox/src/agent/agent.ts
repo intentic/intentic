@@ -71,6 +71,7 @@ import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
 import { workloadStamp } from "../platform/leftovers.js";
 import { opt } from "./opt.js";
 import { readClaudeUsage } from "../usage/claude-usage.js";
+import { routedEndpointOf } from "./routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { noteChildWork } from "./child-verification.js";
@@ -1266,6 +1267,10 @@ export async function* runAgent(
                 redeliver,
                 readUsage,
                 allowance: request.allowance,
+                // The translator endpoint, for the one question a retry storm raises that the harness cannot
+                // answer: is the endpoint refusing this MODEL (a plan that does not cover it) rather than
+                // having a bad minute? Undefined on a native Claude turn, which has nothing to ask.
+                routed: routedEndpointOf(request),
                 trial: request.trial === true,
                 subagents,
             })) {

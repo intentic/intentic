@@ -240,6 +240,24 @@ export class TurnFailures {
      * what stops the picker offering it as though it had headroom. */
     private applyUnhandledError(error: TurnError, turn: TurnContext): void {
         const { message, code } = error;
+        if (code === `model-unavailable`) {
+            /* THE MODEL IS REAL AND NOT THIS PLAN'S TO RUN, which is this method's shape exactly: a red line
+             * over a fix that is nobody's but the user's, and one they make somewhere else (the picker, or the
+             * vendor's billing page). It is here rather than beside the two `*-model-invalid` codes above
+             * because it is not the same failure: nothing is misspelled, the vendor really does serve this
+             * model, and no reload of the catalog would find a correction — the daemon has just taken the row
+             * OUT of it (usage/model-refusals.ts), which is what the reload is for here. The id this chat is
+             * pinned to is gone by the time the user looks, and the picker repoints them at one that runs.
+             *
+             * The words are HELD, as they are for every refusal that ran nothing: the endpoint turned the
+             * request away before a token was spent, so the message is not part of the conversation yet, and
+             * making somebody retype a prompt over a billing tier would be the one part of this that was ours.
+             * They wait in the composer, ready to send at whatever model comes next. */
+            void import(`./useChat`).then((chat) => chat.loadProviderModels(this.host.provider.value));
+            this.host.requeue(turn.userMessageId);
+            this.host.error.value = message;
+            return;
+        }
         if (code === `engine-version-floor`) {
             /* Nothing ran: the provider refused the turn for the version of the engine driving it, so the words
              * are still only in this window and are held like every other refusal that ran nothing. The sentence

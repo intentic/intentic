@@ -90,6 +90,7 @@ import { createSessions, type MintedSession } from "./auth/session.js";
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
 import { claudeHeadroomSource } from "./usage/claude-usage.js";
 import { createHeadroomService, type HeadroomService } from "./usage/headroom.js";
+import { fileModelRefusalStore, type ModelRefusalStore } from "./usage/model-refusals.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
 import { fileIssuesStore, type IssuesStore } from "./issues/issues-store.js";
@@ -552,6 +553,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // records it from the turn that was refused, and /agent/refusals serves it to the account surfaces, which
     // read the two together (a healthy meter beside a fresh refusal means the meter is stale).
     readonly providerRefusals: ProviderRefusalStore;
+    /* Which MODELS this sandbox's credentials were refused (historyRoot/model-refusals.json), which the store
+     * above cannot hold: its key is the provider, and one subscription routinely serves some of a vendor's
+     * models and not others. Written by the turn that was refused and read by the catalog seam, which drops
+     * the rows so the picker stops offering a model the plan will not run (usage/model-refusals.ts). */
+    readonly modelRefusals: ModelRefusalStore;
     // Every native provider's live model catalog, keyed by provider, what /providers/{provider}/models serves
     // the picker, what the quick model compares over, and what a routed turn validates its pick against.
     // ASSEMBLED from the provider modules (agent/provider-registry.ts), so those readers do a lookup instead
@@ -1422,6 +1428,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         accountUsage,
         headroom,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
+        modelRefusals: fileModelRefusalStore(join(config.historyRoot, "model-refusals.json")),
         // Assembled from the provider modules, LATE-BOUND through the same holder the extension backend uses:
         // the record is a member of the object its thunks read from, and the thunks only run per request.
         providerCatalogs: providerCatalogsOf(() => {

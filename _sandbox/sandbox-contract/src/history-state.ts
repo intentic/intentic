@@ -67,6 +67,12 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },
     { path: "provider-refusals.json", portability: "carry" },
+    /* Which MODELS this sandbox's credentials were refused (usage/model-refusals.ts), the per-model half of the
+     * entry above and carried for the same reason: a bundle is this owner's sandbox on another machine, signing
+     * the same subscriptions back in, so a plan that does not cover a model there does not cover it here
+     * either, and the picker should arrive already clean. Cheap to be wrong about in the one case it can be
+     * (the target signs in a bigger plan): every entry is forgotten a day after it was written. */
+    { path: "model-refusals.json", portability: "carry" },
     // Explicit first-time dependency setup requests. Carrying the worklist preserves the owner's decision when
     // an export interrupts the queue before its terminal starts; fulfilled entries remove themselves.
     { path: "dependency-requests.json", portability: "carry" },

@@ -1,7 +1,7 @@
-import { capabilitiesOf, compareUnrankedModelIds, MINTED_PROVIDERS, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
+import { capabilitiesOf, compareUnrankedModelIds, MINTED_PROVIDERS, type Model, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { seedModelsOf } from "../minted/minted-provider.js";
-import { PROVIDER_MODULES } from "./provider-registry.js";
+import { PROVIDER_MODULES, servedModels } from "./provider-registry.js";
 
 /* THE REGISTRY'S OWN GUARANTEES, the ones the derived surfaces lean on. The init guard in the registry already
  * throws on a missing or duplicate module; these pin the finer grain a throw message cannot: that each module
@@ -61,6 +61,43 @@ test("every minted provider has a generated module, and it contributes no adapte
         // absence the Kimi test above covers, asserted here from the other direction (by auth kind, not by name).
         expect(module?.adapters, `${provider} contributes an adapter for a runtime it does not own`).toHaveLength(0);
     }
+});
+
+/* THE CATALOG MINUS WHAT THE PLAN WILL NOT RUN (servedModels). A vendor publishes one model list and sells
+ * several tiers of access to it, so a picker row can be a model the upstream refuses on sight — which is not a
+ * fact any catalog carries, only one a refused turn discovers (usage/model-refusals.ts). */
+const catalogOf = (ids: readonly string[], fallback = ids[0]!): Promise<{ models: Model[]; default: string }> =>
+    Promise.resolve({ models: ids.map((id) => ({ id, label: id })), default: fallback });
+const refusing = (...ids: readonly string[]): { modelRefusals: { refused: () => Promise<ReadonlySet<string>>; record: () => Promise<void> } } => ({
+    modelRefusals: { refused: () => Promise.resolve(new Set(ids)), record: () => Promise.resolve() },
+});
+
+test("a refused model comes off the catalog it was refused from", async () => {
+    const served = await servedModels(refusing("kimi-k2.7-code-highspeed"), "kimi", catalogOf(["kimi-k3", "kimi-k2.7-code-highspeed"]));
+    expect(served.models.map((model) => model.id)).toEqual(["kimi-k3"]);
+});
+
+// The default is a row like any other, and one the picker opens a fresh chat on: left pointing at a refused
+// model it would hand every new conversation the one id that cannot run.
+test("a refused default moves to the first model that survives", async () => {
+    const served = await servedModels(refusing("kimi-k3"), "kimi", catalogOf(["kimi-k3", "kimi-k2.7-code"]));
+    expect(served.default).toBe("kimi-k2.7-code");
+});
+
+/* AND IT NEVER EMPTIES THE LIST, which is the one case where showing a model that cannot run is the better
+ * answer: `models` is non-empty by the seam's contract, and a picker with no rows cannot even say what the
+ * provider serves — a refusal on send is more use than a blank menu. */
+test("a provider whose every model is refused keeps its catalog whole", async () => {
+    const served = await servedModels(refusing("kimi-k3", "kimi-k2.7-code"), "kimi", catalogOf(["kimi-k3", "kimi-k2.7-code"]));
+    expect(served.models.map((model) => model.id)).toEqual(["kimi-k3", "kimi-k2.7-code"]);
+    expect(served.default).toBe("kimi-k3");
+});
+
+// One provider's refusal says nothing about another's, which is the whole reason the store is keyed by both:
+// the catalog seam asks per provider, so a model id shared by two vendors must not vanish from the innocent one.
+test("the filter only drops what the asked-for provider was refused", async () => {
+    const served = await servedModels(refusing(), "codex", catalogOf(["gpt-6-astra"]));
+    expect(served.models.map((model) => model.id)).toEqual(["gpt-6-astra"]);
 });
 
 /* A MINTED PROVIDER'S SEED FLOOR IS WHAT ITS PICKER SHOWS BEFORE THE VENDOR HAS EVER ANSWERED, and on a fresh

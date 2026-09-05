@@ -37,6 +37,7 @@ import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolRows from "./ChatToolRows.vue";
 import ChatToolRun from "./ChatToolRun.vue";
+import ChatTurnStatus from "./ChatTurnStatus.vue";
 import { present } from "./toolPresentation";
 
 /* One transcript entry: user bubble, notice line, or the assistant turn's stack (thinking, tools, todos,
@@ -198,24 +199,6 @@ const holdTier = (): void => {
     conversation.value.setTierHold(true);
 };
 
-// Whimsical status words cycled while a turn is streaming (Claude Code style).
-const LOADER_WORDS = [
-    `Thinking`,
-    `Pondering`,
-    `Perusing`,
-    `Conjuring`,
-    `Noodling`,
-    `Musing`,
-    `Cogitating`,
-    `Ruminating`,
-    `Percolating`,
-    `Brewing`,
-    `Tinkering`,
-    `Scheming`,
-    `Untangling`,
-    `Synthesizing`,
-];
-
 // --- Markdown / rendering --------------------------------------------------------------------
 // Both prose surfaces go through the one composable (see useMarkdown), which splits a live turn into settled
 // + still-writing halves and renders anything finished in one pass. One renderer per message view, held for
@@ -310,15 +293,17 @@ const serviceStatus = computed(() => {
     return undefined;
 });
 
-// Keep the loader visible for the whole live turn, not just before the first token. The model streams a
+// Keep the status line visible for the whole live turn, not just before the first token. The model streams a
 // preamble sentence and then goes quiet while it runs tools and thinks: text is present but the turn isn't
-// done. Anchored at the bottom of the assistant stack, the loader tells the user work is still in flight;
-// it disappears only when streaming ends or a card takes over the prompt.
+// done. Anchored at the bottom of the assistant stack, the line tells the user work is still in flight;
+// it disappears only when streaming ends or a card takes over the prompt. (Before the turn has opened a bubble
+// at all there is no message to anchor it to, and ChatPane mounts the same component at the foot of the column
+// instead — see ChatTurnStatus.)
 //
 // A pending card is the one case where the turn is still streaming (its fetch stays open) while nothing is
-// being computed: the card is the prompt, so the loader must yield to it. Read the CONVERSATION's flag, not
+// being computed: the card is the prompt, so the line must yield to it. Read the CONVERSATION's flag, not
 // this message's own cards: a card parks the whole turn but hangs on whichever bubble was current when it
-// arrived, which isn't always the bubble the loader trails (a plan nulls the turn's bubble, so later frames
+// arrived, which isn't always the bubble the line trails (a plan nulls the turn's bubble, so later frames
 // open a fresh one below the card). Per-message, that left "Scheming… (107s)" ticking under a permission
 // prompt the agent was already blocked on.
 const showTyping = computed(() => props.streaming && !awaitingDecision.value);
@@ -331,61 +316,10 @@ const pendingWait = computed(() =>
     props.message.noticeWait === `credentialRenewal` ? conversation.value.failures.credentialRenewal.value : undefined,
 );
 
-// The shared second-ticking clock, armed for every live readout in this view: the turn's elapsed counter, the
-// retry countdown, and a pending notice's wait. Armed whenever any of them is showing, which is why a notice's
-// wait counts too: it outlives the turn it describes, and a frozen "0s" beside a spinner reads as a hang.
-const now = useNow(() => props.streaming || pendingWait.value !== undefined);
-
-// Cycling status-word loader shown while the turn streams. The conversation owns the start instant: send()
-// records it when the command leaves, and a later attach restores the daemon's instant. Deriving from that
-// source means a view mounted halfway through a turn starts halfway through its counter too.
-const loaderSeconds = computed(() => {
-    const startedAt = conversation.value.turnStartedAt.value;
-    return startedAt === undefined ? 0 : Math.max(0, Math.floor((now.value - startedAt) / 1000));
-});
-// The readout itself is the shared elapsed format, so a turn that runs long reads "9m 12s" rather than "552s".
-const loaderElapsed = computed(() => {
-    const startedAt = conversation.value.turnStartedAt.value;
-    return startedAt === undefined ? undefined : formatElapsed(startedAt, now.value);
-});
-/* WHAT THE LOADER SAYS WHILE THE TURN IS ONLY WAITING ON ITS CHILDREN, which is the one stretch the whimsical
- * words are wrong about. A turn that delegated has written its "I'll come back with their results" and gone
- * quiet: nothing of its own is running, the transcript looks finished, and the only thing between it and the
- * end is agents working somewhere else. "Percolating… (6m 12s)" over that reads as a model that has hung.
- *
- * The count is the roster's: the same number the board's card and the chat rail already say, so the three
- * never disagree about how many are out (agentStatus.ts's rule). */
-const liveSubagents = computed(() => agentById(conversation.value.conversationId)?.subagents?.running ?? 0);
-const loaderWord = computed(() =>
-    liveSubagents.value > 0
-        ? `Waiting on ${liveSubagents.value} subagent${liveSubagents.value === 1 ? `` : `s`}`
-        : (LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `Thinking`),
-);
-
-/* THE PROVIDER IS FAILING AND THIS TURN IS RIDING IT OUT (the provider_retry frame). It takes the loader line
- * over, because it answers the one question the cycling word cannot: the agent is not stuck, it is waiting, and
- * here is when it tries again.
- *
- * This line is what makes the long in-turn retry budget safe to have. Without it a turn absorbing an outage looks
- * identical to a hung one for minutes at a stretch, and the move a user makes against an apparent hang is Stop:
- * the only move that actually throws away the work the turn has already done. Rides the same one-second tick as
- * the elapsed counter, so the countdown moves and stale-looks impossible. */
-const providerRetry = computed(() => conversation.value.providerRetry.value);
-// "and here is when it tries again" holds only when the harness said when: Claude's does. Codex reports which
-// attempt it is on and nothing else (codex-agent.ts), so its line drops the countdown rather than name an
-// instant the retry never agreed to.
-const retryWait = computed(() => {
-    const nextAttemptAt = providerRetry.value?.nextAttemptAt;
-    return nextAttemptAt === undefined ? `retrying` : `retrying in ${Math.max(0, Math.round((nextAttemptAt - now.value) / 1000))}s`;
-});
-/* 529 is capacity, 429 is the allowance, everything else in this frame is a fault. All three are worth telling
- * apart because each points somewhere different: "at capacity" says the request was fine and a smaller model
- * would probably go through right now, "rate-limiting" says the account has been asked for too much and only
- * time or another account fixes it, and "not responding" says nobody's request is getting through. Told none of
- * that, a user watching a long wait goes looking for a fault in their own work. */
-const retryReason = computed(() =>
-    providerRetry.value?.status === 529 ? `at capacity` : providerRetry.value?.status === 429 ? `rate-limiting` : `not responding`,
-);
+// The second-ticking clock behind this view's one live readout that is not the turn's: a pending notice's wait.
+// (The turn's own elapsed and its retry countdown ride ChatTurnStatus's clock.) Armed only while that wait is
+// on, because it outlives the turn it describes, and a frozen "0s" beside a spinner reads as a hang.
+const now = useNow(() => pendingWait.value !== undefined);
 
 // --- Interactive question card ---------------------------------------------------------------
 // Selection state for a pending question card, keyed by question index. Held here because it is UI state of
@@ -1710,18 +1644,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </ChatCard>
 
-            <!-- The loader is a status line, not a message: it sits at the meta tier with the tool cards it
-                 trails, and takes the assistant bubble's padding so the stack keeps one left edge. -->
-            <div v-if="showTyping" class="flex items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
-                <Icon name="spinner" class="text-2xs text-link" spin />
-                <span v-if="providerRetry"
-                    >The model provider is {{ retryReason }}: {{ retryWait }}
-                    <span class="text-subtle">(attempt {{ providerRetry.attempt }}, nothing lost)</span></span
-                >
-                <span v-else
-                    >{{ loaderWord }}… <span v-if="loaderElapsed" class="text-subtle">({{ loaderElapsed }})</span></span
-                >
-            </div>
+            <!-- The live turn's status line, trailing the bubble it is writing into. The same component the
+                 pane mounts at the foot of the column for a turn that has opened no bubble yet, which is what
+                 keeps one spinner on screen and one set of words in it (ChatTurnStatus). -->
+            <ChatTurnStatus v-if="showTyping" />
         </template>
 
         <!-- What this turn has been kept going by since it was asked (see `trailer`). Outside the branches

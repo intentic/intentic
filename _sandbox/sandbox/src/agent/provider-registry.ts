@@ -1,4 +1,4 @@
-import { NATIVE_PROVIDERS, type NativeProvider, type SecretInventoryEntry } from "@intentic/sandbox-contract";
+import { type Model, NATIVE_PROVIDERS, type NativeProvider, type SecretInventoryEntry } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { claudeProvider } from "../claude/claude-provider.js";
 import { codexProvider } from "../codex/codex-provider.js";
@@ -62,10 +62,44 @@ export const sharedProviderReads = (services: Services): SharedProviderReads => 
  * member of the object it reads from: the thunks only run once a request arrives, long after composition has
  * finished (the extensionBackend holder is the precedent, composition.ts). */
 export const providerCatalogsOf = (services: () => Services): Record<NativeProvider, ProviderCatalog> =>
-    Object.fromEntries(PROVIDER_MODULES.map((module) => [module.id, { models: () => module.catalog(services()) }])) as Record<
-        NativeProvider,
-        ProviderCatalog
-    >;
+    Object.fromEntries(
+        PROVIDER_MODULES.map((module) => [module.id, { models: () => servedModels(services(), module.id, module.catalog(services())) }]),
+    ) as Record<NativeProvider, ProviderCatalog>;
+
+/* THE CATALOG MINUS WHAT THIS SANDBOX'S CREDENTIALS ARE NOT ALLOWED TO RUN.
+ *
+ * A vendor's model list is what the VENDOR publishes, not what the connected plan pays for, and nothing in the
+ * list distinguishes the two: the translator serves all eight Kimi models to a subscription that covers six.
+ * The rows it does not cover are worse than missing, they are traps — picking one starts a turn that cannot be
+ * served, and the refusal comes back as a 503 that every layer above reads as an outage (routed-refusal.ts has
+ * the story and the measurements).
+ *
+ * So the one place every catalog is served through is the one place they come off. Filed by the turn that
+ * discovered the refusal (agent.routes.ts) and forgotten a day later, so buying the plan brings the row back
+ * without anyone clearing anything.
+ *
+ * IT WILL NOT EMPTY A CATALOG. `models` is non-empty by this seam's contract and the picker has nothing to draw
+ * without it, so a provider whose every model has been refused keeps its list whole: an honest refusal on send
+ * beats a picker that cannot say what the provider serves. Same reasoning for the DEFAULT, which moves to the
+ * first surviving row rather than being left pointing at one the plan will refuse.
+ *
+ * Exported for the test alone: the record above is built from the live provider modules, so reaching this
+ * through it would mean standing up the whole daemon to assert a filter. */
+export const servedModels = async (
+    services: Pick<Services, "modelRefusals">,
+    provider: NativeProvider,
+    catalog: Promise<{ models: Model[]; default: string }>,
+): Promise<{ models: Model[]; default: string }> => {
+    const [served, refused] = await Promise.all([catalog, services.modelRefusals.refused(provider)]);
+    if (refused.size === 0) {
+        return served;
+    }
+    const models = served.models.filter((model) => !refused.has(model.id));
+    if (models.length === 0) {
+        return served;
+    }
+    return { models, default: refused.has(served.default) ? models[0]!.id : served.default };
+};
 
 // Whether each provider could serve a turn right now, the harnessReadyProviders sweep. Complete over
 // NATIVE_PROVIDERS by the init guard above, which is what lets the cast stand.

@@ -131,6 +131,22 @@ export const retryStormFrame = (attempts: number, status: number | undefined): E
         `Work so far is kept; send again to resume. If it keeps failing, check the model and endpoint.`,
 });
 
+/* THE MODEL IS NOT THIS PLAN'S TO RUN, said in the vendor's own words and ending the turn where it stands.
+ *
+ * The one refusal a routed 5xx can hide (routed-refusal.ts holds the mechanism and the measurements): the
+ * translator answers a model the subscription does not cover with `503 auth_unavailable`, which every layer
+ * above reads as an outage and rides out for the full retry budget before scheduling a resume that cannot
+ * work. Coded `model-unavailable` so none of that happens: the client holds the words, names the model, and
+ * the daemon files it so the picker stops offering it.
+ *
+ * The vendor's sentence leads because it is the only part that names the plan and the upgrade; ours adds the
+ * one thing they cannot know, which is that a different row in the picker will run right now. */
+export const modelUnavailableFrame = (model: string, refusal: string): ErrorEvent => ({
+    kind: "error",
+    code: "model-unavailable",
+    message: `${refusal} Nothing here can retry past that: pick another model for this chat (${model} is off the list until the plan covers it).`,
+});
+
 /* A PARAMETER THE TURN NEVER ASKED FOR, refused as if it had (failure-sentences.ts holds the evidence and the
  * narrowing). Coded `provider-outage` for the same reason every 5xx is: the request is not what is wrong, so the
  * breaker owns the waiting and the turn is re-run from the session it already built rather than dying on a red
