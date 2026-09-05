@@ -193,10 +193,17 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(takeover.status).toBe(200);
         expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe(desktop.public.trim());
 
-        // Revoke drops the key; the status flips back to un-enrolled.
-        expect((await fetch(`${base}/system/authorized-key`, { method: "DELETE" })).status).toBe(200);
+        /* Revoke is PER DEVICE, addressed by the machine name the device list shows: there is no fleet-wide
+         * kill switch behind this route any more (app.ts spells out why). What only this tier can prove is the
+         * half a route test cannot: sshd's authorized_keys is DERIVED from the enrollment store, so dropping the
+         * row has to leave the real file empty, and the status has to follow it back to un-enrolled. */
+        expect((await fetch(`${base}/system/authorized-key/e2e-desktop`, { method: "DELETE" })).status).toBe(200);
+        expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe("");
         const revoked = (await (await fetch(`${base}/system/sync`)).json()) as { enrolled: boolean };
         expect(revoked.enrolled).toBe(false);
+        // The bare DELETE is the AGENT's self-revoke and carries its sync token: nobody's enrollment matches an
+        // absent one, so it is a 404 rather than the sandbox-wide clear this line used to be.
+        expect((await fetch(`${base}/system/authorized-key`, { method: "DELETE" })).status).toBe(404);
     }, 120_000);
 
     it("automation approval hold: a webhook fire on a requireApproval automation lands in the queue, reject drops it", async () => {

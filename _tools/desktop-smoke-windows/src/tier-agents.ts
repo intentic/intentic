@@ -31,13 +31,14 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { LOCAL_PORT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { CONNECT_TOKEN } from "./constants.js";
 import type { Harness } from "./harness.js";
-import { assistantReplied, controlTokenSeedScript, controlTokenStore } from "./parse.js";
+import { assistantReplied, controlTokenSeedScript, controlTokenStore, sameStore } from "./parse.js";
+import { containersPublishing, publishedHostPort } from "./probe.js";
 import { run } from "./run.js";
 
 export interface AgentsTierOptions {
@@ -72,7 +73,19 @@ const seedControlToken = async (container: string, token: string): Promise<strin
     }
     const store = controlTokenStore(digest.stdout.trim());
     const write = await run(`docker`, [`exec`, container, `sh`, `-c`, controlTokenSeedScript(STORE_PATH, store)]);
-    return write.code === 0 ? undefined : `writing ${STORE_PATH} exited ${write.code}: ${write.stderr.trim()}`;
+    if (write.code !== 0) {
+        return `writing ${STORE_PATH} exited ${write.code}: ${write.stderr.trim()}`;
+    }
+    /* READ IT BACK, because a shell writes an empty file on a heredoc it never saw the end of and calls it a
+     * success. The seed's whole payload is one multi-line argument crossing two argument parsers and a shell,
+     * and every way that can go wrong lands here as exit 0 with a store the daemon then reads as nothing —
+     * which reaches the transcript as `/agents answered 401`, a sentence about the credential rather than about
+     * the write. What went in has to come back out, or this says which of the two it was. */
+    const back = await run(`docker`, [`exec`, container, `cat`, STORE_PATH]);
+    if (back.code !== 0) {
+        return `reading ${STORE_PATH} back exited ${back.code}: ${back.stderr.trim()}`;
+    }
+    return sameStore(store, back.stdout) ? undefined : `${STORE_PATH} does not hold what was written to it:\n${back.stdout.trim()}`;
 };
 
 interface DaemonCall {
@@ -99,6 +112,48 @@ const callDaemon = async (port: number, path: string, token: string | undefined,
     return { status: response.status, body: await response.text() };
 };
 
+/* WHOSE DAEMON ANSWERS THERE, asked before anything is asked OF it.
+ *
+ * Every assertion in this tier is about the sandbox tier 2 created, and every one of them up to the credential
+ * is satisfied just as well by SOMEBODY ELSE'S sandbox: another one is reachable, correctly gated, and refuses
+ * an uncredentialed call in exactly the same words. Only the seeded control token can tell the two apart,
+ * because that one is seeded into a container BY NAME — and its refusal then reads as a broken credential
+ * rather than as a wrong daemon, which is a sentence about the product where the truth is about the machine.
+ *
+ * Not hypothetical: the port is derived from the connect token, which this tier holds constant, so every
+ * sandbox it has ever created wants this one port. Docker refuses a whole `run` whose `-p` is taken and `ic`
+ * answers that by retrying WITHOUT the shortcut (sandbox/connect.rs) rather than failing the setup, so a
+ * leftover from an older run answers here while the container under test publishes nothing at all. `docker
+ * port` is the question that separates them; teardown removes such a leftover before the tiers begin. */
+const publishesTheShortcut = async (harness: Harness, container: string, port: number): Promise<boolean> => {
+    const published = await publishedHostPort(container, LOCAL_PORT);
+    if (published === port) {
+        harness.pass(`${container} publishes its loopback listener on ${port}`);
+        return true;
+    }
+    const holders = (await containersPublishing(port)).filter((name) => name !== container);
+    harness.fail(
+        published === undefined
+            ? `${container} publishes no host port for its loopback listener`
+            : `${container} publishes its loopback listener on ${published}, not the derived ${port}`,
+        `A browser on this machine derives ${port} from the sandbox id and would reach ${holders.length === 0 ? `nothing` : holders.join(`, `)}.\n` +
+            `The publish is dropped rather than failed when that port is already held, so the setup completed regardless.`,
+    );
+    return false;
+};
+
+// The gate, asserted before the credential is used, and worth asserting because the failure it guards is
+// silent: a daemon that answers everything to everyone looks identical, from every other assertion here, to
+// one that is correctly gated. The daemon refuses to boot at all in that state; this proves it did not.
+const gateIsReal = async (harness: Harness, port: number): Promise<void> => {
+    const unauthenticated = await callDaemon(port, `/agents`, undefined);
+    if (unauthenticated.status === 401 || unauthenticated.status === 403) {
+        harness.pass(`an uncredentialed call is refused (${unauthenticated.status})`);
+        return;
+    }
+    harness.fail(`an uncredentialed /agents answered ${unauthenticated.status}`, `This daemon is reachable and ungated.`);
+};
+
 export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions): Promise<void> => {
     const sandboxId = sandboxIdFromToken(CONNECT_TOKEN);
     if (sandboxId === undefined) {
@@ -109,6 +164,11 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
 
     // ── reachable from the host, at the address the browser derives ──────────────────────────────────────
     harness.section(`the loopback shortcut (port ${port}, derived from sandbox ${sandboxId})`);
+
+    if (!(await publishesTheShortcut(harness, options.container, port))) {
+        return;
+    }
+
     const reachable = await harness.untilTrue(60, `the daemon answers /health on the host's loopback`, async () => {
         const health = await callDaemon(port, `/health`, undefined);
         return health.status === 200;
@@ -122,15 +182,7 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     }
 
     // ── the gate is real ─────────────────────────────────────────────────────────────────────────────────
-    // Asserted before the credential is used, and worth asserting because the failure it guards is silent: a
-    // daemon that answers everything to everyone looks identical, from every other assertion here, to one that
-    // is correctly gated. The daemon refuses to boot at all in that state, this proves it did not.
-    const unauthenticated = await callDaemon(port, `/agents`, undefined);
-    if (unauthenticated.status === 401 || unauthenticated.status === 403) {
-        harness.pass(`an uncredentialed call is refused (${unauthenticated.status})`);
-    } else {
-        harness.fail(`an uncredentialed /agents answered ${unauthenticated.status}`, `This daemon is reachable and ungated.`);
-    }
+    await gateIsReal(harness, port);
 
     // ── the credential a program is meant to use ─────────────────────────────────────────────────────────
     harness.section(`driving it with a control token`);

@@ -173,8 +173,47 @@ export const dockerOsType = (stdout: string): string | undefined => {
     return value === `` ? undefined : value;
 };
 
+/** What every sandbox container this product creates is called, whatever hostname produced its slug. */
+export const SANDBOX_CONTAINER_PREFIX = `intentic-sandbox-`;
+
 /** The container name every later flow addresses, recreate, cleanup and the launcher's docker reads all key off it. */
-export const sandboxContainerName = (hostname: string): string => `intentic-sandbox-${sandboxSlug(hostname)}`;
+export const sandboxContainerName = (hostname: string): string => `${SANDBOX_CONTAINER_PREFIX}${sandboxSlug(hostname)}`;
+
+/** `docker ps --format {{.Names}}` (or any one-name-per-line docker output), as the list it prints. */
+export const containerNames = (stdout: string): string[] =>
+    stdout
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line !== ``);
+
+/* `docker port <container> <port>/tcp`, which answers `127.0.0.1:28122` for a published port and NOTHING AT
+ * ALL for one that is not published, exit 0 either way on some engines.
+ *
+ * That silence is the whole reason this exists. `ic` treats the loopback shortcut as the one part of a launch
+ * whose failure does not mean a broken sandbox: docker refuses the entire `run` when the derived port is held,
+ * so connect retries without the `-p` and says so in a note nobody's exit code carries. The sandbox is then
+ * healthy, reachable through its tunnel, and absent from the address a browser on this machine derives, which
+ * is exactly the state tier 3 exists to catch and cannot catch by asking whether SOMETHING answers there. */
+export const publishedPort = (stdout: string): number | undefined => {
+    const first = containerNames(stdout)[0];
+    if (first === undefined) {
+        return undefined;
+    }
+    const port = Number.parseInt(first.slice(first.lastIndexOf(`:`) + 1), 10);
+    return Number.isNaN(port) ? undefined : port;
+};
+
+/* Whether the store that came back out of the container is the one that went in, compared as the daemon reads
+ * it (parsed JSON) rather than byte for byte: what matters is that `auth/control-tokens.ts` will find the hash,
+ * not that the bytes survived unshuffled, and a heredoc that arrived with CRLF line endings is a store the
+ * daemon accepts. Unparseable, on either side, is never the same store. */
+export const sameStore = (written: string, readBack: string): boolean => {
+    try {
+        return JSON.stringify(JSON.parse(written)) === JSON.stringify(JSON.parse(readBack));
+    } catch {
+        return false;
+    }
+};
 
 /** The slug rule the app's launcher relies on: everything before the first dot. */
 export const sandboxSlug = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;

@@ -8,7 +8,18 @@
 
 import { errorMessage } from "@intentic/base/errors";
 import { desktop, type WindowInfo } from "@intentic/desktop";
-import { asList, dockerOsType, installedApp, titled, webView2Version, type InstalledApp, type RunnerTask, type UninstallEntry } from "./parse.js";
+import {
+    asList,
+    containerNames,
+    dockerOsType,
+    installedApp,
+    publishedPort,
+    titled,
+    webView2Version,
+    type InstalledApp,
+    type RunnerTask,
+    type UninstallEntry,
+} from "./parse.js";
 import { powershell, run } from "./run.js";
 
 /* Where Windows lists what is installed. Both hives, because `installMode: currentUser` in the bundle config
@@ -130,6 +141,18 @@ export const dockerLogs = async (container: string, lines: number): Promise<stri
 
 export const removeContainer = async (container: string): Promise<void> => {
     await run(`docker`, [`rm`, `-f`, container]);
+};
+
+/** Which host port this container publishes for one of its own, or undefined when it publishes none. */
+export const publishedHostPort = async (container: string, containerPort: number): Promise<number | undefined> => {
+    const result = await run(`docker`, [`port`, container, `${containerPort}/tcp`]);
+    return result.code === 0 ? publishedPort(result.stdout) : undefined;
+};
+
+/** Every running container that has claimed a host port, which is how the one holding a derived port is named. */
+export const containersPublishing = async (port: number): Promise<string[]> => {
+    const result = await run(`docker`, [`ps`, `--filter`, `publish=${port}`, `--format`, `{{.Names}}`]);
+    return result.code === 0 ? containerNames(result.stdout) : [];
 };
 
 /* The window layer. `@intentic/desktop` rather than a P/Invoke of our own: it is this repo's own answer to

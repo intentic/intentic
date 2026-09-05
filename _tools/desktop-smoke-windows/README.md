@@ -111,6 +111,13 @@ machine use it".
   container publishes its loopback listener on a host port computed from the sandbox id. This tier computes it
   with the same function (`localDaemonPort`), never a copy of the arithmetic. If that publish is broken on
   Windows, every local user's workspace silently falls back to the tunnel and nobody finds out.
+- **Whose daemon answers there**, asked with `docker port` before anything is asked of it. The tier's connect
+  token is a constant, so every sandbox it has ever created wants the same host port, and docker refuses a whole
+  `run` whose `-p` is held: `ic` then retries WITHOUT the shortcut rather than failing the setup. A leftover
+  from an older run therefore answers on that port — reachable, correctly gated, refusing an uncredentialed
+  call in the same words — while the container under test publishes nothing. Every assertion below it would
+  pass against that stranger, and only the seeded credential would not, which is how a machine's leftover comes
+  out as a sentence about the product's auth. `teardown` removes such a leftover; this names it.
 - **The gate.** An uncredentialed call must be refused. Worth asserting because a daemon that answers
   everything to everyone is, from every other assertion here, indistinguishable from a correctly gated one.
 - **The turn.** Driven with a **control token** at `drive` scope: the credential the product provides for
@@ -127,6 +134,11 @@ Seeding creates the store's directory on the way in, and derives it from the pat
 naming it a second time. Nothing on a fresh sandbox has made that directory yet: the daemon writes its
 identity files when a browser first connects, and this tier never opens one: so the write is the first thing
 there, and a directory named twice is a directory that disagrees with itself the next time one of them moves.
+
+The seed is then **read back and compared**, because the payload is one multi-line heredoc crossing two
+argument parsers and a shell, and a shell that never saw the end of one writes an empty file and exits 0. Every
+way that write can go wrong otherwise reaches the transcript as `/agents answered 401` — a sentence about the
+credential, when the truth is about the write.
 
 The AI account is **connected once, by hand**, and shared through a Docker volume the setup mounts at
 `/agent-auth`. Connecting one is a subscription OAuth flow through a browser; there is no API-key route in this

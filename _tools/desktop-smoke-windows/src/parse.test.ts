@@ -2,11 +2,15 @@ import { expect, test } from "vitest";
 import {
     assistantReplied,
     asList,
+    containerNames,
+    controlTokenStore,
     dockerOsType,
     humanDuration,
     installedApp,
     nonEmpty,
+    publishedPort,
     runnerSupervision,
+    sameStore,
     sandboxContainerName,
     sandboxSlug,
     titled,
@@ -106,6 +110,36 @@ test("the container name follows the slug rule every later flow addresses", () =
     expect(sandboxSlug(`winsmoke.e2e.test`)).toBe(`winsmoke`);
     expect(sandboxContainerName(`winsmoke.e2e.test`)).toBe(`intentic-sandbox-winsmoke`);
     expect(sandboxContainerName(`work`)).toBe(`intentic-sandbox-work`);
+});
+
+test("a published host port is read off docker port, and its absence is not a port", () => {
+    /* The distinction this whole probe exists for: a container that publishes the loopback listener and one
+     * that does not both answer `docker port` with exit 0, and the second says nothing at all. Reading that
+     * silence as "no port" is what lets tier 3 tell its own sandbox from whoever else holds the address. */
+    expect(publishedPort(`127.0.0.1:28122\n`)).toBe(28122);
+    // Both families, for a publish that was not scoped to loopback: the port is the same on either line.
+    expect(publishedPort(`0.0.0.0:28122\n[::]:28122\n`)).toBe(28122);
+    expect(publishedPort(`127.0.0.1:28122\r\n`)).toBe(28122);
+    expect(publishedPort(``)).toBeUndefined();
+    expect(publishedPort(`\n \n`)).toBeUndefined();
+});
+
+test("container names come back one per line, whatever the shell's line endings", () => {
+    expect(containerNames(`intentic-sandbox-winsmoke\nintentic-sandbox-work\n`)).toEqual([`intentic-sandbox-winsmoke`, `intentic-sandbox-work`]);
+    expect(containerNames(`intentic-sandbox-winsmoke\r\n`)).toEqual([`intentic-sandbox-winsmoke`]);
+    expect(containerNames(`\n`)).toEqual([]);
+});
+
+test("the seeded store is compared as the daemon reads it, not as bytes", () => {
+    const store = controlTokenStore(`deadbeef`);
+    expect(sameStore(store, `${store}\n`)).toBe(true);
+    // The seed is a multi-line heredoc crossing two argument parsers on Windows: CRLF is a store the daemon
+    // still accepts, and a truncated one is not.
+    expect(sameStore(store, store.replace(`{"tokens"`, `{\r\n"tokens"`))).toBe(true);
+    expect(sameStore(store, controlTokenStore(`cafebabe`))).toBe(false);
+    // The failure this catches: a shell that never saw the end of the heredoc writes an empty file and exits 0.
+    expect(sameStore(store, ``)).toBe(false);
+    expect(sameStore(store, `{"tokens":[`)).toBe(false);
 });
 
 test("a title matches on its distinctive half, so reworded copy does not go red", () => {
