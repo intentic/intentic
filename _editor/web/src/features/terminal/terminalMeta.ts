@@ -15,13 +15,15 @@ export interface TerminalMeta {
 }
 
 // What each KIND looks like when the user hasn't overridden it, the strip's pills and the Recent-work rows
-// read from the same table, so a glyph means the same thing wherever it appears.
+// read from the same table, so a glyph means the same thing wherever it appears. A plain shell wears `code`,
+// the SAME glyph as the rail's terminal tile: the pill and the tile that opens it must be the one picture.
+// Not `desktop` (ri:device-line), which is the monitor the Devices and Browsers surfaces already own.
 export const KIND_ICONS = {
     agent: `sparkles`,
     job: `bolt`,
     process: `cog`,
-    shell: `desktop`,
-    panel: `desktop`,
+    shell: `code`,
+    panel: `code`,
 } as const satisfies Record<string, IconName>;
 
 // The offered palette (VSCode's terminal-tab colors, roughly), tuned to read on the dark pill background.
