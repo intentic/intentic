@@ -465,8 +465,8 @@ RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
 # admission policy (src/platform/resources/memory-admission.ts, the numbers that refuse a turn) run as a command, so
 # queue-run can hold a suite off a pinned box without the policy being written down twice. Fails open on every
 # path, including this binary being absent.
-RUN chmod +x /opt/sandbox/dist/platform/memory-gate.js \
-    && ln -s /opt/sandbox/dist/platform/memory-gate.js /usr/local/bin/memory-gate
+RUN chmod +x /opt/sandbox/dist/platform/resources/memory-gate.js \
+    && ln -s /opt/sandbox/dist/platform/resources/memory-gate.js /usr/local/bin/memory-gate
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The
 # environment skill teaches the agent to extend this very image via an approved overlay Dockerfile; the
 # intentic skill is the product's own reference, what the agent reads before it answers for the product.
