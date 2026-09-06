@@ -56,6 +56,13 @@ back at all:
 Automation turns additionally receive `AUTOMATION_PAYLOAD`, the webhook body or event lines the trigger
 delivered (the automation templates on `connectors` and `imap` read it).
 
+An automation's GUARD is not a turn — it is a shell command the daemon runs itself before deciding to wake
+anything (`automations/scheduler.ts` `runGuard`), so it gets the daemon's own environment rather than the
+layers above, plus three names: `AUTOMATION_PAYLOAD` when the trigger arrived with one, the root-only shelf
+exclusion a scanner-backed guard must pass on (`WORKSPACE_ROOT_EXCLUDE_ENV`), and `AUTOMATION_ID`, the id of
+the automation being fired. That last one is what lets a guard weigh its own past — everything the daemon
+records about a fire is keyed by it — without a template hardcoding an id the owner is free to rename.
+
 ## 3. The process (`platform/leftovers.ts`)
 
 `INTENTIC_TURN_OWNER=<conversation id>` stamps every workload the daemon spawns on a turn's behalf: the

@@ -71,6 +71,13 @@ disagreement waiting for whichever was edited second.
 - The dependency fix chore ("Fix what a dependency change broke") exists only as a template. No row is added
   until the owner picks it; its fires then carry a 60-second hold. Approved posts are carried out by the
   daemon's approvals executor at their due time rather than through an automation.
+- The dreaming session is the one offer whose subject is this SANDBOX rather than a repository: it reads the
+  sessions that have been run here and changes one thing about how the next ones will go (a persona, a
+  capability to ask for, an image step, a mechanism against a repeated correction). Its row spends most nights
+  saying "12 sessions since the last dreaming session, and the bar is 30", and that is the automation working:
+  a pattern is what survives thirty sessions, so the cron only asks and the guard answers. It measures from the
+  conversation its own last fire opened rather than from its run history, because a run history is capped and a
+  job that skips for three weeks would otherwise forget it had ever run (`sandbox/src/automations/catalog.ts`).
 - A source outlives the pack that supplied it and a template does not, which reads like an inconsistency until
   you ask what each one is for. A source has to keep naming the trigger of an automation already standing on it,
   so a switched-off pack keeps its row and the picker simply declines to offer it. A template is something you

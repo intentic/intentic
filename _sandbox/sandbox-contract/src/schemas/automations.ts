@@ -264,7 +264,9 @@ export type WebchatMessage = z.infer<typeof WebchatMessageSchema>;
 export const AutomationSchema = z.object({
     id: entryId.describe("The automation's id."),
     trigger: TriggerSchema.describe("What sets it off: a schedule, an event in the workspace, a message arriving from outside, or a webhook."),
-    // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
+    /* Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
+     * Its environment carries `AUTOMATION_ID` (this automation's own id, so a guard can look up what its past
+     * fires did) and, for a trigger that arrived with one, `AUTOMATION_PAYLOAD`. */
     guard: z
         .string()
         .min(1)
@@ -279,7 +281,9 @@ export const AutomationSchema = z.object({
     // field rather than a shared "public endpoint" bag: the two sources answer different questions (a chat's
     // greeting and access model, an intake's dedup ceiling and ingest key) and a union of both would be a
     // schema where most fields are wrong for whichever source is reading it.
-    issues: IssuesConfigSchema.optional().describe("Settings for the bug reporter, for an automation that takes crash reports from your own sites and apps."),
+    issues: IssuesConfigSchema.optional().describe(
+        "Settings for the bug reporter, for an automation that takes crash reports from your own sites and apps.",
+    ),
     /* NARROW THIS ONE JOB FURTHER than the persona it runs as, raw tool names, and the escape hatch under the
      * shelves rather than the way anyone is expected to answer this question.
      *

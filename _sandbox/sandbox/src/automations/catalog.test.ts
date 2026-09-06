@@ -25,18 +25,31 @@ describe(`code chores come from the book`, () => {
         }
     });
 
-    /* Two shelf entries stand apart from the measurement book, and neither is an oversight: they are REFLEXES,
-     * not chores. Each fires on a workspace event, has no standing evidence to accumulate, and would be
-     * meaningless as a row in a panel about what a codebase is owed. The split is the point: the book holds
-     * chores that have a measurement, this file holds triggers. The fix chore's definition lives beside the
-     * book in fix-deps.ts so its template metadata and prompt stay one unit; this catalogue only dresses that
-     * definition for the shelf. */
-    test(`the only hand-written chores are the reflexes, with no standing evidence`, () => {
+    /* Three shelf entries stand apart from the measurement book, and none of them is an oversight. Two are
+     * REFLEXES: they fire on a workspace event, have no standing evidence to accumulate, and would be
+     * meaningless as a row in a panel about what a codebase is owed. The third is the dreaming session, which
+     * is not about a codebase at all — its evidence is the fleet's own history, which no probe measures and no
+     * repository has, so `assess` would have nothing to read and the panel nothing to show.
+     *
+     * The split is the point: the book holds chores that have a measurement, this file holds the ones whose
+     * trigger IS the measurement. The fix chore's definition lives beside the book in fix-deps.ts so its
+     * template metadata and prompt stay one unit; this catalogue only dresses that definition for the shelf. */
+    test(`the only hand-written chores are the ones the book cannot measure`, () => {
         const handWritten = shelf.filter((template) => !scheduled.some((chore) => chore.id === template.id));
-        expect(handWritten.map((template) => template.id)).toEqual([`fix-dependency-breakage`, `review-agent-work`]);
-        for (const reflex of handWritten) {
-            expect(reflex.trigger.kind).toBe(`workspace`);
-        }
+        expect(handWritten.map((template) => [template.id, template.trigger.kind])).toEqual([
+            [`fix-dependency-breakage`, `workspace`],
+            [`review-agent-work`, `workspace`],
+            [`dreaming-session`, `schedule`],
+        ]);
+    });
+
+    /* The book's chores are held to this above, and the hand-written one that carries a report needs it just as
+     * much: a guard's stdout is discarded unless the guard FAILS, so the file it writes is the only way what it
+     * counted reaches the turn, and a prompt naming a different path wakes an agent to an empty file. */
+    test(`the dreaming session's prompt reads the file its guard writes`, () => {
+        const dream = shelf.find((template) => template.id === `dreaming-session`);
+        expect(dream?.guard).toContain(`/tmp/intentic-dreaming-sessions.json`);
+        expect(dream?.prompt).toContain(`/tmp/intentic-dreaming-sessions.json`);
     });
 
     test(`a scheduled chore's prompt tells the woken turn where the guard left its findings`, () => {

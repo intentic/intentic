@@ -151,6 +151,88 @@ const CHORE_TEMPLATES: readonly AutomationTemplate[] = CHORES.flatMap((chore) =>
           ];
 });
 
+/* THE DREAMING SESSION, the one job on this shelf that is about the SANDBOX rather than about a codebase, and
+ * the only one whose evidence is the fleet's own history.
+ *
+ * A sandbox accumulates the shape of its own work: which kinds of job keep coming back, which of them open by
+ * rediscovering the same thing, which correction the owner has now typed three times. Nothing reads that back.
+ * Every other entry here measures a repository and changes a file in it; this one reads the SESSIONS and
+ * changes how the next hundred are run, a persona that starts a category of job with the right context, a
+ * capability worth asking the owner for, a tool worth baking into the image, a hook that stops a mistake being
+ * made a fourth time.
+ *
+ * WHY IT COUNTS INSTEAD OF JUST RUNNING. Nightly on a quiet week is a turn spent describing the four sessions
+ * it described yesterday, and the whole value here is volume: a pattern is what survives thirty sessions, an
+ * anecdote is what three of them look like. So the cron only ASKS, and the guard answers, which is also what
+ * makes the row honest when it is quiet, "12 sessions since the last one" is a status, not a failure. */
+const DREAMING_ID = "dreaming-session";
+// Where the guard leaves the sessions it counted, for the turn that starts moments later. Same reasoning as the
+// chore reports (chores.ts): a guard's stdout is discarded unless it FAILS, so a file is how the free
+// deterministic half hands its findings to the half that costs a turn.
+const DREAMING_REPORT = "/tmp/intentic-dreaming-sessions.json";
+// How much has to have happened before there is something to see. Sessions, not days: a week of one-line
+// questions is not a week of evidence, and thirty busy hours can be.
+const DREAMING_SESSIONS_FLOOR = 30;
+
+/* WHAT IS COUNTED, AND WHERE THE LAST TIME IS READ FROM, both answered by the fleet registry in one pass.
+ *
+ * THE HIGH-WATER MARK IS THE REGISTRY, NOT THE RUN LEDGER, and that is correctness rather than convenience.
+ * The ledger keeps a bounded number of runs per automation (automations-store.ts RUNS_KEPT), so a nightly job
+ * that skips for three weeks pushes its own last completed run off the end of its history and forgets when it
+ * last ran, after which "since last time" quietly means "ever" and the bar this exists to enforce is cleared
+ * on the next tick. Every fire mints a conversation named `a-<automation>-<time>` (conversation-ids.ts) and
+ * the registry keeps conversations forever, so the newest of those IS the last time this automation woke an
+ * agent, and no amount of skipping can erase it.
+ *
+ * WHAT COUNTS IS WHAT SOMEBODY ASKED FOR. Those same `a-` names are how the fleet's robotic half is kept out
+ * of the total: a Front Desk answering visitors all afternoon, the nightly sweeps, and this job itself cannot
+ * push the counter up. Thirty visitor greetings are not thirty pieces of work worth reviewing.
+ *
+ * `${HISTORY_ROOT:-/history}` is the image's own idiom for the history volume (docker-entrypoint.sh): the
+ * daemon takes the root as an override with that name and falls back to the same default. */
+const DREAMING_GUARD =
+    `jq --arg me "$AUTOMATION_ID" '` +
+    `(map(select(.id | startswith("a-" + $me[0:40] + "-")) | .createdAt) | max // 0) as $since | ` +
+    `(map(select(.createdAt > $since and .origin == null and (.id | startswith("a-") | not))) | sort_by(-.createdAt)) as $new | ` +
+    `{since: $since, count: ($new | length), ` +
+    `sessions: ($new[0:200] | map({id, title, at: (.createdAt/1000 | todate), status, provider, model, turns, toolUses, costUsd}))}' ` +
+    `"\${HISTORY_ROOT:-/history}/agents.json" > ${DREAMING_REPORT} || { echo "the fleet registry could not be read"; exit 1; }; ` +
+    `count=$(jq -r .count ${DREAMING_REPORT}); ` +
+    `[ "$count" -ge ${DREAMING_SESSIONS_FLOOR} ] || { echo "$count sessions since the last dreaming session, and the bar is ${DREAMING_SESSIONS_FLOOR}"; exit 1; }`;
+
+/* The brief. Four areas, because they are the four things a session can be made better by that a session
+ * cannot fix for itself: the context it starts with, what it is allowed to reach, what is installed, and what
+ * it is told. Naming the LEVER for each one is the difference between a turn that changes something and a turn
+ * that writes an essay about what somebody should change. */
+const DREAMING_PROMPT =
+    `Dream about how this sandbox works, and change one thing about it.\n\n` +
+    `${DREAMING_REPORT} is the sessions somebody has run here since you last did this (JSON): id, title, when, how many ` +
+    `turns each took, what it cost. \`agents show <id> --transcript --last 40\` reads any of them back and ` +
+    `\`agents find '<text>'\` finds the ones that said a particular thing. Read enough of them to see a PATTERN rather ` +
+    `than an anecdote: what this sandbox is actually asked for, where the same ground is covered from cold every time, ` +
+    `and where the owner has had to correct the same thing more than once.\n\n` +
+    `Then pick ONE improvement, the most substantial one available, in one of these four areas:\n` +
+    `- PERSONAS. A category of job that keeps coming back deserves a card that starts it with the right context, the ` +
+    `right accounts and the right corner of the workspace, instead of the whole toolbox and a cold read. Create one, ` +
+    `sharpen one, or delete one no session has needed (.intentic/config/personas.json, and the Personas page draws it).\n` +
+    `- A CAPABILITY TO ASK FOR. Something you kept working around because this sandbox is not connected to it: a ` +
+    `service, an account, one of the owner's own machines. Raise it with the \`capabilities\` skill, so it arrives as a ` +
+    `card they can approve, and say which sessions it would have changed.\n` +
+    `- THE IMAGE. A tool that would have made the searching, reading or artifact-making in those sessions materially ` +
+    `cheaper, proposed as a Dockerfile step through the \`environment\` skill. Installing it at runtime is not the ` +
+    `answer: it does not survive, which is exactly why this is one of the four.\n` +
+    `- A MISTAKE THAT KEEPS HAPPENING. Where the record shows the same correction being typed again, the fix is a ` +
+    `mechanism rather than a resolution: a hook under .intentic/config/hooks, a skill, or a line in the workspace's own ` +
+    `AGENTS.md / CLAUDE.md that would have prevented it.\n\n` +
+    `The sessions woke you; they did not decide anything. A count is not a pattern, and one bad afternoon is not a ` +
+    `standing problem: quote what you actually read. If they genuinely show nothing worth changing, say so in one line ` +
+    `and stop, inventing an improvement to look useful costs more than the turn that found nothing.\n\n` +
+    `Do the one thing you chose, in full, and nothing else: this lands as a single diff for someone who did not watch ` +
+    `you work, and a night that rewrote five files about four ideas is one nobody can review. Where the change is an ASK ` +
+    `rather than an edit, raise it through the skill that owns it instead of describing it in your summary. Finish with ` +
+    `a short note: what the sessions showed, in numbers; what you changed or asked for; and what you considered and ` +
+    `rejected, so the next one of these does not spend its night re-proposing it.`;
+
 export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
     {
         id: "front-desk",
@@ -235,6 +317,19 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
             `Cite file:line for each one and keep it to what you can point at. If the change is fine, say so in one line: ` +
             `do not manufacture findings to look useful.`,
         note: "skips changes under 20 lines",
+        offer: "create",
+        chore: true,
+    },
+    {
+        id: DREAMING_ID,
+        title: "Dreaming session",
+        icon: "moon",
+        requires: [],
+        trigger: { kind: "schedule", cron: "0 5 * * *" },
+        description: "Look back over the sessions this sandbox has run, and change one thing about how the next ones will go.",
+        guard: DREAMING_GUARD,
+        prompt: DREAMING_PROMPT,
+        note: `nightly · wakes once ${DREAMING_SESSIONS_FLOOR} new sessions have run`,
         offer: "create",
         chore: true,
     },

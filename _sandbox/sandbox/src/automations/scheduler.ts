@@ -81,11 +81,23 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
     return `Disabled after ${failures} consecutive failed runs (automationFailureLimit is ${automationFailureLimit}). Fix the cause and re-enable it.`;
 };
 
-// Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
-// guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
-// the UI). The process env also names the root-only shelf exclusion for scanner-backed guards; guards are
-// sandbox scripts, not agent turns.
-const runGuard = async (command: string, cwd: string, payload: string | undefined): Promise<{ pass: boolean; detail?: string }> => {
+/* Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
+ * guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
+ * the UI). The process env also names the root-only shelf exclusion for scanner-backed guards; guards are
+ * sandbox scripts, not agent turns.
+ *
+ * AUTOMATION_ID IS HOW A GUARD NAMES ITSELF, which a guard that weighs its own past has no other way to do.
+ * Everything the daemon records about a fire is keyed by the automation's id — the run ledger, and the
+ * conversation each fire mints (`a-<automation>-<time>`, mintConversationId below) — so "has enough happened
+ * since I last ran?" is one read of a file the sandbox already keeps, and one that a TEMPLATE can ask, which
+ * is the part that needed this: a template cannot hardcode an id, because the id is the row's name and the
+ * owner is free to type another one. */
+const runGuard = async (
+    command: string,
+    cwd: string,
+    payload: string | undefined,
+    automationId: string,
+): Promise<{ pass: boolean; detail?: string }> => {
     try {
         await execFileAsync("sh", ["-c", command], {
             cwd,
@@ -93,6 +105,7 @@ const runGuard = async (command: string, cwd: string, payload: string | undefine
             env: {
                 ...process.env,
                 [WORKSPACE_ROOT_EXCLUDE_ENV]: REFERENCE_DIR,
+                AUTOMATION_ID: automationId,
                 ...(payload !== undefined ? { AUTOMATION_PAYLOAD: payload } : {}),
             },
         });
@@ -186,7 +199,12 @@ export interface FireOutcome {
  * meets a running one is refused or made to wait, and `runFire` below is the fire itself.
  *
  * Callers run it detached from their tick/request lifecycles; tests await it directly. */
-export const fireAutomation = async (services: Services, automation: AutomationRecord, wake: WakeFn, options: FireOptions = {}): Promise<FireOutcome> => {
+export const fireAutomation = async (
+    services: Services,
+    automation: AutomationRecord,
+    wake: WakeFn,
+    options: FireOptions = {},
+): Promise<FireOutcome> => {
     const running = inFlight.get(automation.id);
     if (running !== undefined && options.overlap !== "queue") {
         // Dropped as overlapping, which is a REPLY THAT WILL NEVER COME for anyone waiting on the sink, and
@@ -271,7 +289,7 @@ const runFire = async (
         }
         if (cleared !== "both") {
             if (automation.guard !== undefined) {
-                const precheck = await runGuard(automation.guard, services.workspace.root, capped);
+                const precheck = await runGuard(automation.guard, services.workspace.root, capped, automation.id);
                 if (!precheck.pass) {
                     await services.automations.recordRun(automation.id, {
                         at: Date.now(),

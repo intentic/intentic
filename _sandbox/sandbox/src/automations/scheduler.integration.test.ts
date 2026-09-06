@@ -87,12 +87,21 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     expect(prompts).toEqual(["wake:guarded"]);
 });
 
-test("guards receive the reserved workspace-root directory to prune", async () => {
+/* What a guard's environment carries beyond the payload: the shelf a scanner-backed guard must prune, and the
+ * automation's own id. The id is what lets a guard weigh its OWN past — the run ledger and the conversations
+ * its fires minted are both keyed by it — which is a question a template has to be able to ask without
+ * hardcoding an id the owner is free to rename. */
+test("a guard is told which automation it is, and which directory to prune", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("scoped", { guard: `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs"` }));
+    const namesItself = `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs" && test "$AUTOMATION_ID" = "scoped"`;
+    await services.automations.upsert(automation("scoped", { guard: namesItself }));
+    // The same guard on another row: it is the firing automation's id, not a constant the daemon exports.
+    await services.automations.upsert(automation("other", { guard: namesItself }));
     const prompts: string[] = [];
     await fireAutomation(services, (await services.automations.get("scoped")) as AutomationRecord, fakeWake(prompts));
+    await fireAutomation(services, (await services.automations.get("other")) as AutomationRecord, fakeWake(prompts));
     expect((await services.automations.get("scoped"))?.runs[0]?.outcome).toBe("completed");
+    expect((await services.automations.get("other"))?.runs[0]?.outcome).toBe("skipped");
     expect(prompts).toEqual(["wake:scoped"]);
 });
 
