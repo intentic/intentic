@@ -638,6 +638,9 @@ export const HostedOfferSchema = z.object({
     enabled: z.boolean(),
     remaining: z.number().int().nonnegative(),
     hours: HostedHoursSchema.optional(),
+    // True when the caller is on the hosted plan (or comped onto it): no hours, and the card says "always
+    // on" rather than "free", which is the other reason `hours` can be absent (a platform with no ceiling).
+    plan: z.boolean().optional(),
 });
 export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 

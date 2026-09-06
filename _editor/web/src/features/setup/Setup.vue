@@ -514,10 +514,16 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    * AND IT SAYS WHAT HAPPENS AFTER THE HOURS, for the same reason. "40h a month" answers
                    * "how much do I get" and leaves "and then?" hanging, which is precisely the question a
                    * price is read to settle; the honest answer is that the hosted plan lifts the limit (and the
-                   * rung beside this one never had it): said as the upgrade it is. Owners on the plan and
-                   * ceiling-less platforms send no hours at all and read the old way. */
-                  meta:
-                      hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month, always on with the plan`,
+                   * rung beside this one never had it): said as the upgrade it is. "To try" because that is
+                   * what the free hours are, and a reader who took "Free" as the whole price found out later.
+                   * An owner on the plan (or comped onto it) sends no hours and reads "always on": their card
+                   * must not say free about a thing they pay for. Only a platform with no ceiling at all
+                   * reads the bare way. */
+                  meta: hostedOffer.value?.plan
+                      ? `On your plan · always on`
+                      : hostedHours.value === null
+                        ? `Free · ready in seconds`
+                        : `Free to try · ${hostedHours.value.allowance}h a month, always on with the plan`,
                   note: `Runs on our servers`,
               },
           ]

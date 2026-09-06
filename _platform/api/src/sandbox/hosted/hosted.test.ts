@@ -36,7 +36,7 @@ const config = (over?: Record<string, unknown>): Config =>
             idleWarnDays: 14,
             poolSize: 1,
         },
-        hostedPlan: { compEmails: `` },
+        hostedPlan: { compEmails: ``, stripeSecretKey: ``, stripePriceId: `` },
         ...over,
     }) as unknown as Config;
 
@@ -715,6 +715,13 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             config: config({ hosted: { ...config().hosted, monthlyHours: 0 } }),
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({ enabled: true, remaining: 1 });
+        // Where the plan is actually sold, the same owner is told they are on it, so the card can say "always
+        // on" instead of "free": the two reasons `hours` is absent must not read alike.
+        const selling = routeContext({
+            prisma: member,
+            config: config({ hostedPlan: { ...config().hostedPlan, stripeSecretKey: `sk`, stripePriceId: `price` } }),
+        });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: selling })).toEqual({ enabled: true, remaining: 1, plan: true });
     });
 
     /* The gate itself: a non-member who has spent the month is refused the wake, and told both ways out. The

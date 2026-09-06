@@ -640,6 +640,17 @@ it(`states the hour ceiling and what follows it on the hosted card, with the sma
     expect(el.textContent).toContain(`it's removed`);
 });
 
+/* AN OWNER ON THE PLAN IS NOT TOLD "FREE". Comped or paying, their card says what they have: always on. The
+ * bare "Free · ready in seconds" is for a platform with no ceiling at all, and only there. */
+it(`says always on, not free, on the hosted card of an owner on the plan`, async () => {
+    query.value = { elsewhere: `1` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, plan: true });
+    const el = await mount();
+    const hosted = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)][0];
+    expect(hosted?.textContent).toContain(`On your plan · always on`);
+    expect(hosted?.textContent).not.toContain(`Free`);
+});
+
 // A member has no ceiling, so a member is shown none: the absence of the block is the whole contract.
 it(`says nothing about hours to someone they do not apply to`, async () => {
     query.value = { elsewhere: `1` };

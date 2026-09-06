@@ -23,6 +23,7 @@ import {
 } from "./hosted/hosted.js";
 import { HostedBuildRefused, type HostedBuildRefusal, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/hosted-build.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
+import { hostedPlanEnabled, onHostedPlan } from "./hosted/hosted-plan.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
@@ -303,12 +304,16 @@ export const sandboxRoutes = {
         // is omitted entirely for the unmetered (the hosted plan, ceiling-less platforms), a limit that does not
         // apply to you should not appear on your screen at all.
         const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
+        // Said separately from "unmetered": a platform with no ceiling is also unmetered, and its card must
+        // not claim a plan nobody bought.
+        const plan = hostedPlanEnabled(context.config) && (await onHostedPlan(context.prisma, context.config, user.id));
         return {
             enabled: true,
             remaining: Math.max(0, context.config.hosted.perUser - used),
             ...(budget.metered
                 ? { hours: { allowance: Math.round(budget.allowanceMinutes / 60), remaining: Math.floor(budget.remainingMinutes / 60) } }
                 : {}),
+            ...(plan ? { plan: true } : {}),
         };
     }),
     /* Give an existing sandbox a machine on intentic's own provider, the lane with no command, no code, no
