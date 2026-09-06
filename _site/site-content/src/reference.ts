@@ -62,7 +62,7 @@ const startHere: BookSection = {
                     meta: {
                         title: "Authorising a sandbox API call · intentic",
                         description:
-                            "Two credentials reach an intentic sandbox: a session for a signed-in person and a control token for a program. What each one is, how to get it, and what the four scopes reach.",
+                            "Two credentials reach an intentic sandbox: a session for a signed-in person and a control token for a program. How to get each, and what the scopes reach.",
                         datePublished: PUBLISHED,
                     },
                 },
@@ -73,7 +73,7 @@ const startHere: BookSection = {
                     meta: {
                         title: "The shape of a sandbox API call · intentic",
                         description:
-                            "Input rides the query string on a GET and a JSON body on everything else, including DELETE. The base address, the two conventions, and the routes that answer bytes instead of JSON.",
+                            "Input rides the query string on a GET and a JSON body on everything else, including DELETE. The base address, the conventions, and the routes answering bytes.",
                         datePublished: PUBLISHED,
                     },
                 },
@@ -84,7 +84,7 @@ const startHere: BookSection = {
                     meta: {
                         title: "Sandbox API failures · intentic",
                         description:
-                            "A refusal is a result, not a crash: every failure comes back as JSON with a message. What each status means on an intentic sandbox, and which ones are worth retrying.",
+                            "A refusal is a result, not a crash: every failure comes back as JSON with a message. What each status means on a sandbox, and which ones are worth retrying.",
                         datePublished: PUBLISHED,
                     },
                 },
@@ -99,13 +99,27 @@ const startHere: BookSection = {
                          * that already has a generated one, and would be wrong the first time a route started
                          * or stopped streaming. It was, within a day of being written. */
                         description:
-                            "Some routes answer a stream rather than a value: watching a turn, the sandbox-wide event feed, and the operations that take minutes. How to read one, and what each frame carries.",
+                            "Some routes answer a stream rather than a value: watching a turn, the sandbox event feed, the operations that take minutes. How to read one, frame by frame.",
                         datePublished: PUBLISHED,
                     },
                 },
             ],
         },
     ],
+};
+
+// A search result cuts a description past 160 characters. The group's summary leads; the book's sentence
+// follows only where it fits. A summary that does not fit on its own is a content bug, so the build fails.
+const DESCRIPTION_MAX = 160;
+const groupDescription = (group: { label: string; summary: string }): string => {
+    const lead = `${group.summary.replace(/\.\s*$/u, "")}.`;
+    const book = `the ${group.label.toLowerCase()} group of the intentic sandbox API`;
+    for (const suffix of [` Every route in ${book}, with its input, its answer and a playground.`, ` Every route in ${book}.`, ""]) {
+        if (lead.length + suffix.length <= DESCRIPTION_MAX) {
+            return lead + suffix;
+        }
+    }
+    throw new Error(`API group "${group.label}" summary is over ${DESCRIPTION_MAX} characters: ${lead}`);
 };
 
 /** One generated page per route group: the id is the group's own key, which is also its first path segment. */
@@ -115,30 +129,14 @@ const groupPage = (group: { name: string; label: string; summary: string; descri
     blurb: group.summary,
     meta: {
         title: `${group.label} · intentic sandbox API`,
-        /* The group's own summary, trimmed to what a search result will actually show. `description` runs to a
-         * paragraph and would be cut mid-sentence; `summary` is one line by construction and is guarded against
-         * a trailing period, so the sentence this builds closes cleanly. */
-        description: `${group.summary}. Every route in the ${group.label.toLowerCase()} group of the intentic sandbox API, with its input, its answer and a playground.`,
+        description: groupDescription(group),
         datePublished: PUBLISHED,
     },
 });
 
-/* The menu icon for each shelf, by its stable name. This menu shows its shelves as labels with no scent line
- * (the reference is looked up, not browsed), so the icon is the one bit of ornament each row carries; a shelf
- * with no entry here simply draws none. */
-const SHELF_ICONS: Record<string, string> = {
-    agents: "bot",
-    workspace: "folder",
-    kit: "briefcase",
-    connections: "network",
-    models: "cpu",
-    ship: "share-2",
-    daemon: "hard-drive",
-};
-
+// No shelf icons: the only thing that drew them was the bar menu this book used to be (see nav.ts).
 const referenceSections: BookSection[] = shelves.map(({ shelf, groups }) => ({
     label: shelf.label,
-    icon: SHELF_ICONS[shelf.name],
     // The shelf's first group: a nav row has to land on a real page, and a shelf heading is not one.
     entry: groups[0]?.name ?? "",
     groups: [{ items: groups.map(groupPage) }],

@@ -125,12 +125,16 @@ is the one the reader has to believe. It states the working stance in words nobo
 and the single word it takes from the system is the app's own name for the actor, so it teaches a
 word the product answers to. It still licenses no second noun for the machine.
 
-**The hero subhead carries the category**: `A workspace for coding agents. Nothing happens out of
-sight.` Ownership is not the only thing kept out of the first screen by the rules above: any
-statement of what the product *is* was out too, and that is not a differentiator to be earned later,
-it is the sentence every other claim hangs on. So the category noun leads and the visibility claim
-(recorded 2026-08-12) follows unchanged as the second beat. Same order for the page title and the
-meta description: category first, differentiators after.
+**The hero subhead carries the category**: `A workspace for coding agents.` One sentence. Any
+statement of what the product *is* had been kept out of the first screen along with ownership, and that
+is not a differentiator to be earned later, it is the sentence every other claim hangs on. Same order for
+the page title and the meta description: category first, differentiators after.
+
+Retired from the fold (2026-09-06, do not bring back, and `landing.ts` has no slots for them): the
+subhead's second beat "Nothing happens out of sight." (visibility is shown by the three live surfaces),
+a literal restatement line under the subhead, three fact chips under the CTAs ("Free and open source",
+"Works with Claude, Codex and Grok", "Runs on your own machine"), and an authored `finalCta` for the
+closing band, which keeps its own two lines in `Landing.astro`.
 
 ## Section order
 
@@ -142,11 +146,11 @@ its page) → **carry the trust** (ownership) → **the deal** (economics) → *
 → **get connected** → **objections** (FAQ) → **final CTA**. Each pain from positioning.md (P1–P7)
 surfaces where its band lands.
 
-**Free, no pricing section (principle, not a section).** There is deliberately no on-page pricing
-block and no "Pricing" nav/footer link: there is nothing to price. The whole product is free and
-MIT, and the page says so softly rather than loudly: the hero "Free and open source" chip, the
-economics band, the final CTA, and the FAQ answer "Is any of it paid?". Do not introduce a pricing
-section.
+**Free, and no pricing band on the landing page.** The page says free softly: the hero chip, the
+economics band, the final CTA, the FAQ answer "Is any of it paid?". Do not add a pricing section to it.
+`/pricing/` and a bar link exist (2026-09-06): "pricing" is the highest-intent click on a developer-tool
+site, and a visitor who finds no link assumes the price is hidden. Copy in `site-content/src/pricing.ts`,
+figures from `pool.ts`.
 
 ## Glossary (use these words, exactly)
 

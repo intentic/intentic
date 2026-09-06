@@ -5,4 +5,7 @@ Allow: /
 # assets behind them, and a shell script has no business in a search index.
 Disallow: /scripts/
 
+# Index and quote these pages; do not train on them.
+Content-Signal: search=yes, ai-input=yes, ai-train=no
+
 Sitemap: https://intentic.dev/sitemap-index.xml

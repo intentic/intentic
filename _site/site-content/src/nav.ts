@@ -1,36 +1,28 @@
+import { comparePages, compareHref } from "./compare";
 import { developersDestinations, developersServicesDestination } from "./developers";
-import { docsDestinations } from "./docs";
+import { docsDestinations, docsHref } from "./docs";
+import { guidePages, guidesHref } from "./guides";
 import type { ShotImage } from "./landing";
 import { productHref, productPages } from "./product";
 import { referenceDestinations, referenceHref } from "./reference";
-import { DEMO_PATH } from "./site";
+import { DEMO_PATH, discordUrl } from "./site";
 
-/* The site's navigation, as data.
+/* The site's navigation, as data. One source for the bar, the phone overlay and the footer's menus.
  *
- * Three menus, and all are grouped: a flat list of ten docs pages made "Manifest reference" a peer of
- * "Overview", and the product used to be five anchors into one long page: nothing you could link to, rank,
- * or illustrate. Each row now carries a line of scent, and the product rows carry the screenshot the page
- * opens on, which the mega-menu previews.
+ * The bar is spent on the buyer's path (Features, Docs, Resources, Pricing, About); every builder destination
+ * lives in one Developers menu. It used to run seven labels, four of them for somebody extending the product,
+ * while the guides, the blog and the comparisons had no bar presence at all (docs/site-audit-2026-09.md).
  *
- * Compare is NOT in the bar, and that is the deliberate omission here. A visitor looks for a comparison
- * after a specific doubt forms; a permanent tab would introduce a field of rivals before that question
- * exists. The bar is also the site's scarcest space, spent best on what people RETURN to (Features, Docs) or
- * act on (Get started). A comparison is usually read once, by someone search already sent straight to it.
+ * Compare is a row inside Resources, not a tab: a tab would introduce a field of rivals before the doubt
+ * exists, a row is read only by someone who opened the menu looking for this kind of page.
  *
- * It stays reachable in the two places that matter: a full column in the footer, sitewide, which is what
- * keeps every comparison page linked; and the home page FAQ, where the row that asks the question links the
- * hub: the moment the doubt actually forms, rather than before it.
- *
- * Download is the second deliberate omission, and for a different reason. The app is not a way INTO the
- * product: both roads end at the same signed-in workspace, and what it replaces is one step, the terminal
- * command that puts a sandbox on your machine. A permanent tab beside "Get started free" therefore offers
- * two openings where there is one, and most of the people who take it are first-timers clicking the most
- * concrete-sounding word in the bar: they get a longer road to the same place, a binary to install before
- * they know what it is for, and on a Mac no build at all. That cost is paid on every page view; the
- * returning reader installing on a second machine, who is the case FOR the tab, arrives rarely.
- *
- * So it lives where the need is instead: the Resources column of the footer, sitewide, and the band of the
- * home page that asks for a terminal: beside the command, at the moment the hesitation lands.
+ * Download is the deliberate omission. The app is not a way INTO the product: both roads end at the same
+ * signed-in workspace, and what it replaces is one step, the terminal command that puts a sandbox on your
+ * machine. A permanent tab beside "Create your workspace" offers two openings where there is one, and most
+ * of the people who take it are first-timers clicking the most concrete-sounding word in the bar: a longer
+ * road to the same place, a binary to install before they know what it is for, and on a Mac no build at all.
+ * It lives where the need is instead: the Resources column of the footer, and the band of the home page that
+ * asks for a terminal, beside the command.
  */
 
 export interface MenuItem {
@@ -61,8 +53,8 @@ export type NavEntry =
     | {
           type: "menu";
           label: string;
-          /** Path prefix that marks this menu active. */
-          prefix: string;
+          /** Every path prefix this label is current for: Resources spans /guides, /blog, /compare, /changelog. */
+          prefixes: string[];
           sections: MenuSection[];
           /** The one action at the foot of the panel. */
           action?: { label: string; href: string; external?: boolean };
@@ -105,99 +97,115 @@ export const navEntries: NavEntry[] = [
          * forwarded (see worker.ts), so the links other people made still arrive. */
         type: "menu",
         label: "Features",
-        prefix: "/features",
-        // The extension gallery is NOT a row here: it is already "Extensions" in this same bar, two items to
-        // the right, and a menu whose neighbour duplicates it teaches the reader that the bar has no shape.
+        prefixes: ["/features"],
+        // The extension gallery is NOT a row here: it is a row of the Developers menu, which is where the
+        // rest of the extension story lives, and a destination in two neighbouring menus teaches the reader
+        // that the bar has no shape.
         sections: [{ items: productItems() }],
         action: { label: "Try the demo workspace", href: DEMO_PATH },
     },
     {
         type: "menu",
         label: "Docs",
-        prefix: "/docs",
+        prefixes: ["/docs"],
         // One unlabelled column of four destinations: see docsDestinations for why this is not the tree.
         sections: [{ items: [...docsDestinations] }],
-        // The changelog as the panel's action rather than a seventh link in the bar. It is the same question
-        // the docs answer to "what does this thing do?" asked about the last two weeks of it, and it was the
-        // one row of the bar a visitor reads once a release.
-        //
-        // Points at OUR page rather than at the GitHub releases it used to: a visitor asking what changed wants
-        // the handful of things they would notice, and what they got was every commit in the range, subject
-        // lines and all. The exhaustive list is still one click further on (/changelog/ links each entry to its
-        // release), which is the right order: the readable answer first, the audit trail behind it.
-        action: { label: "Changelog", href: "/changelog/" },
+        // Changelog is a Resources row now, and a destination should not sit in two neighbouring menus.
+        action: { label: "Troubleshooting", href: docsHref("troubleshooting") },
     },
-    /* The authoring book, its own entry in the bar rather than a shelf inside Docs: the split this whole tree
-     * exists to make. Two shelf rows, and the reason a reader picks one over the other is the audience
-     * line under each: Build is the code, Ship is the process. "Developers" rather than "API" because the menu
-     * holds both jobs, and a bar that says "API" over registry policy is promising reference it isn't holding.
-     * The path now says "Developers" too, for the same reason the feature pages moved: see the Features entry
-     * above. The old /api/* paths are forwarded in worker.ts.
-     *
-     * THE THIRD ROW IS A PAGE, not a shelf, and it is the second thing you can ship here. Both artifacts are
-     * now named on the one surface every visitor passes: the shelves cover the extension, and the service
-     * gets the row it cannot get any other way, because one endpoint will never be a shelf of its own. This
-     * is the ONLY place the derived-from-shelves rule bends, and it bends because the rule was written to
-     * stop a menu listing twenty pages, not to hide one of two artifacts (see developersServicesDestination).
-     *
-     * It is a menu row rather than a top-level label on purpose. In the bar it would read as a peer
-     * destination, announcing a paid-service catalog to every visitor who has no endpoint to sell, and the
-     * bar is already six labels, two marks and a button wide. Inside the menu it costs nobody
-     * anything: whoever opened "Developers" is already the audience it is written for.
-     *
-     * The gallery is the ACTION here, the way the changelog is under Docs. It is the answer to the question an
-     * author arrives with: what does a listed extension actually look like, and the row it would otherwise
-     * be is already two items to the right in this same bar. */
+    /* Resources: what a visitor reads while making up their mind, in the order it is read: guides before they
+     * know the product exists, blog and comparisons once they do, changelog after installing, community when
+     * a page did not answer. Blog posts are markdown files this module cannot read, so that row has no `covers`. */
+    {
+        type: "menu",
+        label: "Resources",
+        prefixes: ["/guides", "/blog", "/compare", "/changelog"],
+        sections: [
+            {
+                items: [
+                    {
+                        label: "Guides",
+                        href: guidesHref(""),
+                        description: "Asked before you find us",
+                        icon: "compass",
+                        covers: [guidesHref(""), ...guidePages.map((page) => guidesHref(page.slug))],
+                    },
+                    {
+                        label: "Blog",
+                        href: "/blog/",
+                        description: "What we worked out, and got wrong",
+                        icon: "newspaper",
+                    },
+                    {
+                        label: "Compare",
+                        href: compareHref(""),
+                        description: "Cursor, Claude Code, Conductor, cloud agents",
+                        icon: "git-compare",
+                        covers: [compareHref(""), ...comparePages.map((page) => compareHref(page.slug))],
+                    },
+                    {
+                        label: "Changelog",
+                        href: "/changelog/",
+                        description: "What shipped, in plain words",
+                        icon: "history",
+                    },
+                    {
+                        label: "Community",
+                        href: discordUrl,
+                        description: "Ask in Discord",
+                        icon: "message-circle",
+                        external: true,
+                    },
+                ],
+            },
+        ],
+        action: { label: "The blog by RSS", href: "/blog/rss.xml", external: true },
+    },
+    /* Developers: everything for somebody building ON intentic. It was four bar labels (Developers, API,
+     * Extensions, Earn); all four readers have already decided to build and will open a menu. The API, the
+     * gallery and the economy are one row each pointing at an index: the /api/ shelf tree is the rail on the
+     * /api/ pages themselves. */
     {
         type: "menu",
         label: "Developers",
-        prefix: "/developers",
-        sections: [{ items: [...developersDestinations, developersServicesDestination] }],
-        action: { label: "Browse the gallery", href: "/extensions/" },
-    },
-    /* THE WIRE API, its own label rather than a row inside Developers, and this is the one place the bar was
-     * genuinely worth widening for.
-     *
-     * The two books next to each other are a fair test of the site's own cut, which is by READER. Developers is
-     * written for somebody extending intentic: they write a manifest, ship a bundle, get listed. This is for
-     * somebody CALLING a sandbox: a script, a dashboard, another agent, none of which will ever author an
-     * extension. Filed as a row under Developers, the whole HTTP surface would have been announced only to
-     * people who had already decided they were writing an extension.
-     *
-     * It is also simply bigger than the book it would have joined: 269 calls across 39 groups, against eight
-     * authored pages. A shelf that outweighs its book is a book.
-     *
-     * "API" is the accurate word here, and it is the word Developers gave up (see developers.ts): that book
-     * holds registry policy and trust definitions alongside its reference, and "API" over those was a promise
-     * it did not keep. Over this it is exactly the promise being made.
-     *
-     * The rows are the reference's own shelves, derived like every other menu, so a shelf added to the
-     * generated tree is a menu row without an edit here. The action is the document itself, for a reader whose
-     * next move is to point their own tooling at it rather than to read anything. */
-    {
-        type: "menu",
-        label: "API",
-        prefix: "/api",
-        sections: [{ items: [...referenceDestinations] }],
+        prefixes: ["/developers", "/api", "/extensions", "/earn"],
+        sections: [
+            {
+                items: [
+                    ...developersDestinations,
+                    developersServicesDestination,
+                    {
+                        label: "Sandbox API",
+                        href: referenceHref(""),
+                        description: "Every call a sandbox answers",
+                        icon: "network",
+                        covers: referenceDestinations.flatMap((destination) => destination.covers ?? [destination.href]),
+                    },
+                    {
+                        label: "Extensions gallery",
+                        href: "/extensions/",
+                        description: "What people have published",
+                        icon: "blocks",
+                    },
+                    {
+                        label: "Earn & the creator pool",
+                        href: "/earn/",
+                        description: "What a spent credit pays out",
+                        icon: "coins",
+                        covers: ["/earn/", "/earn/ledger/", "/earn/catalog/", "/earn/fine-print/"],
+                    },
+                ],
+            },
+        ],
         action: { label: "Download the OpenAPI document", href: `${referenceHref("")}openapi.json` },
     },
-    // A bare link: the gallery's contents come from the registry repo at build time, so there is no authored
-    // list here to build a menu out of.
+    // "Pricing" is the highest-intent click on a developer-tool site; a visitor who finds no link assumes
+    // the price is hidden. The page says "free". Decision 2026-09-06, landing-blueprint.md.
     {
         type: "link",
-        label: "Extensions",
-        href: "/extensions/",
-        prefix: "/extensions",
-    },
-    /* The economy, top-level: the one system on the site with two audiences. A member asking what the
-     * membership buys and a creator asking what the split is are both sent to one page, and neither should
-     * have to look for money inside a developer menu. It sits beside Extensions because they are two halves
-     * of one story: what's listed, and how what's listed is paid for. */
-    {
-        type: "link",
-        label: "Earn",
-        href: "/earn/",
-        prefix: "/earn",
+        label: "Pricing",
+        href: "/pricing/",
+        prefix: "/pricing",
     },
     // Last of the text links, where a bar conventionally keeps it, and in the bar at all because "who is
     // behind this?" is a question about TRUST, and the reader with it is deciding whether to run a container

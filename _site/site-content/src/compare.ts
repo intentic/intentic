@@ -284,9 +284,9 @@ export const comparePages: ComparePage[] = [
             { label: "Pricing", url: "https://superset.sh/pricing" },
         ],
         meta: {
-            title: "intentic vs Superset · parallel agents, and the machine under them",
+            title: "intentic vs Superset · the machine under the agents",
             description:
-                "Superset runs 100+ parallel CLI agents in git worktrees on your Mac (ELv2, paid Pro). intentic adds a configurable sandbox around its worktree-isolated fleet, free and MIT.",
+                "Superset runs 100+ parallel CLI agents in git worktrees on your Mac (ELv2, paid Pro). intentic adds a configurable sandbox around its fleet, free and MIT.",
             datePublished: PUBLISHED,
         },
     },
@@ -352,9 +352,9 @@ export const comparePages: ComparePage[] = [
             "Your computer already has every tool and login your agents need, and native iOS and Android apps matter more than a browser tab. It is one MIT app with nothing to configure.",
         sources: [{ label: "Source and README", url: "https://github.com/pingdotgg/t3code" }],
         meta: {
-            title: "intentic vs T3 Code · a control plane, or the machine under it",
+            title: "intentic vs T3 Code · a control plane, or a machine",
             description:
-                "T3 Code drives harnesses on your computer from desktop, web and mobile, MIT and free. intentic runs a worktree-isolated fleet in a sandbox you approve, woken by events.",
+                "T3 Code drives harnesses on your computer from desktop, web and mobile, MIT and free. intentic runs a worktree-isolated fleet in a sandbox you approve.",
             datePublished: PUBLISHED,
         },
     },
@@ -435,9 +435,9 @@ export const comparePages: ComparePage[] = [
             "You want the widest runtime choice in one window, your machine already has what the agents need, and you want no account, container runtime or platform in the path.",
         sources: [{ label: "Docs", url: "https://www.trysynara.com/docs" }],
         meta: {
-            title: "intentic vs Synara · nine runtimes, or a managed agent sandbox",
+            title: "intentic vs Synara · runtimes, or an agent sandbox",
             description:
-                "Synara runs nine agent runtimes in one local-first, open-source window. intentic runs a worktree-isolated fleet in a container you configure and wire to your systems.",
+                "Synara runs nine agent runtimes in one local-first, open-source window. intentic runs a worktree-isolated fleet in a container you configure and wire up.",
             datePublished: PUBLISHED,
         },
     },
@@ -712,7 +712,7 @@ export const comparePages: ComparePage[] = [
             { label: "Pricing", url: "https://claude.com/pricing" },
         ],
         meta: {
-            title: "intentic vs Claude Code · a harness intentic runs, and its own cloud",
+            title: "intentic vs Claude Code · a harness intentic runs",
             description:
                 "Claude Code is one of intentic's five built-in harnesses. Its web version runs on Anthropic-managed VMs; intentic runs every harness on your machine.",
             datePublished: PUBLISHED,
@@ -798,7 +798,7 @@ export const comparePages: ComparePage[] = [
             { label: "Source", url: "https://github.com/anomalyco/opencode" },
         ],
         meta: {
-            title: "intentic vs OpenCode · an open harness, and the machine around it",
+            title: "intentic vs OpenCode · a harness, or the machine",
             description:
                 "OpenCode is an MIT, provider-agnostic terminal agent storing no code. intentic runs harnesses like it in a container you own, with a board and automations.",
             datePublished: PUBLISHED,
@@ -883,9 +883,9 @@ export const comparePages: ComparePage[] = [
             { label: "Source", url: "https://github.com/openclaw/openclaw" },
         ],
         meta: {
-            title: "intentic vs OpenClaw · a personal assistant, and a workplace for agents",
+            title: "intentic vs OpenClaw · an assistant, or a workplace",
             description:
-                "OpenClaw is a self-hosted assistant that lives in your chat apps. intentic gives the fleet a sandbox, and each coding agent an isolated worktree and reviewable diff.",
+                "OpenClaw is a self-hosted assistant that lives in your chat apps. intentic gives the fleet a sandbox, and each coding agent a worktree and reviewable diff.",
             datePublished: PUBLISHED,
         },
     },
@@ -977,9 +977,9 @@ export const comparePages: ComparePage[] = [
             { label: "Source", url: "https://github.com/NousResearch/hermes-agent" },
         ],
         meta: {
-            title: "intentic vs Hermes · a self-improving assistant, and a managed agent sandbox",
+            title: "intentic vs Hermes · an assistant, or an agent sandbox",
             description:
-                "Hermes is Nous Research's self-improving assistant, MIT and self-hosted. intentic gives the fleet a sandbox, and each coding agent an isolated worktree and diff you approve.",
+                "Hermes is Nous Research's self-improving assistant, MIT and self-hosted. intentic gives the fleet a sandbox, and each agent an isolated worktree and diff.",
             datePublished: PUBLISHED,
         },
     },
@@ -1055,7 +1055,7 @@ export const comparePages: ComparePage[] = [
             { label: "Jules docs", url: "https://jules.google/docs" },
         ],
         meta: {
-            title: "intentic vs Devin, Jules and cloud agents · whose machine runs it",
+            title: "intentic vs Devin, Jules · whose machine runs it",
             description:
                 "Devin, Jules, Codex cloud and Replit clone your repo into the vendor's VM. intentic keeps the browser, with the sandbox on your own machine. Free and MIT.",
             datePublished: PUBLISHED,
@@ -1096,7 +1096,7 @@ export const compareIndex = {
         cta: "Report an inaccuracy",
     },
     meta: {
-        title: "How intentic compares · Cursor, Claude Code, Conductor, Superset, Devin",
+        title: "How intentic compares · Cursor, Claude Code, Devin",
         description:
             "Where intentic sits among agent CLIs, AI editors, assistants, local orchestrators and cloud platforms: Cursor, Claude Code, Conductor, Superset, Synara, Devin.",
         datePublished: PUBLISHED,

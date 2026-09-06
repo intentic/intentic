@@ -12,15 +12,19 @@ import type { MenuItem, NavEntry } from "@intentic-dev/site-content/nav";
 const bare = (path: string): string => path.replace(/\/+$/u, "");
 
 /**
- * A BAR LABEL is current for a whole region of the site: every page under its prefix. That is the claim a
- * trigger should make — "Docs" is where you are on all twenty docs pages — and it is exactly the claim a row
- * inside the menu must not make.
+ * A BAR LABEL is current for a whole region of the site: every page under one of its prefixes. That is the
+ * claim a trigger should make — "Docs" is where you are on all twenty docs pages — and it is exactly the
+ * claim a row inside the menu must not make.
+ *
+ * A MENU CARRIES SEVERAL PREFIXES because a menu is no longer one folder: Resources gathers /guides, /blog,
+ * /compare and /changelog, and Developers gathers /developers, /api, /extensions and /earn. A bare link is
+ * still one path, because a link that stood for several regions would be a menu.
  */
 export function isCurrentSection(entry: NavEntry, path: string): boolean {
     if (entry.type === "link") {
         return path === entry.href || path.startsWith(entry.prefix);
     }
-    return path.startsWith(entry.prefix);
+    return entry.prefixes.some((prefix) => path.startsWith(prefix));
 }
 
 /**

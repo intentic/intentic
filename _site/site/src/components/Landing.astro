@@ -65,12 +65,6 @@ const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, 205vw";
 const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
 const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 
-/* THE SUBHEAD, FIRST CLAUSE ONLY. The shared line is two sentences — what the product is, then a claim
- * about visibility — and this page keeps the first. The second is carried here by the picture beside it
- * rather than by words: three live surfaces of the product, turning, in the same screenful. Sliced off the
- * shared string rather than retyped, so a rewording upstream still lands here. */
-const subheadLead = `${content.hero.subhead.split(/(?<=\.)\s+/u)[0] ?? content.hero.subhead}`;
-
 /* HOW WIDE A VERB STAGE PAINTS ITS SCREENSHOT. A stage takes the shell's measure — `max-width: 84rem` with
  * a 1.5rem gutter either side — so the widest a shot is ever drawn is 1296px, and below 84rem it is the
  * window minus those gutters. Under 48rem it is a top-left crop drawn at 275% of the frame instead, which
@@ -119,18 +113,24 @@ const machineStep = content.connect.steps.at(-1)!;
                             <Lozenge />
                         </p>
 
+                        {/* A space between the beats. Each is its own block, so nothing paints it; without it
+                            the h1's text reads "You delegate.Agents work.You approve." to a crawler or a
+                            screen reader. */}
                         <h1 class="headline">
                             {
-                                beats.map((beat) => (
-                                    <span class="headline-line">
-                                        <span class="display">{beat}</span>
-                                        <span class="stop">.</span>
-                                    </span>
+                                beats.map((beat, index) => (
+                                    <>
+                                        <span class="headline-line">
+                                            <span class="display">{beat}</span>
+                                            <span class="stop">.</span>
+                                        </span>
+                                        {index < beats.length - 1 && " "}
+                                    </>
                                 ))
                             }
                         </h1>
 
-                        <p class="hero-sub">{subheadLead}</p>
+                        <p class="hero-sub">{content.hero.subhead}</p>
 
                         {/* TWO PRESSES, and resist adding a third. On a centred axis three controls in a row
                             read as a toolbar, and the claim above them drops to a caption on it. They are
@@ -542,8 +542,10 @@ const machineStep = content.connect.steps.at(-1)!;
                     <Lotus size="lg" />
                     <h2 class="h2 display final-heading">
                         <span>Open-source and free</span>
-                        {/* The underline is drawn rather than `text-decoration`, which on a face this large
-                            sits too close and too thin, and cannot take the page's gold. */}
+                        {/* The space is for the heading's text, not its layout: both spans are blocks. The
+                            underline is drawn rather than `text-decoration`, which on a face this large sits
+                            too close and too thin, and cannot take the page's gold. */}
+                        {" "}
                         <span class="final-forever">forever</span>
                     </h2>
                     <p class="lede final-sub">

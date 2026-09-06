@@ -99,11 +99,20 @@ export const pageMeta: Record<string, PageMeta> = {
             "Browse published intentic extensions. Each listing shows what it adds, who wrote it and the exact source commit you would install.",
         datePublished: "2026-08-01",
     },
+    // The title answers "intentic pricing" in the result itself. Reasoning in pricing.ts.
+    "/pricing/": {
+        title: "Pricing · intentic is free. Bring your own AI plan",
+        description:
+            "intentic is free and MIT: every sandbox, capability and shared workspace, no tiers and no card. Agents run on AI plans you already pay for. Membership is extra.",
+        datePublished: "2026-09-06",
+    },
     /* The economy's own page, top-level because it serves members and creators alike. Its FIGURES come from
-     * pool.ts at render time; only the framing is authored here. */
+     * pool.ts at render time; only the framing is authored here. The description names both readers: the
+     * member asking what credits do, the creator asking what the cut is. */
     "/earn/": {
         title: "Membership credits, creator pool & public ledger · intentic",
-        description: "Credits to creators on install or run. Public ledger.",
+        description:
+            "A daily credit allowance members spend on premium extensions and paid services, and the share of the pool that reaches whoever published them. Public ledger.",
         datePublished: "2026-08-11",
     },
     /* The numbers themselves. Deliberately not part of the argued page: /earn/fine-print/ explains what the
@@ -119,7 +128,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/earn/catalog/": {
         title: "The catalog · Earn · intentic",
         description:
-            "Every paid service agents can run, live from the platform: price, publisher, and each listing's served and refunded runs, plus what agents asked for that nobody serves yet.",
+            "Every paid service agents can run, live from the platform: price, publisher, and each listing's served and refunded runs, plus what nobody serves yet.",
         datePublished: "2026-08-19",
     },
     // The argued version of every promise /earn makes. Its own page so the short one stays scannable.

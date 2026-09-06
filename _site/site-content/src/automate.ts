@@ -64,8 +64,8 @@ export const automateMachine: AutomateMachine = {
         optional: "optional",
         // Shell a reader can evaluate at a glance: is there anything to do? Kept SHORT on purpose — this line
         // sets on one line inside a panel that is 180px wide on a laptop, and a command that wraps stops being
-        // an example of the idea and starts being a snippet to parse.
-        example: { caption: "for example", command: 'test -n "$(git diff)"' },
+        // an example of the idea and starts being a snippet to parse. The caption names the job it guards.
+        example: { caption: "a nightly sweep", command: 'test -n "$(git diff)"' },
         pass: { code: "exit 0", note: "wake an agent" },
         skip: { code: "anything else", note: "skipped, nothing spent" },
     },
@@ -76,6 +76,6 @@ export const automateMachine: AutomateMachine = {
     },
     label:
         "How an automation runs: a push, an alert, a payment, an email, a message or a schedule wakes it. " +
-        "An optional command of yours reads the event first — exit 0 and an agent wakes, anything else is recorded as skipped and costs nothing. " +
+        "An optional command of yours reads the event first: exit 0 and an agent wakes, anything else is recorded as skipped and costs nothing. " +
         "A run is a fresh agent session on your board, with its own transcript, its own branch and checkout, and nothing landing until you have read the diff.",
 };

@@ -106,7 +106,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Sandbox definitions · intentic docs",
                                 description:
-                                    "Describe a sandbox as sandbox.toml: the workspace itself, repositories, connection shapes, secret names, environment overlay and agent settings, without credentials or history.",
+                                    "Describe a sandbox as sandbox.toml: the workspace, repositories, connection shapes, secret names, environment overlay and agent settings, without credentials.",
                                 datePublished: "2026-08-25",
                             },
                         },
@@ -215,7 +215,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Your own browser · intentic docs",
                                 description:
-                                    "Install the browser extension and let your sandbox work in the browser you are already signed into — on the sites you allow, one at a time, while you watch every click.",
+                                    "Install the browser extension and let your sandbox work in the browser you are already signed into: on the sites you allow, one at a time, while you watch.",
                                 datePublished: "2026-08-29",
                             },
                         },
@@ -305,9 +305,9 @@ export const docsBook: Book = {
                             title: "Bug reports",
                             blurb: "Your users' crashes, fixed by your agent",
                             meta: {
-                                title: "Bug reports · your users' crashes, fixed by your agent · intentic docs",
+                                title: "Bug reports · crashes fixed by your agent · intentic docs",
                                 description:
-                                    "Embed a crash reporter on your site or app with one script tag. Reports are grouped, so a crash that hit a thousand people is one issue your agent investigates once.",
+                                    "Embed a crash reporter with one script tag. Reports are grouped, so a crash that hit a thousand people is one issue your agent investigates once.",
                                 datePublished: "2026-08-30",
                             },
                         },

@@ -339,7 +339,7 @@ export const guidePages: GuidePage[] = [
             { label: "intentic vs Conductor", href: compareHref("conductor") },
         ],
         meta: {
-            title: "How to keep a coding agent running after you close your laptop",
+            title: "Keep a coding agent running after you close your laptop",
             description:
                 "tmux survives a dropped connection but not a sleeping machine. What actually keeps an agent working unattended, and how to set its limits before it runs.",
             datePublished: PUBLISHED,

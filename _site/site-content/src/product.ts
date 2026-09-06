@@ -234,7 +234,7 @@ export const productPages: ProductPage[] = [
     {
         slug: "automate",
         navLabel: "Automate",
-        menuBlurb: "Start on schedule or event",
+        menuBlurb: "On a pipeline, issue or schedule",
         icon: "zap",
         heading: "Start an agent automatically.",
         sub: "Choose a schedule or event. Add an optional check command that decides whether each run should start.",
@@ -255,6 +255,20 @@ export const productPages: ProductPage[] = [
             { value: "Fresh session", label: "each run gets its own transcript and isolated checkout" },
         ],
         blocks: [
+            // Jobs before mechanism: a reader arrives asking what they would automate, and a machine answers
+            // "anything". Every trigger named here exists in /docs/automations/ (schedule, webhook, provider events).
+            {
+                title: "Six jobs you could automate today",
+                body: "Each is a trigger, a prompt and the choices about who runs it.",
+                bullets: [
+                    "A pipeline finishes red: an agent reads the log, fixes the build and leaves the change on its branch",
+                    "A webhook fires on a new issue: an agent reproduces it, labels it and proposes the change",
+                    "A nightly schedule: a dependency audit, filed as a chore",
+                    "A weekly schedule: release notes drafted from what landed",
+                    "A Discord message mentions the agent: it answers with the repository open",
+                    "A Front Desk visitor asks: an agent answers, and holds what it should not answer alone",
+                ],
+            },
             {
                 title: "Control what starts and what it can do",
                 body: "Each run uses the identity, model, permissions and limits you set. An optional check command can skip the run before it uses any tokens.",

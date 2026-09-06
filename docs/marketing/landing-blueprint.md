@@ -162,25 +162,21 @@ One page, one continuous scroll: **the claim, a five-verb tour, two objection ba
 down from fourteen. Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy
 is in `about.ts` because `/about/` shares it.
 
-1. **Hero (`#hero`)**: the brand line, kept verbatim ("You delegate. Agents work. You approve.")
-   + the subhead `A workspace for coding agents. Nothing happens out of sight.` (recorded decision
-   2026-08-15; its second beat is the 2026-08-12 decision, which replaced "Ten agents at once. They
-   keep working after you close the browser."). The subhead's **first beat says what the product
-   is**: nothing else above the fold did, and that is precisely what readers bounced on. The
-   headline owns the stance and the second beat owns **visibility**: "You approve" is a gate at the
-   end of a run, the subhead claims the whole of it: watched while it happens, interruptible
-   mid-thought: and the board cropped underneath is the proof, on sight, in the same screenful. **Scale is now shown, not
-   said**: the shot is a full board, and "ten agents at once" had become the most crowded sentence in
-   the category, so it bought nothing a competitor wasn't also saying. **Persistence moved down** to
-   the meta description, the final CTA and the FAQ: every phrasing of it above the fold sold the
-   reader's *absence* ("close the browser", "come back to the diffs"), which argues against the
-   co-piloted stance the headline sets one line earlier, and it is the trope every agent product
-   is running at once. Ownership stays out of both lines for the standing reason (it answers a fear,
-   it does not create a want). Then the literal restatement, two CTAs, the three chips, and **three
-   frames on one axis**: the workspace wide on the centre line, a plan and a conversation leaning in
-   from either side and overlapping its edges: with the press into the live demo covering the centre
-   frame and labelled in its top-right corner, which is the one band all three of its screens leave
-   clear. (P1, P2, P6)
+1. **Hero (`#hero`)**: the greeting eyebrow, the brand line kept verbatim ("You delegate. Agents work.
+   You approve."), the one-sentence subhead `A workspace for coding agents.`, two CTAs, and **three frames
+   on one axis**: the workspace wide on the centre line, a plan and a conversation leaning in from either
+   side and overlapping its edges, with the press into the live demo covering the centre frame. The
+   subhead **says what the product is**: nothing else above the fold did, and that is precisely what
+   readers bounced on. Visibility is shown by the three live surfaces, not said; scale is shown by the full
+   board; persistence lives in the meta description and the FAQ; ownership stays out of the first screen
+   (it answers a fear, it does not create a want). (P1, P2, P6)
+
+   **Cut from the fold, and the slots with them (2026-09-06): do not re-add.** The subhead's second beat
+   ("Nothing happens out of sight."), a literal restatement line under the subhead, a row of three fact
+   chips under the CTAs, and a `finalCta` slot for the closing band. Each had been authored in `landing.ts`
+   and then dropped from the page as noise, and the leftover slots were later mistaken for a rendering bug
+   and rendered. `landing.ts` now carries no field for any of them. The closing band authors its own two
+   lines in `Landing.astro` by design.
 
    **The band is symmetric, because the picture behind it is.** The plate is a framed plaque with a
    devata standing in each outer third and a deliberately empty middle; the copy sits on that middle,
@@ -332,8 +328,10 @@ What is a *layout* decision rather than a positioning one:
 - **The hub leads with a jump strip, not an argument.** A visitor arrives wanting to find their tool and
   leave; every page is linkable inside the first viewport, before the two-questions band and before the
   families. The families sit last because their job is to answer for the tools that will never have a page.
-- **Nav is a bare top-level link, not a third mega-menu.** A menu of six competitor rows hands a visitor the
-  names without the sorting, and the sorting is the part that changes their mind.
+- **Nav is one row inside Resources (2026-09-06), not a tab and not a mega-menu.** A tab would introduce a
+  field of rivals before the doubt exists; a row is read only by someone who opened the menu looking for
+  this kind of page. Its scent line names the field, because "Compare" alone asks the reader to guess
+  whether their tool is in there. The footer band stays.
 - **The verdict comes before the table.** A reader who stops after "The short answer" has still been told the
   truth; a reader who only scans the table sees the marked rows. Overlap before differences, `pickThem` last
   and at full weight.
@@ -342,15 +340,18 @@ What is a *layout* decision rather than a positioning one:
 - No screenshots on these pages. They compare products, not surfaces; the product shelf is one click away and
   is where the UI argument is made.
 
-### No dedicated pricing section (deliberate: do not re-add)
+### No pricing band on this page; a pricing page exists (2026-09-06)
 
-No standalone pricing block and no "Pricing" nav/footer link: there is nothing to price. The free
-story is carried softly: the hero "Free and open source" chip, the economics band, the final CTA, and
-the FAQ answer "Is any of it paid?". The `SoftwareApplication` JSON-LD `offers` price "0" reinforces
-free for SEO.
-Note for any auto-improver (`loop.md`): **do not** reintroduce a pricing section, and **do not**
-re-add deployment-engine framing: the deployment engine is not part of the product. Both are
-recorded decisions, not omissions.
+The landing page carries no pricing block: the free story is the hero chip, the economics band, the final
+CTA and the FAQ answer "Is any of it paid?", and the `SoftwareApplication` `offers` price "0" says it for
+SEO. `/pricing/` and a bar link now exist, reversing the older "no pricing link anywhere" rule: "pricing" is
+the highest-intent click on a developer-tool site, and a visitor who finds no link assumes the price is
+hidden, not that the product is free. Copy is `site-content/src/pricing.ts`; every figure derives from
+`pool.ts`.
+
+Note for any auto-improver (`loop.md`): **do not** add a pricing band to the landing page, **do not** delete
+the pricing page as a rule violation, and **do not** re-add deployment-engine framing: the deployment engine
+is not part of the product.
 
 ### No new bands (deliberate: the 2026-08-02 cut)
 

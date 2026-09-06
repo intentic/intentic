@@ -1,0 +1,121 @@
+---
+/* /pricing. Two equal columns, free and the optional membership, neither tagged or tinted, so the second is
+ * not read as the paid tier of the first. Every word is `site-content/pricing.ts`; every figure is derived
+ * from `pool.ts`. The FAQ is passed to the layout as well as rendered, so it is the page's FAQPage node; no
+ * second SoftwareApplication, the landing page owns that one. */
+import { pricingContent } from "@intentic-dev/site-content/pricing";
+import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Corners from "../components/Corners.astro";
+import Divider from "../components/Divider.astro";
+import Footer from "../components/Footer.astro";
+import Lotus from "../components/Lotus.astro";
+import Nav from "../components/Nav.astro";
+
+const content = pricingContent;
+const faq = content.faq.map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
+---
+
+<BaseLayout faq={faq}>
+    <Nav />
+    <main class="flex-1">
+        <section class="page-hero">
+            <div class="below-bar relative mx-auto max-w-6xl px-6 pb-12">
+                <div class="eyebrow">{content.eyebrow}</div>
+                <h1 class="display mt-3 text-4xl font-semibold max-sm:text-3xl">{content.heading}</h1>
+                <p class="mt-4 max-w-copy text-lg text-muted">{content.sub}</p>
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-6xl px-6 pb-16">
+            <div class="grid items-stretch gap-5 lg:grid-cols-2">
+                {
+                    content.columns.map((column) => (
+                        <article class="card relative flex flex-col gap-6 p-7 sm:p-8">
+                            <Corners set="diag" />
+                            <header>
+                                <div class="eyebrow eyebrow-bare">{column.eyebrow}</div>
+                                <h2 class="mt-3 text-xl font-semibold tracking-tight text-content">{column.name}</h2>
+                                <div class="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-y border-line py-4">
+                                    <span class="text-4xl font-semibold tracking-tight text-content">{column.price}</span>
+                                    <span class="text-sm text-muted">{column.priceNote}</span>
+                                </div>
+                            </header>
+                            <ul class="flex flex-col gap-3">
+                                {column.includes.map((item) => (
+                                    <li class="flex items-start gap-2.5 text-sm text-muted">
+                                        <Lotus class="mt-1.5 shrink-0" />
+                                        <span>{item}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            <div class="mt-auto">
+                                <a class:list={["btn", "btn-sm", { "btn-primary": column.cta.primary }]} href={column.cta.href}>
+                                    {column.cta.label}
+                                </a>
+                                <p class="mt-3.5 max-w-copy text-2xs leading-relaxed text-subtle">{column.note}</p>
+                            </div>
+                        </article>
+                    ))
+                }
+            </div>
+        </section>
+
+        <section class="band border-t band-rule" aria-labelledby="providers-heading">
+            <div class="wall" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-6xl px-6 py-16">
+                <h2 id="providers-heading" class="display text-2xl font-semibold sm:text-3xl">{content.providers.heading}</h2>
+                <ul class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {
+                        content.providers.accounts.map((account) => (
+                            <li class="card flex flex-col gap-1.5 p-4">
+                                <span class="flex items-center gap-2 text-sm font-semibold text-content">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                                        <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
+                                    </svg>
+                                    {account.name}
+                                </span>
+                                <span class="text-2xs leading-relaxed text-subtle">{account.detail}</span>
+                            </li>
+                        ))
+                    }
+                </ul>
+                <ul class="mt-8 flex flex-col gap-2.5">
+                    {
+                        content.providers.points.map((point) => (
+                            <li class="flex items-start gap-2.5 text-sm text-muted">
+                                <Lotus class="mt-1.5 shrink-0" />
+                                <span>{point}</span>
+                            </li>
+                        ))
+                    }
+                </ul>
+            </div>
+        </section>
+
+        <section class="border-t band-rule" aria-labelledby="faq-heading">
+            <div class="mx-auto max-w-6xl px-6 py-16 pb-24">
+                <h2 id="faq-heading" class="display text-2xl font-semibold sm:text-3xl">Questions</h2>
+                <Divider class="my-8" />
+                <div class="grid gap-x-12 gap-y-9 lg:grid-cols-2">
+                    {
+                        content.faq.map((item) => (
+                            <div id={item.id} class="scroll-mt-28">
+                                <h3 class="text-base font-semibold text-content">{item.question}</h3>
+                                {item.answer.map((paragraph) => (
+                                    <p class="mt-2.5 max-w-copy text-sm leading-relaxed text-muted">{paragraph}</p>
+                                ))}
+                                {item.more && (
+                                    <a href={item.more.href} class="mt-3 inline-block text-sm text-link hover:underline">
+                                        {item.more.label} →
+                                    </a>
+                                )}
+                            </div>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>

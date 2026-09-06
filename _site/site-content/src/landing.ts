@@ -106,9 +106,6 @@ export interface LandingContent {
     hero: {
         headlineLines: string[];
         subhead: string;
-        /** The plain, literal restatement under the subhead. Named concepts, not persuasion. */
-        summary: string;
-        chips: string[];
         screens: HeroScreens;
         demo: HeroDemo;
     };
@@ -152,7 +149,6 @@ export interface LandingContent {
         commandChoice: { lead: string; cta: string };
         desktop: { lead: string; cta: string; note: string };
     };
-    finalCta: { heading: string; sub: string };
 }
 
 // One claim, proven once: your agents keep running when you look away, and
@@ -162,9 +158,9 @@ export interface LandingContent {
 // you the one command to start.
 export const landingContent: LandingContent = {
     meta: {
-        // Under 160 characters: a search result truncates past that, and this one has to survive
-        // the cut with the claim and the price still in it.
-        title: "intentic · A workspace for coding agents",
+        // Title under 60 characters, description under 160: a search result truncates past those. The
+        // title spends its spare room on the one word strangers filter on.
+        title: "intentic · Open-source workspace for coding agents",
         description: "A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
     },
     hero: {
@@ -175,35 +171,11 @@ export const landingContent: LandingContent = {
         // antecedent anywhere above the fold. A reader who did not already know the category had
         // nothing to resolve it against, so the first screen read as a stance with no subject.
         headlineLines: ["You delegate. Agents work.", "You approve."],
-        // Two beats: what the thing IS, then the claim the board underneath proves. The category
-        // noun sits here rather than in the headline because the headline is a stance, and a stance
-        // needs a subject the reader already holds, the first screen was supplying none, and that
-        // is the one thing strangers reliably bounced on ("I read the whole page and still don't
-        // know what it does"). Visibility is what the headline leaves out: "You approve" is a gate
-        // at the end, this is the whole run, watched while it happens and interruptible mid-thought.
-        // Scale is still shown rather than SAID, the shot below is a full board, and "ten agents at
-        // once" was the most crowded sentence in the category. Ownership still stays out (it answers
-        // a fear instead of creating a want) and persistence still lives in the meta description and
-        // the bands, because framing it as the reader walking away argued against the co-piloted
-        // stance the headline just set.
-        subhead: "A workspace for coding agents. Nothing happens out of sight.",
-        /* THE LITERAL SENTENCE, under the two persuasive ones. The headline is a stance and the subhead is a
-         * category noun plus a claim; neither ever says the mechanism, because saying it costs the opener its
-         * edge. So it is said here instead, one step down the page, in words a reader already holds, parallel,
-         * branch, review, instead of the ones the copy used to lead with (container, worktree). Those two are
-         * accurate and still show up on the pages a search sends you to (guides, docs, the Run page), where the
-         * reader arrived already knowing the concept. The home page pays the human cost of them and gets very
-         * little back, because a stranger reading "in its own container and git worktree" on the first screen
-         * hears an engineering spec instead of a promise.
-         *
-         * It is not a fourth persuasive beat and must not become one. It names what the product does and stops.
-         * Ownership stays out by the standing rule and is carried by the chip below, which is crawlable text on
-         * the same screen, the concept is present without the opener paying for it. */
-        summary: "Run many coding agents on your own machine, each on its own branch, and read every change on its way in.",
-        // "Works with Claude, Codex and Grok" replaces "Bring your own agent": the old chip asked the
-        // reader to already know what an agent is and that they have one, which is the assumption the
-        // whole first screen was making. Three names they recognise do the same job with no decoding.
-        chips: ["Free and open source", "Works with Claude, Codex and Grok", "Runs on your own machine"],
+        // What the thing IS, in one sentence: nothing else above the fold names the category, and that is
+        // what strangers bounced on. Visibility is carried by the three live surfaces beside it, not by a
+        // second sentence. A literal restatement under it, a row of fact chips under the buttons and an
+        // authored closing band were all tried and cut (2026-09-06, landing-blueprint.md): no slots for them.
+        subhead: "A workspace for coding agents.",
         screens: {
             app: [
                 {
@@ -275,7 +247,8 @@ export const landingContent: LandingContent = {
             {
                 verb: "Automate",
                 href: productHref("automate"),
-                line: "Start an agent automatically on an event you pick. Every run is one you can open and watch.",
+                // Two real jobs before the mechanism: the drawing beside this line is already abstract.
+                line: "Start an agent on a failing pipeline, a new issue or a schedule. Every run opens on your board.",
                 /* The one stage on the tour with no screenshot in it, so it carries the machine instead:
                  * what wakes a run, the code of yours that gets to veto it, and what a run turns out to
                  * be. The middle part is the one nobody expects and the reason this is a diagram rather
@@ -288,7 +261,7 @@ export const landingContent: LandingContent = {
                 line: "The agent writes a plan and waits for your yes. Finished work sits on its branch until you read the diff.",
                 shot: {
                     name: "stage-review",
-                    alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and CheckoutPanel.tsx open beside them as a side-by-side diff — the removed lines in red on the left, the added ones in green on the right. The chat alongside holds the plan the change came from.",
+                    alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and CheckoutPanel.tsx open beside them as a side-by-side diff: the removed lines in red on the left, the added ones in green on the right. The chat alongside holds the plan the change came from.",
                     label: "acme-shop · /workspace",
                 },
             },
@@ -408,11 +381,5 @@ export const landingContent: LandingContent = {
             // around it. The Mac reader is not stranded: the command above is what the app runs anyway.
             note: "It runs the same command for you: Docker if the machine needs it, then the sandbox, then your workspace.",
         },
-    },
-    finalCta: {
-        // Persistence closes the page: it is the one claim that lives nowhere else on the scroll now,
-        // and at the bottom it reads as a reason to start rather than a reason to walk away.
-        heading: "Put ten agents to work today.",
-        sub: "It is free, it runs on your own machine, and the work carries on when you close the browser.",
     },
 };
