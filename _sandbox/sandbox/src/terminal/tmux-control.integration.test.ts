@@ -179,6 +179,34 @@ test("a replay puts the same rows and the same cursor on an empty xterm that the
     expect(buffer.getLine(0)?.translateToString(true)).toContain("for i in");
 });
 
+/* AND ONLY ITS OWN SESSION'S. tmux broadcasts `%session-window-changed` to EVERY control client on the server,
+ * not just the ones attached to the session it is about, so a sandbox where anything else is working — every
+ * agent command opens a window in its `agent-*` session, every job command one in a `job-*` session — used to
+ * walk every open tab onto that window: a reset, then a replay of a stranger's pane, most often one that had
+ * just started and had nothing on it yet. That is what a Checks tab going blank mid-run was. */
+test("another session opening a window leaves this tab where it is", async () => {
+    const h = await fresh(80, 6);
+    await until(() => h.text().includes("\x1bc"), "the initial replay");
+    h.terminal.input(Buffer.from("echo MY-OWN-WINDOW\r", "utf8"));
+    await until(() => h.text().includes("MY-OWN-WINDOW"), "this session's output");
+
+    // A second session (any other work in the sandbox) makes its own new window the active one.
+    const other = `cm-other-${String(process.pid)}`;
+    sessions.push(other);
+    await tmux("new-session", "-d", "-s", other, "-c", "/tmp", "sh");
+    const mark = h.text().length;
+    await tmux("new-window", "-t", `=${other}:`, "-n", "run", "sh", "-c", "echo STRANGERS-WINDOW; sleep 30");
+    // Long enough that a sync would have landed (the replays above arrive in well under this).
+    await until(() => false, "any stray replay", 1500).catch(() => undefined);
+
+    // Nothing was sent, so nothing reset the browser's xterm and no stranger's pane reached it.
+    expect(h.text().slice(mark)).toBe("");
+    // And this tab is still typing into its own pane.
+    h.terminal.input(Buffer.from("echo STILL-MINE\r", "utf8"));
+    await until(() => h.text().includes("STILL-MINE"), "this session's pane still taking input");
+    expect(await tmux("capture-pane", "-p", "-t", `=${other}:run`)).toContain("STRANGERS-WINDOW");
+});
+
 test("attaching to a session that does not exist ends at once, with tmux's own words", async () => {
     // A server with SOME session on it, so the answer is about this name and not "no sessions" from a server
     // that is not running at all (the default `exit-empty` takes the fenced server down with its last session).

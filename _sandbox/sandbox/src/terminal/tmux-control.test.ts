@@ -1,5 +1,14 @@
 import { expect, test } from "vitest";
-import { createControlParser, decodeOutput, type ControlEvent, PANE_STATE_FORMAT, type PaneState, parsePaneState, synthesizeScreen } from "./tmux-control.js";
+import {
+    createControlParser,
+    decodeOutput,
+    type ControlEvent,
+    PANE_STATE_FORMAT,
+    type PaneState,
+    parseLocation,
+    parsePaneState,
+    synthesizeScreen,
+} from "./tmux-control.js";
 
 /* The wire, from transcripts of tmux 3.3a (the image's version), fed in the shapes a pipe actually delivers:
  * whole lines, half lines, several lines in one chunk. The events are what the client and the attach layer
@@ -54,6 +63,16 @@ test("notices carry their name and the rest of the line; the -CC preamble is str
         { kind: "notice", name: "session-window-changed", args: "$66 @1864" },
         { kind: "exit", reason: "detached" },
     ]);
+});
+
+test("a location reads back the session it is in, which is what keeps a tab off another session's window", () => {
+    expect(parseLocation("$3 %7 @2")).toEqual({ session: "$3", pane: "%7", window: "@2" });
+    // What tmux answers when the target is gone, or when a reply block came back empty: no location at all,
+    // rather than a partial one a caller would follow.
+    expect(parseLocation("")).toBeUndefined();
+    expect(parseLocation("can't find window: @9")).toBeUndefined();
+    // The ids are sigil-checked, so a field landing in the wrong position can't read as a valid location.
+    expect(parseLocation("%7 @2 $3")).toBeUndefined();
 });
 
 /* The pane's state, as tmux 3.3a printed it for a fresh zsh in a 100x30 pane, and the bytes that put an empty

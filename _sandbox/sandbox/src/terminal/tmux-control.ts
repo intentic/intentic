@@ -32,7 +32,8 @@ import type { Readable, Writable } from "node:stream";
  *
  * Two layers here, both without a tty. `createControlParser` is the wire (pure, tested on its own); the client
  * over it owns one child process and one FIFO of command replies; `attachControlTerminal` is the thing a
- * WebSocket wants: follow the session's active pane, keep it in sync, take bytes in and hand bytes out.
+ * WebSocket wants: follow ITS OWN session's active pane (tmux's notices are broadcast to every control client,
+ * so which session each one is about is a thing to check), keep it in sync, take bytes in and hand bytes out.
  */
 
 // ------------------------------------------------------------------------------------------------------------
@@ -486,6 +487,7 @@ const INPUT_CHUNK = 1024;
 
 const PANE_ID = /^%\d+$/;
 const WINDOW_ID = /^@\d+$/;
+const SESSION_ID = /^\$\d+$/;
 
 const hexOf = (bytes: Buffer): string => {
     const parts: string[] = [];
@@ -495,14 +497,40 @@ const hexOf = (bytes: Buffer): string => {
     return parts.join(" ");
 };
 
-// Find the active pane in the client's current window, or in a named one.
+/* Find the active pane in the client's current window, or in a named one — and WHOSE SESSION that window is in.
+ * The session is asked for because tmux's `%…` notices are broadcast (see the notice handler below): a window id
+ * arriving on this client is not necessarily one of ours, and `-t @<id>` resolves `#{session_id}` to the session
+ * that window is linked into, which is the one thing that settles it. */
 const activePaneCommand = (window: string | undefined): string =>
-    window === undefined ? `display-message -p -F '#{pane_id} #{window_id}'` : `display-message -p -t ${window} -F '#{pane_id} #{window_id}'`;
+    window === undefined
+        ? `display-message -p -F '#{session_id} #{pane_id} #{window_id}'`
+        : `display-message -p -t ${window} -F '#{session_id} #{pane_id} #{window_id}'`;
+
+export interface PaneLocation {
+    readonly session: string;
+    readonly pane: string;
+    readonly window: string;
+}
+
+// That command's answer, `$3 %7 @2`. Undefined when tmux had nothing to say about the target — a window that
+// closed under us answers with an error block, and an empty reply reads the same way.
+export const parseLocation = (line: string): PaneLocation | undefined => {
+    const [session = "", pane = "", window = ""] = line.trim().split(" ");
+    if (!SESSION_ID.test(session) || !PANE_ID.test(pane) || !WINDOW_ID.test(window)) {
+        return undefined;
+    }
+    return { session, pane, window };
+};
 
 export const attachControlTerminal = (argv: readonly string[], size: { readonly cols: number; readonly rows: number }, sink: ControlTerminalSink): ControlTerminal => {
     // The pane whose bytes go to the browser; undefined until the first sync has found it.
     let pane: string | undefined;
     let window: string | undefined;
+    /* THE SESSION THIS CLIENT IS ATTACHED TO, learned from the opening sync (which asks with no target, so tmux
+     * answers about the client's own session) and never changed afterwards: a tab attaches one session and stays
+     * on it. It exists because tmux's notices are broadcast, and following a stranger's window put another
+     * session's pane on the screen and this tab's keystrokes into it. */
+    let session: string | undefined;
     // Bumped by every sync; a reply for an older one is stale and dropped, and so is pane output that arrives
     // while a sync is in flight (it is already inside the capture that sync is about to deliver, see below).
     let syncing = 0;
@@ -514,21 +542,22 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
                 sink.output(bytes);
             }
         },
+        /* EVERY `%…` NOTICE IS BROADCAST TO EVERY CONTROL CLIENT ON THE SERVER, whatever session it is about:
+         * tmux's control_notify_* walk the whole client list and filter on "is a control client", never on which
+         * session the client is attached to. So the session id each notice carries is not decoration, it is the
+         * only thing that says whether the news is this tab's.
+         *
+         * Unfiltered, it was: one sandbox runs many sessions at once (every agent command is a new window in its
+         * `agent-*` session, every job command a new window in a `job-*` one), so any of them opening a window
+         * re-pointed EVERY open tab at that window — a reset and a replay of a stranger's pane, most often a
+         * shell that had just started and had nothing on it yet. That is the Checks tab going blank while its
+         * suite ran: nothing had gone wrong with the checks, the tab had been walked to somebody else's screen.
+         * Keystrokes went with it, since input is sent to the followed pane. */
         onNotice: (name, args) => {
-            // The session's active window moved (a job's new run window, the agent's next command): follow it.
             if (name === "session-window-changed") {
-                const next = args.split(" ")[1];
-                if (next !== undefined && WINDOW_ID.test(next) && next !== window) {
-                    void sync(next);
-                }
-                return;
-            }
-            // A different pane became active inside the window we show (a split made from elsewhere).
-            if (name === "window-pane-changed") {
-                const [inWindow, next] = args.split(" ");
-                if (inWindow === window && next !== undefined && PANE_ID.test(next) && next !== pane) {
-                    void sync(inWindow);
-                }
+                followWindow(args);
+            } else if (name === "window-pane-changed") {
+                followPane(args);
             }
         },
         onExit: (code, reason) => {
@@ -536,6 +565,26 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
             sink.exit(code, reason);
         },
     });
+
+    /* `%session-window-changed $<session> @<window>`: a session's active window moved. Ours means a job's next
+     * run window or the agent's next command, and the tab follows it; anyone else's is news about a session this
+     * tab is not showing, and the session id is what tells the two apart (see the broadcast note above). */
+    const followWindow = (args: string): void => {
+        const [inSession, next] = args.split(" ");
+        if (inSession === session && next !== undefined && WINDOW_ID.test(next) && next !== window) {
+            void sync(next);
+        }
+    };
+
+    /* `%window-pane-changed @<window> %<pane>`: a different pane became active inside a window (a split made
+     * from elsewhere). Broadcast the same way, but a window id is unique across the whole server, so one that
+     * matches the window we are showing is proof enough that this is ours. */
+    const followPane = (args: string): void => {
+        const [inWindow, next] = args.split(" ");
+        if (inWindow === window && next !== undefined && PANE_ID.test(next) && next !== pane) {
+            void sync(inWindow);
+        }
+    };
 
     /* Bring the browser to the pane as it is now. Output for the pane is DROPPED for the duration, which is
      * correct rather than lossy: tmux writes a pane's `%output` and a command's reply block onto this client in
@@ -545,12 +594,22 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
     // Which pane the browser should be showing: the active pane of the named window, or of the client's own.
     const locate = async (inWindow: string | undefined): Promise<void> => {
         const [located] = await Promise.all(client.send([activePaneCommand(inWindow)]));
-        const [foundPane, foundWindow] = (located?.[0] ?? "").trim().split(" ");
-        if (foundPane === undefined || !PANE_ID.test(foundPane) || foundWindow === undefined) {
+        const found = parseLocation(located?.[0] ?? "");
+        if (found === undefined) {
             throw new Error(`no active pane in ${inWindow ?? "the session"}`);
         }
-        pane = foundPane;
-        window = foundWindow;
+        if (inWindow === undefined) {
+            // The opening sync, asked with no target: whatever session tmux answers about is the one this client
+            // attached, and the one it stays on. It is set here rather than read off `%session-changed` because
+            // this reply is the FIRST thing tmux sends back, so nothing can be followed before it is known.
+            session = found.session;
+        } else if (found.session !== session) {
+            // A window in some other session. The notice filter turns these away already; this is the guarantee
+            // under it, and it also covers a window that was moved between sessions since the notice was sent.
+            throw new Error(`window ${inWindow} is not in ${session ?? "this session"}`);
+        }
+        pane = found.pane;
+        window = found.window;
     };
 
     /* The pane's screen as bytes for an empty xterm: its state and the capture(s) that state calls for, in ONE
