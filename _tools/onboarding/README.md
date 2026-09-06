@@ -111,16 +111,20 @@ pnpm --filter @intentic/onboarding e2e:onboarding
 ```
 
 Needs Docker, `openssl`, and Playwright's Chromium: and needs to be running where Docker publishes, since the
-world lives on loopback ports. The CLI lane additionally needs this checkout's `ic`: hand one in with `IC_BIN`,
-leave one at `_sandbox/ic/dist-bin/ic-linux-amd64` (`bash _tools/scripts/build/build-ic.sh linux-x64`), or have
-`cargo` on PATH and it builds one. With none of those that lane stands down with the sentence that fixes it and
-the compose lane still runs. Two switches earn their keep while working on it:
+world lives on loopback ports and is handed its certificate as a bind mount of a directory this process wrote.
+A daemon reached over somebody else's socket satisfies neither. The CLI lane additionally needs this checkout's
+`ic`: hand one in with `IC_BIN`, leave one at `_sandbox/ic/dist-bin/ic-linux-amd64`
+(`bash _tools/scripts/build/build-ic.sh linux-x64`), or have `cargo` on PATH and it builds one. With none of
+those that lane stands down with the sentence that fixes it and the compose lane still runs. Two switches earn their keep while working on it:
 `ONBOARDING_SKIP_IMAGE_BUILD=1` reuses whatever is already tagged, and `ONBOARDING_KEEP=1` leaves the world, the
 compose folder and the CLI lane's sandbox standing after a failure, which is the difference between reading a
 daemon's log and reproducing the run to get one.
 
 In CI this is nightly.yml's `onboarding` job, on the desktop runner because the CLI lane needs the Rust
-toolchain that image bakes.
+toolchain that image bakes. That job is the one on the fleet that does NOT mount the runner's Docker socket: it
+starts a dockerd inside its own container (`--privileged`, with the layer store on a host directory), so "where
+Docker publishes" is the process running the journey. Mounting the socket the way every neighbouring job does
+is what the requirement above rules out, and it is how this job failed the first night it ran.
 
 ## Key files
 
@@ -130,6 +134,8 @@ toolchain that image bakes.
 - [src/containers.ts](src/containers.ts): containers on a network whose subnet we chose, so addresses are
   known before anything starts.
 - [src/provisioner.ts](src/provisioner.ts): the one thing that differs between the paths.
+- [src/run-step.ts](src/run-step.ts): the wizard's run step, the fold in front of it, and the blocks a lane
+  copies from — the two clicks every browser lane makes, spelled once.
 - [src/provisioners/compose.ts](src/provisioners/compose.ts): the wizard's own bytes, run the way a user runs
   them.
 - [src/provisioners/ic.ts](src/provisioners/ic.ts): the CLI the desktop app and the one-liner hand off to, and

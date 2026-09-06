@@ -1,9 +1,9 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect } from "@playwright/test";
 import { waitForAnnounce } from "../announce.js";
 import type { Provisioner, ProvisionContext } from "../provisioner.js";
+import { copyBlockFor, openRunTab } from "../run-step.js";
 import { sh } from "../shell.js";
 
 /* THE DOCKER COMPOSE PATH, the bytes the wizard renders, run the way a user runs them.
@@ -20,9 +20,10 @@ import { sh } from "../shell.js";
  */
 
 /* Read a copy button's payload. The label sits beside the button in the same block, which is how the two
- * blocks on this tab are told apart, they are otherwise identical widgets. */
+ * blocks on this tab are told apart, they are otherwise identical widgets (run-step.ts holds the locator and
+ * the account of why it names the button as well as the label). */
 const copiedText = async (context: ProvisionContext, label: string): Promise<string> => {
-    const block = context.page.locator(`div`).filter({ hasText: label }).last();
+    const block = copyBlockFor(context.page, label);
     await block.getByRole(`button`, { name: `Copy` }).click();
     const text = await context.page.evaluate(() => navigator.clipboard.readText());
     if (text.trim() === ``) {
@@ -43,22 +44,9 @@ export const composeProvisioner = (): Provisioner => {
             await page.goto(`${world.webUrl ?? ``}/setup`);
 
             /* The wizard opens with step 1 already done, the platform mints the sandbox and its address behind
-             * it, so the RUN step is what this waits for, and its tab strip is what it reaches for.
-             *
-             * Patient on purpose. Step 1 is not instant: a row is created, a reachability grant is minted
-             * against the hub, and a setup code is issued, and on a cold world the SPA is still fetching its
-             * own chunks while that happens. A minute was enough most of the time, which is the worst amount
-             * of time for a gate to allow.
-             *
-             * Every spelling of the control, because it is a segmented control whose role depends on how it is
-             * built, and this tier should fail on the wizard not reaching its run step, not on that detail. */
-            const composeTab = page
-                .getByRole(`radio`, { name: /Docker Compose|^Compose$/ })
-                .or(page.getByRole(`button`, { name: /Docker Compose|^Compose$/ }))
-                .or(page.getByRole(`tab`, { name: /Docker Compose|^Compose$/ }))
-                .or(page.getByText(`Docker Compose`, { exact: true }));
-            await expect(composeTab.first()).toBeVisible({ timeout: 180_000 });
-            await composeTab.first().click();
+             * it, so the RUN step is what this waits for — behind the fold the app-first page puts it, and
+             * patiently, both of which run-step.ts owns for the lane beside this one as well. */
+            await openRunTab(page, /Docker Compose|^Compose$/u, `Docker Compose`);
 
             const yaml = await copiedText(context, `Add these services to your docker-compose.yml`);
             const bootstrap = await copiedText(context, `claim your .env, then start`);

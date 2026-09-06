@@ -83,7 +83,11 @@ const reaches = async (port: number, timeoutMs: number): Promise<boolean> =>
  * This is the tier's one environmental requirement, and it is checked once, against the first container up, so
  * an environment that cannot meet it says so in a sentence instead of as four services that each "never
  * started". It fails wherever the test process is in a container whose Docker publishes onto some OTHER
- * machine's loopback, which is exactly why the CI job for this tier runs on the host rather than in one.
+ * machine's loopback — a job container with the runner's socket mounted is exactly that, and it is worth
+ * knowing that the loopback is only the half of it that gets caught: every bind mount this tier makes (the
+ * run's TLS pair, the SPA front's config) names a path in the process's OWN filesystem, which a daemon
+ * elsewhere silently mounts as an empty directory. One arrangement fixes both, so CI uses it: nightly.yml's
+ * `onboarding` job starts a dockerd INSIDE its own container instead of borrowing the runner's.
  */
 export const requireLoopback = async (port: number, what: string, timeoutMs = 60_000): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
@@ -95,8 +99,9 @@ export const requireLoopback = async (port: number, what: string, timeoutMs = 60
     }
     throw new Error(
         `${what} published a port that this process cannot reach at ${HOST}:${port}. The onboarding tier serves its whole ` +
-            `world on loopback, so it has to be running where Docker publishes: on the host, not in a container driving ` +
-            `some other machine's daemon.`,
+            `world on loopback, so the daemon it drives has to be the one this process is on: run it on the machine ` +
+            `whose Docker this is, or — in a container, which is what CI does — give the container a dockerd of its own ` +
+            `rather than mounting somebody else's socket.`,
     );
 };
 

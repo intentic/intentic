@@ -1,8 +1,8 @@
 import { DAEMON_PORT } from "@intentic/constants";
-import { expect } from "@playwright/test";
 import { waitForAnnounce } from "../announce.js";
 import { findIcBinary } from "../ic-binary.js";
 import type { Provisioner, ProvisionContext } from "../provisioner.js";
+import { openRunTab } from "../run-step.js";
 import { type Completed, freshShellEnv, runTool } from "../shell.js";
 
 /* THE CLI PATH — the wizard's setup code, redeemed by THIS checkout's `ic sandbox connect`.
@@ -76,16 +76,9 @@ export const icProvisioner = (): Provisioner => {
     const readSetupCode = async (context: ProvisionContext, apiUrl: string): Promise<string> => {
         const { page } = context;
         /* The wizard opens with step 1 already done — the platform mints the sandbox and its address behind it
-         * — so the RUN step is what this waits for. Patient for the reason the compose lane is: a row is
-         * created, a grant is signed and a code issued while the SPA is still fetching its own chunks. Every
-         * spelling of the control, because it is a segmented control whose role depends on how it is built. */
-        const unixTab = page
-            .getByRole(`radio`, { name: /Linux \/ macOS/ })
-            .or(page.getByRole(`button`, { name: /Linux \/ macOS/ }))
-            .or(page.getByRole(`tab`, { name: /Linux \/ macOS/ }))
-            .or(page.getByText(`Linux / macOS`, { exact: true }));
-        await expect(unixTab.first()).toBeVisible({ timeout: 180_000 });
-        await unixTab.first().click();
+         * — so the RUN step is what this waits for, behind the fold the app-first page puts it and patiently,
+         * both of which run-step.ts owns for the compose lane as well. */
+        await openRunTab(page, /Linux \/ macOS/u, `Linux / macOS`);
 
         await page.getByRole(`button`, { name: `Copy`, exact: true }).first().click();
         const command = (await page.evaluate(() => navigator.clipboard.readText())).trim();

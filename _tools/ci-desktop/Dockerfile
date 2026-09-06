@@ -42,6 +42,23 @@ RUN apt-get update \
         osslsigncode \
     && rm -rf /var/lib/apt/lists/*
 
+# THE DOCKER ENGINE, not just the CLI ci-base bakes — the one thing the onboarding tier cannot borrow from the
+# host. That tier serves its whole world on LOOPBACK ports (_tools/onboarding/src/docker.ts says why: the SPA's
+# own CSP permits plain http to 127.0.0.1 and nowhere else), and it bind-mounts the per-run TLS pair into the
+# containers it starts. A job container driving the HOST's daemon through a mounted socket breaks both at once:
+# the ports are published on the host's loopback, which is not this process's, and a bind mount names a path in
+# the host's filesystem, which is not this process's either — so the api came up with an empty /tls or the run
+# died at the loopback check before it got that far (nightly run 34030369992). The fix is to put the daemon
+# where the process is, which is these three packages plus `--privileged` on the job container.
+#   docker-ce              dockerd itself
+#   containerd.io          its runtime
+#   docker-compose-plugin  the onboarding compose lane runs the wizard's own `docker compose up -d`, and
+#                          ci-base bakes only the CLI and buildx, so `docker compose` did not exist here
+#   iptables               dockerd publishes ports through it; the slim base ships none
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce containerd.io docker-compose-plugin iptables \
+    && rm -rf /var/lib/apt/lists/*
+
 # Rust, in the image rather than in $CARGO_HOME: the jobs point CARGO_HOME at the shared /ci-cache store for the
 # registry, and a toolchain living there would be re-downloaded by any job whose PATH does not already have it.
 # Splitting them is what makes the toolchain immutable-and-free and the registry shared-and-warm.
@@ -92,4 +109,5 @@ RUN cargo --version && rustc --version && cargo fmt --version && cargo clippy --
     done \
     && pkg-config --exists webkit2gtk-4.1 && command -v makensis && command -v xdg-mime \
     && command -v file && command -v 7z && command -v rpm2archive \
-    && node --version && pnpm --version && docker --version
+    && node --version && pnpm --version && docker --version \
+    && dockerd --version && docker compose version && command -v iptables

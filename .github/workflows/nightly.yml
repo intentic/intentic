@@ -97,13 +97,34 @@ jobs:
   # Nightly rather than per-push: it builds the api and web images, pulls a sandbox image and boots a real box.
   # On the DESKTOP runner in ci-desktop, which is the image that bakes the Rust toolchain — the CLI lane drives
   # the ic this commit builds, for the reason the world builds the api rather than pulling `:latest`.
+  #
+  # THE ONE JOB ON THIS FLEET THAT DOES NOT DRIVE THE HOST'S DAEMON, and the only tier that cannot. It serves
+  # its whole world on LOOPBACK ports and bind-mounts a per-run TLS pair into the containers it starts
+  # (_tools/onboarding/src/docker.ts and certs.ts each say why in full), and the mounted host socket every
+  # other job here uses breaks both: a port the host's daemon publishes is on the HOST's loopback, and a bind
+  # mount names a path in the HOST's filesystem — neither of which is this process's. So the daemon comes to
+  # the process instead. That was not a near miss: the tier's own check refused to go further and the job died
+  # on `postgres published a port that this process cannot reach` (run 34030369992), which is the sentence
+  # that check exists to print.
   onboarding:
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
+      # What the job's own dockerd needs, and NOT a widening of this job's reach: the mounted host socket it
+      # replaces was unrestricted root on the runner, which this is not.
+      options: --privileged
       volumes:
         - /ci-cache:/ci-cache
-        - /var/run/docker.sock:/var/run/docker.sock
+        # That daemon's image store, kept between nightlies — otherwise every run re-pulls a sandbox image and
+        # a postgres, which is most of this tier's wall clock. One onboarding job runs at a time (this
+        # workflow's concurrency group) and nothing else on the runner uses this daemon, so there is no second
+        # writer to race.
+        #
+        # A HOST DIRECTORY and not a path inside the container, which is load-bearing: the layer store is an
+        # overlay mount, and stacking one on the container's own overlay filesystem is refused outright —
+        # `failed to mount … fstype: overlay … invalid argument`, on the first container the world starts and
+        # nowhere near the line that chose the directory.
+        - /ci-cache/onboarding-docker:/var/lib/docker
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -114,9 +135,6 @@ jobs:
       CARGO_TARGET_DIR: /ci-cache/onboarding-ic-target
       # The freshly published image the box comes up on, the same one the desktop tiers run.
       SANDBOX_E2E_IMAGE: ghcr.io/intentic/sandbox:latest
-      # The CLI lane's binary, built two steps below. Named here so the lane fails LOUDLY on a build that did
-      # not produce one, rather than standing itself down in a job that exists to run it.
-      IC_BIN: ${{ github.workspace }}/_sandbox/ic/dist-bin/ic-linux-amd64
       # Not $HOME — ci.yml's platform deploy job carries the full account of why a browser left in a job
       # container's home directory reddens unrelated suites on the same runner hours later.
       PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
@@ -126,8 +144,31 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/prepare-workspace
-      # The sandbox image is a private package and the host daemon behind the mounted socket holds no registry
-      # credential — pulls authenticate client-side, so this login is what the box's pull presents.
+      # THE DAEMON THIS TIER'S WORLD RUNS ON, in this container's own network and mount namespaces. Published
+      # ports therefore land on the loopback the test process and its browser use, and a bind mount of a
+      # temp directory means the directory this job actually wrote.
+      #
+      # The address pools are pinned away from the ranges either side of this container: the runner puts the
+      # job network on Docker's default 172.16/12 pool, and a nested daemon handed the same pool routes the
+      # outer network into its own bridge. The world's own network picks 10.89.0.0/24 for the same reason
+      # (containers.ts), which is why these two start at 10.90.
+      - name: Start this job's own Docker daemon
+        shell: bash
+        run: |
+          set -euo pipefail
+          dockerd --bip 10.90.0.1/24 --default-address-pool base=10.91.0.0/16,size=24 > /tmp/dockerd.log 2>&1 &
+          for _ in $(seq 1 60); do
+            if docker version --format '{{.Server.Version}}' > /dev/null 2>&1; then
+              echo "this job's dockerd is up: $(docker version --format '{{.Server.Version}}')"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "this job's Docker daemon never came up — its log:" >&2
+          cat /tmp/dockerd.log >&2
+          exit 1
+      # The sandbox image is a private package and the daemon started above holds no registry credential —
+      # pulls authenticate client-side, so this login is what the box's pull presents.
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -136,9 +177,24 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: npx playwright install --with-deps chromium
         working-directory: _tools/onboarding
-      # musl/static, so the same binary runs wherever this tier puts it.
-      - run: bash _tools/scripts/build/build-ic.sh linux-x64
+      # musl/static, so the same binary runs wherever this tier puts it. IC_BIN is named HERE rather than in
+      # the job's `env:` block, and the difference is not style: `${{ github.workspace }}` expands to the
+      # RUNNER HOST's path to the workspace even inside a container job, so the job pointed the CLI lane at a
+      # binary that cannot exist in here. Naming it at all is what makes that lane fail loudly instead of
+      # standing down in the job that exists to run it — so it has to be the path this job actually has.
+      - name: Build the CLI lane's ic
+        run: |
+          bash _tools/scripts/build/build-ic.sh linux-x64
+          echo "IC_BIN=$GITHUB_WORKSPACE/_sandbox/ic/dist-bin/ic-linux-amd64" >> "$GITHUB_ENV"
       - run: pnpm --filter @intentic/onboarding e2e:onboarding
+      # Bound the store the volume above keeps: every run tags a fresh api and web image over yesterday's, and
+      # the ones it displaces are dangling layers nothing else evicts. Same rule and the same reason as the
+      # turbo cache prune in the pnpm-setup composite — a directory that outlives the job needs a job to bound
+      # it. `always()`, because a failed run leaves exactly as much behind as a green one — and `|| true`
+      # because the one failure that reaches here with no daemon to talk to is the daemon step itself, which
+      # has already said so.
+      - if: always()
+        run: docker image prune -f --filter until=336h || true
 
   # Desktop verification tier 3: verify-desktop-setup.sh runs the connect.sh EXTRACTED FROM THE INSTALLER on a
   # clean Docker host and waits for the sandbox daemon to answer /health. It pulls the sandbox image, so it is
