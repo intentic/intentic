@@ -1,5 +1,5 @@
 import type { MemberRole } from "@intentic/sandbox-contract";
-import { contractRoutes, routeNameForRequest, sandboxContract } from "@intentic/sandbox-contract";
+import { contractRoutes, isAttachmentPath, routeNameForRequest, sandboxContract } from "@intentic/sandbox-contract";
 
 /* ROLE FLOORS, the minimum trust tier each route demands, in one table, consulted by the bearer middleware
  * right after the authorizer resolves the caller's role (auth.ts Caller).
@@ -11,6 +11,10 @@ import { contractRoutes, routeNameForRequest, sandboxContract } from "@intentic/
  * The defaults are the part that matters: an unlisted read floors at viewer, an unlisted MUTATION floors at
  * maintainer, so forgetting to classify a new route can under-serve a collaborator but can never hand one a
  * new power. Only reads that are really the operator's (logs, usage) and the agent-driving mutations are named.
+ *
+ * One route's floor reads its TARGET as well as its name, and exactly one: the byte-upload route, where the
+ * same address serves a message's attachment (the collaborator's) and a write into the shared workspace (the
+ * operating tier's). See uploadFloor.
  *
  * These floors are a FLOOR, not the whole answer: operating routes also keep their in-route maintainer gates
  * where middleware-exempt access exists. Membership is the one owner-only surface. */
@@ -72,10 +76,24 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "system.usage": "maintainer",
 };
 
+/* THE ONE FLOOR THAT READS ITS TARGET, and the reason it has to.
+ *
+ * `/workspace/upload` is two acts wearing one address. Attaching a screenshot to a message is part of driving an
+ * agent (the collaborator's grant) and lands at a known address, ATTACHMENTS_DIR. Saving a file in the explorer
+ * is editing the shared workspace — the same act as move, copy, mkdir and delete, all of which floor at
+ * maintainer. Floored at collaborator for the first, the route handed every member the second: a collaborator
+ * could overwrite any file in the tree, then find the file they had just written impossible to rename or delete,
+ * because its neighbours all sat a tier above. That asymmetry is what a member met first, and it read as the app
+ * being broken rather than as a permission.
+ *
+ * So the address decides, and only for this route. `isAttachmentPath` folds `..` before matching, because the
+ * path arrives in a query the caller wrote. A missing or non-attachment target gets the workspace floor, which
+ * is the same answer its siblings give. */
+const uploadFloor = (target: string | undefined): MemberRole =>
+    target !== undefined && isAttachmentPath(target) ? "collaborator" : "maintainer";
+
 // The hand-written (non-contract) routes that sit below the mutation default.
 const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
-    // Chat attachments land here, part of driving an agent, not of editing the workspace.
-    "/workspace/upload": "collaborator",
     // Minting is deliberately cheap: each WebSocket upgrade floors its OWN redemption (ws-tickets.ts),
     // the terminal at maintainer, the sign-in browser at owner.
     "/system/ws-ticket": "collaborator",
@@ -89,10 +107,15 @@ const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
 
 const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
-export const routeFloor = (method: string, path: string): MemberRole => {
+// `target` is the workspace path a byte-write addresses (the upload route's `?path=`), the only input any floor
+// reads beyond the method and the route. Absent for every other route, and for a caller that omitted it.
+export const routeFloor = (method: string, path: string, target?: string): MemberRole => {
     const prefixed = PREFIX_FLOORS.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`));
     if (prefixed !== undefined) {
         return prefixed[1];
+    }
+    if (path === "/workspace/upload") {
+        return uploadFloor(target);
     }
     const name = routeNameForRequest(ROUTES, method, path);
     if (name !== undefined) {

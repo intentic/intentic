@@ -118,9 +118,15 @@ test("drive is the collaborator tier: it makes an agent work but cannot move cod
     // Archiving is reversible and collaborator-floored, so it sits here rather than on the land rung.
     expect(controlScoped("drive", "POST", "/agents/archive")).toBe(true);
     expect(controlScoped("drive", "POST", "/agents/unarchive")).toBe(true);
-    expect(controlScoped("drive", "POST", "/workspace/upload")).toBe(true);
 
     // The whole point of the rung below `land`.
+    /* Writing bytes straight into the shared tree is on the far side of that line, and it is the same act as
+     * the move below whichever door it uses, so `drive` no longer reaches the upload route. It briefly did:
+     * the route was collaborator-floored because a chat attachment travels through it, and a scope derived
+     * from that floor inherited the whole route with it. A grant is matched on method and path alone (it never
+     * sees the target), so there is no attachment-shaped slice of this route to hand a program, and a program
+     * composing a message with a file attached is not a thing that exists: the browser does that. */
+    expect(controlScoped("drive", "POST", "/workspace/upload")).toBe(false);
     expect(controlScoped("drive", "POST", "/agents/abc/land")).toBe(false);
     expect(controlScoped("drive", "POST", "/agents/abc/discard")).toBe(false);
     expect(controlScoped("drive", "POST", "/agents/purge")).toBe(false);

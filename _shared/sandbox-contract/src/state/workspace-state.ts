@@ -999,6 +999,47 @@ export const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
  * the sandbox itself uses", about a document the sandbox had just asked the reader to approve. */
 export const PLAN_DOCUMENTS_DIR = `${STATE_DIR}/records/sessions/claude/plans`;
 
+/* WHERE A MESSAGE'S ATTACHMENTS LAND, workspace-relative: the browser posts a pasted screenshot or a dropped
+ * PDF to `<this>/<uuid>/<name>` before the message that carries it is sent, and the turn reads them back from
+ * there (schemas/agent.ts attachments).
+ *
+ * Declared here, beside the other addresses the daemon reasons about rather than merely writes, because the
+ * ROLE FLOOR now reads it (auth/role-floor.ts). Attaching a file is part of sending a message, which is the
+ * collaborator's grant; writing into the shared workspace is the operating tier's. Both travel through the same
+ * upload route, so the address is what separates them, and an address two sides spell independently is one they
+ * can spell differently. */
+export const ATTACHMENTS_DIR = `${STATE_DIR}/records/artifacts/attachments`;
+
+/* Whether a workspace-relative path the CLIENT chose lands inside that directory — the question the upload
+ * route's floor turns on, so it is asked about the string the client sent, before anything has resolved it
+ * against the workspace root.
+ *
+ * Which is exactly why it NORMALIZES first. An address that opens with the attachments directory and then
+ * climbs back out of it with `..` lands wherever it likes in the workspace — a project's source, a hook the
+ * daemon will run — so a plain prefix test here would be an open door into the whole tree wearing an
+ * attachment's address. Segments are folded the way the filesystem folds them, and a path that climbs above the
+ * root, or is absolute, is simply not an attachment: this answers for the collaborator carve-out, and every no
+ * falls back to the operating tier's floor rather than to permission. */
+export const isAttachmentPath = (relPath: string): boolean => {
+    const resolved: string[] = [];
+    for (const segment of relPath.split(/[\\/]/)) {
+        if (segment === "" || segment === ".") {
+            continue;
+        }
+        if (segment !== "..") {
+            resolved.push(segment);
+            continue;
+        }
+        if (resolved.pop() === undefined) {
+            // Climbed above the workspace root: whatever it names, it is not in here.
+            return false;
+        }
+    }
+    // An absolute path keeps its leading separator's empty segment out of `resolved`, so it would fold to the
+    // same relative shape; the leading separator is what says it was never workspace-relative to begin with.
+    return !relPath.startsWith("/") && !/^[A-Za-z]:/.test(relPath) && resolved.join("/").startsWith(`${ATTACHMENTS_DIR}/`);
+};
+
 /* WHICH locked entry a workspace-root-relative path belongs to, or undefined for a path that is not in the
  * control plane at all. Scoped deliberately tight, matching the guard: only the ROOT `.intentic` counts (a
  * repo's own nested one is ordinary content) and only these entries within it, subtrees included, so a new

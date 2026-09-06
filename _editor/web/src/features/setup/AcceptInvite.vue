@@ -33,6 +33,29 @@ onMounted(async () => {
 
 const invitedEmail = computed(() => preview.value?.invitedEmail);
 const sandboxName = computed(() => preview.value?.sandboxName);
+/* WHAT THE LINK ACTUALLY GRANTS, in the sentence that asks somebody to take it.
+ *
+ * The page used to promise everyone the same thing, "open and work in", which is true of a collaborator and a
+ * maintainer and false of a viewer: they accepted an invitation to work, and then met a workspace that refused
+ * every write. Saying the tier here costs one clause and is the difference between a permission and a fault.
+ * Fallback wording for an absent role (a preview from a platform that predates the field) says only what every
+ * tier can do rather than guessing upward. */
+const grantSentence = computed<string>(() => {
+    switch (preview.value?.role) {
+        case `maintainer`: {
+            return `work in it and operate it, alongside its owner`;
+        }
+        case `collaborator`: {
+            return `read it and put its agents to work; landing and the box's own settings stay with its owner`;
+        }
+        case `viewer`: {
+            return `follow along: read the files and watch the agents work, without changing anything`;
+        }
+        default: {
+            return `open it`;
+        }
+    }
+});
 const emailMatches = computed(() => invitedEmail.value !== undefined && user.value?.email.toLowerCase() === invitedEmail.value);
 
 // The single thing to render, derived from the token's state × the current session.
@@ -114,7 +137,7 @@ const switchAccount = async (): Promise<void> => {
             <template v-else-if="view === 'accept'">
                 <h2 class="text-2xl font-semibold tracking-tight">You're invited</h2>
                 <p class="mt-2 text-sm text-muted">
-                    You've been invited to open and work in the <span class="font-medium text-content">{{ sandboxName }}</span> sandbox.
+                    You've been invited to the <span class="font-medium text-content">{{ sandboxName }}</span> sandbox, to {{ grantSentence }}.
                 </p>
                 <Button label="Accept invitation" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
                     <template #icon><Icon name="check" /></template>

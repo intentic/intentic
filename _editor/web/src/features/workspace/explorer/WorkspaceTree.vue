@@ -122,6 +122,8 @@ const {
     copyEntries,
     moveIntoMany,
     run,
+    canEditFiles,
+    refuseWrite,
     loadChildren,
     expanded,
     collapseAll,
@@ -545,7 +547,7 @@ const onChevronClick = (event: MouseEvent, row: Row): void => {
 
 // ---- rename (inline) ----
 const beginRename = (path: string): void => {
-    if (locked(path)) {
+    if (locked(path) || refuseWrite()) {
         return;
     }
     renamingPath.value = path;
@@ -575,6 +577,9 @@ const focusRename = (vnode: VNode): void => {
 
 // ---- create (inline) / delete (confirm dialog) / cut·copy·paste (over the whole selection) ----
 const beginCreate = (dir: string, type: "file" | "dir"): void => {
+    if (refuseWrite()) {
+        return;
+    }
     renamingPath.value = undefined;
     if (dir !== `` && !expanded.value.has(dir)) {
         toggleExpand(dir);
@@ -635,6 +640,9 @@ const cancelCreate = (): void => {
     creating.value = undefined;
 };
 const doDeleteSelection = (): void => {
+    if (refuseWrite()) {
+        return;
+    }
     const paths = unlockedOnly([...selection.value]);
     if (paths.length === 0) {
         return;
@@ -717,7 +725,7 @@ const revealSoleBarren = async (): Promise<void> => {
  * recursive create rebuilds the exact shape, which is what makes this the one delete that is genuinely
  * reversible. Counted in BRANCHES, the unit the user sees and deletes. */
 const sweepBarren = (roots: readonly string[]): void => {
-    if (roots.length === 0) {
+    if (roots.length === 0 || refuseWrite()) {
         return;
     }
     const dirs = roots.flatMap((root) => branchDirs(root));
@@ -767,6 +775,9 @@ const confirmDelete = (): void => {
 // Keep a barren branch on purpose: drop the standard placeholder into its DEEPEST folder, so the whole chain
 // is non-empty from then on: real for git, carried by clones, and out of the empty-folder list for good.
 const keepFolder = async (path: string): Promise<void> => {
+    if (refuseWrite()) {
+        return;
+    }
     const tail = chainOf(path).tail;
     await run(async () => {
         await saveText(joinPath(tail, `.gitkeep`), ``);
@@ -820,7 +831,7 @@ const revealPasted = (dir: string, paths: readonly string[]): void => {
 // "<name> copy"); a cut moves and consumes the clipboard.
 const doPaste = async (dir: string): Promise<void> => {
     const clip = clipboard.value;
-    if (clip === undefined) {
+    if (clip === undefined || refuseWrite()) {
         return;
     }
     if (clip.mode === `copy`) {
@@ -1048,8 +1059,9 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     event.stopPropagation();
     const dir = dropDirOf(row);
     // Swallowed here rather than left to bubble: a drop the sandbox would refuse must not fall through to the
-    // explorer root and land the files somewhere the user never aimed at.
-    if (locked(dir)) {
+    // explorer root and land the files somewhere the user never aimed at. A drop is the one write with no menu
+    // item to withdraw, so a read-only member gets the sentence rather than a file that never appears.
+    if (locked(dir) || refuseWrite()) {
         dragOverPath.value = undefined;
         return;
     }
@@ -1068,6 +1080,33 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     enqueueFromDataTransfer(dir, dataTransfer);
 };
 
+/* What the row's own icons offer, said in words, because the icons are revealed by HOVER: a touch device has no
+ * hover and a keyboard user never reaches them (the row is the button; the icons inside it cannot be). This is
+ * the whole non-pointer route to a directory's document, health and history, and it READS rather than writes,
+ * which is why it is the one part of the menu a read-only member keeps. */
+const dirActionItems = (target: WorkspaceTreeEntry | undefined, multi: boolean): MenuItem[] =>
+    target?.type === `dir` && !multi
+        ? actionsFor(target.path).map((action) => ({ label: action.tooltip, icon: action.icon, command: () => runAction(target, action) }))
+        : [];
+
+/* A READ-ONLY MEMBER'S MENU: what this row still offers, and one line saying what became of the rest.
+ *
+ * Every write item is dropped rather than disabled — a menu of greyed-out verbs is a list of things to resent —
+ * and the tier is named once, at the bottom, which is where a member goes looking when a row will not move. The
+ * daemon would refuse each of those items anyway (auth/role-floor.ts); drawing them was how that refusal came to
+ * look like an app that ignores clicks. */
+const readOnlyMenu = (target: WorkspaceTreeEntry | undefined, multi: boolean): MenuItem[] => {
+    const readable = [
+        ...dirActionItems(target, multi),
+        ...(expanded.value.size > 0 ? [{ label: `Collapse Folders`, icon: `collapse-all`, command: collapseAll }] : []),
+    ];
+    return [
+        ...readable,
+        ...(readable.length > 0 ? [{ separator: true }] : []),
+        { label: `Read-only: changing files needs maintainer access`, icon: `lock`, disabled: true },
+    ];
+};
+
 // ---- context menu (acts on the whole selection when the right-clicked row is part of it) ----
 const menuItems = computed<MenuItem[]>(() => {
     const target = menuEntry.value;
@@ -1080,19 +1119,15 @@ const menuItems = computed<MenuItem[]>(() => {
     const multi = target !== undefined && selection.value.size > 1 && selection.value.has(target.path);
     const count = unlockedOnly([...selection.value]).length;
     const dir = target === undefined ? `` : target.type === `dir` ? target.path : parentDir(target.path);
+    if (!canEditFiles.value) {
+        return readOnlyMenu(target, multi);
+    }
     const items: MenuItem[] = [
         { label: `New File`, icon: `file`, command: () => beginCreate(dir, `file`) },
         { label: `New Folder`, icon: `folder`, command: () => beginCreate(dir, `dir`) },
+        // The directory's own read surfaces, at the top, for the reason dirActionItems gives.
+        ...dirActionItems(target, multi),
     ];
-    /* What the row's own icons offer, said in words and at the top, because the icons are revealed by HOVER, and
-     * a touch device has no hover and a keyboard user never reaches them (the row is the button; the icons inside
-     * it cannot be). This menu is the whole non-pointer route to a directory's document, health and history. */
-    if (target?.type === `dir` && !multi) {
-        const actions = actionsFor(target.path);
-        if (actions.length > 0) {
-            items.push(...actions.map((action) => ({ label: action.tooltip, icon: action.icon, command: () => runAction(target, action) })));
-        }
-    }
     if (target !== undefined) {
         items.push({ separator: true });
         if (!multi) {

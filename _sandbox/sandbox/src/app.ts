@@ -394,7 +394,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                  * route's tier gets a 403 that NAMES the tier, so the browser can render "ask a maintainer"
                  * instead of a bare refusal. The owner-only routes keep their in-route gates besides, this
                  * floor is what keeps a viewer read-only and a collaborator off the ship controls. */
-                const floor = routeFloor(c.req.method, c.req.path);
+                const floor = routeFloor(c.req.method, c.req.path, c.req.query("path"));
                 if (!roleAtLeast(caller.role, floor)) {
                     return c.json({ error: `${floor} access required`, floor }, 403);
                 }

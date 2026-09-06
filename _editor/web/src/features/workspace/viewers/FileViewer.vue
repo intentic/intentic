@@ -344,7 +344,7 @@ const download = async (): Promise<void> => {
  * the file's live buffer (edits survive tab switches via useEditBuffers) or its on-disk text. Ctrl+S / Save
  * persists through the daemon's upload route; the tree refetch then refreshes size + the read view. */
 const { editMode, setEditMode, hideFileComments, toggleHideFileComments } = useLayout();
-const { saveText, run } = useWorkspaceTree();
+const { saveText, run, canEditFiles } = useWorkspaceTree();
 // The editable CodeView instance: the toolbar Save button saves through its exposed save() so the toolbar and
 // Ctrl+S run the same normalize-then-save path.
 const editorView = ref<InstanceType<typeof CodeView>>();
@@ -363,16 +363,23 @@ const editableKind = computed(() => (open.value.kind === `code` || open.value.ki
  * to the SHARED tree's file of the same path, which is the exact confusion this scope exists to end. And the
  * agent may be writing to that file right now: two writers on one worktree file lose each other's work with
  * nothing to notice it. */
-const canEdit = computed(() => workspaceAgent.value === undefined && editableKind.value);
+const canEdit = computed(() => canEditFiles.value && workspaceAgent.value === undefined && editableKind.value);
 /* AND THE REASON IS SAID HERE, on the row where the Edit button would have been, because that is where somebody
  * finds out they wanted it. It used to be a clause in a banner across the top of the whole view, which charged
  * every reader of every file for a sentence that only matters to the one who reaches for the keyboard: the
  * textbook trade of a permanent cost against an occasional need. The chip in the tab row says WHICH copy; this
  * says what that means for the file in front of you, at the moment it means anything. */
-const scopedReadOnly = computed(() => !mobile.value && workspaceAgent.value !== undefined && editableKind.value);
+/* The same seat now answers for the OTHER reason Edit can be missing, a member whose tier does not write. Two
+ * causes, one chip: what a reader needs at that spot is why this file will not take a caret, and the second
+ * cause is the more permanent of the two, so leaving it unsaid was the version of this that read as a bug.
+ * The tier is asked FIRST because it outranks the scope: a viewer looking at a conversation's copy cannot edit
+ * for a reason that no landing will fix. */
+const scopedReadOnly = computed(() => !mobile.value && editableKind.value && (!canEditFiles.value || workspaceAgent.value !== undefined));
 const scopeTitle = useScopeTitle();
-const readOnlyReason = computed(
-    () => `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`,
+const readOnlyReason = computed(() =>
+    canEditFiles.value
+        ? `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`
+        : `Your access to this sandbox is read-only: changing files needs maintainer access.`,
 );
 /* MARKDOWN ANSWERS THE SAME EDIT SWITCH AS EVERY OTHER FILE, and only differs in what it opens INTO: the
  * rendered document becomes typeable (MarkdownViewer), where a `.ts` file opens in the code editor. One button,

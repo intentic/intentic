@@ -71,6 +71,7 @@ const {
     run,
     busy,
     actionError,
+    canEditFiles,
     loadChildren,
     lazyChildren,
     lazyHidden,
@@ -668,20 +669,28 @@ const onPick = (event: Event): void => {
                     >
                         <Icon name="download" class="text-base text-muted" /> Download
                     </button>
-                    <button
-                        type="button"
-                        class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
-                        @click="startRename(sheetEntry)"
-                    >
-                        <Icon name="pencil" class="text-base text-muted" /> Rename
-                    </button>
-                    <button
-                        type="button"
-                        class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger active:bg-danger/10"
-                        @click="((deleteTarget = sheetEntry), (sheetEntry = undefined))"
-                    >
-                        <Icon name="trash" class="text-base" /> Delete
-                    </button>
+                    <!-- Rename and Delete are writes to the shared tree, so they belong to the operating tier
+                         and are withheld below it, the same way the padlock withholds them above. Download and
+                         Copy path stay: reading is every member's. -->
+                    <template v-if="canEditFiles">
+                        <button
+                            type="button"
+                            class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
+                            @click="startRename(sheetEntry)"
+                        >
+                            <Icon name="pencil" class="text-base text-muted" /> Rename
+                        </button>
+                        <button
+                            type="button"
+                            class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger active:bg-danger/10"
+                            @click="((deleteTarget = sheetEntry), (sheetEntry = undefined))"
+                        >
+                            <Icon name="trash" class="text-base" /> Delete
+                        </button>
+                    </template>
+                    <p v-else class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
+                        <Icon name="lock" class="text-base text-subtle" /> Read-only: changing files needs maintainer access
+                    </p>
                 </template>
             </div>
         </BottomSheet>

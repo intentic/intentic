@@ -145,7 +145,16 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         label: `Configuration`,
         items: configurationRows(updatable.value).filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || canShip.value),
     },
-    { key: `reach`, label: `Reach`, items: reachRows(contendedPorts.value.length).filter((tab) => tab.slug !== `devices` || canShip.value) },
+    {
+        key: `reach`,
+        label: `Reach`,
+        // Personas joins Devices behind the operating tier: choosing who this box IS when it acts outside is a
+        // configuration write like the ones on Secrets and Agent, and every control on that page (its own
+        // mutations and the settings it patches) floors at maintainer, so below it the page is a form that
+        // cannot be submitted. Access stays: giving up your OWN grant is every member's, and the roster's
+        // owner-only half is gated inside the page.
+        items: reachRows(contendedPorts.value.length).filter((tab) => (tab.slug !== `devices` && tab.slug !== `personas`) || canShip.value),
+    },
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>

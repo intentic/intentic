@@ -17,6 +17,7 @@ import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { useRole } from "../../sandbox/secrets/useRole";
 import { refusalSummary } from "../health/fixProposal";
 import { outgoingWork } from "../push/outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
@@ -106,6 +107,9 @@ interface ScopedTask {
 
 const actionBusy = ref(false);
 const failures = ref<ReadonlyMap<string, ActionFailure>>(new Map());
+// The signed-in member's tier on the active sandbox, read once for the whole module (useRole is computed over
+// the sandbox store, which is module-level too). What runBatch consults before it sends anything.
+const { canShip } = useRole();
 
 /* THE REPOS THIS TAB IS COMMITTING RIGHT NOW, beside the daemon's own answer to the same question.
  *
@@ -150,6 +154,23 @@ const dismissFailure = (scope: string): void => {
  * shut a second time by the commit box, which clears its message on success and needs one to arm the button. */
 const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unknown>): Promise<void> => {
     if (actionBusy.value) {
+        return;
+    }
+    /* A MEMBER BELOW THE OPERATING TIER IS TOLD HERE, before anything is sent.
+     *
+     * Every verb in this panel — commit, discard, stage — is a change to the shared repos, which the daemon
+     * floors at maintainer (auth/role-floor.ts). Reviewing the diffs is a viewer's right and stays open; acting
+     * on them is not. Caught at the batch rather than per verb because this is the one door all of them pass
+     * through, and the refusal is filed as an ordinary per-scope failure, so it lands in the same place beside
+     * the same repo as any other refusal, instead of being a button that goes busy and then does nothing. */
+    if (!canShip.value) {
+        failures.value = new Map([
+            ...failures.value,
+            ...tasks.map((task): [string, ActionFailure] => [
+                task.scope,
+                { action: task.action, detail: `Your access to this sandbox is read-only: this needs maintainer access.` },
+            ]),
+        ]);
         return;
     }
     actionBusy.value = true;

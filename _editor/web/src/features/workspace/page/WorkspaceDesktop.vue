@@ -49,7 +49,8 @@ import { HOISTED_CONTEXT } from "../files/viewerChrome";
  * toggled from the rail: this view owns no control for it. */
 
 const layout = useLayout();
-const { tree, rootHidden, barren, error, isLoading, refetch, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
+const { tree, rootHidden, barren, error, isLoading, refetch, expanded, collapseAll, moveIntoMany, run, busy, actionError, canEditFiles, refuseWrite } =
+    useWorkspaceTree();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -730,7 +731,9 @@ const onRootDragLeave = (): void => {
 const onRootDrop = (event: DragEvent): void => {
     const offer = dragOffer(event);
     resetRootDrag();
-    if (event.dataTransfer === null) {
+    // A read-only member's drop says the tier rather than dropping the files into a refusal one request later
+    // (useWorkspaceTree refuseWrite): the whole gesture is "put this in the workspace", which is a write.
+    if (event.dataTransfer === null || refuseWrite()) {
         return;
     }
     const dataTransfer = event.dataTransfer;
@@ -783,7 +786,7 @@ onBeforeUnmount(() => {
 });
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
-    if (input.files !== null && input.files.length > 0) {
+    if (input.files !== null && input.files.length > 0 && !refuseWrite()) {
         void enqueue(``, filesToEntries(input.files));
     }
     input.value = ``;
@@ -1106,7 +1109,7 @@ const endResize = (event: PointerEvent): void => {
                     @keep="keepTab"
                     @close="closeTab"
                     @contextmenu="openTabMenu"
-                    @pick="fileInput?.click()"
+                    @pick="canEditFiles ? fileInput?.click() : refuseWrite()"
                 >
                     <template #lead>
                         <!-- The explorer's one control, and, while a split has stood the explorer aside, the one
@@ -1160,9 +1163,10 @@ const endResize = (event: PointerEvent): void => {
                     <EditorPane pane="side" @select="selectTab" @keep="keepTab" @close="closeTab" @contextmenu="openTabMenu" />
                 </div>
                 <!-- Drop-to-root hint over the editor, shown only for external file drags (an internal move is
-                     guided by the row rings instead). pointer-events-none so the drop still reaches the body. -->
+                     guided by the row rings instead). pointer-events-none so the drop still reaches the body.
+                     Withheld from a read-only member: an invitation to drop is a promise to keep the file. -->
                 <div
-                    v-if="rootDragging && externalDrag"
+                    v-if="rootDragging && externalDrag && canEditFiles"
                     class="ws-dropzone pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 text-primary-500"
                 >
                     <Icon name="upload" class="text-2xl" />

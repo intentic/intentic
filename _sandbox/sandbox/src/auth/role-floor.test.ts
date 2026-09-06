@@ -1,3 +1,4 @@
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 import { routeFloor } from "./role-floor.js";
 
@@ -26,7 +27,9 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/agent/resume")).toBe("collaborator");
         expect(routeFloor("POST", "/agents/abc/resume-after-outage")).toBe("collaborator");
         expect(routeFloor("POST", "/agents/abc/auto-land")).toBe("maintainer");
-        expect(routeFloor("POST", "/workspace/upload")).toBe("collaborator");
+        // An attachment is part of the message it travels with, so the upload route answers at this tier for
+        // the address attachments land at — and only for that one (the workspace write below).
+        expect(routeFloor("POST", "/workspace/upload", `${ATTACHMENTS_DIR}/u1/shot.png`)).toBe("collaborator");
         expect(routeFloor("POST", "/system/ws-ticket")).toBe("collaborator");
         expect(routeFloor("POST", "/system/sync/pair")).toBe("collaborator");
     });
@@ -37,6 +40,12 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/approvals")).toBe("maintainer");
         expect(routeFloor("DELETE", "/approvals/d1")).toBe("maintainer");
         expect(routeFloor("POST", "/workspace/move")).toBe("maintainer");
+        // Writing bytes into the shared tree is that same edit, whichever door it uses: the upload route only
+        // drops to collaborator for an attachment address, so a plain file, a missing target, and a path that
+        // climbs back out of the attachments dir all land here with move and delete.
+        expect(routeFloor("POST", "/workspace/upload", "app/main.ts")).toBe("maintainer");
+        expect(routeFloor("POST", "/workspace/upload")).toBe("maintainer");
+        expect(routeFloor("POST", "/workspace/upload", `${ATTACHMENTS_DIR}/u1/../../../../config/hooks/lint.mjs`)).toBe("maintainer");
     });
 
     test("operator reads outrank the GET default: logs, usage, capabilities", () => {

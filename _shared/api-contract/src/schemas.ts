@@ -825,6 +825,11 @@ export const InvitePreviewSchema = z.object({
     status: InvitePreviewStatusSchema,
     sandboxName: z.string().optional(),
     invitedEmail: z.string().optional(),
+    /* THE TIER THE LINK CARRIES, so the page that asks someone to accept can say what they are accepting.
+     * Without it the invitation read "open and work in" to everybody, including a viewer, whose whole grant is
+     * watching: they accepted a promise the sandbox then declined to keep, and every refusal afterwards looked
+     * like a fault rather than the tier they were given. Absent on an invalid token, where nothing is exposed. */
+    role: GrantedRoleSchema.optional(),
 });
 export type InvitePreview = z.infer<typeof InvitePreviewSchema>;
 

@@ -1,5 +1,5 @@
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic/api-contract";
-import { type NoticeModel, noticeFrom, useAsyncAction } from "@intentic/ui/async";
+import { type NoticeModel, noticeFrom, noticeOf, useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { SandboxHttpError, sandboxBlob, sandboxJson } from "../../sandbox/client/sandboxClient";
@@ -7,6 +7,7 @@ import { jsonBody } from "../../sandbox/client/jsonBody";
 import { readFileWindow } from "../files/fileWindow";
 import { resetEmptyDirsState } from "./useEmptyDirs";
 import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useRole } from "../../sandbox/secrets/useRole";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { resetUploadQueue } from "../files/useUploadQueue";
 import { readExpandedDirs, writeExpandedDirs } from "../changes/workspaceSnapshot";
@@ -195,6 +196,26 @@ export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
 
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
+    /* WHETHER THIS MEMBER MAY EDIT THE SHARED TREE, and the refusal every gesture that cannot be withdrawn
+     * reports through.
+     *
+     * Editing the workspace is the operating tier's: the daemon floors every file write at maintainer
+     * (auth/role-floor.ts), so for a viewer or a collaborator this explorer is a reading surface. The views used
+     * to offer the whole menu to everyone and let the daemon answer, which is the worst of both — the refusal
+     * arrived as a truncated line in a toolbar nobody looks at, so Delete read as a button that does nothing.
+     * Menus withdraw their write items; a keystroke or a dropped file has no item to withdraw, so it says the
+     * tier instead, on the SAME line every other file failure uses.
+     *
+     * It lives here rather than in each view so the explorer, its toolbar and the mobile sheet cannot disagree
+     * about who may write, and so the sentence is written once. */
+    const { canShip: canEditFiles } = useRole();
+    const refuseWrite = (): boolean => {
+        if (canEditFiles.value) {
+            return false;
+        }
+        actionError.value = noticeOf(`Changing files needs maintainer access. Yours is read-only here.`);
+        return true;
+    };
 
     const { query, error } = useSandboxQuery({
         queryKey: computed(() => workspaceTreeKey()),
@@ -420,5 +441,7 @@ export function useWorkspaceTree() {
         busy,
         actionError,
         run,
+        canEditFiles,
+        refuseWrite,
     };
 }

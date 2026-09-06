@@ -170,4 +170,26 @@ describe(`invite routes`, () => {
         const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(null) } });
         await expectOrpcCode(call(inviteRoutes.accept, { token: `nope` }, { context: context({ prisma }) }), `NOT_FOUND`);
     });
+
+    it(`invite.preview names the tier the link grants, so the accept page can say what is being accepted`, async () => {
+        const memberRow = {
+            email: `guest@example.com`,
+            role: `viewer`,
+            acceptedAt: null,
+            inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
+            sandbox: sandboxRow,
+        };
+        const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(memberRow) } });
+        expect(await call(inviteRoutes.preview, { token: `tok` }, { context: context({ prisma }) })).toEqual({
+            status: `pending`,
+            sandboxName: `dev`,
+            invitedEmail: `guest@example.com`,
+            role: `viewer`,
+        });
+    });
+
+    it(`invite.preview exposes nothing at all for a token it does not know`, async () => {
+        const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(null) } });
+        expect(await call(inviteRoutes.preview, { token: `nope` }, { context: context({ prisma }) })).toEqual({ status: `invalid` });
+    });
 });

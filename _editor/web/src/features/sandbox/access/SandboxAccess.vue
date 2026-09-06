@@ -70,7 +70,9 @@ const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
         label: `Collaborator`,
         value: `collaborator`,
         icon: `users`,
-        hint: `Can drive agents and review work. Landing and publishing become requests.`,
+        // The clause about the files is the one people arrive without: a collaborator works THROUGH the agents,
+        // so the explorer stays a reading surface for them and every landing is a request.
+        hint: `Can drive agents and review work. Files change through agents, not by hand; landing and publishing become requests.`,
     },
     {
         label: `Maintainer`,

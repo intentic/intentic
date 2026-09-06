@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { apiContract, type InviteDelivery } from "@intentic/api-contract";
+import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
@@ -122,7 +123,14 @@ export const inviteRoutes = {
         if (!member) {
             return { status: `invalid` };
         }
-        return { status: inviteStatus(member, new Date()), sandboxName: member.sandbox.name, invitedEmail: member.email };
+        return {
+            status: inviteStatus(member, new Date()),
+            sandboxName: member.sandbox.name,
+            invitedEmail: member.email,
+            // The stored grant, defaulted the way the roster read defaults it: a row whose role predates the
+            // column, or holds something this build does not know, is the least it could be.
+            role: GrantedRoleSchema.catch(`viewer`).parse(member.role),
+        };
     }),
     // Accept an invite: flip the caller's pending grant to an active member. email-locked (the daemon authorizes
     // by the exact invited email); idempotent once accepted. The sandbox then surfaces in the caller's list.
