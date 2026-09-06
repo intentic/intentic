@@ -19,8 +19,8 @@ import { acknowledge } from "./attention";
 import ChoreRow from "./ChoreRow.vue";
 import { host } from "./host";
 import MaintenanceSkeleton from "./MaintenanceSkeleton.vue";
-import RepoScope from "./RepoScope.vue";
 import { conversationIdOf } from "./runs";
+import ScopeNote from "./ScopeNote.vue";
 import { useChores } from "./useChores";
 import { useRuns } from "./useRuns";
 
@@ -63,7 +63,7 @@ import { useRuns } from "./useRuns";
 const { repo: pinned } = defineProps<{ repo?: string }>();
 
 const api = host();
-const { byRepo, error, isPending, measuring, measuringKeys, refresh, refreshProbe, snooze } = useChores();
+const { byRepo, error, isPending, measuring, refresh, refreshProbe, snooze } = useChores();
 const { latestByChore, start, promote } = useRuns();
 
 type Filter = "attention" | "all";
@@ -139,8 +139,9 @@ const scoped = computed(() => (repo.value === undefined ? byRepo.value : byRepo.
 
 /* A chore that does not APPLY here is not a row under any filter: there is no Dockerfile to slim, no pipeline to
  * tighten, no documentation to re-read, and listing it as "clear" would claim we checked something that does not
- * exist. It is not hidden either: <RepoScope> counts them in one line and opens to every one of them and why, so
- * "why is there no Docker chore in this repository?" has an answer one click away rather than a support question. */
+ * exist. It is not hidden either: <ScopeNote> counts them under the list and opens to every one of them and why,
+ * so "why is there no Docker chore in this repository?" has an answer one click away rather than a support
+ * question. */
 /* `stale` is under "Needs attention" alongside due and snoozed, and it has to be. It is the state a chore lands
  * in the moment a turn finishes on it, so filtering it out would make a chore VANISH from the page exactly when
  * the owner came back to see what happened to it: the same disappearance the settled note exists to prevent,
@@ -177,7 +178,7 @@ const groups = computed(() =>
     }),
 );
 
-// The freshness statement is about ONE repository's measurements, so it renders when the scope is one repository:
+// The footnote is about ONE repository's chores and probes, so it renders when the scope is one repository:
 // which "All repositories" also is in a workspace that only has one, and that is the right answer there too.
 const only = computed(() => (scoped.value.length === 1 ? scoped.value[0] : undefined));
 // Under a wider scope the repository is what tells two otherwise identical rows apart, so the row carries it.
@@ -227,19 +228,11 @@ const attempt = async (what: string, action: () => Promise<unknown>): Promise<vo
     }
 };
 
-// Re-run one of the scope's probes ahead of its TTL. Reads the repository off the scope rather than taking it
-// from the strip, because the strip is only ever rendered for one and re-emitting a prop is a longer way to say
-// the same thing.
-const onRefreshProbe = (id: string): void => {
-    const at = only.value?.repo;
-    if (at === undefined) {
-        return;
-    }
-    void attempt(`ask for that measurement`, () => refreshProbe(at, id));
-};
-
-/* Re-measure everything ONE chore rests on, from its own row: the move a stale row offers instead of a turn.
- * The row carries its repository, so this works under "All repositories" where the scope strip's buttons cannot.
+/* Re-measure everything ONE chore rests on, from its own row: the ONLY way this page asks for a measurement, and
+ * the reason the probe strip that used to sit under the title is gone. That strip offered a refresh button per
+ * probe, above a list whose rows are what anyone actually wants re-measured, so the reader had to know which of
+ * seven tools decides "Clear out dead code" before they could press anything. The row carries its repository, so
+ * this also works under "All repositories", which the strip's buttons never could.
  *
  * `attempt` here covers the ASK, not the measurement: the request is milliseconds and the sweep is minutes, and
  * conflating them is what made this button feel broken: the page's busy flag went up and straight back down
@@ -291,21 +284,13 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
             />
         </template>
 
-        <template #strips>
+        <!-- Failures only, and the slot is only PASSED when there is one: the strip band reserves its margin on
+             the mere presence of the slot, so a permanently-mounted, usually-empty strip is 16px of nothing
+             between the title and the list. What this repository could not be asked is a footnote UNDER the list
+             (<ScopeNote>) rather than a strip over it: it is read once, by someone surprised a chore is missing. -->
+        <template v-if="notice || error" #strips>
             <Notice v-if="notice" tone="warning">{{ notice }}</Notice>
             <Notice v-if="error" :of="noticeOf(error)" />
-
-            <!-- What this repository can be asked and what we actually asked it. Above both panes because it is a
-                 statement about the scope, not a row in the list it qualifies. -->
-            <RepoScope
-                v-if="only"
-                :probes="only.probes"
-                :inapplicable="only.verdicts.filter((verdict) => verdict.state === `not-applicable`)"
-                :measuring="measuringKeys"
-                :repo="only.repo"
-                :busy="busy"
-                @refresh="onRefreshProbe"
-            />
         </template>
 
         <template v-if="railed" #rail>
@@ -359,6 +344,10 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                         />
                     </RowGroup>
                 </template>
+
+                <!-- The record of what was left out, last: a chore with no subject here, a probe this repository
+                     cannot run, a tool that broke. It qualifies the list, so it comes after it. -->
+                <ScopeNote v-if="only" :probes="only.probes" :inapplicable="only.verdicts.filter((verdict) => verdict.state === `not-applicable`)" />
             </div>
         </template>
     </SplitView>

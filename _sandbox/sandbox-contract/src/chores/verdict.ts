@@ -11,7 +11,7 @@ import { probeSpec } from "./probes.js";
  *   not-applicable  this chore is not a QUESTION worth asking of this repository, there is no Dockerfile to
  *                slim, no pipeline to tighten, no documentation to re-read. Dropped from the panel entirely
  *                rather than shown as clear, because "clear" claims we checked, and there was nothing to check.
- *                The reason survives in the scope strip, so "why is there no Docker chore here?" has an answer.
+ *                The reason survives in the panel's scope note, so "why is there no Docker chore here?" has an answer.
  *   unavailable  we have not measured this. knip is not a devDependency; there is no lockfile to audit. Rendered
  *                greyed, never badged, and never collapsed into `clear`, a maintenance surface reporting a green
  *                repository it has never actually measured is worse than one that says nothing.
@@ -39,7 +39,7 @@ import { probeSpec } from "./probes.js";
  *
  * Nothing here can hide a problem. Snoozing and settling change whether the rail SPEAKS; the panel still shows
  * the chore, its evidence and its state. The one thing that removes a row entirely is `not-applicable`, and that
- * is not hiding, it is the absence of a subject, counted in the panel's scope strip and expandable to the reason.
+ * is not hiding, it is the absence of a subject, counted in the panel's scope note and expandable to the reason.
  * A maintenance surface you can quietly bury findings in is a maintenance surface nobody trusts. */
 
 export type ChoreState = "due" | "clear" | "snoozed" | "stale" | "unavailable" | "not-applicable";
@@ -110,7 +110,7 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
 
     /* APPLICABILITY FIRST, before anything is measured or any evidence is read. A chore that does not apply is
      * not "clear" and not "unmeasured", the question does not arise here, and every subsequent branch of this
-     * function would be answering it anyway. The cause is carried as the headline, because the scope strip, which
+     * function would be answering it anyway. The cause is carried as the headline, because the scope note, which
      * groups these rows BY it, is the only place it will ever be read. */
     const inapplicable = chore.applies?.(context.signals);
     if (inapplicable !== undefined) {

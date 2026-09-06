@@ -18,7 +18,7 @@ the daemon computed rather than by a model's impression.
 - [src/useChores.ts](src/useChores.ts): the book, assessed against the daemon's signals.
 - [src/runs.ts](src/runs.ts): a chore run's shape and its history.
 - [src/attention.ts](src/attention.ts): the badge, and what it stays quiet about.
-- [src/RepoScope.vue](src/RepoScope.vue): scoping the list to one repository without fragmenting the surface.
+- [src/ScopeNote.vue](src/ScopeNote.vue): what this repository was not asked, and why, under the list.
 - [src/extension.ts](src/extension.ts): activation, and three decisions that could each have gone the other way.
 
 ## How it fits
@@ -46,5 +46,9 @@ which cost the column a silent seat on every workspace.
   than due: the probes refresh on a daily-to-weekly TTL, so an hour after a run the numbers on the row describe a
   tree that no longer exists. A stale row keeps its evidence, drops the claim, and offers a re-measure instead of a
   second turn.
-- The page's own Refresh **re-reads**, it does not re-measure. Measuring again costs a subprocess and minutes, so
-  it stays a decision made on the row that needs it.
+- The page's own Reload **re-reads**, it does not re-measure. Measuring again costs a subprocess and minutes, so
+  it is a decision made on the row that needs it: every chore resting on a probe carries its own Re-measure, and
+  that is the only place the page asks for one.
+- What was left out is a footnote, not a banner. Chores with no subject here, probes this repository cannot run
+  and tools that broke are counted in one line under the list and expand to the causes; how fresh a measurement
+  is rides on the row it decides, beside the numbers it qualifies.

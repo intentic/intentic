@@ -101,7 +101,7 @@ export interface Chore {
      * this asks whether the question makes sense. "Re-read the documentation against the code" in a repository
      * with no documentation is not a chore that is currently clear, it is one that will never apply here, and
      * showing it as clear says we checked something we cannot check. A chore that does not apply is dropped from
-     * the panel entirely; a line in the scope strip records that it was considered.
+     * the panel entirely; a line under the panel's list records that it was considered.
      *
      * A BARE CAUSE, "no Dockerfile", never "this repository ships no Dockerfile, so there is no image to slim".
      * Same spelling as `ProbeSpec.unavailable`, and for the same reason both surfaces need: one absent

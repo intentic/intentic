@@ -11,8 +11,8 @@ import { RowGroup } from "@intentic/extension-ui";
  * Erring short means the list grows downward: the direction reading already goes, while guessing four would
  * shrink the page the moment the report answers.
  *
- * Nothing here stands in for the rail or the scope strip. Both are DERIVED from the same report: until it lands
- * there is no list of repositories to index and no measurement to be honest about the age of, and drawing a
+ * Nothing here stands in for the rail or the scope note under the list. Both are DERIVED from the same report:
+ * until it lands there is no list of repositories to index and nothing known to be ruled out, and drawing a
  * placeholder for either would be inventing the one thing this surface must never invent.
  *
  * The group is the board's own <RowGroup>, drawn with bars in its heading slot rather than re-typed here: the

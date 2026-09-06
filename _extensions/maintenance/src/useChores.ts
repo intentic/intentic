@@ -35,7 +35,7 @@ const MEASURING_POLL_MS = 2000;
 const UNCONFIRMED_MS = 15_000;
 
 // Repo + probe, the key both halves of "what is measuring" agree on.
-export const probeKey = (repo: string, id: string): string => `${repo}|${id}`;
+const probeKey = (repo: string, id: string): string => `${repo}|${id}`;
 
 /* A measurement in flight, as the panel needs to draw it. `startedAt` absent means it is waiting behind another
  * one, the runner has one lane across the sandbox, and the row says "queued" rather than counting up from a
@@ -179,9 +179,9 @@ export function useChores() {
         verdicts,
         byRepo,
         // What is being measured right now, this panel's own unconfirmed clicks included, the state every
-        // surface that offers a re-measure draws its progress on.
+        // surface that offers a re-measure draws its progress on. One list, not a keyed set as well: the rows
+        // are the only thing that draws it now, and a row wants the start time to count up from.
         measuring,
-        measuringKeys: computed(() => new Set(measuring.value.map((entry) => probeKey(entry.repo, entry.id)))),
         error: computed(() => query.error.value?.message),
         // isPending, not isLoading: true from mount until the FIRST report, INCLUDING the window where `enabled`
         // still gates the fetch on the sandbox handshake. isLoading is false in that window (nothing is in

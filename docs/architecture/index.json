@@ -3482,24 +3482,24 @@
           "what": ": the badge, and what it stays quiet about."
         },
         {
-          "path": "_extensions/maintenance/src/RepoScope.vue",
-          "what": ": scoping the list to one repository without fragmenting the surface."
+          "path": "_extensions/maintenance/src/ScopeNote.vue",
+          "what": ": what this repository was not asked, and why, under the list."
         },
         {
           "path": "_extensions/maintenance/src/extension.ts",
           "what": ": activation, and three decisions that could each have gone the other way."
         }
       ],
-      "behind": 10,
+      "behind": 11,
       "component": "extensions",
       "dir": "_extensions/maintenance",
       "files": 15,
       "hasTests": true,
-      "loc": 1805,
+      "loc": 1758,
       "name": "@intentic/ext-maintenance",
       "oneLiner": "The chore book: what this workspace is owed, why, and the evidence behind each answer.",
       "readmeRev": "775111ae1d4b957f575e2bf345e2642a0f5c2269",
-      "reason": "10 commits have touched this package since its README was written",
+      "reason": "11 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787652437000
     },

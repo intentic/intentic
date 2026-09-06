@@ -512,8 +512,8 @@ describe(`what does not apply here`, () => {
         expect(assessReport(withShape({}), NOW).filter((verdict) => verdict.state === `not-applicable`)).toEqual([]);
     });
 
-    /* THE CAUSES HAVE TO GROUP, and that is a fact about the STRINGS rather than about the gates. The scope strip
-     * prints one line per distinct cause with the chores it costs listed beside it, so two gates that both mean
+    /* THE CAUSES HAVE TO GROUP, and that is a fact about the STRINGS rather than about the gates. The panel's
+     * scope note prints one line per distinct cause with the chores it costs listed beside it, so two gates that both mean
      * "there is no package.json here" and say it in different words print two lines, and a workspace root, where
      * a dozen chores are ruled out by three facts, is back to the paragraph-per-chore wall this phrasing replaced.
      * Bounded rather than enumerated: a new gate may invent a new cause, it may not invent a new sentence. */

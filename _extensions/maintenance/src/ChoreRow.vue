@@ -83,9 +83,30 @@ const elapsed = computed<string>(() => {
     return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 });
 
-// What is actually being run, by the name the strip above uses for it: "measuring" is a spinner, "measuring
-// dead code" is a fact, and the difference is whether the reader can tell a stuck row from a slow one.
+// What is actually being run, by the probe's own name for its subject: "measuring" is a spinner, "measuring how
+// much of the tree is duplicated" is a fact, and the difference is whether the reader can tell a stuck row from
+// a slow one.
 const measuringWhat = computed(() => inFlight.value.map((entry) => probeSpec(entry.id).measures).join(` and `));
+
+/* THE RE-MEASURE, ON EVERY ROW THAT RESTS ON A MEASUREMENT. It used to appear only on `stale` rows, and asking
+ * for a fresh measurement anywhere else meant finding the right one of seven refresh buttons in a strip above
+ * the list, which required knowing which tool decides this chore. The row knows: `needs` is the chore's own
+ * list of probes, and pressing this re-runs all of them. Chores with no probes (the surveys, documentation)
+ * have nothing to re-measure and get no button.
+ *
+ * The subject is named, and the cost is told BEFORE the press rather than after the sandbox goes quiet: a tier-2
+ * probe genuinely runs for minutes, and a tier-1 one is seconds, so the warning is attached to the chores that
+ * have earned it instead of being said on every row until it is ignored. */
+const measures = computed(() => verdict.chore.needs.map((id) => probeSpec(id).measures).join(` and `));
+const deep = computed(() => verdict.chore.needs.some((id) => probeSpec(id).tier === 2));
+// "Re-measure" is a lie on a chore that has never been measured, which is exactly the row (`unavailable`) where
+// pressing it is most worth doing: a probe that failed, or a tool that has since been installed.
+const measureLabel = computed(() => (verdict.measuredAt === undefined ? `Measure now` : `Re-measure`));
+const measureTitle = computed(() =>
+    busyHere.value
+        ? `Measuring ${measuringWhat.value}${deep.value ? `: a deep check can take a few minutes` : ``}`
+        : `Measure ${measures.value} again now${deep.value ? `, a deep check can take a few minutes` : ``}`,
+);
 
 /* THE LANDING. A measurement that finishes silently is only half of the fix: the numbers change while the reader
  * is looking somewhere else on the page, and they are left comparing a row against their memory of it. So the
@@ -134,8 +155,8 @@ const status = computed<{ variant: StatusVariant; label: string } | undefined>((
 /* HOW OLD THE NUMBERS ARE, on the collapsed row beside the numbers themselves. Every measured state carries it,
  * not just the stale one, because the failure this prevents is general: a count from last Tuesday and a count
  * from an hour ago are different claims, they were drawn identically, and the row was the only place a reader
- * would ever look. The scope strip says the same thing per probe, but that is one line above a list of thirteen
- * and it is not what the eye is on when it reads "279 unreferenced files". */
+ * would ever look, which is why this is now the only place it is said. A strip above the list used to repeat it
+ * per probe, and that is a line of chips nobody's eye is on when it reads "279 unreferenced files". */
 const measured = computed<string | undefined>(() => (verdict.measuredAt === undefined ? undefined : `measured ${timeAgo(verdict.measuredAt)}`));
 
 /* WHAT THE LAST RUN MEANS FOR THIS EVIDENCE: two sentences that were one, and had to be split because they are
@@ -289,21 +310,18 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                         @run="startRun"
                         @pick="runModel.choose"
                     />
-                    <!-- The one move a stale row has, and the reason it has no "Fix it" beside it: nobody can decide
-                     whether there is work here until something has looked at the tree since the last turn.
+                    <!-- The only way this page asks for a measurement, and the one move a stale row has: nobody
+                     can decide whether there is work here until something has looked at the tree since the last
+                     turn, which is why a stale row has this and no "Fix it".
                      It stays on the row WHILE it runs, wearing the state, rather than vanishing: a control that
                      disappears when pressed leaves nowhere to look for what pressing it did, and the button is
                      where the reader's eye already is. -->
                     <Button
-                        v-if="verdict.state === `stale` || busyHere"
+                        v-if="verdict.chore.needs.length > 0"
                         size="small"
                         severity="secondary"
-                        :label="busyHere ? `Measuring…` : `Re-measure`"
-                        :title="
-                            busyHere
-                                ? `Measuring ${measuringWhat}: a deep check can take a few minutes`
-                                : `Measure this again now, a deep check can take a few minutes`
-                        "
+                        :label="busyHere ? `Measuring…` : measureLabel"
+                        :title="measureTitle"
                         :disabled="busy || busyHere"
                         @click="emit(`remeasure`)"
                     >
