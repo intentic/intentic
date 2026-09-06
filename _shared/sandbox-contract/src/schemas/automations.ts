@@ -89,6 +89,19 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("schedule").describe("On a clock."),
         cron: z.string().min(1).describe("When, in cron notation."),
+        /* THE CLOCK ASKS, THE FLEET ANSWERS. A schedule whose evidence is the sandbox's own history (the
+         * dreaming session) is worth a turn only once enough has happened, and "enough" is sessions rather than
+         * days: a week of one-line questions is not a week of evidence, and thirty busy hours can be. With this
+         * set, a due occurrence fires only if at least this many conversations somebody started have been
+         * opened since the newest conversation this automation itself opened; short of that the run is recorded
+         * as skipped, saying how far off it is (automations/scheduler.ts, the sessions gate). Absent ⇒ every
+         * occurrence fires. */
+        afterSessions: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Fire only once at least this many new sessions have been run since the last wake. A due run short of that is skipped, and says how far off it is."),
     }),
     z.object({
         kind: z.literal("event").describe("When something calls its webhook."),
@@ -270,9 +283,8 @@ export type WebchatMessage = z.infer<typeof WebchatMessageSchema>;
 export const AutomationSchema = z.object({
     id: entryId.describe("The automation's id."),
     trigger: TriggerSchema.describe("What sets it off: a schedule, an event in the workspace, a message arriving from outside, or a webhook."),
-    /* Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
-     * Its environment carries `AUTOMATION_ID` (this automation's own id, so a guard can look up what its past
-     * fires did) and, for a trigger that arrived with one, `AUTOMATION_PAYLOAD`. */
+    // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
+    // For a trigger that arrived with one, its environment carries `AUTOMATION_PAYLOAD`.
     guard: z
         .string()
         .min(1)

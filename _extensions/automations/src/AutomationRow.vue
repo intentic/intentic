@@ -2,7 +2,7 @@
 import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
 import { Button, ui, CopyButton, DisclosureRow, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { nextIn, scheduleLabel, since } from "./cronSchedule";
+import { nextIn, scheduleTriggerLabel, since } from "./cronSchedule";
 import { host } from "./host";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
 import AutomationFields from "./AutomationFields.vue";
@@ -51,7 +51,7 @@ const TRIGGER_ICON: Record<Trigger[`kind`], IconName> = { schedule: `clock`, eve
 const triggerLabel = computed<string>(() => {
     const fires = trigger.value;
     if (fires.kind === `schedule`) {
-        return scheduleLabel(fires.cron);
+        return scheduleTriggerLabel(fires);
     }
     if (fires.kind === `event`) {
         return `Webhook`;

@@ -625,6 +625,23 @@ const setProvider = (provider: string): void => {
                         <template v-if="'runs' in cronPreview">Next runs: {{ cronPreview.runs.map(formatDateTime).join(" · ") }}</template>
                         <template v-else>{{ cronPreview.error }}</template>
                     </p>
+                    <!-- THE CLOCK ASKS, THE FLEET ANSWERS. A schedule whose evidence is this sandbox's own history
+                         (the dreaming session) is worth a turn only once enough has happened, and "enough" is
+                         sessions rather than nights. A due run short of the bar shows on the row as skipped, with
+                         the count, which is the automation working rather than failing. -->
+                    <label class="flex flex-wrap items-center gap-2 text-xs text-muted">
+                        Only once
+                        <input
+                            v-model.number="form.afterSessions"
+                            type="number"
+                            min="0"
+                            class="w-20 font-mono"
+                            :class="ui.input()"
+                            aria-label="New sessions required since the last wake before a due run fires"
+                        />
+                        new sessions have run since it last woke
+                    </label>
+                    <p class="text-2xs text-subtle">0 fires on every occurrence. Short of the bar, a due run is recorded as skipped and says how far off it is.</p>
                 </template>
 
                 <!-- CI is the one source with no gateway holding a connection open: its events arrive by provider

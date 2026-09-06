@@ -78,6 +78,10 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         requireApproval: false,
         // 0 = fire instantly; positive = each fire is held, visibly and cancellably, for this many seconds.
         holdForSeconds: 0,
+        // A schedule's bar. 0 = every occurrence fires; positive = a due run fires only once this many new
+        // sessions have been run since the last wake, and is recorded as skipped (saying how far off it is)
+        // until then. Schedule only: nothing else has a "since last time" worth counting sessions against.
+        afterSessions: 0,
         provider: `discord`,
         channelId: ``,
         eventType: undefined as string | undefined,
@@ -135,6 +139,17 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     );
 
     const effectiveCron = computed(() => cronOf(schedule));
+    // The schedule trigger's two halves, the clock and the bar, read into the form and written back out. One
+    // place each way, because a template and a stored row both carry the same trigger.
+    const loadSchedule = (trigger: { readonly cron: string; readonly afterSessions?: number }): void => {
+        Object.assign(schedule, parseCron(trigger.cron));
+        form.afterSessions = trigger.afterSessions ?? 0;
+    };
+    const scheduleTrigger = (): Automation[`trigger`] => ({
+        kind: `schedule`,
+        cron: effectiveCron.value as string,
+        ...(form.afterSessions > 0 ? { afterSessions: form.afterSessions } : {}),
+    });
 
     // A croner instance without a callback never schedules, it's just a queryable pattern here.
     // ponytail: preview uses the browser's timezone while the daemon fires in the sandbox's, same as the row's `next`.
@@ -265,6 +280,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             model: ``,
             requireApproval: false,
             holdForSeconds: 0,
+            afterSessions: 0,
             provider: `discord`,
             channelId: ``,
             eventType: undefined,
@@ -301,7 +317,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         form.prompt = template.prompt;
         form.chore = template.chore === true;
         if (template.trigger.kind === `schedule`) {
-            Object.assign(schedule, parseCron(template.trigger.cron));
+            loadSchedule(template.trigger);
         }
         if (template.trigger.kind === `listener`) {
             form.provider = template.trigger.provider;
@@ -334,7 +350,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         form.holdForSeconds = automation.holdForSeconds ?? 0;
         form.chore = automation.chore === true;
         if (trigger.kind === `schedule`) {
-            Object.assign(schedule, parseCron(trigger.cron));
+            loadSchedule(trigger);
         }
         if (trigger.kind === `workspace`) {
             form.workspaceEvent = trigger.event;
@@ -408,7 +424,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     const build = (): Automation => {
         const trigger: Automation["trigger"] =
             form.kind === `schedule`
-                ? { kind: `schedule`, cron: effectiveCron.value as string }
+                ? scheduleTrigger()
                 : form.kind === `event`
                   ? {
                         kind: `event`,

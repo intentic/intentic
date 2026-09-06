@@ -181,6 +181,12 @@ export const nextIn = (at: number): string => {
     return `in ${Math.round(minutes / MINUTES_PER_DAY)}d`;
 };
 
+// The whole rule of a schedule trigger in one phrase, "Daily 05:00 · after 30 sessions". The bar rides the
+// clock rather than hiding in the form, because a row that said only the clock would read as a nightly job
+// that mostly skips for no reason.
+export const scheduleTriggerLabel = (trigger: { readonly cron: string; readonly afterSessions?: number }): string =>
+    trigger.afterSessions === undefined ? scheduleLabel(trigger.cron) : `${scheduleLabel(trigger.cron)} · after ${trigger.afterSessions} sessions`;
+
 // Human badge for a stored cron; unrecognized shapes pass the raw string through.
 export const scheduleLabel = (cron: string): string => {
     const schedule = parseCron(cron);

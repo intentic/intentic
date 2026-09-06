@@ -154,6 +154,22 @@ describe(`editing a stored automation`, () => {
 });
 
 describe(`editing preserves fields outside the changed control`, () => {
+    it(`carries a schedule's sessions bar both ways, and drops it at zero`, () => {
+        const nightly: Automation = {
+            id: `dream`,
+            trigger: { kind: `schedule`, cron: `0 5 * * *`, afterSessions: 30 },
+            prompt: `Dream.`,
+            enabled: true,
+        };
+        const { form, load, build } = formState();
+        load(nightly);
+        expect(form.afterSessions).toBe(30);
+        expect(build()).toEqual(nightly);
+        // Zero is "every occurrence", which the record says by carrying no bar at all.
+        form.afterSessions = 0;
+        expect(build().trigger).toEqual({ kind: `schedule`, cron: `0 5 * * *` });
+    });
+
     it(`keeps a webhook's daily ceiling and disabled state`, () => {
         // The token is not on the record any more (the daemon keeps it with the door), so what an edit has to
         // carry through untouched is the trigger's own setting and the switch.

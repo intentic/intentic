@@ -8,6 +8,7 @@ import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { TurnInput } from "../agent/run/turn-actor.js";
 import type { Services } from "../composition.js";
+import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
@@ -82,23 +83,11 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
     return `Disabled after ${failures} consecutive failed runs (automationFailureLimit is ${automationFailureLimit}). Fix the cause and re-enable it.`;
 };
 
-/* Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
- * guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
- * the UI). The process env also names the root-only shelf exclusion for scanner-backed guards; guards are
- * sandbox scripts, not agent turns.
- *
- * AUTOMATION_ID IS HOW A GUARD NAMES ITSELF, which a guard that weighs its own past has no other way to do.
- * Everything the daemon records about a fire is keyed by the automation's id — the run ledger, and the
- * conversation each fire mints (`a-<automation>-<time>`, mintConversationId below) — so "has enough happened
- * since I last ran?" is one read of a file the sandbox already keeps, and one that a TEMPLATE can ask, which
- * is the part that needed this: a template cannot hardcode an id, because the id is the row's name and the
- * owner is free to type another one. */
-const runGuard = async (
-    command: string,
-    cwd: string,
-    payload: string | undefined,
-    automationId: string,
-): Promise<{ pass: boolean; detail?: string }> => {
+// Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
+// guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
+// the UI). The process env also names the root-only shelf exclusion for scanner-backed guards; guards are
+// sandbox scripts, not agent turns.
+const runGuard = async (command: string, cwd: string, payload: string | undefined): Promise<{ pass: boolean; detail?: string }> => {
     try {
         await execFileAsync("sh", ["-c", command], {
             cwd,
@@ -106,7 +95,6 @@ const runGuard = async (
             env: {
                 ...process.env,
                 [WORKSPACE_ROOT_EXCLUDE_ENV]: REFERENCE_DIR,
-                AUTOMATION_ID: automationId,
                 ...(payload !== undefined ? { AUTOMATION_PAYLOAD: payload } : {}),
             },
         });
@@ -128,11 +116,102 @@ const inFlight = new Map<string, Promise<unknown>>();
 // the contract's ConversationIdSchema, this builds one that satisfies it from the automation's id. Room for
 // the "a-" prefix and the suffix is bought out of the automation id, which is the part that repeats.
 const AUTOMATION_ID_IN_CONVERSATION = 40;
+// Every fire's conversation carries this prefix. It is the one mark a schedule wake leaves in the registry (a
+// listener or webhook wake records an origin as well), which is what the sessions gate below reads back.
+const AUTOMATION_CONVERSATION_PREFIX = "a-";
 // Two fires of one automation can't share a millisecond (fires are serialized per automation), but the counter
 // costs nothing and makes the id unique per PROCESS regardless of who calls this.
 let fireSeq = 0;
 export const mintConversationId = (automationId: string, now: number): string =>
-    `a-${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
+    `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
+
+/* THE SESSIONS GATE (a schedule trigger's afterSessions): a due occurrence fires only once enough NEW sessions
+ * have been run since this automation last woke an agent. Both halves are read from the fleet registry.
+ *
+ * LAST TIME IS THE CONVERSATION THE LAST FIRE OPENED, not the run ledger. The ledger keeps a bounded number of
+ * runs per automation (automations-store.ts RUNS_KEPT), so a nightly job that skips for three weeks pushes its
+ * own last completed run off the end and forgets it ever ran, after which "since last time" quietly means
+ * "ever" and the bar is cleared on the next tick. Every fire mints a conversation named `a-<automation>-<time>`
+ * (mintConversationId above) and the registry keeps conversations, archived ones included, so the newest of
+ * those IS the last wake and no amount of skipping erases it. A row that has never woken measures from the
+ * start of the registry, which is the right first night on both kinds of sandbox: a fresh one has three
+ * sessions and skips, an old one has the whole history and plenty to read.
+ *
+ * WHAT COUNTS IS WHAT SOMEBODY ASKED FOR AND GOT: a conversation with no automation origin, not minted by a
+ * fire, and with at least one turn behind it. The fleet's robotic half (a Front Desk answering visitors all
+ * afternoon, the nightly sweeps, this job itself) cannot push the counter up, and neither can a conversation
+ * opened and abandoned before its first turn finished. */
+interface SessionsSinceWake {
+    // Epoch ms of the last wake's conversation; 0 when this automation has never woken an agent.
+    readonly since: number;
+    // Newest first.
+    readonly sessions: readonly PersistedAgent[];
+}
+
+const sessionsSinceLastWake = (services: Services, automationId: string): SessionsSinceWake => {
+    const mine = `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-`;
+    const entries = services.agents.ids().flatMap((id) => {
+        const entry = services.agents.entry(id);
+        return entry === undefined ? [] : [entry];
+    });
+    // Exactly this row's fires: the minted suffix is base36, so a remaining "-" means a row whose id merely
+    // begins with this one's ("dream" must not read "dream-2"'s nights as its own).
+    const ownWakes = entries.filter((entry) => entry.id.startsWith(mine) && !entry.id.slice(mine.length).includes("-"));
+    const since = Math.max(0, ...ownWakes.map((entry) => entry.createdAt));
+    const sessions = entries
+        .filter(
+            (entry) =>
+                entry.createdAt > since &&
+                entry.origin === undefined &&
+                !entry.id.startsWith(AUTOMATION_CONVERSATION_PREFIX) &&
+                (entry.turns ?? 0) >= 1,
+        )
+        .sort((a, b) => b.createdAt - a.createdAt);
+    return { since, sessions };
+};
+
+// How many of the counted sessions the wake is shown by name. The count is the whole number; the list is what
+// the turn opens first, and `agents ls --all` has the rest.
+const SESSIONS_LISTED = 200;
+
+/* What a gated wake reads under its prompt, in place of an event payload: the count that cleared the bar, the
+ * moment it was measured from, and the sessions themselves, one per line, in the fields a turn picks one to
+ * open by. Persisted with the fire like any payload (the journal, a held snapshot), so a re-fire or an approved
+ * replay reads the list that woke it rather than a fresh count that may have moved. */
+const sessionsListing = ({ since, sessions }: SessionsSinceWake): string => {
+    const measuredFrom =
+        since === 0
+            ? "and this automation has never woken an agent before"
+            : `since ${new Date(since).toISOString()}, the last time this automation woke an agent`;
+    const lines = sessions
+        .slice(0, SESSIONS_LISTED)
+        .map((session) =>
+            [
+                session.id,
+                session.title ?? "(untitled)",
+                new Date(session.createdAt).toISOString(),
+                `${session.turns ?? 0} turns`,
+                `${session.toolUses ?? 0} tool uses`,
+                `$${session.costUsd.toFixed(2)}`,
+            ].join(" · "),
+        );
+    const more = sessions.length > SESSIONS_LISTED ? [`… and ${sessions.length - SESSIONS_LISTED} more (agents ls --all)`] : [];
+    return [`${sessions.length} sessions ${measuredFrom}. Newest first:`, ...lines, ...more].join("\n");
+};
+
+// The gate as one step of runFire. Not gated, or the bar cleared ⇒ the listing to carry as the fire's payload
+// (absent when not gated); short of the bar ⇒ what the skipped run says.
+const sessionsGate = (services: Services, automation: AutomationRecord): { readonly skipped: string } | { readonly listing?: string } => {
+    const bar = automation.trigger.kind === "schedule" ? automation.trigger.afterSessions : undefined;
+    if (bar === undefined) {
+        return {};
+    }
+    const counted = sessionsSinceLastWake(services, automation.id);
+    if (counted.sessions.length < bar) {
+        return { skipped: `${counted.sessions.length} of ${bar} sessions since the last wake` };
+    }
+    return { listing: sessionsListing(counted).slice(0, PAYLOAD_MAX) };
+};
 
 // Everything a fire needs beyond the automation itself. An options object rather than five positional flags:
 // the external dispatchers set a different subset than the tick does, and `payload, wake, false, undefined,
@@ -264,7 +343,7 @@ const runFire = async (
     }: FireOptions,
 ): Promise<FireOutcome> => {
     try {
-        const capped = payload?.slice(0, PAYLOAD_MAX);
+        let capped = payload?.slice(0, PAYLOAD_MAX);
         /* ADMISSION, the session.start guard, consulted on EVERY fire including approved replays. A deny
          * refuses even a `cleared` fire (the checks re-run live, so approve-then-tighten does not execute); a
          * hold is what `cleared` satisfies, the owner's click, or the approve route's replay, already answered
@@ -289,8 +368,20 @@ const runFire = async (
             return {};
         }
         if (cleared !== "both") {
+            /* The sessions gate, ahead of the guard: it is the cheaper check, and a guard that scans the shelf
+             * for findings has nothing to scan for on a night the fleet has not earned. Not on a re-fire (a
+             * resumed conversation id): that fire cleared the bar once and, having minted its conversation,
+             * would now measure zero sessions since ITSELF. Not on "both" either, for the guard's own reason. */
+            const gate = resumedConversationId === undefined ? sessionsGate(services, automation) : {};
+            if ("skipped" in gate) {
+                await services.automations.recordRun(automation.id, { at: Date.now(), outcome: "skipped", detail: gate.skipped });
+                stream?.failed(gate.skipped);
+                return {};
+            }
+            // The sessions ARE a gated fire's payload: what woke it, read by the guard and appended under the prompt.
+            capped = gate.listing ?? capped;
             if (automation.guard !== undefined) {
-                const precheck = await runGuard(automation.guard, services.workspace.root, capped, automation.id);
+                const precheck = await runGuard(automation.guard, services.workspace.root, capped);
                 if (!precheck.pass) {
                     await services.automations.recordRun(automation.id, {
                         at: Date.now(),
@@ -365,7 +456,9 @@ const runFire = async (
          * guard command parses what arrived and an approved replay wraps freshly on its way back through. A
          * schedule/event/workspace payload is the workspace talking to itself and rides bare. */
         const sealed = automation.trigger.kind === "listener" ? wrapOutsideContent(capped ?? "", { source: automation.trigger.provider }) : capped;
-        const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- Event payload ---\n${sealed}` : automation.prompt;
+        // Nothing hands a schedule a payload but its own sessions gate, so the heading can say what the list is.
+        const heading = automation.trigger.kind === "schedule" ? "Sessions since the last wake" : "Event payload";
+        const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- ${heading} ---\n${sealed}` : automation.prompt;
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
         // Every fire lands in a CONVERSATION and therefore on a fleet card. Outside messages are isolated so the

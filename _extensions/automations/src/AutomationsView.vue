@@ -208,7 +208,10 @@ const enableChore = async (recipe: AutomationTemplate): Promise<void> => {
     try {
         await save.mutateAsync({
             id: recipe.id,
-            trigger: trigger.kind === `workspace` ? { kind: `workspace`, event: trigger.event } : { kind: `schedule`, cron: trigger.cron },
+            trigger:
+                trigger.kind === `workspace`
+                    ? { kind: `workspace`, event: trigger.event }
+                    : { kind: `schedule`, cron: trigger.cron, ...(trigger.afterSessions !== undefined ? { afterSessions: trigger.afterSessions } : {}) },
             ...(recipe.guard !== undefined ? { guard: recipe.guard } : {}),
             prompt: recipe.prompt,
             chore: true,

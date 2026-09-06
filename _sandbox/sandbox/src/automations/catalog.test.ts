@@ -43,13 +43,16 @@ describe(`code chores come from the book`, () => {
         ]);
     });
 
-    /* The book's chores are held to this above, and the hand-written one that carries a report needs it just as
-     * much: a guard's stdout is discarded unless the guard FAILS, so the file it writes is the only way what it
-     * counted reaches the turn, and a prompt naming a different path wakes an agent to an empty file. */
-    test(`the dreaming session's prompt reads the file its guard writes`, () => {
+    /* The book's chores wake on a guard's findings; the dreaming session wakes on the fleet's. Its bar is a field
+     * of its trigger rather than a line of shell, which is what lets the row show it and the owner move it, and
+     * there is no guard for the same reason: the daemon's own count is the check, and the list it counted
+     * reaches the turn as the fire's payload rather than through a file a guard would have to write. */
+    test(`the dreaming session waits for sessions through its trigger, not through a guard`, () => {
         const dream = shelf.find((template) => template.id === `dreaming-session`);
-        expect(dream?.guard).toContain(`/tmp/intentic-dreaming-sessions.json`);
-        expect(dream?.prompt).toContain(`/tmp/intentic-dreaming-sessions.json`);
+        expect(dream?.trigger).toEqual({ kind: `schedule`, cron: `0 5 * * *`, afterSessions: 30 });
+        expect(dream?.guard).toBeUndefined();
+        expect(dream?.note).toContain(`30`);
+        expect(dream?.prompt).toContain(`Under this brief is the list of sessions`);
     });
 
     test(`a scheduled chore's prompt tells the woken turn where the guard left its findings`, () => {

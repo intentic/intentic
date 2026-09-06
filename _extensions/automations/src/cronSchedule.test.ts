@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cronOf, defaultSchedule, nextIn, parseCron, type ScheduleState, scheduleLabel, since } from "./cronSchedule";
+import { cronOf, defaultSchedule, nextIn, parseCron, type ScheduleState, scheduleLabel, scheduleTriggerLabel, since } from "./cronSchedule";
 
 const schedule = (overrides: Partial<ScheduleState>): ScheduleState => ({ ...defaultSchedule(), ...overrides });
 
@@ -68,6 +68,11 @@ describe(`scheduleLabel`, () => {
         expect(scheduleLabel(`0 9 * * 0,6`)).toBe(`Sat, Sun 09:00`);
         expect(scheduleLabel(`0 9 1 * *`)).toBe(`Monthly 1st 09:00`);
         expect(scheduleLabel(`30 8 22 * *`)).toBe(`Monthly 22nd 08:30`);
+    });
+
+    it(`carries a sessions bar on the phrase, and only then`, () => {
+        expect(scheduleTriggerLabel({ cron: `0 5 * * *`, afterSessions: 30 })).toBe(`Daily 05:00 · after 30 sessions`);
+        expect(scheduleTriggerLabel({ cron: `0 5 * * *` })).toBe(`Daily 05:00`);
     });
 
     it(`passes unrecognized crons through raw`, () => {

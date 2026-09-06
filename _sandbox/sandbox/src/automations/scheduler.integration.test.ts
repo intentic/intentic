@@ -8,18 +8,28 @@ import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import type { z } from "zod";
 import { fileTurnJournal } from "../agent/run/turn-journal.js";
+import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import type { Services } from "../composition.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { automationIdle, createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
 
 // The scheduler only touches automations/heldWakes/activity/turnJournal/workspace/logger/sandboxSettings:
-// plus, for the countdown scan, the registry's liveSessionIds (`live` mutates in place, as a test's fleet
-// does); `unstubbed` keeps the fake that small. The journal is a real one on a temp dir: the in-flight entry
-// is what several tests assert on.
-const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSchema> = {}, live: string[] = []): Services =>
+// plus, for the countdown scan, the registry's liveSessionIds, and for the sessions gate, its persisted entries
+// (`live` and `registry` mutate in place, as a test's fleet does); `unstubbed` keeps the fake that small. The
+// journal is a real one on a temp dir: the in-flight entry is what several tests assert on.
+const fakeServices = (
+    root: string,
+    settings: z.input<typeof SandboxSettingsSchema> = {},
+    live: string[] = [],
+    registry: readonly PersistedAgent[] = [],
+): Services =>
     unstubbed<Services>("services", {
-        agents: unstubbed<Services["agents"]>("agents", { liveSessionIds: () => live }),
+        agents: unstubbed<Services["agents"]>("agents", {
+            liveSessionIds: () => live,
+            ids: () => registry.map((entry) => entry.id),
+            entry: (id) => registry.find((entry) => entry.id === id),
+        }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         // Read by the spin-loop guard after a failed run. Defaults parse from `{}`, so the guard is OFF unless a
         // test asks for it, which is also the production default.
@@ -51,6 +61,28 @@ const automation = (id: string, extra: Partial<Automation> = {}): Automation => 
     enabled: true,
     ...extra,
 });
+
+// One conversation as the registry holds it, with only what the sessions gate reads chosen: when it was
+// opened, by whom (an origin, or a fire's `a-` name), and whether a turn ever ran in it.
+const conversation = (id: string, createdAt: number, extra: Partial<PersistedAgent> = {}): PersistedAgent => ({
+    id,
+    title: id,
+    provider: "claude",
+    harness: "native",
+    status: "idle",
+    repos: [],
+    costUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    turns: 1,
+    createdAt,
+    updatedAt: createdAt,
+    ...extra,
+});
+
+const gatedNightly = (id: string): Automation => automation(id, { trigger: { kind: "schedule", cron: "* * * * *", afterSessions: 30 } });
+
+const DAY = 86_400_000;
 
 // Ticking 61s past construction guarantees an every-minute cron has exactly one occurrence in the window.
 const pastDue = (): number => Date.now() + 61_000;
@@ -87,22 +119,91 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     expect(prompts).toEqual(["wake:guarded"]);
 });
 
-/* What a guard's environment carries beyond the payload: the shelf a scanner-backed guard must prune, and the
- * automation's own id. The id is what lets a guard weigh its OWN past — the run ledger and the conversations
- * its fires minted are both keyed by it — which is a question a template has to be able to ask without
- * hardcoding an id the owner is free to rename. */
-test("a guard is told which automation it is, and which directory to prune", async () => {
+test("guards receive the reserved workspace-root directory to prune", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    const namesItself = `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs" && test "$AUTOMATION_ID" = "scoped"`;
-    await services.automations.upsert(automation("scoped", { guard: namesItself }));
-    // The same guard on another row: it is the firing automation's id, not a constant the daemon exports.
-    await services.automations.upsert(automation("other", { guard: namesItself }));
+    await services.automations.upsert(automation("scoped", { guard: `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs"` }));
     const prompts: string[] = [];
     await fireAutomation(services, (await services.automations.get("scoped")) as AutomationRecord, fakeWake(prompts));
-    await fireAutomation(services, (await services.automations.get("other")) as AutomationRecord, fakeWake(prompts));
     expect((await services.automations.get("scoped"))?.runs[0]?.outcome).toBe("completed");
-    expect((await services.automations.get("other"))?.runs[0]?.outcome).toBe("skipped");
     expect(prompts).toEqual(["wake:scoped"]);
+});
+
+/* ---- THE SESSIONS GATE (a schedule's afterSessions) ----------------------------------------------------
+ *
+ * The one pre-wake check the daemon computes itself rather than delegating to a guard, because its evidence is
+ * the daemon's own registry: what it counts, what it refuses to count, where it reads "last time" from, and
+ * what the wake it finally allows is told. */
+
+test("a schedule gated on sessions skips short of the bar and says how far off it is; at the bar it wakes with the sessions under its prompt", async () => {
+    const registry = Array.from({ length: 29 }, (_, index) => conversation(`swift-otter-${index}`, DAY + index));
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, [], registry);
+    await services.automations.upsert(gatedNightly("dream"));
+    const prompts: string[] = [];
+    const fire = async (): Promise<void> => {
+        await fireAutomation(services, (await services.automations.get("dream")) as AutomationRecord, fakeWake(prompts));
+    };
+
+    await fire();
+    expect((await services.automations.get("dream"))?.runs[0]).toMatchObject({ outcome: "skipped", detail: "29 of 30 sessions since the last wake" });
+    expect(prompts).toEqual([]);
+
+    registry.push(conversation("swift-otter-29", DAY + 29));
+    await fire();
+    expect((await services.automations.get("dream"))?.runs[0]?.outcome).toBe("completed");
+    // What woke it rides under the prompt like an event's payload: the count, and the sessions newest first.
+    expect(prompts[0]).toMatch(
+        /^wake:dream\n\n--- Sessions since the last wake ---\n30 sessions and this automation has never woken an agent before\. Newest first:\nswift-otter-29 · swift-otter-29 · 1970-01-02T00:00:00\.029Z · 1 turns · 0 tool uses · \$0\.00\n/,
+    );
+    // The brief, a blank line, the heading, the count line, then one line per session.
+    expect(prompts[0]?.split("\n")).toHaveLength(4 + 30);
+});
+
+test("last time is the conversation the last fire opened, and the fleet's own wakes and unturned conversations never count", async () => {
+    const dreamedAt = 100 * DAY;
+    const after = (index: number): number => dreamedAt + DAY + index;
+    const registry = [
+        conversation("a-dream-mabc", dreamedAt),
+        // A row whose id merely begins with this one's: its nights are its own, not "dream"'s.
+        conversation("a-dream-2-mabd", dreamedAt - 2 * DAY),
+        // Before the last wake: reviewed once already, and never counted again however long the row then skips.
+        ...Array.from({ length: 40 }, (_, index) => conversation(`old-session-${index}`, dreamedAt - DAY + index)),
+        ...Array.from({ length: 5 }, (_, index) => conversation(`new-session-${index}`, after(index))),
+        // Everything an automation opened, by either mark it leaves: the `a-` name every fire mints, and the
+        // origin a dispatcher-born wake records. And a conversation abandoned before its first turn ran.
+        ...Array.from({ length: 40 }, (_, index) => conversation(`a-front-desk-${index}`, after(index))),
+        ...Array.from({ length: 40 }, (_, index) =>
+            conversation(`visitor-${index}`, after(index), { origin: { automationId: "front-desk", provider: "webchat" } }),
+        ),
+        ...Array.from({ length: 40 }, (_, index) => conversation(`abandoned-${index}`, after(index), { turns: 0 })),
+    ];
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, [], registry);
+    await services.automations.upsert(gatedNightly("dream"));
+    await services.automations.upsert(gatedNightly("dream-2"));
+    const prompts: string[] = [];
+
+    await fireAutomation(services, (await services.automations.get("dream")) as AutomationRecord, fakeWake(prompts));
+    expect((await services.automations.get("dream"))?.runs[0]).toMatchObject({ outcome: "skipped", detail: "5 of 30 sessions since the last wake" });
+
+    // The other row measures from ITS last wake, two days before everything: the 40 old and the 5 new both count.
+    await fireAutomation(services, (await services.automations.get("dream-2")) as AutomationRecord, fakeWake(prompts));
+    expect((await services.automations.get("dream-2"))?.runs[0]?.outcome).toBe("completed");
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain(`45 sessions since ${new Date(dreamedAt - 2 * DAY).toISOString()}, the last time this automation woke an agent. Newest first:\nnew-session-4 · `);
+});
+
+test("a re-fire on the conversation a fire already minted is not measured against itself", async () => {
+    // The daemon died mid-turn: the registry holds the fire's own conversation and nothing after it. The boot
+    // pass re-fires on that conversation, and a gate that ran again would count zero sessions since ITSELF.
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, [], [conversation("a-dream-mabc", DAY)]);
+    await services.automations.upsert(gatedNightly("dream"));
+    const prompts: string[] = [];
+    await fireAutomation(services, (await services.automations.get("dream")) as AutomationRecord, fakeWake(prompts), {
+        conversationId: "a-dream-mabc",
+        cleared: "approval",
+        attempts: 1,
+    });
+    expect((await services.automations.get("dream"))?.runs[0]?.outcome).toBe("completed");
+    expect(prompts).toEqual(["wake:dream"]);
 });
 
 test("event automations never tick; fireAutomation hands the payload to the guard and the prompt", async () => {
