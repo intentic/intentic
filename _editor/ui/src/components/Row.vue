@@ -327,10 +327,16 @@ const picked = as === `button`;
                      measures whatever the mark and the icon actually measure at this tier; the rule is absolutely
                      positioned inside it so it centres on that column and runs the block's full height without
                      adding to it. `aria-hidden` on both: the mirror is a duplicate of content already read out, and
-                     a rule is not content. -->
+                     a rule is not content.
+                     `inert` FOR THE SAME REASON `#before`'s MIRROR CARRIES IT: `#lead` is the caller's, and a
+                     caller may legitimately put a CONTROL there — the model settings put each job's tick in that
+                     column, so the glyph and the box it becomes share one slot instead of sitting side by side.
+                     Mirrored without this, that tick is a second focus stop and a second labelled input, invisible
+                     and a tab away from the real one. Mirroring a bare icon never showed the bug; the slot is what
+                     makes it possible, so the guard belongs on the mirror rather than on the callers. -->
                 <div v-if="spine" class="flex" :class="TIERS[tier].gap">
                     <div class="relative flex shrink-0 justify-center">
-                        <span class="invisible flex items-center" :class="TIERS[tier].gap" aria-hidden="true">
+                        <span class="invisible flex items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
                             <slot name="lead" :mark="TIERS[tier].mark" />
                             <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
                         </span>

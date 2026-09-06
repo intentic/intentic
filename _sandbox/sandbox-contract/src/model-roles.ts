@@ -58,6 +58,18 @@ import { z } from "zod";
 export const ModelRoleKindSchema = z.enum(["helper", "run"]);
 export type ModelRoleKind = z.infer<typeof ModelRoleKindSchema>;
 
+/* WHAT STARTS A RUN, declared for the run roles alone.
+ *
+ * It is not a wire value and never has been: it decides which BLOCK a job is read in, and the argument for
+ * reading them apart is the same one that separates a helper from a run — an owner holds a session nobody is
+ * watching to a different budget from one they are sitting in front of. The settings page used to make that
+ * argument in a comment over a thirteen-row list ("the ones somebody presses ahead of the ones that fire on
+ * their own"), which is a claim no reader can check and no row has to honour. Declared, it draws the page.
+ *
+ * A HELPER DECLARES NONE, and that is the honest answer rather than a gap: nobody presses "write me a commit
+ * subject". It happens because something else did. */
+export type ModelRoleTrigger = "pressed" | "unprompted";
+
 /* The shape of a row. `id` is a bare string HERE and narrowed on the exported type below, because the id union
  * is derived from this very table: a self-referential `satisfies` would be a type that has to know its own
  * answer before it can check it. */
@@ -69,6 +81,8 @@ interface ModelRoleRow {
     // cannot rather than restating it.
     readonly blurb: string;
     readonly kind: ModelRoleKind;
+    /** Runs only, and required for every one of them: see `ModelRoleTrigger`. */
+    readonly trigger?: ModelRoleTrigger;
     // The row's glyph, from the shared icon set. Here rather than in a web-side map because the whole value of
     // this table is that a role is declared ONCE; a second table keyed by the same ids is the drift this
     // replaced, moved one layer up.
@@ -78,7 +92,8 @@ interface ModelRoleRow {
 /* THE TABLE. Ordered as the settings page draws it, and the order is an argument about reach: the one-shots
  * first, because nobody chose a model for them and they run constantly; then the runs somebody's click starts;
  * then the runs that start themselves, which are the ones an owner is least likely to be watching and most
- * likely to want held to a budget.
+ * likely to want held to a budget. Those three are BLOCKS now (see MODEL_ROLE_BLOCKS) rather than an ordering
+ * this comment asserts and nothing holds to.
  *
  * The ids are the wire vocabulary: a turn carries one (AgentTurn.runRole), so they are kebab-case and stable,
  * and renaming one is a breaking change to the setting rather than a cosmetic edit. */
@@ -131,6 +146,7 @@ export const MODEL_ROLES = [
         label: "Pipeline fixes",
         blurb: "The agent started by Fix on a red pipeline.",
         kind: "run",
+        trigger: "pressed",
         icon: "wave-pulse",
     },
     {
@@ -138,6 +154,7 @@ export const MODEL_ROLES = [
         label: "Deployment fixes",
         blurb: "The agent started by Fix on a deployment that is down.",
         kind: "run",
+        trigger: "pressed",
         icon: "server",
     },
     {
@@ -145,6 +162,7 @@ export const MODEL_ROLES = [
         label: "Maintenance chores",
         blurb: "A chore run started from the Maintenance board.",
         kind: "run",
+        trigger: "pressed",
         icon: "wrench",
     },
     {
@@ -152,6 +170,7 @@ export const MODEL_ROLES = [
         label: "Documentation runs",
         blurb: "A pass over a repo's own documentation.",
         kind: "run",
+        trigger: "pressed",
         icon: "book",
     },
     {
@@ -159,6 +178,7 @@ export const MODEL_ROLES = [
         label: "Acceptance runs",
         blurb: "One session per story in an acceptance fan-out.",
         kind: "run",
+        trigger: "pressed",
         icon: "list-check",
     },
     {
@@ -166,27 +186,34 @@ export const MODEL_ROLES = [
         label: "Pre-push fixes",
         blurb: "The fix proposed when a check fails on the way to a push.",
         kind: "run",
+        trigger: "pressed",
         icon: "cloud-upload",
+    },
+    {
+        /* PRESSED, ON THE STRENGTH OF THE APPROVAL. Nothing here runs until somebody reads the item and says
+         * yes, and that press is the start of this turn as much as Fix is the start of a pipeline run — the
+         * queue between the two is machinery, not a second decision. */
+        id: "approval-queue",
+        label: "Approvals queue",
+        blurb: "The turn that publishes or acts on what you approved.",
+        kind: "run",
+        trigger: "pressed",
+        icon: "check-circle",
     },
     {
         id: "automation-wake",
         label: "Automation wakes",
         blurb: "A turn an automation fires: a schedule, a webhook, a message from outside.",
         kind: "run",
+        trigger: "unprompted",
         icon: "clock",
-    },
-    {
-        id: "approval-queue",
-        label: "Approvals queue",
-        blurb: "The turn that publishes or acts on what you approved.",
-        kind: "run",
-        icon: "check-circle",
     },
     {
         id: "extension-review",
         label: "Extension update reviews",
         blurb: "The agent that reads an extension update before it is applied.",
         kind: "run",
+        trigger: "unprompted",
         icon: "box",
     },
     {
@@ -194,6 +221,7 @@ export const MODEL_ROLES = [
         label: "Loop iterations",
         blurb: "Each round of a loop working towards its goal.",
         kind: "run",
+        trigger: "unprompted",
         icon: "repeat",
     },
     {
@@ -201,6 +229,7 @@ export const MODEL_ROLES = [
         label: "Watch wakes",
         blurb: "The turn a watch starts when the thing it was watching happens.",
         kind: "run",
+        trigger: "unprompted",
         icon: "eye",
     },
     {
@@ -208,6 +237,7 @@ export const MODEL_ROLES = [
         label: "Verify nudges",
         blurb: "The follow-up turn sent when work was left unverified.",
         kind: "run",
+        trigger: "unprompted",
         icon: "search",
     },
     {
@@ -218,6 +248,7 @@ export const MODEL_ROLES = [
         label: "Child agents",
         blurb: "What an agent's own subagents run on when it names no model for them.",
         kind: "run",
+        trigger: "unprompted",
         icon: "users",
     },
 ] as const satisfies readonly ModelRoleRow[];
@@ -233,5 +264,57 @@ export const MODEL_ROLE_IDS = MODEL_ROLES.map((role) => role.id) as readonly Mod
  * silently ignored. */
 export const ModelRoleSchema = z.enum(MODEL_ROLE_IDS as [ModelRole, ...ModelRole[]]);
 
-/** The roles of one kind, in table order: the two blocks the settings page draws. */
-export const modelRolesOfKind = (kind: ModelRoleKind): readonly ModelRoleSpec[] => MODEL_ROLES.filter((role) => role.kind === kind);
+/* ═══ THE BLOCKS THE SETTINGS PAGE READS IN ═══
+ *
+ * EIGHTEEN JOBS IN ONE LIST IS A TABLE, NOT A PAGE. The unit being the role is right and is not in question —
+ * it is what lets an owner pin Opus to commit subjects without pinning it to every session title — but the cost
+ * lands on whoever opens the page: one unbroken run of eighteen rows, each with a name, a sentence, a control
+ * and a list under it, with no landmark to say where you are in it or which rows are like the one you came for.
+ *
+ * SO THE BLOCKS ARE DECLARED, AND THEY ARE THE DISTINCTIONS THE TABLE ALREADY MAKES. Nothing here is a fresh
+ * taxonomy invented for the layout: `kind` was always the difference between a one-shot and a whole session,
+ * and `trigger` is the sentence the old table wrote in a comment about its own ordering. A block is what those
+ * two answers already separate, given a name and a heading.
+ *
+ * THE LABELS LIVE HERE, beside the role labels, for the same reason those do: a heading kept in a web-side map
+ * keyed by the same ids is the drift a single table exists to stop. What is NOT here is anything about how the
+ * page draws them — that is the page's, and it changes on its own schedule.
+ *
+ * ORDER IS REACH, and it is the order of the table itself: jobs nobody picked a model for, then sessions a
+ * click of yours starts, then sessions that start without one. Every role belongs to exactly one block and
+ * every block keeps the table's order, which is what makes a role added upstairs appear on the page by
+ * existing. */
+export type ModelRoleBlockId = "helper" | "pressed" | "unprompted";
+
+export interface ModelRoleBlock {
+    readonly id: ModelRoleBlockId;
+    /** The group's heading on the settings page. */
+    readonly label: string;
+    /** One line beside it: what the jobs in this block have in common that the others do not. */
+    readonly caption: string;
+    /** Its roles, in table order. */
+    readonly roles: readonly ModelRoleSpec[];
+}
+
+const rolesWhere = (match: (role: ModelRoleSpec) => boolean): readonly ModelRoleSpec[] => MODEL_ROLES.filter((role) => match(role));
+
+export const MODEL_ROLE_BLOCKS: readonly ModelRoleBlock[] = [
+    {
+        id: "helper",
+        label: "Automatic helpers",
+        caption: "One prompt, no tools, one answer back.",
+        roles: rolesWhere((role) => role.kind === "helper"),
+    },
+    {
+        id: "pressed",
+        label: "Runs you start",
+        caption: "Whole sessions, begun by a click of yours.",
+        roles: rolesWhere((role) => role.kind === "run" && role.trigger === "pressed"),
+    },
+    {
+        id: "unprompted",
+        label: "Runs that start themselves",
+        caption: "Whole sessions nobody pressed for.",
+        roles: rolesWhere((role) => role.kind === "run" && role.trigger === "unprompted"),
+    },
+];

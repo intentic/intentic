@@ -18,7 +18,7 @@
 // move it up, take it out, re-point one, change its tier, and each of those happens in the component's own
 // handler.
 import type { SandboxSettings } from "@intentic-app/api-contract";
-import { MODEL_ROLES, type ModelPin } from "@intentic/sandbox-contract";
+import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin } from "@intentic/sandbox-contract";
 import { SandboxSettingsSchema } from "@intentic-app/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
@@ -152,6 +152,25 @@ const rowButton = (host: HTMLElement, label: string): HTMLButtonElement =>
 const addButton = (host: HTMLElement, label: string): HTMLButtonElement =>
     [...host.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.getAttribute(`aria-label`) === label)!;
 
+/* WHAT EVERY JOB ROW SAYS BESIDE ITS NAME, as {job: chip}. Both halves live in the row's TITLE — the name, then
+ * the state chip when the row has one — which is the arrangement under test as much as the words are: a chip
+ * that drifted out of the title and into the trailing cluster would still read on screen and would no longer be
+ * "next to the job name", which is the whole of why it is a chip rather than the paragraph it replaced.
+ *
+ * Read structurally rather than as text, because the two are adjacent with no whitespace between them: joined
+ * into one string, `Commit messagesoff` is one prettier line-break away from being `Commit messages off`. */
+const chips = (host: HTMLElement): Record<string, string> =>
+    Object.fromEntries(
+        [...host.querySelectorAll(`[class*="font-medium"] > span`)].map((title) => [
+            title.firstElementChild?.textContent?.trim() ?? ``,
+            title.childElementCount > 1 ? (title.lastElementChild?.textContent?.trim() ?? ``) : ``,
+        ]),
+    );
+
+// What an empty list means for THIS job, which is the only reason the chip carries a word: a one-shot with no
+// models does not run, a whole session with none opens on the model the owner picked for their own chat.
+const unsetChip = (kind: string): string => (kind === `helper` ? `off` : `chat default`);
+
 /* ONE ROW PER JOB, FROM THE CATALOG. The page is built by walking `MODEL_ROLES`, so this is the claim that a
  * job added to that table becomes configurable by existing rather than by somebody remembering to add a row —
  * which is what the four hand-written rows this replaced could not promise, and how a documentation sweep came
@@ -160,18 +179,65 @@ test("draws a row per declared role, plus the one setting that is not a role", a
     const host = mount();
     await Promise.resolve();
 
-    const titles = [...host.querySelectorAll(`h3, [class*="font-medium"]`)].map((node) => node.textContent?.trim() ?? ``);
+    const named = chips(host);
     for (const role of MODEL_ROLES) {
-        expect(titles, role.id).toContain(role.label);
+        expect(Object.keys(named), role.id).toContain(role.label);
     }
     // The cheaper-tier row belongs to automatic tier selection rather than to a job, so it is drawn by hand and
-    // must still be there.
-    expect(titles).toContain(`Automatic tier`);
-    // Every job offers the same gesture, which is what makes the page one page rather than seventeen designs.
+    // must still be there. It is not a job, so it carries no tick and no chip — hence no title span to find it by.
+    expect(host.textContent).toContain(`Automatic tier`);
+    // Every job offers the same gesture, which is what makes the page one page rather than eighteen designs.
     const adders = [...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`));
     for (const role of MODEL_ROLES) {
         expect(adders, role.id).toContain(`Add a model for ${role.label.toLowerCase()}`);
     }
+});
+
+/* THE PAGE IS FOUR GROUPS, AND THE CATALOG DECIDES WHICH ROW IS IN WHICH. Eighteen rows on one surface was a
+ * table rather than a page, and the fix is only worth anything if the blocks are the ones the catalog declares:
+ * a role drawn under the wrong heading tells an owner that a session nobody is watching is one they start,
+ * which is exactly the budget question the split exists to let them answer. Asserted per section rather than by
+ * counting headings, because the failure that matters is a row in the wrong group, not a missing title. */
+test("draws one group per declared block, in order, holding exactly that block's rows", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    const sections = [...host.querySelectorAll(`section`)];
+    for (const [index, block] of MODEL_ROLE_BLOCKS.entries()) {
+        const section = sections[index];
+        // The heading and the line under it are the block's own words, so a group cannot end up describing a
+        // set of rows it no longer holds.
+        expect(section?.textContent, block.id).toContain(block.label);
+        expect(section?.textContent, block.id).toContain(block.caption);
+
+        const adders = [...(section?.querySelectorAll(`button`) ?? [])]
+            .map((button) => button.getAttribute(`aria-label`) ?? ``)
+            .filter((label) => label.startsWith(`Add a model for`));
+        expect(adders, block.id).toEqual(block.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
+    }
+
+    // …and the one setting that is not a job gets a surface of its own, after them: it is the only thing here
+    // that can override a model the user chose a second ago.
+    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length + 1);
+    expect(sections.at(-1)?.textContent).toContain(`Automatic tier`);
+});
+
+/* ONE MARK IN THE LEAD COLUMN. The glyph and the tick used to sit side by side, an identity and an affordance
+ * undermining each other, and the fix is that they share one slot: the glyph at rest, the box under the pointer
+ * and on focus. What can be checked without a pointer is the structure that makes it possible — that the two
+ * are in the same box rather than laid out as two — because a refactor that pulled the tick back into its own
+ * column would restore the double mark while every other test on this page kept passing. */
+test("a job's glyph and its tick share one slot", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    // PrimeVue draws the box as a wrapper around the real input; the slot is that wrapper's parent.
+    const slot = tickBox(host, `Select commit messages`).closest(`.p-checkbox`)?.parentElement;
+
+    expect(slot?.querySelector(`i`)).not.toBeNull();
+    // The tick is never merely hidden: opacity keeps it in the tab order and in the accessibility tree, so a
+    // keyboard can find the control a pointer would otherwise have to reveal.
+    expect(slot?.querySelector(`.p-checkbox`)?.classList.contains(`hidden`)).toBe(false);
 });
 
 /* THE READING ORDER, WHICH THE PAGE ARGUES FOR AND NOTHING ENFORCED. Its own comment states the rule: read
@@ -223,10 +289,53 @@ test("names no model at all for a one-shot job nobody has set one for", async ()
     const host = mount();
     await Promise.resolve();
 
-    expect(host.textContent).toContain(`Not set`);
+    expect(chips(host)[`Commit messages`]).toBe(`off`);
     expect(host.textContent).not.toContain(`Claude Haiku 4.5`);
     expect(host.textContent).not.toContain(`GPT 5.6 Luna`);
     expect(orderOnScreen(host)).toEqual([]);
+});
+
+/* AN UNSET ROW STATES ITSELF IN A WORD, and the word differs by what an empty list MEANS for that job — a
+ * one-shot does not happen at all, a whole session opens on the model the owner picked for their own chat.
+ *
+ * IT USED TO BE A PARAGRAPH, one per row ("Not set: this does not run…", "Composer default: whatever your chat
+ * is set to…"), and on a sandbox nobody has configured that is every row on the page: eighteen paragraphs whose
+ * content is that no choices have been made yet. The fact is worth a chip beside the name; the sentence behind
+ * it is worth a tooltip. So what is pinned here is both halves — the chip says the right thing, and the prose
+ * it replaced is gone rather than sitting under it as well. */
+test("an unset job states itself in a chip beside its name, not in a paragraph under it", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    const stated = chips(host);
+    for (const role of MODEL_ROLES) {
+        expect(stated[role.label], role.id).toBe(unsetChip(role.kind));
+    }
+    expect(host.textContent).not.toContain(`Not set`);
+    expect(host.textContent).not.toContain(`Composer default`);
+});
+
+// …and a row that HAS models says nothing extra: the list under it names them in the order they will be tried,
+// which is more than a chip could, so a chip there would be repeating the row back to itself.
+test("a job with models drops the chip, because its list already says what it will do", async () => {
+    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(chips(host)[`Commit messages`]).toBe(``);
+    expect(chips(host)[`Session titles`]).toBe(unsetChip(`helper`));
+});
+
+/* THE CHIP IS A CLAIM ABOUT WHAT THE JOB WILL DO, so it may not be drawn over a record nobody has read: "off"
+ * while the settings are still in flight is a lie that corrects itself a moment later, which is worse than a
+ * beat of silence — and it is the state every visit to this page passes through. */
+test("says nothing about a job until the settings have landed", async () => {
+    settings.value = undefined as unknown as SandboxSettings;
+    const host = mount();
+    await Promise.resolve();
+
+    expect(chips(host)[`Commit messages`]).toBe(``);
+    expect(chips(host)[`Pipeline fixes`]).toBe(``);
 });
 
 test("shows the pinned models in the order the setting holds them", async () => {

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { MODEL_ROLES, type ModelPin, type ModelRole, type ModelRoleSpec, modelPinKey, parsePinned } from "@intentic/sandbox-contract";
-import { Button, type IconName, Row, RowGroup, SegmentedControl, Verdict } from "@intentic/ui";
-import { isIconName } from "@intentic/ui/icons";
+import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin, type ModelRole, modelPinKey, parsePinned } from "@intentic/sandbox-contract";
+import { Button, Row, RowGroup, SegmentedControl, Verdict } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, shallowRef } from "vue";
 import { RouterLink } from "vue-router";
@@ -11,6 +10,7 @@ import AddModelButton from "./AddModelButton.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
+import ModelRoleRow from "./ModelRoleRow.vue";
 
 /* EVERY MODEL CHOICE THIS SANDBOX MAKES, in one place, because "where do I set a model" may only have one
  * answer. It sits directly under the AI accounts because every row is a choice OVER them: a model pinned here
@@ -25,26 +25,35 @@ import ModelPinPicker from "./ModelPinPicker.vue";
  * documentation sweep and a red production pipeline alike. A row per job is more to read than four; it is also
  * the first version of this page where the thing somebody wants to say can be said.
  *
- * AND THE LENGTH OF THAT LIST IS WHY THE ROWS ARE SELECTABLE. The honest cost of a true per-job model was that
- * the commonest thing anyone wants to say — "all of these, on this model, at this tier" — took one trip
- * through the same panel PER JOB, and the catalog grows (a role added to the table appears here by existing,
- * which is the point of drawing from it). That is a UI problem rather than a modelling one, and it is solved on
- * top of the true model rather than by collapsing it: tick the jobs, open ONE picker, and the model and its
- * tier land on every one of them (see `applyToSelection`). The grouping this page threw away was a fixed guess
- * about which jobs belong together; a selection is the same saving made by the person who knows.
+ * FOUR GROUPS, AND THE CATALOG DECIDES WHICH IS WHICH. Eighteen jobs on one surface is a table, not a page:
+ * one unbroken run of rows with no landmark to say where you are in it or which rows are like the one you came
+ * for. The blocks are declared upstairs (MODEL_ROLE_BLOCKS) rather than assembled here, so they are the
+ * distinctions the table ALREADY makes — a one-shot against a whole session, and a session your click starts
+ * against one that starts without you — rather than a second taxonomy this file would have to keep in step. The
+ * page's job is to draw them; a role added to the catalog joins the right group by saying what it is.
  *
- * TWO BLOCKS, IN ORDER OF REACH. The one-shot helpers first: nobody picked a model for them, they run
- * constantly, and they are the ones whose bill turns up without a click. Then the whole sessions a screen
- * starts, and within those the ones somebody presses ahead of the ones that fire on their own, which are the
- * runs an owner is least likely to be watching and most likely to want held to a budget. The chat's own model
- * is not here at all: it lives in the composer, where it is chosen per turn and per conversation.
+ * AND THE ORDER OF THE GROUPS IS REACH, which is the argument the single list used to make in prose: jobs
+ * nobody picked a model for come first, because they run constantly and their bill turns up without a click;
+ * then the sessions somebody presses for; then the sessions that fire on their own, which are the ones an owner
+ * is least likely to be watching and most likely to want held to a budget; then automatic tier, the only
+ * setting here that can override a model chosen a second ago. The chat's own model is not on this page at all:
+ * it lives in the composer, where it is chosen per turn and per conversation.
  *
- * AN EMPTY ROW IS THE JOB SWITCHED OFF, AND NOTHING IS RECOMMENDED FOR IT. A one-shot row used to read
+ * THE ROWS ARE SELECTABLE, and that is the honest cost of a true per-job model being paid back. The commonest
+ * thing anyone wants to say — "all of these, on this model, at this tier" — took one trip through the same
+ * panel PER JOB, and the catalog grows (a role added to the table appears here by existing, which is the
+ * point). That is a UI problem rather than a modelling one, and it is solved on top of the true model rather
+ * than by collapsing it: tick the jobs, open ONE picker, and the model and its tier land on every one of them
+ * (see `applyToSelection`). The grouping the page threw away was a fixed guess about which jobs belong
+ * together; a selection is the same saving made by the person who knows.
+ *
+ * AN EMPTY ROW IS THE JOB AT ITS FLOOR, AND NOTHING IS RECOMMENDED FOR IT. A one-shot row used to read
  * "Auto: Gemini 3 Flash Lite, then Claude Haiku 4.5, then …" — a ladder derived from whatever happened to be
  * connected, re-ranking itself the day an account was added, spending accounts the owner had connected for
  * something else. It was presented as discoverability and it was really a default nobody chose. Now a row with
- * no models says so: a one-shot that has none does not run, and a whole session that has none opens on the
- * model the owner picked for their own chat, which is a choice they made rather than one this page invented.
+ * no models says so in a word: a one-shot with none is `off` and does not run, a whole session with none opens
+ * on the model the owner picked for their own chat. Both are chips beside the name rather than the two-line
+ * paragraphs they used to be — <ModelRoleRow> says why.
  *
  * EVERY ENTRY IS EDITED IN THE APP'S OWN MODEL PICKER (ModelPinPicker → the composer's ModelPicker), which is
  * what replaced the 14rem dropdown these rows used to offer and the single effort control that used to sit
@@ -54,6 +63,7 @@ import ModelPinPicker from "./ModelPinPicker.vue";
  * belong to the entry that will actually run, on every row. */
 
 const { settings, patch } = useSandboxSettings();
+const loaded = computed(() => settings.value !== undefined);
 
 /* THE TIER JUDGE'S OWN RECORD, the numbers the Measure state exists to produce, drawn where the switch is so
  * "switch to On once the spend history says so" points at something on the same screen instead of at a promise.
@@ -116,14 +126,13 @@ const editorFor = (role: ModelRole): PinnedList =>
         knobs: true,
     });
 
-/* The catalog's glyph, narrowed. It crosses the wire as an OPEN string, like every other icon this app takes
- * from a declaration (a manifest's, an Activation's), so it is checked rather than asserted and a name this
- * build's icon set does not carry falls back rather than rendering nothing. */
-const iconOf = (role: ModelRoleSpec): IconName => (isIconName(role.icon) ? role.icon : `sparkles`);
-
-const rows = MODEL_ROLES.map((role) => ({ role: role as ModelRoleSpec, icon: iconOf(role), list: editorFor(role.id) }));
-const helperRows = rows.filter((row) => row.role.kind === `helper`);
-const runRows = rows.filter((row) => row.role.kind === `run`);
+/* THE GROUPS, EACH WITH ITS ROWS' EDITORS ATTACHED. Built once: the editors close over the settings ref, so
+ * they stay live without being rebuilt, and the block a role sits in is the catalog's answer rather than a
+ * filter kept in step here. */
+const blocks = MODEL_ROLE_BLOCKS.map((block) => ({
+    ...block,
+    rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })),
+}));
 
 /* THE ONE ROW WHOSE FEATURE CAN BE OFF FROM SOMEWHERE ELSE, and the two sentences it owes because of it.
  *
@@ -153,17 +162,17 @@ const fast = pinnedList({
 /* ═══ SETTING SEVERAL JOBS AT ONCE ═══
  *
  * WHAT IS TICKED, as an ordered list rather than a Set, because it is also read as "how many" and iterated to
- * write; the catalog is a couple of dozen rows at most, so `includes` is cheaper than the reactivity a Set proxy costs. It is
- * per-visit state and deliberately not persisted: a selection is a gesture in progress, and one restored from
- * last week would have the next pick land on jobs nobody is looking at. */
+ * write; the catalog is a couple of dozen rows at most, so `includes` is cheaper than the reactivity a Set proxy
+ * costs. It is per-visit state and deliberately not persisted: a selection is a gesture in progress, and one
+ * restored from last week would have the next pick land on jobs nobody is looking at. */
 const ROLE_IDS = MODEL_ROLES.map((role) => role.id) as readonly ModelRole[];
 const selected = ref<readonly ModelRole[]>([]);
 const isSelected = (role: ModelRole): boolean => selected.value.includes(role);
 const selectRole = (role: ModelRole, on: boolean): void => {
     selected.value = on ? [...selected.value.filter((held) => held !== role), role] : selected.value.filter((held) => held !== role);
 };
-// All or nothing, from the group's own header: the master box is the whole gesture for "everything on this
-// page runs on one model", which is the shape most sandboxes actually want.
+// All or nothing, from the page's own bar: the master box is the whole gesture for "everything on this page
+// runs on one model", which is the shape most sandboxes actually want.
 const allSelected = computed(() => selected.value.length === ROLE_IDS.length);
 const someSelected = computed(() => selected.value.length > 0 && !allSelected.value);
 const selectAll = (on: boolean): void => {
@@ -336,124 +345,74 @@ const eagernessOptions = [
     <!-- `id` so the chat can send someone straight here: the model picker's "Turn it off for every chat" is the
          only route out of automatic tier selection that reaches beyond one conversation, and a link that lands
          on the top of a long settings page has not answered the question that was asked. -->
-    <RowGroup id="models" label="Models" sticky>
-        <!-- THE GROUP SELECTOR: the master box, what it has caught, and the verbs that act on it, in the
-             group's own header and STUCK there as the rows scroll under it. That is what makes the gesture
-             usable on a page this tall — the ticks are spread over two screens, so a control that scrolled
-             away would mean scrolling back to a button you cannot see from the row you just ticked.
+    <div id="models" class="flex flex-col gap-6">
+        <!-- THE SELECTION BAR, above every group and STUCK to the top of the scroll, because the thing it
+             commands is spread over four surfaces and two screens: a control that scrolled away would mean
+             scrolling back to a button you cannot see from the row you just ticked.
+             IT IS THE PAGE'S, NOT A GROUP'S. It used to ride the single group's header (<RowGroup sticky>),
+             which was right while there was one group; with four, that header would either duplicate the verbs
+             on every surface or scope them to a block, and a selection that spans blocks is the commonest one
+             there is — "everything on this page, on one model" is the whole gesture.
              IT REPLACED A FLOATING PILL over the canvas, which answered the same reach problem and was the
              wrong answer twice over: a toolbar on a page that has no toolbar, and one that parks itself over
-             the last row for as long as a selection is live.
-             NOT ON A PHONE, with the ticks it commands. The selection column is taken out of the row's own
-             width, and this page's description column is already the thing that gave way when the Add button
-             was narrowed for a 390px screen (<AddModelButton>). Measured there, one box costs the blurb 24px
-             and two more wrapped lines, on every row, to offer a bulk edit nobody performs on a phone. Every
-             row still sets its own model; what is withheld is the shortcut. -->
-        <template #actions>
-            <div class="flex flex-wrap items-center gap-2 max-md:hidden">
-                <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
-                    <Checkbox
-                        :model-value="allSelected"
-                        :indeterminate="someSelected"
-                        binary
-                        size="small"
-                        aria-label="Select every job"
-                        @update:model-value="(value: unknown) => selectAll(value === true)"
-                    />
-                    <span>{{ selected.length > 0 ? `${selected.length} selected` : `Select jobs` }}</span>
-                </label>
-                <!-- The verbs appear WITH a selection rather than sitting greyed: there is nothing to act on
-                     until something is ticked, and a disabled pair of buttons in a group header is furniture
-                     on every other visit to this page. The first carries its own element up as the panel's
-                     anchor, the same contract <AddModelButton> has. -->
-                <template v-if="selected.length > 0">
-                    <Button
-                        size="small"
-                        label="Set a model for all…"
-                        :disabled="settings === undefined"
-                        @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement)"
-                    />
-                    <!-- Emptying is the other half of the vocabulary, and with an empty list meaning "off" it
-                         is how a sandbox switches several jobs off at once. -->
-                    <Button size="small" severity="danger" text label="Clear models" :disabled="settings === undefined" @click="clearSelection" />
-                </template>
-            </div>
-        </template>
-
-        <!-- THE ONE-SHOT JOBS. No conversation, no tools, one string back, and nobody picked a model for any of
-             them, which is why they lead: they run constantly and their bill turns up without a click.
-
-             THE SPINE FOLLOWS THE CONTENT: a pinned LIST is a block belonging to this row and hangs off its
-             name; a one-line fallback is prose continuing the description, and every other explanatory `#below`
-             in the app is flush. Drawn beside a single line the rule is a 14px stub that reads as a tick mark
-             rather than as a spine, which is worse than no rule at all. <Row>'s `spine` says the same thing in
-             general terms. -->
-        <Row
-            v-for="row in helperRows"
-            :key="row.role.id"
-            :spine="row.list.entries.value.length > 0"
-            :icon="row.icon"
-            :title="row.role.label"
-            :description="row.role.blurb"
-        >
-            <!-- THE SELECTION COLUMN, leading the row, in <Row>'s `#before` — which exists so that a mark
-                 here moves the row's whole BODY rather than pushing the title away from the `#below` lines
-                 that belong to it. See the slot's own note for what a mark in `#lead` costs instead.
-                 IT IS THE DESIGN SYSTEM'S ORDINARY CHECKBOX, not `ui-checkbox-quiet`. That modifier is for a
-                 column as long as the list whose ticks are an EXCEPTION (the acceptance board's nine stories,
-                 where empty is the normal state and the loudest thing on the page must not be a box nobody
-                 chose). Here the column is the affordance being offered, and quiet made it read as broken: a
-                 transparent box with a hairline in it, next to a filled field, looks like a control that
-                 failed to draw rather than one waiting to be pressed. -->
-            <template #before>
+             the last row for as long as a selection is live. This sits in the flow, so nothing is covered and
+             nothing moves when a selection starts.
+             NOT ON A PHONE, with the ticks it commands. The mark column is a job's glyph there and never a
+             box: a bulk edit is not a gesture anybody performs on a 390px screen, and every row still sets its
+             own model. What is withheld is the shortcut. -->
+        <div class="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-canvas px-1 py-2 max-md:hidden">
+            <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
                 <Checkbox
-                    :model-value="isSelected(row.role.id)"
+                    :model-value="allSelected"
+                    :indeterminate="someSelected"
                     binary
                     size="small"
-                    class="max-md:hidden"
-                    :aria-label="`Select ${row.role.label.toLowerCase()}`"
-                    @update:model-value="(value: unknown) => selectRole(row.role.id, value === true)"
+                    aria-label="Select every job"
+                    @update:model-value="(value: unknown) => selectAll(value === true)"
                 />
-            </template>
-            <template #control>
-                <AddModelButton
-                    :label="`Add a model for ${row.role.label.toLowerCase()}`"
-                    :disabled="settings === undefined || (row.role.id === JUDGE && judgeOff)"
-                    @open="(anchor: HTMLElement) => openRowPicker(row.list, undefined, anchor)"
+                <span>{{ selected.length > 0 ? `${selected.length} selected` : `Select jobs` }}</span>
+            </label>
+            <!-- The verbs appear WITH a selection rather than sitting greyed: there is nothing to act on until
+                 something is ticked, and a disabled pair of buttons is furniture on every other visit to this
+                 page. The first carries its own element up as the panel's anchor, the same contract
+                 <AddModelButton> has. -->
+            <template v-if="selected.length > 0">
+                <Button
+                    size="small"
+                    label="Set a model for all…"
+                    :disabled="!loaded"
+                    @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement)"
                 />
+                <!-- Emptying is the other half of the vocabulary, and with an empty list meaning "off" it is how
+                     a sandbox switches several jobs off at once. -->
+                <Button size="small" severity="danger" text label="Clear models" :disabled="!loaded" @click="clearSelection" />
             </template>
-            <!-- Two states: the list the user wrote, and the job being off because they wrote none. Settings
-                 still loading draws neither rather than announcing an "off" it has not read yet. -->
-            <template #below>
-                <div class="flex flex-col gap-2">
-                    <ModelPinList
-                        v-if="row.list.entries.value.length > 0"
-                        :entries="row.list.entries.value"
-                        note-thinking
-                        @promote="row.list.promote"
-                        @remove="row.list.remove"
-                        @edit="(index: number, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
-                    />
-                    <!-- NOT SET, SAID PLAINLY. This row used to spell out an "Auto" ladder derived from whatever
-                         was connected, on the argument that naming it was the discoverability story for a
-                         setting nobody had opened. What it was really doing was choosing: a job nobody had
-                         configured still spent an account, on an order this app invented, which changed under
-                         the owner whenever an account was added. Saying nothing runs is both the honest line
-                         and the one that makes the control beside it worth pressing. The invitation is dropped
-                         while the judge is off, because the control that would answer it is disabled an inch
-                         away and a row may not ask for a press it has just refused. -->
-                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                        <span class="text-content">Not set</span>: this does not run, and no model is chosen for you.<template
-                            v-if="row.role.id !== JUDGE || !judgeOff"
-                        >
-                            Add a model to switch it on.</template
-                        >
-                    </p>
+        </div>
 
+        <!-- ONE GROUP PER BLOCK, from the catalog. The heading and the line under it are the block's own, so a
+             group cannot end up describing a set of rows it no longer holds. -->
+        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" :count="block.rows.length" :caption="block.caption">
+            <ModelRoleRow
+                v-for="row in block.rows"
+                :key="row.role.id"
+                :role="row.role"
+                :icon="row.role.icon"
+                :list="row.list"
+                :selected="isSelected(row.role.id)"
+                :disabled="!loaded || (row.role.id === JUDGE && judgeOff)"
+                :loaded="loaded"
+                @select="(on: boolean) => selectRole(row.role.id, on)"
+                @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
+            >
+                <!-- THE SLOT IS OFFERED TO ONE ROW IN EIGHTEEN, and the `v-if` is on the <template> so the other
+                     seventeen are handed no slot at all rather than an empty one: a slot that exists but renders
+                     nothing still opens the block under the row, which is 12px of dead space per row on a page
+                     whose whole point this round was to stop spending lines on nothing. -->
+                <template v-if="row.role.id === JUDGE" #note>
                     <!-- Where the switch is. This is the only row on the page whose feature can be off from
                          somewhere else, and a disabled control with no explanation is the thing a settings page
                          owes an answer for. -->
-                    <p v-if="row.role.id === JUDGE && judgeOff" class="text-2xs text-subtle">
+                    <p v-if="judgeOff" class="text-2xs text-subtle">
                         Nothing is judging commands at the moment, so this is not in use.
                         <RouterLink
                             :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
@@ -465,135 +424,96 @@ const eagernessOptions = [
                     <!-- The one thing worth saying about this choice, and it is not "pick a cheap one": of every
                          job on this page, the judge is the only one whose input may have been written by
                          whoever the agent was reading. -->
-                    <p v-else-if="row.role.id === JUDGE" class="text-2xs text-subtle">
+                    <p v-else class="text-2xs text-subtle">
                         Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in
                         something from outside, that text may be arguing for its own approval.
                     </p>
-                </div>
-            </template>
-        </Row>
+                </template>
+            </ModelRoleRow>
+        </RowGroup>
 
-        <!-- THE WHOLE SESSIONS, each with tools and a worktree, started by a screen rather than by a person at a
-             composer. Ordered so the ones somebody presses come before the ones that fire on their own. -->
-        <Row
-            v-for="row in runRows"
-            :key="row.role.id"
-            :spine="row.list.entries.value.length > 0"
-            :icon="row.icon"
-            :title="row.role.label"
-            :description="row.role.blurb"
-        >
-            <template #before>
-                <Checkbox
-                    :model-value="isSelected(row.role.id)"
-                    binary
-                    size="small"
-                    class="max-md:hidden"
-                    :aria-label="`Select ${row.role.label.toLowerCase()}`"
-                    @update:model-value="(value: unknown) => selectRole(row.role.id, value === true)"
-                />
-            </template>
-            <template #control>
-                <AddModelButton
-                    :label="`Add a model for ${row.role.label.toLowerCase()}`"
-                    :disabled="settings === undefined"
-                    @open="(anchor: HTMLElement) => openRowPicker(row.list, undefined, anchor)"
-                />
-            </template>
-            <template #below>
-                <!-- Each entry names the tier it will run at beside the model, because that is a property of the
-                     entry: press the row to change either half. -->
-                <ModelPinList
-                    v-if="row.list.entries.value.length > 0"
-                    :entries="row.list.entries.value"
-                    @promote="row.list.promote"
-                    @remove="row.list.remove"
-                    @edit="(index: number, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
-                />
-                <!-- The floor, named, and it is a choice the owner already made rather than one this page
-                     derived: nothing here can judge what a whole session is worth, so an unset row follows the
-                     composer instead of picking. -->
-                <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                    <span class="text-content">Composer default</span>: whatever your chat is set to, which keeps following it as you change it. Add a
-                    model to pin this job to a tier of its own.
-                </p>
-            </template>
-        </Row>
-
-        <!-- THE CHAT'S OWN TURNS, which no row above ever touches. It is last because it is the only one that
+        <!-- THE CHAT'S OWN TURNS, which no job above ever touches, and the reason this is a group of its own
+             rather than a nineteenth row: it is not a job, so it is not selectable, and inside a list of ticked
+             rows it had to hold the selection column open with an invisible box to keep its mark in line. A
+             heading says what that hack was trying to say. It is LAST because it is the only setting here that
              can override a choice the user made a second ago, and a settings page owes that ordering: read down
              and the reach grows, from jobs nobody picked a model for, to runs somebody started, to the
              conversation in front of you. -->
-        <!-- NOT A JOB, SO NOT SELECTABLE — and it holds the selection column open anyway, empty, so its mark
-             stays in the same column as the rows above it. The width is MEASURED rather than typed: the same
-             box, hidden, is the only thing guaranteed to be exactly as wide as the ones it is lining up with,
-             which is the device <Row> uses for its own spine and for the same reason. -->
-        <Row spine icon="credit-card" title="Automatic tier" description="Run simple turns on a cheaper model from the same provider.">
-            <template #before>
-                <span class="invisible flex max-md:hidden" aria-hidden="true"><Checkbox :model-value="false" binary size="small" /></span>
-            </template>
-            <template #control>
-                <SegmentedControl
-                    :model-value="settings?.autoTier ?? `shadow`"
-                    :options="autoTierOptions"
-                    @update:model-value="(autoTier: string) => patch({ autoTier: autoTier as `off` | `shadow` | `on` })"
-                />
-            </template>
-            <template #below>
-                <div class="flex flex-col gap-3">
-                    <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">Nothing is judged or recorded.</p>
-                    <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
-                        Simple turns run on the cheaper model. Each conversation can veto it.
-                    </p>
-
-                    <!-- WHAT THE JUDGE HAS RECORDED, in the app's one shape for a measured answer and with no
-                         surface of its own: the row's `#below` is already inside the row's hairline, and a fill
-                         here would split the setting down a colour change. See <Verdict>. -->
-                    <Verdict
-                        v-if="settings?.autoTier !== `off` && tierReport !== undefined"
-                        tone="content"
-                        :value="`${tierReport.fast}`"
-                        :unit="tierUnit"
-                        :evidence="tierEvidence"
+        <RowGroup label="Cheaper turns" caption="Not a job: a substitution made inside a turn you started.">
+            <Row spine title="Automatic tier" description="Run simple turns on a cheaper model from the same provider.">
+                <!-- ITS MARK IS THE SAME BOX THE JOB ROWS DRAW, and it is a `#lead` rather than the `icon` prop
+                     for exactly that reason: a bare glyph measures the tier's type size (15px) where a job's
+                     mark measures the tier's `mark` (22px), so this row's title landed 8px left of every title
+                     above it and the page's one text column stepped sideways in its last group. Measured, not
+                     guessed. No tick, because this is not a job and cannot be selected. -->
+                <template #lead="{ mark }">
+                    <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
+                        <Icon name="credit-card" aria-hidden="true" class="text-sm text-subtle" />
+                    </span>
+                </template>
+                <template #control>
+                    <SegmentedControl
+                        :model-value="settings?.autoTier ?? `shadow`"
+                        :options="autoTierOptions"
+                        @update:model-value="(autoTier: string) => patch({ autoTier: autoTier as `off` | `shadow` | `on` })"
                     />
+                </template>
+                <template #below>
+                    <div class="flex flex-col gap-3">
+                        <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">Nothing is judged or recorded.</p>
+                        <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
+                            Simple turns run on the cheaper model. Each conversation can veto it.
+                        </p>
 
-                    <div class="flex flex-col gap-1.5">
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <span class="text-xs font-medium text-content">Cheaper model</span>
-                            <div class="flex flex-wrap items-center justify-end gap-2">
-                                <div v-if="settings?.autoTier !== `off`" class="flex shrink-0 items-center" role="group" aria-label="How readily">
-                                    <SegmentedControl
-                                        :model-value="settings?.autoTierEagerness ?? `balanced`"
-                                        :options="eagernessOptions"
-                                        wrap
-                                        @update:model-value="
-                                            (autoTierEagerness: string) =>
-                                                patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
-                                        "
+                        <!-- WHAT THE JUDGE HAS RECORDED, in the app's one shape for a measured answer and with no
+                             surface of its own: the row's `#below` is already inside the row's hairline, and a
+                             fill here would split the setting down a colour change. See <Verdict>. -->
+                        <Verdict
+                            v-if="settings?.autoTier !== `off` && tierReport !== undefined"
+                            tone="content"
+                            :value="`${tierReport.fast}`"
+                            :unit="tierUnit"
+                            :evidence="tierEvidence"
+                        />
+
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <span class="text-xs font-medium text-content">Cheaper model</span>
+                                <div class="flex flex-wrap items-center justify-end gap-2">
+                                    <div v-if="settings?.autoTier !== `off`" class="flex shrink-0 items-center" role="group" aria-label="How readily">
+                                        <SegmentedControl
+                                            :model-value="settings?.autoTierEagerness ?? `balanced`"
+                                            :options="eagernessOptions"
+                                            wrap
+                                            @update:model-value="
+                                                (autoTierEagerness: string) =>
+                                                    patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
+                                            "
+                                        />
+                                    </div>
+                                    <AddModelButton
+                                        label="Add a model for automatic tier selection"
+                                        :disabled="!loaded"
+                                        @open="(anchor: HTMLElement) => openRowPicker(fast, undefined, anchor)"
                                     />
                                 </div>
-                                <AddModelButton
-                                    label="Add a model for automatic tier selection"
-                                    :disabled="settings === undefined"
-                                    @open="(anchor: HTMLElement) => openRowPicker(fast, undefined, anchor)"
-                                />
                             </div>
+                            <ModelPinList
+                                v-if="fast.entries.value.length > 0"
+                                :entries="fast.entries.value"
+                                @promote="fast.promote"
+                                @remove="fast.remove"
+                                @edit="(index: number, anchor: HTMLElement) => openRowPicker(fast, index, anchor)"
+                            />
+                            <p v-else-if="loaded" class="text-2xs text-muted">
+                                <span class="text-content">Auto</span>: cheapest from the chat's provider.
+                            </p>
                         </div>
-                        <ModelPinList
-                            v-if="fast.entries.value.length > 0"
-                            :entries="fast.entries.value"
-                            @promote="fast.promote"
-                            @remove="fast.remove"
-                            @edit="(index: number, anchor: HTMLElement) => openRowPicker(fast, index, anchor)"
-                        />
-                        <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                            <span class="text-content">Auto</span>: cheapest from the chat's provider.
-                        </p>
                     </div>
-                </div>
-            </template>
-        </Row>
-    </RowGroup>
+                </template>
+            </Row>
+        </RowGroup>
+    </div>
 
     <!-- ONE PANEL, STANDING BY, opened over whichever trigger raised it. It is mounted rather than created per
          open because the overlay hosts inside it measure and place themselves in a watcher on that flag: a host
