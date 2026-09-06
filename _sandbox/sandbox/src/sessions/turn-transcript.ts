@@ -1,8 +1,8 @@
 import { type AgentTurn, capabilitiesOf, resumeDisclosure, type TranscriptRow, withoutResumeNote } from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { stripAttachmentNote } from "../agent/attachment-note.js";
-import { parseRuntimeHistory } from "../agent/runtime-history.js";
-import { takeSteerAnchors } from "../agent/steer-anchors.js";
+import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
+import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
+import { takeSteerAnchors } from "../agent/anchors/steer-anchors.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 

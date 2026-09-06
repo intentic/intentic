@@ -2,15 +2,15 @@ import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema } f
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { z } from "zod";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { createPublicDoor, type PublicDoor, type PublicDoorSpec } from "../automations/public-door.js";
 import { PAYLOAD_MAX, TITLE_MAX, type WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { type ThreadSession, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import type { InstallsStore } from "../store/installs.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 import { createSseStream } from "./sse-stream.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired, type VisitorIdentity } from "./webchat-identity.js";

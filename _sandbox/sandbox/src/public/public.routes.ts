@@ -6,8 +6,8 @@ import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contr
 import { isPublicPath, toRelPath } from "@intentic/workspace-ignore";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
-import { isControlPlanePath, resolveWithin } from "../workspace/workspace-files-paths.js";
+import type { OrpcContext } from "../app-env.js";
+import { isControlPlanePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { BLOCK_REASON, blockByName, listPublicFiles, publicRoot } from "./public-files.js";
 
 /* The /public routes: the owner's side of the outbox, and the only authenticated view of it.

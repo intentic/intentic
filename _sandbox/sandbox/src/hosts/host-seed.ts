@@ -1,6 +1,6 @@
 import type { HostConfig } from "@intentic/sandbox-contract";
 import { capabilityCtx } from "../capabilities/capability.js";
-import { hostHandler } from "../capabilities/handlers/host.js";
+import { hostHandler } from "../capabilities/handlers/host.handler.js";
 import type { Services } from "../composition.js";
 
 /* THE DEVICE THAT RAN THE INSTALLER, CONNECTED WITHOUT ANYONE ASKING FOR IT.

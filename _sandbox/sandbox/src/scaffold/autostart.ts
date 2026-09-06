@@ -5,8 +5,8 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { jsonFile } from "../store/json-file.js";
-import { appPanelKey, buildAppSpec } from "../workspace/app-previews.js";
-import { statePath } from "../workspace/state-paths.js";
+import { appPanelKey, buildAppSpec } from "../workspace/layout/app-previews.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* WHAT THIS WORKSPACE RUNS WHEN IT BOOTS, as a file the workspace carries rather than a fact the seed knew once.
  *

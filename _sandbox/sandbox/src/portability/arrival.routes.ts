@@ -3,8 +3,8 @@ import type { Context } from "hono";
 import { ArrivalFormatError, ArrivalStaleError } from "../arrival-error.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
-import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "../workspace/workspace-files-upload.js";
+import type { AppEnv } from "../app-env.js";
+import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "../workspace/files/workspace-files-upload.js";
 import { createArrivals } from "./arrival.js";
 
 /* ARRIVALS: everything coming INTO this sandbox, through one preview-first pipeline

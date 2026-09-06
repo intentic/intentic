@@ -44,17 +44,17 @@ import { createEngineClient } from "@intentic/iq-engine/host";
 import { createInvariantRegistry, type InvariantRegistry } from "./invariants/invariants.js";
 import { registerDaemonInvariants } from "./invariants/register.js";
 import type { Logger } from "pino";
-import { createAcpAgent } from "./acp/acp-agent.js";
-import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
-import { createPiAgent } from "./pi/pi-agent.js";
-import { piSpawner } from "./pi/pi-rpc.js";
+import { createAcpAgent } from "./runtimes/acp/acp-agent.js";
+import { type AcpConnections, createAcpConnections } from "./runtimes/acp/acp-connection.js";
+import { createPiAgent } from "./runtimes/pi/pi-agent.js";
+import { piSpawner } from "./runtimes/pi/pi-rpc.js";
 import { type ControlTokens, fileControlTokens } from "./auth/control-tokens.js";
 import { type DoorTokens, fileDoorTokens } from "./auth/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
-import { type AgentRequest, runAgent } from "./agent/agent.js";
-import { cliProxyAuthDir, type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
+import { type AgentRequest, runAgent } from "./agent/run/agent.js";
+import { cliProxyAuthDir, type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
 import { type HeldWakesStore, fileHeldWakesStore } from "./automations/held-wakes-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { fileLoopDesignsStore, fileLoopsStore, type LoopDesignsStore, type LoopsStore } from "./loops/loops-store.js";
@@ -74,9 +74,9 @@ import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
-import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/heavy-commands.js";
+import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
-import { fileVerifyStore, type VerifyStore } from "./workspace/verify-store.js";
+import { fileVerifyStore, type VerifyStore } from "./workspace/deps/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
 import {
@@ -109,20 +109,20 @@ import { createPeerHub } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
 import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
 import { pairings, type Pairings } from "./store/enrollment.js";
-import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
-import { fileWatchJournal, type WatchJournal } from "./agent/watch-journal.js";
-import { fileTurnAnchors, type TurnAnchors } from "./agent/turn-anchors.js";
+import { fileTurnJournal, type TurnJournal } from "./agent/run/turn-journal.js";
+import { fileWatchJournal, type WatchJournal } from "./agent/verification/watch-journal.js";
+import { fileTurnAnchors, type TurnAnchors } from "./agent/anchors/turn-anchors.js";
 import type { Config } from "./env.config.js";
-import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
-import type { AgentArchiveDeps } from "./agents/archive.js";
-import { fileAgentsStore } from "./agents/agents-store.js";
-import { createTurnIsolation, type TurnIsolation } from "./agents/isolation.js";
-import { createAgentOrigins, type AgentOrigins } from "./agents/origins.js";
-import { createExpiryTracker } from "./agents/expiry.js";
-import { createLandedPresences } from "./agents/landed-presence.js";
-import { createLandStandings } from "./agents/standing.js";
-import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
-import { changedFiles } from "./git/changes.js";
+import { createAgentsRegistry, type AgentsRegistry } from "./agents/registry/agents-registry.js";
+import type { AgentArchiveDeps } from "./agents/registry/archive.js";
+import { fileAgentsStore } from "./agents/registry/agents-store.js";
+import { createTurnIsolation, type TurnIsolation } from "./agents/worktrees/isolation.js";
+import { createAgentOrigins, type AgentOrigins } from "./agents/land/origins.js";
+import { createExpiryTracker } from "./agents/registry/expiry.js";
+import { createLandedPresences } from "./agents/land/landed-presence.js";
+import { createLandStandings } from "./agents/land/standing.js";
+import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees/worktrees.js";
+import { changedFiles } from "./git/changes/changes.js";
 import {
     type ActionResult,
     checkoutRef,
@@ -138,33 +138,33 @@ import {
     rebaseOnto,
     resetTo,
     revertCommit,
-} from "./git/changes-commits.js";
-import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./git/changes-diff.js";
-import { commitIndex, discardPaths, stagePaths, unstagePaths } from "./git/changes-index.js";
-import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/commit-message.js";
-import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./git/branches.js";
-import { abortOperation, type GitOperation, operationInProgress } from "./git/operation.js";
-import { type UndoableAction, undoableAction, undoLastAction } from "./git/undo.js";
-import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./git/stash.js";
-import { fetchRemote, pullRemote, remoteState } from "./git/remote.js";
-import { remoteProjectOf } from "./git/remote-urls.js";
-import { publishFile } from "./git/publish-file.js";
+} from "./git/changes/changes-commits.js";
+import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./git/changes/changes-diff.js";
+import { commitIndex, discardPaths, stagePaths, unstagePaths } from "./git/changes/changes-index.js";
+import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/ops/commit-message.js";
+import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./git/ops/branches.js";
+import { abortOperation, type GitOperation, operationInProgress } from "./git/ops/operation.js";
+import { type UndoableAction, undoableAction, undoLastAction } from "./git/ops/undo.js";
+import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./git/ops/stash.js";
+import { fetchRemote, pullRemote, remoteState } from "./git/remote/remote.js";
+import { remoteProjectOf } from "./git/remote/remote-urls.js";
+import { publishFile } from "./git/ops/publish-file.js";
 import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
-import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
-import { type ClaudeSlice, createClaudeSlice } from "./claude/claude-provider.js";
-import { type CodexSlice, createCodexSlice } from "./codex/codex-provider.js";
-import { createCursorSlice, type CursorSlice } from "./cursor/cursor-provider.js";
-import { createGeminiSlice, type GeminiSlice } from "./gemini/gemini-provider.js";
-import { createGrokSlice, type GrokSlice } from "./grok/grok-provider.js";
-import { createMintedSlice, type MintedSlice } from "./minted/minted-provider.js";
-import { createKimiSlice, type KimiSlice } from "./kimi/kimi-provider.js";
-import { type ProviderCatalog, providerCatalogsOf } from "./agent/provider-registry.js";
+import { createOpenCodeService, type OpenCodeService } from "./runtimes/grok/opencode.js";
+import { type ClaudeSlice, createClaudeSlice } from "./runtimes/claude/claude-provider.js";
+import { type CodexSlice, createCodexSlice } from "./runtimes/codex/codex-provider.js";
+import { createCursorSlice, type CursorSlice } from "./runtimes/cursor/cursor-provider.js";
+import { createGeminiSlice, type GeminiSlice } from "./runtimes/gemini/gemini-provider.js";
+import { createGrokSlice, type GrokSlice } from "./runtimes/grok/grok-provider.js";
+import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-provider.js";
+import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.js";
+import { type ProviderCatalog, providerCatalogsOf } from "./agent/providers/provider-registry.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
 import { createServiceProcesses, type ServiceProcesses } from "./processes/service-processes.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
-import { discoverRepos } from "./workspace/repo-discovery.js";
+import { discoverRepos } from "./workspace/layout/repo-discovery.js";
 import { type PushStore, filePushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
 import { turnAwaiting } from "./push/notifications.js";
@@ -195,21 +195,21 @@ import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firing
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
 import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { liveCardRun } from "./agent/offer-card.js";
-import { onTurnSettled, turnRunOf } from "./agent/turn-runs.js";
+import { liveCardRun } from "./agent/run/offer-card.js";
+import { onTurnSettled, turnRunOf } from "./agent/run/turn-runs.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
-import { type Announcer, createAnnouncer } from "./platform/announce.js";
-import { type ReachReporter, createReachReporter } from "./platform/reach-report.js";
-import { type BootTracker, createBootTracker } from "./platform/boot.js";
-import { DAEMON_OWNER } from "./platform/leftovers.js";
-import { type PlatformTunnel, startPlatformTunnel } from "./platform/local-tunnel.js";
-import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
+import { type Announcer, createAnnouncer } from "./platform/boot/announce.js";
+import { type ReachReporter, createReachReporter } from "./platform/listeners/reach-report.js";
+import { type BootTracker, createBootTracker } from "./platform/boot/boot.js";
+import { DAEMON_OWNER } from "./platform/boot/leftovers.js";
+import { type PlatformTunnel, startPlatformTunnel } from "./platform/listeners/local-tunnel.js";
+import { createResourceReaper, type ResourceReaper } from "./platform/boot/reaper.js";
 import { createClientLogger, createPerfLogger } from "./logger.js";
-import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
+import { createPerfTracker, type PerfTracker } from "./platform/resources/perf.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
-import { type AgentTool, internalTools } from "./agent/agent-tools.js";
+import { type AgentTool, internalTools } from "./agent/tools/agent-tools.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
@@ -217,7 +217,7 @@ import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extensio
 import { installedExtensions } from "./extensions/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
-import { writeWorkspaceFileStream } from "./workspace/workspace-files-upload.js";
+import { writeWorkspaceFileStream } from "./workspace/files/workspace-files-upload.js";
 import {
     copyWorkspacePath,
     makeWorkspaceDir,
@@ -230,11 +230,11 @@ import {
     statWorkspaceFileSize,
     type WorkspaceFileWindow,
     writeWorkspaceFile,
-} from "./workspace/workspace-files.js";
-import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/workspace-tree.js";
-import type { WorkspaceScopeDeps } from "./workspace/workspace-scope.js";
-import { statePath } from "./workspace/state-paths.js";
-import { createDependencyCoordinator, type DependencyCoordinator } from "./workspace/reconcile-deps.js";
+} from "./workspace/files/workspace-files.js";
+import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/files/workspace-tree.js";
+import type { WorkspaceScopeDeps } from "./workspace/layout/workspace-scope.js";
+import { statePath } from "./workspace/layout/state-paths.js";
+import { createDependencyCoordinator, type DependencyCoordinator } from "./workspace/deps/reconcile-deps.js";
 
 /* The daemon's collaborators, wired once at boot and handed to the route factories, the injection seam the
  * route tests build fakes against (the equivalent of the old createDaemon `deps` object). Stateful members

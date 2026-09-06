@@ -5,7 +5,7 @@ import type { ExtensionHost } from "../extensions/installed-extensions.js";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 
 // The /ports routes: `list` scans procfs on demand (no background poller, the Ports view polls while open),
 // `forward`/`unforward` drive the slot table. Forwarding is the explicit exposure gesture: previews are

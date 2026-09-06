@@ -1,6 +1,6 @@
 import type { Services } from "../composition.js";
-import { providerPackWants } from "../agent/provider-registry.js";
-import { translatorWanted } from "../agent/translator.js";
+import { providerPackWants } from "../agent/providers/provider-registry.js";
+import { translatorWanted } from "../agent/providers/translator.js";
 import { packFragment } from "./packs.js";
 
 /* THE PACKS A CONNECTED PROVIDER ASKS FOR, the provider-side counterpart to capabilityFragments.

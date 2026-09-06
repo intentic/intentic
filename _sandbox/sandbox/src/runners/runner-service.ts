@@ -14,8 +14,8 @@ import {
     runnerContract,
 } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
-import { streamAgent } from "../agent/agent.routes.js";
-import { applyReply, applySteer, composeSteerText } from "../agent/turn-interactions.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
+import { applyReply, applySteer, composeSteerText } from "../agent/run/turn-interactions.js";
 import type { Services } from "../composition.js";
 import { adoptDefinitionSettings } from "../portability/apply-definition.js";
 import { parseDefinitionToml } from "../portability/definition.js";

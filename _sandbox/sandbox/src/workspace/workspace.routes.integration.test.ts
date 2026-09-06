@@ -22,13 +22,13 @@ import type { ManagedProcesses, ProcessSpec } from "../processes/managed-process
 import { unstubbed } from "@intentic/testing";
 
 import { workspacePaths } from "./workspace.js";
-import { MAX_RAW_BYTES } from "./workspace-files-download.js";
-import { UploadTooLargeError } from "./workspace-files-upload.js";
-import { sha256Text, statWorkspaceFileSize } from "./workspace-files.js";
+import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
+import { UploadTooLargeError } from "./files/workspace-files-upload.js";
+import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
 
-import { clientFor, errorCode } from "../route-client.testing.js";
-import { fakeFiles, fakeHistory, tempWorkspace } from "../route-fakes.testing.js";
-import { services } from "../route-services.testing.js";
+import { clientFor, errorCode } from "../harness/route-client.testing.js";
+import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { services } from "../harness/route-services.testing.js";
 import { testConfig } from "../testing.js";
 
 /* The workspace routes, driven over the daemon's HTTP surface exactly as the browser drives them.

@@ -1,7 +1,7 @@
 import { vpnContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { tunnelEntry } from "../tunnel/tunnel-links.js";
 import { heldStream } from "../tunnel/tunnel-route.js";
 import { parseForticlientConfig } from "./forticlient-config.js";

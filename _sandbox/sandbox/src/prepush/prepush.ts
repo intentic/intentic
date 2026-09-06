@@ -1,6 +1,6 @@
 import type { CommandRun, Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { waitForMemoryHeadroom } from "../platform/memory-admission.js";
+import { waitForMemoryHeadroom } from "../platform/resources/memory-admission.js";
 import { prepushFailed } from "../push/notifications.js";
 import { type RuleCommandRun, runRuleCommand } from "../rules/rule-command.js";
 import { matching } from "../rules/rules.js";

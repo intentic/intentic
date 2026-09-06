@@ -1,7 +1,7 @@
 import { request } from "node:https";
 import { errorMessage } from "@intentic/base/errors";
 import type { Config } from "../env.config.js";
-import { isLocalHost } from "./local-tls.js";
+import { isLocalHost } from "./tls/local-tls.js";
 
 /* THE DAEMON'S ONE OUTBOUND CHANNEL TO THE PLATFORM, shared by everything that speaks on it: the boot
  * registration (announce.ts) and the reachability report (reach-report.ts). Both authenticate the same way,

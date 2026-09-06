@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { isNewer } from "@intentic/sandbox-contract";
 import { version } from "../version.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* THE NEWEST INTENTIC THAT EVER RAN THIS WORKSPACE, one small stamp, `.intentic/local/newest-run.json`, recorded at
  * boot and moved only FORWARD.

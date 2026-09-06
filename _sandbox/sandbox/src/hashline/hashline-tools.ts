@@ -1,9 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
-import { sdk } from "../claude/claude-sdk.js";
+import { sdk } from "../runtimes/claude/claude-sdk.js";
 import { z } from "zod";
-import { resolveWithin } from "../workspace/workspace-files-paths.js";
+import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { applyEdit, type HashlineOp, renderForRead } from "./hashline.js";
 
 // The hashline file tools (in-process SDK MCP server, the uiServer/discord-voice pattern). Registered, and the native

@@ -1,9 +1,9 @@
 import type { EngineChannel, EngineId, EngineRow, EnginesView } from "@intentic/sandbox-contract";
 import { ENGINE_IDS, isNewer } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { opt } from "../agent/opt.js";
-import type { BootRole } from "../agent/provider-module.js";
-import { refreshClaudeSdk } from "../claude/claude-sdk.js";
+import { opt } from "../agent/run/opt.js";
+import type { BootRole } from "../agent/providers/provider-module.js";
+import { refreshClaudeSdk } from "../runtimes/claude/claude-sdk.js";
 import { blessedEntry, blessedList, blessedListReadAt, blessedListSource, lowestSatisfying, targetVersion } from "./engine-channel.js";
 import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
 import { type EngineInstallOutcome, installEngine, isEngineInstalling } from "./engine-install.js";

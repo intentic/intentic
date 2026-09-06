@@ -7,7 +7,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
+import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { packFragment } from "./packs.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";

@@ -17,12 +17,12 @@ import { z } from "zod";
 import { type GitHost, gitHostOf, githubHeaders } from "../capabilities/cli/git-access.js";
 import { parseExtensionManifest, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
-import { defaultBranchOf } from "../git/publish-file.js";
-import { pushBranch, remoteState } from "../git/remote.js";
-import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/root-repo.js";
+import { defaultBranchOf } from "../git/ops/publish-file.js";
+import { pushBranch, remoteState } from "../git/remote/remote.js";
+import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { rootPathIsExcluded } from "../history/history.js";
-import { discoverRepos } from "../workspace/repo-discovery.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { DEFINITION_SOURCES } from "./definition.js";
 
 /* THE WORKSPACE AS A REFERENCE: publishing /work, and taking somebody's published /work into a fresh sandbox.

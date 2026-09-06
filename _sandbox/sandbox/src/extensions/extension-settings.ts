@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { SecretVault } from "../capabilities/secret-vault.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* Per-extension settings values (<workspace>/.intentic/config/extension-settings.json), keyed by the manifest-derived
  * extension id (publisher.name). NOT the capability entry id, so values survive a remove/re-add and the

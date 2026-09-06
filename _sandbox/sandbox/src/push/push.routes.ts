@@ -1,7 +1,7 @@
 import { channelId, pushContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 
 export type PushRoutesDeps = Pick<Services, "push" | "pushSender">;
 

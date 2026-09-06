@@ -7,11 +7,11 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { stream } from "hono/streaming";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure } from "../automations/listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { listenerState } from "./listener-state.js";
 import { setListenerStatus } from "./listener-status.js";
 

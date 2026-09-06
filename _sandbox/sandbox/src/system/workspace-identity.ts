@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Services } from "../composition.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 // The workspace's stable identity at <workspace>/.intentic/identity/workspace.json, minted at the first boot of an
 // empty /work and surviving with the volume. Streamed as the /events hello frame so the browser can tell a

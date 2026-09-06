@@ -3,8 +3,8 @@ import { join } from "node:path";
 import type { Capability, CapabilityRecommendation } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { parseRemote, remoteUrlsOf } from "../git/remote-urls.js";
-import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
+import { parseRemote, remoteUrlsOf } from "../git/remote/remote-urls.js";
+import { discoverRepos, hasGitEntry } from "../workspace/layout/repo-discovery.js";
 import type { DismissedRecommendation } from "./dismissals-store.js";
 
 /* WHAT THE WORKSPACE SAYS IT NEEDS, read off /work rather than asked of the user.

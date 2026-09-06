@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { RepoBase } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { branchSha } from "../agents/agent-refs.js";
+import { branchSha } from "../agents/land/agent-refs.js";
 
 /* WHICH REPOSITORIES A FINISHED STEP ACTUALLY LEFT WORK IN, asked before the next step is told where to look.
  *

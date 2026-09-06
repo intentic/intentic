@@ -15,9 +15,9 @@ import { parse } from "smol-toml";
 import { ArrivalFormatError } from "../arrival-error.js";
 import type { Services } from "../composition.js";
 import { baseImageOf, customPath } from "../environment/environment.js";
-import { remoteState } from "../git/remote.js";
-import { discoverRepos } from "../workspace/repo-discovery.js";
-import { stateRelPath } from "../workspace/state-paths.js";
+import { remoteState } from "../git/remote/remote.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
+import { stateRelPath } from "../workspace/layout/state-paths.js";
 
 /* THE DEFINITION SIDE OF PORTABILITY: a sandbox's declarable shape derived from its live manifests, emitted
  * as `sandbox.toml`, and read back for apply/diff (apply-definition.ts drives the writes).

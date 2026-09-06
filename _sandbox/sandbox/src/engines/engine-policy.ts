@@ -1,8 +1,8 @@
 import { type EngineChannel, EngineChannelSchema, type EngineId, ENGINE_IDS } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { opt } from "../agent/opt.js";
+import { opt } from "../agent/run/opt.js";
 import { jsonFile } from "../store/json-file.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* THE OWNER'S STANDING ANSWER per engine, one small file in the workspace's config slice.
  *

@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Logger } from "pino";
-import { activeTurnCount } from "../agent/agent-steering.js";
-import { listSubagentSessions, subagentRunning } from "../agent/subagents.js";
-import { armedWatcherCount } from "../agent/watchers.js";
+import { activeTurnCount } from "../agent/anchors/agent-steering.js";
+import { listSubagentSessions, subagentRunning } from "../agent/subagents/subagents.js";
+import { armedWatcherCount } from "../agent/verification/watchers.js";
 import { connectedCount } from "./presence.js";
 
 /* THE HOSTED LANE'S ECONOMICS, DAEMON-SIDE. On a machine the platform runs, compute bills for as long as this

@@ -1,8 +1,8 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { capabilitiesOf } from "@intentic/sandbox-contract";
-import type { PersistedAgent } from "../agents/agents-store.js";
-import { statePath } from "../workspace/state-paths.js";
+import type { PersistedAgent } from "../agents/registry/agents-store.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 export type PurgeConversation = Pick<PersistedAgent, "id" | "provider" | "harness" | "sessionId">;
 

@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
-import type { AppEnv } from "../../context.js";
+import type { AppEnv } from "../../app-env.js";
 
 /* Headers about ONE transport connection cannot cross the extension-backend proxy. The child host speaks
  * HTTP/1.1, whose server adds `Connection: keep-alive` and `Keep-Alive` to every answer; the browser-facing

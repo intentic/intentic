@@ -8,7 +8,7 @@ import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { listenerContribution, testConfig } from "../testing.js";
-import { readWorkspaceFile } from "../workspace/workspace-files.js";
+import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { extensionProcessIndex, extensionProcessKey, reconcileListenerProcesses, startAllExtensionProcesses } from "./extension-processes.js";
 
 const GATEWAY_KEY = extensionProcessKey("intentic.discord", "gateway");

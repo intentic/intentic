@@ -1,7 +1,7 @@
 import { safetyContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 
 /* The Safety page's two reads and its one write: the policy document, and the log of what it decided.
  *

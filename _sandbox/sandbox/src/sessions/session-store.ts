@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { statePath, stateRelPath } from "../workspace/state-paths.js";
+import { statePath, stateRelPath } from "../workspace/layout/state-paths.js";
 
 // The Claude Agent SDK keeps its per-conversation state under ~/.claude, the container's ephemeral fs, wiped
 // on every rebuild while /work survives. Point every conversation-owned store at the workspace volume before

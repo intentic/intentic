@@ -1,5 +1,5 @@
 import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract";
-import { type ClaudeStore, ensureFreshToken } from "../claude/claude-credentials.js";
+import { type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
 import type { HeadroomSource } from "./headroom.js";
 import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
 

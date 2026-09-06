@@ -8,14 +8,14 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { z } from "zod";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { createPublicDoor, type PublicDoor, type PublicDoorSpec } from "../automations/public-door.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import type { InstallsStore } from "../store/installs.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 import { fingerprintOf } from "./fingerprint.js";
 import { ISSUES_PROVIDER } from "./provider.js";
 import { wakeBrief } from "./issue-payload.js";

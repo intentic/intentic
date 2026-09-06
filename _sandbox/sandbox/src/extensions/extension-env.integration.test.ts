@@ -9,7 +9,7 @@ import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
 import { extensionDir } from "../capabilities/extension-dirs.js";
 import { fileSecretVault, type SecretVault } from "../capabilities/secret-vault.js";
-import { readWorkspaceFile } from "../workspace/workspace-files.js";
+import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { extensionEnvOf } from "./extension-env.js";
 import { writeExtensionSettings } from "./extension-settings.js";
 

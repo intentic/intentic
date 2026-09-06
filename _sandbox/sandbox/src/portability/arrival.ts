@@ -20,7 +20,7 @@ import { ArrivalFormatError, ArrivalStaleError } from "../arrival-error.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { applyBundle, bundleActions, bundleItems, dropSpool, type HeldBundle, spoolBundle } from "./bundle-arrival.js";
 import { parseDefinitionToml } from "./definition.js";
-import { MAX_UPLOAD_BYTES } from "../workspace/workspace-files-upload.js";
+import { MAX_UPLOAD_BYTES } from "../workspace/files/workspace-files-upload.js";
 
 /* THE ARRIVAL PIPELINE: one plan → apply → report, for every artifact that can come INTO this sandbox.
  *

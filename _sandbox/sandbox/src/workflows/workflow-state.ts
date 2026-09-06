@@ -1,5 +1,5 @@
 import type { AgentSummary, WorkflowRun } from "@intentic/sandbox-contract";
-import { cardProjection } from "../agents/card-projection.js";
+import { cardProjection } from "../agents/registry/card-projection.js";
 
 /* WHAT THE FLEET CARD SAYS ABOUT A WORKFLOW STEP, which run this conversation belongs to, and where in it.
  *

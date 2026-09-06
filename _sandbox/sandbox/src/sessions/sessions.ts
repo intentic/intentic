@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { sdk } from "../claude/claude-sdk.js";
+import { sdk } from "../runtimes/claude/claude-sdk.js";
 import {
     AskQuestionSchema,
     type MatchSnippet,
@@ -10,12 +10,12 @@ import {
     type TranscriptTool,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { stripAttachmentNote } from "../agent/attachment-note.js";
-import { ASK_TOOL_NAMES, parseAnswers } from "../agent/question-answers.js";
-import { parseRuntimeHistory } from "../agent/runtime-history.js";
-import { TaskChecklist } from "../agent/task-checklist.js";
-import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
-import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
+import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
+import { ASK_TOOL_NAMES, parseAnswers } from "../agent/tools/question-answers.js";
+import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
+import { TaskChecklist } from "../agent/run/task-checklist.js";
+import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tools/tool-calls.js";
+import { unwrapStoredPrompt } from "../agent/prompt/turn-preamble.js";
 import type { SearchIndex } from "./search-index.js";
 import { matchLines, sessionOverlay } from "./transcript-search.js";
 

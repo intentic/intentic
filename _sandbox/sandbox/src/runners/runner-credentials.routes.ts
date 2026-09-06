@@ -6,10 +6,10 @@ import {
     runnerTranslatorPath,
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { replaceRejectedToken } from "../claude/claude-credentials.js";
+import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { bearerFrom } from "../auth/auth.js";
-import { type HarnessCredentialsResult, resolveHarnessCredentials } from "../agent/harness-credentials.js";
+import { type HarnessCredentialsResult, resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
 
 /* THE PARENT'S CREDENTIAL DOORS (runner-protocol.ts says the trust shape): a runner's turns spend THIS
  * sandbox's model providers. Three routes, all bearer-authenticated by the runner's own token:

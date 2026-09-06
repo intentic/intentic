@@ -1,8 +1,8 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../claude/claude-sdk.js";
+import { sdk } from "../runtimes/claude/claude-sdk.js";
 import { z } from "zod";
-import { resolveCommandSecrets, type SecretAccess } from "../agent/agent-secrets.js";
-import type { TurnPlacement } from "../agents/isolation.js";
+import { resolveCommandSecrets, type SecretAccess } from "../agent/tools/agent-secrets.js";
+import type { TurnPlacement } from "../agents/worktrees/isolation.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 
 /* THE JS BACKEND AS THE CLAUDE CODE LOOP SEES IT, one tool, a peer of Bash, mounted by agent.ts directly

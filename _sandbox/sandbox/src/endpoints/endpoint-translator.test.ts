@@ -1,7 +1,7 @@
 import { TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { services, withTranslator } from "../route-services.testing.js";
-import { memoryCapabilitiesStore } from "../route-stores.testing.js";
+import { services, withTranslator } from "../harness/route-services.testing.js";
+import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 import type { Config } from "../env.config.js";
 import { withTrialEndpoint } from "../trial/trial-endpoint.js";
 import { endpointCompatEntries } from "./endpoint-translator.js";

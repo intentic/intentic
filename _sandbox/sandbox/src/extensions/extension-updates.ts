@@ -16,7 +16,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { updateBrief } from "@intentic/sandbox-contract/chores";
 import { z } from "zod";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, parseExtensionManifest, readExtensionManifest } from "../capabilities/extension-dirs.js";
 import { gitAuthHeader, previousDir } from "../capabilities/git-checkout.js";
@@ -26,7 +26,7 @@ import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 import { readExtensionEnablement, writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, processesDesired, reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";

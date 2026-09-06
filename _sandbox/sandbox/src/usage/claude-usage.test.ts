@@ -1,6 +1,6 @@
 import { pino } from "pino";
 import { expect, test } from "vitest";
-import { type ClaudeStore, displayLabel, type StoredAccount } from "../claude/claude-credentials.js";
+import { type ClaudeStore, displayLabel, type StoredAccount } from "../runtimes/claude/claude-credentials.js";
 import { claudeHeadroomSource, claudeUsageWindows, readClaudeUsage } from "./claude-usage.js";
 
 /* The Anthropic OAuth usage payload, pinned: a private endpoint rather than a published contract, so what

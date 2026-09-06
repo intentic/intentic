@@ -2,8 +2,8 @@ import { choreById, PROBES } from "@intentic/sandbox-contract/chores";
 import { choresContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
-import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
+import type { OrpcContext } from "../app-env.js";
+import { discoverRepos, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { choreSignals } from "./chore-signals.js";
 
 /* The maintenance routes. `list` is the whole surface's data: every repo's standing evidence in one read, because

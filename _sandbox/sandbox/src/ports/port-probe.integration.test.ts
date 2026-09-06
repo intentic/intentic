@@ -5,7 +5,7 @@ import https from "node:https";
 import net from "node:net";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
+import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { expect, test } from "vitest";
 import { answers, cachedScheme, detectScheme } from "./port-probe.js";
 

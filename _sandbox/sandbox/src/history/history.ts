@@ -14,9 +14,9 @@ import {
 import { STATE_DIR } from "@intentic/constants";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
-import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/diff-partial.js";
+import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
-import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/repo-discovery.js";
+import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // Daemon-owned workspace history: every scope (the /work root plus each discovered repo under it) gets a

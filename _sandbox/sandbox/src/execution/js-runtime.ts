@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { whenAborted } from "../abort.js";
-import type { TurnPlacement } from "../agents/isolation.js";
-import { inWorktree, nsenterArgv } from "../agents/isolation.js";
+import type { TurnPlacement } from "../agents/worktrees/isolation.js";
+import { inWorktree, nsenterArgv } from "../agents/worktrees/isolation.js";
 import type { TurnPersona } from "../personas/personas.js";
-import { resolveWithin } from "../workspace/workspace-files-paths.js";
+import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 
 /* THE JS EXECUTION BACKEND, the second way a turn runs work of its own, beside the shell
  * (AgentCapabilities.execution in the contract).

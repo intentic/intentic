@@ -1,8 +1,8 @@
 import { loopCanConverge, loopsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { loopRunning, runLoop, stopLoop } from "./loop-runner.js";
 
 /* The loop routes. Thin by design, the pump owns everything that happens after `start` acks, because a loop

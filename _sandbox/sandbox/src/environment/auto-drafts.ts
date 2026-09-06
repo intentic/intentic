@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@intentic/sandbox-contract";
 import { installLive } from "./drift.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* THE AUTO-DRAFTER: the daemon writing the overlay draft the model was told to write and, six cargo-xwin
  * reinstalls later, demonstrably never did.

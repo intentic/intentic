@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { type GitHost, gitHostOf } from "../capabilities/cli/git-access.js";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
-import { parseRemote, remoteUrlsOf } from "../git/remote-urls.js";
-import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
+import { parseRemote, remoteUrlsOf } from "../git/remote/remote-urls.js";
+import { discoverRepos, hasGitEntry } from "../workspace/layout/repo-discovery.js";
 
 /* Which CI project stands behind each workspace repo. A repo is mapped when ANY of its remotes' HOSTNAMES
  * matches a connected github/gitlab capability (github.com is fixed; a gitlab host comes from the capability's

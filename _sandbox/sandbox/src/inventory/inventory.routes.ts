@@ -2,7 +2,7 @@ import { type InventoryEntry, inventoryContract } from "@intentic/sandbox-contra
 import { readManagedRegion, writeManagedRegion } from "@intentic/scaffold";
 import { implement } from "@orpc/server";
 
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { type ConfigStoreDeps, createConfigStore } from "./config-store.js";
 
 export type InventoryRoutesDeps = ConfigStoreDeps;

@@ -3,10 +3,10 @@ import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
-import type { ScriptsProbe } from "../agent/agent-verification.js";
+import type { ScriptsProbe } from "../agent/verification/agent-verification.js";
 import { syncHookOutput } from "../testing.js";
 import type { RuleCommandRun } from "./rule-command.js";
-import { TEST_WRITING_NOTE } from "../agent/agent-tests.js";
+import { TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
 import { type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";
 
 const SCRIPTS: ScriptsProbe = async () => ["test", "lint", "dev"];

@@ -1,9 +1,9 @@
 import { settingsContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
-import { INTENTIC_PROMPT } from "../agent/intentic-prompt.js";
-import { presetSystemPrompt } from "../agent/preset-prompt.js";
+import { INTENTIC_PROMPT } from "../agent/prompt/intentic-prompt.js";
+import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { readInputSavings } from "../logs/filter-stats.js";
 import { readTierReport } from "../usage/tier-report.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";

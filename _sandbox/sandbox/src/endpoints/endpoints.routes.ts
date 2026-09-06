@@ -1,7 +1,7 @@
 import { endpointsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { endpointConfigOf } from "./local-model.js";
 
 export type EndpointsRoutesDeps = Pick<Services, "capabilities" | "endpointModels" | "trial">;

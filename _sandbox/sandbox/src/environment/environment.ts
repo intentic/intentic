@@ -7,7 +7,7 @@ import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, step
 import { containerBornAtMs, installLive } from "./drift.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { providerPackFragments } from "./provider-packs.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 // The overlay Dockerfile extending the sandbox image. The approved file is DAEMON-COMPOSED from three parts:
 // the pinned FROM, the enabled capabilities' code-versioned fragments (see CapabilityHandler.fragment), and the

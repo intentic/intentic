@@ -2,7 +2,7 @@ import { EnvironmentRuntimeDecisionSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { readEnvironmentContents } from "./contents.js";
 import { approveEnvironment, decideRuntimeInstall, readEnvironment, rejectEnvironment } from "./environment.js";
 import { clearVersionCache } from "./version-probe.js";

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 
 import { checks } from "./invariant.js";
-import type { ProcessIdentity } from "./proc-stat.js";
+import type { ProcessIdentity } from "./resources/proc-stat.js";
 
 /* 2026-07-31, from the survivor's side. A second daemon booted, took the claim, converged HOME onto its own
  * roots, and the daemon that had been running went on believing the answer it got at ITS boot: converging,

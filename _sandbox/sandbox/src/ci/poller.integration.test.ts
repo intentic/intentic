@@ -8,7 +8,7 @@ import { unstubbed } from "@intentic/testing";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
-import { fileTurnJournal } from "../agent/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";

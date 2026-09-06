@@ -1,13 +1,13 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
 import { presentedDoorToken } from "../auth/door-tokens.js";
 import { sessionStart } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { gateVerdictOf } from "./workflow-gate.js";

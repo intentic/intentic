@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { compareUnrankedModelIds, type EndpointConfig, type Model, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { localTolerantFetch } from "../platform/local-tls.js";
+import { localTolerantFetch } from "../platform/tls/local-tls.js";
 import { endpointHeaders, unversionedBase, versionedBase } from "./endpoint-config.js";
 
 /* WHAT AN ENDPOINT SERVES, read from the server itself, and from nowhere else.

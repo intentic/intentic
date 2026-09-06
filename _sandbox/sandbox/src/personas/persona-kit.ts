@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseSkillFile, skillDocument } from "../settings/skill-file.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* A PERSONA'S OWN KIT, the prompt it runs on, the skills it can reach, the tools that are its and nobody
  * else's. One folder per card, beside the card itself.

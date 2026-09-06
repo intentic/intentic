@@ -1,5 +1,5 @@
 /* The JS-rendering fallback: the image's own Chromium, driven headless through playwright. Chromium is a
- * FEATURE PACK, not a base-image staple (packs/browser.Dockerfile), so availability is a runtime fact:
+ * FEATURE PACK, not a base-image staple (image-packs/browser.Dockerfile), so availability is a runtime fact:
  * playwright's executablePath() DERIVES a path from its pinned revision and returns it whether or not the
  * pack put a browser there, and the existsSync gate below is what turns that claim into an answer — the
  * same gate browser-tools.ts uses for the agent's interactive browser. Absent, webq degrades to the static
@@ -26,7 +26,7 @@ export const chromiumAvailable = async (): Promise<boolean> => {
 export const renderPage = async (url: string, timeoutMs: number): Promise<RenderedPage> => {
     const { chromium } = await import("playwright");
     // executablePath stated explicitly: a bare headless launch reaches for the separate headless-shell
-    // build, which the image deliberately does not carry (packs/browser.Dockerfile deletes it) — the full
+    // build, which the image deliberately does not carry (image-packs/browser.Dockerfile deletes it) — the full
     // browser under --headless is the one Chromium everything in the sandbox shares.
     browser ??= await chromium.launch({ executablePath: chromium.executablePath(), headless: true, args: ["--no-sandbox"] });
     const context = await browser.newContext({ javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });

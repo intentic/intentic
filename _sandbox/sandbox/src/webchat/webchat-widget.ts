@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { Context } from "hono";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 
 /* Serves the Front Desk bundle at /webchat/widget.js, the one <script> a customer's page loads.
  *

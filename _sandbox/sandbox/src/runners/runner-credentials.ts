@@ -7,7 +7,7 @@ import {
     runnerCredentialsUrl,
     runnerTranslatorUrl,
 } from "@intentic/sandbox-contract";
-import type { HarnessCredentialsResult } from "../agent/harness-credentials.js";
+import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
 /* THE RUNNER'S SIDE of the credential doors: a dispatched turn authenticates with whatever the ORIGIN

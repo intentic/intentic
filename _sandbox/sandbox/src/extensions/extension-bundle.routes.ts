@@ -2,8 +2,8 @@ import { join } from "node:path";
 import type { Context } from "hono";
 import { extensionDir, extensionRead } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
-import { sha256Text } from "../workspace/workspace-files.js";
+import type { AppEnv } from "../app-env.js";
+import { sha256Text } from "../workspace/files/workspace-files.js";
 import { installedExtensions } from "./installed-extensions.js";
 
 export type ExtensionBundleRouteDeps = Pick<Services, "workspace" | "files" | "capabilities" | "config" | "git">;

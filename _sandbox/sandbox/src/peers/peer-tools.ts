@@ -1,5 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import type { AgentTool } from "../agent/agent-tools.js";
+import type { AgentTool } from "../agent/tools/agent-tools.js";
 import { PEER_BRIDGES } from "./peer.js";
 
 /* The agent's tools for the user's own peers, the parallel to mcpToolsOf with one difference that is the whole

@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../claude/claude-sdk.js";
+import { sdk } from "../runtimes/claude/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
-import { createRequest, resolveRequest } from "../agent/agent-requests.js";
+import { createRequest, resolveRequest } from "../agent/tools/agent-requests.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { captureScrollback } from "./terminal-session.js";

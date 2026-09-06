@@ -107,7 +107,7 @@ test("a rung resolves to its own token count, a custom entry to the number typed
 });
 
 // A form cannot submit this; a hand-edited manifest can. The window has a good answer available, so it takes it
-// rather than refusing, and the apply says which one it took (localmodel.ts states that asymmetry in full).
+// rather than refusing, and the apply says which one it took (localmodel.handler.ts states that asymmetry in full).
 test("custom with no number falls back to the default rung", () => {
     expect(localModelWindow({ model: "owner/repo/m.gguf", gpu: "off", context: "custom" })).toBe(Number(LOCAL_MODEL_WINDOW_DEFAULT));
 });

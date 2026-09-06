@@ -11,7 +11,7 @@ import { expect, test } from "vitest";
  * someone remembered to write down, which is the failure AGENTS.md names: "a hardcoded file list repeats the
  * miss it exists to prevent", so this recognizes violations by their SHAPE instead.
  *
- * "Every path the daemon builds is declared" is no longer checked here: `statePath` (workspace/state-paths.ts)
+ * "Every path the daemon builds is declared" is no longer checked here: `statePath` (workspace/layout/state-paths.ts)
  * takes `WorkspaceStatePath`, the literal union of the table's own paths, so an undeclared path does not compile.
  * That is a stronger statement than a regex sweep can make: it holds for computed call sites, generated leaves
  * and shapes this pattern would never have matched, but it holds only for paths that go THROUGH statePath. So
@@ -31,7 +31,7 @@ const ROOT_EXPRESSIONS = new Set(["workspace.root", "services.workspace.root", "
 const SOURCE_ROOT = join(packageRoot(import.meta.url), "src");
 
 // The module that REPLACES the raw spelling has to quote it to explain itself, and a doc comment is not a call.
-const EXEMPT = "workspace/state-paths.ts";
+const EXEMPT = "workspace/layout/state-paths.ts";
 
 const sourceFiles = async (dir: string): Promise<string[]> => {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -94,7 +94,7 @@ test("every workspace-root .intentic path goes through statePath, where the tabl
 
     expect(
         [...new Set(rawJoins)].toSorted(),
-        'Build these with statePath(root, ".intentic/…") from workspace/state-paths.ts instead of join(). A raw join bypasses WorkspaceStatePath, so the path can name a file WORKSPACE_STATE_FILES doesn\'t declare and no view ever refreshes for it.',
+        'Build these with statePath(root, ".intentic/…") from workspace/layout/state-paths.ts instead of join(). A raw join bypasses WorkspaceStatePath, so the path can name a file WORKSPACE_STATE_FILES doesn\'t declare and no view ever refreshes for it.',
     ).toEqual([]);
 });
 

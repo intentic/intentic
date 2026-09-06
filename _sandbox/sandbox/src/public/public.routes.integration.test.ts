@@ -6,7 +6,7 @@ import { publicContract } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
 import { expect, test } from "vitest";
-import { errorCode, routesClient } from "../route-client.testing.js";
+import { errorCode, routesClient } from "../harness/route-client.testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createPublicRoutes, type PublicRoutesDeps } from "./public.routes.js";

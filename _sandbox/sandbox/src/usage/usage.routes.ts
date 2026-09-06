@@ -2,7 +2,7 @@ import { usageContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import { claimLimitReset, readLimitReset } from "./claude-limit-reset.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 
 export type UsageRoutesDeps = Pick<Services, "headroom" | "usage" | "claudeStore">;
 

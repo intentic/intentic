@@ -1,6 +1,6 @@
 import { request } from "node:https";
 import type { Config } from "../env.config.js";
-import { isLocalHost } from "./local-tls.js";
+import { isLocalHost } from "./tls/local-tls.js";
 
 // A single authenticated POST to the platform, authenticated by possession of the connect token (the announce
 // pattern). node:https instead of fetch: undici can't skip TLS verification per-request, and a localhost dev

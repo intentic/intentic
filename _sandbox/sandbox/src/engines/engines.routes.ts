@@ -1,9 +1,9 @@
 import { EngineChannelInputSchema, EngineRevertInputSchema, EngineUpdateInputSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { opt } from "../agent/opt.js";
+import { opt } from "../agent/run/opt.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { enginesView, revertEngine, setChannel, updateEngine } from "./engines.js";
 
 /* THE AGENT ENGINES: which version of Claude Code, codex, @cursor/sdk, opencode and the translator this

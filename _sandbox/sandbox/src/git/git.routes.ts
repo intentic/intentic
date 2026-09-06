@@ -4,15 +4,15 @@ import { join } from "node:path";
 import { gitContract, type GitChange, type GitChanges, type OriginAgent, type RepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
-import { isValidRepoId } from "../workspace/repo-discovery.js";
-import { currentRepos } from "../workspace/repo-watch.js";
-import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/workspace-files-paths.js";
-import type { ActionResult } from "./changes-commits.js";
-import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./code-counts.js";
+import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
+import { currentRepos } from "../workspace/watch/repo-watch.js";
+import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
+import type { ActionResult } from "./changes/changes-commits.js";
+import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
-import { createPushRuns } from "./push-run.js";
+import { createPushRuns } from "./ops/push-run.js";
 
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
 // per-batch refetch storm, short enough that a save still shows up in the panel as it happens.

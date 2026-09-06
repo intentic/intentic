@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
-import { withRuntimeHistory } from "../agent/runtime-history.js";
+import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, readWorkspaceSessionTail, searchWorkspaceSessions } from "./sessions.js";
 import { IN_MEMORY, openSearchIndex } from "./search-index.js";
 import { readSessionLines } from "./transcript-search.js";

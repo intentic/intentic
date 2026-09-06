@@ -2,8 +2,8 @@ import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { fieldsValidator, type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract";
-import type { RoleAnswer } from "../agent/role-answer.js";
-import { askRoleModel } from "../agent/role-model.js";
+import type { RoleAnswer } from "../agent/models/role-answer.js";
+import { askRoleModel } from "../agent/models/role-model.js";
 import type { Services } from "../composition.js";
 import { verdictPathIn } from "./loop-brief.js";
 

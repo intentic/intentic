@@ -53,7 +53,7 @@ export interface AppInstanceInput {
 }
 
 // True for dirs under `_apps/`, these are per-instance and get renamed when the instance name differs from
-// the template key. Everything else (e.g. `_platform/api-contract`, `_platform/prisma`) is shared infra that keeps
+// the template key. Everything else (e.g. `_shared/api-contract`, `_platform/prisma`) is shared infra that keeps
 // its canonical name and is only injected once.
 export const isAppDir = (dir: string): boolean => dir.startsWith("_apps/");
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { type EngineId, type EngineQuarantine, EngineQuarantineSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { opt } from "../agent/opt.js";
+import { opt } from "../agent/run/opt.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 
 /* THE ENGINE STORE: versions of the upstream agent programs, kept beside the daemon rather than inside its

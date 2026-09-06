@@ -201,8 +201,8 @@ describe("conformance: every daemon-mounted MCP server is classified", () => {
 
     test("agent.ts and turn-plan.ts mount nothing unclassified", () => {
         const mounted = [
-            ...mountedIn("agent/agent.ts", /mcpServers:\s*\{[\s\S]*?\n\s{8}\}/),
-            ...mountedIn("agent/turn-plan.ts", /const sdkServers = \{[\s\S]*?\n {4}\};/),
+            ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{[\s\S]*?\n\s{8}\}/),
+            ...mountedIn("agent/run/turn-plan.ts", /const sdkServers = \{[\s\S]*?\n {4}\};/),
         ];
         // Sanity: the scan found the blocks at all, so a refactor that moves them fails loudly here rather
         // than passing vacuously.

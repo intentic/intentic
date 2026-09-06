@@ -10,7 +10,7 @@ import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { upsertEnv } from "../secrets/secrets.routes.js";
 import { reconcileSkills, writeOwnSkill } from "../settings/skills.js";
-import { resolveWithin } from "../workspace/workspace-files-paths.js";
+import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { Files, SourcePlan } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
 import { applyMigration, type MigrationDeps, SecretsInactiveError } from "./apply.js";

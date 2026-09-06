@@ -1,7 +1,7 @@
 import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { foldTurn, TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { describe, expect, it } from "vitest";
-import { withRuntimeHistory } from "../agent/runtime-history.js";
+import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { openingRows } from "./turn-transcript.js";
 
 // When the turn started: what its user row is stamped with (TranscriptRow.sentAt).

@@ -1,6 +1,6 @@
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
-import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
-import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.js";
+import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
+import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import type { ListeningPort } from "./port-scan.js";
 

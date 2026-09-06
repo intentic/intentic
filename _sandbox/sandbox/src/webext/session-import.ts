@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, WebExtSessionImport } from "@intentic/sandbox-contract";
-import { acquireProfileLock, isProfileOpen, markConnected, profileOwner, releaseProfileLock, sessionDir } from "../browser/session-store.js";
+import { acquireProfileLock, isProfileOpen, markConnected, profileOwner, releaseProfileLock, sessionDir } from "../browser/sessions/session-store.js";
 
 /* THE ONE PLACE A SESSION CROSSES FROM THE PERSON'S BROWSER INTO THE SANDBOX'S.
  *

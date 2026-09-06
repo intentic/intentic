@@ -1,7 +1,7 @@
 import { skillsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { parseSkillFile } from "./skill-file.js";
 import { readSkillText, skillInventory } from "./skill-inventory.js";
 import { isBakedSkill, readOwnSkill, reconcileSkills, removeOwnSkill, writeOwnSkill } from "./skills.js";

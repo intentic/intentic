@@ -15,7 +15,7 @@ const sandboxRoot = join(repoRoot, "_sandbox/sandbox");
 test("profiles name real packs, and placement/overlayability inference matches each pack's content", async () => {
     const packs = await listPacks();
     const byName = new Map(packs.map((pack) => [pack.name, pack]));
-    const profiles = JSON.parse(readFileSync(join(sandboxRoot, "packs/profiles.json"), "utf8")).profiles as Record<string, string[]>;
+    const profiles = JSON.parse(readFileSync(join(sandboxRoot, "image-packs/profiles.json"), "utf8")).profiles as Record<string, string[]>;
     expect(profiles["core"]).toEqual([]);
     for (const name of profiles["standard"] ?? []) {
         expect(byName.has(name), `standard profile names unknown pack "${name}"`).toBe(true);
@@ -150,12 +150,12 @@ test("a provider CLI present on this machine reports the version its pack pins",
 
     const codexVersion = reported("codex");
     if (codexVersion !== undefined) {
-        expect(codexVersion, "the codex on PATH is not the version packs/codex.Dockerfile pins").toBe(await pinOf("codex", /@openai\/codex@(\S+) /));
+        expect(codexVersion, "the codex on PATH is not the version image-packs/codex.Dockerfile pins").toBe(await pinOf("codex", /@openai\/codex@(\S+) /));
     }
 
     const opencodeVersion = reported("opencode");
     if (opencodeVersion !== undefined) {
-        expect(opencodeVersion, "the opencode on PATH is not the version packs/opencode.Dockerfile pins").toBe(
+        expect(opencodeVersion, "the opencode on PATH is not the version image-packs/opencode.Dockerfile pins").toBe(
             await pinOf("opencode", /opencode-ai@(\S+) /),
         );
     }
@@ -167,7 +167,7 @@ test("a provider CLI present on this machine reports the version its pack pins",
     const cursorDir = process.env["INTENTIC_CURSOR_SDK_DIR"] ?? "/opt/cursor-sdk";
     const cursorManifest = join(cursorDir, "node_modules/@cursor/sdk/package.json");
     if (existsSync(cursorManifest)) {
-        expect(JSON.parse(readFileSync(cursorManifest, "utf8")).version, `the @cursor/sdk in ${cursorDir} is not the version packs/cursor.Dockerfile pins`).toBe(
+        expect(JSON.parse(readFileSync(cursorManifest, "utf8")).version, `the @cursor/sdk in ${cursorDir} is not the version image-packs/cursor.Dockerfile pins`).toBe(
             await pinOf("cursor", /@cursor\/sdk@(\S+) /),
         );
     }
@@ -182,7 +182,7 @@ test("compose-image-dockerfile.mjs stamps the hashes this module computes, in th
     // The PROFILE's packs, not every shipped pack: llamacpp-cuda is deliberately overlay-only (hundreds of MB
     // of CUDA runtime only a GPU-granted sandbox can use), so a stamp for it would be a lie the recompose
     // reads as "already baked" and the GPU option would silently never install its build.
-    const profiles = JSON.parse(readFileSync(join(sandboxRoot, "packs/profiles.json"), "utf8")).profiles as Record<string, string[]>;
+    const profiles = JSON.parse(readFileSync(join(sandboxRoot, "image-packs/profiles.json"), "utf8")).profiles as Record<string, string[]>;
     const standard = new Set(profiles["standard"] ?? []);
     for (const pack of await listPacks()) {
         if (!standard.has(pack.name)) {

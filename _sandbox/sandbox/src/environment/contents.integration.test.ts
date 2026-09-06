@@ -6,7 +6,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
-import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
+import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { readEnvironmentContents } from "./contents.js";
 import { customPath, proposalPath } from "./environment.js";
 import { clearVersionCache } from "./version-probe.js";

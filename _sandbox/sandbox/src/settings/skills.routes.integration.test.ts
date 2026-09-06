@@ -6,10 +6,10 @@ import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
-import { clientFor, errorCode } from "../route-client.testing.js";
-import { fakeFiles, tempWorkspace } from "../route-fakes.testing.js";
-import { services } from "../route-services.testing.js";
-import { memoryCapabilitiesStore } from "../route-stores.testing.js";
+import { clientFor, errorCode } from "../harness/route-client.testing.js";
+import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { services } from "../harness/route-services.testing.js";
+import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 
 /* THE SKILLS ROUTES over the daemon's real HTTP surface, driven exactly as the browser drives them.
  *

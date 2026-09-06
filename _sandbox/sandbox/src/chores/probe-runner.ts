@@ -5,7 +5,7 @@ import { PROBES, type ProbeSpec, WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sa
 import type { ProbeId, ProbeResult, RunningProbe } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
-import { discoverRepos } from "../workspace/repo-discovery.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { type ChoresStore, isStale, probeOf } from "./chores-store.js";
 
 const execFileAsync = promisify(execFile);

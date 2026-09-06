@@ -1,8 +1,8 @@
-import { sdk } from "../claude/claude-sdk.js";
+import { sdk } from "../runtimes/claude/claude-sdk.js";
 import type { MatchSnippet, TranscriptRow, Speaker } from "@intentic/sandbox-contract";
-import { stripAttachmentNote } from "../agent/attachment-note.js";
-import { parseRuntimeHistory } from "../agent/runtime-history.js";
-import { stripTurnPreamble } from "../agent/turn-preamble.js";
+import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
+import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
+import { stripTurnPreamble } from "../agent/prompt/turn-preamble.js";
 
 /* What was SAID in a session, per side, the text the fleet filter and the history search match on.
  *

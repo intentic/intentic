@@ -3,10 +3,10 @@ import { join } from "node:path";
 import type { Persona } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { createApp } from "../app.js";
-import { clientFor, errorCode } from "../route-client.testing.js";
-import { tempWorkspace } from "../route-fakes.testing.js";
-import { services } from "../route-services.testing.js";
-import { memoryPersonasStore } from "../route-stores.testing.js";
+import { clientFor, errorCode } from "../harness/route-client.testing.js";
+import { tempWorkspace } from "../harness/route-fakes.testing.js";
+import { services } from "../harness/route-services.testing.js";
+import { memoryPersonasStore } from "../harness/route-stores.testing.js";
 
 /* THE PERSONA KIT ROUTES over the daemon's real HTTP surface, on a real temp workspace.
  *

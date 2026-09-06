@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { createApp } from "../../app.js";
 import type { Services } from "../../composition.js";
-import { services } from "../../route-services.testing.js";
+import { services } from "../../harness/route-services.testing.js";
 import { testConfig } from "../../testing.js";
 import { workspaceExtensionsRoot } from "../../capabilities/extension-dirs.js";
 import { workspacePaths } from "../../workspace/workspace.js";

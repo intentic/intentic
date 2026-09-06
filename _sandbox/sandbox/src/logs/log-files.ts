@@ -3,7 +3,7 @@ import { type FileHandle, open, readFile, readdir, rm, stat, writeFile } from "n
 import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import type { LogFileEntry } from "@intentic/sandbox-contract";
-import { resolveWithin } from "../workspace/workspace-files-paths.js";
+import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 
 // Daemon-owned debug logs under historyRoot/logs: terminal pipe-pane captures (terminals/), intentic CLI run
 // logs (intentic-runs/), the daemon's own pino file (daemon.log), and its resource time series

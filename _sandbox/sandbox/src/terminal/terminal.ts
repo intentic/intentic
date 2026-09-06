@@ -8,7 +8,7 @@ import type { WebSocket } from "ws";
 import type { Services } from "../composition.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import { SERVICE_SESSION_PREFIX } from "../processes/service-processes.js";
-import { resolveWithin } from "../workspace/workspace-files-paths.js";
+import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { isValidSessionName } from "./terminal-session.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
 

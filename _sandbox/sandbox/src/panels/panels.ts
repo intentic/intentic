@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ListeningPort } from "../ports/port-scan.js";
-import { discoverRepos } from "../workspace/repo-discovery.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // Per-repository operator panels. Every discovered git repo under /work is one sidebar entry; a repo exposes

@@ -1,6 +1,6 @@
 import type { InvariantCheck } from "../invariants/invariants.js";
-import { claimHolder, type ContainerRole, type DaemonRoots } from "./container-owner.js";
-import { processIdentity, type ProcessIdentity } from "./proc-stat.js";
+import { claimHolder, type ContainerRole, type DaemonRoots } from "./boot/container-owner.js";
+import { processIdentity, type ProcessIdentity } from "./resources/proc-stat.js";
 
 /* ONE CONTAINER, ONE DAEMON, still true, or no longer true.
  *

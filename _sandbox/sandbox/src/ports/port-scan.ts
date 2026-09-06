@@ -1,6 +1,6 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
-import { parentPid } from "../platform/proc-stat.js";
+import { parentPid } from "../platform/resources/proc-stat.js";
 
 // Discovers every listening TCP socket in the sandbox by reading procfs directly, no lsof/ss dependency, a
 // handful of file reads per scan, cheap enough to run on demand per /ports request. This is the generic

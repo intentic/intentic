@@ -4,7 +4,7 @@ import { SHARE_DIR, SHARE_ID, shareId } from "@intentic/sandbox-contract/share-p
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { publishShare, unpublishShare, viewerDist } from "./share-publish.js";
 import { shareTranscript } from "./share-payload.js";
 import type { StoredShare } from "./share-store.js";

@@ -3,7 +3,7 @@ import { ORPCError } from "@orpc/server";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { enrollHost } from "./enroll-host.js";
 
 // POST /enroll. Deploy-target enrollment from the connect-host script (curl, not a browser): authenticated by

@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./exports.js";
 
 /* The environment BUNDLE: this sandbox's two volumes packed for a move, and the restore that unpacks one.

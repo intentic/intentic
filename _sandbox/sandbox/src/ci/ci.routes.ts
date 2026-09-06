@@ -1,12 +1,12 @@
 import { errorMessage } from "@intentic/base/errors";
 import { type AgentTurn, ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/agent.routes.js";
-import { startConversationTurn } from "../agent/turn-resume.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
+import { startConversationTurn } from "../agent/run/turn-resume.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 

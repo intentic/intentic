@@ -2,7 +2,7 @@ import type { ChoreLedgerEntry, ProbeId, ProbeResult } from "@intentic/sandbox-c
 import { ChoreLedgerEntrySchema, ProbeResultSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
-import { stateRelPath } from "../workspace/state-paths.js";
+import { stateRelPath } from "../workspace/layout/state-paths.js";
 
 /* The two files the maintenance surface persists, both under <workspace>/.intentic/records/chores/ and both deliberately
  * boring: a cache of what the probes measured, and a ledger of what has been done about it.

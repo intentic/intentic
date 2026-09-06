@@ -1,5 +1,5 @@
 import type { AgentHarness, AgentProvider, TranscriptRow } from "@intentic/sandbox-contract";
-import type { TurnAnchor, TurnAnchors } from "../agent/turn-anchors.js";
+import type { TurnAnchor, TurnAnchors } from "../agent/anchors/turn-anchors.js";
 import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
 import type { TranscriptPage, TranscriptRecord, TranscriptWindow } from "./transcript-record.js";
 

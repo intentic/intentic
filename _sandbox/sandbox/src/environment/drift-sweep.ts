@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import { readWorkspaceFile, writeWorkspaceFile } from "../workspace/workspace-files.js";
+import { readWorkspaceFile, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { synthesizeAutoDrafts } from "./auto-drafts.js";
 import { clearDriftCache, computeDrift } from "./drift.js";
 import type { RuntimeInstallsStore } from "./runtime-installs.js";

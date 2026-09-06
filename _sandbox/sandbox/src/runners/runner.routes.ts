@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 
 /* The one owner route a runner has beyond its peer door (runner-peer.ts): the settings push.

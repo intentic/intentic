@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import type { Logger } from "pino";
 import { isCandidatePath } from "@intentic/fileq/formats";
-import { stateRelPath } from "../workspace/state-paths.js";
+import { stateRelPath } from "../workspace/layout/state-paths.js";
 
 /* THE EAGER HALF OF FILEQ: markdown shadows of binary workspace files, converged in the BACKGROUND so a
  * reasoning-time read hits a sidecar that already exists instead of paying a parse mid-task. The lazy half

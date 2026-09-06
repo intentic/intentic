@@ -1,11 +1,11 @@
 import { createHmac } from "node:crypto";
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { dispatchCiRun } from "./events.js";
 import { ciClientFor, type FetchFn, type GithubRun, githubRun, type GitlabPipelineHook, gitlabHookRun, gitlabStatus } from "./providers.js";
 import { ciProjects } from "./projects.js";

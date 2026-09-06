@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
-import { parentPid } from "../platform/proc-stat.js";
+import { parentPid } from "../platform/resources/proc-stat.js";
 import { scanListeningPorts, withOwningSessions } from "./port-scan.js";
 
 // A procfs fixture tree: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}. The fd entries are dangling

@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import type { SecretAccess, SecretUseReport } from "../agent/agent-secrets.js";
+import type { SecretAccess, SecretUseReport } from "../agent/tools/agent-secrets.js";
 import type { JsExecutionPlan } from "./js-runtime.js";
 import { type JsToolDeps, runJsTool } from "./js-tool.js";
 

@@ -4,9 +4,9 @@ import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
 
-import { clientFor, errorCode } from "../route-client.testing.js";
-import { fakeFiles, fakeHistory, tempWorkspace } from "../route-fakes.testing.js";
-import { services } from "../route-services.testing.js";
+import { clientFor, errorCode } from "../harness/route-client.testing.js";
+import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { services } from "../harness/route-services.testing.js";
 
 /* The git routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:

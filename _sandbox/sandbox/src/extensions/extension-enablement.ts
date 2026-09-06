@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 // The owner's per-extension on/off switch (<workspace>/.intentic/config/extension-enablement.json), keyed by the
 // manifest-derived extension id (publisher.name), the same key extension-settings.json uses, so the choice

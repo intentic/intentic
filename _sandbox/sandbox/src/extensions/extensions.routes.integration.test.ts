@@ -15,9 +15,9 @@ import { listenerProvidersOf } from "./installed-extensions.js";
 
 import { workspacePaths } from "../workspace/workspace.js";
 
-import { clientFor, errorCode } from "../route-client.testing.js";
-import { services } from "../route-services.testing.js";
-import { memoryCapabilitiesStore } from "../route-stores.testing.js";
+import { clientFor, errorCode } from "../harness/route-client.testing.js";
+import { services } from "../harness/route-services.testing.js";
+import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 
 /* The extensions routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:

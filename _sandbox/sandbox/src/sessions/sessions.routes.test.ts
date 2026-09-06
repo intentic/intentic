@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { sessionsContract } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test, vi } from "vitest";
-import { routesClient } from "../route-client.testing.js";
+import { routesClient } from "../harness/route-client.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { type SessionsRoutesDeps, createSessionsRoutes } from "./sessions.routes.js";
 

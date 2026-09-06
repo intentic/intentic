@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { SharePayload } from "@intentic/sandbox-contract";
 import { SHARE_DIR, SHARE_VIEWER_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicRoot } from "../public/public-files.js";
-import { resolveWithin } from "../workspace/workspace-files-paths.js";
+import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { sharePage } from "./share-page.js";
 import type { SharePicture } from "./share-payload.js";
 

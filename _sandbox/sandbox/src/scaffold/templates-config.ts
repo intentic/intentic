@@ -1,7 +1,7 @@
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE, fetchTemplateManifest, type TemplateManifest } from "@intentic/scaffold";
 import type { TemplateSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 export interface TemplatesConfig {
     readonly source: string;

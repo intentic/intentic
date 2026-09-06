@@ -5,10 +5,10 @@ import {
     matchCommand,
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
-import { judgeCommand } from "../agent/command-judge.js";
-import { raiseCard } from "../agent/offer-card.js";
-import { RoleModelUnsetError } from "../agent/role-model-unset.js";
-import { turnRunOf } from "../agent/turn-runs.js";
+import { judgeCommand } from "../agent/tools/command-judge.js";
+import { raiseCard } from "../agent/run/offer-card.js";
+import { RoleModelUnsetError } from "../agent/models/role-model-unset.js";
+import { turnRunOf } from "../agent/run/turn-runs.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";

@@ -5,7 +5,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
 /* Feature packs, the single unit of image growth. A pack is a checked-in Dockerfile fragment
  * (packs/<name>.Dockerfile in this package): the SAME file is spliced into a published image by
- * _tools/scripts/image/compose-image-dockerfile.mjs when a profile bakes it (packs/profiles.json), and composed into
+ * _tools/scripts/image/compose-image-dockerfile.mjs when a profile bakes it (image-packs/profiles.json), and composed into
  * the environment overlay by a capability/provider that needs it on demand, one source, so the baked and
  * on-demand paths cannot drift.
  *
@@ -27,7 +27,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 // packs/ ships inside the deployed package (package.json has no `files` allowlist). Anchored to the package's
 // OWN root rather than counted back from this file, so it resolves from dist/environment in the image
 // (/opt/sandbox/packs) and from src/environment in a dev run alike, and keeps doing so if this file moves.
-const packsDir = join(packageRoot(import.meta.url), "packs");
+const packsDir = join(packageRoot(import.meta.url), "image-packs");
 
 /* Where the image-compose splice stamps what the BASE image bakes (content hash per pack). An absent stamp,
  * core image, dev run, or a pack newer than this base, reads as "not baked".

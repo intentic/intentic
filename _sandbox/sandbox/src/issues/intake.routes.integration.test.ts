@@ -13,7 +13,7 @@ import {
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { expect, test } from "vitest";
-import { fileTurnJournal } from "../agent/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn-journal.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";

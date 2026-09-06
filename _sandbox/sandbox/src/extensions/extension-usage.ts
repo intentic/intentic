@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* WHICH OF THE ROUTES AN EXTENSION DECLARED IT ACTUALLY CALLS (<workspace>/.intentic/records/extension-usage.json),
  * keyed by the manifest-derived extension id and then by the DECLARED ENTRY, verbatim.

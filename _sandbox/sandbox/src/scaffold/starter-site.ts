@@ -9,7 +9,7 @@ import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { gitCommitAll, gitInit } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
-import { discoverRepos } from "../workspace/repo-discovery.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { recordAutostart } from "./autostart.js";
 
 const exec = promisify(execFile);

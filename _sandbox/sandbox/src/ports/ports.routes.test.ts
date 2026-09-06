@@ -4,8 +4,8 @@ import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contra
 import { expect, test } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 import { testConfig } from "../testing.js";
-import { errorCode, routesClient } from "../route-client.testing.js";
-import { fakeServiceProcesses } from "../route-fakes.testing.js";
+import { errorCode, routesClient } from "../harness/route-client.testing.js";
+import { fakeServiceProcesses } from "../harness/route-fakes.testing.js";
 import { createPortForwards } from "./port-forwards.js";
 import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
 

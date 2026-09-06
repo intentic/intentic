@@ -2,18 +2,18 @@ import { isAbsolute } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule, RuleBuiltin } from "@intentic/sandbox-contract";
-import { notFoundBinary } from "../agent/agent-installs.js";
-import { TEST_FILE, TEST_WRITING_NOTE } from "../agent/agent-tests.js";
-import { createRemovalLedger, type FileReader, readWorkspaceFile, type RemovalLedger, verifyRemovalsMessage } from "../agent/agent-removals.js";
+import { notFoundBinary } from "../agent/providers/agent-installs.js";
+import { TEST_FILE, TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
+import { createRemovalLedger, type FileReader, readWorkspaceFile, type RemovalLedger, verifyRemovalsMessage } from "../agent/verification/agent-removals.js";
 import {
     commandExitCode,
     createVerificationLedger,
     type ScriptsProbe,
     type VerificationLedger,
     verifyEditsMessage,
-} from "../agent/agent-verification.js";
-import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessage } from "../agent/agent-viewing.js";
-import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
+} from "../agent/verification/agent-verification.js";
+import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessage } from "../agent/verification/agent-viewing.js";
+import { inWorktree, type IsolationPlan } from "../agents/worktrees/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { conditionHolds, type RuleFacts } from "./rules.js";
 import { EDIT_TOOLS, editedPath } from "./edit-tools.js";

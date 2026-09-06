@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, WebExtCookie } from "@intentic/sandbox-contract";
-import { acquireProfileLock, isProfileOpen, profileOwner, releaseProfileLock, sessionDir } from "../browser/session-store.js";
+import { acquireProfileLock, isProfileOpen, profileOwner, releaseProfileLock, sessionDir } from "../browser/sessions/session-store.js";
 
 /* THE ONE PLACE A SESSION CROSSES FROM THE SANDBOX'S BROWSER INTO THE PERSON'S — the mirror of
  * session-import.ts, and the answer to the thing no amount of streaming quality can fix.

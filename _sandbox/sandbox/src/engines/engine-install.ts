@@ -14,7 +14,7 @@ import { forgetEngineResolution } from "./engine-resolve.js";
  * DOWNLOADING IS npm's JOB, not this file's. `npm install --prefix` already resolves the package's
  * platform-specific optional dependency for THIS cpu and libc, verifies every tarball against the registry's
  * integrity hash, and retries a flaky network — reimplementing that here would be a second, worse npm whose
- * bugs would be ours. It is also exactly what packs/cursor.Dockerfile and cursor-sdk.ts's bootstrap already do,
+ * bugs would be ours. It is also exactly what image-packs/cursor.Dockerfile and cursor-sdk.ts's bootstrap already do,
  * so the store's copy and the pack's copy of a package are produced by the same command.
  *
  * WHAT THIS FILE ADDS is the question npm cannot answer: does this version still work with THIS daemon? A

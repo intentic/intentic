@@ -7,16 +7,16 @@ import { defaultGit, gitClone } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
-import { fakeFiles } from "../route-fakes.testing.js";
-import { services } from "../route-services.testing.js";
-import { memoryCapabilitiesStore } from "../route-stores.testing.js";
+import { fakeFiles } from "../harness/route-fakes.testing.js";
+import { services } from "../harness/route-services.testing.js";
+import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { applyDefinitionItems } from "./apply-definition.js";
 import { createArrivals } from "./arrival.js";
 import { deriveDefinition, parseDefinitionToml } from "./definition.js";
 import { rootExcludes } from "../history/history.js";
-import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/root-repo.js";
+import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
 import { workspaceRemoteUrl } from "./workspace-repo.js";
 
 /* THE DEFINITION ROUND TRIP ON REAL DISK AND REAL GIT: derive a sandbox.toml from a workspace with live

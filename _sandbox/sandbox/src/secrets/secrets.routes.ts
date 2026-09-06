@@ -11,10 +11,10 @@ import type { CredentialGate, SecretInventoryEntry } from "@intentic/sandbox-con
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, bearerFrom, ForbiddenError } from "../auth/auth.js";
 import { secretsContract } from "@intentic/sandbox-contract";
-import { providerSecretEntries } from "../agent/provider-registry.js";
+import { providerSecretEntries } from "../agent/providers/provider-registry.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
-import { stateRelPath } from "../workspace/state-paths.js";
+import type { OrpcContext } from "../app-env.js";
+import { stateRelPath } from "../workspace/layout/state-paths.js";
 
 // One connected provider account as an inventory entry (never a value, provider tokens are not revealable).
 /* Upsert KEY=value into a .env's text. Parsed and re-serialized with Node's own env parser (the same one the

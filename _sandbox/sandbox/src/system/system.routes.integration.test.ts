@@ -9,13 +9,13 @@ import { createApp } from "../app.js";
 
 import { createLogger } from "../logger.js";
 
-import { createBootTracker } from "../platform/boot.js";
+import { createBootTracker } from "../platform/boot/boot.js";
 
 import { testConfig } from "../testing.js";
 
-import { clientFor, rejectAuth, rejectForbidden } from "../route-client.testing.js";
-import { fakeFiles, fakeProcesses } from "../route-fakes.testing.js";
-import { services } from "../route-services.testing.js";
+import { clientFor, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
+import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
+import { services } from "../harness/route-services.testing.js";
 import { publishRuntimeChange } from "./runtime-watch.js";
 
 /* The system routes, driven over the daemon's HTTP surface exactly as the browser drives them.

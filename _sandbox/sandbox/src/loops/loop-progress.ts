@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { discoverRepos } from "../workspace/repo-discovery.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 
 /* DID THE TREE MOVE?, the stall detector, and the guardrail that earns its keep more than any other here.
  *

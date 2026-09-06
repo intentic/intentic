@@ -1,5 +1,5 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../claude/claude-sdk.js";
+import { sdk } from "../runtimes/claude/claude-sdk.js";
 import type { UsageTurn } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";

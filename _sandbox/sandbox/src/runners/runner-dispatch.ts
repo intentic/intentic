@@ -4,8 +4,8 @@ import type { AgentEvent, AgentTurn, RunnerSync, RunnerSyncLine, RunnerTurn } fr
 import { runnerIncomingRef } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
 import { whenAborted } from "../abort.js";
-import { mainBranchOf } from "../agents/agent-refs.js";
-import type { ConversationWorktree } from "../agents/worktrees.js";
+import { mainBranchOf } from "../agents/land/agent-refs.js";
+import type { ConversationWorktree } from "../agents/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
 

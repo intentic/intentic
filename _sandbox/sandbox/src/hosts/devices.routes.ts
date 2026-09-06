@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { devices } from "./device-reports.js";
 
 /* GET /system/devices. Every device on the other end of this sandbox, the volunteered reports and the ones

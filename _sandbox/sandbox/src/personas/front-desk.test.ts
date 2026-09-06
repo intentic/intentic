@@ -1,6 +1,6 @@
 import { FRONT_DESK_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { memoryPersonasStore } from "../route-stores.testing.js";
+import { memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { ensureFrontDeskPersona } from "./front-desk.js";
 
 /* The card follows the need. Nothing seeds personas, so the only guarantee left is this one: a workspace that has

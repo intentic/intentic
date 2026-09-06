@@ -8,8 +8,8 @@ import {
     WORKSPACE_ROOT,
 } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
-import { resolveRequest } from "../agent/agent-requests.js";
-import type { JudgeFacts } from "../agent/command-judge.js";
+import { resolveRequest } from "../agent/tools/agent-requests.js";
+import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandGateHooks, type CommandGateOptions } from "./command-gate.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";

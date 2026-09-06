@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import type { TurnAnchor, TurnAnchors } from "../agent/turn-anchors.js";
+import type { TurnAnchor, TurnAnchors } from "../agent/anchors/turn-anchors.js";
 import { agentTranscriptPage } from "./agent-transcript.js";
 import { fileTranscriptRecord } from "./transcript-record.js";
 

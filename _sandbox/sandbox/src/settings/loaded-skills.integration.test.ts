@@ -3,7 +3,7 @@ import { lstat, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
+import { removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import {
     loadedSkillCatalogNote,
     loadedSkillDir,

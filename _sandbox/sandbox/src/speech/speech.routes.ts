@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { MAX_UTTERANCE_WAV_BYTES, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
 
 /* THE COMPOSER'S VOICE ROUTES, bytes in, words out, so they live beside the other byte routes rather than on

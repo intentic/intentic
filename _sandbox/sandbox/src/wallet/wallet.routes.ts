@@ -1,8 +1,8 @@
 import type { WalletConfig } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { liveCardRun } from "../agent/offer-card.js";
+import { liveCardRun } from "../agent/run/offer-card.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { conversationTainted } from "../guard/turn-taint.js";
 import { gatedPaidFetch } from "./payment-offer.js";
 import { relayWalletSign } from "./wallet-signer.js";

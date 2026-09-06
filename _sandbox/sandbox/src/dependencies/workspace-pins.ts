@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
-import { readWorkspaceManifests } from "../workspace/package-graph.js";
+import { readWorkspaceManifests } from "../workspace/deps/package-graph.js";
 import type { Ecosystem } from "./registry-freshness.js";
 
 /* WHAT THIS WORKSPACE ALREADY USES, which is the difference between a check worth having on and one that gets

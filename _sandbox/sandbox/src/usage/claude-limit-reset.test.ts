@@ -1,6 +1,6 @@
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
-import type { ClaudeStore, StoredAccount } from "../claude/claude-credentials.js";
+import type { ClaudeStore, StoredAccount } from "../runtimes/claude/claude-credentials.js";
 import { claimLimitReset, readLimitReset } from "./claude-limit-reset.js";
 
 /* The once-a-week session-limit reset, over the two seams it has: the stored credential and the provider.

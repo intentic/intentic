@@ -14,9 +14,9 @@ import {
     type SafetyLogEntry,
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
-import { createRequest } from "../agent/agent-requests.js";
-import type { JudgeFacts } from "../agent/command-judge.js";
-import { RoleModelUnsetError } from "../agent/role-model-unset.js";
+import { createRequest } from "../agent/tools/agent-requests.js";
+import type { JudgeFacts } from "../agent/tools/command-judge.js";
+import { RoleModelUnsetError } from "../agent/models/role-model-unset.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
 import { createCredentialOracle } from "./credential-files.js";

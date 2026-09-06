@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { REGISTRY_FACTS_FILE, REGISTRY_FILE } from "@intentic/registry";
 import { gitClone } from "@intentic/scaffold";
 import { expect, test } from "vitest";
-import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
+import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "./capability.js";
 import { browseMarketplace } from "./marketplace.js";
 import { pluginsRoot } from "./plugin-dirs.js";

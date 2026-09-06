@@ -1,7 +1,7 @@
 import { prepushContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { type PrepushDeps, prepushCheck } from "./prepush.js";
 
 export type PrepushRoutesDeps = PrepushDeps;

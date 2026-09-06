@@ -1,8 +1,8 @@
 import { checks as agentChecks, owner as agentOwner, type TurnJournalDeps } from "../agent/invariant.js";
 import { checks as agentsChecks, owner as agentsOwner, type FleetRegistryDeps } from "../agents/invariant.js";
 import { checks as capabilityChecks, owner as capabilityOwner, type ManifestSecretDeps } from "../capabilities/invariant.js";
-import { checks as childrenChecks, owner as childrenOwner } from "../children/invariant.js";
-import { checks as cursorChecks, type CommandGateDeps, owner as cursorOwner } from "../cursor/invariant.js";
+import { checks as childrenChecks, owner as childrenOwner } from "../agent/subagents/invariant.js";
+import { checks as cursorChecks, type CommandGateDeps, owner as cursorOwner } from "../runtimes/cursor/invariant.js";
 import { checks as dependenciesChecks, owner as dependenciesOwner } from "../dependencies/invariant.js";
 import { checks as derivedChecks, owner as derivedOwner } from "../derived/invariant.js";
 import { checks as engineChecks, owner as engineOwner } from "../engines/invariant.js";
@@ -11,7 +11,8 @@ import { checks as issueChecks, type IssuesInboxDeps, owner as issueOwner } from
 import { checks as hostChecks, owner as hostOwner } from "../hosts/invariant.js";
 import { checks as peerChecks, owner as peerOwner, type PeerRegistryDeps } from "../peers/invariant.js";
 import { checks as runnerChecks, owner as runnerOwner } from "../runners/invariant.js";
-import { checks as testingChecks, owner as testingOwner } from "../testing/invariant.js";
+import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
+import { checks as runtimeChecks, owner as runtimeOwner } from "../runtimes/invariant.js";
 import { checks as tunnelChecks, owner as tunnelOwner } from "../tunnel/invariant.js";
 import { checks as webextChecks, owner as webextOwner } from "../webext/invariant.js";
 import type { InvariantRegistry } from "./invariants.js";
@@ -51,6 +52,7 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(engineOwner, engineChecks());
     registry.register(dependenciesOwner, dependenciesChecks());
     registry.register(derivedOwner, derivedChecks());
-    registry.register(testingOwner, testingChecks());
+    registry.register(fenceOwner, fenceChecks());
+    registry.register(runtimeOwner, runtimeChecks());
     registry.register(tunnelOwner, tunnelChecks());
 };

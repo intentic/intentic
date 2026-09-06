@@ -1,6 +1,6 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 import type { Services } from "../composition.js";
 import { removeLoadedSkill, writeLoadedSkill } from "./loaded-skills.js";
 import { parseSkillFile, skillDocument } from "./skill-file.js";

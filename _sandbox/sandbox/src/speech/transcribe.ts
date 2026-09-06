@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { downloadFile } from "@huggingface/hub";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 /* Composer voice input's transcription engine: whisper.cpp over WAV utterances the browser records and
  * segments itself (16kHz mono s16le, the page encodes exactly what whisper-cli reads, so this side never
@@ -16,7 +16,7 @@ import { statePath } from "../workspace/state-paths.js";
  * (_extensions/discord/src/audio.ts), which proved them; the two stay separate because an extension's gateway
  * process and the daemon cannot share code.
  *
- * whisper-cli comes from the `whisper` feature pack (packs/whisper.Dockerfile, baked into the standard image
+ * whisper-cli comes from the `whisper` feature pack (image-packs/whisper.Dockerfile, baked into the standard image
  * profile). On an image without it, `status` reports unprovisioned and the browser explains the one-time
  * rebuild instead of recording audio nobody can hear. */
 

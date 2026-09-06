@@ -4,21 +4,21 @@ import { HEALTH_LIMIT, includeGlobs, MAX_REF_CANDIDATES, previewUrl, workspaceCo
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { repoGitDir } from "../history/history.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
-import { classifyWorkspace } from "./classify.js";
-import { readModules } from "./modules.js";
-import { readPackageGraph } from "./package-graph.js";
-import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
-import { resolveReference } from "./resolve-reference.js";
-import { missingCount } from "./workspace-setup.js";
-import { syncWorkspaceRepos } from "./sync-repos.js";
+import { appPanelKey, buildAppSpec, discoverApps } from "./layout/app-previews.js";
+import { classifyWorkspace } from "./deps/classify.js";
+import { readModules } from "./deps/modules.js";
+import { readPackageGraph } from "./deps/package-graph.js";
+import { discoverRepos, isValidRepoId, isValidRepoName } from "./layout/repo-discovery.js";
+import { resolveReference } from "./files/resolve-reference.js";
+import { missingCount } from "./layout/workspace-setup.js";
+import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
-import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
-import { containedIn, scopedTarget, workspaceRootFor } from "./workspace-scope.js";
+import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
+import { containedIn, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
 
 /* What one page of /workspace/search costs, in the unit the caller actually pays: rows in a scrollable list.
  * The engine's other page shape sizes itself by what rendering the results as TEXT would spend, an agent's

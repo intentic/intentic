@@ -1,6 +1,6 @@
 import { type Capability, type EndpointConfig, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { cliProxyManagementUrl } from "../agent/translator.js";
+import { cliProxyManagementUrl } from "../agent/providers/translator.js";
 import { trialCompatEntry } from "../trial/trial-endpoint.js";
 import { parseHeaders, versionedBase } from "./endpoint-config.js";
 import { endpointConfigOf } from "./local-model.js";

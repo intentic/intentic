@@ -7,7 +7,7 @@ import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from 
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { pack, type Pack } from "tar-stream";
 import type { Services } from "../composition.js";
-import { discoverRepos } from "../workspace/repo-discovery.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition } from "./definition.js";
 

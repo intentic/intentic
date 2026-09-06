@@ -4,10 +4,10 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookJSONOutput, SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { repoRoot } from "@intentic/constants/node";
 import type { ListenerContribution } from "@intentic/extension-manifest";
-import type { IsolatedAgent, PersistedAgent } from "./agents/agents-store.js";
-import type { IsolationPlan, TurnIsolation } from "./agents/isolation.js";
-import { overlaysDir } from "./agents/isolation.js";
-import type { CodexEvent, CodexRunner, CodexTurn } from "./codex/codex-app-server.js";
+import type { IsolatedAgent, PersistedAgent } from "./agents/registry/agents-store.js";
+import type { IsolationPlan, TurnIsolation } from "./agents/worktrees/isolation.js";
+import { overlaysDir } from "./agents/worktrees/isolation.js";
+import type { CodexEvent, CodexRunner, CodexTurn } from "./runtimes/codex/codex-app-server.js";
 import type { Config } from "./env.config.js";
 
 /* Test-support seams shared across this package's suites, the ones that stand in for something specific to

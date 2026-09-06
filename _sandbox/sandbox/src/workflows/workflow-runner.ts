@@ -15,12 +15,12 @@ import type {
 import type { Services } from "../composition.js";
 // The turn registry's own abort, agent-steering is a leaf (a Map of live turns), so this is not the cycle
 // through agent.routes that loop-runner's header warns about.
-import { stopTurn } from "../agent/agent-steering.js";
+import { stopTurn } from "../agent/anchors/agent-steering.js";
 import { resumeLoops, runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
 import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 import { workflowProjection } from "./workflow-state.js";
-import { stateRelPath } from "../workspace/state-paths.js";
+import { stateRelPath } from "../workspace/layout/state-paths.js";
 
 /* THE SCHEDULER, run a graph of steps, each one a loop, in dependency order.
  *

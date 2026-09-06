@@ -9,7 +9,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { listenerContribution, testConfig } from "../testing.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
-import { readWorkspaceFile } from "../workspace/workspace-files.js";
+import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { enabledExtensions, extensionBinDirsOf, extensionInventory, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
 
 const manifest = (publisher: string, name: string): object => ({

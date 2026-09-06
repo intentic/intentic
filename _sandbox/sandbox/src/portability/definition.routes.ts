@@ -2,7 +2,7 @@ import { WorkspacePublishSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { createDefinitions } from "./apply-definition.js";
 import { DefinitionFormatError } from "./definition.js";
 import { publishWorkspace, workspaceRemote, WorkspaceRemoteError } from "./workspace-repo.js";

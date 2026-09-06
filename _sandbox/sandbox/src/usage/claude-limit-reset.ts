@@ -1,6 +1,6 @@
 import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
 import { asRecord, asString, resetFromIso } from "./payload.js";
-import { type ClaudeStore, ensureFreshToken } from "../claude/claude-credentials.js";
+import { type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
 
 /* REOPENING A SPENT SESSION WINDOW WITHOUT WAITING FOR IT, which is the one thing a refused turn could never
  * be offered here, and the reason people were told to sit out a five-hour window with a weekly allowance three

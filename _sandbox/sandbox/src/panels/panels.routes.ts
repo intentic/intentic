@@ -6,7 +6,7 @@ import { panelsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contr
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { resolvePanelUpstream } from "./panel-upstream.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
 import { cachedScheme } from "../ports/port-probe.js";

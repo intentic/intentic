@@ -1,7 +1,7 @@
 import { request } from "node:https";
 import { type TrialHealth, TrialStatusSchema } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
-import { isLocalHost } from "../platform/local-tls.js";
+import { isLocalHost } from "../platform/tls/local-tls.js";
 
 /* THE FREE TRIAL, AS THE DAEMON SEES IT, is there one, and how much of today's allowance is left.
  *

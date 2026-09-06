@@ -3,7 +3,7 @@ import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import type { UsageRoutesDeps } from "./usage.routes.js";
 import { createUsageRoutes } from "./usage.routes.js";
-import { routesClient } from "../route-client.testing.js";
+import { routesClient } from "../harness/route-client.testing.js";
 
 /* The usage routes, over the one seam they read.
  *
