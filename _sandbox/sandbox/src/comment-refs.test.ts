@@ -47,7 +47,10 @@ const component = (stem: string, leaf: string): boolean => /\.(?:vue|tsx)$/.test
 // Names for files outside this tree: they resolve to nothing and always will. Most are the chore analyzer's
 // examples of components in a USER's repository: chores/stack.ts reduces two of them to one stem, and holds
 // `page.tsx` up as the framework-chosen entry name that must NOT become a family, which are the two points it
-// is making. `one-file.ts` is the odd one out, an example argument in a documented command line — named here
+// is making. `legacyPlans.ts` is the same repository one file further out, a module rather than a component:
+// ChoreRow.vue quotes `unreferenced · src/legacyPlans.ts` to show the `<tag> · <claim>` shape every evidence
+// line has, and the claim half of an unreferenced-files line IS a path, so the illustration cannot avoid
+// spelling one. `one-file.ts` is the odd one out, an example argument in a documented command line — named here
 // rather than called "the last", because it stopped being last the moment the three new names were appended.
 // `client.mjs` is a DEPENDENCY's file, Vite's dev client under node_modules: the two styleStability modules
 // quote its `updateStyle` because that bare `style.textContent = content` is the write they exist to absorb, and
@@ -58,6 +61,7 @@ const NOT_OURS = new Set([
     "BaseButton.vue",
     "ButtonV2.tsx",
     "Checkout.vue",
+    "legacyPlans.ts",
     "one-file.ts",
     "AppShell.vue",
     "ErrorBoundary.tsx",
