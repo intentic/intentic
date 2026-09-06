@@ -380,7 +380,6 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `${STATE_DIR}/config/capability-dismissals.json`,
             // The context shelves: which repositories a conversation opened on one carries. A list of names, and
             // the decision about what a session may see, which is what a review is for.
-            `${STATE_DIR}/config/context/`,
             /* The two entries the AGENT authors on its own initiative, and the reason `versioned` is not read as
              * config-only. Both are the sandbox acting outward: a draft publishes words under the owner's name,
              * a workspace extension is code that runs in the app and can serve HTTP with the workspace under

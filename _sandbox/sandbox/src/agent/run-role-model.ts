@@ -1,4 +1,4 @@
-import { endpointProvider, type ModelPin, type ModelRole, type ModelSource, NATIVE_PROVIDERS, resolveRoleModels } from "@intentic/sandbox-contract";
+import { endpointProvider, type ModelPin, type ModelRole, type ModelSource, NATIVE_PROVIDERS, readyChain, resolveRoleModels } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { harnessReadyProviders } from "./harness-credentials.js";
 import { spentRung } from "./role-model-quota.js";
@@ -59,14 +59,36 @@ export const runRoleModel = async (services: Services, role: ModelRole): Promise
     if (pinned.length === 0) {
         return undefined;
     }
-    const chain = resolveRoleModels(await readinessSources(services), pinned, role);
+    return headOf(services, resolveRoleModels(await readinessSources(services), pinned, role));
+};
+
+/* THE PIN A TURN WEARING THIS PERSONA SHOULD OPEN ON, from the card's own ladder (contract schemas/personas.ts
+ * `models`), or undefined for a card with none, a card that is not there, or a ladder whose every provider is
+ * disconnected. The same walk as the role's, minus the floor: a card that says nothing about models has left
+ * the question to the role, and the caller asks the role next (turn-resume.ts withRoleModel). Consulted BEFORE
+ * the role because the card is the more specific answer: the role says what kind of job this is, the card
+ * says who is doing it, and an owner who pinned a model on a persona meant it for every turn wearing that
+ * persona, whatever started them. */
+export const personaRunModel = async (services: Services, actsAs: string | undefined): Promise<ModelPin | undefined> => {
+    if (actsAs === undefined) {
+        return undefined;
+    }
+    const pinned = (await services.personas.get(actsAs))?.models ?? [];
+    if (pinned.length === 0) {
+        return undefined;
+    }
+    return headOf(services, readyChain(await readinessSources(services), pinned));
+};
+
+// The first rung of a chain the recorded quota does not already call spent, or, when every rung is, the head:
+// it runs anyway and fails in the provider's own words, which beats a run that quietly opens on an account the
+// user never pinned. The reading is a snapshot, and a chain spent to the bottom is exactly when a window may
+// have reopened since it was taken.
+const headOf = async (services: Services, chain: readonly ModelPin[]): Promise<ModelPin | undefined> => {
     for (const choice of chain) {
         if ((await spentRung(services, choice)) === undefined) {
             return choice;
         }
     }
-    // Every pin is known-spent. The head runs anyway and fails in the provider's own words, which beats a run
-    // that quietly opens on an account the user never pinned: the reading is a snapshot, and a chain spent to
-    // the bottom is exactly when a window may have reopened since it was taken.
     return chain[0];
 };

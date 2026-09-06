@@ -2,7 +2,8 @@ import type { TurnNote } from "@intentic/sandbox-contract";
 
 /* WHAT THIS SESSION CAN SEE, told to a model that would otherwise assume it sees everything.
  *
- * A conversation on a shelf stands in a tree that holds some of the workspace's repositories and not others,
+ * A conversation wearing a persona card that names its context stands in a tree that holds some of the
+ * workspace's repositories and not others,
  * and a directory that is not there reads, to a model, exactly like a directory that never existed. Left to
  * itself it concludes the code is gone, or clones it, or asks the user why the repo was deleted. The map that
  * opens a conversation (agent/workspace-map.ts) draws the rule this note follows: what was left out is counted
@@ -17,8 +18,8 @@ export const CONTEXT_NOTE_HEADER = "## Context of this session";
 export const CONTEXT_NOTE_TITLE = "Context of this session";
 
 export interface ContextNoteInput {
-    // The shelf's label (or id) the composition was made from, absent when it was set without one.
-    readonly shelf: string | undefined;
+    // The label (or id) of the persona card the composition was read off, absent when it was set without one.
+    readonly persona: string | undefined;
     // Repository ids the conversation carries, in composition order. Root is implied and not listed.
     readonly carried: readonly string[];
     // Live repository ids the conversation does NOT carry.
@@ -31,7 +32,7 @@ const list = (ids: readonly string[]): string => ids.map((id) => `\`${id}\``).jo
 const repositories = (count: number): string => (count === 1 ? "repository" : "repositories");
 
 export const contextNote = (input: ContextNoteInput): TurnNote => {
-    const from = input.shelf === undefined ? "" : ` (the \`${input.shelf}\` shelf)`;
+    const from = input.persona === undefined ? "" : ` (wearing the \`${input.persona}\` persona)`;
     const carried =
         input.carried.length === 0
             ? "the workspace root and none of its nested repositories"
@@ -46,7 +47,7 @@ export const contextNote = (input: ContextNoteInput): TurnNote => {
         );
     }
     if (input.missing.length > 0) {
-        lines.push("", `Named by the shelf but not in this workspace: ${list(input.missing)}.`);
+        lines.push("", `Named by the persona but not in this workspace: ${list(input.missing)}.`);
     }
     return { title: CONTEXT_NOTE_TITLE, text: lines.join("\n") };
 };

@@ -738,12 +738,6 @@ const STATE_FILES = [
      * behaves, it holds no credential, and it belongs in a pull request, which is also what makes it
      * searchable, since every versioned entry already is. */
     { path: ".intentic/config/personas/", invalidates: ["personas"], portability: "carry", versioned: true },
-
-    /* THE CONTEXT SHELVES, one JSON file per shelf (schemas/context.ts): which part of the workspace a
-     * conversation opened on it carries. `versioned` and `carry` on the persona card's own argument, a shelf is
-     * a list of item ids and holds no credential, and which repositories a session can see is exactly the kind
-     * of decision that belongs in a pull request. */
-    { path: ".intentic/config/context/", invalidates: ["context"], portability: "carry", versioned: true },
 ] as const satisfies readonly WorkspaceStateFile[];
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;

@@ -3,7 +3,7 @@ import { Button, Icon, Notice, PersonaFace, ResponsiveOverlay, growTextarea, use
 import { useNow } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { type AgentCommand, isTrialProvider, loopDesignLine } from "@intentic/sandbox-contract";
+import { type AgentCommand, isTrialProvider, loopDesignLine, personaModels } from "@intentic/sandbox-contract";
 import { turnInFlight } from "../composables/agents/agentStatus";
 import { boxNameOf, scopeOffered } from "../composables/agents/fleetScope";
 import { useAgents } from "../composables/agents/useAgents";
@@ -33,6 +33,8 @@ import { conversationView, PANE_VIEW } from "../composables/chat/useChat-view";
 import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
+import { usePersonaRoute } from "../composables/chat/personaRoute";
+import { roleSources } from "../composables/chat/roleModel";
 import { useRole } from "../composables/sandbox/useRole";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { useChatAttachments } from "../composables/chat/useChatAttachments";
@@ -65,6 +67,7 @@ import ChatTurnStatus from "./ChatTurnStatus.vue";
 import ComposerEffort from "./ComposerEffort.vue";
 import ComposerModelPill from "./ComposerModelPill.vue";
 import ComposerMoreMenu from "./ComposerMoreMenu.vue";
+import ComposerPersonaChip from "./ComposerPersonaChip.vue";
 import ComposerTierChip from "./ComposerTierChip.vue";
 import { type ComposerControl, overflowRows, ridesRow } from "./composerMore";
 import { startingMode } from "../composables/chat/turnDefaults";
@@ -772,7 +775,24 @@ const personaNotice = computed<string | undefined>(() => {
 const pickPersona = (id: string | undefined): void => {
     personaOpen.value = false;
     props.conversation.actsAs.value = id;
+    // A pick by hand, "Anyone" included, overrules whatever the router had read into this chat.
+    personaRoute.byHand();
+    // And the card's own model goes on with it, when the card has one (Conversation.wearModel says why).
+    const card = personaCards.value.find((persona) => persona.id === id);
+    const head = card === undefined ? undefined : personaModels(card, roleSources.value)[0];
+    if (head !== undefined) {
+        props.conversation.wearModel(head);
+    }
 };
+
+/* WHICH PERSONA THE DAEMON READS THIS DRAFT AS BELONGING TO, asked once per settled draft on a chat that has no
+ * turns and no persona yet (personaRoute.ts owns the gates and the modes). The chip beside the tier chip shows
+ * the answer; `beforeSend` is what an `auto` chat waits for, briefly, so the card is on for the opening turn,
+ * the one turn on which the daemon decides what the conversation's tree holds. */
+const personaRoute = usePersonaRoute(
+    () => props.conversation,
+    () => draft.value,
+);
 
 // Snap the box back to one line and keep the cursor ready for the next message: what every path that spends
 // the draft ends with.
@@ -829,7 +849,16 @@ const sendDraft = (): void => {
         void decidePlan(pendingPlan, false, text, staging.snapshot());
         attachments.value = [];
     } else {
-        void send(text, staging.snapshot(), editorContextForSend());
+        const snapshot = staging.snapshot();
+        const editorContext = editorContextForSend();
+        /* An `auto` chat's opening message waits for the router's reading, briefly, so the card is on before the
+         * turn that decides the conversation's tree (personaRoute.ts beforeSend). Every other send goes now. */
+        const routing = personaRoute.beforeSend(text);
+        if (routing === undefined) {
+            void send(text, snapshot, editorContext);
+        } else {
+            void routing.then(() => send(text, snapshot, editorContext));
+        }
         attachments.value = [];
         includeEditorContext.value = false;
     }
@@ -1737,6 +1766,11 @@ watch(
                                              rule): a control announcing that your model is about to be
                                              substituted is the last thing a narrow pane should hide. -->
                                         <ComposerTierChip :conversation="conversation" />
+                                        <!-- Who the daemon read this draft as belonging to, and the press that
+                                             takes it or declines it (ComposerPersonaChip says which, by mode).
+                                             Beside the tier chip, for the same reason: it is a sentence about
+                                             what the next send runs as, contradicting the pill on purpose. -->
+                                        <ComposerPersonaChip :preview="personaRoute.preview.value" @press="personaRoute.press()" />
                                     </div>
 
                                     <!-- HOW THE TURN IS SHAPED, AND THE PRESS THAT SENDS IT: the group that

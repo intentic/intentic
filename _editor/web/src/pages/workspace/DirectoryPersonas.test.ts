@@ -145,7 +145,9 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
             id: `docs-bot`,
             label: `Docs bot`,
             capabilities: [`reddit-work`, `x-company`],
-            repos: [`intentic`],
+            brief: `Writes the docs.`,
+            context: { repos: [`intentic`] },
+            models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
             workspace: { startIn: `docs`, folders: [`docs`] },
         },
     ];
@@ -161,7 +163,9 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
         id: `docs-bot`,
         label: `Docs crew`,
         capabilities: [`reddit-work`, `x-company`],
-        repos: [`intentic`],
+        brief: `Writes the docs.`,
+        context: { repos: [`intentic`] },
+        models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
         workspace: { startIn: `docs`, folders: [`docs`] },
     });
 });
@@ -213,7 +217,9 @@ it(`points an existing persona at this folder, keeping everything else about it`
             id: `docs-bot`,
             label: `Docs bot`,
             capabilities: [`reddit-work`],
-            repos: [`intentic`],
+            brief: `Writes the docs.`,
+            context: { repos: [`intentic`] },
+            models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
             powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: true },
             workspace: { startIn: `docs`, folders: [`docs`] },
         },
@@ -230,7 +236,9 @@ it(`points an existing persona at this folder, keeping everything else about it`
         id: `docs-bot`,
         label: `Docs bot`,
         capabilities: [`reddit-work`],
-        repos: [`intentic`],
+        brief: `Writes the docs.`,
+        context: { repos: [`intentic`] },
+        models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
         powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: true },
         // The one field the mode is about. The fence it was given stays the fence it was given.
         workspace: { startIn: `knowledge`, folders: [`docs`] },

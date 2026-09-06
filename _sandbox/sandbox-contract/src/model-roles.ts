@@ -109,6 +109,17 @@ export const MODEL_ROLES = [
         icon: "check-square",
     },
     {
+        /* THE ONE HELPER THAT ANSWERS A CLASSIFICATION rather than writing prose: one card id, or none, from the
+         * owner's own short list (schemas/personas.ts `brief`). Cheap by construction, once per chat, and the
+         * job a small model does well, which is the whole argument for routing chats onto static cards rather
+         * than asking a model to compose a context per session. */
+        id: "persona-router",
+        label: "Persona routing",
+        blurb: "Which model reads a new chat's first message and picks the persona for it.",
+        kind: "helper",
+        icon: "users",
+    },
+    {
         id: "pipeline-fix",
         label: "Pipeline fixes",
         blurb: "The agent started by Fix on a red pipeline.",

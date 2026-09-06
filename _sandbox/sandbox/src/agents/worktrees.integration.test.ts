@@ -563,8 +563,8 @@ test("the versioned state slice is checked out in the worktree and follows a reb
     expect(await sh(work, "status", "--short")).toBe("");
 });
 
-/* A SELECTION, the repositories a conversation carries when a context shelf narrowed it (context/shelves.ts
- * repoSelectionOf). Root is always in; a nested repo is in when named. The three moves below are the whole of
+/* A SELECTION, the repositories a conversation carries when its persona card names them
+ * (context/conversation-context.ts). Root is always in; a nested repo is in when named. The three moves below are the whole of
  * what a selection can do to a checkout: shape it at birth, bring a repo in later, take one out later without
  * losing what it held. */
 test("a selection creates worktrees for root and the named repositories only", async () => {

@@ -316,3 +316,28 @@ test("a card on a built-in base takes the base and none of the sandbox's text", 
 test("custom with nothing written yet falls back to the sandbox", () => {
     expect(personaPrompt(card("desk", [], { systemPromptMode: "custom" }), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
 });
+
+// ── The card is a static context ───────────────────────────────────────────────────────────────────────────
+
+/* EVERYTHING A TURN IS TOLD OR DENIED BECAUSE OF ITS CARD IS A FUNCTION OF THE CARD ALONE. That is what makes a
+ * persona a static context: two conversations wearing one card open on the same note, the same tool set and
+ * the same prompt placement, so a provider's prompt cache serves the second from the first, and it is why the
+ * design routes a chat onto a card rather than composing a context per session (contract schemas/personas.ts).
+ * Pinned here so a field that varies per turn can never quietly join the persona-derived prefix. */
+test("two turns wearing one card get identical persona-derived context, and a different card gets a different one", () => {
+    const backend: Persona = { id: "backend", label: "Backend", capabilities: ["github-work"], powers: powers({ shell: false }), workspace: { folders: ["api"] } };
+    const cast = [...CAST, backend];
+    const installed = [browser("reddit-work"), connector("github-work"), connector("stripe")];
+    const wear = (unattended: boolean) => turnPersona({ personas: cast, actsAs: "backend", unattended });
+    const first = wear(false);
+    const second = wear(true);
+    expect(personaNote(second)).toBe(personaNote(first));
+    expect(personaDisallowedTools(second, installed)).toEqual(personaDisallowedTools(first, installed));
+    expect(personaCapabilities(installed, second)).toEqual(personaCapabilities(installed, first));
+    expect(personaPrompt(second.persona, undefined, { systemPromptMode: "intentic", systemPrompt: "" })).toEqual(
+        personaPrompt(first.persona, undefined, { systemPromptMode: "intentic", systemPrompt: "" }),
+    );
+    const other = turnPersona({ personas: cast, actsAs: "work", unattended: false });
+    expect(personaNote(other)).not.toBe(personaNote(first));
+    expect(personaDisallowedTools(other, installed)).not.toEqual(personaDisallowedTools(first, installed));
+});

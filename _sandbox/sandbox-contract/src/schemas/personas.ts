@@ -1,14 +1,25 @@
 // Personas: the named faces a sandbox shows the outside world — which accounts each speaks for, what a
 // session wearing one may do, and where it works.
 import { z } from "zod";
+import { type ModelSource, readyChain } from "../model-pins.js";
+import { type ModelPin, ModelPinSchema } from "./agent.js";
 import { entryId } from "./internal.js";
 import { SkillDraftSchema, SkillNameSchema, SystemPromptModeSchema } from "./settings.js";
 /* A NAMED PERSONA THE SANDBOX SHOWS THE OUTSIDE WORLD, "work-reddit", "the studio account", and the layer
  * that decides which connected accounts a given turn may act through.
  *
- * IT ANSWERS FOUR QUESTIONS AND NO MORE: who it speaks as, what it may do, where it works, and what it is told.
- * Making one is then a name, a few accounts, some switches and, only if you want one, a prompt. That is the
- * whole of what an owner is deciding, and short enough that they finish.
+ * IT ANSWERS FIVE QUESTIONS AND NO MORE: who it speaks as, what it may do, where it works, what it is told, and
+ * what it runs on (the repositories its tree holds, the models it runs on). Making one is then a name, a few
+ * accounts, some switches and, only if you want one, a prompt. That is the whole of what an owner is deciding,
+ * and short enough that they finish.
+ *
+ * A CARD IS THE SANDBOX'S ONE STATIC DESCRIPTION OF A WORKING POSTURE, and static is the design. Everything a
+ * session sees before the user's first word is a function of the card it wears: the accounts, the tool set the
+ * powers leave, the kit's prompt and skills, and now the tree it opens on. Two sessions on one card open on
+ * the same prefix, which is what lets a provider's prompt cache serve the second. The only per-task decision
+ * left is WHICH card, and that is a classification over the owner's own short list (`brief`), once per chat,
+ * which a cheap model does reliably; asking a model to compose a context per session instead either picks
+ * badly or costs a second strong run and a hand-off of everything it decided.
  *
  *   NO PUBLISH-OR-DRAFT SWITCH. It read as a lock and was a sentence: it asked the turn to route outward things
  *   through the approvals queue and could not stop it posting. The queue is the mechanism, and a control whose
@@ -122,6 +133,28 @@ export const PersonaWorkspaceSchema = z.object({
     folders: z.array(z.string().min(1)).max(50).optional().describe("Which folders it may touch at all. Absent means the whole workspace."),
 });
 export type PersonaWorkspace = z.infer<typeof PersonaWorkspaceSchema>;
+/* WHAT A CONVERSATION WEARING THIS CARD CARRIES: which repositories its checkout HOLDS, as opposed to
+ * `workspace.folders`, which fences what the file tools may TOUCH inside a tree that holds everything.
+ *
+ * `repos` names NESTED repositories by their workspace-relative dir (the ids repo-discovery reports). The root
+ * repository is the workspace itself and is always carried, never listed, so an empty list is the workspace
+ * alone. ABSENT `context` is every repository the workspace has, which is what every card meant before this
+ * existed and what a card that has never thought about it should get. The sandbox brings a conversation's
+ * checkout to this list on every turn (agents/worktrees.ts `selection`): a repository the list names joins,
+ * one it stops naming leaves with its work committed to the branch.
+ *
+ * An OBJECT rather than a bare list, so the next kinds of thing a session can carry (a directory inside a
+ * repository through a sparse cone, a documents folder) arrive as fields beside this one rather than as a
+ * grammar inside it. */
+export const PersonaContextSchema = z.object({
+    repos: z
+        .array(z.string().min(1).max(200))
+        .max(50)
+        .describe(
+            "Which nested repositories a conversation wearing this card carries, by workspace-relative path. The workspace itself is always carried; empty means the workspace alone.",
+        ),
+});
+export type PersonaContext = z.infer<typeof PersonaContextSchema>;
 export const PersonaSchema = z.object({
     id: entryId.describe("The persona's id."),
     // What the owner calls it in the composer chip. Absent ⇒ surfaces read the id, which is already human-chosen.
@@ -138,28 +171,40 @@ export const PersonaSchema = z.object({
         .describe(
             "Which connected accounts are its hands. Named individually rather than by site, because two accounts on one site is the whole problem this solves. Naming one that is not connected yet is not an error: it is a card describing an account this sandbox has still to sign into.",
         ),
-    /* Which workspace repos prefer this persona, so a chat opened on a project starts with the right chip already
-     * selected. A PREFERENCE, not a fence, the owner's chosen chat default is still "every account", and it
-     * lives on the card rather than in each project's own config so that one account named by three repos stays
-     * one definition instead of three that drift. */
-    repos: z
-        .array(z.string().min(1))
-        .max(50)
+    /* WHAT THIS PERSONA IS FOR, in one line: the sentence a new chat is routed on (the sandbox's
+     * agent/persona-router.ts reads one line per card and names one) and the row's subtitle on the Personas
+     * page. Written by the owner rather than derived from the card, because a classifier reading "backend work
+     * on the api and billing services, never the marketing site" routes better than one reading a list of
+     * account ids, and because it is the one sentence a reader scanning the list wants under each name. Absent
+     * is a card the router can still name from what else the card says, with less to go on. */
+    brief: z
+        .string()
+        .max(200)
         .optional()
-        .describe(
-            "Which repositories prefer this persona, so a conversation opened on one starts with the right choice already made. A preference rather than a fence.",
-        ),
+        .describe("What this persona is for, in one line. A new chat is routed onto a persona by this sentence, and the Personas page shows it under the name."),
     // What a session wearing this card may do, and where it works. Both absent ⇒ the full toolbox and the whole
     // workspace, so a card written before these existed keeps behaving exactly as it did.
     powers: PersonaPowersSchema.optional().describe(
         "What a conversation wearing it may do. Absent means the full toolbox, so a card written before this existed behaves exactly as it did.",
     ),
     workspace: PersonaWorkspaceSchema.optional().describe("Where it works. Absent means the whole workspace."),
-    /* WHICH PART OF THE WORKSPACE A SESSION WEARING THIS CARD CARRIES, the id of a context shelf
-     * (schemas/context.ts). A different question from `workspace.folders`: that one fences what the file tools
-     * may TOUCH inside a tree that holds everything, this one decides what the tree HOLDS. Absent falls through to
-     * the sandbox's `contextShelf` setting, and from there to everything. */
-    context: entryId.optional().describe("Which context shelf a conversation wearing it opens on: the part of the workspace it carries. Absent follows the sandbox setting."),
+    context: PersonaContextSchema.optional().describe(
+        "Which part of the workspace a conversation wearing it carries: the repositories its checkout holds. Absent means every repository.",
+    ),
+    /* WHICH MODELS A CONVERSATION WEARING THIS CARD RUNS ON, in order: the ladder shape every role list has
+     * (settings.modelRoles, model-pins.ts), for the same reason, a single pin is a single point of failure and
+     * the next entry catches an account that is spent today. ABSENT is the caller's own answer: the composer's
+     * pick for a chat, the run role's list for a turn a surface started. Present, the composer moves its model
+     * pill to the ladder's head when the card is picked (so a chat routed onto a card runs on that card's
+     * model as well as in its context), and the sandbox fills an unattended turn's silence from it before the
+     * run role's list (agent/turn-resume.ts). A model named on the turn itself always wins. */
+    models: z
+        .array(ModelPinSchema)
+        .max(10)
+        .optional()
+        .describe(
+            "Which models a conversation wearing it runs on, tried in order. Absent means whatever the chat or the job would have run on anyway; a model chosen for the turn itself always wins.",
+        ),
     /* WHICH SYSTEM PROMPT A SESSION WEARING THIS CARD RUNS ON, the same three bases the sandbox chooses
      * between, asked per card. ABSENT is the fourth answer and the default: follow the sandbox, which is what
      * every card meant before this field existed and what almost every card will go on meaning.
@@ -179,6 +224,27 @@ export const PersonaSchema = z.object({
     systemPromptMode: SystemPromptModeSchema.optional(),
 });
 export type Persona = z.infer<typeof PersonaSchema>;
+/* WHICH OF A CARD'S MODELS THIS SANDBOX CAN RUN, IN ORDER: the ladder filtered to connected providers and
+ * deduplicated, the same walk a role list gets (model-pins.ts readyChain) minus the role's floor, because a
+ * card has none. An absent ladder, or one whose every provider is disconnected, is empty here, and empty means
+ * the caller's own answer rather than Auto: a card that says nothing about models has not asked for the cheap
+ * one, it has left the question to whoever opened the chat. */
+export const personaModels = (card: Pick<Persona, "models">, sources: readonly ModelSource[]): readonly ModelPin[] => readyChain(sources, card.models ?? []);
+/* WHAT A NEW CHAT IS ROUTED ON, and what comes back. The composer asks once per settled draft on a chat that
+ * has no turns and no persona pinned by hand (its personaRoute composable), and the sandbox answers with the
+ * one card the message belongs to, or none. `folder` and `paths` are the two facts a card's `context` and
+ * `workspace.startIn` can be matched against and the words alone cannot supply. */
+export const PersonaRouteAskSchema = z.object({
+    prompt: z.string().min(1).max(20000).describe("The message a new chat is about to open with."),
+    folder: z.string().max(200).optional().describe("The workspace folder the chat was opened in, when it was opened in one."),
+    paths: z.array(z.string().min(1).max(500)).max(50).default([]).describe("Workspace paths the message names: uploads, @-mentions, the editor's own file."),
+});
+export type PersonaRouteAsk = z.infer<typeof PersonaRouteAskSchema>;
+export const PersonaRouteSchema = z.object({
+    persona: entryId.optional().describe("The card this message belongs to, or absent when none does and the chat should stay open to everything."),
+    reason: z.string().describe("Why, in the one line a chip can show. Present whether or not a card was named."),
+});
+export type PersonaRoute = z.infer<typeof PersonaRouteSchema>;
 /* THE ONE CARD ID THE PRODUCT NAMES ITSELF, the read-only persona a public web chat answers through.
  *
  * Nothing else is stock: a fresh workspace has no personas at all, and every card on the Personas page is one

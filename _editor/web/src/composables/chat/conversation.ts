@@ -11,6 +11,7 @@ import {
     fastAllowed,
     isAwaitingDecision,
     mentionPaths,
+    type ModelPin,
     newConversationId,
     type PermissionMode,
     providerLabel,
@@ -844,6 +845,36 @@ export class Conversation {
          * it earns is a different one (modelSwitchNotice), but it is not nothing: the next turn re-reads the
          * whole conversation on a model that has never seen it, and on a metered-per-model plan it spends a
          * different allowance from the one this chat has been spending. */
+        this.refreshSwitchNotice();
+    }
+
+    /* THE PERSONA'S MODEL, applied as the CARD's choice rather than the user's. A card with a ladder (contract
+     * schemas/personas.ts `models`) says which model every session wearing it runs on, and the composer follows
+     * its head the moment the card is put on, by hand or by routing (personaRoute.ts), so a chat matched to a
+     * persona runs on that persona's model as well as in its context. The whole pin, because the entry says
+     * how it runs as well as which model it is; a knob the pin leaves out is left as the chat had it.
+     *
+     * Like repointProvider it writes NO module default: a persona's pick is that persona's, and the next new
+     * chat opens on the user's own remembered model. Unlike it, nothing is owed back: putting the card on was
+     * the decision, taking it off leaves the chat where it stands, and the pill is right there to pick again.
+     * Refused mid-stream, like every switch that would retire the session under a running turn. */
+    wearModel(pin: ModelPin): void {
+        if (this.streaming.value) {
+            return;
+        }
+        this.keep();
+        this.pointAt(pin.provider);
+        this.model.value = pin.model;
+        if (pin.effort !== undefined) {
+            this.effortPick.value = pin.effort;
+        }
+        if (pin.thinking !== undefined) {
+            this.thinking.value = pin.thinking;
+        }
+        if (pin.harness !== undefined) {
+            this.harness.value = pin.harness;
+        }
+        this.movedFrom.value = undefined;
         this.refreshSwitchNotice();
     }
 

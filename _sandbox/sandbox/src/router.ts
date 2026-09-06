@@ -5,6 +5,7 @@ import { createAgentsRoutes } from "./agents/agents.routes.js";
 import { createTranslatorRoutes } from "./agent/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
+import { routePersona } from "./agent/persona-router.js";
 import { createPersonasRoutes } from "./personas/personas.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
@@ -51,7 +52,7 @@ export const createRouter = (services: Services) => ({
     ci: createCiRoutes(services),
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
-    personas: createPersonasRoutes(services),
+    personas: createPersonasRoutes(services, (ask, signal) => routePersona(services, ask, signal)),
     safety: createSafetyRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),

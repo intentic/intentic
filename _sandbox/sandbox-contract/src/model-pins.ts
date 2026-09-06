@@ -156,6 +156,19 @@ export const autoLadder = (sources: readonly ModelSource[]): readonly ModelPin[]
  * all, and the caller renders a control that says so rather than a live button that fails on click; for a `run`
  * it is the ordinary state of an unpinned role, and the caller's own floor answers. */
 export const resolveRoleModels = (sources: readonly ModelSource[], pinned: readonly ModelPin[], role: ModelRole): readonly ModelPin[] => {
+    const chain = readyChain(sources, pinned);
+    if (chain.length > 0) {
+        return chain;
+    }
+    // The floor, which the role declares. An id outside the table has no floor to fall to, and answering with
+    // the cheapest connected model for it would be this file inventing a job.
+    return modelRole(role)?.kind === `helper` ? autoLadder(sources) : [];
+};
+
+/* THE PINS THIS SANDBOX CAN REACH, IN THE ORDER THEY WERE WRITTEN, the walk under every ladder here: a role's
+ * list (resolveRoleModels, which adds the role's floor beneath it) and a persona card's (schemas/personas.ts
+ * personaModels, which adds nothing, a card has no floor). Empty when nothing on the list is connected. */
+export const readyChain = (sources: readonly ModelSource[], pinned: readonly ModelPin[]): readonly ModelPin[] => {
     const ready = new Set(sources.filter((source) => source.ready).map((source) => source.provider));
     // Taken verbatim, unvalidated against the catalog on purpose: the picker offers a custom-id escape hatch for
     // a model a catalog hasn't caught up with, and second-guessing the user's own id here would silently run a
@@ -174,10 +187,5 @@ export const resolveRoleModels = (sources: readonly ModelSource[], pinned: reado
             chain.push(pin);
         }
     }
-    if (chain.length > 0) {
-        return chain;
-    }
-    // The floor, which the role declares. An id outside the table has no floor to fall to, and answering with
-    // the cheapest connected model for it would be this file inventing a job.
-    return modelRole(role)?.kind === `helper` ? autoLadder(sources) : [];
+    return chain;
 };

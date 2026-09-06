@@ -307,17 +307,21 @@ export const SandboxSettingsSchema = z.object({
             "Keep the instructions identical between turns so the provider can cache them, moving anything that varies into the message instead. Cheaper, at the cost of some flexibility.",
         ),
     skills: z.array(z.string()).default(["lsp", "fileq"]).describe("Which skills are switched on."),
-    /* WHICH CONTEXT SHELF A CONVERSATION OPENS ON when nothing closer to it says (schemas/context.ts). A persona
-     * card's own `context` wins where a turn wears one; this is the sandbox's answer for the turns that do not.
-     * Empty means no shelf, so a conversation carries every repository the workspace has, which is what every
-     * conversation did before shelves existed. Empty rather than optional because a settings object is parsed
-     * from `{}` until the owner first changes something, and every field here has to answer to that. */
-    contextShelf: z
-        .string()
-        .max(60)
-        .default("")
+    /* WHETHER A NEW CHAT IS ROUTED ONTO A PERSONA, and how far the answer goes without a press. The router is
+     * the `persona-router` helper role (model-roles.ts): it reads the first message and one line per card and
+     * names one card or none, once per chat, before the first turn (the sandbox's agent/persona-router.ts).
+     *   off      — never asked. A chat wears the persona the user picked, or none.
+     *   suggest  — asked, and the answer is a chip on the composer that the user presses to apply. The default:
+     *              a persona takes accounts and repositories AWAY from a chat, and the first time that happens
+     *              it should happen because somebody pressed it.
+     *   auto     — the answer is applied when the message is sent, unless the chip was dismissed first.
+     * Attended chats only, whatever this says: a wake nobody is watching names its persona on its own form,
+     * and routing one onto a card would GRANT it accounts the owner never named for it. */
+    personaRouting: z
+        .enum(["off", "suggest", "auto"])
+        .default("suggest")
         .describe(
-            "Which context shelf a conversation opens on when its persona names none: the part of the workspace it carries. Empty means every repository, as before shelves existed.",
+            "Whether a new chat is matched to one of your personas from its first message. Suggest shows the match on the composer for you to press; auto applies it when you send unless you dismiss it first. Never applies to unwatched runs, which name their persona themselves.",
         ),
     hashlineEdits: z
         .boolean()

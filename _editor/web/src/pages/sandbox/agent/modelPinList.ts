@@ -1,5 +1,6 @@
 import { type ModelPin, modelPinKey } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
+import { effortLabelOf } from "../../../composables/chat/effortScale";
 import { type DescribedPin, describePin } from "../../../composables/chat/modelPins";
 
 /* ONE EDITOR OVER EVERY PINNED MODEL LIST IN THE SETTINGS, AND SEVERAL STORED SHAPES. Add, re-point, promote and
@@ -93,3 +94,23 @@ export function pinnedList<T>(list: {
         },
     };
 }
+
+/* WHAT AN ENTRY SAYS ABOUT HOW IT RUNS, in one line beside its name, for every list whose pins carry knobs (the
+ * role lists on Sandbox ▸ Agent ▸ Models, a persona card's ladder). Only the fields actually pinned are named, so
+ * an entry left at the provider's own defaults reads as just a model: the point of the line is that a deliberate
+ * choice is legible from the list without opening anything, not that every field has a value.
+ *
+ * The tier is clamped the way the composer clamps its own (effortScale.ts): a stored `max` on a model whose
+ * scale stops at `high`, or on one whose thinking the same pin switched off, would otherwise name a rung this
+ * run cannot use. The user's own pick stays stored either way, for the day the longer-scaled model leads again. */
+export const pinKnobSummary = (pin: ModelPin): string | undefined => {
+    const effort = effortLabelOf(pin.effort, pin.provider, pin.model, pin.thinking);
+    return (
+        [
+            ...(effort === undefined ? [] : [effort]),
+            ...(pin.thinking === undefined ? [] : [pin.thinking ? `thinking` : `no thinking`]),
+            ...(pin.fast === true ? [`fast`] : []),
+            ...(pin.harness === `claude-code` ? [`Claude Code`] : []),
+        ].join(` · `) || undefined
+    );
+};

@@ -122,8 +122,8 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
     };
 };
 
-/* WHICH CARDS BELONG TO A FOLDER, the ones that START there, and pointedly not the ones that merely prefer it
- * (`repos`, a chat-default preference). A folder can hold several: "Docs bot" and "Refactor crew" can both begin
+/* WHICH CARDS BELONG TO A FOLDER, the ones that START there, and pointedly not the ones that merely carry it
+ * (`context.repos`, the part of the workspace their tree holds). A folder can hold several: "Docs bot" and "Refactor crew" can both begin
  * in the same repo with different bounds, which is why the tree's icon opens a list rather than one card.
  *
  * Matched exactly rather than by prefix. A persona starting in `intentic/_editor` is not a persona of

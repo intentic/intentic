@@ -17,7 +17,7 @@ import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTrans
 import { grantRestoredPermission, POST_PLAN_MODE } from "./agent.js";
 import { formatAnswers } from "./question-answers.js";
 import { restoreRequest } from "./agent-requests.js";
-import { runRoleModel } from "./run-role-model.js";
+import { personaRunModel, runRoleModel } from "./run-role-model.js";
 import { registerTurn } from "./agent-steering.js";
 import { outageRetryDue, outageRetryFired } from "./provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
@@ -420,10 +420,15 @@ const resumedTurn = (
  * once, here, for the same reason the resolution happens here at all: what the journal records has to be the
  * model the run is on, not a list it might re-read differently tomorrow.
  *
- * A TURN WITH NO ROLE GETS NO PIN, and that is deliberate rather than a gap. Every starter in this repo names
- * one; what arrives without a role is an unattended turn whose origin this build does not model, and guessing a
- * tier for it is exactly the thing the role split exists to stop. It falls to the same floor an unpinned role
- * does: the composer's own model, which is one the owner chose.
+ * THE PERSONA'S OWN LADDER IS ASKED FIRST (contract schemas/personas.ts `models`, run-role-model.ts
+ * personaRunModel), because a card is the more specific answer than a role: the role says what KIND of job this
+ * is, the card says WHO is doing it, and a model pinned on a persona was meant for every turn wearing it,
+ * whatever started them. A card with no ladder leaves the question to the role, exactly as before.
+ *
+ * A TURN WITH NO ROLE AND NO PERSONA LADDER GETS NO PIN, and that is deliberate rather than a gap. Every starter
+ * in this repo names a role; what arrives without one is an unattended turn whose origin this build does not
+ * model, and guessing a tier for it is exactly the thing the role split exists to stop. It falls to the same
+ * floor an unpinned role does: the composer's own model, which is one the owner chose.
  *
  * Fills only what is absent, which is what keeps the flag from overriding a real choice: every one of those
  * surfaces can name a model for a single run through the shared button's caret, Acceptance names one per run
@@ -462,12 +467,13 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
      * "nobody picked a model for this turn" means. Naming an agent and no model falls to that provider's own
      * catalog default, exactly as it did before the flag existed.
      *
-     * NO ROLE, NO PIN, for the reason the header gives: a role is how a turn says what it is, and a turn that
-     * has not said runs on the owner's own composer pick rather than on a tier this file chose for it. */
-    if (turn.unattended !== true || turn.runRole === undefined || turn.model !== undefined || turn.agent !== undefined) {
+     * NO ROLE AND NO PERSONA LADDER, NO PIN, for the reason the header gives: a role is how a turn says what it
+     * is, and a turn that has not said runs on the owner's own composer pick rather than on a tier this file
+     * chose for it. */
+    if (turn.unattended !== true || turn.model !== undefined || turn.agent !== undefined) {
         return turn;
     }
-    const pinned = await runRoleModel(services, turn.runRole);
+    const pinned = (await personaRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
     if (pinned === undefined) {
         return turn;
     }

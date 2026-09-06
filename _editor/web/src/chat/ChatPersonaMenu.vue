@@ -120,6 +120,9 @@ const closeMenu = (event: MouseEvent): void => {
                          the speaker, so it is an ordinary row rather than a broken one. What genuinely blocks a
                          send (a signed-out account, a card that no longer exists) is said by the composer,
                          once, where the send is about to happen (ChatPane's personaNotice). -->
+                    <!-- The card's own line about what it is for, when it has one: the sentence a chat is
+                         matched on, and the one that tells "Work" from "Studio" faster than their accounts do. -->
+                    <span v-if="persona.brief !== undefined" class="truncate text-2xs text-subtle">{{ persona.brief }}</span>
                     <span v-if="persona.capabilities.length > 0" class="truncate text-2xs" :class="ready(persona) ? `text-subtle` : `text-muted`">
                         {{ accountsOf(persona) }}<template v-if="!ready(persona)">, not signed in yet</template>
                     </span>

@@ -13,7 +13,7 @@ There are **two stored things** and **one derived thing**. That is the whole mod
 | Word | What it really is | Where it lives |
 | --- | --- | --- |
 | **Capability** | One thing you connected. A GitHub token, a database, a VPN: and, for our purposes, **one login on one site**. | one entry in `.intentic/config/capabilities.json` |
-| **Persona** | A card that says "these logins are the same someone", plus what a session wearing it may do and where it works. | one entry in `.intentic/config/personas.json` (committed to git) |
+| **Persona** | A card that says "these logins are the same someone", plus what a session wearing it may do, where it works, what its tree holds and what it runs on. | one entry in `.intentic/config/personas.json` (committed to git) |
 | **Browser session** | *Not a thing you create.* It is the signed-in Chromium profile that a browser capability grows once somebody logs in. | files under `.intentic/local/browser/` |
 
 And one word that people expect to find and **will not**: there is no **Identity** object. See
@@ -135,6 +135,47 @@ Both run under the same owner's rulebook: a script that would read a credential 
 internet is classified and gated exactly as the command that would. Which runtimes can host the second
 backend is declared per runtime (`AgentCapabilities.execution`); today that is the Claude Code loop.
 
+## What it carries, what it runs on, and how a new chat finds it
+
+A card is the sandbox's one **static** description of a working posture, and three fields make it the whole
+of one:
+
+- **`context.repos`**: which nested repositories a session wearing the card carries. The workspace repository
+  is always carried; an absent `context` is every repository. This is what the session's tree HOLDS, which is a
+  different question from `workspace.folders` (what its file tools may TOUCH): a repository that is off is not
+  fenced, it is absent from the checkout, and the session is told so on its opening turn. The daemon brings a
+  conversation's checkout to the list on every turn: a repository the card names joins, one it stops naming
+  leaves with its work committed to the branch.
+- **`models`**: an ordered ladder, the same shape as every per-job list under Sandbox ▸ Agent ▸ Models. The
+  composer moves its model pill to the ladder's head when the card goes on; an unattended turn wearing the
+  card fills its silence from the ladder before the job's own list. A model named on the turn itself always
+  wins. Absent means whatever the chat or the job would have run on anyway.
+- **`brief`**: one line, what the persona is for. The line under the name on the Personas page, and the line a
+  new chat is matched on.
+
+**Static on purpose.** Everything a session sees before the user's first word (its accounts, the tool set its
+powers leave, the kit's prompt and skills, the tree it opens on) is a function of the card it wears, so two
+sessions on one card open on the same system prefix and the provider's prompt cache serves the second. A model
+asked to compose a context per session instead either picks badly and the session walks outside it anyway,
+or picks well at the price of a second strong run (`docs/context-composition-plan.md` at the workspace root
+has the whole argument).
+
+**How a new chat finds its card.** The one per-chat decision is *which* card, and it is a classification: the
+`persona-router` helper role reads the first message and one line per card and names one card or `none`,
+once, before the first turn. The composer asks it once per settled draft on a chat with no turns and no
+persona pinned, and what it does with the answer is the **Match new chats to a persona** setting on the
+Personas page:
+
+| Setting | What happens |
+| --- | --- |
+| Off | Never asked. |
+| Suggest (default) | A chip on the composer offers the card ("Act as Backend?"); pressing it puts the card on. Nothing happens at send. |
+| Auto | The card goes on when the message is sent, unless the chip was pressed first, which declines it for that chat. A send that beats the reading waits for it, briefly. |
+
+Putting the card on means its model too, whichever door it came through. A pick made by hand at the persona
+pill, "Anyone" included, overrules routing for that chat. Unattended wakes are never routed: a wake names its
+persona on its own form, and routing one onto a card would grant it accounts the owner never named for it.
+
 ## Two very different things both called "account"
 
 The one confusion worth naming out loud, because the two words sit one line apart on the same form:
@@ -164,13 +205,13 @@ route outward things through the approvals queue and could not stop it posting. 
 control that promises more than it delivers is the one an owner trusts. So a card answers three questions: who
 it speaks as, what it may do, where it works: and every field of it changes what a session can reach.
 
-**And it does not choose a tree.** A card used to carry a third workspace field: its own copy, the shared one,
-or whatever the surface that started the session preferred. Every surface already opens in a private worktree, so
-the setting existed only to opt *out* of the isolation that lets several sessions run at once, and it asked the
-question in three phrases a reader had no way to choose between. A persona now says where it *starts* and which
-folders its file tools may touch; the copy it works in is not up for discussion. Both folder answers are picked
-from the workspace's own tree rather than typed, because a fence naming a folder that does not exist refuses
-everything, and it does so silently.
+**And it does not choose where its tree lives.** A card used to carry a third workspace field: its own copy,
+the shared one, or whatever the surface that started the session preferred. Every surface already opens in a
+private worktree, so the setting existed only to opt *out* of the isolation that lets several sessions run at
+once, and it asked the question in three phrases a reader had no way to choose between. A persona says where
+it *starts*, which folders its file tools may touch, and (see above) which repositories its tree holds; the
+copy it works in is not up for discussion. Both folder answers are picked from the workspace's own tree rather
+than typed, because a fence naming a folder that does not exist refuses everything, and it does so silently.
 
 The one exception is the desk a Front Desk answers through, whose manner is the product's rather than any
 workspace's: that wording lives in the daemon beside the card the daemon writes, not on the card.
@@ -208,6 +249,9 @@ accounts spelled out.
 | The per-site skills, accounts as roster lines | [account-skills.ts](../_sandbox/sandbox/src/capabilities/account-skills.ts) (the converge) · [browser-skill.ts](../_sandbox/sandbox/src/browser/browser-skill.ts) (the core notes) |
 | The agent signing itself in | [accounts-tools.ts](../_sandbox/sandbox/src/browser/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../_sandbox/sandbox/src/agent/turn-plan.ts) |
+| What a session's tree holds | [conversation-context.ts](../_sandbox/sandbox/src/context/conversation-context.ts) (the card's `context` becomes the conversation's composition, once) · [worktrees.ts](../_sandbox/sandbox/src/agents/worktrees.ts) (`selection`: the checkout brought to it) · [context-note.ts](../_sandbox/sandbox/src/context/context-note.ts) (what the session is told) |
+| Which persona a new chat belongs to | [persona-router.ts](../_sandbox/sandbox/src/agent/persona-router.ts) (the reading, on the `persona-router` role) · [personaRoute.ts](../_editor/web/src/composables/chat/personaRoute.ts) (when the composer asks, and the three modes) · [ComposerPersonaChip.vue](../_editor/web/src/chat/ComposerPersonaChip.vue) (the chip) |
+| The card's model ladder | [personas.ts (contract)](../_sandbox/sandbox-contract/src/schemas/personas.ts) (`personaModels`) · [run-role-model.ts](../_sandbox/sandbox/src/agent/run-role-model.ts) (`personaRunModel`, an unattended turn's fill) · [conversation.ts](../_editor/web/src/composables/chat/conversation.ts) (`wearModel`, the composer's pill following the card) |
 | The screens | [SandboxPersonas.vue](../_editor/web/src/pages/sandbox/SandboxPersonas.vue) (who this box is, the whole card) · [DirectoryPersonas.vue](../_editor/web/src/pages/workspace/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../_editor/web/src/pages/Capabilities.vue) (what it is signed into) |
 | The card's own fields | [PersonaForm.vue](../_editor/web/src/pages/sandbox/PersonaForm.vue) (the editor) · [PersonaPowersFields.vue](../_editor/web/src/pages/sandbox/PersonaPowersFields.vue) (what it may do, grouped by blast radius: shared with the tree's quick panel) · [FolderPicker.vue](../_editor/web/src/pages/sandbox/FolderPicker.vue) (both location answers, picked from the workspace tree) |
 | Seeing the workspace as one | [personaReach.ts](../_editor/web/src/composables/workspace/personaReach.ts) (the lens, and why it never blocks) · [WorkspaceDesktop.vue](../_editor/web/src/pages/workspace/WorkspaceDesktop.vue) (`lensLine`: who you are reading as, on the funnel that is already lit for it) |

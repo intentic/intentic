@@ -67,7 +67,7 @@ describe(`personasStartingIn`, () => {
         { id: `docs`, capabilities: [], workspace: { startIn: `intentic/_editor` } },
         { id: `refactor`, capabilities: [], workspace: { startIn: `intentic/_editor` } },
         { id: `deep`, capabilities: [], workspace: { startIn: `intentic/_editor/web` } },
-        { id: `prefers`, capabilities: [], repos: [`intentic/_editor`] },
+        { id: `carries`, capabilities: [], context: { repos: [`intentic/_editor`] } },
         { id: `anywhere`, capabilities: [] },
     ];
 
@@ -76,13 +76,13 @@ describe(`personasStartingIn`, () => {
         expect(personasStartingIn(cards, `intentic/_editor`).map((persona) => persona.id)).toEqual([`docs`, `refactor`]);
     });
 
-    /* Matched exactly. A card starting in a subfolder is not this folder's, and a card that merely PREFERS this
-     * repo (a chat default) has not been told to start here: claiming either would make the row assert work the
-     * card does not do. */
-    it(`claims neither a subfolder's card nor one that only prefers the repo`, () => {
+    /* Matched exactly. A card starting in a subfolder is not this folder's, and a card that merely CARRIES this
+     * repo (the part of the workspace its tree holds) has not been told to start here: claiming either would
+     * make the row assert work the card does not do. */
+    it(`claims neither a subfolder's card nor one that only carries the repo`, () => {
         const found = personasStartingIn(cards, `intentic/_editor`).map((persona) => persona.id);
         expect(found).not.toContain(`deep`);
-        expect(found).not.toContain(`prefers`);
+        expect(found).not.toContain(`carries`);
     });
 
     it(`counts the cards per folder in one pass, ignoring the rootless ones`, () => {

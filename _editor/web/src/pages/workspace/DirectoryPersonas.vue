@@ -155,13 +155,14 @@ const bounds = computed(() => {
     return stored === undefined ? undefined : personaBounds({ id: cardId.value, capabilities: [], powers: stored });
 });
 
-/* THE DECISIONS THIS PANEL DOES NOT ASK ABOUT and must not undo when it rewrites an existing card: which projects
- * prefer it, which prompt it runs on, which context shelf it opens on. A card rebuilt from this form without them
- * would lose each on the first folder change, silently, in a tracked file. */
-const carriedOver = (existing: Persona | undefined): Pick<Persona, "repos" | "systemPromptMode" | "context"> => ({
-    ...(existing?.repos !== undefined ? { repos: existing.repos } : {}),
+/* THE DECISIONS THIS PANEL DOES NOT ASK ABOUT and must not undo when it rewrites an existing card: what it is
+ * for, which prompt it runs on, which repositories it carries, which models it runs on. A card rebuilt from
+ * this form without them would lose each on the first folder change, silently, in a tracked file. */
+const carriedOver = (existing: Persona | undefined): Pick<Persona, "brief" | "systemPromptMode" | "context" | "models"> => ({
+    ...(existing?.brief !== undefined ? { brief: existing.brief } : {}),
     ...(existing?.systemPromptMode !== undefined ? { systemPromptMode: existing.systemPromptMode } : {}),
     ...(existing?.context !== undefined ? { context: existing.context } : {}),
+    ...(existing?.models !== undefined ? { models: existing.models } : {}),
 });
 
 /* THE WHOLE CARD THIS PANEL IS ABOUT TO WRITE, or undefined when the form does not describe one yet. Built here

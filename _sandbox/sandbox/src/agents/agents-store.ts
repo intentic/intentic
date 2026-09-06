@@ -3,7 +3,6 @@ import {
     AgentHarnessSchema,
     AgentOriginSchema,
     AgentProviderSchema,
-    ContextCompositionSchema,
     ForkedFromSchema,
     LandConflictSchema,
     type LandedMessage,
@@ -74,6 +73,16 @@ export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
  * turn at all) errs toward telling the model twice rather than never. */
 export const compactedSinceLastTurn = (entry: { readonly compactedTurn?: number | undefined } | undefined, conversationTurns: number): boolean =>
     entry?.compactedTurn !== undefined && entry.compactedTurn >= conversationTurns - 1;
+
+/* WHICH PART OF THE WORKSPACE A CONVERSATION CARRIES: the nested repositories its checkout holds (root always,
+ * never listed), and the persona card the answer was read off (contract schemas/personas.ts `context`), kept
+ * so the preamble can name it. Daemon-local rather than in the contract: nothing outside this process reads
+ * it, and the card it was copied from is the owner's own record of the decision. */
+export const CompositionSchema = z.object({
+    persona: z.string().optional(),
+    repos: z.array(z.string()),
+});
+export type Composition = z.infer<typeof CompositionSchema>;
 
 export const PersistedAgentSchema = z.object({
     // The conversationId. `branch` is the placement discriminator: present for an isolated conversation,
@@ -173,16 +182,16 @@ export const PersistedAgentSchema = z.object({
             absorbed: z.number().optional(),
         }),
     ),
-    /* WHICH PART OF THE WORKSPACE THIS CONVERSATION CARRIES, the pick a context shelf made on the turn that
-     * created its worktrees (schemas/context.ts, context/shelves.ts). It is what `repos` above is brought to on
-     * every later turn (worktrees.ts ensure's selection), so the two are read together: this says what SHOULD be
-     * checked out, that says what IS and where it stands.
+    /* WHICH PART OF THE WORKSPACE THIS CONVERSATION CARRIES, copied off the persona card the opening turn wore
+     * (context/conversation-context.ts). It is what `repos` above is brought to on every later turn
+     * (worktrees.ts ensure's selection), so the two are read together: this says what SHOULD be checked out,
+     * that says what IS and where it stands.
      *
-     * Absent means everything the workspace has, which is every conversation opened with no shelf and every one
-     * that predates shelves. Decided ONCE, with the worktrees: a shelf edited afterwards changes what the next
-     * conversation carries and never what this one does, for the same reason a persona card edited mid-life does
-     * not move a running turn's account. */
-    composition: ContextCompositionSchema.optional(),
+     * Absent means everything the workspace has, which is every conversation opened with no persona, or with a
+     * card that says nothing about its context. Decided ONCE, with the worktrees: a card edited afterwards
+     * changes what the next conversation carries and never what this one does, for the same reason a card
+     * edited mid-life does not move a running turn's account. */
+    composition: CompositionSchema.optional(),
     /* WHAT THE LANDED WORK DID, as a commit subject, drafted from the diff the moment it reached the main tree
      * (agents/landed-subject.ts), for the Changes panel's "From" chip to file into the commit box.
      *

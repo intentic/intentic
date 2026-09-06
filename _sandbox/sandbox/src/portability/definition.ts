@@ -73,12 +73,6 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     },
     { path: ".intentic/config/personas/", note: "Persona prompt files, beside the cards that name them." },
     {
-        // Spelled through the typed helper so the compiler holds it to the state table; the helper drops the
-        // directory's trailing slash, which the table's path keeps, so it is put back.
-        path: `${stateRelPath(".intentic/config/context/")}/`,
-        note: "Context shelves: which repositories a conversation opened on one carries. Named from a persona card or the contextShelf setting.",
-    },
-    {
         /* Through `stateRelPath` rather than spelled out, unlike the entries around it: those predate the
          * path-literals rule and are held by a baseline that may shrink and not grow, and this way the state
          * table's own union checks the name. It drops the trailing slash a directory entry carries, which the

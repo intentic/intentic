@@ -5,10 +5,11 @@ import {
     type AgentEvent,
     type AgentTurn,
     type ParkedCard,
-    type TranscriptRow,
+    type Persona,
     RESUME_NOTES,
     type SandboxSettings,
     SandboxSettingsSchema,
+    type TranscriptRow,
     withResumeNote,
 } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
@@ -289,6 +290,66 @@ test("an unattended turn that names its own model keeps it", async () => {
         { prompt: "walk the story", conversationId: "ar-explicit", unattended: true, runRole: ROLE, agent: "claude", model: "claude-opus-4-5" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
+});
+
+/* THE PERSONA'S LADDER, asked before the role's. A card is the more specific answer: the role says what kind of
+ * job this is, the card says who is doing it. The fixture's services carry no persona store, so these hand one
+ * in; a turn that names no persona never reaches it. */
+const withPersonas = (services: Services, cards: readonly Persona[]): Services => ({
+    ...services,
+    personas: unstubbed<Services["personas"]>("personas", { get: async (id) => cards.find((card) => card.id === id) }),
+});
+
+const ranAs = async (cards: readonly Persona[], settings: Partial<SandboxSettings>, turn: AgentTurn & { conversationId: string }): Promise<AgentTurn> => {
+    const services = withPersonas(withProviders(fakeServices(mkdtempSync(join(tmpdir(), "agent-run-model-"))), ["claude", "codex", "gemini"]), cards);
+    await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...settings });
+    const seen: AgentTurn[] = [];
+    await startConversationTurn(
+        services,
+        async function* (_services, input) {
+            seen.push(input);
+            yield { kind: "done" };
+        },
+        turn,
+    );
+    await settle(turn.conversationId);
+    return seen[0]!;
+};
+
+test("the persona's own ladder outranks the role's list, and brings its knobs", async () => {
+    const ran = await ranAs(
+        [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5", effort: "max" }] }],
+        { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] } },
+        { prompt: "fix CI", conversationId: "ar-persona", unattended: true, runRole: ROLE, actsAs: "backend" },
+    );
+    expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5", effort: "max" });
+});
+
+test("a persona with no ladder, or none reachable, leaves the question to the role", async () => {
+    const roles = { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } };
+    const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, { prompt: "fix CI", conversationId: "ar-persona-silent", unattended: true, runRole: ROLE, actsAs: "quiet" });
+    expect(silent).toMatchObject({ agent: "codex", model: "gpt-5.6" });
+    // Kimi is not connected in this fixture, so the card's ladder reaches nothing and the role answers.
+    const unreachable = await ranAs([{ id: "far", capabilities: [], models: [{ provider: "kimi", model: "k2" }] }], roles, {
+        prompt: "fix CI",
+        conversationId: "ar-persona-far",
+        unattended: true,
+        runRole: ROLE,
+        actsAs: "far",
+    });
+    expect(unreachable).toMatchObject({ agent: "codex", model: "gpt-5.6" });
+    // A card nobody has (the resolver denies that turn everything anyway) is the same silence.
+    const missing = await ranAs([], roles, { prompt: "fix CI", conversationId: "ar-persona-missing", unattended: true, runRole: ROLE, actsAs: "gone" });
+    expect(missing).toMatchObject({ agent: "codex", model: "gpt-5.6" });
+});
+
+test("a turn that names its own model keeps it over the persona's ladder too", async () => {
+    const ran = await ranAs(
+        [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5" }] }],
+        {},
+        { prompt: "fix CI", conversationId: "ar-persona-explicit", unattended: true, runRole: ROLE, actsAs: "backend", agent: "codex", model: "gpt-5.6" },
+    );
+    expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
 
 test("a turn nobody flagged unattended is left alone", async () => {

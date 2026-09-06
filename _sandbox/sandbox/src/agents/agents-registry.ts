@@ -3,7 +3,6 @@ import {
     type AgentStatus,
     type AgentSummary,
     type AgentTurn,
-    type ContextComposition,
     deriveTitle,
     type LandedMessageDraft,
     planParts,
@@ -18,7 +17,7 @@ import { watchProjection } from "../agent/watch-state.js";
 import { loopProjection } from "../loops/loop-state.js";
 import { workflowProjection } from "../workflows/workflow-state.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
-import { type AgentsStore, type AgentTitleSource, isIsolated, landedMessageOf, type PersistedAgent } from "./agents-store.js";
+import { type AgentsStore, type AgentTitleSource, type Composition, isIsolated, landedMessageOf, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
 import type { LandedPresences } from "./landed-presence.js";
 import type { LandStanding, LandStandings } from "./standing.js";
@@ -490,7 +489,7 @@ export interface AgentsRegistry {
      * on the turn that created it, what it was decided it SHOULD carry (agents-store.ts `composition`). The
      * composition is set only when given, so the callers that rewrite the repos alone, the pre-turn rebase, a
      * join or a leave, keep the decision the opening turn made. */
-    readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][], composition?: ContextComposition) => Promise<void>;
+    readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][], composition?: Composition) => Promise<void>;
     /* Take repos that no longer exist out of EVERY composition, live and archived, and answer with the
      * conversations that named them. The one write that may edit a composition after it is frozen, because a
      * deleted repo is the one change to the workspace a frozen composition cannot survive: every per-repo pass

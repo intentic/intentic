@@ -4,13 +4,12 @@ import { type IconName, Row, RowGroup, SegmentedControl, Verdict } from "@intent
 import { isIconName } from "@intentic/ui/icons";
 import { computed, shallowRef } from "vue";
 import { RouterLink } from "vue-router";
-import { effortLabelOf } from "../../../composables/chat/effortScale";
 import { modelChoiceLabel } from "../../../composables/chat/modelPins";
 import { useRoleModel } from "../../../composables/chat/roleModel";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import AddModelButton from "./AddModelButton.vue";
-import { type PinnedList, pinnedList } from "./modelPinList";
+import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
 
@@ -94,23 +93,6 @@ const tierEvidence = computed<string>(() => {
         .join(` · `);
 });
 
-/* THE TIER AN ENTRY WILL ACTUALLY RUN AT, clamped the way the composer clamps its own (effortScale.ts): a
- * stored `max` on a model whose scale stops at `high`, or on one whose thinking the same pin switched off,
- * would otherwise name a rung this run cannot use. The user's own pick stays stored either way, for the day the
- * longer-scaled model leads again. */
-const effortLabel = (pin: ModelPin): string | undefined => effortLabelOf(pin.effort, pin.provider, pin.model, pin.thinking);
-
-/* WHAT AN ENTRY SAYS ABOUT HOW IT RUNS, in one line beside its name. Only the fields actually pinned are named,
- * so an entry left at the provider's own defaults reads as just a model: the point of the line is that a
- * deliberate choice is legible from the list without opening anything, not that every field has a value. */
-const knobSummary = (pin: ModelPin): string | undefined =>
-    [
-        ...(effortLabel(pin) === undefined ? [] : [effortLabel(pin)!]),
-        ...(pin.thinking === undefined ? [] : [pin.thinking ? `thinking` : `no thinking`]),
-        ...(pin.fast === true ? [`fast`] : []),
-        ...(pin.harness === `claude-code` ? [`Claude Code`] : []),
-    ].join(` · `) || undefined;
-
 /* ONE EDITOR PER ROLE, BUILT FROM THE CATALOG rather than written out. Every row stores the same thing — an
  * ordered list of pins under settings.modelRoles[role] — so the only per-row facts left are the ones the
  * catalog already holds, and a role added there gets a working row here by existing.
@@ -123,7 +105,7 @@ const editorFor = (role: ModelRole): PinnedList =>
         write: (pins) => patch({ modelRoles: { ...settings.value?.modelRoles, [role]: [...pins] } }),
         decode: (pin) => pin,
         encode: (pin) => pin,
-        detail: knobSummary,
+        detail: pinKnobSummary,
         knobs: true,
     });
 

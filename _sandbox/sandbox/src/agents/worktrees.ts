@@ -16,9 +16,10 @@ import { mirroredDirs, overlaysDir, overlaysRoot, type TurnIsolation } from "./i
 // invisible to the /work tree walk + watcher + iq + history scopes, and their gitdir pointers never straddle
 // volumes. The object stores are shared; a worktree costs only its checkout.
 //
-// A conversation with no SELECTION (context/shelves.ts repoSelectionOf) has its composition FROZEN at first
-// ensure: repos cloned into /work later don't join it. A conversation on a context shelf is instead brought to
-// its selection on every ensure, a named repo joins and an unnamed one leaves (reconcile, below). Either way,
+// A conversation with no SELECTION (context/conversation-context.ts) has its composition FROZEN at first
+// ensure: repos cloned into /work later don't join it. A conversation whose persona card names its context is
+// instead brought to that selection on every ensure, a named repo joins and an unnamed one leaves (reconcile,
+// below). Either way,
 // repos the agent clones inside its worktree are outside diff/land.
 
 export interface ConversationWorktree {
@@ -53,14 +54,14 @@ export interface AgentWorktrees {
          * linkMirrors). Absent ⇒ the container's own answer, for the callers that are not about to run a turn
          * (a sweep, a repair, a test). */
         namespaced?: boolean,
-        /* WHICH REPOSITORIES THE CONVERSATION CARRIES, as repo ids, root implied (context/shelves.ts
-         * repoSelectionOf). Absent ⇒ every live repository, the composition every conversation had before a
-         * shelf could narrow one. Present, the composition is brought to it: on first use only the named repos
+        /* WHICH REPOSITORIES THE CONVERSATION CARRIES, as repo ids, root implied (the persona card's `context`,
+         * context/conversation-context.ts). Absent ⇒ every live repository, the composition every conversation
+         * had before a card could narrow one. Present, the composition is brought to it: on first use only the named repos
          * are checked out, and on a later turn a repo named here that the record lacks JOINS (a fresh checkout
          * at main's head, or its old branch back off the shelf), while a recorded repo not named here LEAVES
          * (its remainder committed onto agent/<id>, the checkout removed, the branch parked), so the returned
-         * `repos` are the record to write down. A name that is not a live repository is ignored: a shelf may
-         * name a repo that has yet to be cloned, as a persona names an account that has yet to sign in. */
+         * `repos` are the record to write down. A name that is not a live repository is ignored: a card may
+         * name a repo that has yet to be cloned, as it names an account that has yet to sign in. */
         selection?: readonly string[],
     ) => Promise<ConversationWorktree>;
     // Tear down: worktree remove (before the ref goes, git refuses to delete a checked-out branch), then the dir.

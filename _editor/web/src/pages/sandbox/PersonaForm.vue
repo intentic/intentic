@@ -1,26 +1,35 @@
 <script setup lang="ts">
-import type { SystemPromptMode } from "@intentic/sandbox-contract";
+import type { ModelPin, SystemPromptMode } from "@intentic/sandbox-contract";
 import { BrandMark, ui, Notice, type NoticeModel, SearchBar, SegmentedControl } from "@intentic/ui";
-import { computed, ref } from "vue";
+import ToggleSwitch from "primevue/toggleswitch";
+import { computed, ref, shallowRef } from "vue";
+import AddModelButton from "./agent/AddModelButton.vue";
+import { pinKnobSummary, pinnedList } from "./agent/modelPinList";
+import ModelPinList from "./agent/ModelPinList.vue";
+import ModelPinPicker from "./agent/ModelPinPicker.vue";
 import FolderPicker from "./FolderPicker.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
+import { useRepos } from "../../composables/workspace/useRepos";
 
 /* THE CARD EDITOR: a saved persona, opened inside its own row on the Personas page.
  *
- * IT ASKS FOUR QUESTIONS AND SHOWS ONE AT A TIME. Stacked, they ran to roughly thirty controls in one scroll:
+ * IT ASKS FIVE QUESTIONS AND SHOWS ONE AT A TIME. Stacked, they ran to roughly thirty controls in one scroll:
  * an account picker, nine permission switches in two columns, two folder pickers, a prompt and a skill list.
  * Every one of them was on screen for someone who came to change a single thing, and the effect was a card that
- * read as a settings dump rather than as a person being described. The three answers are exclusive views of one
+ * read as a settings dump rather than as a person being described. The answers are exclusive views of one
  * subject, which is what <SegmentedControl> is for, and it is the same control, at the same size, that the Agent tab
  * one level up uses for exactly the same reason.
  *
- * WHY THREE PILLS AND NOT FOUR. "Where it works" is the obvious fourth, and it stays inside "What it may do" on
- * purpose: a folder fence is a limit on your own tree, the same question as the file dropdown directly above it,
- * and PersonaPowersFields already hosts it in the workspace column for that reason. A tab of two pickers would
- * split one question across two screens to make the strip symmetrical.
+ * FOUR PILLS FOR FIVE QUESTIONS. "Where it works" stays inside "What it may do" on purpose: a folder fence is a
+ * limit on your own tree, the same question as the file dropdown directly above it, and PersonaPowersFields
+ * already hosts it in the workspace column for that reason. "Runs on" IS its own pill, because it answers a
+ * different kind of question from a fence: not what a session may touch but what its tree HOLDS and which model
+ * reads it, the two things that make a card a static context every session on it shares (contract
+ * schemas/personas.ts says why that is the design). The brief, the one line a new chat is matched on, sits
+ * under the name in "Speaks as", because it is the card saying who it is.
  *
  * AND WHY THE PERMISSIONS ARE NOT SPLIT FURTHER. Their own two columns: "in your workspace" and "reaching out":
  * would make a tidy four-pill strip and would break the one property that block is built around: a reader arrives
@@ -57,11 +66,17 @@ export interface PersonaDraft extends PersonaPowersDraft {
      * its own route (usePersonaKit). Carrying it in this draft would put a system prompt inside the debounced
      * whole-card autosave, so every keystroke would rewrite the committed personas file. */
     systemPromptMode: SystemPromptMode | undefined;
-    /* Which context shelf a session wearing this card opens on (contract schemas/context.ts): the part of the
-     * workspace it carries. Carried through the draft so a save rewrites the card WITH it: the card is rebuilt
-     * from this draft on every autosave, and a field the draft did not hold would be dropped by the first edit
-     * to anything else. No control draws it yet; it is set in the card's file. */
-    context: string | undefined;
+    /* WHAT IT IS FOR, in one line (Persona.brief): the sentence a new chat is matched on, and the row's subtitle.
+     * "" is a card with none, stored as absent. */
+    brief: string;
+    /* WHICH NESTED REPOSITORIES ITS CONVERSATIONS CARRY (Persona.context.repos). `undefined` is the default and
+     * means every repository the workspace has; a list, even an empty one, is the card deciding, and an empty
+     * one is the workspace repository alone. Two states the switch below tells apart on purpose: "everything"
+     * has to stay sayable as the absence of a decision, so a card that never opened this tab commits nothing. */
+    carries: string[] | undefined;
+    /* WHICH MODELS ITS CONVERSATIONS RUN ON, in order (Persona.models). Empty is stored as absent: the chat's
+     * own pick, or the job's list, answers instead. */
+    models: ModelPin[];
 }
 
 const { draft, accounts, connected, grantables, error } = defineProps<{
@@ -75,12 +90,13 @@ const { draft, accounts, connected, grantables, error } = defineProps<{
     error?: NoticeModel;
 }>();
 
-/* The three questions, in the order somebody thinks in: who is this, what may it touch, what is it told. Each
- * label is the heading that part used to carry, so nothing has to be relearned: the card that was one scroll
- * of three headings is the same card with those headings turned into a strip. */
+/* The questions, in the order somebody thinks in: who is this, what may it touch, what does it run on, what is
+ * it told. Each label is the heading that part used to carry, so nothing has to be relearned: the card that was
+ * one scroll of headings is the same card with those headings turned into a strip. */
 const SECTIONS = [
     { label: `Speaks as`, value: `identity` },
     { label: `What it may do`, value: `powers` },
+    { label: `Runs on`, value: `runs` },
     { label: `What it is told`, value: `told` },
 ] as const;
 type Section = (typeof SECTIONS)[number][`value`];
@@ -144,6 +160,42 @@ const shown = computed(() =>
 // The folder fence is this form's field, and one of the bounds a shell can walk around, so the caveat inside
 // <PersonaPowersFields> has to know about it.
 const folderBound = computed(() => draft.folders.length > 0);
+
+/* ── Runs on ─────────────────────────────────────────────────────────────────────────────────────────────────
+ * WHAT ITS TREE HOLDS: one switch for "every repository" (the default, stored as nothing), and under it, when
+ * that is off, one per nested repository. Off is a strong statement and the sentence under the list says so: a
+ * repository that is off is not fenced, it is ABSENT from the session's checkout. */
+const { nested } = useRepos();
+const setCarried = (repo: string, on: boolean): void => {
+    const current = draft.carries ?? [];
+    draft.carries = on ? [...new Set([...current, repo])] : current.filter((name) => name !== repo);
+};
+
+/* WHICH MODELS IT RUNS ON, the same editor the role lists on Sandbox ▸ Agent ▸ Models use (modelPinList.ts),
+ * over the draft's own list: the ladder is part of the card, so it rides the card's autosave like a switch
+ * does. Knobs on, because an entry here says how it runs as well as which model it is. */
+const models = pinnedList<ModelPin>({
+    read: () => draft.models,
+    write: (pins) => {
+        draft.models = [...pins];
+    },
+    decode: (pin) => pin,
+    encode: (pin) => pin,
+    detail: pinKnobSummary,
+    knobs: true,
+});
+// One picker for the card, over whichever entry raised it; `index` absent means ADDING (AgentModels.vue says why).
+const editing = shallowRef<{ index: number | undefined; anchor: HTMLElement } | undefined>(undefined);
+const openPicker = (index: number | undefined, anchor: HTMLElement): void => {
+    editing.value = { index, anchor };
+};
+const editingPin = computed<ModelPin | undefined>(() => (editing.value?.index === undefined ? undefined : models.entries.value[editing.value.index]?.pin));
+const pick = (pin: ModelPin): void => models.apply(editing.value?.index, pin);
+const configure = (pin: ModelPin): void => {
+    if (editing.value?.index !== undefined) {
+        models.apply(editing.value.index, pin);
+    }
+};
 </script>
 
 <template>
@@ -159,6 +211,21 @@ const folderBound = computed(() => draft.folders.length > 0);
         <SegmentedControl v-model="section" :options="SECTIONS" aria-label="What to change about this persona" />
 
         <template v-if="section === `identity`">
+            <!-- THE ONE LINE THE CARD SAYS ABOUT ITSELF, first, because it is the card saying who it is. It is
+                 also the sentence a new chat is matched on (the sandbox's persona router reads one line per card),
+                 so the hint asks for the thing that helps that reading: what the work looks like. -->
+            <div class="ui-field">
+                <label class="ui-field-label" for="persona-brief">What it's for</label>
+                <input
+                    id="persona-brief"
+                    v-model="draft.brief"
+                    :class="ui.input('max-w-xl')"
+                    maxlength="200"
+                    placeholder="Backend work on the api and billing services"
+                />
+                <span class="text-xs text-subtle">One line. A new chat is matched to a persona by this sentence, so say what its work looks like.</span>
+            </div>
+
             <div class="ui-field">
                 <span class="ui-field-label">Speaks through</span>
                 <!-- Nothing to offer, said as a fact about this sandbox rather than as something missing from the
@@ -309,6 +376,75 @@ const folderBound = computed(() => draft.folders.length > 0);
                     </div>
                 </template>
             </PersonaPowersFields>
+        </template>
+
+        <template v-else-if="section === `runs`">
+            <p class="text-xs text-subtle">
+                The tree a session wearing this card opens on, and the model that reads it. Both are the same for every session on this card, which is
+                what lets a chat matched to it open on a prompt the provider has already cached.
+            </p>
+
+            <div class="ui-field">
+                <span class="ui-field-label">Models</span>
+                <div class="flex flex-col gap-2">
+                    <ModelPinList
+                        v-if="models.entries.value.length > 0"
+                        :entries="models.entries.value"
+                        @promote="models.promote"
+                        @remove="models.remove"
+                        @edit="(index: number, anchor: HTMLElement) => openPicker(index, anchor)"
+                    />
+                    <!-- Empty is the ordinary state and says what it means: no ladder here, so the chat's own
+                         pick (or the job's list, for a run nobody watched start) answers. -->
+                    <p v-else class="text-xs text-subtle">
+                        Whatever the chat or the job would have run on anyway. Add a model to decide for every session wearing this card; the
+                        first one that answers wins, so a second entry catches an account that is out.
+                    </p>
+                    <AddModelButton label="Add a model for this persona" @open="(anchor: HTMLElement) => openPicker(undefined, anchor)" />
+                </div>
+            </div>
+
+            <div class="ui-field">
+                <span class="ui-field-label">Carries</span>
+                <div class="flex flex-col gap-2">
+                    <label class="flex items-center justify-between gap-3">
+                        <span class="flex min-w-0 flex-col">
+                            <span class="text-sm text-content">Every repository</span>
+                            <span class="text-xs text-subtle">The whole workspace, as a chat with no persona sees it.</span>
+                        </span>
+                        <ToggleSwitch
+                            :model-value="draft.carries === undefined"
+                            @update:model-value="(on: boolean) => (draft.carries = on ? undefined : [])"
+                        />
+                    </label>
+                    <template v-if="draft.carries !== undefined">
+                        <p v-if="nested.length === 0" class="text-xs text-subtle">
+                            This workspace has no nested repositories, so the workspace repository is all a session carries either way.
+                        </p>
+                        <label v-for="repo in nested" :key="repo" class="flex items-center justify-between gap-3 pl-4">
+                            <span class="truncate text-sm text-content">{{ repo }}</span>
+                            <ToggleSwitch :model-value="draft.carries.includes(repo)" @update:model-value="(on: boolean) => setCarried(repo, on)" />
+                        </label>
+                        <!-- Said HERE, because this is the switch whose effect is easiest to under-read: it is
+                             not a fence on the file tools, the repository is simply not in the checkout. -->
+                        <span class="text-xs text-subtle">
+                            A repository that is off is not in the session's tree at all: nothing under it exists there. The workspace repository
+                            is always carried.
+                        </span>
+                    </template>
+                </div>
+            </div>
+
+            <ModelPinPicker
+                :open="editing !== undefined"
+                :anchor="editing?.anchor"
+                :pin="editingPin"
+                knobs
+                :taken="models.taken.value"
+                @update:open="editing = undefined"
+                @pick="pick"
+                @configure="configure"
+            />
         </template>
 
         <PersonaKitFields

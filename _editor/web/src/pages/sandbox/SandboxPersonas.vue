@@ -12,6 +12,7 @@ import {
     PersonaFace,
     RowGroup,
     RowNote,
+    SegmentedControl,
     SkeletonRows,
     StatusBadge,
 } from "@intentic/ui";
@@ -24,6 +25,7 @@ import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
+import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 
 /* THE PERSONAS this sandbox wears when it acts outside, and the one place a WHOLE card is written: the accounts
  * it speaks through, what it may do, where it works. (A folder's own personas can also be named and bounded from
@@ -94,7 +96,10 @@ const draftOf = (persona: Persona): PersonaDraft => ({
     startIn: persona.workspace?.startIn === undefined ? [] : [persona.workspace.startIn],
     folders: [...(persona.workspace?.folders ?? [])],
     systemPromptMode: persona.systemPromptMode,
-    context: persona.context,
+    brief: persona.brief ?? ``,
+    // Absent context is "every repository"; a list, even an empty one, is the card deciding.
+    carries: persona.context === undefined ? undefined : [...persona.context.repos],
+    models: [...(persona.models ?? [])],
 });
 
 /* Changing the draft without the autosave below reading it as an edit: installing one on open, and writing a
@@ -182,9 +187,17 @@ const cardFrom = (state: PersonaDraft): Persona => {
         // Same rule as the two above: a card following the sandbox stores nothing, so the file says what was
         // decided rather than restating a default nobody chose.
         ...(state.systemPromptMode !== undefined ? { systemPromptMode: state.systemPromptMode } : {}),
-        ...(state.context !== undefined ? { context: state.context } : {}),
+        ...runsOn(state),
     };
 };
+
+/* THE FIFTH QUESTION'S HALF OF THE CARD, by the same rule: a brief nobody wrote, a card that carries everything
+ * and a card with no ladder each store NOTHING, so the committed file holds the decisions and not the defaults. */
+const runsOn = (state: PersonaDraft): Pick<Persona, "brief" | "context" | "models"> => ({
+    ...(state.brief.trim() !== `` ? { brief: state.brief.trim() } : {}),
+    ...(state.carries !== undefined ? { context: { repos: [...state.carries] } } : {}),
+    ...(state.models.length > 0 ? { models: [...state.models] } : {}),
+});
 
 /* CREATE, THEN OPEN. The card is written with nothing on it but its name and an empty account list: every
  * other answer is a default the schema already means, and storing them would put a decision nobody made into a
@@ -271,6 +284,22 @@ const beginRename = (persona: Persona): void => {
     rename.begin();
 };
 
+/* ── Routing ─────────────────────────────────────────────────────────────────────────────────────────────────
+ * Whether a new chat is matched to one of these cards from its first message (settings.personaRouting; the
+ * daemon's persona-router.ts does the reading). It lives on THIS page rather than beside the model lists
+ * because it is a fact about what personas do, and the sentence under each card (`brief`) is what the match
+ * reads: someone deciding whether to switch it on is looking at the cards it would choose between. */
+const { settings, patch } = useSandboxSettings();
+const ROUTING = [
+    { label: `Off`, value: `off` },
+    { label: `Suggest`, value: `suggest` },
+    { label: `Auto`, value: `auto` },
+] as const;
+const routing = computed(() => settings.value?.personaRouting ?? `suggest`);
+const setRouting = (value: string): void => {
+    patch({ personaRouting: value as (typeof ROUTING)[number][`value`] });
+};
+
 // ── Removal ─────────────────────────────────────────────────────────────────────────────────────────────────
 const removing = ref<Persona | undefined>(undefined);
 const confirmRemove = async (): Promise<void> => {
@@ -290,6 +319,24 @@ const confirmRemove = async (): Promise<void> => {
             A persona is who this sandbox is when it works: the accounts it speaks through, what it may do, and where in the workspace it works. Point
             an automation at one and it runs inside those bounds.
         </p>
+
+        <!-- THE ONE SETTING ON THIS PAGE, above the list it governs. Three words rather than a switch, because the
+             middle one is the honest default: a persona takes accounts and repositories AWAY from a chat, and the
+             first time that happens it should happen because somebody pressed the chip. -->
+        <div v-if="settings !== undefined && personas.length > 0" class="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <span class="flex min-w-0 flex-col">
+                <span class="flex items-center gap-2 text-sm text-content">
+                    <Icon name="users" class="w-4 shrink-0 text-center text-xs text-subtle" />
+                    Match new chats to a persona
+                </span>
+                <span class="text-xs text-subtle">
+                    <template v-if="routing === `off`">A chat acts as the persona you pick, or as everyone.</template>
+                    <template v-else-if="routing === `suggest`">The first message is read, and the matching persona is offered on the composer for you to press.</template>
+                    <template v-else>The first message is read, and the matching persona is applied when you send, unless you dismiss it.</template>
+                </span>
+            </span>
+            <SegmentedControl :model-value="routing" :options="ROUTING" aria-label="Match new chats to a persona" @update:model-value="setRouting" />
+        </div>
 
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
         <!-- The empty state below is a real one: it explains what NOT having a persona costs, so it must not
@@ -410,15 +457,16 @@ const confirmRemove = async (): Promise<void> => {
                         </button>
                     </template>
 
-                    <!-- The name sits alone on the row: accounts live in the open card, and the marks on the
-                         right already say which platforms. A description slot would sit the title on the first
-                         line of a two-line block and make it look top-heavy against the face.
-
-                         A rename failure still uses this slot, because that is the one moment the row has
-                         something to say under the name. The slot is omitted otherwise so Row does not reserve
-                         a blank line for it. -->
-                    <template v-if="rename.error !== undefined && renamingId === persona.id" #description>
-                        <span class="text-danger">{{ rename.error }}</span>
+                    <!-- Under the name: the card's own one-line brief when it has one, or a rename failure, the
+                         one moment the row has something else to say. Accounts live in the open card, and the
+                         marks on the right already say which platforms. The slot is omitted when there is
+                         neither so Row does not reserve a blank line for it. -->
+                    <template v-if="(rename.error !== undefined && renamingId === persona.id) || persona.brief !== undefined" #description>
+                        <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
+                        <!-- The one line the card says about itself, and the line a new chat is matched on: worth
+                             the second line on the row, because it is the difference between six names and six
+                             jobs. -->
+                        <span v-else class="truncate">{{ persona.brief }}</span>
                     </template>
 
                     <template #meta>

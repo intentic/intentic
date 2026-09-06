@@ -31,8 +31,11 @@ import { endpointProviders, modelOptionsFor } from "./providerCatalog";
  * `run` role has no ladder at all. Kept in one source list rather than split per kind, because a connected
  * provider whose catalog has not answered yet publishes no options, and dropping its PIN on that basis would
  * make a run button name a different model for the first second of every page load than the one the daemon is
- * about to spend. `resolveRoleModels` filters pins on readiness alone, so that cannot happen here. */
-const roleSources = computed(() =>
+ * about to spend. `resolveRoleModels` filters pins on readiness alone, so that cannot happen here.
+ *
+ * Exported for the one other ladder the composer resolves: a persona card's own (contract personaModels), which
+ * decides over exactly the same providers and must not disagree with these rows about which are reachable. */
+export const roleSources = computed(() =>
     [...NATIVE_PROVIDERS, ...endpointProviders.value.map((endpoint) => endpoint.id)].map((provider) => ({
         provider,
         ready: providerReady(provider),

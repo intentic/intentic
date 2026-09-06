@@ -1,4 +1,4 @@
-import { personasContract } from "@intentic/sandbox-contract";
+import { type PersonaRoute, type PersonaRouteAsk, personasContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -18,7 +18,12 @@ import {
 // disconnects nothing (personas.contract.ts says why at length), the accounts themselves are capabilities and
 // keep their own lifecycle. What a card DOES own is its kit folder, which the routes below write and `remove`
 // takes with it.
-export const createPersonasRoutes = (services: Services) => {
+/* WHICH CARD A NEW CHAT BELONGS TO, answered by the helper ask in agent/persona-router.ts and handed in from
+ * router.ts rather than imported here: agent/ already reads this subsystem's cards for every turn, and a value
+ * import back the other way would make the two a cycle. A function is the whole of what these routes need. */
+export type PersonaRouter = (ask: PersonaRouteAsk, signal?: AbortSignal) => Promise<PersonaRoute>;
+
+export const createPersonasRoutes = (services: Services, route: PersonaRouter) => {
     const i = implement(personasContract).$context<OrpcContext>();
     const root = services.workspace.root;
 
@@ -57,6 +62,10 @@ export const createPersonasRoutes = (services: Services) => {
             await removePersonaKit(root, input.id);
             return { ok: true as const };
         }),
+        // Which card a new chat belongs to (agent/persona-router.ts). Never throws: no cards, no model and a
+        // deadline are all "none" with a reason, because the composer's chip is waiting on this and the chat
+        // must open.
+        route: i.route.handler(({ input, signal }) => route(input, signal)),
 
         // ---- the kit ----
 

@@ -3,6 +3,8 @@ import {
     PersonaIdParamSchema,
     PersonaKitSchema,
     PersonaPromptSchema,
+    PersonaRouteAskSchema,
+    PersonaRouteSchema,
     PersonaSchema,
     PersonaSkillBodySchema,
     PersonaSkillNameSchema,
@@ -67,6 +69,21 @@ export const personasContract = {
         })
         .input(PersonaIdParamSchema)
         .output(OkSchema),
+
+    /* WHICH CARD A NEW CHAT BELONGS TO, asked by the composer before the first turn and answered by the
+     * `persona-router` helper role (the sandbox's agent/persona-router.ts). A READ that spends a small model
+     * call, which is why it is a POST: it is not idempotent in cost, only in effect. Nothing is applied here; the
+     * composer applies the answer, or shows it, under the `personaRouting` setting. */
+    route: oc
+        .route({
+            method: "POST",
+            path: "/personas/route",
+            summary: "Which persona a new chat belongs to",
+            description:
+                "Reads the message a chat is about to open with, and one line per persona, and names the card it belongs to, or none. Costs one small model call on the persona-routing list. Nothing is applied: the composer shows or applies the answer according to the persona routing setting.",
+        })
+        .input(PersonaRouteAskSchema)
+        .output(PersonaRouteSchema),
 
     // ---- the kit: what this card is told, and the skills only it reaches ----
 

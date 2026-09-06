@@ -134,9 +134,6 @@ export const APPS = family(`apps`);
 export const BROWSERS = family(`browsers`);
 export const BUNDLE_EXPORTS = family(`bundle-exports`);
 export const CAPABILITIES = family(`capabilities`);
-// The context shelves (`.intentic/config/context/`, contract schemas/context.ts): the daemon pushes this name
-// when one is written. No query reads it yet; the family exists so the push has somewhere to land when one does.
-export const CONTEXT = family(`context`);
 export const DEVICES = family(`devices`);
 export const DEPLOYMENTS = family(`deployments`);
 export const ENGINES = family(`engines`);
