@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { RowGroup, StatusTally } from "@intentic/extension-ui";
+import { RowGroup } from "@intentic/extension-ui";
 
 /* What the Deployments view shows before its first /komodo/overview response: the SHAPE of the answer, not a
  * spinner and not the sentence "Reading your deployments…", which is a line of text where a board is about to
  * be and moves everything under it the moment the data lands.
  *
- * The tally line and the host group are drawn with the SAME kit components the board itself uses, in their
- * loading form (<StatusTally skeleton>, <RowGroup>): a second copy of their markup is what a change to either
- * would leave behind, and this outline exists precisely to not drift from what lands.
+ * The host group is drawn with the SAME kit component the board itself uses, in its loading form (<RowGroup>):
+ * a second copy of its markup is what a change to either would leave behind, and this outline exists precisely
+ * to not drift from what lands. The tally rides the title row like Automations, so it is not part of this
+ * skeleton.
  *
- * The geometry is a deliberate copy of the real thing: tally line, one host group with its meta strip, rows
+ * The geometry is a deliberate copy of the real thing: one host group with its meta strip, rows
  * with a state glyph, a name, a status line and two action buttons, so the page settles once. Row widths vary
  * because a column of identical bars reads as a rendering artifact rather than as a list of container names;
  * they are fixed rather than random, since a placeholder that reshuffles on every re-render is worse than one
@@ -22,8 +23,6 @@ const ROWS = [{ name: `w-32` }, { name: `w-44` }, { name: `w-24` }, { name: `w-4
     <!-- aria-busy over aria-hidden: a screen reader should hear "this region is loading", not silence that is
          indistinguishable from an empty board. The bars carry no text, so there is nothing to read. -->
     <div role="status" aria-busy="true" aria-label="Loading deployments">
-        <StatusTally :skeleton="3" class="mb-5" />
-
         <!-- One host group. A second would be a guess about the user's infrastructure; one is the floor.
              h-4 is the line box of the label the bars stand in for (`text-xs`), so the group heading holds
              its height; the three shorter bars are the host's meta strip (ServerMeta), which rides the same

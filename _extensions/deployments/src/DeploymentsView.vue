@@ -35,7 +35,8 @@ import { useDeploymentBoard } from "./useDeploymentBoard";
  *
  * Reading order is worst-first, because nothing an outage needs may sit below the fold:
  *   1. the incident strip: the reason the rail badged, with the buttons already on it
- *   2. one tally line: "is anything wrong right now", before you read anything else
+ *   2. one tally on the title row: "is anything wrong right now", before you read anything else (same slot
+ *      as Automations and Pipelines)
  *   3. the list GROUPED BY SERVER: the highest-value framing call in the design. The question at 2am is
  *      "is this one app, or is it the box?", and grouping by host answers it in the layout rather than making
  *      the operator correlate it. Komodo's own UI groups by resource type, which reads worst exactly here.
@@ -265,6 +266,15 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
          AcceptanceView and AutomationsView are the same shape and were already written this way. -->
     <Page width="wide">
         <PageHeader title="Deployments">
+            <!-- ON THE TITLE ROW, not under it: same slot as Automations and Pipelines. Hidden while the first
+                 read is in flight, because "0 running" is a claim the list underneath is about to contradict. -->
+            <template #info>
+                <StatusTally
+                    v-if="!isPending && board?.reachable && resources.length > 0"
+                    :items="counts"
+                    class="ml-2"
+                />
+            </template>
             <template #actions>
                 <PageAction v-if="stacksUrl !== undefined" icon="box" label="Open Komodo stacks" :href="stacksUrl" />
             </template>
@@ -332,9 +342,6 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                     />
                 </div>
             </div>
-
-            <!-- ---- 2. Is anything wrong right now ---- -->
-            <StatusTally v-if="resources.length > 0" :items="counts" class="mb-5" />
 
             <div class="flex flex-col gap-6">
                 <div v-if="emptyReason" :class="ui.emptyState(`text-left`)">
