@@ -222,12 +222,18 @@ case "$KIND" in
         # The excludelist baseline, and nothing above it. linuxdeploy applies the AppImage project's
         # excludelist, which deliberately does NOT bundle the libraries every graphical Linux install already
         # carries — so an AppImage is self-contained ABOVE that line and host-dependent below it. This image has
-        # no graphical stack at all, so the line has to be drawn explicitly: these five are what the bundle
-        # resolves against the host, and they are installed HERE rather than in the image so the deb tier keeps
-        # meeting a host with no GUI libraries and has to name its own dependencies.
+        # no graphical stack at all, so the line has to be drawn explicitly: these are what the bundle resolves
+        # against the host, and they are installed HERE rather than in the image so the deb tier keeps meeting a
+        # host with no GUI libraries and has to name its own dependencies.
+        #
+        # The list is (excludelist ∩ what the binary's libraries need) minus what this image already carries,
+        # and it grows when the build base does: trixie's webkit pulls libgcrypt and a gssapi stack, whose
+        # libgpg-error and libcom_err are BOTH on the excludelist. Missing, the AppImage died in the loader at
+        # `libgpg-error.so.0: cannot open shared object file` with a ✗ on "the workspace window opened" — a
+        # correct bundle on a host that was not what an AppImage assumes (run 34049900600, desktop-verify).
         apt-get update -qq
         apt-get install -y -qq --no-install-recommends \
-            libfribidi0 libharfbuzz0b libasound2 libegl1 libgbm1 >/dev/null
+            libfribidi0 libharfbuzz0b libasound2 libegl1 libgbm1 libgpg-error0 libcom-err2 >/dev/null
         chmod +x "$artifact"
         # No FUSE in a container; the runtime's own self-extract is how CI runs an AppImage.
         export APPIMAGE_EXTRACT_AND_RUN=1

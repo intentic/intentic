@@ -107,10 +107,12 @@ for required in from.AppImage to.AppImage latest.json; do
     }
 done
 
-# The excludelist baseline this deliberately bare image does not carry — the same five smoke.sh installs in its
+# The excludelist baseline this deliberately bare image does not carry — the same set smoke.sh installs in its
 # AppImage tier, for the same reason: an AppImage is self-contained above that line and host-dependent below it.
+# Keep the two lists identical; smoke.sh carries the note on how the set is derived.
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends libfribidi0 libharfbuzz0b libasound2 libegl1 libgbm1 >/dev/null
+apt-get install -y -qq --no-install-recommends \
+    libfribidi0 libharfbuzz0b libasound2 libegl1 libgbm1 libgpg-error0 libcom-err2 >/dev/null
 
 install -m 0755 /artifacts/from.AppImage "$INSTALLED"
 BEFORE="$(hash_of "$INSTALLED")"

@@ -553,19 +553,45 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
         window = foundWindow;
     };
 
-    // The pane's screen as bytes for an empty xterm: its state, then the capture(s) that state calls for.
+    /* The pane's screen as bytes for an empty xterm: its state and the capture(s) that state calls for, in ONE
+     * write, so tmux runs them back to back and the screen is the screen the state describes.
+     *
+     * WHICH capture is wanted is only known once the state is back, so all three are asked for and the two the
+     * state does not call for are thrown away. Asking after the state came back reads cheaper and is wrong: it
+     * puts a round trip between the two, and a pane that writes inside it (a shell reaching its first prompt,
+     * turning bracketed paste on) has those bytes in the capture while its modes are read from before them —
+     * and this sync drops pane output for its own duration, so nothing ever re-states them. That is not
+     * theory: CI attached at the instant a session was created, read `#{pane_current_command}` as `tmux`
+     * because the pane's process had been forked and had not yet exec'd its shell, and then captured a screen
+     * with the shell's prompt already on it.
+     *
+     * `-a` is the SAVED screen: an error unless the alternate screen is up, which is the answer rather than a
+     * failure. The alternate screen's own capture takes no `-S`: there is no history behind it, and asking for
+     * one reads the normal screen's instead. */
     const capture = async (of: string): Promise<Buffer> => {
-        const [stateLines] = await Promise.all(client.send([`display-message -p -t ${of} -F '${PANE_STATE_FORMAT}'`]));
+        const history = `-S -${String(ATTACH_HISTORY_LINES)}`;
+        // Every reply is optional, and each is made so where it is created rather than where it is read: the
+        // `-a` capture rejects by design, and a client that ends mid-sync rejects ALL FOUR — one `await` on
+        // them would leave the other three rejected with nobody listening, which vitest and Node both call an
+        // unhandled rejection. A missing state line is the one that matters, and it throws below.
+        const [stateLines, saved, normal, screen] = await Promise.all(
+            client
+                .send([
+                    `display-message -p -t ${of} -F '${PANE_STATE_FORMAT}'`,
+                    `capture-pane -p -e -J -a ${history} -t ${of}`,
+                    `capture-pane -p -e -J ${history} -t ${of}`,
+                    `capture-pane -p -e -J -t ${of}`,
+                ])
+                .map((reply) => reply.catch(() => undefined)),
+        );
         const state = parsePaneState(stateLines?.[0] ?? "");
         if (state === undefined) {
             throw new Error("unreadable pane state");
         }
-        const history = `-S -${String(ATTACH_HISTORY_LINES)}`;
-        const captures = state.alternate
-            ? [`capture-pane -p -e -J -a ${history} -t ${of}`, `capture-pane -p -e -J -t ${of}`]
-            : [`capture-pane -p -e -J ${history} -t ${of}`];
-        const [normal, alternate] = await Promise.all(client.send(captures));
-        return synthesizeScreen(normal ?? [], alternate, state);
+        if (state.alternate) {
+            return synthesizeScreen(saved ?? [], screen ?? [], state);
+        }
+        return synthesizeScreen(normal ?? [], undefined, state);
     };
 
     const sync = async (inWindow: string | undefined): Promise<void> => {

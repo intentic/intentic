@@ -22,9 +22,12 @@ anything it failed to vendor is missing on this host too.
 
 One line is drawn explicitly, in `smoke.sh` and only for the AppImage tier: `linuxdeploy` applies the AppImage
 project's **excludelist**, which by design does not bundle the libraries every graphical Linux install already
-carries (`libfribidi`, `libharfbuzz`, `libasound`, `libEGL`, `libgbm`). An AppImage is self-contained above
-that line and host-dependent below it; a host with no graphical stack at all is below it, so those five are
-installed for that tier: never in the image, which has to stay bare for the deb's `Depends`.
+carries (`libfribidi`, `libharfbuzz`, `libasound`, `libEGL`, `libgbm`, `libgpg-error`, `libcom_err`). An
+AppImage is self-contained above that line and host-dependent below it; a host with no graphical stack at all
+is below it, so those are installed for that tier: never in the image, which has to stay bare for the deb's
+`Depends`. The set is (excludelist ∩ what the binary's libraries need) minus what the image already carries,
+so it moves when the build base does — the last two arrived with trixie's webkit, and until they did the
+AppImage tier died in the loader on a bundle that was correct.
 
 ## What one run asserts
 

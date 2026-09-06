@@ -54,16 +54,32 @@ afterEach(async () => {
 
 // A plain `sh` rather than whatever $SHELL is here: deterministic prompt, no rc files, and it is what a fresh
 // session's argv can name (tmux ignores the command when `-A` finds the session already there).
-const fresh = (cols = 80, rows = 24): Harness => {
+//
+// The session is CREATED first and attached to only once its shell has printed a prompt, because those are not
+// one moment. `new-session` answers when the pane's process has been FORKED; until it execs the shell, tmux
+// reports `#{pane_current_command}` as whatever that fork inherited — its own `tmux`, or the session's
+// default shell — and a replay taken there re-states the modes of a program that is not running yet. Attaching
+// into that window is racing the exec, not testing the module: CI lost the race and got an opening replay
+// carrying the shell's prompt and none of the shell's modes. The prompt IS the exec, so waiting for it is the
+// wait; the attach below still uses the production argv, which `-A` resolves to an attach.
+const fresh = async (cols = 80, rows = 24): Promise<Harness> => {
     const name = `cm-${process.pid}-${String(sessions.length)}`;
     sessions.push(name);
+    await execFileAsync("tmux", ["new-session", "-d", "-s", name, "-x", String(cols), "-y", String(rows), "-c", "/tmp", "sh"]);
+    const deadline = Date.now() + 10_000;
+    while ((await tmux("capture-pane", "-p", "-t", `=${name}:`)) === "") {
+        if (Date.now() > deadline) {
+            throw new Error(`timed out waiting for the shell's prompt in ${name}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
     const h = open(["new-session", "-A", "-s", name, "-c", "/tmp", "sh"], cols, rows);
     opened.push(h);
     return h;
 };
 
 test("an attach opens with a reset-and-replay, then the pane's raw bytes follow, colour and UTF-8 intact", async () => {
-    const h = fresh();
+    const h = await fresh();
     // The opening screen: RIS, then the (near-empty) pane, then the cursor and the shell's modes.
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     expect(h.text()).toContain("\x1b[?2004h");
@@ -75,7 +91,7 @@ test("an attach opens with a reset-and-replay, then the pane's raw bytes follow,
 });
 
 test("a resize reaches the pane, and the replay is captured at the browser's width", async () => {
-    const h = fresh(80, 24);
+    const h = await fresh(80, 24);
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     const name = sessions.at(-1) ?? "";
     expect(await tmux("display", "-p", "-t", `=${name}:`, "#{pane_width}x#{pane_height}")).toBe("80x24");
@@ -86,7 +102,7 @@ test("a resize reaches the pane, and the replay is captured at the browser's wid
 });
 
 test("a program on the alternate screen is replayed there on a fresh attach, with the mouse it asked for", async () => {
-    const h = fresh();
+    const h = await fresh();
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     const name = sessions.at(-1) ?? "";
     // Enter the alternate screen and ask for SGR mouse reporting by hand, as vim would, then sit in `cat`.
@@ -110,7 +126,7 @@ test("a program on the alternate screen is replayed there on a fresh attach, wit
 });
 
 test("a second replay puts history under the screen, and the resync does the same on demand", async () => {
-    const h = fresh(80, 5);
+    const h = await fresh(80, 5);
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     h.terminal.input(Buffer.from("for i in 1 2 3 4 5 6 7 8; do echo line-$i; done\r", "utf8"));
     await until(() => h.text().includes("line-8"), "the loop's output");
@@ -130,11 +146,13 @@ test("a second replay puts history under the screen, and the resync does the sam
  * what tmux shows: the visible rows, and the cursor, which is only right if `-J`'s rejoined lines re-wrapped
  * into exactly the rows tmux had them on. Long lines on a narrow pane, so that wrapping is what is tested. */
 test("a replay puts the same rows and the same cursor on an empty xterm that the pane has", async () => {
-    const h = fresh(40, 8);
+    const h = await fresh(40, 8);
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     const name = sessions.at(-1) ?? "";
     // Twelve 58-column lines through a 40-column pane: each wraps onto two rows, most scroll into history.
-    h.terminal.input(Buffer.from("for i in $(seq 1 12); do printf 'line-%02d-%s\\n' $i xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done\r", "utf8"));
+    h.terminal.input(
+        Buffer.from("for i in $(seq 1 12); do printf 'line-%02d-%s\\n' $i xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done\r", "utf8"),
+    );
     await until(() => h.text().includes("line-12-"), "the loop's output");
     // Let the prompt come back before reading either side.
     await until(() => false, "the prompt", 300).catch(() => undefined);
@@ -164,7 +182,7 @@ test("a replay puts the same rows and the same cursor on an empty xterm that the
 test("attaching to a session that does not exist ends at once, with tmux's own words", async () => {
     // A server with SOME session on it, so the answer is about this name and not "no sessions" from a server
     // that is not running at all (the default `exit-empty` takes the fenced server down with its last session).
-    const other = fresh();
+    const other = await fresh();
     await until(() => other.text().includes("\x1bc"), "the other session's replay");
 
     const h = open(["attach-session", "-t", "=cm-no-such-session"]);
@@ -175,7 +193,7 @@ test("attaching to a session that does not exist ends at once, with tmux's own w
 });
 
 test("the session being killed from elsewhere is an exit, not a hang", async () => {
-    const h = fresh();
+    const h = await fresh();
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     await tmux("kill-session", "-t", `=${sessions.at(-1) ?? ""}`);
     await until(() => h.exits.length > 0, "the exit");
@@ -183,7 +201,7 @@ test("the session being killed from elsewhere is an exit, not a hang", async () 
 });
 
 test("the tab follows the session's active window: a new window replays, its close returns", async () => {
-    const h = fresh(80, 6);
+    const h = await fresh(80, 6);
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     const name = sessions.at(-1) ?? "";
     h.terminal.input(Buffer.from("echo FIRST-WINDOW\r", "utf8"));
