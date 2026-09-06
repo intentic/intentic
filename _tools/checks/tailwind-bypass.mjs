@@ -3,7 +3,7 @@
  *
  * A theme exists to make a decision once. `bg-[#090706]` is that decision being made again, inline, by whoever
  * was in the file — and the cost is not the one line: it is that a palette change lands everywhere except the
- * places that opted out of it. The chores probe in _sandbox/sandbox-contract/src/chores/stack.ts already COUNTS
+ * places that opted out of it. The chores probe in _shared/sandbox-contract/src/chores/stack.ts already COUNTS
  * these and wakes an agent when the number climbs. This is the other half: a gate that stops the number climbing
  * in the first place, so the chore has less to find.
  *
@@ -39,7 +39,7 @@ import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
 
-/* Where a class list is written as MARKUP. Mirrors MARKUP_GLOBS in _sandbox/sandbox-contract/src/chores/stack.ts:
+/* Where a class list is written as MARKUP. Mirrors MARKUP_GLOBS in _shared/sandbox-contract/src/chores/stack.ts:
  * the probe that counts these and the gate that blocks them have to look in the same places, or they disagree
  * about whether main is clean and the chore fires on a repository this check calls green. */
 const MARKUP = /\.(?:vue|tsx|jsx|html|svelte|astro)$/u;
@@ -85,7 +85,7 @@ const ALLOWED = new Map([
         ]),
     ],
     [
-        `_editor/web/src/pages/workspace/ReviewPanel.vue`,
+        `_editor/web/src/features/workspace/changes/ReviewPanel.vue`,
         new Map([
             [
                 `max-h-[142px]`,

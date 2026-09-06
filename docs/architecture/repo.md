@@ -92,7 +92,7 @@ part it belongs to before you open it.
     {"label": "_editor/web", "value": 95392, "display": "95.4k", "accent": "1"},
     {"label": "_sandbox/sandbox", "value": 92307, "display": "92.3k", "accent": "2"},
     {"label": "_platform/prisma", "value": 16274, "display": "16.3k", "accent": "neutral"},
-    {"label": "_sandbox/sandbox-contract", "value": 13891, "display": "13.9k", "accent": "2"},
+    {"label": "_shared/sandbox-contract", "value": 13891, "display": "13.9k", "accent": "2"},
     {"label": "_deploy/providers", "value": 13778, "display": "13.8k", "accent": "5"},
     {"label": "_editor/ui", "value": 8758, "display": "8.8k", "accent": "1"},
     {"label": "_search/iq-engine", "value": 7223, "display": "7.2k", "accent": "4"},
@@ -110,9 +110,9 @@ Two packages are most of the product. That is expected: one is the screen, one i
 { "title": "Number of packages depending on it",
   "items": [
     {"label": "_tools/tsconfig", "value": 60, "accent": "neutral"},
-    {"label": "_sandbox/sandbox-contract", "value": 28, "accent": "2"},
-    {"label": "_sandbox/extension-api", "value": 20, "accent": "2"},
-    {"label": "_editor/extension-ui", "value": 15, "accent": "1"},
+    {"label": "_shared/sandbox-contract", "value": 28, "accent": "2"},
+    {"label": "_shared/extension-api", "value": 20, "accent": "2"},
+    {"label": "_shared/extension-ui", "value": 15, "accent": "1"},
     {"label": "_tools/testing", "value": 12, "accent": "neutral"},
     {"label": "_deploy/graph", "value": 10, "accent": "5"},
     {"label": "_tools/constants", "value": 7, "accent": "neutral"},
@@ -125,9 +125,9 @@ A shared rulebook and a shared config sit at the bottom of everything. Break eit
 ## Where to start reading
 
 1. **_editor/web** (The browser app) the whole editor you see and click.
-2. **_sandbox/sandbox-contract**: The rulebook both sides of the wire agree on.
+2. **_shared/sandbox-contract**: The rulebook both sides of the wire agree on.
 3. **_sandbox/sandbox** (The daemon) the program running inside your project's box.
-4. **_sandbox/extension-api**: The contract an extension is written against.
+4. **_shared/extension-api**: The contract an extension is written against.
 5. **_search/iq**: One search command an agent can actually use.
 
 ## Words used here in a particular way

@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-app/localhost-https",
+    "name": "@intentic/localhost-https",
     "version": "0.0.0",
     "private": true,
     "exports": {

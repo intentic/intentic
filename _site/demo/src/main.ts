@@ -90,4 +90,4 @@ console.info(
     `[demo] ${demoMode.id}: fixture daemon serving ${served.served} routes of the contract's ${served.contract}; anything else answers 404 and logs here.`,
 );
 
-await import("@intentic-app/web/main");
+await import("@intentic/web/main");

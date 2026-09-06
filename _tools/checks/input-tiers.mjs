@@ -99,7 +99,7 @@ const RETIRED = /(?:^|\s)ui-field-input-error(?:\s|$)/u;
  * finding it looks like. Two, and both are a field whose box is pinned to something outside itself. */
 const ALLOWED = new Map([
     [
-        `_editor/ui/src/components/SearchBar.vue`,
+        `_editor/ui/src/components/forms/SearchBar.vue`,
         new Map([
             [
                 `inputClass`,
@@ -108,7 +108,7 @@ const ALLOWED = new Map([
         ]),
     ],
     [
-        `_editor/web/src/pages/settings/SettingsProfile.vue`,
+        `_editor/web/src/features/settings/SettingsProfile.vue`,
         new Map([
             [
                 `h-8`,
@@ -119,7 +119,7 @@ const ALLOWED = new Map([
         ]),
     ],
     [
-        `_editor/web/src/pages/sandbox/SandboxOverview.vue`,
+        `_editor/web/src/features/sandbox/overview/SandboxOverview.vue`,
         new Map([
             [
                 `h-8`,

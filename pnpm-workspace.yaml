@@ -12,6 +12,7 @@ packages:
   - "_platform/*"
   - "_sandbox/*"
   - "_search/*"
+  - "_shared/*"
   - "_site/*"
   - "_tools/*"
 
@@ -192,9 +193,9 @@ catalog:
   # open-source: its licence is "all rights reserved, use subject to Cursor's Terms of Service", which grants
   # no redistribution. So it is a repo dependency for TYPES and for a dev run, and never rides a published
   # image: prepare-image-trees.sh prunes it and its platform packages out of the deployed tree, and
-  # packs/cursor.Dockerfile installs the same pin back on the owner's OWN machine when they connect a Cursor
+  # image-packs/cursor.Dockerfile installs the same pin back on the owner's OWN machine when they connect a Cursor
   # account. packs.integration.test.ts holds the two in step, the @openai/codex precedent.
-  # ponytail: bump together with packs/cursor.Dockerfile.
+  # ponytail: bump together with image-packs/cursor.Dockerfile.
   "@cursor/sdk": 1.0.28
   "@dagrejs/dagre": 3.0.0
   # DiceBear v10 discontinued the per-style npm packages (@dicebear/adventurer and its ~50 siblings) in favour of

@@ -30,7 +30,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                           runs against a REAL private tmux server — stub it and the test asserts the stub
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
 # The docker apt repo is added the same way the sandbox's docker feature pack adds it
-# (_sandbox/sandbox/packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
+# (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux \
     && install -m 0755 -d /etc/apt/keyrings \

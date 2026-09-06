@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
+import { ORG_NAME, SITE_URL } from "@intentic/site-content/site";
 import { blogHref, posts } from "../../lib/posts";
 
 /* THE FEED, hand-rolled rather than pulled from `@astrojs/rss`.

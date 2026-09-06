@@ -5,7 +5,7 @@ GitHub Actions inside a public repository this monorepo does not contain. The wo
 version from the `REGISTRY_SCAN_VERSION` repository variable; a moving package tag is not allowed inside the
 admission boundary.
 
-The file format it reads and writes lives in [`@intentic/registry`](../../_sandbox/registry), which the daemon
+The file format it reads and writes lives in [`@intentic/registry`](../../_shared/registry), which the daemon
 and the site's gallery use too, so all three agree by construction rather than by three copies of a zod
 schema staying in step.
 
@@ -47,7 +47,7 @@ pull request at a time. The privileged jobs fetch only the candidate marketplace
 out solely on the disposable deterministic runner and is never executed.
 
 Identity is also enforced mechanically. The listing key is `publisher.name` read from the manifest:
-[`extensionIdOf`](../../_sandbox/extension-api/src/manifest.ts): so a repository that copies somebody else's
+[`extensionIdOf`](../../_shared/extension-manifest/src/manifest.ts): so a repository that copies somebody else's
 manifest collides with their existing listing and is refused here rather than arriving as a pull request that
 looks legitimate.
 

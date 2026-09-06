@@ -102,7 +102,7 @@ const VOID = new Set([`br`, `hr`, `img`, `input`, `source`]);
  * its tier — which is the only kind of exception this rule has room for. */
 const ALLOWED = new Map([
     [
-        `_editor/ui/src/components/AgentRunButton.vue`,
+        `_editor/ui/src/components/sandbox/AgentRunButton.vue`,
         new Map([
             [
                 `['rounded-l-none', text ? 'pl-1 pr-1.5' : 'px-1.5']`,
@@ -111,7 +111,7 @@ const ALLOWED = new Map([
         ]),
     ],
     [
-        `_editor/web/src/pages/workspace/WorkspaceMobile.vue`,
+        `_editor/web/src/features/workspace/page/WorkspaceMobile.vue`,
         new Map([
             [
                 `h-14 w-14 px-0 py-0 shadow-lg`,

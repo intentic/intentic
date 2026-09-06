@@ -36,7 +36,7 @@ export const STATE_DIR = ".intentic";
 // as opposed to inside a sandbox container. Every service composes its own dir under this one.
 export const HOST_STATE_ROOT = "/opt/intentic";
 
-// The clickwrap legal version: the platform (@intentic-app/api) stamps the accepted version on each account
+// The clickwrap legal version: the platform (@intentic/api) stamps the accepted version on each account
 // at sign-up; intentic.dev renders the /terms and /privacy documents under it. Bump on any material change
 // to the terms or privacy policy, one edit, both sides move together.
 export const LEGAL_VERSION = "2026-09-03";

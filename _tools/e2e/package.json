@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-app/e2e",
+    "name": "@intentic/e2e",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -10,9 +10,9 @@
         "smoke:signin": "node smoke-signin.mjs"
     },
     "devDependencies": {
-        "@intentic-app/api-contract": "workspace:*",
-        "@intentic-app/localhost-https": "workspace:*",
-        "@intentic-app/prisma": "workspace:*",
+        "@intentic/api-contract": "workspace:*",
+        "@intentic/localhost-https": "workspace:*",
+        "@intentic/prisma": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@playwright/test": "catalog:",

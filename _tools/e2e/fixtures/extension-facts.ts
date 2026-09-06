@@ -1,4 +1,4 @@
-import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract";
+import type { CapabilitySummary, PanelSummary } from "@intentic/api-contract";
 
 /* A WORKSPACE THAT ACTIVATES EVERY EXTENSION VIEW AT ONCE.
  *

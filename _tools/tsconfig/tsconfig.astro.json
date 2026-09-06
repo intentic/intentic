@@ -8,7 +8,7 @@
          * that package has been built. Without these, importing a sibling by its public subpath
          * (`@intentic/sandbox-openapi/groups`) is an unresolved module whose every use then degrades to `any`,
          * so the typecheck fails on the import and lies about the nine lines under it. */
-        "customConditions": ["@intentic/src", "@intentic-app/src", "@intentic-dev/src"],
+        "customConditions": ["@intentic/src", "@intentic/src", "@intentic/src"],
         "lib": ["ES2023", "DOM", "DOM.Iterable"],
         "strict": true,
         "noUncheckedIndexedAccess": true,

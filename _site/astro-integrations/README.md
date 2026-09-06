@@ -1,4 +1,4 @@
-# @intentic-dev/astro-integrations
+# @intentic/astro-integrations
 
 The build-time integrations the public site needs and Astro does not ship.
 

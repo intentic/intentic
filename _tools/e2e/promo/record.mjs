@@ -1,6 +1,6 @@
 /* THE PROMO RECORDING: one unbroken take of the product's main journey, driven against the interactive demo.
  *
- * What it records is the real `@intentic-app/web` app (`_site/demo` boots it against a fixture instead of a
+ * What it records is the real `@intentic/web` app (`_site/demo` boots it against a fixture instead of a
  * sandbox), so every frame below is the shipping UI reacting to the shipping protocol: the drop really walks a
  * directory and writes it, the streaming turn is `AgentEvent` frames the chat has never seen before, the land is
  * the mutation that moves four surfaces at once. Nothing is mocked up for marketing, and nothing is sped up.

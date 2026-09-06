@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* EVERY LIST IN THIS APP IS ONE SIZE, AND THIS IS THE GATE THAT KEEPS IT.
  *
- * <Row>, <DisclosureRow> and <SkeletonRows> draw from one table of three tiers (_editor/ui/src/components/row.ts),
+ * <Row>, <DisclosureRow> and <SkeletonRows> draw from one table of three tiers (_editor/ui/src/components/rows/row.ts),
  * and the tier is the <RowGroup>'s: a group is a list, a list is `compact`, and no call site says anything. That
  * is the second version of this rule. The first one kept the old taxonomy — "comfortable for settings rows,
  * compact for record lists" — and merely made it inheritable, which fixed the mechanism and left the JUDGEMENT
@@ -58,7 +58,7 @@ const MARKS = new Set([`BrandMark`, `Avatar`, `PersonaFace`]);
 // Elements that carry no geometry of their own and so pass a group's tier through to what they contain.
 const VOID = new Set([`br`, `hr`, `img`, `input`, `source`]);
 
-const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_editor/web/src`, `_editor/ui/src`, `_editor/extension-ui/src`], {
+const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_editor/web/src`, `_editor/ui/src`, `_shared/extension-ui/src`], {
     cwd: root,
     encoding: `utf8`,
     maxBuffer: 64 * 1024 * 1024,

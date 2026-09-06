@@ -131,7 +131,7 @@ this page.
   `_site/site-content/src/site.ts` (ORG_DESCRIPTION): one page, one set of strings.
 - Screenshots: `_site/site/src/assets/product/`, all written by one harness:
   `node --experimental-strip-types _tools/e2e/shots/capture.mts` after
-  `pnpm --filter @intentic-dev/demo build`. It drives the DEMO build of the real app (the recorded
+  `pnpm --filter @intentic/demo build`. It drives the DEMO build of the real app (the recorded
   "acme-shop" workspace the live demo runs on), so the site, the demo and the shots tell one story and a
   re-shoot needs no database, API or tunnel. Whole surfaces are captured; a page that wants a detail crops
   in CSS.

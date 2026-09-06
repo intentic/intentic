@@ -5,7 +5,14 @@
             "id": "editor",
             "name": "The editor",
             "oneLiner": "The screen you actually look at — files, chat, terminals.",
-            "packages": ["_editor/desktop-app", "_editor/extension-ui", "_editor/ui", "_editor/web"]
+            "packages": [
+                "_editor/android-app",
+                "_editor/desktop-app",
+                "_editor/ios-app",
+                "_editor/share-view",
+                "_editor/ui",
+                "_editor/web"
+            ]
         },
         {
             "accent": "2",
@@ -14,18 +21,35 @@
             "oneLiner": "One private box per project, where your code and the agents live.",
             "packages": [
                 "_sandbox/acp-bridge",
-                "_sandbox/extension-api",
                 "_sandbox/fileq",
+                "_sandbox/gate",
+                "_sandbox/gate-action",
                 "_sandbox/ic",
-                "_sandbox/registry",
+                "_sandbox/issue-sdk",
                 "_sandbox/sandbox",
-                "_sandbox/sandbox-contract",
-                "_sandbox/sandbox-run",
                 "_sandbox/scaffold",
                 "_sandbox/webchat-widget",
                 "_sandbox/webq",
-                "_sandbox/workspace-ignore",
                 "_sandbox/workspace-setup"
+            ]
+        },
+        {
+            "accent": "neutral",
+            "id": "shared",
+            "name": "Shared",
+            "oneLiner": "Contracts and SDKs every part is written against.",
+            "packages": [
+                "_shared/api-contract",
+                "_shared/capability-catalog",
+                "_shared/connector-runtime",
+                "_shared/extension-api",
+                "_shared/extension-manifest",
+                "_shared/extension-ui",
+                "_shared/registry",
+                "_shared/sandbox-contract",
+                "_shared/sandbox-openapi",
+                "_shared/sandbox-run",
+                "_shared/workspace-ignore"
             ]
         },
         {
@@ -37,16 +61,19 @@
                 "_extensions/acceptance",
                 "_extensions/acp-agents",
                 "_extensions/activity",
+                "_extensions/approvals",
                 "_extensions/automations",
                 "_extensions/browsers",
-                "_extensions/devices",
                 "_extensions/connectors",
                 "_extensions/deployments",
+                "_extensions/devices",
                 "_extensions/discord",
                 "_extensions/documentation",
                 "_extensions/git-history",
+                "_extensions/google-workspace",
                 "_extensions/imap",
-                "_extensions/logs",
+                "_extensions/issues",
+                "_extensions/knowledge",
                 "_extensions/maintenance",
                 "_extensions/pi-agent",
                 "_extensions/pipelines",
@@ -67,7 +94,7 @@
             "oneLiner": "How an agent reaches a machine of your own — with your permission, within your switches.",
             "packages": [
                 "_devices/browser",
-                "_devices/desktop",
+                "_devices/desktop-automation",
                 "_devices/local-agent",
                 "_devices/machine",
                 "_devices/webext",
@@ -79,7 +106,13 @@
             "id": "search",
             "name": "Code search",
             "oneLiner": "How an agent finds the right file instead of reading everything.",
-            "packages": ["_search/iq", "_search/iq-bench", "_search/iq-engine", "_search/iq-recall", "_search/lsp"]
+            "packages": [
+                "_search/iq",
+                "_search/iq-bench",
+                "_search/iq-engine",
+                "_search/iq-recall",
+                "_search/lsp"
+            ]
         },
         {
             "accent": "5",
@@ -102,14 +135,24 @@
             "id": "platform",
             "name": "Account",
             "oneLiner": "Sign-in and the sandbox registry. Off to one side of everything else.",
-            "packages": ["_platform/api", "_platform/api-contract", "_platform/capability-catalog", "_platform/prisma"]
+            "packages": [
+                "_platform/api",
+                "_platform/example-provider",
+                "_platform/ingress",
+                "_platform/prisma"
+            ]
         },
         {
             "accent": "neutral",
             "id": "site",
             "name": "The website",
             "oneLiner": "The public site and its playable demo.",
-            "packages": ["_site/astro-integrations", "_site/demo", "_site/site", "_site/site-content"]
+            "packages": [
+                "_site/astro-integrations",
+                "_site/demo",
+                "_site/site",
+                "_site/site-content"
+            ]
         },
         {
             "accent": "neutral",
@@ -117,12 +160,18 @@
             "name": "Plumbing",
             "oneLiner": "Shared config and test harnesses.",
             "packages": [
+                "_tools/base",
+                "_tools/code-read",
                 "_tools/constants",
                 "_tools/desktop-smoke",
+                "_tools/desktop-smoke-windows",
                 "_tools/dind-host",
                 "_tools/e2e",
                 "_tools/examples",
+                "_tools/fake-model",
+                "_tools/fake-upstream",
                 "_tools/localhost-https",
+                "_tools/onboarding",
                 "_tools/registry-scan",
                 "_tools/testing",
                 "_tools/tsconfig"
@@ -180,6 +229,12 @@
         "model": "claude-opus-4-6",
         "sourceRev": "e95df55b81e45f87716e24b6f004ed94252da79d"
     },
-    "reading": ["_editor/web", "_sandbox/sandbox-contract", "_sandbox/sandbox", "_sandbox/extension-api", "_search/iq"],
+    "reading": [
+        "_editor/web",
+        "_shared/sandbox-contract",
+        "_sandbox/sandbox",
+        "_shared/extension-api",
+        "_search/iq"
+    ],
     "repo": "intentic"
 }

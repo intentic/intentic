@@ -17,7 +17,7 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
-        "@intentic/desktop": "workspace:*",
+        "@intentic/desktop-automation": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",
         "tslib": "catalog:"

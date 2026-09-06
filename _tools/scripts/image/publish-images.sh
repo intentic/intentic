@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build + push the first-party intentic images to every registry in REGISTRIES (see below — GHCR):
-#   sandbox    the AI-agent workspace daemon + CLI — TWO PROFILES of one Dockerfile (packs/profiles.json):
+#   sandbox    the AI-agent workspace daemon + CLI — TWO PROFILES of one Dockerfile (image-packs/profiles.json):
 #              `standard` (core + the standard feature packs, composed by compose-image-dockerfile.mjs) owns
 #              the plain tags every runner references; the minimal `core` rides `core-` prefixed tags
 #   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
@@ -138,7 +138,7 @@ case " $IMAGES " in
     *" sandbox "*)
         # The sandbox image COPYs its compiled payload from .image-out — prepare-image-trees.sh must have run first.
         [ -d "$root/.image-out/sandbox" ] || { echo "missing $root/.image-out — run _tools/scripts/image/prepare-image-trees.sh first" >&2; exit 1; }
-        # Two profiles of one Dockerfile (see packs/profiles.json): `standard` — the core file with the
+        # Two profiles of one Dockerfile (see image-packs/profiles.json): `standard` — the core file with the
         # standard feature packs spliced in — owns the plain tags every runner references; the bare core file
         # is the minimal image under `core-` prefixed tags. Composed fresh here so the published bytes always
         # come from the checked-in pack files.

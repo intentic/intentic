@@ -80,7 +80,7 @@ done
 # onnxruntime-node + onnxruntime-common, and nothing else in dist/ resolves the web package. pnpm deploy has no
 # per-dependency exclude, so it is pruned from the tree after the fact.
 # @openai/codex is the ~350 MiB platform binary @openai/codex-sdk exact-pins. The codex feature pack
-# global-installs the same pinned version onto PATH (packs/codex.Dockerfile; packs.integration.test.ts holds the
+# global-installs the same pinned version onto PATH (image-packs/codex.Dockerfile; packs.integration.test.ts holds the
 # pins in step), and the adapter directly spawns that binary's app-server surface. Shipping it in the tree too
 # would put the one copy the pack owns back into every image, core included.
 # The -xtype l pass clears the symlinks both prunes leave dangling in dependents' node_modules (never
@@ -88,7 +88,7 @@ done
 # @cursor/sdk is the daemon's Cursor runtime, and the one dependency here pruned for a LICENCE reason rather
 # than a size one: "all rights reserved, use subject to Cursor's Terms of Service" grants no redistribution, and
 # a published image containing it would redistribute it to everyone who pulls that image, Cursor account or not.
-# It is a repo dependency so the daemon type-checks against it and a dev run works; packs/cursor.Dockerfile
+# It is a repo dependency so the daemon type-checks against it and a dev run works; image-packs/cursor.Dockerfile
 # installs the same pin into /opt/cursor-sdk on the OWNER's own machine. The explicit Connect action bootstraps
 # that install for login; the resulting credential then keeps it in the durable overlay. cursor/cursor-sdk.ts
 # loads it dynamically so a tree without it still boots. Its ~15 MiB per-platform packages go with it — nothing

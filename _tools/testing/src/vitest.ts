@@ -32,7 +32,7 @@ const ALL_TESTS = ["./**/*.test.{ts,mjs}"];
  * `deploy/` is the one that is not obviously an output: `pnpm deploy --prod ./deploy` (docker-release.sh)
  * stages a flat, symlink-free copy of a package there, tests and all, with its OWN node_modules. Vitest
  * therefore collected every suite twice, and the copy failed where the original could not: a `--prod` tree
- * ships no `src/`, so the `@intentic-app/src` / `@intentic/src` conditions these projects resolve under (see
+ * ships no `src/`, so the `@intentic/src` / `@intentic/src` conditions these projects resolve under (see
  * _platform/api/vitest.config.ts) find nothing, and three suites died at import with a missing module naming
  * a path inside the artifact. It is gitignored, so it exists only where somebody has built an image, which is
  * exactly the CI runner that then reported the red — a failure in a directory nobody edited, on a shared

@@ -1,4 +1,4 @@
-import { PrismaClient } from "@intentic-app/prisma";
+import { PrismaClient } from "@intentic/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 /* WHAT "CONNECTED" MEANS, ASKED OF THE PLATFORM ITSELF — the gate every provisioner ends on.

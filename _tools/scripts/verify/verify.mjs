@@ -35,6 +35,11 @@ const { step, skip, finish } = createSteps("verify", root);
 // Independent of everything below: it reads the checkout, not the build.
 step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs")]);
 
+/* The scripts' own tests. `_tools/scripts` is plumbing rather than a workspace package, so `turbo run test`
+ * cannot reach it and a `*.test.mjs` there would otherwise be a test nothing runs — which is what move-files.mjs,
+ * the codemod every directory move is made of, must not be. node:test needs no install. */
+step("script self-tests", process.execPath, ["--test", "_tools/scripts/**/*.test.mjs"]);
+
 // VITEST_MAX_WORKERS is the ONLY thing bounding a repo-wide run's memory (turbo.json says why); the caller's
 // own value wins. INDEXNOW_ENABLED=0 for the reason ci.yml gives: the site build otherwise polls the live site.
 const SUITE_ENV = { VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4", INDEXNOW_ENABLED: "0" };

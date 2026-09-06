@@ -1,4 +1,4 @@
-# @intentic-dev/site-content
+# @intentic/site-content
 
 Every word on the public website, as data. So the marketing copy is reviewable in a diff instead of buried in
 markup.

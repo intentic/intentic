@@ -28,7 +28,7 @@ is that wrapper, and it needs no branch anywhere in the app.
 
 ## The package
 
-`@intentic-dev/demo` (`_site/demo/`): its own package, depending on `@intentic-app/web` and importing the app's
+`@intentic/demo` (`_site/demo/`): its own package, depending on `@intentic/web` and importing the app's
 entry through its `./main` export. Its [README](../../_site/demo/README.md) has the file-by-file layout.
 
 It lived inside `_editor/web/src/demo/` first, and that was wrong in three ways that are checkable rather than
@@ -160,7 +160,7 @@ was invented for them and none of their code knows the difference. What the demo
 a `POST /agent` whose conversation id carries a run prefix (`xt-`, `dg-`, `mt-`) is a fan-out of isolated agents
 against a checkout that does not exist here, so it comes back as a refusal the extension already renders.
 
-**The scripted turn is the centrepiece.** `AgentEventSchema` (`_sandbox/sandbox-contract/src/events.ts:186`) is the
+**The scripted turn is the centrepiece.** `AgentEventSchema` (`_shared/sandbox-contract/src/events.ts:186`) is the
 whole streaming-turn protocol, and `/agent/attach` yields `{kind:"frame", seq, event}`. A recorded sequence on a
 timer gives, in the real UI with no special-casing: `thinking` folding open, `delta` text typing,
 `tool_call` → `tool_call_update` cards resolving with their line stats derived from the diffs (a Read, a Write, an
@@ -220,7 +220,7 @@ routes them to the same handlers. What arrives is written into the flat path tab
 grows the dropped repository and every file in it opens.
 
 **The extension list is read off the app build, not re-typed.** `GET /extensions` enumerates
-`@intentic-app/web`'s own `builtinModules`, because the extension host treats a compiled-in extension the daemon
+`@intentic/web`'s own `builtinModules`, because the extension host treats a compiled-in extension the daemon
 never mentioned as image/app version drift and says so on every row: true of a dogfooding sandbox, alarming
 nonsense on a marketing page. Listing them from the registry means a new first-party extension appears here the
 day it is added, with a switch that works, instead of appearing as a warning nobody wrote.
@@ -263,7 +263,7 @@ It ships **with the marketing site, at the same origin**, and needs no host of i
    into its dist verbatim, so the demo lands in the site's own asset bundle.
 2. The site's Cloudflare worker gains one rule: a navigation under `/demo/` that no asset answers serves
    `/demo/index.html`. That is the SPA fallback its history routes need, and the same rule its dev server runs.
-3. `_site/site` declares `@intentic-dev/demo` as a devDependency purely for ORDER: turbo's `^build` then builds
+3. `_site/site` declares `@intentic/demo` as a devDependency purely for ORDER: turbo's `^build` then builds
    the demo before Astro reads `public/`. Nothing is imported across that edge, and a site built without the
    demo present is still a valid site: `/demo/` simply isn't there.
 

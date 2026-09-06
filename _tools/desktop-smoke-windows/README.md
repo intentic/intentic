@@ -5,7 +5,7 @@ The tiers that meet the Windows installer the way a user's machine does: by **ru
 The counterpart of [`@intentic/desktop-smoke`](../desktop-smoke), which does the same job on Linux inside a
 bare Debian container. This one cannot be a container: the artifact under test is a Windows program with a
 window, a tray icon and a registry entry, so it needs a real Windows session. Setting that session up is
-[`docs/ci-runner-windows.md`](../../docs/ci-runner-windows.md).
+[`docs/ci-runner-windows.md`](../../docs/ops/ci-runner-windows.md).
 
 ```powershell
 pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
@@ -173,7 +173,7 @@ misconfigured".
 - **Scripts reach PowerShell as `-EncodedCommand`.** Quoting is then not a thing that exists on the way in.
   Passing a script as text means every embedded quote is negotiated twice, and the failures that produces are
   silent: a probe that returns the empty string reads exactly like one that returned "no".
-- **Assertions read window titles**, through `@intentic/desktop`: this repo's own answer to driving a Windows
+- **Assertions read window titles**, through `@intentic/desktop-automation`: this repo's own answer to driving a Windows
   desktop from Node, and the exact counterpart of the `xdotool` the Linux tier leans on. The app has no test
   hook and should not grow one: the window appearing IS the behaviour a user is promised.
 - **Answering the confirmation is itself checked.** Windows only lets a process move the keyboard under
@@ -189,7 +189,7 @@ misconfigured".
 
 **The `/agents` page in a browser.** That needs the platform stack (Postgres, the API, the web build) running
 beside the sandbox, and the SPA is byte-identical on every OS. This tier proves WebView2 fetched and rendered a
-loopback page; browser journeys for the actual SPA live in [`@intentic-app/e2e`](../e2e).
+loopback page; browser journeys for the actual SPA live in [`@intentic/e2e`](../e2e).
 
 **Real Google sign-in, and real AI-account OAuth.** Both are browser flows against a third party. The first is
 stood in for the same way the browser tier stands it in; the second is the one-time manual step in the runner

@@ -242,7 +242,7 @@ export const CHECKOUT_LIB_AFTER = `export const checkout = async (priceId: strin
 `;
 
 // The endpoint the run writes first, and the only file in the story that is created rather than edited.
-export const CHECKOUT_ROUTE = `import { stripe } from "../stripe";
+export const CHECKOUT_ROUTE = `import { stripe } from "../../../../_deploy/providers/src/integrations/stripe";
 
 export const createCheckoutSession = async (req: Request, res: Response) => {
     const { priceId } = checkoutBody.parse(req.body);

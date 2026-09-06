@@ -91,7 +91,7 @@ the runtime refusing to execute. A `shell` step picks the form from the tools th
 
 ## Who drives it
 
-- [`_sandbox/sandbox/src/codex/codex-wire.e2e.test.ts`](../../_sandbox/sandbox/src/codex/codex-wire.e2e.test.ts)
-- [`_sandbox/sandbox/src/grok/opencode-wire.e2e.test.ts`](../../_sandbox/sandbox/src/grok/opencode-wire.e2e.test.ts)
+- [`_sandbox/sandbox/src/codex/codex-wire.e2e.test.ts`](../../_sandbox/sandbox/src/e2e/codex-wire.e2e.test.ts)
+- [`_sandbox/sandbox/src/grok/opencode-wire.e2e.test.ts`](../../_sandbox/sandbox/src/e2e/opencode-wire.e2e.test.ts)
 
 Both are gated by `INTENTIC_E2E_PROVIDERS` and run in CI as `verify-providers`, which gates the release.

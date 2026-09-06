@@ -35,7 +35,6 @@ const src = join(root, "_sandbox/sandbox/src");
  * come back, not a verdict that there is nothing to check: removing one means writing its `invariant.ts`, empty
  * with a reason or full with a check. Shrink this list; never grow it. */
 const UNAUDITED = new Set([
-    "acp",
     "activity",
     "approvals",
     "auth",
@@ -43,27 +42,21 @@ const UNAUDITED = new Set([
     "browser",
     "chores",
     "ci",
-    "claude",
-    "codex",
     "endpoints",
     "environment",
     "execution",
     "extensions",
-    "gemini",
     "git",
-    "grok",
     "guard",
     "hashline",
     "history",
     "intentic",
     "inventory",
-    "kimi",
     "logs",
     "loops",
     "migrations",
     "panels",
     "personas",
-    "pi",
     "portability",
     "ports",
     "prepush",
@@ -89,8 +82,10 @@ const UNAUDITED = new Set([
     "workspace",
 ]);
 
-// Not subsystems: the registry itself, and anything that is not a directory of daemon code.
-const NOT_A_SUBSYSTEM = new Set(["invariants"]);
+/* Not subsystems: the registry itself, and the three directories that hold no daemon code at all — the gated
+ * end-to-end suites, the route harness every suite stands its routes up with, and the vitest fences. A
+ * runtime invariant over test scaffolding would be a check on something no runtime runs. */
+const NOT_A_SUBSYSTEM = new Set(["invariants", "e2e", "harness"]);
 
 const failures = [];
 

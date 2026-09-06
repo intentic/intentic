@@ -67,7 +67,7 @@ const DELETES_NPM_CACHE = /(?:rm\s+(?:-\S+\s+)*[^\n]*\/root\/\.npm\b|npm\s+cache
  * rather than listed, so a NEW extension's fragment is covered on the commit that adds it. */
 const fragmentFiles = () => {
     const files = [join(root, "_sandbox/sandbox/Dockerfile")];
-    const packs = join(root, "_sandbox/sandbox/packs");
+    const packs = join(root, "_sandbox/sandbox/image-packs");
     files.push(
         ...readdirSync(packs)
             .filter((entry) => entry.endsWith(".Dockerfile"))

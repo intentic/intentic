@@ -29,7 +29,7 @@
                 "/_site/site/public/scripts/connect\\.sh$/",
                 "/_site/site/public/scripts/connect\\.ps1$/",
                 "/_site/site/public/scripts/connect-host\\.ps1$/",
-                "/_editor/web/src/pages/setupCompose\\.ts$/",
+                "/_editor/web/src/features/setup/setupCompose\\.ts$/",
             ],
             matchStrings: ["cloudflare/cloudflared:(?<currentValue>[^@'\"`\\s}]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
             depNameTemplate: "cloudflare/cloudflared",

@@ -21,7 +21,7 @@ import { shrunkSurfaces } from "../constants/src/contract-shrink.mjs";
 import { finish } from "./lib/report.mjs";
 import { git, root } from "./lib/repo.mjs";
 
-const LOCK_FILE = "_sandbox/sandbox-contract/contract.lock.json";
+const LOCK_FILE = "_shared/sandbox-contract/contract.lock.json";
 
 const gitDir = git("rev-parse", "--absolute-git-dir")?.trim();
 const gitCommonDir = git("rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();

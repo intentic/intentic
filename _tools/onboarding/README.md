@@ -1,4 +1,4 @@
-# @intentic-app/onboarding
+# @intentic/onboarding
 
 The onboarding tier: one journey through the product's front door, run once per way of getting a sandbox.
 
@@ -107,7 +107,7 @@ Most of these were discovered by watching this tier fail in ways that named some
 ## Run
 
 ```sh
-pnpm --filter @intentic-app/onboarding e2e:onboarding
+pnpm --filter @intentic/onboarding e2e:onboarding
 ```
 
 Needs Docker, `openssl`, and Playwright's Chromium: and needs to be running where Docker publishes, since the

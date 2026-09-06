@@ -1,8 +1,8 @@
-# @intentic-dev/demo
+# @intentic/demo
 
 The landing page's playable demo: the real editor, running on a recording instead of a sandbox.
 
-It is **the actual `@intentic-app/web` app**, not a mock-up. Its entry installs a fake platform and a fake daemon on the two globals
+It is **the actual `@intentic/web` app**, not a mock-up. Its entry installs a fake platform and a fake daemon on the two globals
 the app reaches the outside world through, seeds the credentials the router gates look for, and then imports the
 app's own `main.ts`. Nothing in the app is aware of it.
 
@@ -22,7 +22,7 @@ It lived in `_editor/web/src/demo/` first, which was wrong in three checkable wa
 (web's entry list can't see a second html), and the package emitted two dist directories while its Dockerfile
 assumes one. The boundary also does what a boundary is for: app code cannot reach the fixture by accident.
 
-The dependency runs one way and only one way: this package depends on `@intentic-app/web`, imports its entry
+The dependency runs one way and only one way: this package depends on `@intentic/web`, imports its entry
 through the `./main` export, its compiled-in extension registry through `./builtins`, and shares its Vite setup
 through `./vite-shared`. Web knows nothing about this.
 

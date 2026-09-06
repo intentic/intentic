@@ -8,6 +8,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
-    "references": [{ "path": "../../_search/iq-engine" }, { "path": "../../_sandbox/sandbox-contract" }],
+    "references": [{ "path": "../../_search/iq-engine" }, { "path": "../../_shared/sandbox-contract" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

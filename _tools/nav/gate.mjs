@@ -54,8 +54,8 @@ const FROZEN = [
     /(^|\/)locales?\//,
     /\.schema\.json$/,
     /(^|\/)openapi[^/]*\.(json|ya?ml)$/,
-    /(^|\/)_platform\/api-contract\/src\//,
-    /(^|\/)_sandbox\/sandbox-contract\/src\//,
+    /(^|\/)_shared\/api-contract\/src\//,
+    /(^|\/)_shared\/sandbox-contract\/src\//,
 ];
 
 const sha = (text) => createHash("sha256").update(text).digest("hex").slice(0, 16);

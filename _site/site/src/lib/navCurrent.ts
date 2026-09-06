@@ -7,7 +7,7 @@
  *
  * The trailing slash is "always" in a build and "ignore" in dev, so it is never part of a comparison.
  */
-import type { MenuItem, NavEntry } from "@intentic-dev/site-content/nav";
+import type { MenuItem, NavEntry } from "@intentic/site-content/nav";
 
 const bare = (path: string): string => path.replace(/\/+$/u, "");
 

@@ -19,6 +19,10 @@
             "types": "./src/vitest.ts",
             "default": "./src/vitest.ts"
         },
+        "./aliases": {
+            "types": "./src/aliases.ts",
+            "default": "./src/aliases.ts"
+        },
         "./e2e": {
             "types": "./src/e2e.ts",
             "default": "./src/e2e.ts"

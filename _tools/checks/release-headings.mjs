@@ -16,7 +16,7 @@ import { root } from "./lib/repo.mjs";
 const HEADINGS = ["What's new", "Breaking changes"];
 const HEADING_FILES = [
     "_tools/scripts/release/publish-github.sh",
-    "_sandbox/sandbox/src/platform/release-notes.ts",
+    "_sandbox/sandbox/src/platform/boot/release-notes.ts",
     "_site/site/src/lib/changelog.ts",
     "_tools/scripts/release/post-release-discord.mjs",
 ];

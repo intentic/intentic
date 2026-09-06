@@ -17,7 +17,7 @@ set -euo pipefail
 # Found, not counted: `cd "$(dirname "$0")/../.."` is right only for this file's current location and nothing
 # checks it, which is the whole reason repo-root.sh exists.
 . "$(dirname "$0")/../lib/repo-root.sh"
-packs="$(repo_root)/_sandbox/sandbox/packs"
+packs="$(repo_root)/_sandbox/sandbox/image-packs"
 latest=0
 [ "${1:-}" = "--latest" ] && latest=1
 

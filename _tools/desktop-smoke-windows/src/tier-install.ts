@@ -38,7 +38,7 @@
  * browser reading the product's own docs is titled `Intentic …`, gets counted as the app's. See `appWindows`.
  */
 
-import type { WindowInfo } from "@intentic/desktop";
+import type { WindowInfo } from "@intentic/desktop-automation";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninstallSilently } from "./app.js";

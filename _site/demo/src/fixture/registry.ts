@@ -1,4 +1,4 @@
-import type { Marketplace } from "@intentic-app/api-contract";
+import type { Marketplace } from "@intentic/api-contract";
 
 /* THE REGISTRY THE DEMO BROWSES, what the Sandbox screen's Discover row shows.
  *

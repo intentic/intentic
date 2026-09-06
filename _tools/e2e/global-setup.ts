@@ -3,7 +3,7 @@ import { mkdirSync, openSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
-import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
+import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { repoRoot } from "@intentic/constants/node";
 import {
     API_URL,
@@ -70,7 +70,7 @@ export default async (): Promise<void> => {
 
     // Postgres + schema. Compose is idempotent; a CI-provided postgres just makes this a no-op that fails soft.
     await run(`docker`, [`compose`, `up`, `-d`, `--wait`, `postgres`], { cwd: root }).catch(() => undefined);
-    await run(`pnpm`, [`--filter`, `@intentic-app/prisma`, `migrate:deploy`], { cwd: root, env: { ...process.env, DATABASE_URL } });
+    await run(`pnpm`, [`--filter`, `@intentic/prisma`, `migrate:deploy`], { cwd: root, env: { ...process.env, DATABASE_URL } });
 
     // The daemon under test: the published sandbox image in loopback (no GOOGLE_CLIENT_ID / PLATFORM_URL,
     // that IS the mode). CONNECT_TOKEN + ZONE make GET /system/sync report an sshHostname, which the desktop-
@@ -119,7 +119,7 @@ export default async (): Promise<void> => {
 
     // The web SPA (vite dev, https :47145).
     if (!(await up(WEB_URL))) {
-        state.webPid = spawnServer(`web`, `pnpm`, [`--filter`, `@intentic-app/web`, `dev`], root, {});
+        state.webPid = spawnServer(`web`, `pnpm`, [`--filter`, `@intentic/web`, `dev`], root, {});
         await waitUp(WEB_URL, `web`, join(cacheDir, `web.log`), 120_000);
     }
 

@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
         "composite": true,
-        "customConditions": ["@intentic/src", "@intentic-app/src", "@intentic-dev/src"],
+        "customConditions": ["@intentic/src", "@intentic/src", "@intentic/src"],
         "declaration": true,
         "declarationMap": true,
         "exactOptionalPropertyTypes": true,

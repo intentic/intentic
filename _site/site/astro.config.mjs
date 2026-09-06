@@ -1,14 +1,14 @@
 import sitemap from "@astrojs/sitemap";
-import { docsSearch, lastModForUrl, llmsText } from "@intentic-dev/astro-integrations";
-import { developersBook, developersHref, developersPages } from "@intentic-dev/site-content/developers";
-import { bookHref, bookPlacements } from "@intentic-dev/site-content/book";
-import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
-import { docsBook, docsHref, docsPages } from "@intentic-dev/site-content/docs";
-import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
-import { landingContent } from "@intentic-dev/site-content/landing";
-import { productHref, productPages } from "@intentic-dev/site-content/product";
-import { referenceBook, referenceHref, referencePages } from "@intentic-dev/site-content/reference";
-import { ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
+import { docsSearch, lastModForUrl, llmsText } from "@intentic/astro-integrations";
+import { developersBook, developersHref, developersPages } from "@intentic/site-content/developers";
+import { bookHref, bookPlacements } from "@intentic/site-content/book";
+import { compareHref, comparePages } from "@intentic/site-content/compare";
+import { docsBook, docsHref, docsPages } from "@intentic/site-content/docs";
+import { guidePages, guidesHref } from "@intentic/site-content/guides";
+import { landingContent } from "@intentic/site-content/landing";
+import { productHref, productPages } from "@intentic/site-content/product";
+import { referenceBook, referenceHref, referencePages } from "@intentic/site-content/reference";
+import { ORG_NAME, SITE_URL } from "@intentic/site-content/site";
 import tailwindcss from "@tailwindcss/vite";
 import astroOpenGraphImages, { getImagePath } from "astro-opengraph-images";
 import { defineConfig } from "astro/config";
@@ -90,9 +90,9 @@ export default defineConfig({
          * plugin states the rule as a resolver, which every environment runs. Keep both: this block is what the
          * client bundle and the SSR graph use, and it is the shorter statement of the same intent. */
         resolve: {
-            conditions: ["@intentic/src", "@intentic-dev/src", "@intentic-app/src", "import", "module", "browser", "default"],
+            conditions: ["@intentic/src", "@intentic/src", "@intentic/src", "import", "module", "browser", "default"],
         },
-        /* The interactive demo (@intentic-dev/demo) at DEMO_PATH. In production it is a BUILD output copied into
+        /* The interactive demo (@intentic/demo) at DEMO_PATH. In production it is a BUILD output copied into
          * this package's public/demo/, and the worker serves its history routes (worker.ts). Neither exists under
          * `astro dev`: the demo isn't built, and public/demo/index.html (if someone did build it) would answer
          * only its exact path, so the hero's iframe loaded /demo/ and got this site's 404 page.

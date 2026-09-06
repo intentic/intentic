@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-dev/demo",
+    "name": "@intentic/demo",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -9,8 +9,8 @@
         "typecheck": "vue-tsc --noEmit -p tsconfig.json"
     },
     "dependencies": {
-        "@intentic-app/api-contract": "workspace:*",
-        "@intentic-app/web": "workspace:*",
+        "@intentic/api-contract": "workspace:*",
+        "@intentic/web": "workspace:*",
         "@intentic/ext-knowledge": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*"
     },

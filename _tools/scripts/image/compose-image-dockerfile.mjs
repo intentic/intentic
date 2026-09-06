@@ -7,7 +7,7 @@
 //
 //   node _tools/scripts/image/compose-image-dockerfile.mjs <profile>     # composed Dockerfile on stdout
 //
-// Profiles live in packs/profiles.json. The `core` profile is empty: composing it returns the core
+// Profiles live in image-packs/profiles.json. The `core` profile is empty: composing it returns the core
 // Dockerfile unchanged. Two splice points, matching how the core file orders its layers:
 //   packs:pre-trees   pinned installs, ABOVE the tree COPYs (a source change never evicts a pack download)
 //   packs:post-trees  packs that read the daemon tree (/opt/sandbox) or COPY from the `trees` context
@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 
 const root = repoRoot(import.meta.url);
-const packsDir = join(root, "_sandbox/sandbox/packs");
+const packsDir = join(root, "_sandbox/sandbox/image-packs");
 const corePath = join(root, "_sandbox/sandbox/Dockerfile");
 
 const PRE_MARKER = "# ---- packs:pre-trees ----";

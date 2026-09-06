@@ -41,7 +41,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
 /** The scopes every in-repo package is published under. A bare id outside them is a real dependency. */
-const WORKSPACE_SCOPES = [`@intentic/`, `@intentic-app/`, `@intentic-dev/`];
+const WORKSPACE_SCOPES = [`@intentic/`, `@intentic/`, `@intentic/`];
 
 /** The condition each package's exports map lists ahead of its `default`, pointing at the entry's `.ts`. */
 const SOURCE_CONDITION = `@intentic/src`;

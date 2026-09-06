@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { PrismaClient } from "@intentic-app/prisma";
+import { PrismaClient } from "@intentic/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 // The one place the e2e stack's shape lives: origins, credentials, the seeded rows, and the Better Auth

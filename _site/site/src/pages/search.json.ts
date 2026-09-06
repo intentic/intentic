@@ -1,7 +1,7 @@
-import { blocksFromPage, type SearchEntry } from "@intentic-dev/astro-integrations";
-import { developersBook } from "@intentic-dev/site-content/developers";
-import { bookHref, bookPlacements } from "@intentic-dev/site-content/book";
-import { docsBook } from "@intentic-dev/site-content/docs";
+import { blocksFromPage, type SearchEntry } from "@intentic/astro-integrations";
+import { developersBook } from "@intentic/site-content/developers";
+import { bookHref, bookPlacements } from "@intentic/site-content/book";
+import { docsBook } from "@intentic/site-content/docs";
 import type { APIRoute } from "astro";
 
 /* The documentation search index: this route serves it under `astro dev`; the build writes it from dist.

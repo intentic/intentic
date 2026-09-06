@@ -1,6 +1,6 @@
 // The app's own description of a persisted tab, reached through its package export the same way this package
 // reaches the app's entry, so a change to the strip's stored shape breaks this build rather than the demo.
-import type { StoredTab, TabSnapshot } from "@intentic-app/web/chat-tabs";
+import type { StoredTab, TabSnapshot } from "@intentic/web/chat-tabs";
 import { FEATURED_AGENT_ID } from "./fleet";
 
 /* THE CHATS THE RECORDING OPENS HOLDING, the tab strip a visitor arrives with, and the conversation the

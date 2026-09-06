@@ -33,17 +33,17 @@
     {
       "dev": false,
       "from": "_deploy/cli",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_deploy/cli",
-      "to": "_sandbox/sandbox-run"
-    },
-    {
-      "dev": false,
-      "from": "_deploy/cli",
       "to": "_sandbox/scaffold"
+    },
+    {
+      "dev": false,
+      "from": "_deploy/cli",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_deploy/cli",
+      "to": "_shared/sandbox-run"
     },
     {
       "dev": false,
@@ -138,7 +138,7 @@
     {
       "dev": false,
       "from": "_deploy/providers",
-      "to": "_sandbox/sandbox-run"
+      "to": "_shared/sandbox-run"
     },
     {
       "dev": false,
@@ -247,12 +247,12 @@
     },
     {
       "dev": true,
-      "from": "_devices/desktop",
+      "from": "_devices/desktop-automation",
       "to": "_tools/testing"
     },
     {
       "dev": true,
-      "from": "_devices/desktop",
+      "from": "_devices/desktop-automation",
       "to": "_tools/tsconfig"
     },
     {
@@ -278,7 +278,7 @@
     {
       "dev": false,
       "from": "_devices/machine",
-      "to": "_devices/desktop"
+      "to": "_devices/desktop-automation"
     },
     {
       "dev": false,
@@ -288,12 +288,12 @@
     {
       "dev": false,
       "from": "_devices/machine",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
       "from": "_devices/machine",
-      "to": "_sandbox/sandbox-run"
+      "to": "_shared/sandbox-run"
     },
     {
       "dev": false,
@@ -323,7 +323,7 @@
     {
       "dev": false,
       "from": "_devices/webext",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -358,16 +358,6 @@
     {
       "dev": true,
       "from": "_editor/desktop-app",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": true,
-      "from": "_editor/extension-ui",
-      "to": "_editor/ui"
-    },
-    {
-      "dev": true,
-      "from": "_editor/extension-ui",
       "to": "_tools/tsconfig"
     },
     {
@@ -383,7 +373,7 @@
     {
       "dev": true,
       "from": "_editor/share-view",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -414,11 +404,6 @@
       "dev": true,
       "from": "_editor/ui",
       "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_editor/extension-ui"
     },
     {
       "dev": false,
@@ -503,47 +488,52 @@
     {
       "dev": false,
       "from": "_editor/web",
-      "to": "_platform/api-contract"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_platform/capability-catalog"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_sandbox/extension-api"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_sandbox/extension-manifest"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_sandbox/registry"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_sandbox/sandbox-run"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
-      "to": "_sandbox/workspace-ignore"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
       "to": "_sandbox/workspace-setup"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/api-contract"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/capability-catalog"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/extension-api"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/extension-manifest"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/extension-ui"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/registry"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/sandbox-run"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
+      "to": "_shared/workspace-ignore"
     },
     {
       "dev": false,
@@ -573,22 +563,22 @@
     {
       "dev": false,
       "from": "_extensions/acceptance",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/acceptance",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/acceptance",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/acceptance",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -608,22 +598,22 @@
     {
       "dev": false,
       "from": "_extensions/activity",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/activity",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/activity",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/activity",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -638,22 +628,22 @@
     {
       "dev": false,
       "from": "_extensions/approvals",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/approvals",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/approvals",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/approvals",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -668,22 +658,22 @@
     {
       "dev": false,
       "from": "_extensions/automations",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/automations",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/automations",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/automations",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -698,22 +688,22 @@
     {
       "dev": false,
       "from": "_extensions/deployments",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/deployments",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/deployments",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/deployments",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -733,12 +723,12 @@
     {
       "dev": false,
       "from": "_extensions/discord",
-      "to": "_sandbox/connector-runtime"
+      "to": "_shared/connector-runtime"
     },
     {
       "dev": false,
       "from": "_extensions/discord",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -758,22 +748,22 @@
     {
       "dev": false,
       "from": "_extensions/documentation",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/documentation",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/documentation",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/documentation",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -788,22 +778,22 @@
     {
       "dev": false,
       "from": "_extensions/git-history",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/git-history",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/git-history",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/git-history",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -818,12 +808,12 @@
     {
       "dev": false,
       "from": "_extensions/google-workspace",
-      "to": "_sandbox/connector-runtime"
+      "to": "_shared/connector-runtime"
     },
     {
       "dev": false,
       "from": "_extensions/google-workspace",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -843,12 +833,12 @@
     {
       "dev": false,
       "from": "_extensions/imap",
-      "to": "_sandbox/connector-runtime"
+      "to": "_shared/connector-runtime"
     },
     {
       "dev": false,
       "from": "_extensions/imap",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -863,22 +853,22 @@
     {
       "dev": false,
       "from": "_extensions/issues",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/issues",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/issues",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/issues",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -893,22 +883,22 @@
     {
       "dev": false,
       "from": "_extensions/knowledge",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/knowledge",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/knowledge",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/knowledge",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -928,22 +918,22 @@
     {
       "dev": false,
       "from": "_extensions/maintenance",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/maintenance",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/maintenance",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/maintenance",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -963,22 +953,22 @@
     {
       "dev": false,
       "from": "_extensions/pipelines",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/pipelines",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/pipelines",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/pipelines",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -998,22 +988,22 @@
     {
       "dev": false,
       "from": "_extensions/preview",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/preview",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/preview",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/preview",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -1023,22 +1013,22 @@
     {
       "dev": false,
       "from": "_extensions/repo-apps",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/repo-apps",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/repo-apps",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/repo-apps",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -1053,12 +1043,12 @@
     {
       "dev": false,
       "from": "_extensions/slack",
-      "to": "_sandbox/connector-runtime"
+      "to": "_shared/connector-runtime"
     },
     {
       "dev": false,
       "from": "_extensions/slack",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1078,12 +1068,12 @@
     {
       "dev": false,
       "from": "_extensions/telegram",
-      "to": "_sandbox/connector-runtime"
+      "to": "_shared/connector-runtime"
     },
     {
       "dev": false,
       "from": "_extensions/telegram",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1103,17 +1093,17 @@
     {
       "dev": false,
       "from": "_extensions/viewers",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/viewers",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/viewers",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": true,
@@ -1128,12 +1118,12 @@
     {
       "dev": false,
       "from": "_extensions/whatsapp",
-      "to": "_sandbox/connector-runtime"
+      "to": "_shared/connector-runtime"
     },
     {
       "dev": false,
       "from": "_extensions/whatsapp",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1153,22 +1143,22 @@
     {
       "dev": false,
       "from": "_extensions/workflows",
-      "to": "_editor/extension-ui"
+      "to": "_shared/extension-api"
     },
     {
       "dev": false,
       "from": "_extensions/workflows",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_extensions/workflows",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-ui"
     },
     {
       "dev": false,
       "from": "_extensions/workflows",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -1179,11 +1169,6 @@
       "dev": true,
       "from": "_extensions/workflows",
       "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_platform/api",
-      "to": "_platform/api-contract"
     },
     {
       "dev": true,
@@ -1198,12 +1183,17 @@
     {
       "dev": false,
       "from": "_platform/api",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/api-contract"
     },
     {
       "dev": false,
       "from": "_platform/api",
-      "to": "_sandbox/sandbox-run"
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_platform/api",
+      "to": "_shared/sandbox-run"
     },
     {
       "dev": false,
@@ -1231,41 +1221,6 @@
       "to": "_tools/tsconfig"
     },
     {
-      "dev": false,
-      "from": "_platform/api-contract",
-      "to": "_deploy/resources"
-    },
-    {
-      "dev": false,
-      "from": "_platform/api-contract",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": true,
-      "from": "_platform/api-contract",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_platform/capability-catalog",
-      "to": "_sandbox/extension-manifest"
-    },
-    {
-      "dev": false,
-      "from": "_platform/capability-catalog",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": true,
-      "from": "_platform/capability-catalog",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_platform/capability-catalog",
-      "to": "_tools/tsconfig"
-    },
-    {
       "dev": true,
       "from": "_platform/example-provider",
       "to": "_tools/testing"
@@ -1278,7 +1233,7 @@
     {
       "dev": false,
       "from": "_platform/ingress",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1313,7 +1268,7 @@
     {
       "dev": false,
       "from": "_sandbox/acp-bridge",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1328,51 +1283,6 @@
     {
       "dev": true,
       "from": "_sandbox/acp-bridge",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/connector-runtime",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/connector-runtime",
-      "to": "_tools/base"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/connector-runtime",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/connector-runtime",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/connector-runtime",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/extension-api",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/extension-api",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/extension-manifest",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/extension-manifest",
       "to": "_tools/tsconfig"
     },
     {
@@ -1383,7 +1293,7 @@
     {
       "dev": false,
       "from": "_sandbox/fileq",
-      "to": "_sandbox/workspace-ignore"
+      "to": "_shared/workspace-ignore"
     },
     {
       "dev": false,
@@ -1408,7 +1318,7 @@
     {
       "dev": true,
       "from": "_sandbox/gate",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1433,7 +1343,7 @@
     {
       "dev": true,
       "from": "_sandbox/gate-action",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1452,27 +1362,17 @@
     },
     {
       "dev": true,
-      "from": "_sandbox/issue-widget",
-      "to": "_sandbox/sandbox-contract"
+      "from": "_sandbox/issue-sdk",
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
-      "from": "_sandbox/issue-widget",
+      "from": "_sandbox/issue-sdk",
       "to": "_tools/testing"
     },
     {
       "dev": true,
-      "from": "_sandbox/issue-widget",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/registry",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/registry",
+      "from": "_sandbox/issue-sdk",
       "to": "_tools/tsconfig"
     },
     {
@@ -1493,42 +1393,12 @@
     {
       "dev": false,
       "from": "_sandbox/sandbox",
-      "to": "_platform/capability-catalog"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/extension-api"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/extension-manifest"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
       "to": "_sandbox/fileq"
     },
     {
       "dev": false,
       "from": "_sandbox/sandbox",
-      "to": "_sandbox/issue-widget"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/registry"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/sandbox-run"
+      "to": "_sandbox/issue-sdk"
     },
     {
       "dev": false,
@@ -1544,11 +1414,6 @@
       "dev": false,
       "from": "_sandbox/sandbox",
       "to": "_sandbox/webq"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/workspace-ignore"
     },
     {
       "dev": false,
@@ -1569,6 +1434,41 @@
       "dev": false,
       "from": "_sandbox/sandbox",
       "to": "_search/lsp"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_shared/capability-catalog"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_shared/extension-api"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_shared/extension-manifest"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_shared/registry"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_shared/sandbox-run"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_shared/workspace-ignore"
     },
     {
       "dev": false,
@@ -1607,68 +1507,13 @@
     },
     {
       "dev": false,
-      "from": "_sandbox/sandbox-contract",
-      "to": "_sandbox/extension-manifest"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox-contract",
-      "to": "_sandbox/registry"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox-contract",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sandbox-contract",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sandbox-contract",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox-openapi",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sandbox-openapi",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sandbox-openapi",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox-run",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sandbox-run",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sandbox-run",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
       "from": "_sandbox/scaffold",
       "to": "_deploy/graph"
     },
     {
       "dev": false,
       "from": "_sandbox/scaffold",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
@@ -1688,7 +1533,7 @@
     {
       "dev": true,
       "from": "_sandbox/webchat-widget",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -1713,21 +1558,6 @@
     {
       "dev": true,
       "from": "_sandbox/webq",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/workspace-ignore",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/workspace-ignore",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/workspace-ignore",
       "to": "_tools/tsconfig"
     },
     {
@@ -1773,16 +1603,16 @@
     {
       "dev": false,
       "from": "_search/iq-bench",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_search/iq-bench",
       "to": "_search/iq-engine"
     },
     {
       "dev": false,
       "from": "_search/iq-bench",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_search/iq-bench",
       "to": "_tools/constants"
     },
     {
@@ -1798,12 +1628,12 @@
     {
       "dev": false,
       "from": "_search/iq-engine",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
       "from": "_search/iq-engine",
-      "to": "_sandbox/workspace-ignore"
+      "to": "_shared/workspace-ignore"
     },
     {
       "dev": false,
@@ -1853,6 +1683,176 @@
     {
       "dev": true,
       "from": "_search/lsp",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/api-contract",
+      "to": "_deploy/resources"
+    },
+    {
+      "dev": false,
+      "from": "_shared/api-contract",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_shared/api-contract",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/capability-catalog",
+      "to": "_shared/extension-manifest"
+    },
+    {
+      "dev": false,
+      "from": "_shared/capability-catalog",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_shared/capability-catalog",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_shared/capability-catalog",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/connector-runtime",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_shared/connector-runtime",
+      "to": "_tools/base"
+    },
+    {
+      "dev": false,
+      "from": "_shared/connector-runtime",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_shared/connector-runtime",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_shared/connector-runtime",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/extension-api",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_shared/extension-api",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/extension-manifest",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_shared/extension-manifest",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": true,
+      "from": "_shared/extension-ui",
+      "to": "_editor/ui"
+    },
+    {
+      "dev": true,
+      "from": "_shared/extension-ui",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": true,
+      "from": "_shared/registry",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_shared/registry",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/sandbox-contract",
+      "to": "_shared/extension-manifest"
+    },
+    {
+      "dev": false,
+      "from": "_shared/sandbox-contract",
+      "to": "_shared/registry"
+    },
+    {
+      "dev": false,
+      "from": "_shared/sandbox-contract",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_shared/sandbox-contract",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_shared/sandbox-contract",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/sandbox-openapi",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_shared/sandbox-openapi",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_shared/sandbox-openapi",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/sandbox-run",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_shared/sandbox-run",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_shared/sandbox-run",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_shared/workspace-ignore",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_shared/workspace-ignore",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_shared/workspace-ignore",
       "to": "_tools/tsconfig"
     },
     {
@@ -1868,12 +1868,12 @@
     {
       "dev": false,
       "from": "_site/demo",
-      "to": "_platform/api-contract"
+      "to": "_shared/api-contract"
     },
     {
       "dev": false,
       "from": "_site/demo",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": true,
@@ -1888,12 +1888,12 @@
     {
       "dev": false,
       "from": "_site/site",
-      "to": "_sandbox/registry"
+      "to": "_shared/registry"
     },
     {
       "dev": false,
       "from": "_site/site",
-      "to": "_sandbox/sandbox-openapi"
+      "to": "_shared/sandbox-openapi"
     },
     {
       "dev": false,
@@ -1918,7 +1918,7 @@
     {
       "dev": false,
       "from": "_site/site-content",
-      "to": "_sandbox/sandbox-openapi"
+      "to": "_shared/sandbox-openapi"
     },
     {
       "dev": false,
@@ -1963,17 +1963,17 @@
     {
       "dev": false,
       "from": "_tools/desktop-smoke-windows",
-      "to": "_devices/desktop"
+      "to": "_devices/desktop-automation"
     },
     {
       "dev": false,
       "from": "_tools/desktop-smoke-windows",
-      "to": "_sandbox/sandbox-contract"
+      "to": "_shared/sandbox-contract"
     },
     {
       "dev": false,
       "from": "_tools/desktop-smoke-windows",
-      "to": "_sandbox/sandbox-run"
+      "to": "_shared/sandbox-run"
     },
     {
       "dev": false,
@@ -1998,12 +1998,12 @@
     {
       "dev": true,
       "from": "_tools/e2e",
-      "to": "_platform/api-contract"
+      "to": "_platform/prisma"
     },
     {
       "dev": true,
       "from": "_tools/e2e",
-      "to": "_platform/prisma"
+      "to": "_shared/api-contract"
     },
     {
       "dev": true,
@@ -2038,7 +2038,7 @@
     {
       "dev": false,
       "from": "_tools/extension-example/seed",
-      "to": "_sandbox/extension-api"
+      "to": "_shared/extension-api"
     },
     {
       "dev": true,
@@ -2088,12 +2088,12 @@
     {
       "dev": false,
       "from": "_tools/registry-scan",
-      "to": "_sandbox/extension-manifest"
+      "to": "_shared/extension-manifest"
     },
     {
       "dev": false,
       "from": "_tools/registry-scan",
-      "to": "_sandbox/registry"
+      "to": "_shared/registry"
     },
     {
       "dev": true,
@@ -2139,16 +2139,16 @@
           "what": ": the post-apply Access summary + access.md; src/lib/known-hosts.ts, TOFU host-key pinning."
         }
       ],
-      "behind": 5,
+      "behind": 8,
       "component": "deploy",
       "dir": "_deploy/cli",
-      "files": 64,
+      "files": 65,
       "hasTests": true,
-      "loc": 6251,
+      "loc": 6399,
       "name": "@intentic/cli",
       "oneLiner": "The intentic command: tunnels, deployment and scaffolding, in one toolbox.",
       "readmeRev": "693fb0978ccb163234326d043889a7873b5cd412",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788085991000
     },
@@ -2345,7 +2345,7 @@
           "what": ": the canonical deploy.config.ts + expected graph (snapshot)."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "deploy",
       "dir": "_deploy/sdk",
       "files": 9,
@@ -2354,7 +2354,7 @@
       "name": "@intentic/sdk",
       "oneLiner": "The authoring surface a user writes their deploy.config.ts against.",
       "readmeRev": "4a1136063a6db1d3bec96653c5532c38137566ef",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306217000
     },
@@ -2381,7 +2381,7 @@
           "what": "/ src/resolvers/identity.ts: id helpers, adminUsername."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "deploy",
       "dir": "_deploy/state-resolver",
       "files": 23,
@@ -2390,7 +2390,7 @@
       "name": "@intentic/state-resolver",
       "oneLiner": "The state resolver: turns an IntentSet into the desired state, a DesiredStateGraph.",
       "readmeRev": "4a1136063a6db1d3bec96653c5532c38137566ef",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306217000
     },
@@ -2421,48 +2421,48 @@
       "loc": 674,
       "name": "@intentic/browser",
       "oneLiner": "Drive a Chromium-family browser from Node over CDP: open pages, read them as structured text, and click and type by element reference.",
-      "readmeRev": "",
+      "readmeRev": "a92344c8b8e11a314499f4c0163797473b6fbdb1",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1788599189000
     },
     {
       "anchors": [
         {
-          "path": "_devices/desktop/src/index.ts",
+          "path": "_devices/desktop-automation/src/index.ts",
           "what": ": the public surface."
         },
         {
-          "path": "_devices/desktop/src/input-linux.ts",
+          "path": "_devices/desktop-automation/src/input-linux.ts",
           "what": "/ src/input-windows.ts: pointer, keys and text, per platform."
         },
         {
-          "path": "_devices/desktop/src/apps-linux.ts",
+          "path": "_devices/desktop-automation/src/apps-linux.ts",
           "what": "/ src/apps-windows.ts: windows, focus, launching and the clipboard, per platform."
         },
         {
-          "path": "_devices/desktop/src/screen.ts",
+          "path": "_devices/desktop-automation/src/screen.ts",
           "what": ": capturing the screen."
         },
         {
-          "path": "_devices/desktop/src/keys.ts",
+          "path": "_devices/desktop-automation/src/keys.ts",
           "what": ": chord and key-name parsing, shared by both platforms."
         },
         {
-          "path": "_devices/desktop/src/run.ts",
+          "path": "_devices/desktop-automation/src/run.ts",
           "what": ": how commands are invoked without a native module."
         }
       ],
       "behind": 0,
       "component": "devices",
-      "dir": "_devices/desktop",
+      "dir": "_devices/desktop-automation",
       "files": 13,
       "hasTests": true,
       "loc": 1340,
-      "name": "@intentic/desktop",
+      "name": "@intentic/desktop-automation",
       "oneLiner": "Drive a desktop from Node, on Windows and Linux, with no native modules.",
-      "readmeRev": "",
+      "readmeRev": "a92344c8b8e11a314499f4c0163797473b6fbdb1",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1788599189000
     },
     {
       "anchors": [
@@ -2499,9 +2499,9 @@
       "loc": 1986,
       "name": "@intentic/local-agent",
       "oneLiner": "The plumbing every intentic CLI that lives on a user's own computer needs, and none of what any of them does.",
-      "readmeRev": "",
+      "readmeRev": "a92344c8b8e11a314499f4c0163797473b6fbdb1",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1788599189000
     },
     {
       "anchors": [
@@ -2542,6 +2542,10 @@
           "what": "what the sandbox is permitted to do here; the security surface."
         },
         {
+          "path": "_devices/machine/src/device/tools/sandboxes.ts",
+          "what": "the fleet: the docker ps/inspect readers, the docker verbs, and the ic flows (swap, reshape, remove, runners) with the pure argv builders beside them."
+        },
+        {
           "path": "_devices/machine/src/sync/mirror.ts",
           "what": "the sync tick: ports reconcile, git bridge, revocation handling."
         },
@@ -2550,17 +2554,18 @@
           "what": "driving the Mutagen binary, sessions and its daemon's autostart."
         }
       ],
-      "behind": 0,
+      "behind": 2,
       "component": "devices",
       "dir": "_devices/machine",
       "files": 65,
       "hasTests": true,
-      "loc": 11809,
+      "loc": 11935,
       "name": "@intentic/machine",
       "oneLiner": "The one agent that lives on a user's own device: it lets a sandbox's agent work on the machine, and keeps the machine's folders and ports mirrored with the sandbox — one binary, one resident loop,…",
-      "readmeRev": "",
-      "stale": false,
-      "updatedAt": 0
+      "readmeRev": "06b9f1a00d05f61e0f9206cd2000b8f0235cce90",
+      "reason": "2 commits have touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788603796000
     },
     {
       "anchors": [
@@ -2609,17 +2614,18 @@
           "what": ": the mandatory promotional tile, from that same lotus."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "devices",
       "dir": "_devices/webext",
       "files": 27,
       "hasTests": true,
-      "loc": 3263,
+      "loc": 3157,
       "name": "@intentic/webext",
       "oneLiner": "The browser extension that lets your sandbox work in the browser you are already signed into, on the sites you allow, while you watch it happen.",
-      "readmeRev": "",
-      "stale": false,
-      "updatedAt": 0
+      "readmeRev": "b266789b5edcb1f77ac85ef317cfa3abf3cd6ecd",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788599292000
     },
     {
       "anchors": [
@@ -2639,9 +2645,9 @@
       "hasTests": false,
       "loc": 331,
       "oneLiner": "The ~200 KB Windows program that starts another program without putting a window on anybody's desktop.",
-      "readmeRev": "",
+      "readmeRev": "b266789b5edcb1f77ac85ef317cfa3abf3cd6ecd",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1788599292000
     },
     {
       "anchors": [
@@ -2659,6 +2665,7 @@
         }
       ],
       "behind": 0,
+      "component": "editor",
       "dir": "_editor/android-app",
       "files": 0,
       "hasTests": false,
@@ -2671,17 +2678,18 @@
     },
     {
       "anchors": [],
-      "behind": 0,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 14,
       "hasTests": true,
-      "loc": 2847,
+      "loc": 2963,
       "name": "@intentic/desktop-app",
       "oneLiner": "The no-terminal way to run an intentic sandbox on your own computer.",
-      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
-      "stale": false,
-      "updatedAt": 1788598120000
+      "readmeRev": "06b9f1a00d05f61e0f9206cd2000b8f0235cce90",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788603796000
     },
     {
       "anchors": [
@@ -2702,39 +2710,16 @@
           "what": ": the Rust dependencies."
         }
       ],
-      "behind": 19,
+      "behind": 21,
       "dir": "_editor/desktop-app/src-tauri",
       "files": 11,
       "hasTests": false,
-      "loc": 5032,
+      "loc": 5448,
       "oneLiner": "The Rust half of the desktop app: the native window, the tray, and the permissions the webview is allowed.",
       "readmeRev": "4a1136063a6db1d3bec96653c5532c38137566ef",
-      "reason": "19 commits have touched this package since its README was written",
+      "reason": "21 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306217000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_editor/extension-ui/src/index.ts",
-          "what": ", the whole surface: which components and helpers an extension may render with."
-        },
-        {
-          "path": "_editor/extension-ui/src/format.ts",
-          "what": ": the shared formatters, so two extensions render a duration the same way."
-        }
-      ],
-      "behind": 0,
-      "component": "editor",
-      "dir": "_editor/extension-ui",
-      "files": 4,
-      "hasTests": false,
-      "loc": 696,
-      "name": "@intentic/extension-ui",
-      "oneLiner": "The UI kit an extension renders with, so its views look like the app rather than like a website.",
-      "readmeRev": "1f9a725f6942351de592801a3090f2e362e3963d",
-      "stale": false,
-      "updatedAt": 1788516606000
     },
     {
       "anchors": [
@@ -2760,6 +2745,7 @@
         }
       ],
       "behind": 0,
+      "component": "editor",
       "dir": "_editor/ios-app",
       "files": 2,
       "hasTests": false,
@@ -2773,6 +2759,37 @@
     {
       "anchors": [
         {
+          "path": "_editor/share-view/src/main.ts",
+          "what": "the boot, and by what it does not do, most of the argument above."
+        },
+        {
+          "path": "_editor/share-view/src/payload.ts",
+          "what": "the conversation as it arrives: one JSON block baked into the page."
+        },
+        {
+          "path": "_editor/share-view/src/ShareApp.vue",
+          "what": "the page: the transcript and nothing around it."
+        },
+        {
+          "path": "_editor/share-view/src/shareSurface.ts",
+          "what": "what a shared tool call is allowed to show, which is less than"
+        }
+      ],
+      "behind": 0,
+      "component": "editor",
+      "dir": "_editor/share-view",
+      "files": 10,
+      "hasTests": true,
+      "loc": 559,
+      "name": "@intentic/share-view",
+      "oneLiner": "The read-only page a conversation shared to the public is published as.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
           "path": "_editor/ui/src/index.ts",
           "what": ", the public surface, and the kit's own map: nearly every export carries a note saying what it replaced and why it exists. Read this before adding a component; the thing you want is usually already here under a name you did not guess."
         },
@@ -2782,7 +2799,7 @@
         },
         {
           "path": "_editor/ui/src/markdown",
-          "what": ", the engine behind that surface, on the @intentic/ui/markdown subpath because it is plain TypeScript: render.ts (sanitize, the document's parts, and the streaming split), code.ts (fenced blocks), figures.ts (which fences are figures), blocks.ts (where each block SITS in the source)."
+          "what": ", the engine behind both of those surfaces, on the @intentic/ui/markdown subpath because it is plain TypeScript. Reading: render.ts (sanitize, the document's parts, and the streaming split), code.ts (fenced blocks), figures.ts (which fences are figures). Writing: blocks.ts (where each block SITS in the source, in spans that tile the document, so an edit can be read back and spliced in without disturbing a byte of the rest), sourceDom.ts (the block as an element whose text IS its source, markup included), edits.ts (the formatting keys and Enter-on-a-list as functions from text+selection to text+selection), history.ts (the undo stack, because rebuilding a block is a programmatic DOM write and drops the browser's own). This package runs no suite of its own, so all four are exercised from editor/web/src/composables/markdown.test.ts, which is where blocks.ts's tests already lived."
         },
         {
           "path": "_editor/ui/src/lib",
@@ -2794,20 +2811,20 @@
         },
         {
           "path": "_editor/ui/src/styles",
-          "what": ": design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the two sheets only some consumers pay for (prose.css, extension-surface.css)."
+          "what": ": design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the three sheets only some consumers pay for (prose.css, markdown-editing.css, extension-surface.css). The first two are the two halves of one surface and are imported together: markdown-editing.css adds no type rules of its own, it only hides the markup a MarkdownDocument is holding, hangs a block's opening markers in the gutter and lights the block under the caret, so an app with one sheet and not the other shows an editor with every ## on screen."
         }
       ],
       "behind": 0,
       "component": "editor",
       "dir": "_editor/ui",
-      "files": 144,
+      "files": 155,
       "hasTests": false,
-      "loc": 17848,
+      "loc": 20496,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
-      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
+      "readmeRev": "deef2bb09b8aa1499c58cc387d70a2df6a829fd6",
       "stale": false,
-      "updatedAt": 1788598120000
+      "updatedAt": 1788693416000
     },
     {
       "anchors": [
@@ -2836,18 +2853,18 @@
           "what": ": the full route table."
         }
       ],
-      "behind": 3,
+      "behind": 7,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 1123,
+      "files": 1139,
       "hasTests": true,
-      "loc": 200396,
-      "name": "@intentic-app/web",
+      "loc": 203927,
+      "name": "@intentic/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue), the platform's workspace UI.",
-      "readmeRev": "655a5786e29e11526ea53d54d0a2c7a2a51e4eba",
-      "reason": "3 commits have touched this package since its README was written",
+      "readmeRev": "9ddf278b5c48ae0e4fde452c0a3f5ca25a1a42ab",
+      "reason": "7 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788562266000
+      "updatedAt": 1788688053000
     },
     {
       "anchors": [
@@ -2876,16 +2893,16 @@
           "what": ": activation, and the argument for one workspace-wide tile."
         }
       ],
-      "behind": 15,
+      "behind": 17,
       "component": "extensions",
       "dir": "_extensions/acceptance",
       "files": 26,
       "hasTests": true,
-      "loc": 4879,
+      "loc": 4758,
       "name": "@intentic/ext-acceptance",
       "oneLiner": "User stories written in plain language, run against the real app by an agent, and reported back as pass or fail.",
       "readmeRev": "a14873a7a7478c1629672306527d08ff07d701fc",
-      "reason": "15 commits have touched this package since its README was written",
+      "reason": "17 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787350005000
     },
@@ -2936,16 +2953,16 @@
           "what": ": activation, off the public capability facts."
         }
       ],
-      "behind": 9,
+      "behind": 10,
       "component": "extensions",
       "dir": "_extensions/activity",
       "files": 12,
       "hasTests": true,
-      "loc": 1225,
+      "loc": 1231,
       "name": "@intentic/ext-activity",
       "oneLiner": "The audit feed: what happened across the systems this sandbox is connected to, as one timeline.",
       "readmeRev": "2bbeca94d85e7462e6febdae183681d12285eeb2",
-      "reason": "9 commits have touched this package since its README was written",
+      "reason": "10 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306242000
     },
@@ -2981,6 +2998,7 @@
         }
       ],
       "behind": 1,
+      "component": "extensions",
       "dir": "_extensions/approvals",
       "files": 21,
       "hasTests": true,
@@ -3011,18 +3029,17 @@
           "what": ": the composer's state and its validation."
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/automations",
       "files": 18,
       "hasTests": true,
-      "loc": 3786,
+      "loc": 3785,
       "name": "@intentic/ext-automations",
       "oneLiner": "Standing instructions that start an agent turn on their own: on a schedule, or when something outside happens.",
-      "readmeRev": "3bcb3a56c7557c4b7c35567029e2c9fbb0de78d2",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788362610000
+      "readmeRev": "d05f42a4f54e8ff44b80c39fb7d01d2c523a4687",
+      "stale": false,
+      "updatedAt": 1788692664000
     },
     {
       "anchors": [
@@ -3035,7 +3052,7 @@
           "what": ": one pack, shared by both cards — Edge is Chromium and the extension is the same one."
         }
       ],
-      "behind": 2,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/browsers",
       "files": 0,
@@ -3043,10 +3060,10 @@
       "loc": 0,
       "name": "@intentic/ext-browsers",
       "oneLiner": "The browser families a user can connect their own copy of, as something the agent can work inside.",
-      "readmeRev": "5c115465dce6964a736c16777cca80d92a1bbcce",
-      "reason": "2 commits have touched this package since its README was written",
+      "readmeRev": "a92344c8b8e11a314499f4c0163797473b6fbdb1",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1787999549000
+      "updatedAt": 1788599189000
     },
     {
       "anchors": [
@@ -3063,7 +3080,7 @@
           "what": ": a connector that needs a client installed in the sandbox,"
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "extensions",
       "dir": "_extensions/connectors",
       "files": 0,
@@ -3072,7 +3089,7 @@
       "name": "@intentic/ext-connectors",
       "oneLiner": "The systems an agent can be wired to: GitHub, GitLab, npm, Sentry, Redmine, Outline, Notion, SharePoint, SigNoz, Komodo, Cloudflare, Firecrawl, Postgres, MySQL.",
       "readmeRev": "2bbeca94d85e7462e6febdae183681d12285eeb2",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306242000
     },
@@ -3123,16 +3140,16 @@
           "what": ": activation, and why it is one tile per connection."
         }
       ],
-      "behind": 16,
+      "behind": 18,
       "component": "extensions",
       "dir": "_extensions/deployments",
       "files": 30,
       "hasTests": true,
-      "loc": 3161,
+      "loc": 3169,
       "name": "@intentic/ext-deployments",
       "oneLiner": "What is actually running on the servers you own, read from a Komodo you already operate.",
       "readmeRev": "2bbeca94d85e7462e6febdae183681d12285eeb2",
-      "reason": "16 commits have touched this package since its README was written",
+      "reason": "18 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306242000
     },
@@ -3151,7 +3168,7 @@
           "what": ": the same for Windows, and where the two genuinely differ."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/devices",
       "files": 0,
@@ -3159,9 +3176,10 @@
       "loc": 0,
       "name": "@intentic/ext-devices",
       "oneLiner": "The user's own machines (Windows and Linux) as something the agent can operate.",
-      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
-      "stale": false,
-      "updatedAt": 1788598120000
+      "readmeRev": "b266789b5edcb1f77ac85ef317cfa3abf3cd6ecd",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788599292000
     },
     {
       "anchors": [
@@ -3178,16 +3196,16 @@
           "what": "/ src/audio.ts: joining voice, and the audio path in both directions."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "extensions",
       "dir": "_extensions/discord",
       "files": 9,
       "hasTests": true,
-      "loc": 1074,
+      "loc": 1035,
       "name": "@intentic/ext-discord",
       "oneLiner": "Discord as a place the agent works: it reads channels, replies, and can join a voice channel and speak.",
       "readmeRev": "2bbeca94d85e7462e6febdae183681d12285eeb2",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306242000
     },
@@ -3230,16 +3248,16 @@
           "what": ": the conventions, taught to every turn"
         }
       ],
-      "behind": 13,
+      "behind": 15,
       "component": "extensions",
       "dir": "_extensions/documentation",
       "files": 31,
       "hasTests": true,
-      "loc": 3928,
+      "loc": 3931,
       "name": "@intentic/ext-documentation",
       "oneLiner": "Plain-language architecture documentation for every repository and package in the workspace.",
       "readmeRev": "a14873a7a7478c1629672306527d08ff07d701fc",
-      "reason": "13 commits have touched this package since its README was written",
+      "reason": "15 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787350005000
     },
@@ -3309,7 +3327,8 @@
           "what": ": what the agent is told about all of it."
         }
       ],
-      "behind": 4,
+      "behind": 5,
+      "component": "extensions",
       "dir": "_extensions/google-workspace",
       "files": 39,
       "hasTests": true,
@@ -3317,7 +3336,7 @@
       "name": "@intentic/ext-google-workspace",
       "oneLiner": "Google Workspace as a place the agent works: one connected account gives it Gmail, Calendar, Drive, Docs, Sheets and Contacts, and can wake it when mail arrives or a meeting is about to start.",
       "readmeRev": "2bbeca94d85e7462e6febdae183681d12285eeb2",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306242000
     },
@@ -3377,6 +3396,7 @@
         }
       ],
       "behind": 6,
+      "component": "extensions",
       "dir": "_extensions/issues",
       "files": 10,
       "hasTests": true,
@@ -3455,15 +3475,16 @@
           "what": ": when the agent reads the knowledge base and"
         }
       ],
-      "behind": 12,
+      "behind": 14,
+      "component": "extensions",
       "dir": "_extensions/knowledge",
       "files": 45,
       "hasTests": true,
-      "loc": 5419,
+      "loc": 5409,
       "name": "@intentic/ext-knowledge",
       "oneLiner": "A folder of markdown notes that is also a typed graph: the people, projects, decisions and words this work happens among, browsable here and queryable by the agent.",
       "readmeRev": "4cb4713498d144f29eb7cc3e27aa045aec43bd7a",
-      "reason": "12 commits have touched this package since its README was written",
+      "reason": "14 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788023900000
     },
@@ -3490,18 +3511,17 @@
           "what": ": activation, and three decisions that could each have gone the other way."
         }
       ],
-      "behind": 11,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/maintenance",
       "files": 15,
       "hasTests": true,
-      "loc": 1758,
+      "loc": 1760,
       "name": "@intentic/ext-maintenance",
       "oneLiner": "The chore book: what this workspace is owed, why, and the evidence behind each answer.",
-      "readmeRev": "775111ae1d4b957f575e2bf345e2642a0f5c2269",
-      "reason": "11 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787652437000
+      "readmeRev": "a23c6b4d6661b843fd8194624890d1bdbbefba6c",
+      "stale": false,
+      "updatedAt": 1788687420000
     },
     {
       "anchors": [
@@ -3582,18 +3602,18 @@
           "what": ": what an agent's state says on a red row, in the fleet's own words."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "extensions",
       "dir": "_extensions/pipelines",
       "files": 30,
       "hasTests": true,
-      "loc": 3893,
+      "loc": 3993,
       "name": "@intentic/ext-pipelines",
       "oneLiner": "CI as it actually went: runs, their jobs, and which failures are a streak rather than a blip.",
-      "readmeRev": "f06644da45edb48bb16639beba464d80165e5b75",
-      "reason": "1 commit has touched this package since its README was written",
+      "readmeRev": "de5f15a194e5e3ce1675bc3dd4b698fe5a0bbcc7",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788560847000
+      "updatedAt": 1788600781000
     },
     {
       "anchors": [
@@ -3678,16 +3698,16 @@
           "what": ": the API surface the agent's tools sit on."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "extensions",
       "dir": "_extensions/slack",
       "files": 5,
       "hasTests": true,
-      "loc": 677,
+      "loc": 663,
       "name": "@intentic/ext-slack",
       "oneLiner": "Slack as a place the agent works: it reads channels, replies in thread, and reacts.",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306246000
     },
@@ -3738,16 +3758,16 @@
           "what": ", what Telegram plugs into the shared connector runtime: open/close a bot's poll loop, and when a failure is fatal."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "extensions",
       "dir": "_extensions/telegram",
       "files": 5,
       "hasTests": true,
-      "loc": 816,
+      "loc": 759,
       "name": "@intentic/ext-telegram",
       "oneLiner": "Telegram as a place the agent works: it reads chats and groups, replies in them, and wakes when it is messaged.",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306246000
     },
@@ -3810,16 +3830,16 @@
           "what": ": the structural message shapes everything except client.ts works on."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "extensions",
       "dir": "_extensions/whatsapp",
       "files": 6,
       "hasTests": true,
-      "loc": 1181,
+      "loc": 1134,
       "name": "@intentic/ext-whatsapp",
       "oneLiner": "WhatsApp as a place the agent works: paired to a dedicated number as a linked device, it reads chats and groups, replies in them, and wakes when it is addressed.",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306246000
     },
@@ -3854,18 +3874,17 @@
           "what": ": the badge, filled while nothing here is on screen."
         }
       ],
-      "behind": 6,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/workflows",
       "files": 30,
       "hasTests": true,
-      "loc": 3876,
+      "loc": 3936,
       "name": "@intentic/ext-workflows",
       "oneLiner": "Multi-step agent work, designed as a graph and run as one thing.",
-      "readmeRev": "775111ae1d4b957f575e2bf345e2642a0f5c2269",
-      "reason": "6 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787652437000
+      "readmeRev": "d05f42a4f54e8ff44b80c39fb7d01d2c523a4687",
+      "stale": false,
+      "updatedAt": 1788692664000
     },
     {
       "anchors": [
@@ -3883,7 +3902,7 @@
         },
         {
           "path": "_platform/api/src/config.ts",
-          "what": "(@puristic/env config; src/prisma.ts) client factory; src/types.ts: the shared Prisma type."
+          "what": "(@puristic/env config; src/prisma.ts) client factory; src/context.ts: the per-request context that carries it."
         }
       ],
       "behind": 4,
@@ -3892,60 +3911,12 @@
       "files": 121,
       "hasTests": true,
       "loc": 24113,
-      "name": "@intentic-app/api",
+      "name": "@intentic/api",
       "oneLiner": "The platform backend, Hono + oRPC + Prisma + Better Auth.",
       "readmeRev": "64344ba9ae44c2c767590b17134984e34210175c",
       "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788519262000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_platform/api-contract/src/index.ts",
-          "what": ": apiContract + public re-exports."
-        },
-        {
-          "path": "_platform/api-contract/src/schemas.ts",
-          "what": ": the Zod schemas and inferred types."
-        }
-      ],
-      "behind": 11,
-      "component": "platform",
-      "dir": "_platform/api-contract",
-      "files": 2,
-      "hasTests": false,
-      "loc": 1987,
-      "name": "@intentic-app/api-contract",
-      "oneLiner": "The single source of truth for the platform's API surface: the oRPC contract and its Zod schemas.",
-      "readmeRev": "0f0d7f1bd2385426492146d91f17b937a4a17958",
-      "reason": "11 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788276392000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_platform/capability-catalog/src/index.ts",
-          "what": ": the catalogs and their descriptor types."
-        },
-        {
-          "path": "_platform/capability-catalog/src/effects.ts",
-          "what": ": what a capability changes once it is on."
-        }
-      ],
-      "behind": 11,
-      "component": "platform",
-      "dir": "_platform/capability-catalog",
-      "files": 5,
-      "hasTests": true,
-      "loc": 1892,
-      "name": "@intentic-app/capability-catalog",
-      "oneLiner": "The product catalogs of what a sandbox can be connected to: which capabilities exist, what each one's add-form asks for, and how its card reads: rendered by the web app, and read by the sandbox…",
-      "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "11 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306246000
     },
     {
       "anchors": [
@@ -3959,11 +3930,12 @@
         }
       ],
       "behind": 1,
+      "component": "platform",
       "dir": "_platform/example-provider",
       "files": 4,
       "hasTests": true,
       "loc": 271,
-      "name": "@intentic-app/example-provider",
+      "name": "@intentic/example-provider",
       "oneLiner": "A complete, working paid service in one dependency-free file: the reference a third-party provider copies, and the endpoint the platform's own conformance suite is driven against.",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
       "reason": "1 commit has touched this package since its README was written",
@@ -3998,6 +3970,7 @@
         }
       ],
       "behind": 1,
+      "component": "platform",
       "dir": "_platform/ingress",
       "files": 19,
       "hasTests": true,
@@ -4026,7 +3999,7 @@
       "files": 77,
       "hasTests": false,
       "loc": 61314,
-      "name": "@intentic-app/prisma",
+      "name": "@intentic/prisma",
       "oneLiner": "The database layer: the Prisma schema, the generated client, and the migrations.",
       "readmeRev": "1d6ac035f515dea5dff94bb579dcf3bbc4c3aa36",
       "stale": false,
@@ -4055,7 +4028,7 @@
           "what": ": what the editor actually spawns."
         }
       ],
-      "behind": 3,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/acp-bridge",
       "files": 11,
@@ -4063,116 +4036,9 @@
       "loc": 1099,
       "name": "@intentic/acp-bridge",
       "oneLiner": "Drive the agents in your intentic sandbox from your own editor.",
-      "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306246000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/connector-runtime/src/gateway.ts",
-          "what": ", runConnectorGateway: the reconcile/status/health/shutdown shell, and the"
-        },
-        {
-          "path": "_sandbox/connector-runtime/src/daemon.ts",
-          "what": ": the client for /listeners/<provider>/{state,dispatch,failure,status}."
-        },
-        {
-          "path": "_sandbox/connector-runtime/src/painter.ts",
-          "what": ": the streaming and buffered painters, and the per-automation fan-out."
-        },
-        {
-          "path": "_sandbox/connector-runtime/src/context.ts",
-          "what": ": what a connector's own modules get from the process (daemon, log,"
-        }
-      ],
-      "behind": 3,
-      "dir": "_sandbox/connector-runtime",
-      "files": 9,
-      "hasTests": true,
-      "loc": 846,
-      "name": "@intentic/connector-runtime",
-      "oneLiner": "The shared gateway runtime for the messaging connectors: the process shell, daemon client and reply painters that ext-discord, ext-slack, ext-telegram, ext-whatsapp and ext-imap used to each carry a…",
-      "readmeRev": "94a50eb84b3ac78c153d02665dd3becfe1be321a",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788173460000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/extension-api/src/api.ts",
-          "what": ": the handle an extension is given; the centre of this package."
-        },
-        {
-          "path": "_sandbox/extension-api/src/facts.ts",
-          "what": ": the public facts a view's detect() answers from."
-        },
-        {
-          "path": "_sandbox/extension-api/src/engines.ts",
-          "what": ": how engines.intentic is matched against the version below, for the host"
-        },
-        {
-          "path": "_sandbox/extension-api/src/route.ts",
-          "what": ": the query rules a view with internal navigation uses."
-        },
-        {
-          "path": "_sandbox/extension-api/src/scope.ts",
-          "what": ": module state that belongs to one sandbox, and the guard for work in flight"
-        },
-        {
-          "path": "_sandbox/extension-api/src/version.ts",
-          "what": "and src/surface.json: the protocol version, and what"
-        }
-      ],
-      "behind": 3,
-      "component": "sandbox",
-      "dir": "_sandbox/extension-api",
-      "files": 13,
-      "hasTests": false,
-      "loc": 1479,
-      "name": "@intentic/extension-api",
-      "oneLiner": "The one SDK an extension programs against: the extension-author contract for the intentic app.",
-      "readmeRev": "b961febcc09e9e25bb2d71136e43359d77534fe2",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788192761000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/extension-manifest/src/points",
-          "what": ": one contribution point per file, and the index that collects them into"
-        },
-        {
-          "path": "_sandbox/extension-manifest/src/contribution-point.ts",
-          "what": ", what a point is: name, description, schema. The"
-        },
-        {
-          "path": "_sandbox/extension-manifest/src/manifest.ts",
-          "what": ", the envelope: who the extension is, which host it needs, what code it"
-        },
-        {
-          "path": "_sandbox/extension-manifest/src/json-schema.ts",
-          "what": ": the authoring schema, emitted from those points."
-        },
-        {
-          "path": "_sandbox/extension-manifest/src/permissions.ts",
-          "what": ": sandboxRouteAllowed, the \"<METHOD> <path-glob>\" matcher behind"
-        }
-      ],
-      "behind": 6,
-      "dir": "_sandbox/extension-manifest",
-      "files": 23,
-      "hasTests": false,
-      "loc": 1394,
-      "name": "@intentic/extension-manifest",
-      "oneLiner": "What an extension declares: as opposed to what it programs against.",
-      "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "6 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306246000
+      "readmeRev": "d05f42a4f54e8ff44b80c39fb7d01d2c523a4687",
+      "stale": false,
+      "updatedAt": 1788692664000
     },
     {
       "anchors": [
@@ -4228,17 +4094,17 @@
           "what": ": the behaviour a pipeline relies on, including the reader-versus-contract agreement test."
         }
       ],
-      "behind": 2,
+      "behind": 0,
+      "component": "sandbox",
       "dir": "_sandbox/gate",
-      "files": 4,
+      "files": 6,
       "hasTests": true,
-      "loc": 295,
+      "loc": 855,
       "name": "@intentic/gate",
       "oneLiner": "The one-line CI step for a release gate: POSTs what the pipeline knows to a gated workflow's webhook, waits for the run, and exits on the verdict.",
-      "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306246000
+      "readmeRev": "d05f42a4f54e8ff44b80c39fb7d01d2c523a4687",
+      "stale": false,
+      "updatedAt": 1788692664000
     },
     {
       "anchors": [
@@ -4263,17 +4129,17 @@
           "what": ", the public repository's README: what a team installing the action reads."
         }
       ],
-      "behind": 1,
+      "behind": 0,
+      "component": "sandbox",
       "dir": "_sandbox/gate-action",
       "files": 4,
       "hasTests": true,
-      "loc": 367,
+      "loc": 522,
       "name": "@intentic/gate-action",
       "oneLiner": "The GitHub Action around the sandbox's two CI doors: one uses: step that waits on a release gate's verdict or wakes an event automation with the workflow's payload.",
-      "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306246000
+      "readmeRev": "d05f42a4f54e8ff44b80c39fb7d01d2c523a4687",
+      "stale": false,
+      "updatedAt": 1788692664000
     },
     {
       "anchors": [
@@ -4299,7 +4165,7 @@
         },
         {
           "path": "_sandbox/ic/src/sandbox/recreate.rs",
-          "what": ": the four swap modes, the rollback record, and the seam"
+          "what": ": the five modes (rebuild, update, rollback, dev, and"
         },
         {
           "path": "_sandbox/ic/src/sandbox/staged.rs",
@@ -4323,81 +4189,57 @@
       "dir": "_sandbox/ic",
       "files": 28,
       "hasTests": false,
-      "loc": 12067,
-      "oneLiner": "The host-side CLI: the flows that must run on the machine that runs a sandbox, connect, prepare, update, rebuild, rollback, remove, and enrolling the machine as a deploy target.",
-      "readmeRev": "4f7174e0f9fc32a2e474ed41b326c7f664f0db4c",
+      "loc": 12691,
+      "oneLiner": "The host-side CLI: the flows that must run on the machine that runs a sandbox, connect, prepare, update, rebuild, rollback, reshape, remove, and enrolling the machine as a deploy target.",
+      "readmeRev": "06b9f1a00d05f61e0f9206cd2000b8f0235cce90",
       "reason": "3 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788106517000
+      "updatedAt": 1788603796000
     },
     {
       "anchors": [
         {
-          "path": "_sandbox/issue-widget/src/main.ts",
+          "path": "_sandbox/issue-sdk/src/main.ts",
           "what": ": the entry — auto-boots from a <script> tag, or init() from an import."
         },
         {
-          "path": "_sandbox/issue-widget/src/client.ts",
+          "path": "_sandbox/issue-sdk/src/client.ts",
           "what": ": everything between \"an error happened\" and \"the daemon has it\"."
         },
         {
-          "path": "_sandbox/issue-widget/src/capture.ts",
+          "path": "_sandbox/issue-sdk/src/transport.ts",
+          "what": ": the report, with keepalive; the config and challenge calls, the"
+        },
+        {
+          "path": "_sandbox/issue-sdk/src/capture.ts",
           "what": ": the uncaught-error handlers, and what they decline to report."
         },
         {
-          "path": "_sandbox/issue-widget/src/breadcrumbs.ts",
+          "path": "_sandbox/issue-sdk/src/breadcrumbs.ts",
           "what": ": the ring buffer, and what it deliberately does not instrument."
         },
         {
-          "path": "_sandbox/issue-widget/src/dialog.ts",
+          "path": "_sandbox/issue-sdk/src/dialog.ts",
           "what": "/ src/styles.ts: the optional report box."
         }
       ],
-      "behind": 1,
-      "dir": "_sandbox/issue-widget",
-      "files": 14,
+      "behind": 0,
+      "component": "sandbox",
+      "dir": "_sandbox/issue-sdk",
+      "files": 12,
       "hasTests": true,
-      "loc": 1409,
+      "loc": 1275,
       "name": "@intentic/issue-sdk",
       "oneLiner": "The bug reporter a website or app embeds to send crashes and user reports to a sandbox agent.",
-      "readmeRev": "60087c1df99a73b9cf0112841f964b3ffe503e2f",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788069688000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/registry/src/registry.ts",
-          "what": ", the file format: what a registry repo contains."
-        },
-        {
-          "path": "_sandbox/registry/src/source.ts",
-          "what": ": how a sha-pinned pointer names an extension."
-        },
-        {
-          "path": "_sandbox/registry/src/index.ts",
-          "what": ": the public surface."
-        }
-      ],
-      "behind": 1,
-      "component": "sandbox",
-      "dir": "_sandbox/registry",
-      "files": 6,
-      "hasTests": true,
-      "loc": 685,
-      "name": "@intentic/registry",
-      "oneLiner": "The extension-registry file format: what a registry repo contains, how its two files join, and the order the result is shown in.",
-      "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306246000
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
     },
     {
       "anchors": [
         {
           "path": "_sandbox/sandbox/src/app.ts",
-          "what": ", the Hono HTTP API: every route the browser and the CLI reach the daemon through."
+          "what": ", the Hono HTTP API's composition root: the middleware stack (boot gate, CORS, the bearer check with its exemptions and role floor), /health, and every route the browser and the CLI reach the daemon through, mounted in one fixed order from the .routes.ts module of the area that owns it. The order is behavior — Hono matches in registration order and the exemptions are keyed by path — so it stays in this one file while each handler lives beside the code it drives (auth/members.routes.ts, environment/environment.routes.ts, portability/arrival.routes.ts, platform/sync.routes.ts, extensions/backend/backend-proxy.routes.ts, …)."
         },
         {
           "path": "_sandbox/sandbox/src/agent",
@@ -4405,7 +4247,11 @@
         },
         {
           "path": "_sandbox/sandbox/src/agent/provider-registry.ts",
-          "what": ": the provider list, once. Each native provider's directory exports one ProviderModule (its adapter row, turn arm, Services slice, catalog, readiness rung, boot tasks, pack wants and secrets rows — src/agent/provider-module.ts is the seam), and the shared surfaces DERIVE from the aggregation instead of each keeping its own enumeration. Adding a provider is its contract row (the one-row-per-provider table in @intentic/sandbox-contract's provider-specs.ts), its directory, and one import line here; the registry throws at init on a missing or duplicate module, so forgetting the line fails every suite rather than shipping a provider whose secrets rows and readiness silently do not exist (which happened twice while these lists were hand-kept)."
+          "what": ": the provider list, once. Each native provider's directory exports one ProviderModule (its adapter row, turn arm, Services slice, catalog, readiness rung, boot tasks, pack wants, secrets rows and its ACCOUNT DOOR — src/agent/provider-module.ts is the seam), and the shared surfaces DERIVE from the aggregation instead of each keeping its own enumeration. Adding a provider is its contract row (the one-row-per-provider table in @intentic/sandbox-contract's provider-specs.ts), its directory, and one import line here; the registry throws at init on a missing or duplicate module, so forgetting the line fails every suite rather than shipping a provider whose secrets rows and readiness silently do not exist (which happened twice while these lists were hand-kept)."
+        },
+        {
+          "path": "_sandbox/sandbox/src/agent/accounts.routes.ts",
+          "what": ": the accounts this sandbox holds ITSELF, one route family with the provider in the path (/accounts/{provider}: start, complete, cancel, list, rename, disconnect). Four families used to serve this, each \"the previous one's shape\" with a verb renamed; the operations are the same six for every provider, so what differs is each module's AccountDoor (Anthropic's paste-back with the PKCE verifier now HELD in the door rather than round-tripped through the browser, Cursor's held verifier, xAI's device code through OpenCode, a minted key), and the route says the part no door owns: which provider was asked for and whether it has a door at all (a translator-only provider answers 404), how a door's own refusal reaches the wire (a 412 in its words), and the two answers a finishing call can give (the account, where the exchange ends there; nothing, where a mint follows and the row lands in the list)."
         },
         {
           "path": "_sandbox/sandbox/src/minted",
@@ -4425,7 +4271,7 @@
         },
         {
           "path": "_sandbox/sandbox/src/git/git.routes.ts",
-          "what": "(status/commit/push over the wire; src/workspace) the repo layout the daemon serves. The push is not a request but a RUN (src/git/push-run.ts): it runs the repository's own pre-push hook, which in a gated workspace is the whole suite, so it starts at once in the same terminal as the pre-push check (src/prepush), is polled for its verdict, and settles with git's last word and who refused it (the hook, the remote, or the transport: pushRefusal in git.ts, read off real transcripts). Both runs are one shape (CommandRun in the contract) over one engine (rules/rule-command.ts), which is what lets the app show a refused push with the card, the terminal link and the proposed fix a red check already gets. src/workspace/workspace-scope.ts decides WHOSE copy a file read means: the shared /work tree, or one conversation's own checkout when the request names it (?agent=). Reads only (no write route can name a checkout) and a request naming one that was archived away says so specifically instead of reporting a missing file."
+          "what": "(status/commit/push over the wire; src/workspace) the repo layout the daemon serves; workspace-bytes.routes.ts is its byte surface, the raw and ranged-media reads and the three upload doors, off oRPC because their bodies are streamed bytes. The push is not a request but a RUN (src/git/push-run.ts): it runs the repository's own pre-push hook, which in a gated workspace is the whole suite, so it starts at once in the same terminal as the pre-push check (src/prepush), is polled for its verdict, and settles with git's last word and who refused it (the hook, the remote, or the transport: pushRefusal in git.ts, read off real transcripts). Both runs are one shape (CommandRun in the contract) over one engine (rules/rule-command.ts), which is what lets the app show a refused push with the card, the terminal link and the proposed fix a red check already gets. src/workspace/workspace-scope.ts decides WHOSE copy a file read means: the shared /work tree, or one conversation's own checkout when the request names it (?agent=). Reads only (no write route can name a checkout) and a request naming one that was archived away says so specifically instead of reporting a missing file."
         },
         {
           "path": "_sandbox/sandbox/src/composition.ts",
@@ -4476,16 +4322,24 @@
           "what": ": which daemon this one is. This repository"
         },
         {
+          "path": "_sandbox/sandbox/src/peers",
+          "what": ", the substrate under everything of the user's that DIALS this sandbox and then serves"
+        },
+        {
           "path": "_sandbox/sandbox/src/hosts",
-          "what": ", the user's own computers: the socket each one holds open, the Devices view's data"
+          "what": ": host-peer.ts is the door (the grant is the capability's config, pushed down on"
         },
         {
           "path": "_sandbox/sandbox/src/webext",
-          "what": ", the user's own BROWSERS, through the extension installed in one: the same three"
+          "what": ": webext-peer.ts is the door, with the three differences a browser makes: a"
         },
         {
           "path": "_sandbox/sandbox/src/runners",
-          "what": ", this sandbox's own execution containers on other machines — both halves, since"
+          "what": ", both halves, since a runner IS this daemon in another posture. Parent half:"
+        },
+        {
+          "path": "_sandbox/sandbox/src/tunnel",
+          "what": ", the substrate under the two things the sandbox holds a TUNNEL for: a VPN into"
         },
         {
           "path": "_sandbox/sandbox/src/guard/guard.ts",
@@ -4540,6 +4394,10 @@
           "what": ": who a turn is and what it may do, resolved in one"
         },
         {
+          "path": "_sandbox/sandbox/src/context/conversation-context.ts",
+          "what": ": which part of the workspace a"
+        },
+        {
           "path": "_sandbox/sandbox/src/agent/system-prompt.ts",
           "what": ": what the model is told before the conversation"
         },
@@ -4549,136 +4407,25 @@
         },
         {
           "path": "_sandbox/sandbox/src/auth/role-floor.ts",
-          "what": ": the minimum trust tier per route, in one table. src/auth/auth.ts resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches."
+          "what": ": the minimum trust tier per route, in one table. src/auth/auth.ts resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches. The plain-Hono routes that gate on the owner share one pair of gates (owner-gates.ts: the maintainer-equivalent operating gate, and the ownership gate reserved for membership) and sit beside it: the roster (members.routes.ts), control tokens (control-tokens.routes.ts), and browser credentials — the WebSocket ticket, sign-out-everywhere and retirement (access.routes.ts). src/auth/control-tokens.ts is the program's credential: hashed at rest with an optional expiry and a last-use mark, and its scopes (read/drive/land, plus the editor slice) are DERIVED from the same role floors a member is held to, so a route added tomorrow lands in the right rung by its floor. src/auth/door-tokens.ts holds the credentials behind the public doors (an event automation's webhook, a workflow's release gate, a bug intake's key) in .intentic/secrets/doors.json, out of the versioned manifests that declare them, and hands each to an operator only (src/auth/operator.ts) through the route that lists the automation or workflow; a door takes its token as ?token= or as a bearer header. src/auth/grants.ts is the one table of every non-bearer credential and what each reaches; a control token's admission hands back a principal (src/auth/principal.ts) that the turn it starts is attributed to (src/agent/turn-actor.ts: the activity log's actor, the agent card's startedBy)."
         },
         {
           "path": "_sandbox/sandbox/src/workflows",
           "what": ": workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 1205,
+      "files": 1269,
       "hasTests": true,
-      "loc": 218864,
+      "loc": 224106,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon, a Docker image that runs as the project's workspace container on the customer's host.",
-      "readmeRev": "e6a427235b13fba03aba0cc245041020f996a7ae",
-      "stale": false,
-      "updatedAt": 1788598120000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/sandbox-contract/src/contracts",
-          "what": ": one contract per area. Start with agent.contract.ts and git.contract.ts."
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/schemas",
-          "what": ": the wire shapes, one module per subject area, named to match the contract that"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/events.ts",
-          "what": ": what the daemon pushes, and when. It also holds the transcript wire: a"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/transcript-fold.ts",
-          "what": ", its own entry point (@intentic/sandbox-contract/transcript-fold):"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/workspace-state.ts",
-          "what": "and src/runtime-state.ts: which"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/documents.ts",
-          "what": ": which of a turn's writes is a DOCUMENT, a markdown file written whole,"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/agent-runtimes.ts",
-          "what": ": what each agentic LOOP can do, one record per runtime: its"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/provider-specs.ts",
-          "what": ": one row per provider, and the source every other list"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/agent-catalog.ts",
-          "what": ": the shapes each surface reads that table in, plus the rules"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/chores",
-          "what": ", the chore book: definitions, applicability gates and verdicts, shared because the"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/approvals-execution.ts",
-          "what": ": how an approved item gets done, the hold every"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/workflow-faults.ts",
-          "what": "and src/output-fields.ts: graph and"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/definition.ts",
-          "what": ": the SANDBOX DEFINITION, the declarable shape of a sandbox"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/arrival.ts",
-          "what": ": the ARRIVAL PIPELINE, one plan → apply → report for every artifact that can"
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/index.ts",
-          "what": ": the public surface."
-        },
-        {
-          "path": "_sandbox/sandbox-contract/src/contract-lock.ts",
-          "what": "and contract.lock.json: every exported"
-        }
-      ],
-      "behind": 1,
-      "component": "sandbox",
-      "dir": "_sandbox/sandbox-contract",
-      "files": 201,
-      "hasTests": true,
-      "loc": 36813,
-      "name": "@intentic/sandbox-contract",
-      "oneLiner": "The wire between the sandbox daemon and its browser client: change it here, and both sides follow.",
-      "readmeRev": "7879727d167da914223136658689dd06fb443bb6",
+      "readmeRev": "d05f42a4f54e8ff44b80c39fb7d01d2c523a4687",
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788597992000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/sandbox-run/src/index.ts",
-          "what": ": the contract and the docker-run emitter; the surface every docker-shaped flow uses."
-        },
-        {
-          "path": "_sandbox/sandbox-run/src/fly.ts",
-          "what": ", the hosted flavor: the same contract emitted as a Fly Machine config (one VM per"
-        },
-        {
-          "path": "_sandbox/sandbox-run/src/quote.ts",
-          "what": ": shell quoting, which is the part that is easy to get subtly wrong."
-        },
-        {
-          "path": "_sandbox/sandbox-run/src/quote-contract.integration.test.ts",
-          "what": ": the emitted command run for"
-        }
-      ],
-      "behind": 1,
-      "component": "sandbox",
-      "dir": "_sandbox/sandbox-run",
-      "files": 10,
-      "hasTests": true,
-      "loc": 1683,
-      "name": "@intentic/sandbox-run",
-      "oneLiner": "The sandbox container's run contract: every path that creates a sandbox composes its docker run from here.",
-      "readmeRev": "68c5b99786105cc7b6a1ebac8dc1a31c0b0c134e",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788515506000
+      "updatedAt": 1788692664000
     },
     {
       "anchors": [
@@ -4724,29 +4471,28 @@
         },
         {
           "path": "_sandbox/webchat-widget/src/transport.ts",
-          "what": ": the connection back to the sandbox."
+          "what": ": the reply, SSE over POST; the config and challenge calls are the contract's embed helpers."
         },
         {
           "path": "_sandbox/webchat-widget/src/identity.ts",
-          "what": "/ src/challenge.ts: who a visitor is, and the abuse gate."
+          "what": "/ src/challenge.ts: who a visitor is, and the Turnstile half of the abuse gate (the proof of work is every embed's, in the contract)."
         },
         {
           "path": "_sandbox/webchat-widget/src/main.ts",
           "what": ": the entry the script tag loads."
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/webchat-widget",
-      "files": 12,
+      "files": 11,
       "hasTests": true,
-      "loc": 1478,
+      "loc": 1321,
       "name": "@intentic/webchat-widget",
       "oneLiner": "Front Desk: the embeddable chat bubble a website loads to talk to a sandbox agent.",
-      "readmeRev": "e1177efbdce3587b11d466b0531ec1d8ff30a661",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306249000
+      "readmeRev": "e212ec43be370a3b5f9d998c09925582aaf01c92",
+      "stale": false,
+      "updatedAt": 1788640820000
     },
     {
       "anchors": [
@@ -4775,7 +4521,7 @@
           "what": "the whole surface driven against a loopback fixture site."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "sandbox",
       "dir": "_sandbox/webq",
       "files": 30,
@@ -4784,37 +4530,9 @@
       "name": "@intentic/webq",
       "oneLiner": "Agent-native web fetch: any URL as clean, token-budgeted markdown, and bounded same-site crawls, over one shared cache.",
       "readmeRev": "61142da000ca3afaf5693c2fc87a7dded54d8d19",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788008368000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/workspace-ignore/src/index.ts",
-          "what": ": the scope, and the layered decision."
-        },
-        {
-          "path": "_sandbox/workspace-ignore/src/constants.ts",
-          "what": ": the floor and the denylist, spelled out."
-        },
-        {
-          "path": "_sandbox/workspace-ignore/src/index.test.ts",
-          "what": ": the layer-precedence cases, which are the whole correctness story."
-        }
-      ],
-      "behind": 3,
-      "component": "sandbox",
-      "dir": "_sandbox/workspace-ignore",
-      "files": 4,
-      "hasTests": true,
-      "loc": 326,
-      "name": "@intentic/workspace-ignore",
-      "oneLiner": "The workspace attention filter: what the tree grays and lazy-loads, and what ordinary workspace search skips.",
-      "readmeRev": "e1177efbdce3587b11d466b0531ec1d8ff30a661",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306249000
     },
     {
       "anchors": [
@@ -5033,6 +4751,383 @@
     {
       "anchors": [
         {
+          "path": "_shared/api-contract/src/index.ts",
+          "what": ": apiContract + public re-exports."
+        },
+        {
+          "path": "_shared/api-contract/src/schemas.ts",
+          "what": ": the Zod schemas and inferred types."
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/api-contract",
+      "files": 2,
+      "hasTests": false,
+      "loc": 1987,
+      "name": "@intentic/api-contract",
+      "oneLiner": "The single source of truth for the platform's API surface: the oRPC contract and its Zod schemas.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/capability-catalog/src/index.ts",
+          "what": ": the catalogs and their descriptor types."
+        },
+        {
+          "path": "_shared/capability-catalog/src/effects.ts",
+          "what": ": what a capability changes once it is on."
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/capability-catalog",
+      "files": 5,
+      "hasTests": true,
+      "loc": 1892,
+      "name": "@intentic/capability-catalog",
+      "oneLiner": "The product catalogs of what a sandbox can be connected to: which capabilities exist, what each one's add-form asks for, and how its card reads: rendered by the web app, and read by the sandbox…",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/connector-runtime/src/gateway.ts",
+          "what": ", runConnectorGateway: the reconcile/status/health/shutdown shell, and the"
+        },
+        {
+          "path": "_shared/connector-runtime/src/daemon.ts",
+          "what": ": the client for /listeners/<provider>/{state,dispatch,failure,status}."
+        },
+        {
+          "path": "_shared/connector-runtime/src/painter.ts",
+          "what": ": the streaming and buffered painters, and the per-automation fan-out."
+        },
+        {
+          "path": "_shared/connector-runtime/src/listener-memory.ts",
+          "what": ": what a listener remembers between messages, in memory and"
+        },
+        {
+          "path": "_shared/connector-runtime/src/context.ts",
+          "what": ": what a connector's own modules get from the process (daemon, log,"
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/connector-runtime",
+      "files": 11,
+      "hasTests": true,
+      "loc": 1032,
+      "name": "@intentic/connector-runtime",
+      "oneLiner": "The shared gateway runtime for the messaging connectors: the process shell, daemon client and reply painters that ext-discord, ext-slack, ext-telegram, ext-whatsapp and ext-imap used to each carry a…",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/extension-api/src/api.ts",
+          "what": ": the handle an extension is given; the centre of this package."
+        },
+        {
+          "path": "_shared/extension-api/src/facts.ts",
+          "what": ": the public facts a view's detect() answers from."
+        },
+        {
+          "path": "_shared/extension-api/src/engines.ts",
+          "what": ": how engines.intentic is matched against the version below, for the host"
+        },
+        {
+          "path": "_shared/extension-api/src/route.ts",
+          "what": ": the query rules a view with internal navigation uses."
+        },
+        {
+          "path": "_shared/extension-api/src/scope.ts",
+          "what": ": module state that belongs to one sandbox, and the guard for work in flight"
+        },
+        {
+          "path": "_shared/extension-api/src/version.ts",
+          "what": "and src/surface.json: the protocol version, and what"
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/extension-api",
+      "files": 13,
+      "hasTests": false,
+      "loc": 1487,
+      "name": "@intentic/extension-api",
+      "oneLiner": "The one SDK an extension programs against: the extension-author contract for the intentic app.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/extension-manifest/src/points",
+          "what": ": one contribution point per file, and the index that collects them into"
+        },
+        {
+          "path": "_shared/extension-manifest/src/contribution-point.ts",
+          "what": ", what a point is: name, description, schema. The"
+        },
+        {
+          "path": "_shared/extension-manifest/src/manifest.ts",
+          "what": ", the envelope: who the extension is, which host it needs, what code it"
+        },
+        {
+          "path": "_shared/extension-manifest/src/json-schema.ts",
+          "what": ": the authoring schema, emitted from those points."
+        },
+        {
+          "path": "_shared/extension-manifest/src/permissions.ts",
+          "what": ": sandboxRouteAllowed, the \"<METHOD> <path-glob>\" matcher behind"
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/extension-manifest",
+      "files": 23,
+      "hasTests": false,
+      "loc": 1394,
+      "name": "@intentic/extension-manifest",
+      "oneLiner": "What an extension declares: as opposed to what it programs against.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/extension-ui/src/index.ts",
+          "what": ", the whole surface: which components and helpers an extension may render with."
+        },
+        {
+          "path": "_shared/extension-ui/src/format.ts",
+          "what": ": the shared formatters, so two extensions render a duration the same way."
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/extension-ui",
+      "files": 4,
+      "hasTests": false,
+      "loc": 704,
+      "name": "@intentic/extension-ui",
+      "oneLiner": "The UI kit an extension renders with, so its views look like the app rather than like a website.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/registry/src/registry.ts",
+          "what": ", the file format: what a registry repo contains."
+        },
+        {
+          "path": "_shared/registry/src/source.ts",
+          "what": ": how a sha-pinned pointer names an extension."
+        },
+        {
+          "path": "_shared/registry/src/index.ts",
+          "what": ": the public surface."
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/registry",
+      "files": 6,
+      "hasTests": true,
+      "loc": 685,
+      "name": "@intentic/registry",
+      "oneLiner": "The extension-registry file format: what a registry repo contains, how its two files join, and the order the result is shown in.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/sandbox-contract/src/contracts",
+          "what": ": one contract per area. Start with agent.contract.ts and git.contract.ts."
+        },
+        {
+          "path": "_shared/sandbox-contract/src/schemas",
+          "what": ": the wire shapes, one module per subject area, named to match the contract that"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/events.ts",
+          "what": ": what the daemon pushes, and when. It also holds the transcript wire: a"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/transcript-fold.ts",
+          "what": ", its own entry point (@intentic/sandbox-contract/transcript-fold):"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/workspace-state.ts",
+          "what": "and src/runtime-state.ts: which"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/documents.ts",
+          "what": ": which of a turn's writes is a DOCUMENT, a markdown file written whole,"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/agent-runtimes.ts",
+          "what": ": what each agentic LOOP can do, one record per runtime: its"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/provider-specs.ts",
+          "what": ": one row per provider, and the source every other list"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/contracts/accounts.contract.ts",
+          "what": ": the accounts the sandbox holds"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/agent-catalog.ts",
+          "what": ": the shapes each surface reads that table in, plus the rules"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/chores",
+          "what": ", the chore book: definitions, applicability gates and verdicts, shared because the"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/approvals-execution.ts",
+          "what": ": how an approved item gets done, the hold every"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/workflow-faults.ts",
+          "what": "and src/output-fields.ts: graph and"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/definition.ts",
+          "what": ": the SANDBOX DEFINITION, the declarable shape of a sandbox"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/arrival.ts",
+          "what": ": the ARRIVAL PIPELINE, one plan → apply → report for every artifact that can"
+        },
+        {
+          "path": "_shared/sandbox-contract/src/index.ts",
+          "what": ": the public surface."
+        },
+        {
+          "path": "_shared/sandbox-contract/src/contract-lock.ts",
+          "what": "and contract.lock.json: every exported"
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/sandbox-contract",
+      "files": 207,
+      "hasTests": true,
+      "loc": 38769,
+      "name": "@intentic/sandbox-contract",
+      "oneLiner": "The wire between the sandbox daemon and its browser client: change it here, and both sides follow.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/sandbox-openapi/src/spec.ts",
+          "what": "the document itself: every route walked into a path item, with the operation"
+        },
+        {
+          "path": "_shared/sandbox-openapi/src/converter.ts",
+          "what": "zod → JSON Schema, in the dialect oRPC's own generator declares, so"
+        },
+        {
+          "path": "_shared/sandbox-openapi/src/groups.ts",
+          "what": "the shelves and tags a reader meets the surface through, which is the one"
+        },
+        {
+          "path": "_shared/sandbox-openapi/src/security.ts",
+          "what": "which control-token scope each operation sits behind, derived from the"
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/sandbox-openapi",
+      "files": 7,
+      "hasTests": true,
+      "loc": 970,
+      "name": "@intentic/sandbox-openapi",
+      "oneLiner": "The daemon's wire contract as an OpenAPI 3.1 document, generated from the contract rather than written beside it.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/sandbox-run/src/index.ts",
+          "what": ": the contract and the docker-run emitter; the surface every docker-shaped flow uses."
+        },
+        {
+          "path": "_shared/sandbox-run/src/fly.ts",
+          "what": ", the hosted flavor: the same contract emitted as a Fly Machine config (one VM per"
+        },
+        {
+          "path": "_shared/sandbox-run/src/quote.ts",
+          "what": ": shell quoting, which is the part that is easy to get subtly wrong."
+        },
+        {
+          "path": "_shared/sandbox-run/src/quote-contract.integration.test.ts",
+          "what": ": the emitted command run for"
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/sandbox-run",
+      "files": 10,
+      "hasTests": true,
+      "loc": 1928,
+      "name": "@intentic/sandbox-run",
+      "oneLiner": "The sandbox container's run contract: every path that creates a sandbox composes its docker run from here.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_shared/workspace-ignore/src/index.ts",
+          "what": ": the scope, and the layered decision."
+        },
+        {
+          "path": "_shared/workspace-ignore/src/constants.ts",
+          "what": ": the floor and the denylist, spelled out."
+        },
+        {
+          "path": "_shared/workspace-ignore/src/index.test.ts",
+          "what": ": the layer-precedence cases, which are the whole correctness story."
+        }
+      ],
+      "behind": 0,
+      "component": "shared",
+      "dir": "_shared/workspace-ignore",
+      "files": 4,
+      "hasTests": true,
+      "loc": 326,
+      "name": "@intentic/workspace-ignore",
+      "oneLiner": "The workspace attention filter: what the tree grays and lazy-loads, and what ordinary workspace search skips.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
           "path": "_site/astro-integrations/src/index.mjs",
           "what": ": the integrations, and what each hooks into."
         },
@@ -5063,7 +5158,7 @@
       "files": 10,
       "hasTests": false,
       "loc": 1213,
-      "name": "@intentic-dev/astro-integrations",
+      "name": "@intentic/astro-integrations",
       "oneLiner": "The build-time integrations the public site needs and Astro does not ship.",
       "readmeRev": "e1177efbdce3587b11d466b0531ec1d8ff30a661",
       "reason": "1 commit has touched this package since its README was written",
@@ -5093,16 +5188,16 @@
           "what": ": what the demo allows and what it quietly declines."
         }
       ],
-      "behind": 4,
+      "behind": 7,
       "component": "site",
       "dir": "_site/demo",
       "files": 27,
       "hasTests": false,
-      "loc": 6827,
-      "name": "@intentic-dev/demo",
+      "loc": 6857,
+      "name": "@intentic/demo",
       "oneLiner": "The landing page's playable demo: the real editor, running on a recording instead of a sandbox.",
       "readmeRev": "cc830febacee7ca33eb51e6065ea1ea544fdff1a",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "7 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788463698000
     },
@@ -5137,6 +5232,10 @@
           "what": ": the four drawn shapes (lotus, lozenge, corner,"
         },
         {
+          "path": "_site/site/src/pages/pricing.astro",
+          "what": ": free beside the optional membership, words from"
+        },
+        {
           "path": "_site/site/src/pages/docs",
           "what": ": the documentation pages."
         },
@@ -5149,7 +5248,7 @@
           "what": ": the render pass that gives every prose heading a stable"
         },
         {
-          "path": "_site/site/src/pages/docs/search.json.ts",
+          "path": "_site/site/src/pages/search.json.ts",
           "what": ": the docs search index, section by section."
         },
         {
@@ -5177,18 +5276,18 @@
           "what": ": where the build-time integrations are wired in."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "site",
       "dir": "_site/site",
-      "files": 29,
+      "files": 30,
       "hasTests": false,
-      "loc": 5961,
-      "name": "@intentic-dev/site",
+      "loc": 6049,
+      "name": "@intentic/site",
       "oneLiner": "The public website at intentic.dev: an Astro build, all copy imported rather than written in the markup.",
-      "readmeRev": "2d9220a77d51072589ab4b7a38e7134aa5f4b903",
-      "reason": "it points at _site/site/src/pages/docs/search.json.ts, which no longer exists",
+      "readmeRev": "9c322eee1551f8b9d19ec028ffaba9fb3300e052",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788553732000
+      "updatedAt": 1788688371000
     },
     {
       "anchors": [
@@ -5209,6 +5308,10 @@
           "what": ": the words of the automation machine — six triggers, the check that may veto a"
         },
         {
+          "path": "_site/site-content/src/pricing.ts",
+          "what": ": the pricing page's copy; figures from src/pool.ts, the"
+        },
+        {
           "path": "_site/site-content/src/nav.ts",
           "what": "/ src/page-meta.ts: navigation and per-page metadata."
         },
@@ -5217,18 +5320,18 @@
           "what": ": the JSON-LD the site emits."
         }
       ],
-      "behind": 3,
+      "behind": 1,
       "component": "site",
       "dir": "_site/site-content",
-      "files": 17,
+      "files": 18,
       "hasTests": false,
-      "loc": 5281,
-      "name": "@intentic-dev/site-content",
+      "loc": 5379,
+      "name": "@intentic/site-content",
       "oneLiner": "Every word on the public website, as data.",
-      "readmeRev": "3f9e0da5a2076a577c770d7acae1ac0a8bcb87f1",
-      "reason": "3 commits have touched this package since its README was written",
+      "readmeRev": "9c322eee1551f8b9d19ec028ffaba9fb3300e052",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788464300000
+      "updatedAt": 1788688371000
     },
     {
       "anchors": [
@@ -5254,6 +5357,7 @@
         }
       ],
       "behind": 0,
+      "component": "tools",
       "dir": "_tools/base",
       "files": 11,
       "hasTests": true,
@@ -5292,6 +5396,7 @@
         }
       ],
       "behind": 0,
+      "component": "tools",
       "dir": "_tools/code-read",
       "files": 12,
       "hasTests": true,
@@ -5381,17 +5486,18 @@
           "what": ": what Windows, Docker, and the desktop say is true."
         }
       ],
-      "behind": 9,
+      "behind": 1,
+      "component": "tools",
       "dir": "_tools/desktop-smoke-windows",
       "files": 18,
       "hasTests": true,
-      "loc": 2275,
+      "loc": 2539,
       "name": "@intentic/desktop-smoke-windows",
       "oneLiner": "The tiers that meet the Windows installer the way a user's machine does: by running it.",
-      "readmeRev": "d228d2676c5dae2482c9716a81394bfcc514d83e",
-      "reason": "9 commits have touched this package since its README was written",
+      "readmeRev": "572cd6b8edf49e0793165aea7a3d4f9701aaa5c1",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1787353077000
+      "updatedAt": 1788603012000
     },
     {
       "anchors": [
@@ -5443,16 +5549,16 @@
           "what": ": the data the journeys rest on."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "tools",
       "dir": "_tools/e2e",
       "files": 18,
       "hasTests": true,
-      "loc": 2175,
-      "name": "@intentic-app/e2e",
+      "loc": 2245,
+      "name": "@intentic/e2e",
       "oneLiner": "The browser smoke tier: Playwright against the whole stack, including the published daemon image.",
       "readmeRev": "cadec12d6313acaaa247df40046029c4ea0c6b21",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788478332000
     },
@@ -5510,7 +5616,7 @@
           "what": ": the agent-facing half of an extension."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "dir": "_tools/extension-example/seed",
       "files": 8,
       "hasTests": true,
@@ -5518,7 +5624,7 @@
       "name": "intentic-extension-example",
       "oneLiner": "The reference intentic extension: one contribution of every kind the extension API offers, in as little code as each one takes.",
       "readmeRev": "a14873a7a7478c1629672306527d08ff07d701fc",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787350005000
     },
@@ -5538,6 +5644,7 @@
         }
       ],
       "behind": 2,
+      "component": "tools",
       "dir": "_tools/fake-model",
       "files": 4,
       "hasTests": true,
@@ -5568,7 +5675,8 @@
           "what": ": the image the journey harness stands up beside the platform."
         }
       ],
-      "behind": 0,
+      "behind": 1,
+      "component": "tools",
       "dir": "_tools/fake-upstream",
       "files": 4,
       "hasTests": true,
@@ -5576,7 +5684,8 @@
       "name": "@intentic/fake-upstream",
       "oneLiner": "A stand-in for the model the free trial spends: Google's two surfaces, served locally and deterministically.",
       "readmeRev": "bde9ea814cab4a99d31c139be638825dba2eb13d",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1787306252000
     },
     {
@@ -5604,7 +5713,7 @@
       "files": 4,
       "hasTests": false,
       "loc": 469,
-      "name": "@intentic-app/localhost-https",
+      "name": "@intentic/localhost-https",
       "oneLiner": "A certificate authority for this machine and a localhost certificate under it, so development runs over real HTTPS with the browser's lock rather than its warning.",
       "readmeRev": "8a147ad282f40457d745484ce5dce0e5de03b5ec",
       "stale": false,
@@ -5637,6 +5746,22 @@
           "what": ": the wizard's own bytes, run the way a user runs"
         },
         {
+          "path": "_tools/onboarding/src/provisioners/ic.ts",
+          "what": ": the CLI the desktop app and the one-liner hand off to, and"
+        },
+        {
+          "path": "_tools/onboarding/src/announce.ts",
+          "what": ": what \"connected\" means, asked of the platform's own registry."
+        },
+        {
+          "path": "_tools/onboarding/src/shell.ts",
+          "what": ": the fresh terminal every lane runs its commands in."
+        },
+        {
+          "path": "_tools/onboarding/src/ic-binary.ts",
+          "what": ": where the CLI lane's binary comes from, and when it stands down."
+        },
+        {
           "path": "_tools/onboarding/src/seed.ts",
           "what": ": the signed-in account, and how far a seeded one can carry a journey."
         },
@@ -5649,17 +5774,17 @@
           "what": ": the journey itself."
         }
       ],
-      "behind": 2,
+      "behind": 0,
+      "component": "tools",
       "dir": "_tools/onboarding",
-      "files": 13,
+      "files": 17,
       "hasTests": true,
-      "loc": 1378,
-      "name": "@intentic-app/onboarding",
+      "loc": 1773,
+      "name": "@intentic/onboarding",
       "oneLiner": "The onboarding tier: one journey through the product's front door, run once per way of getting a sandbox.",
-      "readmeRev": "0f0d7f1bd2385426492146d91f17b937a4a17958",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788276392000
+      "readmeRev": "a51c99b45d5af08dd1f7d6d4437ccc1b0461e5c5",
+      "stale": false,
+      "updatedAt": 1788652936000
     },
     {
       "anchors": [
@@ -5754,11 +5879,8 @@
       "updatedAt": 1787306252000
     }
   ],
-  "generatedAt": 1788598164125,
+  "generatedAt": 1788697173777,
   "orphans": [],
   "repo": "intentic",
-  "undocumented": [
-    "_editor/share-view",
-    "_sandbox/sandbox-openapi"
-  ]
+  "undocumented": []
 }

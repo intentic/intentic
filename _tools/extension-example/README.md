@@ -21,9 +21,9 @@ single-file bundle (the UI ones are compiled into the web bundle instead) so the
 Building it surfaced three things that no amount of reading would have:
 
 1. **`@intentic/sandbox-contract` could not be installed from npm.** Its published tarball declares
-   `@intentic/registry@0.0.0`, a version that was never published, because `_sandbox/registry` was missing from the
+   `@intentic/registry@0.0.0`, a version that was never published, because `_shared/registry` was missing from the
    release set in `_tools/scripts/lib/packages.sh`. `npm i @intentic/sandbox-contract`: step one of the published
-   build guide: failed for everyone. Fixed by adding `_sandbox/registry` (and `_tools/registry-scan`, whose absence left
+   build guide: failed for everyone. Fixed by adding `_shared/registry` (and `_tools/registry-scan`, whose absence left
    the registry's own nightly job with no `@intentic/registry-scan` to `npx`) to `PUB`.
 2. ~~**A third-party view cannot use Tailwind utilities.**~~ **Fixed: the host now promises them.** The app's
    Tailwind build used to scan its own sources and the first-party extension packages, so a utility class in an

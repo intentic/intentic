@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-dev/astro-integrations",
+    "name": "@intentic/astro-integrations",
     "version": "0.0.0",
     "private": true,
     "type": "module",

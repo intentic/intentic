@@ -60,15 +60,15 @@ export default defineConfig({
             // The app's entry, source-first, the same treatment `shared` gives every workspace lib, and the
             // mapping this package's tsconfig `paths` already declares. `package.json` names the dependency;
             // this is how it resolves, with no dist between an app edit and the demo showing it.
-            "@intentic-app/web/main": fromRoot(`_editor/web/src/main.ts`),
+            "@intentic/web/main": fromRoot(`_editor/web/src/main.ts`),
             // The extensions THIS app build compiled in, which the fixture's GET /extensions enumerates. Read
             // from the app rather than re-listed here on purpose: a demo whose list is one extension short shows
             // that extension as image/app drift, in the app's own alarmed wording.
-            "@intentic-app/web/builtins": fromRoot(`_editor/web/src/extension-host/builtins.ts`),
+            "@intentic/web/builtins": fromRoot(`_editor/web/src/extension-host/builtins.ts`),
             // How the app persists a window's open chat tabs. The recording seeds four of them (fixture/
             // openChats.ts), and takes the shape from the app so a change to the strip's stored form is a
             // build error here rather than four rows that quietly stop appearing.
-            "@intentic-app/web/chat-tabs": fromRoot(`_editor/web/src/composables/chat/tabSnapshot.ts`),
+            "@intentic/web/chat-tabs": fromRoot(`_editor/web/src/features/chat/tabs/tabSnapshot.ts`),
         },
     },
     base: `/demo/`,

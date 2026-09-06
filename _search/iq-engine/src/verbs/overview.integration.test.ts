@@ -29,7 +29,7 @@ test("map: files ranked by import graph, each showing its exported signatures at
     const outcome = await engine.run(request({ verb: "map", query: "" }));
     expect(outcome.exitCode).toBe(0);
 
-    // registry.ts and WidgetList.vue both `import … from "./widget.js"`: a specifier naming a file that does
+    // registry.ts and WidgetList.vue both `import … from "../__fixtures__/workspace/alpha/src/widget.js"`: a specifier naming a file that does
     // not exist, since the real neighbour is widget.ts. Ranking widget.ts above registry.ts (which nothing
     // imports) therefore also proves the TypeScript .js→.ts resolution works.
     const paths = outcome.result.groups.map((group) => group.path);

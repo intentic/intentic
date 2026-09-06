@@ -1,4 +1,4 @@
-# @intentic-app/localhost-https
+# @intentic/localhost-https
 
 A certificate authority for this machine and a localhost certificate under it, so development runs over real
 HTTPS with the browser's lock rather than its warning.
@@ -25,7 +25,7 @@ clipboard and media APIs: differ between `http://localhost` and real HTTPS, so d
 finding those differences in production instead. Google's FedCM One Tap simply refuses `http://localhost`.
 
 Nothing hardcodes where the pair is, because it is in your own data directory and that differs per person and
-per OS. Vite, the API and the port probe's test all import the locations from `@intentic-app/localhost-https/paths`
+per OS. Vite, the API and the port probe's test all import the locations from `@intentic/localhost-https/paths`
 instead. `API_HTTPS_KEY`/`API_HTTPS_CERT` still win when set, for serving some other certificate.
 
 Setup is two commands, and the second is once per machine, not once per clone:

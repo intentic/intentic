@@ -195,7 +195,7 @@
             "cache": false,
             "passThroughEnv": ["INTENTIC_E2E_PROVIDERS", "INTENTIC_CURSOR_SDK_DIR"]
         },
-        // The browser tier (@intentic-app/e2e), named apart from `e2e` for the same reason e2e:hermetic is: it
+        // The browser tier (@intentic/e2e), named apart from `e2e` for the same reason e2e:hermetic is: it
         // asks for a provisioning of its own. Its whole stack is addressed on LOCALHOST: compose postgres on
         // :5440, the https API on :6480, vite on :47145, the daemon container on :18787: and CI jobs run in a
         // container that reaches Docker through the HOST's socket, which publishes those ports on the HOST's

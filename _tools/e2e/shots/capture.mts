@@ -1,10 +1,10 @@
-/* Marketing screenshot harness. Drives the REAL Vue SPA — the demo build of it (`@intentic-dev/demo`, which
+/* Marketing screenshot harness. Drives the REAL Vue SPA — the demo build of it (`@intentic/demo`, which
  * enters the app's own source with the recorded fixture installed in place of a daemon and lands in the site's
  * `public/demo/`). That makes the shots hermetic: no postgres, no platform API, no tunnel, no seeded session;
  * one world, the same "acme-shop" workspace a visitor meets at the live demo, so the site and the demo can't
  * tell two stories.
  *
- *   pnpm --filter @intentic-dev/demo build
+ *   pnpm --filter @intentic/demo build
  *   node --experimental-strip-types _tools/e2e/shots/capture.mts            # every shot
  *   node --experimental-strip-types _tools/e2e/shots/capture.mts fleet-board sandbox-usage
  *
@@ -880,7 +880,7 @@ const run = async (): Promise<void> => {
     // Only the app shots need the demo build; a `raw` one brings its own world, so re-shooting just the
     // Front Desk shouldn't cost a full SPA build.
     if (wanted.some((shot) => shot.raw !== true) && !existsSync(join(DEMO_DIR, "index.html"))) {
-        throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic-dev/demo build`);
+        throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic/demo build`);
     }
 
     mkdirSync(OUT_DIR, { recursive: true });

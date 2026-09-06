@@ -1,5 +1,5 @@
-import type { CapabilitySummary } from "@intentic-app/api-contract";
-import { builtinModules } from "@intentic-app/web/builtins";
+import type { CapabilitySummary } from "@intentic/api-contract";
+import { builtinModules } from "@intentic/web/builtins";
 import type { Environment, EnvironmentContents, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
 import { demoMode } from "../mode";
 

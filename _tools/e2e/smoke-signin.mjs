@@ -20,7 +20,7 @@
  *      the way in that depends on none of Google's frame machinery must never quietly disappear.
  *
  * Run after a deploy (ci.yml), against the origin that was just deployed:
- *   pnpm --filter @intentic-app/e2e smoke:signin https://app.intentic.dev
+ *   pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
  */
 
 import { chromium } from "@playwright/test";

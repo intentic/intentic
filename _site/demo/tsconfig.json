@@ -13,28 +13,28 @@
          * _editor/web/tsconfig.json gives one module two identities and every type crossing between them reads
          * as "two different types with this name exist". `@intentic/sandbox-contract` is deliberately NOT here
          * for exactly that reason: web resolves it through node_modules, so the fixture must too.
-         * `@intentic-app/web/main` is the app's entry, imported for its side effect of being the app. */
+         * `@intentic/web/main` is the app's entry, imported for its side effect of being the app. */
         "paths": {
-            "@intentic-app/api-contract": ["../../_platform/api-contract/src/index.ts"],
+            "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"],
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
             "@intentic/ui/async": ["../../_editor/ui/src/lib/async.ts"],
             "@intentic/ui/brand-color": ["../../_editor/ui/src/lib/brandColor.ts"],
-            "@intentic/ui/brand-mark": ["../../_editor/ui/src/components/brandMark.ts"],
-            "@intentic/ui/dag": ["../../_editor/ui/src/components/dagLayout.ts"],
+            "@intentic/ui/brand-mark": ["../../_editor/ui/src/components/brand/brandMark.ts"],
+            "@intentic/ui/dag": ["../../_editor/ui/src/components/charts/dagLayout.ts"],
             "@intentic/ui/format": ["../../_editor/ui/src/lib/format.ts"],
             "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
             "@intentic/ui/icons": ["../../_editor/ui/src/icons/iconSets.ts"],
             "@intentic/code-read": ["../../_tools/code-read/src/index.ts"],
             "@intentic/code-read/langs": ["../../_tools/code-read/src/langs.ts"],
             "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
-            "@intentic/ui/notice": ["../../_editor/ui/src/components/notice.ts"],
+            "@intentic/ui/notice": ["../../_editor/ui/src/components/feedback/notice.ts"],
             "@intentic/ui/path": ["../../_editor/ui/src/lib/path.ts"],
-            "@intentic/ui/series": ["../../_editor/ui/src/components/seriesAccent.ts"],
+            "@intentic/ui/series": ["../../_editor/ui/src/components/charts/seriesAccent.ts"],
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
             "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
-            "@intentic-app/web/main": ["../../_editor/web/src/main.ts"],
-            "@intentic-app/web/builtins": ["../../_editor/web/src/extension-host/builtins.ts"],
-            "@intentic-app/web/chat-tabs": ["../../_editor/web/src/composables/chat/tabSnapshot.ts"]
+            "@intentic/web/main": ["../../_editor/web/src/main.ts"],
+            "@intentic/web/builtins": ["../../_editor/web/src/extension-host/builtins.ts"],
+            "@intentic/web/chat-tabs": ["../../_editor/web/src/features/chat/tabs/tabSnapshot.ts"]
         }
     },
     /* The app's ambient declarations, for the same reason as the path map above: this checks the app's source,

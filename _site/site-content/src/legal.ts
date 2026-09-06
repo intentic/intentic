@@ -22,7 +22,7 @@ import {
     LEGAL_VERSION,
     PLATFORM_HOSTING_LOCATION,
 } from "@intentic/constants";
-// Re-exported so this package's existing consumers keep importing them from @intentic-dev/site-content.
+// Re-exported so this package's existing consumers keep importing them from @intentic/site-content.
 export { LEGAL_CONTACT_EMAIL, LEGAL_VERSION };
 
 export interface LegalTable {

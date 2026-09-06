@@ -1,4 +1,4 @@
-# @intentic-dev/site
+# @intentic/site
 
 The public website at intentic.dev: an Astro build, all copy imported rather than written in the markup.
 
@@ -43,7 +43,7 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
   authored index against the headings that actually exist.
 - [src/lib/docs-headings.ts](src/lib/docs-headings.ts): the render pass that gives every prose heading a stable
   id and an anchor. Derived rather than authored; see the file for why.
-- [src/pages/docs/search.json.ts](src/pages/docs/search.json.ts): the docs search index, section by section.
+- [src/pages/search.json.ts](src/pages/search.json.ts): the docs search index, section by section.
 - [src/lib/registry.ts](src/lib/registry.ts): the extension registry the marketplace pages read; the public gallery includes only exact sources carrying current deterministic-scan and agent-audit evidence.
 - [content/](content/): the two pieces of this site somebody edits without touching a page — `live.json`
   (the notice strip and the download / create-workspace kill switches, live at the edge in about thirty
@@ -61,7 +61,7 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
 
 ## How it fits
 
-Copy comes from `@intentic-dev/site-content` and build-time behaviour from `@intentic-dev/astro-integrations`.
+Copy comes from `@intentic/site-content` and build-time behaviour from `@intentic/astro-integrations`.
 This package is layout and routing; a wording change should not need to touch it.
 
 ## Conventions & gotchas

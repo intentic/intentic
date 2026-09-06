@@ -1,7 +1,7 @@
 /* WHAT A WIRE-CONTRACT LOCK LOST, as one comparison shared by everything that asks it.
  *
  * contract.lock.json is the sandbox-contract package's exported schemas as one comparable document
- * (_sandbox/sandbox-contract/src/contract-lock.ts explains the pair). Three readers ask what a newer lock no
+ * (_shared/sandbox-contract/src/contract-lock.ts explains the pair). Three readers ask what a newer lock no
  * longer offers: the checkout gate that refuses an undeclared shrink at the push (_tools/checks/contract-shrink.mjs),
  * the landing drafter that forces the `!` and the Breaking-Note into the commit message
  * (_sandbox/sandbox/src/git/contract-shrink.ts), and the tests that hold both to the same judgment. One

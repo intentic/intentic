@@ -11,9 +11,9 @@
 # extension-manifest → registry → sandbox-contract → extension-api, where extension-api used to come first.
 # base leads the list: it depends on no workspace package, and moving the when-expressions into it made it a
 # runtime dependency of extension-manifest — publishing that one without this one ships a dead specifier.
-PUB=(_tools/base _tools/constants _sandbox/sandbox-run _deploy/graph _deploy/resources _deploy/engine _deploy/need-resolver _deploy/providers \
-     _sandbox/extension-manifest _sandbox/registry _sandbox/sandbox-contract _sandbox/extension-api _editor/extension-ui _devices/local-agent _devices/desktop _devices/browser _devices/machine _sandbox/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
-     _sandbox/workspace-ignore _search/iq-engine _search/iq-recall _search/iq _deploy/sdk _tools/registry-scan)
+PUB=(_tools/base _tools/constants _shared/sandbox-run _deploy/graph _deploy/resources _deploy/engine _deploy/need-resolver _deploy/providers \
+     _shared/extension-manifest _shared/registry _shared/sandbox-contract _shared/extension-api _shared/extension-ui _devices/local-agent _devices/desktop-automation _devices/browser _devices/machine _sandbox/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
+     _shared/workspace-ignore _search/iq-engine _search/iq-recall _search/iq _deploy/sdk _tools/registry-scan)
 
 # Every dir that carries the release version = the published set plus the two private packages that put the
 # version into an artifact rather than onto a registry: the sandbox image bakes it, and the browser extension

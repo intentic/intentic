@@ -63,7 +63,7 @@ export const buildImages = async (): Promise<void> => {
     // explicitly is what lets the two builds below be pure COPYs of a tree that already exists.
     await exec(
         `pnpm`,
-        [`turbo`, `run`, `build`, `--filter=@intentic-app/api`, `--filter=@intentic-app/web`],
+        [`turbo`, `run`, `build`, `--filter=@intentic/api`, `--filter=@intentic/web`],
         root,
         `building the platform's api and web bundles`,
     );
@@ -72,7 +72,7 @@ export const buildImages = async (): Promise<void> => {
      * whole. `-f Dockerfile` is explicit because that tree carries its own copy of it. */
     const apiDir = join(root, `_platform/api`);
     await rm(join(apiDir, `deploy`), { recursive: true, force: true });
-    await exec(`pnpm`, [`--filter=@intentic-app/api`, `deploy`, `--prod`, `./deploy`], apiDir, `pruning the api's production tree`);
+    await exec(`pnpm`, [`--filter=@intentic/api`, `deploy`, `--prod`, `./deploy`], apiDir, `pruning the api's production tree`);
     await exec(`docker`, [`build`, `--provenance=false`, `-f`, `Dockerfile`, `-t`, IMAGES.api, `./deploy`], apiDir, `building the api image`);
 
     // The web's context is its own app dir; .dockerignore keeps only dist, the nginx template and the entrypoint.

@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-dev/site",
+    "name": "@intentic/site",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -14,8 +14,8 @@
     },
     "dependencies": {
         "@astrojs/sitemap": "catalog:",
-        "@intentic-dev/astro-integrations": "workspace:*",
-        "@intentic-dev/site-content": "workspace:*",
+        "@intentic/astro-integrations": "workspace:*",
+        "@intentic/site-content": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@intentic/sandbox-openapi": "workspace:*",
@@ -27,7 +27,7 @@
     },
     "devDependencies": {
         "@astrojs/check": "catalog:",
-        "@intentic-dev/demo": "workspace:*",
+        "@intentic/demo": "workspace:*",
         "typescript": "catalog:",
         "vite": "catalog:",
         "wrangler": "catalog:"

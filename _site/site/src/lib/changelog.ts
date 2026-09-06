@@ -1,4 +1,4 @@
-import { githubReleasesUrl } from "@intentic-dev/site-content/site";
+import { githubReleasesUrl } from "@intentic/site-content/site";
 
 /* THE CHANGELOG'S DATA, read at BUILD time from the published GitHub Releases: the same bargain the extension
  * gallery makes next door (registry.ts): a static page cut from somebody else's JSON, with no backend behind it.

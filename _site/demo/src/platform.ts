@@ -1,4 +1,4 @@
-import type { ClaimChallenge, CreatorState, MembershipState, SandboxSummary, User } from "@intentic-app/api-contract";
+import type { ClaimChallenge, CreatorState, MembershipState, SandboxSummary, User } from "@intentic/api-contract";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 
 /* THE PLATFORM, as a fetch handler, the small half. The app asks it three things before the workspace can

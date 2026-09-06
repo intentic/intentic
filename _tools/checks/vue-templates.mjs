@@ -7,7 +7,7 @@
  *
  * Which is where it surfaced. A sweep rewrote one title binding as `:title="`No note for "${x}" yet`"`, where
  * the inner `"` is what HTML reads as the end of the attribute. Every typecheck passed it, in all three verify
- * groups, and all three then died on `@intentic-app/web#build` 5,145 modules in. One character, three red
+ * groups, and all three then died on `@intentic/web#build` 5,145 modules in. One character, three red
  * groups, five hours, and the cheapest reader of that line was the last thing to look at it.
  *
  * THE REAL COMPILER, not a scanner for quotes in attributes: the guard is only worth having if it fails on

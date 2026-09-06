@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { PrismaClient } from "@intentic-app/prisma";
+import { PrismaClient } from "@intentic/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 /* THE SIGNED-IN ACCOUNT, AND THE SEAM WHERE A REAL SIGN-IN WILL GO.

@@ -20,7 +20,7 @@ cd _tools/e2e && node promo/record.mjs     # ~95s take → /tmp/intentic-promo/
 
 ## It lives here because Playwright does
 
-This is not a test and never runs in CI. It sits inside `@intentic-app/e2e` because that package already owns
+This is not a test and never runs in CI. It sits inside `@intentic/e2e` because that package already owns
 this repo's browser automation and its `@playwright/test` install: a `_tools/promo` package would be the same
 dependency, installed twice, to hold three files.
 

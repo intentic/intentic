@@ -31,7 +31,7 @@ how big a change is once those are out of it.
 
 A changed file is read twice in this product, on two sides of the wire, and both readings come from here.
 
-The **daemon** counts it when it builds a change list ([git/code-counts.ts](../../_sandbox/sandbox/src/git/code-counts.ts)),
+The **daemon** counts it when it builds a change list ([git/code-counts.ts](../../_sandbox/sandbox/src/git/changes/code-counts.ts)),
 so the +/− a review row shows is final the first time the reader sees it. That is the whole reason this package
 exists as a package: the app used to compute those counts itself, from the diffs as they happened to be fetched,
 which meant a badge changed under whoever was reading it and a list sorted by size re-sorted on the click that

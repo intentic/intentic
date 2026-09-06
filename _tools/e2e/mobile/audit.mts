@@ -24,7 +24,7 @@
  * postgres, no platform API and no seeded session between a CI job and an answer. That is what makes it cheap
  * enough to run on every merge request, which is the only way a geometry rule survives.
  *
- *   pnpm --filter @intentic-dev/demo build
+ *   pnpm --filter @intentic/demo build
  *   node --experimental-strip-types _tools/e2e/mobile/audit.mts
  *   node --experimental-strip-types _tools/e2e/mobile/audit.mts --json      # machine-readable, for CI
  *
@@ -330,7 +330,7 @@ const audit = async (browser: Browser, surface: Surface): Promise<Result> => {
 const run = async (): Promise<void> => {
     const asJson = process.argv.includes("--json");
     if (!existsSync(join(DEMO_DIR, "index.html"))) {
-        throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic-dev/demo build`);
+        throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic/demo build`);
     }
     mkdirSync(DEMO_DIR, { recursive: true });
     const server = serveDemo();

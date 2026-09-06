@@ -7,7 +7,7 @@
  */
 
 import { errorMessage } from "@intentic/base/errors";
-import { desktop, type WindowInfo } from "@intentic/desktop";
+import { desktop, type WindowInfo } from "@intentic/desktop-automation";
 import {
     asList,
     containerNames,
@@ -165,7 +165,7 @@ export const containersPublishing = async (port: number): Promise<string[]> => {
     return result.code === 0 ? containerNames(result.stdout) : [];
 };
 
-/* The window layer. `@intentic/desktop` rather than a P/Invoke of our own: it is this repo's own answer to
+/* The window layer. `@intentic/desktop-automation` rather than a P/Invoke of our own: it is this repo's own answer to
  * "drive a Windows desktop from Node", it is the exact counterpart of the `xdotool` the Linux tier leans on,
  * and using it here means the installer tier is also the only place that runs it against a real Windows
  * session, which no unit test of it can be. */

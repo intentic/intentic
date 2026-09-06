@@ -28,7 +28,7 @@ import { emitsDist, packages, root } from "../../checks/lib/repo.mjs";
  * is a curated re-export of `@intentic/ui`, a component graph, so `tsgo -b` walks straight into it and reports
  * a TS2307 for every one, on a package whose own `vue-tsc` typecheck is clean. Its declarations are built by
  * its own `build` script, and nothing in this repo reads them. */
-const BUILT_BY_VUE_TSC = new Set(["_editor/extension-ui"]);
+const BUILT_BY_VUE_TSC = new Set(["_shared/extension-ui"]);
 const needsDeclarations = packages.filter(({ name, pkg }) => !BUILT_BY_VUE_TSC.has(name) && emitsDist(pkg));
 
 /* A package whose sources are themselves GENERATED has nothing for `tsgo -b` to read until its generator has
@@ -128,7 +128,7 @@ for (const { name, dir, pkg } of existsSync(storeDir) ? needsDeclarations : []) 
     if (!existsSync(dist)) {
         continue;
     }
-    // `@intentic/sandbox-contract` at `_sandbox/sandbox-contract` is stored as
+    // `@intentic/sandbox-contract` at `_shared/sandbox-contract` is stored as
     // `@intentic+sandbox-contract@file+_sandbox+sandbox-contract`, plus `_<peers>` when the resolution has any.
     const prefix = `${mangle(pkg.name)}@file+${mangle(name)}`;
     for (const stored of readdirSync(storeDir)) {

@@ -64,7 +64,7 @@ const MAY_SPELL_A_ROOT = new Set([
 /* Committed BUILD OUTPUT. The site ships a bundled copy of the demo, so these are minified artifacts of source
  * that is itself checked here: flagging them would be flagging the same line twice, once where it can be
  * fixed and once where it cannot. */
-const GENERATED = [`_apps/site/public/`, `_apps/site/dist/`, `_editor/web/public/ext-shims/`, `_sandbox/sandbox/operator-templates/`];
+const GENERATED = [`_site/site/public/`, `_site/site/dist/`, `_editor/web/public/ext-shims/`, `_sandbox/sandbox/operator-templates/`];
 
 // A filesystem root spelled out. `/workspace` and `/workflows` are HTTP ROUTES that merely start with the same
 // letters, so the boundary after the root is required rather than assumed.
@@ -88,7 +88,7 @@ const SPELLED_STATE = /(["'`])\.intentic(\/[^"'`${\n]*)?\1/;
  * for: STATE_DIR exists for callers OUTSIDE the table, and the table's own members stay literal so the compiler
  * keeps its hold on them. The table's declaring files are exempt for the same reason: they ARE the union. */
 const TYPED_STATE_PATH = /state(?:Rel)?Path\(/;
-const STATE_TABLE_FILES = new Set([`_sandbox/sandbox-contract/src/workspace-state.ts`, `_sandbox/sandbox-contract/src/history-state.ts`]);
+const STATE_TABLE_FILES = new Set([`_shared/sandbox-contract/src/state/workspace-state.ts`, `_shared/sandbox-contract/src/state/history-state.ts`]);
 // Counting up to a root from the running file's own location: the position claim, in each spelling that
 // reaches PAST the file's own directory (a single `..` inside a package is a sibling, not a root claim).
 const COUNTED_JS = [

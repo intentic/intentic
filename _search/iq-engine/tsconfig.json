@@ -11,8 +11,8 @@
     "references": [
         { "path": "../../_tools/constants" },
         { "path": "../../_tools/base" },
-        { "path": "../../_sandbox/workspace-ignore" },
-        { "path": "../../_sandbox/sandbox-contract" }
+        { "path": "../../_shared/workspace-ignore" },
+        { "path": "../../_shared/sandbox-contract" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

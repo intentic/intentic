@@ -13,10 +13,10 @@
  *
  *   claude      the catalog pin for @anthropic-ai/claude-agent-sdk (pnpm-workspace.yaml), which is what the
  *               daemon is compiled and tested against;
- *   codex       packs/codex.Dockerfile's `@openai/codex@…`, the version the image bakes and CI exercises;
- *   cursor      packs/cursor.Dockerfile's `@cursor/sdk@…`;
- *   opencode    packs/opencode.Dockerfile's `opencode-ai@…`;
- *   translator  packs/translator.Dockerfile's `version=…`.
+ *   codex       image-packs/codex.Dockerfile's `@openai/codex@…`, the version the image bakes and CI exercises;
+ *   cursor      image-packs/cursor.Dockerfile's `@cursor/sdk@…`;
+ *   opencode    image-packs/opencode.Dockerfile's `opencode-ai@…`;
+ *   translator  image-packs/translator.Dockerfile's `version=…`.
  *
  * Those pins are the same ones the daemon reads back at runtime as each engine's image floor
  * (_sandbox/sandbox/src/engines/engine-descriptors.ts), so this check also keeps the list and the floors from
@@ -29,7 +29,7 @@ import { join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
-const packs = join(root, "_sandbox", "sandbox", "packs");
+const packs = join(root, "_sandbox", "sandbox", "image-packs");
 
 const read = (path) => readFileSync(path, "utf8");
 
@@ -45,10 +45,10 @@ const soleMatch = (text, pattern, what) => {
 
 const pins = {
     claude: () => soleMatch(read(join(root, "pnpm-workspace.yaml")), /^ {2}"@anthropic-ai\/claude-agent-sdk": (\S+)$/gm, "the catalog pin"),
-    codex: () => soleMatch(read(join(packs, "codex.Dockerfile")), /@openai\/codex@(\S+)/g, "packs/codex.Dockerfile"),
-    cursor: () => soleMatch(read(join(packs, "cursor.Dockerfile")), /@cursor\/sdk@(\S+)/g, "packs/cursor.Dockerfile"),
-    opencode: () => soleMatch(read(join(packs, "opencode.Dockerfile")), /opencode-ai@(\S+)/g, "packs/opencode.Dockerfile"),
-    translator: () => soleMatch(read(join(packs, "translator.Dockerfile")), /version=(\S+)/g, "packs/translator.Dockerfile"),
+    codex: () => soleMatch(read(join(packs, "codex.Dockerfile")), /@openai\/codex@(\S+)/g, "image-packs/codex.Dockerfile"),
+    cursor: () => soleMatch(read(join(packs, "cursor.Dockerfile")), /@cursor\/sdk@(\S+)/g, "image-packs/cursor.Dockerfile"),
+    opencode: () => soleMatch(read(join(packs, "opencode.Dockerfile")), /opencode-ai@(\S+)/g, "image-packs/opencode.Dockerfile"),
+    translator: () => soleMatch(read(join(packs, "translator.Dockerfile")), /version=(\S+)/g, "image-packs/translator.Dockerfile"),
 };
 
 const list = JSON.parse(read(join(root, "engines.json")));

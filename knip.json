@@ -19,8 +19,8 @@
                 "vite.config.ts",
                 "src/**/*.test.ts",
                 "scripts/*.mjs",
-                "src/environments/environment.local.ts",
-                "src/environments/environment.deployment.ts"
+                "src/app/environments/environment.local.ts",
+                "src/app/environments/environment.deployment.ts"
             ],
             "ignore": ["public/**"]
         },
@@ -118,6 +118,9 @@
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
         "_sandbox/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_shared/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
         "_search/*": {

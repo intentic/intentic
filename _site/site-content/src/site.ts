@@ -10,7 +10,7 @@ export const APP_URL = PLATFORM_WEB_ORIGIN;
 // them from here in the browser. That endpoint is public and unauthenticated by design; a number anybody is
 // asked to trust should not need a login to check.
 export const API_URL = "https://api.intentic.dev";
-// The interactive demo (@intentic-dev/demo): the real app running against a recorded fixture instead of a
+// The interactive demo (@intentic/demo): the real app running against a recorded fixture instead of a
 // sandbox. It builds into this site's own public/, so it ships in one deploy. More importantly, the
 // hero's iframe is SAME-ORIGIN: a cross-origin frame gets partitioned storage, and the demo seeds credentials
 // into localStorage before the app boots. Relative, so a preview deploy embeds its own copy rather than prod's.

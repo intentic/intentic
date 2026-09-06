@@ -1,10 +1,10 @@
 ---
 import "../styles/global.css";
-import { getPageMeta } from "@intentic-dev/site-content/page-meta";
-import { ORG_DESCRIPTION, ORG_NAME, ORG_TAGLINE, SITE_URL } from "@intentic-dev/site-content/site";
-import type { BreadcrumbEntry, FaqEntry } from "@intentic-dev/site-content/structured-data";
-import { buildPageGraph } from "@intentic-dev/site-content/structured-data";
-import { lastModForUrl } from "@intentic-dev/astro-integrations";
+import { getPageMeta } from "@intentic/site-content/page-meta";
+import { ORG_DESCRIPTION, ORG_NAME, ORG_TAGLINE, SITE_URL } from "@intentic/site-content/site";
+import type { BreadcrumbEntry, FaqEntry } from "@intentic/site-content/structured-data";
+import { buildPageGraph } from "@intentic/site-content/structured-data";
+import { lastModForUrl } from "@intentic/astro-integrations";
 // The package's own `util.js` entry, not its root: the root pulls in the build hook, and with it satori and
 // resvg's native .node binary, which rollup then tries to bundle into the page. This subpath is pure path math.
 import { getImagePath } from "astro-opengraph-images/util.js";

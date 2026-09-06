@@ -48,45 +48,44 @@ const src = join(root, "_sandbox/sandbox/src");
  * shape and off this list by itself. Shrink this list; never grow it. */
 const NARROW_TAKERS = new Set([
     "activity/outbound.ts",
-    "agent/adapter.ts",
-    "agent/provider-module.ts",
-    "agent/turn-interactions.ts",
+    "agent/providers/adapter.ts",
+    "agent/providers/provider-module.ts",
+    "agent/run/turn-interactions.ts",
     "chores/chore-signals.ts",
-    "codex/codex-readiness.ts",
-    "git/diff-raw.ts",
+    "runtimes/codex/codex-readiness.ts",
+    "git/changes/diff-raw.ts",
     "intentic/check-run.ts",
     "personas/personas.routes.ts",
     "platform/sync-ssh.ts",
     "scaffold/ensure-intent.ts",
     "scaffold/starter-site.ts",
     "system/workspace-identity.ts",
-    "workspace/sync-repos.ts",
+    "workspace/layout/sync-repos.ts",
 ]);
 
 /* The pairs of subsystems that import each other's VALUES, at the time this gate was written, `a <-> b` with
  * the names in sorted order. Cutting one means making one side reach the other through a type-only port, an
  * event, or a module that sits above both. Shrink this list; never grow it. */
 const MUTUAL_PAIRS = new Set([
-    "acp <-> agent",
-    "acp <-> capabilities",
+    "agent <-> runtimes/acp",
+    "capabilities <-> runtimes/acp",
     "agent <-> agents",
     "agent <-> automations",
     "agent <-> browser",
     "agent <-> capabilities",
-    "agent <-> children",
-    "agent <-> claude",
-    "agent <-> codex",
-    "agent <-> cursor",
+    "agent <-> runtimes/claude",
+    "agent <-> runtimes/codex",
+    "agent <-> runtimes/cursor",
     "agent <-> endpoints",
     "agent <-> engines",
     "agent <-> execution",
     "agent <-> extensions",
-    "agent <-> gemini",
-    "agent <-> grok",
+    "agent <-> runtimes/gemini",
+    "agent <-> runtimes/grok",
     "agent <-> guard",
-    "agent <-> minted",
-    "agent <-> kimi",
-    "agent <-> pi",
+    "agent <-> runtimes/minted",
+    "agent <-> runtimes/kimi",
+    "agent <-> runtimes/pi",
     "agent <-> platform",
     "agent <-> rules",
     "agent <-> runners",
@@ -109,7 +108,7 @@ const MUTUAL_PAIRS = new Set([
     "capabilities <-> extensions",
     "capabilities <-> hosts",
     "capabilities <-> settings",
-    "claude <-> engines",
+    "engines <-> runtimes/claude",
     "environment <-> extensions",
     "git <-> history",
     "history <-> workspace",
@@ -123,9 +122,21 @@ const MUTUAL_PAIRS = new Set([
 ]);
 
 const relPath = (file) => relative(src, file).split(sep).join("/");
+
+/* `runtimes/` IS A SHELF, NOT A SUBSYSTEM. The nine agent runtimes on it (claude, codex, cursor, …) are
+ * independent adapters that know nothing about each other; they sit in one directory so a listing of `src/`
+ * says "these are the runtimes" instead of scattering nine sibling names through the alphabet. Reading the
+ * shelf as one subsystem would merge their nine edge sets into one and invent cycles nobody wrote — `browser`
+ * imports cursor's tools and gemini imports browser's, which is two one-way edges until something calls both
+ * of them "runtimes". So the shelf's children are the subsystems, exactly as they were when they sat at the
+ * top level, and every pair below keeps its meaning. */
+const SHELVES = new Set(["runtimes"]);
 const subsystemOf = (file) => {
     const parts = relPath(file).split("/");
-    return parts.length === 1 ? undefined : parts[0];
+    if (parts.length === 1) {
+        return undefined;
+    }
+    return SHELVES.has(parts[0]) && parts.length > 2 ? `${parts[0]}/${parts[1]}` : parts[0];
 };
 
 const sources = [];

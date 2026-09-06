@@ -136,7 +136,7 @@
             "id": "agent-turns",
             "verb": "q",
             "query": "how does the sandbox daemon run agent turns with the Claude SDK?",
-            "expected": [{ "file": "_sandbox/sandbox/src/agent/agent.ts" }]
+            "expected": [{ "file": "_sandbox/sandbox/src/agent/run/agent.ts" }]
         },
         {
             "id": "web-search-route",

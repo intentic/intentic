@@ -1,4 +1,4 @@
-# @intentic-app/e2e
+# @intentic/e2e
 
 The browser smoke tier: Playwright against the whole stack, including the published daemon image.
 
@@ -22,7 +22,7 @@ pnpm e2e:browser    # from the repo root: builds libs, then runs this package's 
 ```
 
 Requirements: Docker (compose Postgres + the daemon image), Bun, and Playwright's Chromium
-(`pnpm --filter @intentic-app/e2e exec playwright install chromium`). Everything already running (dev machine)
+(`pnpm --filter @intentic/e2e exec playwright install chromium`). Everything already running (dev machine)
 is reused; whatever the setup started is torn down, including the seeded rows. `SANDBOX_E2E_IMAGE` overrides
 the daemon image (e.g. a source build).
 
@@ -74,13 +74,13 @@ which catches the *cause* of the blank-screen case across every view in the app 
 browser at all. The pair is deliberate: the unit test proves nobody can reintroduce the mistake, the gate proves
 the app actually draws.
 
-Requires Playwright's Chromium (`pnpm --filter @intentic-app/e2e exec playwright install chromium`; a sandbox
+Requires Playwright's Chromium (`pnpm --filter @intentic/e2e exec playwright install chromium`; a sandbox
 has it baked, see Run above). Unlike `e2e:browser` above it needs no stack on localhost, so it runs anywhere.
 
 ## The one thing here that runs against production: `smoke:signin`
 
 ```sh
-pnpm --filter @intentic-app/e2e smoke:signin https://app.intentic.dev
+pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
 ```
 
 Everything above stubs Google out, and rightly so: a hermetic suite cannot depend on someone else's console.
