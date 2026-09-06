@@ -9,7 +9,36 @@ on:
   schedule:
     # 03:00 UTC daily.
     - cron: "0 3 * * *"
+  # ONE TIER, ON DEMAND — because the loop, not the bug, is what made this file expensive. Every tier here needs
+  # real infra, so the only honest test of a fix to one of them is a run of that one, and until this input
+  # existed the smallest thing anyone could dispatch was ALL of them: hours of desktop, mobile, image and e2e
+  # work to learn whether a one-line change to the onboarding daemon step was right. The onboarding tier spent
+  # three nights on three different failures at a rate of one attempt per day, each found the next morning.
+  #
+  # `all` is the default and what the schedule runs (a scheduled run supplies no inputs at all, hence the
+  # `|| 'all'` in each job's `if`), so the nightly is unchanged; the value only ever narrows a manual dispatch.
+  # Every job carries its own name here — a tier absent from this list simply cannot be dispatched alone, which
+  # is the failure mode to avoid when adding the next one.
   workflow_dispatch:
+    inputs:
+      only:
+        description: Run a single tier instead of the whole nightly.
+        type: choice
+        default: all
+        options:
+          - all
+          - e2e
+          - onboarding
+          - desktop-setup
+          - desktop-update
+          - desktop-windows
+          - images-public
+          - install-urls
+          - provider-canary
+          - update-survival
+          - mobile
+          - tidy
+          - ci-audit
 
 concurrency:
   group: nightly
@@ -44,6 +73,7 @@ jobs:
   # filter list here that would drift the first time a suite is added. The browser tier (@intentic/e2e) is
   # `e2e:browser` for exactly that reason: it addresses its stack on localhost, which is nobody's postgres here.
   e2e:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'e2e' }}
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -145,6 +175,7 @@ jobs:
   # every container job regardless — so the daemon this job starts also needs a LISTEN PATH of its own. The
   # step below has the account; without it the arrangement looks correct and behaves exactly as it did before.
   onboarding:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'onboarding' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -176,6 +207,23 @@ jobs:
       # Not $HOME — ci.yml's platform deploy job carries the full account of why a browser left in a job
       # container's home directory reddens unrelated suites on the same runner hours later.
       PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+      # WHERE THIS JOB'S DAEMON LISTENS, AND DELIBERATELY NOT SPELLED `DOCKER_HOST`. The name is the fix: the
+      # runner drives this container with the HOST's docker client (`docker exec <container> …`, once per step,
+      # to run the step inside it), and that client reads DOCKER_HOST out of the job's environment. Point it at
+      # a socket that only exists INSIDE the container and the runner can no longer reach its own job — every
+      # step after the one that set it dies on `failed to connect to the docker API at
+      # unix:///run/onboarding-docker.sock`, including the cleanup steps, before any of them run a line.
+      #
+      # That is run 34063131038, and it reads as the daemon having died: the step before it says the daemon is
+      # up, and 140ms later the socket "does not exist". The daemon was fine. The daemon was never asked. The
+      # host's docker client was, and it was asked on the host, where that path is nothing. The tell is in the
+      # same log — the post-job `docker rm --force` SUCCEEDS, against the host daemon, because cleanup does not
+      # carry the step environment.
+      #
+      # So the path is carried under a name nothing else reads, and the steps that want it export DOCKER_HOST
+      # into their own shell and nowhere else. Not `$GITHUB_ENV` (that IS the job environment) and not a
+      # step-level `env:` (the runner composes that into the same exec).
+      JOB_DOCKER_HOST: unix:///run/onboarding-docker.sock
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -205,10 +253,10 @@ jobs:
           # journey died on `postgres published a port that this process cannot reach` — the same sentence as the
           # night before, printed for the opposite reason, on an arrangement that reads as correct.
           #
-          # DOCKER_HOST carries the path to every later step and to the tier itself, and it is also what makes
-          # the wait honest: an answer here can only come from the daemon this step just started.
-          export DOCKER_HOST=unix:///run/onboarding-docker.sock
-          echo "DOCKER_HOST=$DOCKER_HOST" >> "$GITHUB_ENV"
+          # DOCKER_HOST is exported into THIS SHELL ONLY — the job env carries the path under JOB_DOCKER_HOST
+          # instead, for the reason spelled out where that is set. It is also what makes the wait honest: an
+          # answer here can only come from the daemon this step just started.
+          export DOCKER_HOST="$JOB_DOCKER_HOST"
           dockerd --host "$DOCKER_HOST" --bip 10.90.0.1/24 --default-address-pool base=10.91.0.0/16,size=24 > /tmp/dockerd.log 2>&1 &
           for _ in $(seq 1 60); do
             if docker version --format '{{.Server.Version}}' > /dev/null 2>&1; then
@@ -222,11 +270,20 @@ jobs:
           exit 1
       # The sandbox image is a private package and the daemon started above holds no registry credential —
       # pulls authenticate client-side, so this login is what the box's pull presents.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      #
+      # Hand-rolled rather than docker/login-action, and that is not a preference: `docker login` is a
+      # client-side write to ~/.docker/config.json, so it belongs in a shell that can name its own DOCKER_HOST.
+      # An action cannot — its only channel is a step-level `env:`, which is the job environment this job must
+      # keep clean. One fewer JavaScript action in a container job is the second reason: each one costs the
+      # runner a `docker exec` probe of the container before it runs.
+      - name: Log in to ghcr.io for the box's image pull
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export DOCKER_HOST="$JOB_DOCKER_HOST"
+          printenv GHCR_TOKEN | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       - uses: ./.github/actions/pnpm-setup
       - run: npx playwright install --with-deps chromium
         working-directory: _tools/onboarding
@@ -239,7 +296,15 @@ jobs:
         run: |
           bash _tools/scripts/build/build-ic.sh linux-x64
           echo "IC_BIN=$GITHUB_WORKSPACE/_sandbox/ic/dist-bin/ic-linux-amd64" >> "$GITHUB_ENV"
-      - run: pnpm --filter @intentic/onboarding e2e:onboarding
+      # DOCKER_HOST in the suite's own shell: the tier reads it out of process.env (docker.ts) and passes it
+      # down to every docker it shells out to (shell.ts's PASS_THROUGH), so this one line is what puts the whole
+      # journey on the daemon this job started rather than the runner's.
+      - name: Walk the onboarding journey
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_HOST="$JOB_DOCKER_HOST"
+          pnpm --filter @intentic/onboarding e2e:onboarding
       # Bound the store the volume above keeps: every run tags a fresh api and web image over yesterday's, and
       # the ones it displaces are dangling layers nothing else evicts. Same rule and the same reason as the
       # turbo cache prune in the pnpm-setup composite — a directory that outlives the job needs a job to bound
@@ -247,13 +312,17 @@ jobs:
       # because the one failure that reaches here with no daemon to talk to is the daemon step itself, which
       # has already said so.
       - if: always()
-        run: docker image prune -f --filter until=336h || true
+        shell: bash
+        run: |
+          export DOCKER_HOST="$JOB_DOCKER_HOST"
+          docker image prune -f --filter until=336h || true
 
   # Desktop verification tier 3: verify-desktop-setup.sh runs the connect.sh EXTRACTED FROM THE INSTALLER on a
   # clean Docker host and waits for the sandbox daemon to answer /health. It pulls the sandbox image, so it is
   # nightly rather than per-push — tiers 1 and 2 run in ci.yml's desktop-verify on every main push that touches
   # the desktop tree.
   desktop-setup:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'desktop-setup' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -297,6 +366,7 @@ jobs:
   # once, said "it installs the next time you quit", and installed nothing on any path — green the entire time,
   # because nothing anywhere asserted the outcome.
   desktop-update:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'desktop-update' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -328,6 +398,7 @@ jobs:
   # commit, and reaching across workflows for an artifact would make this job's subject "whatever main last
   # built" rather than "main".
   desktop-windows-build:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'desktop-windows' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -383,7 +454,7 @@ jobs:
   # them — tier 2 pulls a full sandbox image before it can wait on the daemon.
   desktop-windows:
     needs: [desktop-windows-build]
-    if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' }}
+    if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' && ((inputs.only || 'all') == 'all' || inputs.only == 'desktop-windows') }}
     uses: ./.github/workflows/windows-smoke.yml
     with:
       artifact-name: windows-desktop-artifacts-nightly
@@ -404,6 +475,7 @@ jobs:
   # check — the script speaks HTTP to the registry's token endpoint as an anonymous client and never invokes
   # docker, so it cannot pick up a login from the runner's shared config.
   images-public:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'images-public' }}
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -418,6 +490,43 @@ jobs:
           clean: false
       - run: node _tools/scripts/image/verify-images-public.mjs
 
+  # THE OTHER THING A USER REACHES WITHOUT A CREDENTIAL, and the sibling of the job above: the install one-liners
+  # the app and the site print. `curl -fsSL https://intentic.dev/connect | sh` is the front door of this product,
+  # and until this job existed nothing anywhere confirmed that the door opens.
+  #
+  # The check is live on purpose. The app and the site are two deployments reading one table
+  # (@intentic/constants' INSTALL_SCRIPTS), and every static check of that table passes while they are out of
+  # step: the rename in b266789b5 shipped in the app, the site did not deploy for eight days, and
+  # https://intentic.dev/device.ps1 — the exact string the "Connect this device" dialog told people to run —
+  # answered with the 404 page relabelled `text/plain`. Green repository, broken product. The script says what
+  # it asserts and why it stops short of a byte-comparison.
+  #
+  # A schedule is the right trigger for the same reason images-public is scheduled rather than gated: this
+  # guards DEPLOYED state, which drifts on its own long after the commit that changed it, and no push can be
+  # the thing that notices.
+  install-urls:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'install-urls' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # The table is a TypeScript export, so it has to be built before a plain node script can read it — one
+      # tsgo of one small package, rather than a second copy of the table in this repository, which is the
+      # arrangement that put a 404 page into somebody's shell in the first place.
+      - run: pnpm --filter @intentic/constants build
+      - run: node _tools/scripts/ci/check-install-urls.mjs
+
   # THE VENDOR CANARY: the conformance tier again, but against each provider's NEWEST CLI instead of the
   # version the packs pin.
   #
@@ -430,6 +539,7 @@ jobs:
   # It is deliberately NOT a gate on anything. Nothing in this repository ships `@latest`, so a red canary must
   # never be able to stop a release that is pinned to a version still passing in CI.
   provider-canary:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'provider-canary' }}
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -465,6 +575,7 @@ jobs:
   # had" — broke, before any user felt it. Nightly because it pulls two full sandbox images into a clean dind
   # host; ci-desktop for the same reason ic-check uses it: ic builds with the baked cargo.
   update-survival:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'update-survival' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -504,6 +615,7 @@ jobs:
   # GitHub-hosted runners and touches no secret, so it needs nothing from this file's env or credentials —
   # `contents: read` is the whole grant, which is what this workflow already holds.
   mobile:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'mobile' }}
     uses: ./.github/workflows/mobile.yml
 
   # THE TIDY GATE: THE ONE PLACE A TIDY CHECK REFUSES.
@@ -525,6 +637,7 @@ jobs:
   # invisible in an agent's worktree (where the isolation layer mounts those same paths back in). A
   # GitHub-hosted runner clones the commit and nothing else, which is the only tree where all of it can be read.
   tidy:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'tidy' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -550,6 +663,7 @@ jobs:
   # API with the token's read scope and nothing else, so a GitHub-hosted runner is the right place for it and
   # the self-hosted fleet is never in its path. A red week is a table here, never a failure of this job.
   ci-audit:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'ci-audit' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read

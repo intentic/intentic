@@ -1,10 +1,31 @@
 {
-    "name": "intentic-dev",
+    // THE WORKER THAT ACTUALLY SERVES intentic.dev. The custom domain intentic.dev is bound to the Worker named
+    // `intentic`, so this name is not a label — it is the address this config deploys to. It read `intentic-dev`
+    // from 496ea7338 until 2026-09-06, and no Worker by that name has ever existed on the account: a deploy from
+    // this repo would have created a second, routeless Worker and reported success, while the live site went on
+    // serving whatever was last pushed to `intentic` (2026-08-29).
+    //
+    // That is not a hypothetical. It is how the site sat eight days behind main while every check here stayed
+    // green: the rename of the install scripts (computer.* -> device.*, b266789b5) shipped in the app, which
+    // handed out https://intentic.dev/device.ps1, while the site still served /computer.ps1 and answered the new
+    // path with the 404 page — piped straight into somebody's PowerShell.
+    "name": "intentic",
     "compatibility_date": "2026-03-26",
     "main": "./worker.ts",
-    // IndexNow runs after wrangler deploy so the key file and changed pages are live before Bing is pinged.
+    /* WHAT PRODUCES ./dist, AND NOTHING ELSE. `build.command` is the step wrangler runs BEFORE it deploys, so a
+     * `wrangler deploy` inside it re-enters the same command: deploy -> build -> deploy -> build, an astro build
+     * per level, until something is killed. It read `astro build && wrangler deploy && node
+     * scripts/submit-indexnow.mjs` from 496ea7338, which is a description of the DEPLOY sequence written into the
+     * BUILD hook, and it meant no `wrangler deploy` from this package could ever terminate.
+     *
+     * That is the other half of why intentic.dev sat eight days behind main: the name below pointed at a Worker
+     * that does not exist, and this made the command that would have said so never return.
+     *
+     * The deploy sequence it was reaching for is a deploy concern and lives in package.json's `deploy` script,
+     * where IndexNow already runs after wrangler so the key file and the changed pages are live before Bing is
+     * pinged. */
     "build": {
-        "command": "astro build && wrangler deploy && node scripts/submit-indexnow.mjs"
+        "command": "astro build",
     },
     "assets": {
         "directory": "./dist",
