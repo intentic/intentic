@@ -57,7 +57,7 @@ const next = posts.length > 1 ? posts[(index + 1) % posts.length] : undefined;
                 <p class="eyebrow">
                     <a class="no-underline" href={blogHref("")}>Blog</a>
                 </p>
-                <h1 class="display mt-3">{frontmatter.title}</h1>
+                <h1 class="display mt-3 text-3xl font-semibold sm:text-4xl">{frontmatter.title}</h1>
                 <p class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-subtle)]">
                     <time datetime={frontmatter.date}>{formatPostDate(frontmatter.date)}</time>
                     {frontmatter.tags?.map((tag) => <span class="text-[var(--color-muted)]">{tag}</span>)}
