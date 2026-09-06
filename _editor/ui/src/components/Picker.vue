@@ -35,6 +35,7 @@ const {
     searchThreshold = 8,
     ariaLabel,
     header,
+    labelClass,
 } = defineProps<{
     options: PickerOptions<T>;
     placeholder?: string;
@@ -47,6 +48,8 @@ const {
     ariaLabel?: string;
     /** Mobile sheet title; falls back to ariaLabel. */
     header?: string;
+    /** Extra classes on every option label, in the trigger and in the panel rows. */
+    labelClass?: string;
 }>();
 
 const model = defineModel<T | undefined>();
@@ -166,7 +169,7 @@ const applyPick = (option: PickerOption<T>): void => {
              the app's hints, and stayed silent in the one case worth a hover, a name too long for the trigger. -->
         <span
             class="min-w-0 flex-1 truncate text-left"
-            :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``]"
+            :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``, labelClass]"
             v-tooltip.bottom.overflow="selected?.label"
         >
             {{ selected?.label ?? placeholder }}
@@ -185,6 +188,7 @@ const applyPick = (option: PickerOption<T>): void => {
                 :selected-value="model"
                 :search-threshold="searchThreshold"
                 :list-label="ariaLabel"
+                :label-class="labelClass"
                 :autofocus="!mobile"
                 @pick="applyPick"
                 @close="close"

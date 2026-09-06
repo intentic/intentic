@@ -15,6 +15,7 @@ const {
     searchThreshold = 8,
     autofocus = false,
     listLabel,
+    labelClass,
 } = defineProps<{
     options: PickerOptions<T>;
     selectedValue: T | undefined;
@@ -23,6 +24,8 @@ const {
     /** Desktop hosts focus the panel on open; the mobile sheet must not summon the soft keyboard. */
     autofocus?: boolean;
     listLabel?: string;
+    /** Extra classes on every option label in the panel rows. */
+    labelClass?: string;
 }>();
 
 const emit = defineEmits<{ pick: [option: PickerOption<T>]; close: [] }>();
@@ -185,7 +188,7 @@ onMounted(() => {
                     <span class="flex min-w-0 shrink flex-col gap-0.5">
                         <span
                             class="truncate text-sm md:text-xs"
-                            :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``]"
+                            :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``, labelClass]"
                             >{{ row.option.label }}</span
                         >
                         <!-- Wraps on purpose: a sentence cut off mid-clause teaches nothing, and the panel is

@@ -13,11 +13,8 @@ import { useSandbox } from "../../composables/sandbox/useSandbox";
  * slice of it (one scope, no roster, the editor snippet), because pairing an editor is a thing you do from the
  * page about your own machine, and the token it needs is a means rather than the subject.
  *
- * THE SCOPE IS TAUGHT WHERE IT IS CHOSEN. The picker's rows carry the contract's own sentences
- * (CONTROL_SCOPE_REACH), the same rows the site and the daemon's OpenAPI document print, so what a rung reaches
- * is said once and read the same on every surface. The expiry is a choice too, with a default rather than an
- * absence: a token that lives until revoked is right for an editor on the owner's laptop and wrong for a CI
- * secret, and a form that silently minted forever would decide that for everyone.
+ * THE SCOPE IS TAUGHT WHERE IT IS CHOSEN. The picker's rows carry short "Can…" hints in the same voice as the
+ * member-role picker on the Access tab; CONTROL_SCOPE_REACH stays the long form for OpenAPI and the site.
  *
  * SHOWN ONCE. The daemon returns the raw value at mint and keeps only its hash, so the token is on screen
  * exactly until this component is left. The snippets under it are the three ways a program holds one, each
@@ -47,13 +44,22 @@ const isOwner = computed(() => active.value?.role === `owner`);
 
 const SCOPE_ICONS: Record<ControlScope, PickerOption[`icon`]> = { editor: `code`, read: `eye`, drive: `play`, land: `check-circle` };
 
-// The picker's rows ARE the model: label, then the sentence saying what the rung reaches and what it costs.
+/* Short "Can…" sentences for the picker, in the same voice as the member-role picker on this tab. The contract's
+ * CONTROL_SCOPE_REACH rows stay long for OpenAPI and the site; here the choice is taught in two lines. */
+const SCOPE_HINTS: Record<ControlScope, string> = {
+    editor: `Can run one conversation: turns, cards, transcripts. Can't see the fleet or land work.`,
+    read: `Can watch everything a viewer sees. Can't change anything.`,
+    drive: `Can drive agents and steer turns. Can't land or purge worktrees.`,
+    land: `Can land and purge conversation worktrees. The broadest credential a program holds.`,
+};
+
+// The picker's rows ARE the model: label (lowercase scope, capitalized in CSS), then the teaching sentence.
 const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() =>
     CONTROL_SCOPE_REACH.filter((entry) => scopes.includes(entry.scope)).map((entry) => ({
         value: entry.scope,
         label: entry.scope,
         icon: SCOPE_ICONS[entry.scope],
-        hint: `${entry.reach} ${entry.note}`,
+        hint: SCOPE_HINTS[entry.scope],
     })),
 );
 
@@ -187,6 +193,7 @@ const describe = (token: ControlToken): string =>
                                 variant="input"
                                 aria-label="Token scope"
                                 header="Scope"
+                                label-class="capitalize"
                                 class="w-32"
                             />
                             <Picker v-model="expiry" :options="EXPIRY_OPTIONS" variant="input" aria-label="Token expiry" header="Expires" class="w-32" />
