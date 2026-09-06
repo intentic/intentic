@@ -42,11 +42,13 @@ test("the blocks hold every role once, in the table's own order", () => {
     expect(blocked).toEqual(MODEL_ROLES.map((role) => role.id));
 });
 
+/* A BLOCK IS A HEADING AND THE ROLES UNDER IT. It also has to hold MORE THAN ONE, which is a load-bearing
+ * claim rather than a tidiness one now: the settings page collapses a block into a single shared list, and a
+ * block of one would draw that as "one list for all 1 jobs" over the row it is already drawing. */
 test("each block says what it is, so the page keeps no headings of its own", () => {
     for (const block of MODEL_ROLE_BLOCKS) {
         expect(block.label, block.id).toMatch(/\S/);
-        expect(block.caption, block.id).toMatch(/\S/);
         // A block with nothing in it would draw a heading over an empty surface.
-        expect(block.roles.length, block.id).toBeGreaterThan(0);
+        expect(block.roles.length, block.id).toBeGreaterThan(1);
     }
 });

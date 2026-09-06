@@ -128,6 +128,55 @@ const flush = async (): Promise<void> => {
     await nextTick();
 };
 
+// One block's surface, found by the heading the catalog gave it. Every group-scoped helper below goes through
+// this, because "which group did that press belong to" is the question half these tests exist to answer.
+const group = (host: HTMLElement, label: string): HTMLElement =>
+    [...host.querySelectorAll<HTMLElement>(`section`)].find((section) => section.textContent?.includes(label))!;
+
+/* ═══ WHICH VIEW A GROUP IS IN ═══
+ *
+ * EVERY GROUP OPENS COLLAPSED WHILE ITS JOBS AGREE — one shared list for the block instead of a row each — and
+ * a fresh settings record has every job holding the same nothing. So the claims about a JOB'S OWN ROW have to
+ * ask for that view rather than mounting into whichever one the fixture happens to produce: a test that read
+ * the per-job rows only because its fixture made two jobs disagree would go green for the wrong reason.
+ *
+ * The switch is a <SegmentedControl> in the group's own header, so it is reached the way a person reaches it:
+ * by the word on the pill, inside the section that heading belongs to. */
+const viewButton = (host: HTMLElement, block: string, label: string): HTMLButtonElement =>
+    [...group(host, block).querySelectorAll<HTMLButtonElement>(`[role="tablist"] button`)].find((button) => button.textContent?.trim() === label)!;
+
+// Open the named groups (every one, by default) out into their per-job rows.
+const showJobs = async (host: HTMLElement, ...blocks: string[]): Promise<void> => {
+    for (const label of blocks.length > 0 ? blocks : MODEL_ROLE_BLOCKS.map((block) => block.label)) {
+        viewButton(host, label, `Advanced`).click();
+    }
+    await nextTick();
+};
+
+// …and fold them back into one list each.
+const showOneList = async (host: HTMLElement, ...blocks: string[]): Promise<void> => {
+    for (const label of blocks.length > 0 ? blocks : MODEL_ROLE_BLOCKS.map((block) => block.label)) {
+        viewButton(host, label, `Simple`).click();
+    }
+    await nextTick();
+};
+
+// Mounted with every group opened out, for the tests whose subject is one job's own row.
+const mountJobs = async (): Promise<HTMLElement> => {
+    const host = mount();
+    await Promise.resolve();
+    await showJobs(host);
+    return host;
+};
+
+// Every "Add a model for …" on the page, in document order: which of them exist is how a test tells the two
+// views apart, and their order is the page's own reading order.
+const adders = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`) ?? ``).filter((label) => label.startsWith(`Add a model`));
+
+// The collapsed row's Add button, worded for the group rather than for a job.
+const groupAdder = (block: { label: string }): string => `Add a model for every ${block.label.toLowerCase()} job`;
+
 afterEach(() => {
     app?.unmount();
     app = undefined;
@@ -176,8 +225,7 @@ const unsetChip = (kind: string): string => (kind === `helper` ? `off` : `chat d
  * which is what the four hand-written rows this replaced could not promise, and how a documentation sweep came
  * to share a tier with a red production pipeline. */
 test("draws a row per declared role, plus the one setting that is not a role", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     const named = chips(host);
     for (const role of MODEL_ROLES) {
@@ -187,9 +235,8 @@ test("draws a row per declared role, plus the one setting that is not a role", a
     // must still be there. It is not a job, so it carries no tick and no chip — hence no title span to find it by.
     expect(host.textContent).toContain(`Automatic tier`);
     // Every job offers the same gesture, which is what makes the page one page rather than eighteen designs.
-    const adders = [...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`));
     for (const role of MODEL_ROLES) {
-        expect(adders, role.id).toContain(`Add a model for ${role.label.toLowerCase()}`);
+        expect(adders(host), role.id).toContain(`Add a model for ${role.label.toLowerCase()}`);
     }
 });
 
@@ -199,21 +246,16 @@ test("draws a row per declared role, plus the one setting that is not a role", a
  * which is exactly the budget question the split exists to let them answer. Asserted per section rather than by
  * counting headings, because the failure that matters is a row in the wrong group, not a missing title. */
 test("draws one group per declared block, in order, holding exactly that block's rows", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     const sections = [...host.querySelectorAll(`section`)];
     for (const [index, block] of MODEL_ROLE_BLOCKS.entries()) {
         const section = sections[index];
-        // The heading and the line under it are the block's own words, so a group cannot end up describing a
-        // set of rows it no longer holds.
+        // The heading is the block's own word, so a group cannot end up describing a set of rows it no longer
+        // holds.
         expect(section?.textContent, block.id).toContain(block.label);
-        expect(section?.textContent, block.id).toContain(block.caption);
 
-        const adders = [...(section?.querySelectorAll(`button`) ?? [])]
-            .map((button) => button.getAttribute(`aria-label`) ?? ``)
-            .filter((label) => label.startsWith(`Add a model for`));
-        expect(adders, block.id).toEqual(block.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
+        expect(adders(section as HTMLElement), block.id).toEqual(block.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
     }
 
     // …and the one setting that is not a job gets a surface of its own, after them: it is the only thing here
@@ -228,8 +270,7 @@ test("draws one group per declared block, in order, holding exactly that block's
  * are in the same box rather than laid out as two — because a refactor that pulled the tick back into its own
  * column would restore the double mark while every other test on this page kept passing. */
 test("a job's glyph and its tick share one slot", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     // PrimeVue draws the box as a wrapper around the real input; the slot is that wrapper's parent.
     const slot = tickBox(host, `Select commit messages`).closest(`.p-checkbox`)?.parentElement;
@@ -252,14 +293,13 @@ test("a job's glyph and its tick share one slot", async () => {
  *   - both come before Automatic tier (the only one that reaches into a choice already made),
  *   - and the roles hold the catalog's own order, so the page and the table cannot drift apart. */
 test("reads in order of reach: one-shots, then whole sessions, then the row that can override a live choice", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     /* READ OFF THE ADD BUTTONS rather than off the headings: every row on this page has exactly one, its label
      * is already a public fact (the test above pins it), and a title is a bare `div` here that no stable
      * selector separates from the sub-headings inside a row. Document order of the buttons IS row order. */
-    const adders = [...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`) ?? ``);
-    const at = (label: string): number => adders.indexOf(label);
+    const order = adders(host);
+    const at = (label: string): number => order.indexOf(label);
     const roleAt = (kind: string): number[] =>
         MODEL_ROLES.filter((role) => role.kind === kind).map((role) => at(`Add a model for ${role.label.toLowerCase()}`));
 
@@ -273,7 +313,7 @@ test("reads in order of reach: one-shots, then whole sessions, then the row that
     expect(Math.max(...runs)).toBeLessThan(automaticTier);
     // …and it is the LAST row on the page, not merely after the roles: anything drawn under it would be read as
     // reaching further still, which nothing here does.
-    expect(automaticTier).toBe(adders.length - 1);
+    expect(automaticTier).toBe(order.length - 1);
     // Within each block, the catalog's order. The rows are drawn by walking MODEL_ROLES, so this is what stops
     // one being re-sorted here and leaving the table's own stated ordering describing a page it no longer
     // matches.
@@ -286,8 +326,7 @@ test("reads in order of reach: one-shots, then whole sessions, then the row that
  * connected fixtures are named here rather than just one, because a resolver that started deriving again
  * would put whichever it preferred on screen and half an assertion would still pass. */
 test("names no model at all for a one-shot job nobody has set one for", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(chips(host)[`Commit messages`]).toBe(`off`);
     expect(host.textContent).not.toContain(`Claude Haiku 4.5`);
@@ -304,8 +343,7 @@ test("names no model at all for a one-shot job nobody has set one for", async ()
  * it is worth a tooltip. So what is pinned here is both halves — the chip says the right thing, and the prose
  * it replaced is gone rather than sitting under it as well. */
 test("an unset job states itself in a chip beside its name, not in a paragraph under it", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     const stated = chips(host);
     for (const role of MODEL_ROLES) {
@@ -319,8 +357,7 @@ test("an unset job states itself in a chip beside its name, not in a paragraph u
 // which is more than a chip could, so a chip there would be repeating the row back to itself.
 test("a job with models drops the chip, because its list already says what it will do", async () => {
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(chips(host)[`Commit messages`]).toBe(``);
     expect(chips(host)[`Session titles`]).toBe(unsetChip(`helper`));
@@ -331,8 +368,7 @@ test("a job with models drops the chip, because its list already says what it wi
  * beat of silence — and it is the state every visit to this page passes through. */
 test("says nothing about a job until the settings have landed", async () => {
     settings.value = undefined as unknown as SandboxSettings;
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(chips(host)[`Commit messages`]).toBe(``);
     expect(chips(host)[`Pipeline fixes`]).toBe(``);
@@ -340,16 +376,14 @@ test("says nothing about a job until the settings have landed", async () => {
 
 test("shows the pinned models in the order the setting holds them", async () => {
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`, `CLAUDE · Claude Haiku 4.5`]);
 });
 
 test("moving one earlier writes the whole new order back", async () => {
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     // The first row has nowhere above it to go, so its button is off rather than a no-op that looks live.
     expect(rowButton(host, `Move CODEX · GPT 5.6 Luna earlier`).disabled).toBe(true);
@@ -360,8 +394,7 @@ test("moving one earlier writes the whole new order back", async () => {
 
 test("removing the last one empties the list, which is how a job gets switched off", async () => {
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
 
@@ -372,8 +405,7 @@ test("keeps a pin whose account went away on screen, and says why it is greyed",
     // The resolver drops it at run time so the helpers keep working. Dropping it from the ROW as well would
     // look like the app had eaten a setting the user made.
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`gemini`, `gemini-3-flash-lite`), entry(`claude`, `claude-haiku-4-5`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(orderOnScreen(host)).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Claude Haiku 4.5`]);
     const disconnected = host.querySelector(`ol li`) as HTMLElement;
@@ -387,8 +419,7 @@ test("keeps a pin whose account went away on screen, and says why it is greyed",
  * would silently re-point every commit message in the sandbox. */
 
 test("the judge row writes its own setting, never another job's", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     addButton(host, `Add a model for safety judge`).click();
     await flush();
@@ -402,8 +433,7 @@ test("the judge row writes its own setting, never another job's", async () => {
 
 test("a pinned judge model is drawn as written, and removing it empties its own list", async () => {
     settings.value = { ...settings.value, modelRoles: { [JUDGE]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     // The only list with anything in it, so the page's rows read as one order.
     expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
@@ -417,8 +447,7 @@ test("a pinned judge model is drawn as written, and removing it empties its own 
  * and say where the press that matters lives. */
 test("goes inert with the judge, and says where the switch is", async () => {
     settings.value = { ...settings.value, commandJudge: `off` };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(addButton(host, `Add a model for safety judge`).disabled).toBe(true);
     const link = [...host.querySelectorAll<HTMLAnchorElement>(`a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
@@ -429,8 +458,7 @@ test("the judge row stays live while the judge is merely watching", async () => 
     // Watch records verdicts without holding anything, so a model is still being spent on every flagged command
     // and the row that picks it must stay pressable.
     settings.value = { ...settings.value, commandJudge: `watch` };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(addButton(host, `Add a model for safety judge`).disabled).toBe(false);
 });
@@ -450,8 +478,7 @@ test("an agent-run entry names its own tier, and one left at the provider's defa
             ],
         },
     };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     const rows = [...host.querySelectorAll(`ol li`)].map((row) => row.textContent?.replace(/\s+/g, ` `).trim() ?? ``);
     expect(rows[0]).toContain(`High`);
@@ -468,8 +495,7 @@ test("a tier off the model's own scale is drawn as the one that will actually ru
         ...settings.value,
         modelRoles: { [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: false }] },
     };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(host.querySelector(`ol li`)?.textContent).toContain(`X-High`);
     expect(settings.value.modelRoles[RUN]?.[0]?.effort).toBe(`max`);
@@ -479,8 +505,7 @@ test("a tier off the model's own scale is drawn as the one that will actually ru
 // the daemon names the reasoning the tier needs, so the row says the tier the entry actually spends.
 test("an entry that pinned no thinking keeps the top tier it asked for", async () => {
     settings.value = { ...settings.value, modelRoles: { [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max` }] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(host.querySelector(`ol li`)?.textContent).toContain(`Max`);
 });
@@ -495,8 +520,7 @@ test("pressing an agent-run row opens the picker over that entry, with its knobs
             ],
         },
     };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     rowButton(host, `Change CLAUDE · Claude Haiku 4.5`).click();
     await flush();
@@ -514,8 +538,7 @@ test("pressing an agent-run row opens the picker over that entry, with its knobs
  * so the picker offers them. */
 test("a one-shot row opens the picker with knobs, because its job now honours them", async () => {
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     rowButton(host, `Change CODEX · GPT 5.6 Luna`).click();
     await flush();
@@ -549,8 +572,7 @@ test("a knob moved in the picker lands on that entry alone", async () => {
             ],
         },
     };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
     rowButton(host, `Change CLAUDE · Claude Haiku 4.5`).click();
     await flush();
 
@@ -580,8 +602,7 @@ test("re-pointing an entry replaces it where it stands, because its position is 
             ],
         },
     };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
     rowButton(host, `Change CODEX · GPT 5.6 Luna`).click();
     await flush();
 
@@ -601,8 +622,7 @@ test("re-pointing an entry replaces it where it stands, because its position is 
  * settings patch merges at the top level only, so a row that sent its own key alone would drop every other
  * job's list on the way past — the failure would be silent, and would look exactly like the page working. */
 test("adding appends to the end of the order, and leaves every other job's list standing", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     addButton(host, `Add a model for pipeline fixes`).click();
     await flush();
@@ -648,11 +668,6 @@ const tick = (host: HTMLElement, label: string): void => {
     box.dispatchEvent(new Event(`change`, { bubbles: true }));
 };
 
-// One block's surface, found by the heading the catalog gave it. Every selection helper below goes through
-// this, because "which group did that press belong to" is the question these tests exist to answer.
-const group = (host: HTMLElement, label: string): HTMLElement =>
-    [...host.querySelectorAll<HTMLElement>(`section`)].find((section) => section.textContent?.includes(label))!;
-
 /* THE SELECTION'S VERBS LIVE IN THE GROUP'S OWN HEADER, above its rows and stuck there as they scroll. Read
  * off the words on the buttons rather than off a container id: what a caller has to be able to find is the
  * verb, and the header is a <RowGroup> slot rather than a landmark of its own. */
@@ -688,8 +703,7 @@ const rowOf = (host: HTMLElement, label: string): HTMLElement =>
         .closest(`.group`)!;
 
 test("the whole headline ticks the job, so the target is the row rather than an 18px box", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     const row = rowOf(host, `Commit messages`);
     expect(row.tagName).toBe(`LABEL`);
@@ -703,8 +717,7 @@ test("the whole headline ticks the job, so the target is the row rather than an 
 });
 
 test("the Add button opens the picker without ticking the job it belongs to", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     addButton(host, `Add a model for commit messages`).click();
     await flush();
@@ -715,8 +728,7 @@ test("the Add button opens the picker without ticking the job it belongs to", as
 
 test("a press on the pinned list stays in the list rather than ticking the job under it", async () => {
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
     await nextTick();
@@ -729,8 +741,7 @@ test("a press on the pinned list stays in the list rather than ticking the job u
  * over the runs: that button is a promise about the rows under the heading it sits in, and a selection made two
  * surfaces away is not a set anybody on this screen can see. */
 test("no bulk verbs until something is ticked, and then only in that group's header", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     expect(verbs(host, HELPERS.label)).toEqual([]);
     expect(verbs(host, PRESSED.label)).toEqual([]);
@@ -752,8 +763,7 @@ test("one pick lands on every ticked job in that group, in one patch, and never 
     // replacement: a bulk editor that flattened existing orders would silently drop the fallbacks somebody
     // wrote by hand.
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     tick(host, `Select commit messages`);
     tick(host, `Select session titles`);
@@ -781,8 +791,7 @@ test("one pick lands on every ticked job in that group, in one patch, and never 
  * model lands first and the panel stays up on it; the effort chosen next has to reach the SAME entry in every
  * ticked job rather than joining it as a second one. */
 test("the tier chosen after the model reaches the same entry in every ticked job", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     tick(host, `Select commit messages`);
     tick(host, `Select session titles`);
@@ -810,8 +819,7 @@ test("the tier chosen after the model reaches the same entry in every ticked job
 // the user is correcting themselves, and leaving the abandoned model behind in every ticked job is the one
 // mistake this panel staying open makes possible.
 test("picking again supersedes the model the same panel just wrote", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     tick(host, `Select commit messages`);
     await nextTick();
@@ -828,8 +836,7 @@ test("clearing the ticked jobs empties their lists, which is how several jobs ar
         ...settings.value,
         modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)], [JUDGE]: [entry(`claude`, `claude-haiku-4-5`)] },
     };
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     tick(host, `Select commit messages`);
     await nextTick();
@@ -843,8 +850,7 @@ test("clearing the ticked jobs empties their lists, which is how several jobs ar
  * put in that block, derived here rather than listed, so a role that moves between blocks moves this assertion
  * with it. */
 test("a group's master box ticks that block's jobs, and only those", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
     await nextTick();
@@ -862,8 +868,7 @@ test("a group's master box ticks that block's jobs, and only those", async () =>
 // …and each group's box answers for its own block alone: ticking every helper leaves the runs' box empty, which
 // is the visible half of the same claim.
 test("one group's master box does not tick another group's", async () => {
-    const host = mount();
-    await Promise.resolve();
+    const host = await mountJobs();
 
     tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
     await nextTick();
@@ -872,6 +877,118 @@ test("one group's master box does not tick another group's", async () => {
     for (const role of PRESSED.roles) {
         expect(tickBox(host, `Select ${role.label.toLowerCase()}`).checked, role.id).toBe(false);
     }
+});
+
+/* ═══ A WHOLE GROUP AS ONE LIST ═══
+ *
+ * THE COLLAPSED VIEW IS THE SAME SETTING READ A BLOCK AT A TIME. Eighteen true per-job lists are the right
+ * model and they are also eighteen rows to read before anybody has said anything, so a group can be folded
+ * into one ordered list. Nothing is stored for it: the row reads what the block's jobs hold and writes back to
+ * every one of them.
+ *
+ * WHAT THE TWO VIEWS MUST NEVER DO IS DISAGREE, and both directions are tested here because both are silent
+ * failures. A collapsed row that drew a model only some of its jobs hold would report a setting nobody made; a
+ * collapsed row that wrote to fewer jobs than it names would leave the rest behind, and the page would look
+ * exactly the same either way. */
+
+// One fixture shape, the case the collapsed view opens for: every job of a block holding the same list.
+const allOf = (block: { readonly roles: readonly { readonly id: string }[] }, pins: ModelPin[]): SandboxSettings[`modelRoles`] =>
+    Object.fromEntries(block.roles.map((role) => [role.id, pins])) as SandboxSettings[`modelRoles`];
+
+test("a group opens as one list while its jobs agree, and offers nothing per job", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    // One Add button for the block, and not one per job.
+    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
+    expect(group(host, HELPERS.label).textContent).toContain(`One list for all ${HELPERS.roles.length} jobs`);
+    // The jobs are still NAMED, because a row about to write five settings owes their names: the count says how
+    // many, and this says which.
+    for (const role of HELPERS.roles) {
+        expect(group(host, HELPERS.label).textContent, role.id).toContain(role.label);
+    }
+});
+
+test("one model picked there lands on every job of that block, in one patch, and on no other block's", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    addButton(host, groupAdder(HELPERS)).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenCalledWith({ modelRoles: allOf(HELPERS, [entry(`claude`, `claude-haiku-4-5`)]) });
+    // The other groups are collapsed too, and neither of them was pressed.
+    expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[RUN]).toBeUndefined();
+});
+
+test("draws the block's order once, however many jobs are holding it", async () => {
+    settings.value = { ...settings.value, modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)]) };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`, `CLAUDE · Claude Haiku 4.5`]);
+});
+
+// …and every gesture the list offers writes the whole block, which is what "one list for all five" has to mean
+// on the way out as well as on the way in.
+test("a change made in the collapsed list gives every job of the block exactly that list", async () => {
+    settings.value = { ...settings.value, modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`)]) };
+    const host = mount();
+    await Promise.resolve();
+
+    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: allOf(HELPERS, []) });
+});
+
+/* WHICH VIEW A GROUP OPENS IN IS THE SETTING'S OWN ANSWER, and this is the half that keeps the simple face
+ * honest: a block whose jobs were deliberately given different models is a block whose distinction may not be
+ * folded away by a default. It is read per BLOCK, so one group opening apart says nothing about the others. */
+test("a block whose jobs already differ opens showing them apart, and its neighbours stay as one list", async () => {
+    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(adders(group(host, HELPERS.label))).toEqual(HELPERS.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
+    expect(adders(group(host, PRESSED.label))).toEqual([groupAdder(PRESSED)]);
+});
+
+/* AND COLLAPSED OVER JOBS THAT DISAGREE — which takes a press, since such a block opens apart — the row shows
+ * the INTERSECTION and says that it is one. A union would name a model on a row most of whose jobs do not hold
+ * it, which is the one lie a collapsed view is in a position to tell. */
+test("collapsed over jobs that differ, it shows only what every one of them holds, and says so", async () => {
+    const shared = entry(`codex`, `gpt-5.6`);
+    settings.value = {
+        ...settings.value,
+        modelRoles: { ...allOf(HELPERS, [shared]), [COMMIT]: [shared, entry(`claude`, `claude-haiku-4-5`)] },
+    };
+    const host = mount();
+    await Promise.resolve();
+    await showOneList(host, HELPERS.label);
+
+    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
+    expect(chips(host)[`One list for all ${HELPERS.roles.length} jobs`]).toBe(`jobs differ`);
+});
+
+// THE VIEW IS THE GROUP'S OWN, and a selection cannot outlive the rows it was made over: ticks left standing
+// under a collapsed group would arm verbs over jobs nobody on this screen can see.
+test("collapsing a group takes its ticks with it, and leaves the other groups as they were", async () => {
+    const host = await mountJobs();
+
+    tick(host, `Select commit messages`);
+    await nextTick();
+    expect(verbs(host, HELPERS.label)).toEqual([`Set a model for all…`, `Clear models`]);
+
+    await showOneList(host, HELPERS.label);
+
+    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
+    expect(adders(group(host, PRESSED.label))).toEqual(PRESSED.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
+
+    await showJobs(host, HELPERS.label);
+    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
+    expect(verbs(host, HELPERS.label)).toEqual([]);
 });
 
 /* THE AUTOMATIC-TIER ROW is the only setting on this page that can override a model the user picked a second

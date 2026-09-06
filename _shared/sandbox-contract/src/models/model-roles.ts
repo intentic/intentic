@@ -280,6 +280,12 @@ export const ModelRoleSchema = z.enum(MODEL_ROLE_IDS as [ModelRole, ...ModelRole
  * keyed by the same ids is the drift a single table exists to stop. What is NOT here is anything about how the
  * page draws them — that is the page's, and it changes on its own schedule.
  *
+ * A BLOCK IS A LABEL AND ITS ROLES, AND NOTHING ELSE. Each one used to carry a `caption` too — a line the page
+ * printed beside the heading saying what its jobs had in common ("One prompt, no tools, one answer back."). The
+ * header is a CONTROL STRIP now: the group's rows collapse into a single shared list or open into one row per
+ * job, and that switch sits where the sentence did. A caption nothing renders is the drift this table exists to
+ * stop, so it is gone rather than kept for a reader that no longer exists.
+ *
  * ORDER IS REACH, and it is the order of the table itself: jobs nobody picked a model for, then sessions a
  * click of yours starts, then sessions that start without one. Every role belongs to exactly one block and
  * every block keeps the table's order, which is what makes a role added upstairs appear on the page by
@@ -290,8 +296,6 @@ export interface ModelRoleBlock {
     readonly id: ModelRoleBlockId;
     /** The group's heading on the settings page. */
     readonly label: string;
-    /** One line beside it: what the jobs in this block have in common that the others do not. */
-    readonly caption: string;
     /** Its roles, in table order. */
     readonly roles: readonly ModelRoleSpec[];
 }
@@ -302,19 +306,16 @@ export const MODEL_ROLE_BLOCKS: readonly ModelRoleBlock[] = [
     {
         id: "helper",
         label: "Automatic helpers",
-        caption: "One prompt, no tools, one answer back.",
         roles: rolesWhere((role) => role.kind === "helper"),
     },
     {
         id: "pressed",
         label: "Runs you start",
-        caption: "Whole sessions, begun by a click of yours.",
         roles: rolesWhere((role) => role.kind === "run" && role.trigger === "pressed"),
     },
     {
         id: "unprompted",
         label: "Runs that start themselves",
-        caption: "Whole sessions nobody pressed for.",
         roles: rolesWhere((role) => role.kind === "run" && role.trigger === "unprompted"),
     },
 ];

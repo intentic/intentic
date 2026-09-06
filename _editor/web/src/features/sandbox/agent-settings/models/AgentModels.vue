@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin, type ModelRole, modelPinKey, parsePinned } from "@intentic/sandbox-contract";
+import {
+    MODEL_ROLE_BLOCKS,
+    MODEL_ROLES,
+    type ModelPin,
+    type ModelRole,
+    type ModelRoleBlockId,
+    modelPinKey,
+    parsePinned,
+} from "@intentic/sandbox-contract";
 import { Button, Row, RowGroup, SegmentedControl, Verdict } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
-import { computed, ref, shallowRef } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSavings } from "../../usage/useSavings";
 import AddModelButton from "./AddModelButton.vue";
+import ModelGroupRow from "./ModelGroupRow.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
@@ -31,6 +40,13 @@ import ModelRoleRow from "./ModelRoleRow.vue";
  * distinctions the table ALREADY makes — a one-shot against a whole session, and a session your click starts
  * against one that starts without you — rather than a second taxonomy this file would have to keep in step. The
  * page's job is to draw them; a role added to the catalog joins the right group by saying what it is.
+ *
+ * AND EACH GROUP IS READ IN ONE OF TWO VIEWS, WHICH IS THE REST OF THAT COST PAID BACK. Advanced is the page's
+ * true shape, a row per job. Simple collapses the block into ONE ordered list — the sentence most owners
+ * actually have ("these five, on this, in this order") said once instead of five times. Nothing is stored for
+ * it: the collapsed list reads what every job of the block holds and writes back to all of them, so the switch
+ * cannot lose a distinction that the rows would show (see `groupList` and <ModelGroupRow>). A group opens in
+ * the view its own setting asks for — collapsed while its jobs agree, apart the moment they do not.
  *
  * AND THE ORDER OF THE GROUPS IS REACH, which is the argument the single list used to make in prose: jobs
  * nobody picked a model for come first, because they run constantly and their bill turns up without a click;
@@ -126,14 +142,62 @@ const editorFor = (role: ModelRole): PinnedList =>
         knobs: true,
     });
 
-/* THE GROUPS, EACH WITH ITS ROWS' EDITORS ATTACHED. Built once: the editors close over the settings ref, so
- * they stay live without being rebuilt, and the block a role sits in is the catalog's answer rather than a
- * filter kept in step here. */
-const blocks = MODEL_ROLE_BLOCKS.map((block) => ({
-    ...block,
-    ids: block.roles.map((role) => role.id) as readonly ModelRole[],
-    rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })),
-}));
+/* EVERY JOB OF A SET, WRITTEN TOGETHER, so a group of nine is one save rather than nine racing ones: the
+ * settings patch merges at the TOP level, so nine separate writes would each carry a record read before the
+ * last one landed. Both of this page's multi-job gestures go through it — the collapsed list just below, and
+ * the selection's own verbs further down. */
+const acrossRoles = (roles: readonly ModelRole[], listFor: (role: ModelRole) => ModelPin[]): void =>
+    writeRoles(Object.fromEntries(roles.map((role) => [role, listFor(role)])) as Partial<Record<ModelRole, ModelPin[]>>);
+
+/* ═══ A WHOLE BLOCK AS ONE LIST, WHICH IS ALL THE SIMPLE VIEW IS ═══
+ *
+ * NOTHING IS STORED PER BLOCK. The setting is one ordered list per job and stays that way — it is the entire
+ * reason this page exists in this shape — so a block's list is DERIVED from its jobs on the way in and fanned
+ * back out to every one of them on the way out. Switch a group to Advanced afterwards and the rows say exactly
+ * what the collapsed row wrote, which is the property that makes the view safe to offer at all.
+ *
+ * TWO ENTRIES ARE THE SAME WHEN EVERY FIELD MATCHES, not merely the model: a job running Haiku at `max` and one
+ * running it at the provider's own default are two different settings, and a collapsed row that called them
+ * equal would draw one of them and silently re-point the other on the next press. */
+const pinIdentity = (pin: ModelPin): string =>
+    [modelPinKey(pin), pin.effort ?? ``, pin.thinking ?? ``, pin.fast ?? ``, pin.harness ?? ``].join(`|`);
+
+/* WHAT EVERY JOB OF A BLOCK HOLDS, in the first job's order. An INTERSECTION rather than a union, because the
+ * row is read as "what these jobs run": a union would name a model on a row most of whose jobs do not have it,
+ * which is the one lie a collapsed view is in a position to tell. Where the jobs agree — the ordinary case, and
+ * the only case this view opens itself for — it is simply their list. */
+const sharedPins = (ids: readonly ModelRole[]): readonly ModelPin[] => {
+    const [first, ...rest] = ids.map((role) => listOf(role));
+    if (first === undefined) {
+        return [];
+    }
+    const others = rest.map((held) => new Set(held.map(pinIdentity)));
+    return first.filter((pin) => others.every((held) => held.has(pinIdentity(pin))));
+};
+
+// Whether a block's jobs disagree at all: the same entries in the same order is one answer, anything else is
+// not. It words the collapsed row's chip, and it decides which view the group opens in.
+const jobsDiffer = (ids: readonly ModelRole[]): boolean => new Set(ids.map((role) => listOf(role).map(pinIdentity).join(`\n`))).size > 1;
+
+// One editor over a whole block, offering a row's own four gestures: whatever the list becomes is written to
+// every job of that block, in one patch.
+const groupList = (ids: readonly ModelRole[]): PinnedList =>
+    pinnedList({
+        read: () => sharedPins(ids),
+        write: (pins) => acrossRoles(ids, () => [...pins]),
+        decode: (pin) => pin,
+        encode: (pin) => pin,
+        detail: pinKnobSummary,
+        knobs: true,
+    });
+
+/* THE GROUPS, EACH WITH ITS ROWS' EDITORS AND ITS OWN COLLAPSED ONE ATTACHED. Built once: the editors close
+ * over the settings ref, so they stay live without being rebuilt, and the block a role sits in is the catalog's
+ * answer rather than a filter kept in step here. */
+const blocks = MODEL_ROLE_BLOCKS.map((block) => {
+    const ids = block.roles.map((role) => role.id) as readonly ModelRole[];
+    return { ...block, ids, rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })), group: groupList(ids) };
+});
 
 /* THE ONE ROW WHOSE FEATURE CAN BE OFF FROM SOMEWHERE ELSE, and the two sentences it owes because of it.
  *
@@ -197,6 +261,51 @@ const selectAllIn = (ids: readonly ModelRole[], on: boolean): void => {
     selected.value = on ? [...selected.value.filter((held) => !ids.includes(held)), ...ids] : selected.value.filter((held) => !ids.includes(held));
 };
 
+/* ═══ SIMPLE OR ADVANCED, ONE ANSWER PER GROUP ═══
+ *
+ * THE SWITCH IS THE GROUP'S, and that is the same argument the selection's verbs just made: "every one-shot
+ * helper on something cheap" and "hold the runs nobody is watching to a budget" are decisions with different
+ * amounts of care behind them. An owner who has pinned four different models across the runs they start still
+ * wants the helpers as one line, and a page-wide toggle would make them choose one reading for all eighteen.
+ *
+ * WHICH VIEW A GROUP OPENS IN IS DERIVED FROM THE SETTING ITSELF rather than defaulted: a block whose jobs
+ * already hold different lists opens Advanced, because collapsing it would fold away a distinction somebody
+ * made on purpose; a block whose jobs agree opens Simple, because there is nothing to see apart.
+ *
+ * DERIVED ONCE, WHEN THE RECORD LANDS, and this is the part that has to be deliberate. Read continuously, a
+ * group would re-fold itself mid-gesture — set the last of five jobs to match its neighbours in Advanced and
+ * the rows you are working in would collapse under the cursor. So the setting decides how the page OPENS, and
+ * from then on the reader decides. */
+type ModelView = `simple` | `advanced`;
+const VIEWS: readonly { readonly label: string; readonly value: ModelView }[] = [
+    { label: `Simple`, value: `simple` },
+    { label: `Advanced`, value: `advanced` },
+];
+
+// What the record asked for when it arrived, and what the reader has asked for since. Two refs rather than one
+// because a press that lands before the settings do may not be undone by the seeding that follows it.
+const openedIn = shallowRef<Partial<Record<ModelRoleBlockId, ModelView>>>({});
+const chosenView = ref<Partial<Record<ModelRoleBlockId, ModelView>>>({});
+watch(
+    loaded,
+    (isLoaded) => {
+        if (isLoaded) {
+            openedIn.value = Object.fromEntries(blocks.map((block) => [block.id, jobsDiffer(block.ids) ? `advanced` : `simple`]));
+        }
+    },
+    { immediate: true },
+);
+const viewOf = (id: ModelRoleBlockId): ModelView => chosenView.value[id] ?? openedIn.value[id] ?? `simple`;
+
+// Collapsing a group drops its ticks with it: a selection is a gesture over ROWS, and its rows have just gone.
+// Left standing, the next Advanced visit would open with jobs ticked that nobody on this screen selected.
+const setView = (block: { readonly id: ModelRoleBlockId; readonly ids: readonly ModelRole[] }, view: ModelView): void => {
+    chosenView.value = { ...chosenView.value, [block.id]: view };
+    if (view === `simple`) {
+        selectAllIn(block.ids, false);
+    }
+};
+
 /* THE PIN THE OPEN BULK PANEL HAS WRITTEN, or undefined before it has written one. It is what turns a bulk
  * add into an entry the picker can draw its KNOBS for: the footer only appears over a pin that exists
  * (ModelPinPickerBody), and "the model plus its tier, for all of these" is the whole point of the gesture, so
@@ -227,13 +336,8 @@ const withPin = (list: readonly ModelPin[], pin: ModelPin, replacing: ModelPin |
     return at === -1 ? [...kept, pin] : kept.map((held, index) => (index === at ? pin : held));
 };
 
-// Every job of the set, written together, so a selection of nine is one save rather than nine racing ones: the
-// settings patch merges at the top level, so nine separate writes would each carry a record read before the
-// last one landed.
-const acrossRoles = (roles: readonly ModelRole[], listFor: (role: ModelRole) => ModelPin[]): void =>
-    writeRoles(Object.fromEntries(roles.map((role) => [role, listFor(role)])) as Partial<Record<ModelRole, ModelPin[]>>);
-
-// The model, and every knob turned after it, onto every job of the set.
+// The model, and every knob turned after it, onto every job of the set (`acrossRoles`, upstairs, is the one
+// writer for both this and the collapsed list).
 const applyToRoles = (roles: readonly ModelRole[], pin: ModelPin): void => {
     const replacing = bulkPin.value;
     bulkPin.value = pin;
@@ -370,12 +474,28 @@ const eagernessOptions = [
          only route out of automatic tier selection that reaches beyond one conversation, and a link that lands
          on the top of a long settings page has not answered the question that was asked. -->
     <div id="models" class="flex flex-col gap-6">
-        <!-- ONE GROUP PER BLOCK, from the catalog. The heading and the line under it are the block's own, so a
-             group cannot end up describing a set of rows it no longer holds.
-             STICKY, because the header now carries a CONTROL over the rows rather than only their name, which
+        <!-- ONE GROUP PER BLOCK, from the catalog. The heading is the block's own, so a group cannot end up
+             describing a set of rows it no longer holds.
+             STICKY, because the header now carries CONTROLS over the rows rather than only their name, which
              is exactly what <RowGroup>'s own `sticky` is for: the rows you are ticking are the ones that carry
              you away from the button that acts on them. -->
-        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" :count="block.rows.length" :caption="block.caption" sticky>
+        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" sticky>
+            <!-- THE VIEW SWITCH, BUTTED AGAINST THE HEADING, where a row count and the block's own caption used
+                 to sit. Both were furniture on a page that has to be read: the count restated a list already on
+                 screen, and the caption said in a sentence what the heading says in two words. What belongs
+                 beside a group's name is the one control that changes what the group IS.
+                 IT STAYS ON A PHONE, unlike the selection cluster below: collapsing eighteen rows into three is
+                 worth more on a 390px screen than anywhere else, and switching a view spends nothing. -->
+            <template #info>
+                <SegmentedControl
+                    :model-value="viewOf(block.id)"
+                    :options="VIEWS"
+                    size="xs"
+                    :aria-label="`How to show ${block.label.toLowerCase()}`"
+                    @update:model-value="(view: ModelView) => setView(block, view)"
+                />
+            </template>
+
             <!-- THE SELECTION, IN THIS GROUP'S OWN HEADER AND ACTING ON THIS GROUP ALONE. It used to be one bar
                  over the whole page, which was the right shape while this page was one list of eighteen: "all of
                  these on one model" was then the only sentence available. With the blocks named it is the wrong
@@ -384,9 +504,11 @@ const eagernessOptions = [
                  somebody wants is a block's, so the control is a block's.
                  NOT ON A PHONE, with the ticks it commands. The mark column is a job's glyph there and never a
                  box (see <ModelRoleRow>): a bulk edit is not a gesture anybody performs on a 390px screen, and
-                 every row still sets its own model. What is withheld is the shortcut. -->
+                 every row still sets its own model. What is withheld is the shortcut.
+                 AND NOT IN THE COLLAPSED VIEW, where there are no rows to tick and one list to write: a
+                 select-all over rows nobody can see is a promise about a surface that is not on screen. -->
             <template #actions>
-                <div class="flex flex-wrap items-center gap-2 max-md:hidden">
+                <div v-if="viewOf(block.id) === `advanced`" class="flex flex-wrap items-center gap-2 max-md:hidden">
                     <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
                         <Checkbox
                             :model-value="allSelectedIn(block.ids)"
@@ -416,44 +538,63 @@ const eagernessOptions = [
                 </div>
             </template>
 
-            <ModelRoleRow
-                v-for="row in block.rows"
-                :key="row.role.id"
-                :role="row.role"
-                :icon="row.role.icon"
-                :list="row.list"
-                :selected="isSelected(row.role.id)"
-                :disabled="!loaded || (row.role.id === JUDGE && judgeOff)"
+            <!-- THE WHOLE GROUP AS ONE ROW. Not a summary of the rows below it — there are no rows below it —
+                 but the same setting read and written a block at a time. The judge's own switch is not honoured
+                 here and does not need to be: a group of five is not inert because one of its jobs is, and the
+                 row that owes that explanation is the judge's own, in the view that draws it. -->
+            <ModelGroupRow
+                v-if="viewOf(block.id) === `simple`"
+                :block="block"
+                :list="block.group"
+                :differs="jobsDiffer(block.ids)"
+                :disabled="!loaded"
                 :loaded="loaded"
-                @select="(on: boolean) => selectRole(row.role.id, on)"
-                @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
-            >
-                <!-- THE SLOT IS OFFERED TO ONE ROW IN EIGHTEEN, and the `v-if` is on the <template> so the other
-                     seventeen are handed no slot at all rather than an empty one: a slot that exists but renders
-                     nothing still opens the block under the row, which is 12px of dead space per row on a page
-                     whose whole point this round was to stop spending lines on nothing. -->
-                <template v-if="row.role.id === JUDGE" #note>
-                    <!-- Where the switch is. This is the only row on the page whose feature can be off from
-                         somewhere else, and a disabled control with no explanation is the thing a settings page
-                         owes an answer for. -->
-                    <p v-if="judgeOff" class="text-2xs text-subtle">
-                        Nothing is judging commands at the moment, so this is not in use.
-                        <RouterLink
-                            :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
-                            class="text-link hover:underline"
-                            >Turn the judge on</RouterLink
-                        >
-                        under Safety.
-                    </p>
-                    <!-- The one thing worth saying about this choice, and it is not "pick a cheap one": of every
-                         job on this page, the judge is the only one whose input may have been written by
-                         whoever the agent was reading. -->
-                    <p v-else class="text-2xs text-subtle">
-                        Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in
-                        something from outside, that text may be arguing for its own approval.
-                    </p>
-                </template>
-            </ModelRoleRow>
+                @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(block.group, index, anchor)"
+            />
+
+            <!-- …or one row per job, which is what the setting actually is. `v-for` inside a <template v-else>
+                 rather than beside a `v-else` of its own: the two directives on one element are a precedence
+                 puzzle nobody should have to solve while reading a settings page. -->
+            <template v-else>
+                <ModelRoleRow
+                    v-for="row in block.rows"
+                    :key="row.role.id"
+                    :role="row.role"
+                    :icon="row.role.icon"
+                    :list="row.list"
+                    :selected="isSelected(row.role.id)"
+                    :disabled="!loaded || (row.role.id === JUDGE && judgeOff)"
+                    :loaded="loaded"
+                    @select="(on: boolean) => selectRole(row.role.id, on)"
+                    @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
+                >
+                    <!-- THE SLOT IS OFFERED TO ONE ROW IN EIGHTEEN, and the `v-if` is on the <template> so the
+                         other seventeen are handed no slot at all rather than an empty one: a slot that exists
+                         but renders nothing still opens the block under the row, which is 12px of dead space per
+                         row on a page whose whole point this round was to stop spending lines on nothing. -->
+                    <template v-if="row.role.id === JUDGE" #note>
+                        <!-- Where the switch is. This is the only row on the page whose feature can be off from
+                             somewhere else, and a disabled control with no explanation is the thing a settings
+                             page owes an answer for. -->
+                        <p v-if="judgeOff" class="text-2xs text-subtle">
+                            Nothing is judging commands at the moment, so this is not in use.
+                            <RouterLink
+                                :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
+                                class="text-link hover:underline"
+                                >Turn the judge on</RouterLink
+                            >
+                            under Safety.
+                        </p>
+                        <!-- The one thing worth saying about this choice, and it is not "pick a cheap one": of
+                             every job on this page, the judge is the only one whose input may have been written
+                             by whoever the agent was reading. -->
+                        <p v-else class="text-2xs text-subtle">
+                            Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in
+                            something from outside, that text may be arguing for its own approval.
+                        </p>
+                    </template>
+                </ModelRoleRow>
+            </template>
         </RowGroup>
 
         <!-- THE CHAT'S OWN TURNS, which no job above ever touches, and the reason this is a group of its own
