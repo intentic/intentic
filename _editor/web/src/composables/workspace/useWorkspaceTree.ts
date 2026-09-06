@@ -1,8 +1,8 @@
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
-import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
+import { type NoticeModel, noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
-import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
+import { SandboxHttpError, sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { readFileWindow } from "./fileWindow";
 import { resetEmptyDirsState } from "./useEmptyDirs";
@@ -28,6 +28,25 @@ const { busy, notice: actionError, run } = useAsyncAction();
 const lazyChildren = ref<Map<string, readonly WorkspaceTreeEntry[]>>(new Map());
 const lazyHidden = ref<Map<string, number>>(new Map());
 const lazyLoading = ref<Set<string>>(new Set());
+/* The notice a lazy load raised, and the dir it was raised for. A failed dir is simply absent from
+ * lazyChildren, so the expansion watch below RE-ASKS for it on the next tree change, and when that succeeds the
+ * notice has to go with it: otherwise one network failure that childrenOf's own retry didn't catch pins
+ * "Couldn't open …" across the whole explorer (the desktop's header line has no dismiss), over a tree that has
+ * long since recovered, reading as if whatever the user is looking at is what failed.
+ * The NOTICE OBJECT is held, not just the path, so the clear is identity-checked, a recovered background read
+ * must not erase an unrelated file action's error that replaced it in the meantime (a rename that failed a
+ * second ago). */
+let loadNotice: { readonly path: string; readonly notice: NoticeModel } | undefined;
+
+// Retire a lazy-load notice that is still the one on screen. Called when its own dir loads, and when the
+// ground it referred to goes away (scope switch, sandbox switch) — a path in one scope's tree names nothing
+// in the next one's, so its complaint can't be left standing there.
+const clearLoadNotice = (): void => {
+    if (loadNotice !== undefined && actionError.value === loadNotice.notice) {
+        actionError.value = undefined;
+    }
+    loadNotice = undefined;
+};
 
 // Expanded directory paths (also the nest parents that fold sibling files, keyed by path). Module-level, next to
 // the lazy subtrees above, so the explorer's toolbar (WorkspaceDesktop) and its context menu can Collapse All
@@ -70,6 +89,7 @@ const collapseAll = (): void => {
 export const resetWorkspaceTreeState = (): void => {
     busy.value = false;
     actionError.value = undefined;
+    loadNotice = undefined;
     lazyChildren.value = new Map();
     lazyHidden.value = new Map();
     lazyLoading.value = new Set();
@@ -87,6 +107,10 @@ watch(workspaceAgent, () => {
     lazyChildren.value = new Map();
     lazyHidden.value = new Map();
     lazyLoading.value = new Set();
+    // …and so does a complaint about one of them. "Couldn't open intentic/_sandbox/…" names a directory in the
+    // tree that was just dropped, so leaving it up puts a conversation's failure on the shared workspace view,
+    // where it reads as a fault in whatever is open there.
+    clearLoadNotice();
 });
 
 /* The read-only "what the LLM sees" tree: the full /work filesystem the agent operates on, read DIRECTLY from
@@ -116,6 +140,28 @@ const canMoveInto = (source: string, targetDir: string): boolean =>
     !(targetDir === parentDir(source) || targetDir === source || targetDir.startsWith(`${source}/`));
 
 const jsonPost = (path: string, data: unknown): Promise<{ ok: true }> => sandboxJson<{ ok: true }>(path, jsonBody(`POST`, data));
+
+/* One directory's listing, RETRIED ONCE if the request never reached the daemon.
+ *
+ * This is a background read the user did not ask for by name, they opened a folder, and the daemon answers it
+ * in milliseconds. What fails here is the connection under it (a reconnect, a tunnel hiccup, a sleeping
+ * laptop's first request), and failing that on the first attempt puts a red "Couldn't open …" on the workspace
+ * header for a folder that would have listed fine 300ms later. A refused read is a different thing entirely,
+ * a denylisted path, an escape, a directory that isn't there, so a SandboxHttpError (the daemon answered, with
+ * a no) is passed straight out: retrying it would only ask the same question and get the same answer. */
+const childrenOf = async (path: string): Promise<WorkspaceChildrenResponse> => {
+    const request = (): Promise<WorkspaceChildrenResponse> =>
+        sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?${scopeQuery(new URLSearchParams({ path })).toString()}`);
+    try {
+        return await request();
+    } catch (failure) {
+        if (failure instanceof SandboxHttpError) {
+            throw failure;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return await request();
+    }
+};
 
 // Raw single-path daemon calls (no invalidate), the shared core for the single + batch mutations below.
 const moveRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/move`, { from, to });
@@ -258,17 +304,35 @@ export function useWorkspaceTree() {
         await fetchChildren(path);
     };
     const fetchChildren = async (path: string): Promise<void> => {
+        // Which tree the answer will be ABOUT, read before the request rather than when it lands: a scope switch
+        // mid-flight empties the lazy maps (the watch above), and a late answer written in after that would file
+        // one conversation's listing under the shared tree's identical path.
+        const asked = workspaceAgent.value;
         lazyLoading.value.add(path);
         try {
-            const body = await sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?${scopeQuery(new URLSearchParams({ path })).toString()}`);
+            const body = await childrenOf(path);
+            if (workspaceAgent.value !== asked) {
+                return;
+            }
             lazyChildren.value.set(path, body.entries);
             if (body.hidden > 0) {
                 lazyHidden.value.set(path, body.hidden);
             } else {
                 lazyHidden.value.delete(path);
             }
+            // A recovered retry retires the notice its own failure raised (see loadNotice above).
+            if (loadNotice?.path === path) {
+                clearLoadNotice();
+            }
         } catch (loadError) {
-            actionError.value = noticeFrom(loadError, `Couldn't open ${path}.`);
+            // Same reason as the write above: a read the user has already navigated away from doesn't get to
+            // complain about the tree they are looking at now.
+            if (workspaceAgent.value !== asked) {
+                return;
+            }
+            const notice = noticeFrom(loadError, `Couldn't open ${path}.`);
+            loadNotice = { path, notice };
+            actionError.value = notice;
         } finally {
             lazyLoading.value.delete(path);
         }
@@ -296,6 +360,16 @@ export function useWorkspaceTree() {
         },
         { immediate: true },
     );
+
+    // Closing the folder that failed retires its complaint: the retry above only runs while a dir is open, so
+    // a notice left behind a collapsed folder is one nothing will ever clear, and the desktop's status line
+    // has no dismiss. Only a CLOSE does this (the path was open and no longer is), never an unrelated toggle,
+    // so a failed drill-in that never expanded anything keeps its notice.
+    watch(expanded, (dirs, before) => {
+        if (loadNotice !== undefined && before.has(loadNotice.path) && !dirs.has(loadNotice.path)) {
+            clearLoadNotice();
+        }
+    });
 
     /* A lazily-loaded subtree lives outside the tree query, so a tree refresh (a user mutation, or the daemon's
      * file-watch push) would leave it frozen at whatever it held when it was expanded, a file created inside an
