@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Notice, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Button, CodeField, Notice, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
 import { useSafetyPolicy } from "../../../composables/sandbox/useSafetyPolicy";
 import { useDraft } from "../../../composables/useDraft";
@@ -13,9 +13,12 @@ import SafetyPolicyInfo from "./SafetyPolicyInfo.vue";
  * a command is dangerous is an act of understanding, and it is now done by a model that reads this text (the
  * daemon's guard/command-gate.ts runs the pipeline; the contract's safety-policy.ts argues the design).
  *
- * So the control is a textarea, and that is the honest shape. What the owner is configuring is a judgment, and
- * prose is what a judgment is written in. It also means the assistant can edit it when asked to — "stop asking
- * me about force-pushes in this repo" appends a line — which no arrangement of pickers could support.
+ * So the control is a document surface (<CodeField>, markdown), and that is the honest shape. What the owner is
+ * configuring is a judgment, prose is what a judgment is written in, and the file it edits is markdown — so it
+ * is edited where its headings and lists are coloured, on the same surface the skills and the memory notes use,
+ * rather than in a grey box of a fixed sixteen rows. It also means the assistant can edit it when asked to —
+ * "stop asking me about force-pushes in this repo" appends a line — which no arrangement of pickers could
+ * support.
  *
  * A DRAFT WITH AN EXPLICIT SAVE, not a per-keystroke write: this is long text somebody is composing, and every
  * turn that starts reads it. Committed on blur or from the button, the same shape as the custom system prompt
@@ -44,15 +47,22 @@ const commit = (): void => {
         </RowNote>
 
         <RowNote variant="block">
-            <textarea
-                v-model="draft"
-                rows="16"
-                :disabled="isLoading"
-                placeholder="Loading…"
-                :class="ui.inputSm('w-full resize-y font-mono leading-relaxed')"
-                aria-label="Safety policy"
-                @change="commit"
-            ></textarea>
+            <!-- The same source surface the skills and the memory notes are written on: markdown's own colours
+                 under a real caret, growing with the document instead of showing it through a sixteen-line
+                 window. The frame is the caller's (<CodeField> is a bare sheet by contract), and the scroll
+                 belongs to it: a policy that runs long stays inside the row rather than pushing the Save button
+                 and the notice below it off the page. -->
+            <div class="ui-field-shell max-h-[60dvh] overflow-auto p-2">
+                <CodeField
+                    v-model="draft"
+                    lang="markdown"
+                    :readonly="isLoading"
+                    :placeholder="isLoading ? `Loading…` : `What the assistant should stop and ask you about.`"
+                    aria-label="Safety policy"
+                    class="min-h-64"
+                    @change="commit"
+                />
+            </div>
 
             <!-- The one thing on this page that is NOT up for discussion, stated where somebody editing the text
                  above will read it. Without this the document looks like the whole of the policy, and an owner
