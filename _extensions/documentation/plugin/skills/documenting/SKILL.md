@@ -1,6 +1,6 @@
 ---
 name: documenting
-description: This workspace's architecture-documentation conventions, a package's page is its own README.md, the plain-language house style, which figures are computed rather than written, and the rule that a package's README is updated in the same commit as the change that invalidated it. Use when writing or editing a package README or anything under docs/architecture/, when asked to document a repo or package, and (without being asked) when a change alters what a package is for, how it fits together, or which files matter in it.
+description: The workspace's documentation conventions: a package's page is its own README.md, plain-language house style, computed figures, README updated in the same commit that invalidated it. Use when editing a package README or docs/architecture/, and unasked when a change alters what a package is for or how it fits.
 ---
 
 # Documenting a repository

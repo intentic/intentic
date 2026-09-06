@@ -1,6 +1,6 @@
 ---
 name: chrome
-description: Work inside "${id}", the user's OWN signed-in browser, through the extension installed in it — open pages, read them, click and type, on the sites they have allowed, while they watch. Use for anything that needs THEIR session (work SSO, a passkey, a bank, a site that blocks datacentre traffic) rather than the sandbox's own browser, and whenever the user says "my browser", "the tab I have open", or names a site they are already signed into.
+description: Use "${id}", the user's OWN signed-in browser, via its extension: open, read, click and type on the sites they allow. For anything needing THEIR session (work SSO, a passkey, a bank, a datacentre-blocked site), or when they say "my browser", "the tab I have open", or name a site they are signed into.
 ---
 
 ${tools}

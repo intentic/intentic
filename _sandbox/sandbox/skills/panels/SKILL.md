@@ -1,6 +1,6 @@
 ---
 name: panels
-description: Give a repository an operator panel, a small web UI (dev server) the user opens from the sidebar to run and preview that repo. Every git repo under /work is a sidebar entry; a repo gets a panel by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to open, preview, or operate from the sidebar.
+description: Give a repository an operator panel: a small web UI (dev server) the user opens from the sidebar to run and preview that repo, by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to open, preview, or operate from the sidebar.
 ---
 
 # Operator panels (per-repository)

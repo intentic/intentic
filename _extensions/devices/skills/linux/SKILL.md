@@ -1,6 +1,6 @@
 ---
 name: linux
-description: Operate "${id}", the user's own Linux device, run commands, read and write files, capture its screen. Use whenever the user says "my machine", "my laptop", "my PC", "my desktop", "locally", or names this device, and for anything that has to happen on their own device rather than in the sandbox.
+description: Operate "${id}", the user's own Linux device: run commands, read and write files, capture its screen. Use whenever the user says "my machine", "my laptop", "my PC", "locally", or names this device, and for anything that must happen on their device rather than in the sandbox.
 ---
 
 ${tools}

@@ -397,7 +397,7 @@ test("the request's tools become remote http MCP servers alongside the ui server
         captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    const obs = { type: "http", url: "https://signoz.example.com/mcp", alwaysLoad: true, headers: { Authorization: "Bearer tok" } };
+    const obs = { type: "http", url: "https://signoz.example.com/mcp", headers: { Authorization: "Bearer tok" } };
     const tools = [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }];
 
     await collect({ ...request, tools }, capture);
@@ -1815,11 +1815,30 @@ test("fast speed is asked for per session, and only by the turn that wanted it",
     };
 
     await collect({ ...request, fast: true }, capture);
-    expect(captured.at(-1)?.settings).toEqual({ fastMode: true, fastModePerSessionOptIn: true });
+    expect(captured.at(-1)?.settings).toMatchObject({ fastMode: true, fastModePerSessionOptIn: true });
 
     // Not `{fastMode: false}`, an absent ask must leave the lower-precedence settings layers alone.
     await collect(request, capture);
-    expect(captured.at(-1)?.settings).toBeUndefined();
+    expect(captured.at(-1)?.settings).not.toHaveProperty("fastMode");
+    expect(captured.at(-1)?.settings).not.toHaveProperty("fastModePerSessionOptIn");
+});
+
+/* THE CLI'S OWN SKILLS THAT OPEN ONTO NOTHING HERE (HEADLESS_SETTINGS): `loop`, `schedule`, `keybindings-help`
+ * and `update-config` describe an interactive process this harness does not run, so they are hidden on every
+ * turn through the same flag layer, and MERGED with the fast-mode ask rather than replaced by it. */
+test("the bundled CLI-only skills are hidden from the model on every turn, fast or not", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const hidden = { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off" };
+
+    await collect(request, capture);
+    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden });
+
+    await collect({ ...request, fast: true }, capture);
+    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, fastMode: true, fastModePerSessionOptIn: true });
 });
 
 /* WHAT SPEED THE TURN ACTUALLY RAN AT, which is the half that makes the toggle above safe to ship. Fast mode

@@ -1,6 +1,6 @@
 ---
 name: services
-description: Discover and run the platform's premium services (research, data, heavy compute) priced in the owner's membership credits, via the `services` CLI. Use when a task would benefit from a capability no local tool provides, check the catalog, then ask for a run; the owner approves it on a card in chat before anything is spent.
+description: Discover and run the platform's premium services (research, data, heavy compute) priced in the owner's membership credits, via the `services` CLI. Use when a task would benefit from a capability no local tool provides: check the catalog, then ask for a run; the owner approves it on a card before anything is spent.
 ---
 
 # Premium services

@@ -1,6 +1,6 @@
 ---
 name: provide
-description: Turn the owner's existing API, model, or dataset into a paid service on the platform's services catalog, build the thin wrapper endpoint, self-test it against the admission probe's three checks, and hand the owner the exact values the listing form needs. Use when the owner wants to sell, list, or offer something they already run as a metered service agents can pay for.
+description: Turn the owner's API, model, or dataset into a paid service on the platform's services catalog: build the wrapper endpoint, self-test it against the admission probe, and hand the owner the values the listing form needs. Use when the owner wants to sell or list something they already run as a metered service.
 ---
 
 # Offer a paid service

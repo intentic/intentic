@@ -1,6 +1,6 @@
 ---
 name: wallet
-description: Pay x402-payable web endpoints in USDC from the sandbox wallet via the `wallet` CLI, under the owner's spending policy. Use when a useful API answers 402 Payment Required with an x402 challenge, or when a task needs a paid machine-payable service, check the price, then ask; the owner approves each payment on a card in chat unless it sits inside their standing auto-approve band.
+description: Pay x402-payable endpoints in USDC from the sandbox wallet via the `wallet` CLI, under the owner's spending policy. Use when an API answers 402 Payment Required with an x402 challenge or a task needs a paid service: check the price, then ask; the owner approves each payment outside their auto-approve band.
 ---
 
 # The sandbox wallet

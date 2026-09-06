@@ -1,6 +1,6 @@
 ---
 name: npmjs
-description: Act on npmjs.com as the logged-in user through a real browser, approve staged publishes, answer WebAuthn/2FA prompts, manage access tokens and package settings. Use when npm asks for a web approval, a publish needs 2FA the CLI cannot answer, or the user asks to do something on npmjs.com.
+description: Act on npmjs.com as the logged-in user through a real browser: approve staged publishes, answer WebAuthn/2FA prompts, manage access tokens and package settings. Use when npm asks for a web approval or 2FA the CLI cannot answer, or the user asks for something on npmjs.com.
 ---
 
 # npmjs.com (connected browser)

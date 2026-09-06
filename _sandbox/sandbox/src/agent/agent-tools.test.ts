@@ -15,15 +15,19 @@ test("internalTools rejects a malformed payload (a provisioning bug, not silentl
     expect(() => internalTools(encode([{ url: "https://x/mcp" }]))).toThrow();
 });
 
-test("mcpServersOf builds a remote http server with bearer auth and alwaysLoad", () => {
-    expect(mcpServersOf([{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }])).toEqual({
-        obs: { type: "http", url: "https://signoz.example.com/mcp", alwaysLoad: true, headers: { Authorization: "Bearer tok" } },
+// Deferred behind tool search (no `alwaysLoad`): pinned, a connected computer's 25 schemas rode every call
+// and were reached in 5% of sessions; the device skill names the tools and how to load them instead.
+test("mcpServersOf builds a remote http server with bearer auth, deferred behind tool search", () => {
+    const servers = mcpServersOf([{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }]);
+    expect(servers).toEqual({
+        obs: { type: "http", url: "https://signoz.example.com/mcp", headers: { Authorization: "Bearer tok" } },
     });
+    expect(servers["obs"]).not.toHaveProperty("alwaysLoad");
 });
 
 test("a tool without a token carries no Authorization header", () => {
     expect(mcpServersOf([{ name: "pub", url: "https://pub.example.com/mcp" }])).toEqual({
-        pub: { type: "http", url: "https://pub.example.com/mcp", alwaysLoad: true },
+        pub: { type: "http", url: "https://pub.example.com/mcp" },
     });
 });
 
@@ -32,7 +36,7 @@ test("a later same-named tool overrides an earlier one (external overrides inter
         { name: "obs", url: "https://internal/mcp", token: "a" },
         { name: "obs", url: "https://external/mcp", token: "b" },
     ]);
-    expect(servers["obs"]).toEqual({ type: "http", url: "https://external/mcp", alwaysLoad: true, headers: { Authorization: "Bearer b" } });
+    expect(servers["obs"]).toEqual({ type: "http", url: "https://external/mcp", headers: { Authorization: "Bearer b" } });
 });
 
 test("no tools → an empty server map", () => {

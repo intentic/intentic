@@ -1,6 +1,6 @@
 ---
 name: obsidian
-description: The owner's own Obsidian vault, live, through the Local REST API plugin, read, search, write and open notes in the app they actually keep their notes in, and carry notes between it and this workspace's knowledge base. Use whenever the user says "my vault", "my notes", "Obsidian", or asks you to look something up in, or file something into, the notes they keep themselves.
+description: The owner's Obsidian vault through the Local REST API plugin: read, search, write and open notes, and carry notes between it and this workspace's knowledge base. Use whenever the user says "my vault", "my notes", "Obsidian", or asks to look up or file something in their own notes.
 ---
 
 # ${id}: the owner's Obsidian vault

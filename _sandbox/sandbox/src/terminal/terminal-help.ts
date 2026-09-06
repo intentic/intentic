@@ -168,13 +168,13 @@ export interface TerminalHelpDeps {
 export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
         name: "terminal",
-        /* IN THE PROMPT, not behind tool search, the `ui` ask tool's reasoning, and this feature is the
-         * clearest case of it there is. A model that has to go LOOKING for this tool does not know the
-         * handover exists at the one moment it matters, and what it does instead is exactly what prompted this
-         * work: it writes the command out in prose and asks the owner to run it in their own shell, next to a
-         * pane already sitting at the prompt. The tool is worth its place in every turn's context precisely
-         * because the alternative is not "no handover" but "a worse handover, in words". */
-        alwaysLoad: true,
+        /* DEFERRED behind tool search since 2026-09-06. It was pinned (`alwaysLoad`) on the argument that a
+         * model which has to go LOOKING for this tool does not know the handover exists at the one moment it
+         * matters, and writes the command out for the owner to run in their own shell instead. The pin did
+         * not buy that: across 1,138 sessions with the schema in every prompt, the tool was called zero times.
+         * What has surfaced the other deferred seams (`mcp__watch__start`, the diagnostics reads) is a sentence
+         * in the system append that names the SITUATION and the tool, so that is where the handover now lives
+         * (agent/system-prompt.ts TERMINAL_GUIDANCE), told only to the turns that mount this server. */
         tools: [
             sdk().tool(
                 "request_help",

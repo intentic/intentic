@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
-import { accountSkillLine, browserToolsNote, identitiesSkill } from "../browser/browser-skill.js";
+import { accountSkillLine, browserToolsNote, identitiesSkill, rosterSummary } from "../browser/browser-skill.js";
 import { loadedSkillFile, loadedSkillsRoot, removeLoadedSkill, writeLoadedSkill } from "../settings/loaded-skills.js";
 import type { CapabilityCtx } from "./capability.js";
 import { contributionKey, contributionRegistry, hostOf } from "./contributions.js";
@@ -85,11 +85,12 @@ const effectiveEntries = async (ctx: CapabilityCtx, delta?: AccountSkillDelta): 
 
 // Frontmatter surgery on the rendered pack text: the group's name (two instances of one card must not
 // register one skill name each, they ARE one skill now), the marker stamped after the frontmatter, and the
-// account ids appended to the description so the catalog line says who this skill can act as.
+// account ids appended to the description so the catalog line says who this skill can act as (a few ids and
+// a count past that, rosterSummary: the description is paid for on every call, the roster block is not).
 const stampGroupSkill = (source: string, name: string, ids: readonly string[]): string =>
     source
         .replace(/^name: .*$/m, `name: ${name}`)
-        .replace(/^(description: .*)$/m, `$1 Connected accounts: ${ids.join(", ")}.`)
+        .replace(/^(description: .*)$/m, `$1 Connected accounts: ${rosterSummary(ids)}.`)
         .replace(/^---\n([\s\S]*?)\n---\n/, (frontmatter) => `${frontmatter}\n${ACCOUNT_SKILL_MARKER}\n`);
 
 const stampIdentitiesSkill = (source: string): string =>

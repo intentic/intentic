@@ -29,9 +29,7 @@ const ACP = capabilitiesOf("some-installed-agent", "native");
 
 test("nothing to append is undefined, not an empty string", () => {
     // The runner spreads the result into the request; "" would hang a trailing separator off the base prompt.
-    expect(
-        turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "", stableSystemPrompt: false }).systemAppend,
-    ).toBeUndefined();
+    expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "", stableSystemPrompt: false }).systemAppend).toBeUndefined();
 });
 
 test("custom replaces everything: nothing is appended to it", () => {
@@ -86,9 +84,7 @@ test("a custom prompt is added where it cannot replace", () => {
 // all. On one that can only add there is simply nothing to add, and an empty system message is not the same
 // request as no system message.
 test("an emptied custom prompt replaces with nothing, and adds nothing", () => {
-    expect(
-        turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", stableSystemPrompt: false }).systemPrompt,
-    ).toBe("");
+    expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", stableSystemPrompt: false }).systemPrompt).toBe("");
     const grok = turnPromptPlacement({ capabilities: GROK, mode: "custom", systemPrompt: "", stableSystemPrompt: false });
     expect(grok.systemAppend).toBeUndefined();
     expect(grok.systemPrompt).toBeUndefined();
@@ -159,6 +155,10 @@ test("a turn holding accounts is told about the routed browser, and one without 
     }) as string;
     expect(withAccounts).toContain("mcp__browser__");
     expect(withAccounts).toContain("`account` argument");
+    // The accounts tools are deferred too (accounts-tools.ts: pinned, 4 of 327 sessions called them), so the
+    // same sentence has to say how they load and what the roster tool is called.
+    expect(withAccounts).toContain("ToolSearch `+accounts`");
+    expect(withAccounts).toContain("mcp__accounts__roster");
     // Anonymous and signed-in are different prefixes, not one tool with a flag: a turn that confuses them does
     // an account's work signed out and cannot tell why.
     expect(withAccounts).toContain("mcp__web__browser_navigate");
@@ -166,6 +166,7 @@ test("a turn holding accounts is told about the routed browser, and one without 
     const anonymousOnly = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, browserOutputDir }) as string;
     expect(anonymousOnly).toContain("mcp__web__browser_navigate");
     expect(anonymousOnly).not.toContain("mcp__browser__");
+    expect(anonymousOnly).not.toContain("mcp__accounts__");
 });
 
 test("claude keeps the CLI's preset and hands the same guidance to its append", () => {
@@ -312,4 +313,23 @@ test("the diagnostics tools are named on the turns that mounted them, and nowher
     // And a Codex turn, which has no such server, is not sent looking for one.
     const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
     expect(codex.systemAppend).not.toContain("mcp__diagnostics__");
+});
+
+/* THE TERMINAL HANDOVER IS NAMED WHERE IT CAN BE LOADED. The server is deferred (terminal-help.ts: pinned into
+ * every prompt, it was called zero times in 1,138 sessions), so this sentence is what tells a turn the handover
+ * exists, and it rides only the turns agent.ts mounted the server on: attended, with the tmux wrapper. */
+test("the terminal hand-off is named on the turns that mounted it, and nowhere else", () => {
+    const mounted = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, terminal: true }) as string;
+    expect(mounted).toContain("mcp__terminal__request_help");
+    expect(mounted).toContain("ToolSearch (`+terminal`)");
+    // Said for the moment it arrives in, not as a tool summary: the prompt-shaped cue is the recognisable part.
+    expect(mounted).toContain("still running");
+
+    const withheld = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    expect(withheld).not.toContain("mcp__terminal__");
+    // Same guidance under the CLI preset, and none of it on a runtime the loop is not wired for.
+    const preset = sdkSystemPrompt({ ...BASE, mode: "claude", custom: undefined, terminal: true }) as { append: string };
+    expect(preset.append).toContain("mcp__terminal__request_help");
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    expect(codex.systemAppend ?? "").not.toContain("mcp__terminal__");
 });

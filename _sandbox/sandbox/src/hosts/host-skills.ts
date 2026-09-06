@@ -12,13 +12,21 @@
  *   - which shell it is actually talking to (the single biggest source of failed first commands),
  *   - how to do a job in ONE call instead of ten (every call is a round trip through a tunnel to a laptop),
  *   - the platform's non-obvious spellings (utf8 encoding on Windows, Wayland vs X11 clipboards on Linux),
- *   - and what to do when a call is REFUSED, which is a scope decision the user made, not an error to retry. */
+ *   - and what to do when a call is REFUSED, which is a scope decision the user made, not an error to retry.
+ *
+ * The note opens by saying how to LOAD the tools, because the server is deferred behind tool search
+ * (agent/agent-tools.ts: pinned, its 25 schemas rode every call and were reached in 5% of sessions). A deferred
+ * tool is a name in a list until something says to go and get it; the skill is that something. */
 export const HOST_TOOLS_NOTE = `# Connected device "\${id}"
 
 This is a real device belonging to the person you are working for. It is not the sandbox: the sandbox is where
 you live and where the repository is; this is their own machine, reached over a socket it opened to us.
 
 ## Tools
+
+These tools are DEFERRED: their schemas are not in your prompt until you load them. Before the first call, run
+ToolSearch with \`+mcp__\${id}__\` (all of them) or \`select:mcp__\${id}__describe,mcp__\${id}__run_command\` (just
+the ones you need). Then:
 
 | Tool | What it does |
 | --- | --- |

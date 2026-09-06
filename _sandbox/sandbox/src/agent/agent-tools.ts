@@ -24,16 +24,24 @@ export const internalTools = (encoded: string | undefined): AgentTool[] => {
     return z.array(agentToolSchema).parse(JSON.parse(json));
 };
 
-// Build the SDK `mcpServers` map from a tool list. Tools are `alwaysLoad` so a small, curated set stays
-// present in the prompt instead of being deferred behind tool search, best agent performance for known tools.
-// A later entry with the same name wins (lets external config override an internal default).
+/* Build the SDK `mcpServers` map from a tool list. A later entry with the same name wins (lets external config
+ * override an internal default).
+ *
+ * DEFERRED behind tool search, the SDK's default, where these used to be pinned (`alwaysLoad`) "for best agent
+ * performance on known tools". The pin was measured on 2026-09-06 over this workspace's 327 sessions since
+ * 08-29: the three connected computers here were reached in 9, 7 and 1 of them, while each rode every call of
+ * all 327 as 25 tool schemas (~3k tokens apiece), and the SDK blocks turn start on a pinned server's connect
+ * for up to 5s, so an offline laptop stalled every turn. Deferred, a server costs nothing until ToolSearch
+ * pulls it in, and the servers that already WERE deferred show the model finds them: `web` in 40% of
+ * sessions, `deps` in 16%. Discoverability is a sentence's job, not a schema's: a device's skill names every
+ * tool and how to load them (hosts/host-skills.ts), and the deferred-tool list in the prompt carries the
+ * names of the rest. */
 export const mcpServersOf = (tools: readonly AgentTool[]): Record<string, McpServerConfig> => {
     const servers: Record<string, McpServerConfig> = {};
     for (const tool of tools) {
         servers[tool.name] = {
             type: "http",
             url: tool.url,
-            alwaysLoad: true,
             ...(tool.token !== undefined ? { headers: { Authorization: `Bearer ${tool.token}` } } : {}),
         };
     }

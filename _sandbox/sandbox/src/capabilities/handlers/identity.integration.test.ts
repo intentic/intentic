@@ -69,8 +69,10 @@ test("two identities are two roster lines on one skill, and each keeps its own s
     const skill = await readWorkspaceFile(identitiesSkillPath(root));
     expect(skill).toContain("- `main`: studio@gmail.com · may NOT open accounts");
     expect(skill).toContain("- `scout`: scout@gmail.com · may open accounts");
-    // Both route from the one catalog line.
-    expect(skill).toMatch(/^description: .*main \(studio@gmail\.com\).*scout \(scout@gmail\.com\)/m);
+    // Both route from the one catalog line, by id. The addresses stay on the roster lines: the description is
+    // read on every call of every session, and sixteen identities once put 836 characters of e-mail there.
+    expect(skill).toMatch(/^description: .*\(main, scout\)/m);
+    expect(skill).not.toMatch(/^description: .*@/m);
 });
 
 test("apply rejects a non-address and a dangling mailbox reference at the form, not turns later", async () => {

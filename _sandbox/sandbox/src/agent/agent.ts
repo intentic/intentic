@@ -489,6 +489,23 @@ const CHECKLIST_ENV: Record<string, string> = {
     CLAUDE_CODE_ENABLE_TASKS: "1",
 };
 
+/* THE CLI'S BUNDLED SKILLS THAT OPEN ONTO NOTHING HERE, hidden from the model on every turn. Claude Code ships
+ * skills for its own interactive process: `loop` and `schedule` run prompts on a timer inside a CLI that stays
+ * alive, and this one dies when the turn settles (the dead letter that already removes ScheduleWakeup and
+ * Cron*, CLI_SCHEDULER_TOOLS; the daemon's automations and the watch tools are the scheduler here);
+ * `keybindings-help` edits a terminal keymap nobody here types into; `update-config` routes "from now on,
+ * whenever X" into the CLI's settings.json hooks, where this sandbox's rules and automations are the mechanism
+ * the owner can see and edit. Each was a paragraph of every prompt describing a door onto nothing, ~1.5k
+ * characters between them, and an agent that walked through one reported success.
+ *
+ * `off` hides a skill from the model and from `/name` both. This rides the per-turn flag layer beside the
+ * fast-mode ask, and the CLI lists `skillOverrides` among the object-valued settings it merges per key (with
+ * `env` and `mcpServers`), so an owner's own override elsewhere stands. Verified against 2.1.257; the key is
+ * typed on the SDK's Settings, so a CLI that drops it fails the build rather than the prompt. */
+const HEADLESS_SETTINGS: Exclude<NonNullable<Options["settings"]>, string> = {
+    skillOverrides: { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off" },
+};
+
 // Combine hook sets, CONCATENATING the matchers registered for the same event. A plain object spread would
 // have the last contributor silently win the key, two producers of PreToolUse:Bash (the tmux wrapper and the
 // install steer) and only one of them would ever fire.
@@ -582,6 +599,13 @@ const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinki
  * Its own function so the answer costs baseOptions no branch of its own. */
 const holdsBrowserAccounts = (accounts: Record<string, string> | undefined): boolean => Object.keys(accounts ?? {}).length > 0;
 
+/* Whether this turn mounts the terminal hand-off server (terminal/terminal-help.ts). One predicate for the
+ * mount and for the system-prompt sentence that names the tool, so the two cannot drift: the server is
+ * deferred, and a sentence about a tool that is not mounted would send the turn to ToolSearch for nothing.
+ * Two gates, both about the tool being answerable: an unattended turn would park on a person who is not there,
+ * and without the tmux wrapper the agent's Bash runs in no pane at all, so there would be nothing to type into. */
+const terminalMounted = (request: AgentRequest, tmuxEnabled: boolean): boolean => tmuxEnabled && request.unattended !== true;
+
 // Base SDK options for the turn.
 const baseOptions = (
     request: AgentRequest,
@@ -637,6 +661,7 @@ const baseOptions = (
             browserOutputDir: request.browserOutputDir,
             browserAccounts: holdsBrowserAccounts(request.browserAccounts),
             diagnostics: request.diagnostics === true,
+            terminal: terminalMounted(request, tmuxEnabled),
         }),
         // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
         // hooks, and .mcp.json, plus the user tier. The SDK default is [] (loads nothing), so every filesystem
@@ -655,9 +680,13 @@ const baseOptions = (
          * chat's toggle would silently start billing every other chat, and every automation and front desk turn, at
          * fast-mode rates. Per-session keeps it what the composer says it is: a property of this turn.
          *
-         * Omitted entirely when the turn didn't ask, rather than sent as `false`: a `false` in the flag layer would
-         * override a user's own settings.json opt-in, which is theirs to make on turns we say nothing about. */
-        ...(request.fast === true ? { settings: { fastMode: true, fastModePerSessionOptIn: true } } : {}),
+         * Omitted from the object when the turn didn't ask, rather than sent as `false`: a `false` in the flag
+         * layer would override a user's own settings.json opt-in, which is theirs to make on turns we say nothing
+         * about. */
+        settings: {
+            ...HEADLESS_SETTINGS,
+            ...(request.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
+        },
         env: {
             ...process.env,
             // cli-kind capability credentials (e.g. DISCORD_BOT_TOKEN) the agent's shell reads. Rebuilt every turn,
@@ -1183,11 +1212,9 @@ export async function* runAgent(
             // rides, and the signal that settles a park when the turn dies under it.
             ...(request.accountsServer === undefined ? {} : { accounts: request.accountsServer(push, request.signal) }),
             /* Handing the TERMINAL to the owner (terminal/terminal-help.ts), the same handles again, plus the
-             * `shell` handle that names which tmux session this turn's commands run in. Two gates, and both are
-             * about the tool being answerable rather than about taste: an unattended turn would park on a person
-             * who is not there (the `ui` and request_help rule), and without the tmux wrapper the agent's Bash
-             * runs in no pane at all, so there would be nothing for the owner to type into. */
-            ...(request.unattended === true || !tmuxEnabled
+             * `shell` handle that names which tmux session this turn's commands run in. Gated by terminalMounted,
+             * the predicate the system prompt's sentence about this tool reads too. */
+            ...(!terminalMounted(request, tmuxEnabled)
                 ? {}
                 : {
                       terminal: terminalHelpServer({

@@ -225,7 +225,7 @@ const SECRETS_GUIDANCE =
     "chat for those people and the turn waits; a refusal names who can release it, so carry on without it and " +
     "say plainly what you left undone rather than looking for another way in. A gated account is not loaded " +
     "into your turn at all, so it can look unconnected: `secrets gates` says what is gated and by whom, and " +
-    "`secrets request <id> --why \"…\"` asks for an account or connector for the rest of the conversation.";
+    '`secrets request <id> --why "…"` asks for an account or connector for the rest of the conversation.';
 
 /* The outside-content envelope language (base's outside-text.ts and the seams that wrap with it). One
  * stable paragraph for the same reason the secrets language is one: the model SEES the tags on every stranger
@@ -255,16 +255,23 @@ const browserGuidance = (outputDir: string, accounts = false): string =>
     `Screenshots land in ${outputDir} whatever you name them, never in the repo ` +
     `you are working in; the result tells you the path, so Read it back from there. Clicks and navigations time ` +
     `themselves out and come back as errors, but \`browser_evaluate\` awaits whatever the page hands it: give any ` +
-    `in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.${ 
-    /* The second browser, named only where it exists. This turn holds signed-in accounts, and reaching them is
-     * a DIFFERENT tool prefix rather than an argument to the one above: `mcp__web__` is credential-free and
-     * anonymous, `mcp__browser__` acts as somebody. A turn that reached for the anonymous one to do an
-     * account's work would be quietly signed out and would not know why. */
-    accounts
-        ? " That browser holds no identity. To act as one of this sandbox's signed-in accounts, ToolSearch " +
-          "`+mcp__browser__` instead: those tools take an `account` argument and drive that account's own " +
-          "persisted, signed-in profile. `mcp__accounts__roster` names the accounts you may use."
-        : ""}`;
+    `in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.${
+        /* The second browser, named only where it exists. This turn holds signed-in accounts, and reaching them is
+         * a DIFFERENT tool prefix rather than an argument to the one above: `mcp__web__` is credential-free and
+         * anonymous, `mcp__browser__` acts as somebody. A turn that reached for the anonymous one to do an
+         * account's work would be quietly signed out and would not know why.
+         *
+         * The `accounts` server (browser/accounts-tools.ts) rides the same clause because it is deferred too, since
+         * 2026-09-06: pinned, its seven schemas were paid for by every call and reached in 4 of 327 sessions. The
+         * account skills name each tool; this is the one line a turn reads before it has opened any skill. */
+        accounts
+            ? " That browser holds no identity. To act as one of this sandbox's signed-in accounts, ToolSearch " +
+              "`+mcp__browser__` instead: those tools take an `account` argument and drive that account's own " +
+              "persisted, signed-in profile. The `accounts` tools are deferred the same way (ToolSearch " +
+              "`+accounts`): `mcp__accounts__roster` names the accounts you may use, and the rest type stored " +
+              "credentials, fetch e-mail codes and hand a stuck page to the owner."
+            : ""
+    }`;
 
 /* THE RECORDS, NAMED. logs/diagnostics-tools.ts made the daemon's own log, the turn ledger, the perf file and
  * the resource series into four filtered reads, on the argument that "a path in a README is something an agent
@@ -284,11 +291,26 @@ const DIAGNOSTICS_GUIDANCE =
     "When something about THIS sandbox went wrong (a turn that failed or died, an automation that crashed, the " +
     "editor misbehaving, work that felt slow, a machine that may have run out of memory) ask the daemon's own " +
     "records before re-instrumenting code or trying to reproduce it. Load them with ToolSearch (`+diagnostics`): " +
-    "`mcp__diagnostics__errors` is the daemon's log (`source: \"browser\"` for what the editor reported about " +
+    '`mcp__diagnostics__errors` is the daemon\'s log (`source: "browser"` for what the editor reported about ' +
     "itself), `mcp__diagnostics__turns` is how recent turns ended and whether anything checked their work, " +
     "`mcp__diagnostics__slow` is operations over budget with the machine's load at the time, and " +
     "`mcp__diagnostics__resources` is memory, OOM kills and event-loop stalls over time. Each takes a window and " +
     "answers newest-first; none can write.";
+
+/* THE TERMINAL HANDOVER (terminal/terminal-help.ts), named for the situation it is for. The tool sat pinned in
+ * every prompt as a schema and was called zero times in 1,138 sessions; the failure it exists to replace, the
+ * agent writing a command out in prose for the owner to run in their own shell beside a pane already waiting
+ * for them, went on regardless. A schema says what a tool does; this says WHEN, in the words the moment
+ * actually arrives in (Bash has said the command is still running, the pane shows a prompt), because that is
+ * the moment the model has to recognise. Gated on the server being mounted (attended turn, tmux wrapper on):
+ * naming it on an unattended turn would send the model to ToolSearch for a tool that is not there. */
+const TERMINAL_GUIDANCE =
+    "When a command you started is sitting at a prompt only a person can answer (a one-time password, a " +
+    "security-key touch, a confirmation you cannot give) and Bash has handed the turn back saying it is still " +
+    "running, hand the terminal to the owner: load `mcp__terminal__request_help` with ToolSearch (`+terminal`) " +
+    "and say precisely what needs typing. The call waits while they type into that very pane and returns what " +
+    "the terminal says afterwards. Do not write the command out for them to run in their own shell next to a " +
+    "pane that is already waiting for them.";
 
 /* THE CONVENTIONS THAT BELONG TO THE WORKSPACE, not to whoever is reading it. Each describes something enforced
  * what its absence measurably cost.
@@ -412,12 +434,22 @@ export interface SdkSystemPromptInput {
     // Whether turn-plan mounted the diagnostics server this turn (withheld from a persona whose files power is
     // `none`), so the sentence naming its tools rides only where they can be loaded.
     readonly diagnostics?: boolean;
+    // Whether agent.ts mounted the terminal hand-off server this turn (attended, tmux wrapper on), so the
+    // sentence naming it rides only where it can be loaded.
+    readonly terminal?: boolean;
 }
 
 // This harness's own guidance, in most-stable-first order, with whatever the turn composed after it. Shared by
 // both built-in bases so they differ only in the base itself, the guidance describes widgets THIS app renders
 // and conventions THIS workspace enforces, both of which hold whichever prompt the agent is wearing.
-const harnessGuidance = ({ append, unattended, browserOutputDir, browserAccounts, diagnostics }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
+const harnessGuidance = ({
+    append,
+    unattended,
+    browserOutputDir,
+    browserAccounts,
+    diagnostics,
+    terminal,
+}: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     // First, and unconditional: what everything below is guidance ABOUT. Under the Claude preset this is the
     // only place the product is named.
     SELF_GUIDANCE,
@@ -436,6 +468,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir, browserAccounts
     // for tools it cannot load, or installing its own.
     ...(browserOutputDir === undefined ? [] : [browserGuidance(browserOutputDir, browserAccounts === true)]),
     ...(diagnostics === true ? [DIAGNOSTICS_GUIDANCE] : []),
+    ...(terminal === true ? [TERMINAL_GUIDANCE] : []),
     ...(append === undefined ? [] : [append]),
 ];
 

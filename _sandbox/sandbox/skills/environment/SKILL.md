@@ -1,6 +1,6 @@
 ---
 name: environment
-description: Extend this sandbox's own environment (system packages, language toolchains, SDKs, e.g. Rust, Android, JDK, Go, Python) by proposing custom Dockerfile steps the owner approves. Use when a task needs a tool that isn't installed and a runtime install wouldn't survive, or when the user asks to add capabilities to the sandbox itself.
+description: Extend this sandbox's own environment (system packages, language toolchains, SDKs: Rust, Android, JDK, Go, Python) by proposing Dockerfile steps the owner approves. Use when a task needs a tool that isn't installed and a runtime install wouldn't survive, or the user asks to add capabilities to the sandbox itself.
 ---
 
 # Sandbox environment (overlay Dockerfile)

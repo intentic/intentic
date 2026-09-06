@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: The owner's personal knowledge base, a markdown folder that is also a typed graph of the people, projects, companies, decisions and terms around this work, driven by the `kb` CLI. Use it BEFORE answering anything about the owner, who they work with, what a project or an internal word means, or what was decided and why, and use it WITHOUT being asked to record a durable fact you have just learned about any of those. Not for facts about the code itself (that is what the repository and its documentation are for).
+description: The owner's knowledge base: a markdown folder that is also a typed graph of people, projects, decisions and terms, via the `kb` CLI. Use BEFORE answering anything about the owner, who they work with, what a project or term means, or what was decided and why; record durable facts unasked. Not for facts about the code.
 ---
 
 # The knowledge base

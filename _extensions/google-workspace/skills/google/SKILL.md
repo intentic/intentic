@@ -1,6 +1,6 @@
 ---
 name: google
-description: Gmail, Google Calendar, Drive, Docs, Sheets and Contacts for a connected Google account, read and search mail, send and reply, book and move meetings, find and fetch files, read and write documents and spreadsheets, look people up. Use whenever the user mentions their email, inbox, calendar, meetings, Drive, a Google Doc or a Google Sheet.
+description: Gmail, Google Calendar, Drive, Docs, Sheets and Contacts for a connected Google account: read and search mail, send and reply, book and move meetings, find files, read and write Docs and Sheets, look people up. Use whenever the user mentions their email, inbox, calendar, meetings, Drive, a Google Doc or Sheet.
 ---
 
 # Google Workspace (connected)

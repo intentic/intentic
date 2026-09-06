@@ -1,6 +1,6 @@
 ---
 name: capabilities
-description: Ask the owner, on a card in chat, to connect a capability the task needs (a connector, an account, Docker, a machine) via the `capabilities` CLI. Use whenever a task hits something this sandbox isn't connected to, check what's connectable, then raise the ask instead of describing manual setup steps.
+description: Ask the owner, on a card in chat, to connect a capability the task needs (a connector, an account, Docker, a machine) via the `capabilities` CLI. Use whenever a task hits something this sandbox isn't connected to: check what's connectable, then raise the ask instead of describing manual setup steps.
 ---
 
 # Missing capabilities

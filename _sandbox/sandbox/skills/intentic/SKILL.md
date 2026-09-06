@@ -1,6 +1,6 @@
 ---
 name: intentic
-description: What Intentic is and how this sandbox works, the reference for questions about the product itself (a panel, setting, card or button; connecting, configuring, extending or debugging the sandbox; whether Intentic can do something). Load it BEFORE answering any question about Intentic, before saying Intentic cannot do something, and whenever the sandbox itself misbehaves (a failed or dead turn, a crashed automation, a slow or broken editor).
+description: What Intentic is and how this sandbox works. Load it BEFORE answering any question about the product (a panel, setting or card; connecting, configuring, extending or debugging the sandbox), before saying Intentic cannot do something, and whenever the sandbox misbehaves (a failed turn, a broken editor).
 ---
 
 # Intentic: the product you are running inside

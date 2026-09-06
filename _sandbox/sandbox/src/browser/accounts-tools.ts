@@ -181,7 +181,11 @@ export const accountsServer =
     (push, signal) =>
         sdk().createSdkMcpServer({
             name: "accounts",
-            alwaysLoad: true,
+            /* DEFERRED behind tool search (the SDK default), un-pinned 2026-09-06: pinned, these seven schemas
+             * rode every call of 327 sessions and were called in 4. The turns that need them are the turns
+             * holding accounts, and those are told, in the browser sentence of the system append and in every
+             * account skill, that `mcp__accounts__*` exists and how to load it (ToolSearch `+accounts`), the
+             * same shape that made the deferred `web` browser the most-used MCP server in the corpus. */
             tools: [
                 sdk().tool(
                     "type_credential",

@@ -1,6 +1,6 @@
 ---
 name: webq
-description: Web pages as clean, token-budgeted markdown via the `webq` CLI — one call fetches a URL (JS-rendered if needed), prunes the chrome, prints what fits your budget and saves the whole page to a file. Use for reading docs pages, crawling a whole docs site into files, query-focused extraction ("just the parts about X"), and any page WebFetch returns empty because it needs JavaScript. Not for pages behind a sign-in (use the browser tools as the account).
+description: Web pages as token-budgeted markdown via the `webq` CLI: one call fetches and renders a URL, prunes the chrome, prints what fits your budget and saves the whole page. Use for docs pages, crawling a docs site into files, query-focused extraction, and any page WebFetch returns empty. Not for pages behind a sign-in.
 ---
 
 # webq: the web as markdown, sized for context

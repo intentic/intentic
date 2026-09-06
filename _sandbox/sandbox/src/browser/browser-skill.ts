@@ -14,12 +14,25 @@
 
 import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract";
 
+/* A ROSTER'S SHARE OF THE CATALOG LINE: a few ids as triggers, then a count. Every skill's description is read
+ * on every call of every session, and the `identities` line used to spell out sixteen ids WITH their e-mail
+ * addresses, 836 characters (~210 tokens) of the prompt's skill listing spent on data the roster lines inside
+ * the skill carry anyway. Four ids keep "act as radarsuspam3" routing here; the rest are one number, and the
+ * body has them all. Shared with the group skills' "Connected accounts" tail (capabilities/account-skills.ts). */
+const ROSTER_IDS_IN_DESCRIPTION = 4;
+export const rosterSummary = (ids: readonly string[]): string =>
+    ids.length <= ROSTER_IDS_IN_DESCRIPTION
+        ? ids.join(", ")
+        : `${ids.slice(0, ROSTER_IDS_IN_DESCRIPTION).join(", ")} and ${ids.length - ROSTER_IDS_IN_DESCRIPTION} more`;
+
 // How to drive the routed browser well, shared by the identities skill and every platform skill, because the
 // mechanics of a snapshot and the publicness of a post do not depend on whose cookies the profile holds.
 const DRIVING = `
 You drive REAL browsers through the \`browser\` server's Playwright tools (\`mcp__browser__browser_navigate\`,
 \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_press_key\`, \`browser_take_screenshot\`,
-\`browser_wait_for\`, …). EVERY CALL NAMES WHOSE BROWSER with its \`account\` argument: an account's id, or an
+\`browser_wait_for\`, …). BOTH TOOL FAMILIES ARE DEFERRED: before the first call, load them with ToolSearch,
+\`+mcp__browser__\` for these and \`+accounts\` for the \`mcp__accounts__*\` tools named below. EVERY CALL NAMES
+WHOSE BROWSER with its \`account\` argument: an account's id, or an
 identity's id for the identity's own browser. Once a profile is signed in, you act as its owner. Prefer
 \`browser_snapshot\` (the accessibility tree) to find elements by role + visible text over guessing selectors;
 screenshot when a page is visual or a snapshot is ambiguous. Work in small steps: navigate → snapshot → act →
@@ -113,9 +126,7 @@ export const identitiesSkill = (identities: readonly { readonly id: string; read
     const anyOpen = identities.some((identity) => identity.config.openAccounts === "on");
     return `---
 name: identities
-description: The sandbox's online identities, the emails it acts as on the web, each with a signed-in browser its accounts share: ${identities
-        .map((identity) => `${identity.id} (${identity.config.email})`)
-        .join(", ")}. Use to act as one of them, read its webmail, or connect platform accounts through it.
+description: The sandbox's online identities (${rosterSummary(ids)}), the e-mail addresses it acts as on the web, each with a signed-in browser its accounts share. Use to act as one of them, read its webmail, or connect platform accounts through it; the roster inside lists every id and address.
 ---
 
 # Identities: the someones this sandbox is online as
