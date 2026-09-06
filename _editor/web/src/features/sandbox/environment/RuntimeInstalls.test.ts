@@ -70,10 +70,18 @@ const openRow = async (el: HTMLElement, index = 0): Promise<void> => {
 };
 
 const verbs = (el: HTMLElement): string[] =>
-    [...el.querySelectorAll(`button`)]
+    // The header's fold is not a verb on a row: it filters which rows are drawn, and it is the one button here
+    // carrying `aria-pressed`.
+    [...el.querySelectorAll(`button:not([aria-pressed])`)]
         .map((button) => button.textContent?.trim() ?? ``)
         .filter((label) => label !== ``)
         .filter((label) => !label.startsWith(`chromium`) && !label.startsWith(`zizmor`) && !label.startsWith(`p7zip`));
+
+// The header press that unfolds what has been dismissed.
+const unfold = async (el: HTMLElement): Promise<void> => {
+    (el.querySelector(`button[aria-pressed]`) as HTMLElement | undefined)?.click();
+    await nextTick();
+};
 
 afterEach(() => {
     decisions.length = 0;
@@ -130,13 +138,48 @@ it(`dismisses one entry, and lets that be undone`, async () => {
     document.body.innerHTML = ``;
     decisions.length = 0;
     const dismissed = mount([{ ...HUMAN, declined: true }]);
+    await unfold(dismissed);
     await openRow(dismissed);
-    expect(dismissed.textContent).toContain(`dismissed`);
+    expect(dismissed.textContent).toContain(`Dismissed.`);
     // A dismissal a mis-click can reach is one that has to be reversible, and nothing else is offered on it.
     expect(verbs(dismissed)).toContain(`Undo`);
     expect(verbs(dismissed).some((label) => label.includes(`Ask an agent`))).toBe(false);
     [...dismissed.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Undo`)?.click();
     expect(decisions).toEqual([[`zizmor`, `restore`]]);
+});
+
+/* WHAT THE PRESS ACTUALLY DID, which for six days was "nothing you can see". A dismissed row used to stay in
+ * the list — greyed, sunk to the bottom, still counted as an item under a heading about what every rebuild
+ * loses — so the card went on reporting an install the owner had settled, with no press left that could clear
+ * it. The row leaves; the header keeps the way back. */
+it(`folds an answered row out of the list, and out of the count`, async () => {
+    const el = mount([TEMPLATABLE, { ...HUMAN, declined: true }]);
+    expect(el.textContent).toContain(`chromium-headless-shell`);
+    expect(el.textContent).not.toContain(`zizmor`);
+    // One entry is still asking something; the answered one is not an item, it is a footnote on the header.
+    expect(el.textContent).toContain(`1 item`);
+    expect(el.textContent).toContain(`1 dismissed`);
+
+    await unfold(el);
+    expect(el.textContent).toContain(`zizmor`);
+    // Unfolding shows what was answered without re-ordering what was not: the live entry keeps the top.
+    expect([...el.querySelectorAll(`button[aria-expanded]`)].map((row) => row.textContent?.includes(`zizmor`))).toEqual([false, true]);
+    expect(el.textContent).toContain(`1 item`);
+});
+
+// The end state the fold has to survive: everything answered. No count, no warning about what rebuilds lose,
+// no rows — one quiet press that still leads back to them.
+it(`says nothing of a list whose every entry is answered`, async () => {
+    const el = mount([
+        { ...HUMAN, declined: true },
+        { ...TEMPLATABLE, declined: true },
+    ]);
+    expect(el.querySelectorAll(`button[aria-expanded]`)).toHaveLength(0);
+    expect(el.textContent).not.toContain(`item`);
+    expect(el.textContent).not.toContain(`Not in the image`);
+    expect(el.textContent).toContain(`2 dismissed`);
+    await unfold(el);
+    expect(el.querySelectorAll(`button[aria-expanded]`)).toHaveLength(2);
 });
 
 it(`asks nothing of an entry already waiting in the proposal above`, async () => {

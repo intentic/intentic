@@ -45,12 +45,41 @@ const toggle = (tool: string): void => {
     open.value = next;
 };
 
-/* Answered rows sink. A dismissal is a decision the owner has already made, and leaving those interleaved by
- * recency puts the two entries still asking something underneath four that are not. */
-const shown = computed(() =>
-    [...entries].toSorted((left, right) => Number(left.declined ?? false) - Number(right.declined ?? false) || right.lastAt - left.lastAt),
+/* AN ANSWERED ROW LEAVES THE LIST — the half of "every row ends somewhere" the first pass got wrong. Dismissing
+ * only sank the row to the bottom and greyed it, so the press said "I am content to keep installing this" and
+ * the card answered by going on reporting it: `chromium-headless-shell`, still under a heading that reads
+ * `1 item · Not in the image, so every rebuild loses them`, days after the owner had settled it and with the
+ * whole Environment card staying up to carry it. A dismissal whose row does not go away is a mute button that
+ * does not mute, and the list's count — the one number that says whether this section wants anything — could
+ * only ever go up. The workspace's own dismissals page had this right already: what you have said no to stops
+ * being drawn, or the surface becomes the nag strip people learn not to look at.
+ *
+ * IT DOES NOT VANISH WITHOUT TRACE EITHER. The tombstone it writes is permanent and invisible — nothing will
+ * auto-draft a step for that tool again, ever — so a mis-click needs a way back, and hidden permanent state
+ * needs somewhere to be seen. It FOLDS rather than disappears: the header carries `1 dismissed`, one quiet
+ * press from the rows and their Undo. Out of the count, out of the way, still reachable. */
+const revealed = ref(false);
+const byRecency = (left: EnvironmentRecurring, right: EnvironmentRecurring): number => right.lastAt - left.lastAt;
+const awaiting = computed(() => entries.filter((entry) => entry.declined !== true).toSorted(byRecency));
+const dismissed = computed(() => entries.filter((entry) => entry.declined === true).toSorted(byRecency));
+// Revealed rows go UNDER the ones still asking something: unfolding is a look at what you have answered, not a
+// re-sort of what you have not.
+const shown = computed(() => (revealed.value ? [...awaiting.value, ...dismissed.value] : awaiting.value));
+// The count counts what still wants a decision, so it can reach zero. `undefined` rather than "0 items" when it
+// does: an empty count beside the label is the section saying nothing, which is the honest reading of a list
+// whose every entry has been answered.
+const countLabel = computed(() =>
+    awaiting.value.length === 0 ? undefined : `${awaiting.value.length} ${awaiting.value.length === 1 ? `item` : `items`}`,
 );
-const countLabel = computed(() => `${shown.value.length} ${shown.value.length === 1 ? `item` : `items`}`);
+
+/* Dismissing closes the row on its way out, so revealing the fold later opens on a list of headlines rather
+ * than on whatever was expanded the moment it was answered. */
+const decide = (entry: EnvironmentRecurring, decision: `adopt` | `dismiss` | `restore`): void => {
+    if (decision === `dismiss` && open.value.has(entry.tool)) {
+        toggle(entry.tool);
+    }
+    emit(`decide`, entry.tool, decision);
+};
 
 // Recurrence, in the words the ledger actually counts in: SESSIONS, not commands. A session that retried an
 // install five times needed the tool once, and "5 installs" would read as five separate needs.
@@ -89,7 +118,9 @@ const explanation = (entry: EnvironmentRecurring): string => {
         return `A step for this is already in the proposal above, waiting for your approval. Approving it bakes the tool into the image on the next rebuild.`;
     }
     const lost = entry.live ? `It is in the container right now and the next rebuild loses it.` : `The container does not have it at the moment.`;
-    return entry.step === undefined ? `${lost} ${noStep(entry)}` : `${lost} Its Dockerfile step follows from the package name, so it can be added as it stands.`;
+    return entry.step === undefined
+        ? `${lost} ${noStep(entry)}`
+        : `${lost} Its Dockerfile step follows from the package name, so it can be added as it stands.`;
 };
 
 /* THE BRIEF THE AGENT GETS, written here rather than left to a chat message the owner has to compose. It
@@ -113,8 +144,24 @@ const brief = (entry: EnvironmentRecurring): string =>
         undivided
         label="Installed at runtime"
         :count="countLabel"
-        caption="Not in the image, so every rebuild loses them."
+        :caption="awaiting.length ? `Not in the image, so every rebuild loses them.` : undefined"
     >
+        <!-- The fold, in the header rather than as a row under the list, because it is a fact ABOUT the list and
+             not another entry in it: a row here is a tool with a decision on it, and "2 dismissed" is neither.
+             `aria-pressed`, not `aria-expanded`: the only expandable things on this surface are the rows, and
+             the header press filters which of them are drawn rather than opening a region of its own. -->
+        <template v-if="dismissed.length" #actions>
+            <button
+                type="button"
+                :aria-pressed="revealed"
+                v-tooltip.top="revealed ? `Hide what you have dismissed` : `Show what you have dismissed`"
+                :class="ui.linkButton(`gap-1 text-2xs font-medium text-subtle hover:text-content`)"
+                @click="revealed = !revealed"
+            >
+                <Icon :name="revealed ? `eye` : `eye-slash`" />{{ dismissed.length }} dismissed
+            </button>
+        </template>
+
         <DisclosureRow
             v-for="entry in shown"
             :key="entry.tool"
@@ -181,7 +228,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                             type="button"
                             :disabled="busy"
                             :class="ui.linkButton(`gap-1 text-2xs font-medium text-link`)"
-                            @click="emit(`decide`, entry.tool, `adopt`)"
+                            @click="decide(entry, `adopt`)"
                         >
                             <Icon name="plus" />Add to the image
                         </button>
@@ -198,7 +245,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                             type="button"
                             :disabled="busy"
                             :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)"
-                            @click="emit(`decide`, entry.tool, entry.declined === true ? `restore` : `dismiss`)"
+                            @click="decide(entry, entry.declined === true ? `restore` : `dismiss`)"
                         >
                             <Icon :name="entry.declined === true ? `undo` : `eye-slash`" />{{ entry.declined === true ? `Undo` : `Dismiss` }}
                         </button>

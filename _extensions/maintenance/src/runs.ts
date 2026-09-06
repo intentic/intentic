@@ -85,6 +85,19 @@ export const parseResult = (text: string): RunResult | undefined =>
             : { outcome: outcome as ChoreOutcome, summary: typeof summary === `string` ? summary : `` },
     );
 
+/* THE SUMMARY, SPLIT INTO WHAT IS PROSE AND WHAT IS A LITERAL. Agents write package names, paths and commands
+ * in backticks out of habit — `mysql2`, `pnpm-workspace.yaml`, `pnpm audit` — and the panel drew the string
+ * raw, so the one convention that would have made those findable in a paragraph instead printed two characters
+ * of noise around every one of them. The row renders the odd spans as code.
+ *
+ * An UNBALANCED count of marks means the sentence was not written as markup at all (a lone backtick in prose,
+ * a fenced block the agent started and never closed), and the whole thing is handed back as one plain span:
+ * inferring markup from half a delimiter is how a summary ends up with its second half in a code chip. */
+export const summarySpans = (summary: string): { text: string; code: boolean }[] => {
+    const pieces = summary.split("`");
+    return pieces.length % 2 === 0 ? [{ text: summary, code: false }] : pieces.map((text, index) => ({ text, code: index % 2 === 1 }));
+};
+
 /* WHAT WE ADD TO THE CHORE'S OWN PROMPT. The chore book composes the turn — what to do and how to know it is
  * done — and knows nothing about run directories; this is the only part that needs the run id.
  *

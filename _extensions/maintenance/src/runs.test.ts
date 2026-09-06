@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ANY_RUN_PREFIX, conversationIdOf, parseManifest, parseResult, reportingClause, resultPath, runIdAt } from "./runs";
+import { ANY_RUN_PREFIX, conversationIdOf, parseManifest, parseResult, reportingClause, resultPath, runIdAt, summarySpans } from "./runs";
 
 describe(`run identity`, () => {
     // The conversation id is the JOIN to the fleet: `GET /agents` filtered by prefix is how a run finds its
@@ -57,6 +57,33 @@ describe(`reading what is on disk`, () => {
 
     test(`a result with no summary is still a result`, () => {
         expect(parseResult(`{"outcome":"acted"}`)).toEqual({ outcome: `acted`, summary: `` });
+    });
+});
+
+/* THE SUMMARY IS PROSE AN AGENT WROTE, and agents write literals in backticks. Drawn raw, the marks were two
+ * characters of noise around every package name in a paragraph the panel already struggles to keep short. */
+describe(`reading the agent's summary`, () => {
+    test(`backticked literals come back as their own spans, and the prose between them as plain`, () => {
+        expect(summarySpans("Added a `mysql2` override to `pnpm-workspace.yaml`.")).toEqual([
+            { text: `Added a `, code: false },
+            { text: `mysql2`, code: true },
+            { text: ` override to `, code: false },
+            { text: `pnpm-workspace.yaml`, code: true },
+            { text: `.`, code: false },
+        ]);
+    });
+
+    // Half a delimiter is not markup. Splitting on it anyway would put the rest of the sentence in a code chip,
+    // which is a worse misreading than showing the one mark the agent typed.
+    test(`an unbalanced mark leaves the sentence exactly as it was written`, () => {
+        expect(summarySpans("The lockfile bump needs `pnpm install to land")).toEqual([
+            { text: "The lockfile bump needs `pnpm install to land", code: false },
+        ]);
+    });
+
+    test(`a summary with no marks at all is one plain span, and an empty one is not a chip`, () => {
+        expect(summarySpans(`Deleted two unreferenced components.`)).toEqual([{ text: `Deleted two unreferenced components.`, code: false }]);
+        expect(summarySpans(``)).toEqual([{ text: ``, code: false }]);
     });
 });
 

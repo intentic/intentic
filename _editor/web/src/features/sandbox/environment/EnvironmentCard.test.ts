@@ -26,6 +26,11 @@ const environment: Environment = {
 // An approved overlay not yet built, the state whose executor differs per lane; undefined for the ordinary
 // applied state above.
 const pending = ref<Environment[`approved`] | undefined>(undefined);
+// The overlay the running container was built from, and the runtime-install ledger's attention list. Both are
+// variable because the card's own existence is derived from them: a sandbox with neither has no environment
+// story to tell and draws nothing.
+const applied = ref<Environment[`approved`] | undefined>(environment.approved);
+const recurring = ref<NonNullable<Environment[`recurring`]>>([]);
 vi.mock(`./useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
@@ -37,8 +42,8 @@ vi.mock(`./useEnvironment`, () => ({
         isFetching: ref(false),
         proposal: ref(undefined),
         pending,
-        applied: ref(environment.approved),
-        recurring: ref([]),
+        applied,
+        recurring,
         serverManaged: ref(false),
         slug: ref(`demo`),
     }),
@@ -93,6 +98,8 @@ const mount = (): HTMLElement => {
 afterEach(() => {
     unsupported.value = false;
     pending.value = undefined;
+    applied.value = environment.approved;
+    recurring.value = [];
     active.value = { id: `sb1`, role: `owner` };
     app?.unmount();
     app = undefined;
@@ -139,4 +146,20 @@ it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () =
     const el = mount();
     expect(el.querySelector(`[data-executor="hosted"]`)).not.toBeNull();
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
+});
+
+/* A CARD IS A DECISION SURFACE, so a sandbox with no decisions left draws none. The runtime-install list can
+ * be the only thing holding this card open, and it went on doing so for entries the owner had DISMISSED: with
+ * no overlay and one answered row, the whole Environment card stayed on the hub to report a settled question,
+ * which is exactly what pressing dismiss was supposed to end. */
+it(`stands down once the only runtime installs left are ones you dismissed`, () => {
+    applied.value = undefined;
+    recurring.value = [{ tool: `chromium-headless-shell`, kind: `playwright`, sessions: 2, lastAt: 1_756_000_000_000, live: true }];
+    expect(mount().textContent).toContain(`Installed at runtime`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    recurring.value = [{ ...recurring.value[0]!, declined: true }];
+    // Not the section folded away inside a card that is still there: no card at all.
+    expect(mount().textContent).toBe(``);
 });

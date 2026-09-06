@@ -213,7 +213,9 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
             ...(step === undefined ? {} : { step }),
         });
     }
-    recurring.sort((left, right) => right.lastAt - left.lastAt);
+    // Answered entries sink BEFORE the cap below: the card folds them out of sight anyway, so a dismissal must
+    // not spend one of the thirty slots an install still waiting on a decision needs.
+    recurring.sort((left, right) => Number(left.declined ?? false) - Number(right.declined ?? false) || right.lastAt - left.lastAt);
     return {
         ...(drift !== undefined ? { drift } : {}),
         ...(recurring.length > 0 ? { recurring: recurring.slice(0, RECURRING_SHOWN) } : {}),

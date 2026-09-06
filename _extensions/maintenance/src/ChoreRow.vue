@@ -10,11 +10,13 @@ import {
     StatusBadge,
     type StatusVariant,
     timeAgo,
+    ui,
     useAgentRunPick,
     useNow,
 } from "@intentic/extension-ui";
 import { host } from "./host";
 import { computed, ref, watch } from "vue";
+import { summarySpans } from "./runs";
 import type { MeasuringProbe } from "./useChores";
 import type { ChoreRun } from "./useRuns";
 
@@ -34,7 +36,7 @@ import type { ChoreRun } from "./useRuns";
 // `measuring` is the WHOLE sandbox's list rather than this row's slice: the row already knows its repository and
 // which probes its chore rests on, and filtering it here is one line against a parent that would otherwise
 // compute a slice per row on every poll.
-const { verdict, run, measuring } = defineProps<{
+const { verdict, run, measuring, expanded } = defineProps<{
     verdict: ChoreVerdict;
     run: ChoreRun | undefined;
     measuring: readonly MeasuringProbe[];
@@ -176,6 +178,67 @@ const evidenceNote = computed<string | undefined>(() => {
 });
 
 const liveAgent = computed(() => (run?.running === true ? run.manifest.conversationId : undefined));
+
+/* THE EVIDENCE, SPLIT WHERE IT WAS ALREADY BROKEN. Every chore writes its lines as `<tag> · <claim>` —
+ * `high · image-size, ICNS parser…`, `major · vite 6.3.5 → 8.2.1`, `unreferenced · src/legacyPlans.ts` — and
+ * the panel drew the whole string as one mono run at the row's full width. On a wide pane that is a
+ * 140-character line of 11px monospace per advisory, which is the least readable configuration this app has:
+ * the tag that classifies the line is buried in it, and the eye has no column to run down.
+ *
+ * A grid gives the tags one column as wide as the widest of them, so they align without a magic width, and the
+ * claims wrap in a column capped at the reading measure instead of at the pane's. Lines with no separator keep
+ * the whole width — several chores write a bare sentence, and inventing a tag for those would be a lie. */
+const detailRows = computed(() =>
+    verdict.detail.map((line) => {
+        const at = line.indexOf(` · `);
+        return at === -1 ? { key: line, tag: undefined, claim: line } : { key: line, tag: line.slice(0, at), claim: line.slice(at + 3) };
+    }),
+);
+/* Eight, because that is the cap the chores that DO cap themselves already chose (DETAIL_LIMIT): a capped chore
+ * therefore never folds, and only the genuinely unbounded lists — every major behind, every advisory — do.
+ * The fold states the total, so nothing is hidden, it is just not spent before you have asked for it. */
+const EVIDENCE_SHOWN = 8;
+const allEvidence = ref(false);
+const shownDetail = computed(() => (allEvidence.value ? detailRows.value : detailRows.value.slice(0, EVIDENCE_SHOWN)));
+
+/* THE AGENT'S REPORT, WHICH IS THE PART THAT RUNS AWAY. `summary` is asked for as "one or two sentences" and
+ * arrives as whatever the turn felt like writing — the run that prompted this rewrite filed nine sentences of
+ * dense prose, set at the same size and colour as everything else in the drawer, directly above the buttons,
+ * which it pushed off the screen. It is genuinely useful and it is NOT the thing you opened the row to read:
+ * the evidence is why the row exists and the verbs are what you came to press. So it keeps its place and loses
+ * its dominance — three lines on its own surface, the rest one press away, and its backticked literals drawn as
+ * code (summarySpans, in runs.ts beside the parser that reads the field). */
+const summaryParts = computed(() => summarySpans(run?.result?.summary ?? ``));
+// Roughly three lines at the reading measure: below it the clamp has nothing to hide and a "Show more" that
+// reveals nothing is worse than no control at all.
+const SUMMARY_CLAMPED = 220;
+const wholeSummary = ref(false);
+const summaryLong = computed(() => (run?.result?.summary ?? ``).length > SUMMARY_CLAMPED);
+
+/* What the last run concluded, as a badge rather than as a bare lowercase word in a grey line. `clean` is a
+ * success and says so: the agent looked and the findings did not hold up, which is a result. */
+const runTone = computed<{ variant: StatusVariant; label: string }>(() => {
+    if (run?.running === true) {
+        return { variant: `info`, label: `running` };
+    }
+    const outcome = run?.result?.outcome;
+    if (outcome === undefined) {
+        return { variant: `neutral`, label: `no result written` };
+    }
+    return { variant: outcome === `reported` ? `info` : `success`, label: outcome };
+});
+
+// Both folds belong to one reading of one row: leaving them open means the next row you open starts halfway
+// through a sentence you never asked to see.
+watch(
+    () => expanded,
+    (open) => {
+        if (!open) {
+            allEvidence.value = false;
+            wholeSummary.value = false;
+        }
+    },
+);
 </script>
 
 <template>
@@ -268,35 +331,77 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                     </span>
                 </div>
 
-                <p class="max-w-read text-xs text-subtle">{{ verdict.chore.description }}</p>
+                <!-- THE EVIDENCE LEADS, which is the whole reordering. This drawer used to open on two paragraphs
+                 of preamble — what the chore is, then the rule that makes it due — before a single fact, on a row
+                 whose title and headline the reader had just read in order to press it. Four prose blocks at three
+                 sizes, none labelled, all flush left at one indent: a wall, and the numbers were in the middle of
+                 it. The facts are first now, and everything that qualifies them follows.
 
-                <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether
-                 the chore is due or clear. Without it a row is asking to be taken on trust; with it, the reader
-                 can disagree with the rule rather than only with the number, which is the disagreement worth
-                 having, and the one that improves the book. -->
-                <p class="mt-3 max-w-read text-2xs text-subtle">
+                 Verbatim from the measurement, never summarised further: this is the list the rule below is
+                 checked against. -->
+                <ul v-if="shownDetail.length > 0" class="grid max-w-read grid-cols-facts items-baseline gap-x-3 gap-y-1">
+                    <li v-for="row in shownDetail" :key="row.key" class="contents">
+                        <span class="font-mono text-2xs text-subtle">{{ row.tag }}</span>
+                        <span class="min-w-0 break-words font-mono text-2xs text-content">{{ row.claim }}</span>
+                    </li>
+                </ul>
+                <button
+                    v-if="detailRows.length > EVIDENCE_SHOWN"
+                    type="button"
+                    :class="ui.linkButton(`mt-1.5 text-2xs text-subtle hover:text-content`)"
+                    @click="allEvidence = !allEvidence"
+                >
+                    {{ allEvidence ? `Show fewer` : `Show all ${detailRows.length}` }}
+                </button>
+
+                <!-- WHAT THE CHORE IS AND WHAT MAKES IT DUE, one muted block under the evidence rather than two
+                 ahead of it. The rule is still said in full, and it is still said as what WOULD make this due so
+                 it reads the same whether the chore is due or clear: a row that says "3 advisories" and nothing
+                 else asks to be taken on trust, where a row that names its threshold can be argued with, and
+                 arguing with it is how the book gets better. What changed is that it is now the FOOTNOTE to the
+                 evidence it qualifies, which is where a reader goes looking for it, instead of the toll paid
+                 before reaching a number. -->
+                <p class="mt-3 max-w-read text-2xs leading-relaxed text-subtle">
+                    {{ verdict.chore.description }}
                     <span class="text-content">{{ verdict.state === `due` ? `Shown because` : `Shows when` }}:</span> {{ verdict.chore.criterion }}
                 </p>
 
-                <!-- The evidence, verbatim from the measurement. One claim per line and never summarised further:
-                 this is the list the reader checks the rule above against. -->
-                <ul v-if="verdict.detail.length > 0" class="mt-3 flex flex-col gap-1">
-                    <li v-for="line in verdict.detail" :key="line" class="font-mono text-2xs text-content">{{ line }}</li>
-                </ul>
-
-                <p v-if="evidenceNote" class="mt-3 max-w-read text-2xs text-subtle">{{ evidenceNote }}</p>
-
-                <!-- The last run, whatever it concluded. A `clean` outcome is shown as prominently as any other: it is
-                 the agent saying the findings did not hold up, and that is a result, not a non-event. -->
-                <div v-if="run" class="mt-3 flex flex-wrap items-center gap-2 text-2xs text-subtle">
-                    <span>{{ run.running ? `running` : (run.result?.outcome ?? `no result written`) }} · {{ timeAgo(run.manifest.createdAt) }}</span>
-                    <button type="button" class="cursor-pointer underline hover:text-content" @click="emit(`open`, run.manifest.conversationId)">
-                        open the transcript
+                <!-- THE LAST RUN, ON A SURFACE OF ITS OWN. It is a different voice from everything above it — an
+                 agent's report, not a measurement — and drawn as bare prose at the drawer's own size it simply
+                 continued the wall, with the buttons somewhere below the fold. The tint is the same device this
+                 drawer already uses for the measuring and landed strips, so the reader can take it in or skip it
+                 as one object. A `clean` outcome wears the same badge as any other: it is the agent saying the
+                 findings did not hold up, which is a result, not a non-event. -->
+                <div v-if="run" class="mt-3 flex max-w-read flex-col gap-1.5 rounded-lg bg-content/5 px-3 py-2">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
+                        <StatusBadge :variant="runTone.variant" :label="runTone.label" size="xs" />
+                        <span>{{ timeAgo(run.manifest.createdAt) }}</span>
+                        <button type="button" class="cursor-pointer underline hover:text-content" @click="emit(`open`, run.manifest.conversationId)">
+                            open the transcript
+                        </button>
+                    </div>
+                    <p v-if="run.result?.summary" class="text-xs leading-relaxed text-content" :class="wholeSummary ? undefined : `line-clamp-3`">
+                        <template v-for="(part, index) in summaryParts" :key="index"
+                            ><code v-if="part.code" class="rounded bg-content/10 px-1 font-mono text-2xs">{{ part.text }}</code
+                            ><template v-else>{{ part.text }}</template></template
+                        >
+                    </p>
+                    <button
+                        v-if="summaryLong"
+                        type="button"
+                        :class="ui.linkButton(`w-fit text-2xs text-subtle hover:text-content`)"
+                        @click="wholeSummary = !wholeSummary"
+                    >
+                        {{ wholeSummary ? `Show less` : `Show more` }}
                     </button>
                 </div>
-                <p v-if="run?.result?.summary" class="mt-1 max-w-read text-xs text-content">{{ run.result.summary }}</p>
 
-                <div class="mt-4 flex flex-wrap items-center gap-2">
+                <p v-if="evidenceNote" class="mt-3 max-w-read text-2xs leading-relaxed text-subtle">{{ evidenceNote }}</p>
+
+                <!-- The verbs, under a rule. Everything above them is now bounded — eight evidence rows, three
+                 lines of report — so this is a place on the drawer rather than wherever the prose happened to
+                 end. -->
+                <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
                     <!-- No "start an agent" on a clear or unmeasured chore: a button that spends money proving nothing
                      is wrong is an invitation this surface should not be making. -->
                     <AgentRunButton

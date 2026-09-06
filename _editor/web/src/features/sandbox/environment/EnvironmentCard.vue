@@ -80,6 +80,13 @@ const load = async (): Promise<void> => {
     await query.refetch();
 };
 
+/* WHAT THE RUNTIME LIST STILL ASKS, which is what decides whether this card exists at all. Gating on the raw
+ * list kept the whole Environment card on screen for entries the owner had already dismissed — on a sandbox
+ * with no overlay and nothing else to report, a card whose entire content was one greyed row saying it had
+ * been answered. A dismissed install is a decision taken, so it is not a reason to draw a decision surface;
+ * <RuntimeInstalls> still receives the full list, because the fold inside it is where those rows are undone. */
+const awaiting = computed(() => recurring.value.filter((entry) => entry.declined !== true));
+
 const decide = (path: string, body?: object): Promise<void> =>
     run(async () => {
         const next = EnvironmentSchema.parse(await sandboxJson(path, jsonBody(`POST`, body ?? {})));
@@ -90,7 +97,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 </script>
 
 <template>
-    <RowGroup v-if="proposal || pending || applied || recurring.length" label="Environment">
+    <RowGroup v-if="proposal || pending || applied || awaiting.length" label="Environment">
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />
