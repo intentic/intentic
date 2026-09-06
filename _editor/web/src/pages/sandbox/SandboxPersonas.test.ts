@@ -125,10 +125,14 @@ const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
 
 /* A persona's row, reached through the one thing on it with a stable accessible name. The row itself carries no
  * label of its own: it is a settings row, not a control, and adding a test-only attribute to production markup
- * to find it would be inventing a convention this app does not have. */
+ * to find it would be inventing a convention this app does not have.
+ *
+ * The HEADER row, not the block around it: <DisclosureRow> paints its hover and open wash on a wrapper that
+ * also holds the open drawer, and it is the header that carries the press. Both are `.group`; `closest` finds
+ * the inner one, which is the header. */
 const rowFor = (el: HTMLElement, id: string): HTMLElement => {
     const persona = personas.value.find((entry) => entry.id === id)!;
-    return byAriaLabel(el, `Rename ${persona.label ?? persona.id}`)!.closest(`.ui-row-select`) as HTMLElement;
+    return byAriaLabel(el, `Rename ${persona.label ?? persona.id}`)!.closest(`.group`) as HTMLElement;
 };
 /* WAIT FOR THE CARD, NOT FOR A NUMBER OF TICKS. Opening one settles over several of them and how many is not
  * stable, so `click(); await nextTick()` was a coin flip: this file failed about half its runs, always as a

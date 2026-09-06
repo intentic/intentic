@@ -84,11 +84,8 @@ const {
      *   own CONTROLS keep their presses (<Row>'s `headlineGuard`); every other pixel of the headline — a title
      *   that is plain text on this row, the facts line, the preview, the space after a short name — opens the
      *   row like the rest of it. For a turn whose label opens its transcript, a port whose sentence links to
-     *   its terminal, a run whose title goes to the CI provider.
-     * `row` — yes, but the product answer is "people click the row and there is no second way in" (the personas
-     *   list, whose name is click-to-rename). Same button as `pair`, no headline guard, so the name is the
-     *   caller's to protect with `@click.stop`. `#control` and the `rail` body are guarded here for everyone. */
-    hit?: `header` | `pair` | `row`;
+     *   its terminal, a run whose title goes to the CI provider, a persona whose name renames in place. */
+    hit?: `header` | `pair`;
     /** `rail`: evidence about this row · `drawer`: a place of its own. See the note above. */
     body?: `rail` | `drawer`;
     /* Forwarded to <Row> verbatim. Only the four a disclosure row actually reaches for: the rest of <Row>'s
@@ -183,11 +180,10 @@ const chevronSize = computed(() => ROW_TOGGLE_SIZES[tier.value]);
 /* THE ONE TINT PAIR, so an open row is the same colour on every list in the app. It was `bg-content/6`,
  * `bg-content/2`, `bg-overlay`, `bg-canvas` and nothing, chosen by which file you were in.
  *
- * It rides on a wrapper rather than on <Row>'s `interactive`, which would also put a pointer cursor over the
- * trailing verbs — a row where only the left region opens should not claim the whole width is pressable. The
- * exception is `hit="row"`, where it IS pressable: there <Row> takes `interactive` and with it the app's own
- * `ui-row-select` (cursor, hover wash, focus ring), so the hover half of this pair would be a second wash
- * stacked on the first. The OPEN half still belongs here, because it has to cover the drawer as well. */
+ * It rides on a wrapper rather than on <Row>'s `interactive`, because <Row> is only the HEADER: when a drawer
+ * opens, the header gives up its bottom padding (`!pb-0`) and a wash painted on it stops in the middle of the
+ * lead mark, which is what "the hover is cut across the avatar" looks like. The open tint has the same job, and
+ * both have to cover the drawer as well, so both live on the wrapper for every mode. */
 const tint = computed(() => {
     if (disabled) {
         return ``;
@@ -198,13 +194,11 @@ const tint = computed(() => {
     return ``;
 });
 
-/* WHERE THE HOVER WASH LIVES. On every mode except `hit="row"`, it rides the WRAPPER so an open drawer's block
- * is one surface — the header's <Row> loses its bottom padding when a drawer opens (`!pb-0`), and a wash that
- * stopped at the header read as cut off the moment the pointer reached the evidence or the verbs under it.
- * `hit="row"` keeps the wash on <Row> instead, because the whole row is pressable and stacking two would be
- * the failure the note above is about. */
-const wrapperSelect = computed(() => (!disabled && hit !== `row` ? `ui-row-select` : ``));
-const rowInteractive = computed(() => !disabled && hit === `row`);
+/* WHERE THE HOVER WASH LIVES: on the WRAPPER, so an open drawer's block is one surface. The header's <Row>
+ * loses its bottom padding when a drawer opens (`!pb-0`), so a wash painted there reads as cut off the moment
+ * the pointer reaches the evidence or the verbs under it — and, on a row whose lead is a face, as a band sliced
+ * through that face. One wash, one surface, every mode. */
+const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
 
 // Padding for a drawer: ROW_DRAWER_PAD — same horizontal measure as ROW_BLOCK_PAD, less top air because the
 // header row's own padding already paid for separation and a drawer that opens into a diagram was reading as a
@@ -234,16 +228,15 @@ const rowInteractive = computed(() => !disabled && hit === `row`);
                 :header-button="hit === `header` && !disabled"
                 :header-expanded="disabled ? undefined : open"
                 :header-controls="disabled ? undefined : bodyId"
-                :interactive="rowInteractive"
                 :headline-guard="hit === `pair`"
                 @header-click="onRowClick"
                 @click="onRowClick"
             >
                 <template #lead>
-                    <!-- `pair` and `row`: the cluster IS the button, and in `row` it is the KEYBOARD's way in,
-                         since the press target over the whole row is a click handler on a div and reaches no
-                         one who is tabbing. `header`: <Row>'s left region is the button, so this is inert.
-                         `.stop` because in `row` the handler above would otherwise fire on the same click and
+                    <!-- `pair`: the cluster IS the button, and it is the KEYBOARD's way in, since the press
+                         target over the whole row is a click handler on a div and reaches no one who is
+                         tabbing. `header`: <Row>'s left region is the button, so this is inert. `.stop`
+                         because in `pair` the row-wide handler would otherwise fire on the same click and
                          toggle straight back. -->
                     <component
                         :is="hit !== `header` && !disabled ? `button` : `span`"
@@ -315,7 +308,7 @@ const rowInteractive = computed(() => !disabled && hit === `row`);
         <!-- THE DRAWER. A sibling of the row rather than <Row>'s `#below`, because it is full-bleed: pulling it
              back out of the row's padding with negative margins would be four numbers to keep in step with the
              tier table, and every one of them a place to be wrong. -->
-        <div v-if="open && body === `drawer`" :id="bodyId" class="border-t border-line-subtle" :class="ROW_DRAWER_PAD[tier]">
+        <div v-if="open && body === `drawer`" :id="bodyId" class="cursor-auto border-t border-line-subtle" :class="ROW_DRAWER_PAD[tier]">
             <slot name="below" />
         </div>
     </div>

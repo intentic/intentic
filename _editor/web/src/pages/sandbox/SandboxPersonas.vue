@@ -394,17 +394,17 @@ const confirmRemove = async (): Promise<void> => {
                 <!-- THE ROW IS THE DISCLOSURE. Clicking it opens the card in place; there is no second
                      affordance meaning the same thing, which is what the pencil used to be.
 
-                     `hit="row"` is what that costs and what it now also buys. It cannot be `header` — the name
-                     is itself a control (click it to rename), and a <button> inside a <button> is invalid and
-                     unusable. It is not `pair` either, because shrinking the target to the chevron and the face
-                     would take away the gesture people actually use. So the whole row keeps the click, every
-                     control on it keeps its `@click.stop`, and the chevron-and-face pair is a real <button> for
-                     the first time: opening a card used to be reachable by pointer only. The CARD needs no
-                     guard of its own any more — a `drawer` body sits outside the row's handler. -->
+                     `hit="pair"`, the same as every other openable row in the app (a port, a turn, a pipeline
+                     run, a manifest file). It cannot be `header` — the name is itself a control (click it to
+                     rename), and a <button> inside a <button> is invalid and unusable. `pair` costs nothing
+                     here: the whole row still opens on a press, the chevron-and-face pair is the <button> a
+                     keyboard tabs to, and <Row>'s headline guard is what lets the name go on renaming without
+                     also toggling the card. This row used to be the app's one `hit="row"`, which put the hover
+                     wash on the header alone — so an open card's wash stopped dead across the face. -->
                 <DisclosureRow
                     v-for="persona in personas"
                     :key="persona.id"
-                    hit="row"
+                    hit="pair"
                     body="drawer"
                     :open="isOpen(persona)"
                     @update:open="toggleOpen(persona)"
