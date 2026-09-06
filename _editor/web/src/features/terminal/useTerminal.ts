@@ -3,15 +3,7 @@ import { activeSandboxId } from "../sandbox/overview/activeSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
-import {
-    createTerminalSession,
-    disposeTerminalSession,
-    mountTerminalSession,
-    parkTerminalSession,
-    persistScrollback,
-    retypeTerminalSession,
-    type TerminalSession,
-} from "./terminalSession";
+import { createTerminalSession, disposeTerminalSession, mountTerminalSession, parkTerminalSession, retypeTerminalSession, type TerminalSession } from "./terminalSession";
 import { useTextSize } from "@intentic/ui/text-size";
 
 /* Multi-tab terminal state for the terminal panel (pages/TerminalPanel.vue): an instance (createTerminalTabs)
@@ -76,15 +68,12 @@ const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithi
     createTerminalSession(tab.name, onExit, tab.kind === `process`, spawnWithin);
 
 /* Sandbox switch: every cached socket points at the OLD daemon, drop them all and bump the epoch so a mounted
- * surface resets its tab state and relists against the new daemon.
- *
- * `left` is the sandbox being LEFT, which the caller has to tell us: the active id has already moved on by the
- * time this runs. Each session's scrollback is snapshotted under it on the way out, exactly as a page reload
- * does, because a switch is not the end of these terminals, they keep running, and coming back to one that
- * showed a suite's output should not show an empty pane with a fresh prompt in it. */
-export const disposeAllSessions = (left: string | undefined): void => {
+ * surface resets its tab state and relists against the new daemon. Nothing is kept on the way out: a switch is
+ * not the end of these terminals, they keep running, and coming back reattaches each one, which replays the
+ * pane's history from the daemon's own tmux (terminalSession.ts), so the suite's output you walked away from
+ * is there rather than an empty pane with a fresh prompt in it. */
+export const disposeAllSessions = (): void => {
     for (const session of cache.values()) {
-        persistScrollback(session, left);
         disposeTerminalSession(session);
     }
     cache.clear();
@@ -103,13 +92,6 @@ export const terminalSessionOf = (name: string): TerminalSession | undefined => 
 
 // Bumped whenever the cache is wiped wholesale (sandbox switch), mounted surfaces watch it.
 const epoch = ref(0);
-
-// Snapshot every live terminal's scrollback on reload/navigation, createTerminalSession restores it.
-window.addEventListener(`pagehide`, () => {
-    for (const session of cache.values()) {
-        persistScrollback(session);
-    }
-});
 
 // The app's text size reaches everything drawn in CSS by itself; a terminal draws its own glyphs, so the cache
 // is the one place that knows every session there is to re-type. Parked sessions included, they are streaming

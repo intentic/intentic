@@ -1,10 +1,11 @@
 import type { TerminalServerMessage } from "@intentic/sandbox-contract";
 import type { DemoSession, DemoSocket } from "./transport";
 
-/* THE TERMINAL, recorded. `/system/terminal` is a WebSocket of JSON frames (TerminalServerMessage), and xterm
- * renders whatever bytes arrive, so a replay is indistinguishable from a live pty as far as the panel is
- * concerned, escape codes and all. This is the agent's own tmux session for the featured turn: the test run its
- * Bash tool call makes, as the visitor would have watched it happen. */
+/* THE TERMINAL, recorded. `/system/terminal` carries the pane's bytes as BINARY frames and everything the daemon
+ * has to say as JSON (TerminalServerMessage), and xterm renders whatever bytes arrive, so a replay is
+ * indistinguishable from a live pane as far as the panel is concerned, escape codes and all. This is the agent's
+ * own tmux session for the featured turn: the test run its Bash tool call makes, as the visitor would have
+ * watched it happen. */
 
 const BOLD = `\u001b[1m`;
 const DIM = `\u001b[2m`;
@@ -32,13 +33,15 @@ const SCRIPT: Line[] = [
 ];
 
 const frame = (message: TerminalServerMessage): string => JSON.stringify(message);
+// The pane's bytes, as the daemon sends them: UTF-8 in a binary frame, which the panel hands to xterm whole.
+const bytes = (text: string): ArrayBuffer => new TextEncoder().encode(text).buffer as ArrayBuffer;
 
 /** The recorded session, played on the socket the panel just opened. */
 export const terminalSession: DemoSession = (socket: DemoSocket) => {
     let elapsed = 0;
     for (const line of SCRIPT) {
         elapsed += line.after;
-        setTimeout(() => socket.emit(frame({ type: `data`, data: line.text })), elapsed);
+        setTimeout(() => socket.emit(bytes(line.text)), elapsed);
     }
     // Answer the panel's keepalive so its staleness watchdog never trips on a demo left open in a tab.
     const pong = setInterval(() => socket.emit(frame({ type: `pong` })), 25_000);

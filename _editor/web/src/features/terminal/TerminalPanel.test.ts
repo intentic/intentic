@@ -38,7 +38,6 @@ vi.mock(`./terminalSession`, () => ({
     mountTerminalSession: vi.fn(),
     parkTerminalSession: vi.fn(),
     disposeTerminalSession: vi.fn(),
-    persistScrollback: vi.fn(),
     retypeTerminalSession: vi.fn(),
     copySelection: vi.fn(),
     pasteIntoTerminal: vi.fn(),

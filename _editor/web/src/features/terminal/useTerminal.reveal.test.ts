@@ -31,7 +31,6 @@ vi.mock("./terminalSession", () => ({
     mountTerminalSession: vi.fn(),
     parkTerminalSession: vi.fn(),
     disposeTerminalSession: vi.fn(),
-    persistScrollback: vi.fn(),
 }));
 
 const { createTerminalTabs } = await import("./useTerminal");

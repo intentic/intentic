@@ -56,7 +56,7 @@
         "@shikijs/monaco": "catalog:",
         "@tanstack/query-persist-client-core": "catalog:",
         "@tanstack/vue-query": "catalog:",
-        "@xterm/addon-serialize": "catalog:",
+        "@xterm/addon-search": "catalog:",
         "@xterm/addon-web-links": "catalog:",
         "@xterm/addon-webgl": "catalog:",
         "@xterm/xterm": "catalog:",

@@ -41,9 +41,9 @@ export const isValidSessionName = (name: string): boolean => SESSION_NAME.test(n
 // mid-line stub and report success.
 const CAPTURE_MAX_BYTES = 64 * 1_048_576;
 
-// One session's pane history as plain text, what the browser has no other route to, because its live view is
-// a tmux client on the ALTERNATE screen and the scrollback the wheel moves through never leaves this side of
-// the socket. `-p` prints to stdout, `-S -<n>` starts n lines back (tmux clamps to the history it has), `-J`
+// One session's pane history as plain text, the part BEYOND what the live tab holds: an attach replays the last
+// few thousand lines into the browser's xterm (tmux-control.ts), and tmux keeps up to 100k, so this is how the
+// rest is read. `-p` prints to stdout, `-S -<n>` starts n lines back (tmux clamps to the history it has), `-J`
 // rejoins lines a program hard-wrapped so a copied URL or path comes back whole. Deliberately no `-e`: this is
 // read and copied, and colour escapes would ride along into the selection.
 //

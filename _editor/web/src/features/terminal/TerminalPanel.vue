@@ -3,7 +3,7 @@ import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconNam
 import type { Disposable } from "@intentic/extension-api";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "./BackgroundProcesses.vue";
 import WorkTerminals from "./WorkTerminals.vue";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../../shell/commands/useCommands";
@@ -507,11 +507,10 @@ const copyScrollback = async (): Promise<void> => {
 };
 
 // --- Context menu (right-click the GRID) -------------------------------------------------------
-// Right-click inside a terminal used to reach tmux, whose default binding drew its OWN pane menu over the
-// output, splits, swap, kill, respawn: a menu about tmux's panes, in an app whose panes are the strip above,
-// positioned at the pane's idea of the pointer. Those bindings are gone from the image's tmux.conf, so the
-// gesture lands here, on what a terminal actually owes a browser: the clipboard, and the scrollback the
-// alternate screen hides.
+// What a terminal owes a browser on a right-click: the clipboard verbs (a right-click on a word with nothing
+// selected selects the word first, xterm's rightClickSelectsWord, so Copy has something to copy), and the way
+// to the history beyond what the tab replayed on attach. tmux never sees the gesture: the browser's client is a
+// control-mode one (terminalSession.ts), so there is no tmux pane menu to draw over the output any more.
 //
 // It targets the session UNDER THE POINTER, not the focused one: in a split those differ, and a menu that
 // copied from the other pane would be a quiet wrong answer.
@@ -553,6 +552,121 @@ const gridItems = computed<MenuItem[]>(() => {
     }
     return items;
 });
+
+// --- Find (Ctrl+F) -----------------------------------------------------------------------------
+// xterm's search addon over the ACTIVE session's whole buffer, scrollback included, the way a local terminal
+// finds things: matches are painted in place and on the scrollbar's overview ruler, Enter walks them, the bar
+// says which of how many. Incremental as you type (the current match extends rather than jumping), and the
+// decorations come off when the bar closes or the active tab changes, a highlight left on a pane nobody is
+// searching is the kind of state that reads as a bug later. Bound to the chord every editor and VSCode's own
+// terminal use for it; the shell's readline forward-char on that key is the trade, and it is rebindable.
+const finding = ref(false);
+const findQuery = ref(``);
+const findInput = ref<HTMLInputElement>();
+// The addon's own count, with -1 for "more than it will count" (its 1000-match ceiling). Undefined until a
+// query has been run against the active session.
+const findResults = ref<{ index: number; count: number } | undefined>(undefined);
+// The session whose decorations are up and whose result events are subscribed, so switching tabs mid-find
+// clears the one left behind before painting the one arrived at.
+let findBound: { search: { clearDecorations: () => void }; results: { dispose: () => void } } | undefined;
+
+// Yellow on the dark grid, the colour the terminal palette already uses for "look here"; the active match
+// saturates so the eye finds it among its siblings. Hex with alpha: xterm's decorations take CSS colour.
+const FIND_DECORATIONS = {
+    matchBackground: `#facc1540`,
+    matchBorder: `#facc1580`,
+    matchOverviewRuler: `#facc15`,
+    activeMatchBackground: `#facc15a0`,
+    activeMatchBorder: `#facc15`,
+    activeMatchColorOverviewRuler: `#fde047`,
+};
+
+const activeSession = () => (activeName.value === undefined ? undefined : terminalSessionOf(activeName.value));
+
+const unbindFind = (): void => {
+    findBound?.results.dispose();
+    findBound?.search.clearDecorations();
+    findBound = undefined;
+    findResults.value = undefined;
+};
+
+const bindFind = (): void => {
+    unbindFind();
+    const session = activeSession();
+    if (session === undefined) {
+        return;
+    }
+    findBound = {
+        search: session.search,
+        results: session.search.onDidChangeResults(({ resultIndex, resultCount }) => {
+            findResults.value = { index: resultIndex, count: resultCount };
+        }),
+    };
+};
+
+const runFind = (incremental: boolean): void => {
+    const session = activeSession();
+    if (session === undefined) {
+        return;
+    }
+    if (findBound?.search !== session.search) {
+        bindFind();
+    }
+    if (findQuery.value === ``) {
+        session.search.clearDecorations();
+        findResults.value = undefined;
+        return;
+    }
+    session.search.findNext(findQuery.value, { incremental, decorations: FIND_DECORATIONS });
+};
+const findNext = (): void => runFind(false);
+const findPrevious = (): void => {
+    const session = activeSession();
+    if (session !== undefined && findQuery.value !== ``) {
+        session.search.findPrevious(findQuery.value, { decorations: FIND_DECORATIONS });
+    }
+};
+
+const openFind = (): void => {
+    if (activeName.value === undefined) {
+        return;
+    }
+    finding.value = true;
+    void nextTick(() => {
+        findInput.value?.focus();
+        findInput.value?.select();
+    });
+    if (findQuery.value !== ``) {
+        runFind(true);
+    }
+};
+
+// Esc, or the ×: the terminal gets the keyboard back, the highlights go.
+const closeFind = (): void => {
+    finding.value = false;
+    unbindFind();
+    activeSession()?.term.focus();
+};
+
+const findLabel = computed((): string => {
+    const results = findResults.value;
+    if (results === undefined) {
+        return ``;
+    }
+    if (results.count === 0) {
+        return `No results`;
+    }
+    return `${String(results.index + 1)} of ${results.count < 0 ? `many` : String(results.count)}`;
+});
+
+// A find follows the active tab: the highlights leave the pane that lost focus and the same query runs on the
+// one that gained it, which is what "find" means on a strip of terminals.
+watch(activeName, () => {
+    if (finding.value) {
+        runFind(true);
+    }
+});
+onBeforeUnmount(unbindFind);
 
 // --- Panel geometry ----------------------------------------------------------------------------
 // Persisted per surface. Height is clamped to a floor and ~80% of the viewport. There is no collapsed state:
@@ -703,6 +817,16 @@ const registerPanelCommands = (): void => {
             handler: (): void => {
                 showWorkTerminals.value = !showWorkTerminals.value;
             },
+        },
+        {
+            command: `terminal.find`,
+            title: `Find in Terminal`,
+            icon: `search`,
+            // Cmd+F on a Mac, Ctrl+F elsewhere, exactly VSCode's terminal find. Gated to a keystroke from inside
+            // this panel so the browser's page find keeps the chord everywhere else.
+            keybinding: `Mod+F`,
+            when: `tabSurface == 'terminal'`,
+            handler: openFind,
         },
         {
             command: `terminal.nextTab`,
@@ -1206,6 +1330,36 @@ const endResize = (event: PointerEvent): void => {
                  rather than per cell because the cells are built imperatively: the handler reads which session
                  it landed in off the cell's own dataset. -->
             <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" @contextmenu="onGridContextMenu"></div>
+            <!-- FIND, over the pane's top-right corner (VSCode's placement), so the rows it highlights stay in
+                 view under it. Enter and Shift+Enter walk the matches; Esc hands the keyboard back. -->
+            <div
+                v-if="finding"
+                class="absolute top-1 right-4 z-10 flex items-center gap-1 rounded-md border border-line bg-card px-1.5 py-1 shadow-md"
+                @keydown.esc.prevent="closeFind"
+            >
+                <Icon name="search" class="text-2xs text-muted" />
+                <input
+                    ref="findInput"
+                    v-model="findQuery"
+                    type="text"
+                    placeholder="Find"
+                    aria-label="Find in terminal"
+                    class="ui-field-box ui-field-sm w-44"
+                    @input="runFind(true)"
+                    @keydown.enter.exact.prevent="findNext"
+                    @keydown.shift.enter.prevent="findPrevious"
+                />
+                <span class="min-w-14 text-center font-mono text-2xs text-muted" aria-live="polite">{{ findLabel }}</span>
+                <button type="button" :class="ui.iconButton()" aria-label="Previous match" v-tooltip.top="'Previous match (Shift+Enter)'" @click="findPrevious">
+                    <Icon name="chevron-up" />
+                </button>
+                <button type="button" :class="ui.iconButton()" aria-label="Next match" v-tooltip.top="'Next match (Enter)'" @click="findNext">
+                    <Icon name="chevron-down" />
+                </button>
+                <button type="button" :class="ui.iconButton()" aria-label="Close find" v-tooltip.top="'Close (Esc)'" @click="closeFind">
+                    <Icon name="times" />
+                </button>
+            </div>
             <!-- NOTHING TO SHOW, SAID OUT LOUD. The panel opened FOR a session suppresses the empty-panel shell
                  (see attach) because that session is normally seconds away, but a surface can ask for one that
                  will never arrive: a dev server someone started outside this sandbox has no terminal here, and
@@ -1277,13 +1431,12 @@ const endResize = (event: PointerEvent): void => {
              into the floating window while the panel floats there. -->
         <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
 
-        <!-- Right-click INSIDE a terminal: the clipboard verbs and the scrollback, in the place tmux used to
-             draw its own pane menu. -->
+        <!-- Right-click INSIDE a terminal: the clipboard verbs and the deeper scrollback. -->
         <ContextMenu ref="gridMenu" :model="gridItems" :min-width="12" />
 
-        <!-- The pane's history as selectable text. The live grid can only ever offer the screenful in front of
-             you: a tmux client runs on the alternate screen, so its scrollback never reaches the browser, and
-             this is where "scroll back and copy that" is answered: real text, native selection, Ctrl+F. -->
+        <!-- The pane's history as selectable text, BEYOND what the live grid holds: an attach replays the last
+             few thousand lines into xterm, where the wheel, a drag and Ctrl+F already reach them; tmux keeps
+             far more, and this is where the rest is read, as real text with native selection. -->
         <Modal
             :open="scrollbackName !== undefined"
             size="xl"

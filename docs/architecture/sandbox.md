@@ -51,7 +51,7 @@ survive reconnects. Its subsystems:
   ([sessions/transcript-record.ts](../../_sandbox/sandbox/src/sessions/transcript-record.ts)), appended the settled
   run's rows, the same rows every window drew. The provider's session store is only the recovery source above,
   which is why a provider that keeps no readable store still opens.
-- **Terminals**: interactive PTYs over WebSocket ([terminal/terminal.ts](../../_sandbox/sandbox/src/terminal/terminal.ts)).
+- **Terminals**: tmux control-mode clients over WebSocket, the pane's raw bytes into the browser's xterm ([terminal/terminal.ts](../../_sandbox/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews**: per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
   ([panels/](../../_sandbox/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal
   (a procfs scan lists listening ports, an explicit forward maps one onto a fixed slot behind

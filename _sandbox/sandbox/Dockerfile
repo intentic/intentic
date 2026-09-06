@@ -113,6 +113,12 @@ RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
 # file that died with the container. Matched to tmux's history-limit below, since both bound the same thing:
 # how far back the owner can reach in a terminal.
 #
+# zle_highlight is zsh's default list with ONE entry changed: `paste:standout` → `paste:none`. Since 5.1 zsh
+# draws a bracketed paste in reverse video until the next keystroke, which in the browser terminal read as "the
+# whole paste is selected" — and it is stated as the full list because assigning the variable REPLACES the
+# default, so `zle_highlight=(paste:none)` alone would also drop the region/isearch highlighting people rely on.
+# Bracketed paste itself stays on: a pasted newline still waits for Enter instead of running.
+#
 # THE TWO HOOKS AT THE END ARE WHAT MAKES THE PANEL'S BUSY DOT LIVE. tmux tells nobody when a command starts or
 # stops inside a live pane — `pane_current_command` just reads differently the next time somebody asks — so the
 # daemon could only ever sample it, and the dot outlived the command by up to a poll. The shell knows the exact
@@ -135,6 +141,7 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
         'plugins=(git zsh-autosuggestions)' \
         "ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'" \
         "PROMPT_EOL_MARK=''" \
+        'zle_highlight=(region:standout special:standout suffix:bold isearch:underline paste:none)' \
         ': ${HISTFILE:=${HISTORY_ROOT:-/history}/shell/zsh_history}' \
         'HISTSIZE=100000' \
         'SAVEHIST=100000' \
@@ -144,24 +151,17 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
         'add-zsh-hook preexec _intentic_prompt_signal' \
         'add-zsh-hook precmd _intentic_prompt_signal' \
         > /root/.zshrc
-# tmux backs each terminal tab (system/terminal.ts attaches one session per tab). The web UI draws the tab bar,
-# so the tmux status bar is off; default-command launches the oh-my-zsh zsh above (not /bin/sh); destroy-unattached
-# off keeps a session alive when its web client detaches on reload/drop — the whole point of tmux-backed persistence.
-# Mouse is ON because a tmux CLIENT runs on the alternate screen (its first bytes to the pty are ?1049h), and
-# the alternate screen has no scrollback — so with mouse off the wheel is not a scroll at all: xterm takes its
-# no-scrollback branch and sends arrow keys to the pty instead, which at a post-run prompt walks zsh history and
-# leaves a command the user never typed sitting on the prompt line. On, the wheel reaches tmux, which scrolls
-# the history-limit above; tmux's default WheelUpPane is `copy-mode -e`, so scrolling back to the bottom leaves
-# copy-mode on its own, and copy-mode's `y` lands in the browser clipboard through set-clipboard/OSC 52 below.
-# The cost is that mouse reporting is now always on, so a plain drag would belong to the pane rather than the
-# browser — the web client's own gate (terminalSession.ts) is written for exactly that mode and keeps a drag a
-# native selection while letting a click through.
-# The two mouse bindings BELOW the wheel are unbound for the same reason the status bar is off: in a browser
-# they are someone else's job. tmux's default right-click draws its own pane menu (splits, kill, respawn) INSIDE
-# the terminal, over the top of the browser context menu the panel puts there — and it is drawn at the pane's
-# idea of the pointer, on rows the user cannot click away from. Its default middle-click pastes tmux's OWN
-# buffer, which in a browser session is stale or empty and never the thing the user just copied. Both gestures
-# belong to the web client, which has the real clipboard and the real menu; the wheel stays tmux's.
+# tmux backs each terminal tab (terminal/terminal.ts attaches one session per tab), as a PERSISTENCE layer only:
+# the browser's client is a CONTROL-MODE client (`tmux -C`, terminal/tmux-control.ts), which gets every pane's
+# raw bytes as text notifications instead of a drawn screen, and xterm in the browser is the terminal that
+# interprets them. So nothing here is about how a pane LOOKS — no status bar (the web UI draws the tab bar), no
+# mouse (the browser's wheel scrolls xterm's own scrollback, a drag is a native selection, and a program that
+# wants the mouse asks xterm for it directly through the raw stream), no clipboard plumbing (an OSC 52 from a
+# program reaches xterm raw), and nothing bound to the prefix key (keystrokes are injected straight into the
+# pane, tmux never sees them as its own). default-command launches the oh-my-zsh zsh above (not /bin/sh);
+# destroy-unattached off keeps a session alive when its web client detaches on reload/drop — the whole point of
+# tmux-backed persistence; history-limit is how far back a fresh attach can replay (tmux-control.ts captures it
+# to seed xterm's scrollback), matched by the shell's HISTSIZE above.
 # The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
 # /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
 # the same hooks for re-arming a server that outlived a daemon restart). The stream is replayed through
@@ -173,15 +173,10 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
 RUN printf '%s\n' \
         'set -g status off' \
         'set -g history-limit 100000' \
-        'set -g mouse on' \
-        'unbind -n MouseDown3Pane' \
-        'unbind -n MouseDown2Pane' \
         'setw -g aggressive-resize on' \
         'set -g default-terminal "tmux-256color"' \
         'set -g default-command zsh' \
         'set -g destroy-unattached off' \
-        'set -g set-clipboard on' \
-        "set -as terminal-overrides ',xterm-256color:Ms=\\E]52;%p1%s;%p2%s\\007'" \
         "set-hook -g session-created 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
         "set-hook -g after-new-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
         "set-hook -g after-split-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
