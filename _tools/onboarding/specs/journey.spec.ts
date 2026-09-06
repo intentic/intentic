@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { composeProvisioner } from "../src/provisioners/compose.js";
+import { icProvisioner } from "../src/provisioners/ic.js";
 import type { Provisioner } from "../src/provisioner.js";
 import { SIGN_IN_IS_SEEDED } from "../src/seed.js";
 import { readWorldFile } from "../src/world-file.js";
@@ -26,6 +27,7 @@ const world = readWorldFile();
 
 const PROVISIONERS: Record<string, () => Provisioner> = {
     compose: composeProvisioner,
+    ic: icProvisioner,
 };
 
 test.describe.configure({ mode: `serial` });
@@ -33,6 +35,10 @@ test.describe.configure({ mode: `serial` });
 test.skip(world.standDown !== undefined, world.standDown ?? ``);
 
 let provisioner: Provisioner | undefined;
+/* Why THIS path cannot run on THIS machine, when a path needs something the shared world does not provide
+ * (provisioner.ts says what that can be). Held here rather than checked twice because the two tests below
+ * share one provisioned sandbox: a lane that stood down has no sandbox for either of them. */
+let laneStandDown: string | undefined;
 
 test.afterAll(async () => {
     await provisioner?.teardown();
@@ -45,6 +51,11 @@ test(`a new account reaches a connected sandbox`, async ({ page }, testInfo) => 
         throw new Error(`no provisioner named ${testInfo.project.name} — the project and the registry have drifted`);
     }
     provisioner = make();
+
+    // Asked before anything is stood up: a lane that cannot run here says so with a sentence somebody can act
+    // on, rather than failing halfway through a provision on a tool the machine never had.
+    laneStandDown = await provisioner.standDown?.();
+    test.skip(laneStandDown !== undefined, laneStandDown ?? ``);
 
     /* ARRIVE, SIGNED IN. What matters here is that the app ACCEPTS the session: an app that bounced this to
      * /login would fail on the next line rather than three steps later, wearing a different symptom. */
@@ -71,6 +82,9 @@ test(`a new account reaches a connected sandbox`, async ({ page }, testInfo) => 
  * that exists in the suite with its reason attached is the one kind of gap that does not get forgotten.
  */
 test(`the free agent answers`, async ({ page }) => {
+    // Both tests run against the ONE sandbox the test above provisioned, so a lane that stood down there has
+    // nothing for this one to talk to either.
+    test.skip(laneStandDown !== undefined, laneStandDown ?? ``);
     test.skip(
         SIGN_IN_IS_SEEDED,
         `needs the stand-in Google: this journey's sign-in is seeded, and a provisioned daemon verifies Google ID tokens for real — it answers the seeded credential with 401`,

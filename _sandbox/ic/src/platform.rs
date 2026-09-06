@@ -11,9 +11,19 @@ use crate::util::{bail, kv_lines, step, Result};
 #[derive(Default)]
 pub struct Claim {
     pub connect_token: Option<String>,
-    /// The sandbox's reachability grant on the self-hosted tunnel hub: the account token the in-box agent
-    /// enables with, the hub as this machine reaches it, and the namespace its public names live under.
-    /// Replaces the Cloudflare connector token this flow used to carry.
+    /* WHAT MAKES THE SANDBOX REACHABLE, and the two values are useless apart: a platform-signed grant naming
+     * this sandbox's id, and the edge the daemon presents it to. They ride into the container's environment
+     * and are read nowhere else on this machine — the dial is outbound, from inside, so nothing here opens a
+     * port or arranges a name.
+     *
+     * Dropping either produces the quietest failure this flow has: the box starts, comes healthy, registers
+     * with the platform, and serves nobody, because a daemon with no edge dials no tunnel and the address the
+     * platform published answers 502 forever. That is not hypothetical — it is what shipped when the zrok
+     * trio these replaced was deleted from this struct and nothing took its place. */
+    pub sandbox_grant: Option<String>,
+    pub ingress_url: Option<String>,
+    /// The public name the platform published for this sandbox — the address the browser opens, and the
+    /// source of the slug every container, network and later command is keyed by.
     pub sandbox_hostname: Option<String>,
     pub sync_pair_token: Option<String>,
     /// The one-shot pairing the CONNECTED-DEVICE agent redeems, so this machine's sandboxes can be managed
@@ -84,6 +94,8 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     let lookup = kv_lines(&body);
     Ok(Claim {
         connect_token: lookup("CONNECT_TOKEN"),
+        sandbox_grant: lookup("SANDBOX_GRANT"),
+        ingress_url: lookup("INGRESS_URL"),
         sandbox_hostname: lookup("SANDBOX_HOSTNAME"),
         sync_pair_token: lookup("SYNC_PAIR_TOKEN"),
         host_pair_token: lookup("HOST_PAIR_TOKEN"),

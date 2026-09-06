@@ -26,6 +26,14 @@ export interface ProvisionContext {
 export interface Provisioner {
     /** Matches the Playwright project name, so a spec finds its own. */
     readonly name: string;
+    /* Why this path cannot run HERE, or undefined when it can — asked once, before the journey starts.
+     *
+     * A path can need something of the machine that the shared world does not: the CLI lane drives a binary
+     * this repository compiles, and a machine with no Rust toolchain and no prebuilt one cannot produce it.
+     * That is a fact about the machine rather than about the product, so it stands the LANE down with a
+     * sentence somebody can act on, exactly as the world stands the whole tier down without Docker. A path
+     * that needs nothing beyond the world omits this. */
+    standDown?(): Promise<string | undefined>;
     /** Ends with a sandbox this account owns and the platform considers connected. */
     provision(context: ProvisionContext): Promise<void>;
     /** Never throws. A teardown that fails hides whatever the run was reporting. */

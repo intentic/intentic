@@ -13,6 +13,7 @@ import {
     containerNames,
     dockerOsType,
     installedApp,
+    missingEnvNames,
     publishedPort,
     titled,
     webView2Version,
@@ -132,6 +133,15 @@ export const dockerInspectRunning = async (container: string): Promise<boolean> 
 export const sandboxHealth = async (container: string): Promise<string | undefined> => {
     const result = await run(`docker`, [`exec`, container, `curl`, `-fsS`, `--max-time`, `10`, `localhost:8787/health`]);
     return result.code === 0 ? result.stdout.trim() : undefined;
+};
+
+/* WHICH OF THESE NAMES THE CONTAINER DOES NOT CARRY A VALUE FOR — the record of what the run that created it
+ * was actually given, which is the only place a value the setup silently dropped can be seen at all. An
+ * inspect that fails answers "all of them": a container nobody can read is not one that carries anything, and
+ * the caller's other assertions already say why it could not be read. */
+export const missingContainerEnv = async (container: string, keys: readonly string[]): Promise<string[]> => {
+    const result = await run(`docker`, [`inspect`, `-f`, `{{range .Config.Env}}{{println .}}{{end}}`, container]);
+    return result.code === 0 ? missingEnvNames(result.stdout, keys) : [...keys];
 };
 
 export const dockerLogs = async (container: string, lines: number): Promise<string> => {

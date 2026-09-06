@@ -35,7 +35,7 @@ import { join } from "node:path";
 import { CONNECT_TOKEN, INGRESS_URL, PLATFORM_URL_UNREACHABLE, PRODUCT_NAME, SANDBOX_GRANT, SANDBOX_HOSTNAME } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { sandboxContainerName } from "./parse.js";
-import { dockerContainerOs, dockerInspectRunning, dockerLogs, dockerReachable, findInstalledApp, sandboxHealth } from "./probe.js";
+import { dockerContainerOs, dockerInspectRunning, dockerLogs, dockerReachable, findInstalledApp, missingContainerEnv, sandboxHealth } from "./probe.js";
 import { run } from "./run.js";
 
 export interface SetupTierOptions {
@@ -181,10 +181,16 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         return undefined;
     }
 
-    // ── independent read-back ───────────────────────────────────────────────────────────────────────────
-    // connect's success already implies a healthy daemon, so these assert what its exit code does not: that the
-    // container is named the way every later flow addresses it (recreate, cleanup and the launcher's docker
-    // reads all key off `intentic-sandbox-<slug>`), and that the daemon identifies itself.
+    return readBack(harness);
+};
+
+/* THE INDEPENDENT READ-BACK — what connect's exit code does not say.
+ *
+ * Its success already implies a healthy daemon, so these assert the rest: that the container is named the way
+ * every later flow addresses it (recreate, cleanup and the launcher's docker reads all key off
+ * `intentic-sandbox-<slug>`), that the daemon identifies itself, and that what this tier handed the script
+ * reached the container it made. */
+const readBack = async (harness: Harness): Promise<string | undefined> => {
     harness.section(`read-back`);
     const container = sandboxContainerName(SANDBOX_HOSTNAME);
     if (await dockerInspectRunning(container)) {
@@ -200,5 +206,25 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         return undefined;
     }
     harness.pass(`the daemon answers /health: ${health}`);
+
+    /* WHAT THIS TIER HANDED IN, ON THE CONTAINER THE SCRIPT MADE.
+     *
+     * Every assertion above passes on a sandbox that was given no reachability at all: it runs, and its daemon
+     * answers /health on its own port. The tunnel it never dials is invisible from here — and that is not a
+     * hypothetical gap, it is what shipped. The ingress migration replaced the values connect passes into the
+     * container and the CLI was the one layer nobody added the replacements back to, so installs produced
+     * healthy boxes whose public address answered 502 forever, while this tier stayed green.
+     *
+     * The dial still fails here and must (the grant is a dummy naming an unroutable edge). Arriving is the
+     * part that is checkable without an edge, so that is what this checks. */
+    const missing = await missingContainerEnv(container, [`SANDBOX_GRANT`, `INGRESS_URL`]);
+    if (missing.length > 0) {
+        harness.fail(
+            `the container carries no ${missing.join(` and `)}`,
+            `This tier passed ${missing.length === 1 ? `it` : `them`} to connect.ps1, so the value was dropped between the environment and the docker run. A sandbox without it dials no tunnel: it comes up healthy, registers with the platform, and its public address answers 502 for good.`,
+        );
+        return undefined;
+    }
+    harness.pass(`the container carries the grant and the edge it dials`);
     return container;
 };

@@ -56,6 +56,15 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
     let container = format!("{CONTAINER_PREFIX}{slug}");
     let deadline = Instant::now() + patience;
     let mut settled: [Option<Outcome>; 5] = [const { None }; 5];
+    /* WHAT THIS CONTAINER WAS GIVEN TO DIAL THE EDGE WITH, read once, before any patience is spent. The
+     * edge's 502 has two very different causes and one appearance: a tunnel that has not been dialled YET,
+     * which waiting fixes, and a container that was created without a grant, which waiting cannot — it is a
+     * fact about the docker run that made this box. Both used to read as the first, so a sandbox that could
+     * never be reachable was reported as one still coming up, with a remedy that asked for more time. */
+    let missing_reach = match public_url {
+        Some(_) => missing_reach_env(&container),
+        None => Vec::new(),
+    };
 
     loop {
         let last_round = Instant::now() >= deadline;
@@ -128,7 +137,12 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
                     match &settled[DNS] {
                         Some(Outcome::Pass) => {
                             let url = public_url.expect("host implies url");
-                            settle(&mut settled, URL, probe_public(url, &host), last_round);
+                            settle(
+                                &mut settled,
+                                URL,
+                                probe_public(url, &host, &missing_reach),
+                                last_round,
+                            );
                         }
                         Some(_) => settle(
                             &mut settled,
@@ -343,7 +357,21 @@ fn probe_dns(host: &str) -> Verdict {
     })
 }
 
-fn probe_public(url: &str, host: &str) -> Verdict {
+/// The reachability values this container was NOT given, off its own environment — the record of what the
+/// docker run that made it carried. Unreadable (no such container, no daemon) reads as nothing missing: a
+/// cause is never invented, and the container link above already names that case.
+fn missing_reach_env(container: &str) -> Vec<&'static str> {
+    let Some(text) = container_env_text(container) else {
+        return Vec::new();
+    };
+    let lookup = kv_lines(&text);
+    ["SANDBOX_GRANT", "INGRESS_URL"]
+        .into_iter()
+        .filter(|key| lookup(key).unwrap_or_default().is_empty())
+        .collect()
+}
+
+fn probe_public(url: &str, host: &str, missing_reach: &[&str]) -> Verdict {
     let agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
         .build()
@@ -353,12 +381,28 @@ fn probe_public(url: &str, host: &str) -> Verdict {
         Err(ureq::Error::StatusCode(status)) => Ok(status),
         Err(err) => Err(err.to_string()),
     };
-    classify_public(&result, host)
+    classify_public(&result, host, missing_reach)
 }
 
-fn classify_public(result: &std::result::Result<u16, String>, host: &str) -> Verdict {
+fn classify_public(
+    result: &std::result::Result<u16, String>,
+    host: &str,
+    missing_reach: &[&str],
+) -> Verdict {
     match result {
         Ok(200) => Verdict::Settled(Outcome::Pass),
+        /* The same 502, with the cause already in hand: this container was created without the values its
+         * daemon dials with, so there is no tunnel to wait for. SETTLED, not pending — patience is for a dial
+         * in flight, and spending two minutes of it here only delays a verdict that cannot change. */
+        Ok(status @ (502 | 503 | 530)) if !missing_reach.is_empty() => {
+            Verdict::Settled(Outcome::Fail {
+                problem: format!(
+                    "the edge answers HTTP {status} for {host} — this container carries no {}, so its daemon dials no tunnel.",
+                    missing_reach.join(" and ")
+                ),
+                remedy: "re-run the setup command from this sandbox's setup screen — what the container is missing rides in with it.".to_string(),
+            })
+        }
         /* The edge's own "I am up, nothing is registered for this name" answers. The cause is upstream of
          * anything visible from here: no tunnel is registered under this sandbox's id, which means the daemon
          * has not dialled the edge (yet, or at all). The daemon link above says whether it is even running. */
@@ -408,11 +452,16 @@ pub fn container_public_url(container: &str) -> Option<String> {
     container_env(container, "SANDBOX_PUBLIC_URL")
 }
 
-/// One value out of the container's own env, empty read as absent — the run that created this container is
-/// the only record of what it was given, and it answers for a stopped one too.
-fn container_env(container: &str, key: &str) -> Option<String> {
+/// The container's own environment as KEY=value lines — the run that created this container is the only
+/// record of what it was given, and it answers for a stopped one too.
+fn container_env_text(container: &str) -> Option<String> {
     let env = docker::container_env_nul(container).ok()?;
-    let text = String::from_utf8_lossy(&env).replace('\0', "\n");
+    Some(String::from_utf8_lossy(&env).replace('\0', "\n"))
+}
+
+/// One value out of that environment, empty read as absent.
+fn container_env(container: &str, key: &str) -> Option<String> {
+    let text = container_env_text(container)?;
     let value = kv_lines(&text)(key);
     value.filter(|value| !value.is_empty())
 }
@@ -502,20 +551,57 @@ mod tests {
 
     #[test]
     fn public_probe_separates_edge_up_from_edge_unreachable() {
-        match classify_public(&Ok(530), "sandbox-x.example.com") {
+        match classify_public(&Ok(530), "sandbox-x.example.com", &[]) {
             Verdict::Pending(Outcome::Fail { problem, .. }) => {
                 assert!(problem.contains("no tunnel is registered"))
             }
             _ => panic!("530 is the no-tunnel symptom"),
         }
         assert!(matches!(
-            classify_public(&Ok(200), "h"),
+            classify_public(&Ok(200), "h", &[]),
             Verdict::Settled(Outcome::Pass)
         ));
         assert!(matches!(
-            classify_public(&Err("tls handshake".into()), "h"),
+            classify_public(&Err("tls handshake".into()), "h", &[]),
             Verdict::Pending(Outcome::Fail { .. })
         ));
+    }
+
+    /* THE 502 THAT WILL NEVER CLEAR. Same status, same edge, different fact: this container was created
+     * without the values its daemon dials with. Waiting is the wrong advice and the wrong verdict — the
+     * whole failure this separates out is a setup that spent two patient minutes on a dial that was never
+     * going to happen, and then told its user to give it a moment. */
+    #[test]
+    fn a_502_from_a_container_that_was_given_no_grant_is_settled_and_names_the_missing_value() {
+        match classify_public(
+            &Ok(502),
+            "sandbox-x.example.com",
+            &["SANDBOX_GRANT", "INGRESS_URL"],
+        ) {
+            Verdict::Settled(Outcome::Fail { problem, remedy }) => {
+                assert!(problem.contains("SANDBOX_GRANT and INGRESS_URL"));
+                assert!(problem.contains("dials no tunnel"));
+                assert!(remedy.contains("re-run the setup command"));
+            }
+            _ => panic!("a container that cannot dial is a settled failure, not a pending one"),
+        }
+        // One half missing is the same fact, named precisely.
+        match classify_public(&Ok(503), "h", &["INGRESS_URL"]) {
+            Verdict::Settled(Outcome::Fail { problem, .. }) => {
+                assert!(problem.contains("no INGRESS_URL"));
+                assert!(!problem.contains("SANDBOX_GRANT"));
+            }
+            _ => panic!("a missing edge is a settled failure"),
+        }
+        // A healthy container still passes, and a non-edge status is untouched by any of this.
+        assert!(matches!(
+            classify_public(&Ok(200), "h", &["SANDBOX_GRANT"]),
+            Verdict::Settled(Outcome::Pass)
+        ));
+        match classify_public(&Ok(404), "h", &["SANDBOX_GRANT"]) {
+            Verdict::Pending(Outcome::Fail { problem, .. }) => assert!(problem.contains("404")),
+            _ => panic!("a 404 is somebody else's problem and stays pending"),
+        }
     }
 
     #[test]

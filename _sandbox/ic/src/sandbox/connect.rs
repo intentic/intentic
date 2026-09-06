@@ -71,6 +71,13 @@ fn connect(
     let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
+    /* THE SANDBOX'S REACHABILITY, carried rather than arranged: a platform-signed grant naming this sandbox's
+     * id, the edge the daemon presents it to, and the public name that edge will answer for. The claim below
+     * supplies all three for a code-carrying setup; the env is the headless spelling both installers document
+     * (CONNECT_TOKEN=… SANDBOX_GRANT=… ./connect.sh). They ride into the container and are used nowhere else
+     * here — the dial is outbound from inside the box, so this machine opens nothing. */
+    let mut sandbox_grant = env("SANDBOX_GRANT").unwrap_or_default();
+    let mut ingress_url = env("INGRESS_URL").unwrap_or_default();
     let mut sandbox_hostname = env("SANDBOX_HOSTNAME").unwrap_or_default();
     // Only SELF_HOST needs a zone now: it publishes THIS machine's sshd for the deploy engine, on the user's
     // own Cloudflare. The sandbox's own address comes from the platform's edge.
@@ -188,6 +195,8 @@ fn connect(
     if let Some(code) = &setup_code {
         let claim = platform::claim(platform_url, code)?;
         connect_token = claim.connect_token.unwrap_or(connect_token);
+        sandbox_grant = claim.sandbox_grant.unwrap_or(sandbox_grant);
+        ingress_url = claim.ingress_url.unwrap_or(ingress_url);
         sandbox_hostname = claim.sandbox_hostname.unwrap_or(sandbox_hostname);
         sync_pair_token = claim.sync_pair_token.unwrap_or(sync_pair_token);
         host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
@@ -195,13 +204,14 @@ fn connect(
     }
     /* Reachability is the platform's own edge now, and provisioning it is a pure function there: the daemon
      * dials out presenting a signed grant naming this sandbox's id, and the edge routes by parsing that id
-     * back out of the hostname. So there is nothing for this CLI to arrange, and the one thing worth knowing
-     * here is whether the platform named a public address at all — a sandbox claimed without one is a
-     * loopback-only box, which is a legitimate way to run and the warning below says so. */
-    let provided_tunnel = !sandbox_hostname.is_empty();
+     * back out of the hostname. So there is nothing for this CLI to arrange — it CARRIES the three values in
+     * and the box does the rest. Whether they all arrived is `reachability_warning`'s question, asked once
+     * below; this one is only whether the platform named a public address, which is what the slug and the
+     * container's own SANDBOX_PUBLIC_URL are keyed on. */
+    let has_public_name = !sandbox_hostname.is_empty();
 
     // Per-sandbox identity, so several sandboxes coexist: the slug is the same key the public hostname uses.
-    let slug = if provided_tunnel {
+    let slug = if has_public_name {
         sandbox_hostname.split('.').next().unwrap_or("").to_string()
     } else {
         slug_from_token(&connect_token)
@@ -268,10 +278,8 @@ fn connect(
      * box, a sandbox published behind its owner's own domain, and the nightly update drill ever needed. This
      * used to be a hard refusal, and that refusal took the update-survival drill (and every no-tunnel start)
      * down with it: the sandbox it was drilling had never asked to be public. */
-    if !provided_tunnel {
-        ui::warn(
-            "no reachability grant — this sandbox will answer on this machine only (loopback).\nRe-open its setup screen for a command that carries one, or publish it behind your own domain.",
-        );
+    if let Some(warning) = reachability_warning(&sandbox_hostname, &sandbox_grant, &ingress_url) {
+        ui::warn(&warning);
     }
     // SELF_HOST still wants the user's OWN Cloudflare token: it publishes THIS machine's sshd so the sandbox
     // can deploy to it, which is the deploy engine's fabric — not the sandbox's, which the hub now serves.
@@ -398,6 +406,11 @@ fn connect(
         ("WEB_ORIGIN", &web_origin),
         ("SANDBOX_PUBLIC_URL", &sandbox_public_url),
         ("PLATFORM_URL", &platform_url_container),
+        // The whole of reachability, and the reason `connect-env.test.ts` pins this list: the daemon reads
+        // these two out of its own environment and dials the edge with them, so a key missing here is a
+        // sandbox that boots, comes healthy, registers, and answers 502 on the address it was given.
+        ("SANDBOX_GRANT", &sandbox_grant),
+        ("INGRESS_URL", &ingress_url),
         ("SYNC_PAIR_TOKEN", &sync_pair_token),
         // The connected-device seed: the pairing the machine agent below redeems, plus what to call this
         // machine and which OS card it gets. The daemon cannot learn either for itself — it is in a container
@@ -532,6 +545,38 @@ fn connect(
 
     ending(&slug, &container, &sandbox_public_url, self_host);
     Ok(())
+}
+
+/* WHAT THIS RUN CAN PROMISE ABOUT REACHABILITY — three states, and the middle one is the reason this is a
+ * function rather than a boolean.
+ *
+ *   a name, a grant and an edge  the daemon dials out and the address answers. Nothing to say.
+ *   a name and nothing to dial   the platform published an address this box cannot serve. The postflight is
+ *                                about to fail on the edge's 502, and the cause is right here, in hand, two
+ *                                minutes before that.
+ *   no name at all               a loopback-only sandbox: a local-dev box, one published behind its owner's
+ *                                own domain, the update drill. Legitimate, and warned about rather than
+ *                                refused.
+ *
+ * Pure, so the three are asserted rather than reasoned about. This used to be one boolean over the hostname
+ * alone, which read "fully reachable" for a claim that had stopped carrying a grant — and every install that
+ * followed came up healthy, registered, and unreachable, with nothing anywhere naming the missing value. */
+fn reachability_warning(hostname: &str, grant: &str, ingress: &str) -> Option<String> {
+    if hostname.is_empty() {
+        return Some(
+            "no public address — this sandbox will answer on this machine only (loopback).\nRe-open its setup screen for a command that carries one, or publish it behind your own domain."
+                .to_string(),
+        );
+    }
+    let missing = match (grant.is_empty(), ingress.is_empty()) {
+        (false, false) => return None,
+        (true, true) => "no reachability grant and no edge to dial",
+        (true, false) => "no reachability grant",
+        (false, true) => "no edge to dial",
+    };
+    Some(format!(
+        "{missing} — this sandbox will answer on this machine only, and https://{hostname} will answer 502 for as long as that is true.\nRe-open its setup screen for a fresh command, unless you front that address yourself."
+    ))
 }
 
 /* THE ENDING, RANKED — because the old one was seven lines of equal weight and the reader had to find the
@@ -958,6 +1003,38 @@ mod tests {
         assert!(piped.iter().all(|(name, _)| *name != "INTENTIC_UI"));
         // The agent's own variables ride through untouched either way — they are what it is being run FOR.
         assert_eq!(&nested[..2], &vars[..]);
+    }
+
+    /* THE STATE THAT SHIPPED: a claim that named an address and carried no grant. It read as a fully
+     * reachable sandbox, so nothing warned, and the box came up healthy on an address that answered 502
+     * until somebody read a container's environment by hand. */
+    #[test]
+    fn an_address_without_a_grant_is_named_rather_than_read_as_reachable() {
+        let named = |grant, ingress| {
+            reachability_warning("sandbox-abc123.sbx.intentic.dev", grant, ingress)
+                .expect("an address this box cannot serve must be named")
+        };
+        assert!(named("", "https://ingress.sbx.intentic.dev").contains("no reachability grant"));
+        assert!(named("ig1.grant", "").contains("no edge to dial"));
+        let neither = named("", "");
+        assert!(neither.contains("no reachability grant and no edge"));
+        // The address is in the sentence: it is the thing that will answer 502, and the reader is about to
+        // meet it in the postflight below.
+        assert!(neither.contains("sandbox-abc123.sbx.intentic.dev"));
+
+        // Fully equipped: nothing to say. A warning here would be on every ordinary install.
+        assert_eq!(
+            reachability_warning(
+                "sandbox-abc123.sbx.intentic.dev",
+                "ig1.grant",
+                "https://ingress.sbx.intentic.dev"
+            ),
+            None
+        );
+        // No address at all is a posture, not a defect — and it says so in its own words.
+        assert!(reachability_warning("", "", "")
+            .expect("a loopback-only sandbox is still worth a word")
+            .contains("loopback"));
     }
 
     #[test]

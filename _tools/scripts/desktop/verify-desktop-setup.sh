@@ -19,9 +19,14 @@
 # HERMETIC — no edge, no Google, no platform. connect.sh documents a direct-token path (CONNECT_TOKEN +
 # SANDBOX_GRANT + SANDBOX_HOSTNAME instead of a setup code), which is what makes that possible: `/setup/claim`
 # only mints a reachability grant when the platform holds a signing key, so a code-claiming run cannot be
-# secret-free. The grant here is a dummy naming an unroutable ingress, so the daemon's tunnel dial fails and
+# secret-free. The grant here is a dummy naming an unroutable ingress, so the daemon's tunnel DIAL fails and
 # retries harmlessly in the background — the entrypoint does not gate the daemon on it, and the daemon is
 # reached on the container's own published port.
+#
+# The dial failing is expected; the grant not ARRIVING is not, and the two look identical from outside the
+# container. That distinction is the whole of the read-back at the bottom of this file: this tier hands the
+# script a grant and an edge, and asserts they are on the container the script created. Without it, a connect
+# that silently dropped both passed every gate here — which is what shipped.
 #
 # What this therefore does NOT cover: the setup-code claim round trip against a real platform. That needs a
 # real signed grant and belongs with the other gated nightly suites, which self-skip without their secrets.
@@ -132,6 +137,20 @@ else
     in_host docker logs --tail 50 "$CONTAINER" >&2 2>&1 || true
     failures=$((failures + 1))
 fi
+
+# WHAT THE SCRIPT WAS GIVEN, ON THE CONTAINER IT MADE. Every gate above passes on a sandbox handed no
+# reachability at all: it runs, it answers /health on its own port, and a tunnel it never dials is invisible
+# from in here. That is the exact shape that shipped — the ingress migration replaced the values connect
+# passed and nobody added the replacements back, so installs produced healthy boxes on public names that
+# answered 502. These two lines are the only place in this tier where that is a failure.
+for key in SANDBOX_GRANT INGRESS_URL; do
+    if in_host docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" | grep -q "^${key}=."; then
+        echo "  ✓ the container carries $key"
+    else
+        echo "  ✗ the container carries no $key — this run passed one in, so connect dropped it, and a sandbox that cannot dial the edge is reachable by nobody" >&2
+        failures=$((failures + 1))
+    fi
+done
 
 echo
 if [ "$failures" -gt 0 ]; then

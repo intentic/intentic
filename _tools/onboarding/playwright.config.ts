@@ -43,7 +43,15 @@ export default defineConfig({
         // a certificate, and a browser that insisted on one would be testing the harness.
         ignoreHTTPSErrors: true,
     },
-    // The full baked chromium rather than the headless shell the sandbox image deletes on purpose;
-    // _tools/e2e/playwright.config.ts carries the reasoning.
-    projects: [{ name: `compose`, use: { ...devices[`Desktop Chrome`], channel: `chromium` } }],
+    /* One project per way of getting a sandbox, and the project NAME is what the journey looks its provisioner
+     * up by. `compose` is the wizard's rendered file; `ic` is the CLI the desktop app and the one-liner both
+     * hand off to, which had no end-to-end coverage at all until a release shipped a setup that came up
+     * healthy and reachable by nobody.
+     *
+     * The full baked chromium rather than the headless shell the sandbox image deletes on purpose;
+     * _tools/e2e/playwright.config.ts carries the reasoning. */
+    projects: [
+        { name: `compose`, use: { ...devices[`Desktop Chrome`], channel: `chromium` } },
+        { name: `ic`, use: { ...devices[`Desktop Chrome`], channel: `chromium` } },
+    ],
 });

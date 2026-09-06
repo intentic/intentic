@@ -20,16 +20,57 @@ const rustKeys = (): Set<string> => {
     return new Set([...block.matchAll(/\("([A-Z_]+)"/g)].map((match) => match[1] ?? ""));
 };
 
+/* WHAT A CONNECTED SANDBOX CANNOT BE WITHOUT, and this is the direction that actually broke.
+ *
+ * The allowlist check below only ever asked whether a key connect.rs passes is one the contract replays,
+ * which catches a key that should not be there and is blind to one that stopped being there at all. When the
+ * reachability migration deleted the zrok trio from the Rust and put SANDBOX_GRANT/INGRESS_URL in its place
+ * everywhere else — the platform mints them, the allowlist replays them, the daemon reads them — connect.rs
+ * was the one layer nobody added them back to. Every install for the next four days produced a container
+ * that came up healthy, registered with the platform, and answered 502 on its own address forever, because
+ * a daemon with no edge dials no tunnel.
+ *
+ * So: a floor of names, each one a capability that fails SILENTLY when its value never arrives. Nothing here
+ * makes a sandbox refuse to start, which is exactly why the list has to exist. */
+const REQUIRED = [
+    // Reachability: the address the platform published, the signed proof of which sandbox this is, and the
+    // edge that proof is presented to. Missing ⇒ a box on a public name that never answers.
+    "SANDBOX_PUBLIC_URL",
+    "SANDBOX_GRANT",
+    "INGRESS_URL",
+    // Identity and the platform it reports to: the daemon's own credential, the owner it binds, the origin
+    // it announces to, and the browser origin it accepts. Missing ⇒ a setup screen that waits forever.
+    "CONNECT_TOKEN",
+    "OWNER_EMAIL",
+    "PLATFORM_URL",
+    "WEB_ORIGIN",
+    "GOOGLE_CLIENT_ID",
+    // The two pairings this machine can never re-derive from inside the container: the folder sync and the
+    // device enrollment. Missing ⇒ a machine whose sandboxes are unmanageable from the browser.
+    "SYNC_PAIR_TOKEN",
+    "HOST_PAIR_TOKEN",
+    "HOST_PLATFORM",
+    "HOST_LABEL",
+] as const;
+
 describe("ic sandbox connect env", () => {
     const keys = rustKeys();
 
     // If a rewrite changes the Rust shape, the extraction above silently returns nothing and the assertions
     // below pass vacuously. Anchor on a floor and on keys the flow cannot be without.
     it("extracts a plausible env set from the Rust source", () => {
-        expect(keys.size).toBeGreaterThanOrEqual(10);
-        for (const required of ["CONNECT_TOKEN", "SANDBOX_PUBLIC_URL", "PLATFORM_URL"]) {
-            expect(keys.has(required), required).toBe(true);
-        }
+        expect(keys.size).toBeGreaterThanOrEqual(REQUIRED.length);
+    });
+
+    it("passes every key a connected sandbox cannot be without", () => {
+        expect(REQUIRED.filter((key) => !keys.has(key))).toEqual([]);
+    });
+
+    // The two lists describe the same values from opposite ends, so a name required here that the contract
+    // does not replay would be a capability every recreate silently drops.
+    it("requires nothing the run contract would not replay", () => {
+        const replayed: readonly string[] = REPLAY_ENV;
+        expect(REQUIRED.filter((key) => !replayed.includes(key))).toEqual([]);
     });
 
     it("passes only keys the run contract replays, so a recreate keeps them", () => {

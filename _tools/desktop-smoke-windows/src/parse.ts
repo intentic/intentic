@@ -186,6 +186,24 @@ export const containerNames = (stdout: string): string[] =>
         .map((line) => line.trim())
         .filter((line) => line !== ``);
 
+/* WHICH OF THE NAMES A CONTAINER DOES NOT CARRY A VALUE FOR, over `docker inspect`'s printed environment
+ * (`{{range .Config.Env}}{{println .}}{{end}}`) — the record of what the run that created it was given, and
+ * the only place a value the setup silently dropped can be seen from outside.
+ *
+ * A NAME WITH AN EMPTY VALUE COUNTS AS MISSING, which is not pedantry: an empty var is exactly how a creation
+ * flow spells "this was never set", and every consumer in the product reads it that way (the daemon's own
+ * config treats an empty grant as "dial no tunnel"). Reporting `SANDBOX_GRANT=` as present would be reporting
+ * the bug as fixed. */
+export const missingEnvNames = (stdout: string, keys: readonly string[]): string[] => {
+    const carried = new Set(
+        containerNames(stdout)
+            .map((line) => line.split(`=`))
+            .filter((parts) => parts.length > 1 && parts.slice(1).join(`=`).trim() !== ``)
+            .map((parts) => parts[0]),
+    );
+    return keys.filter((key) => !carried.has(key));
+};
+
 /* `docker port <container> <port>/tcp`, which answers `127.0.0.1:28122` for a published port and NOTHING AT
  * ALL for one that is not published, exit 0 either way on some engines.
  *

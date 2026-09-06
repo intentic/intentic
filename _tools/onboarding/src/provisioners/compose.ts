@@ -1,13 +1,10 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
-import { errorMessage } from "@intentic/base/errors";
 import { expect } from "@playwright/test";
-import { PrismaClient } from "@intentic-app/prisma";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { waitForAnnounce } from "../announce.js";
 import type { Provisioner, ProvisionContext } from "../provisioner.js";
+import { sh } from "../shell.js";
 
 /* THE DOCKER COMPOSE PATH, the bytes the wizard renders, run the way a user runs them.
  *
@@ -21,69 +18,6 @@ import type { Provisioner, ProvisionContext } from "../provisioner.js";
  * the only way to get exactly what a user would paste, including whatever the copy button decides to put
  * there, rather than a re-derivation that happens to agree today.
  */
-
-const run = promisify(execFile);
-
-/* A FRESH TERMINAL, not this process's environment, and that distinction cost an afternoon.
- *
- * Compose interpolates `${CONNECT_TOKEN}` from the `.env` the claim wrote, but the SHELL's environment
- * outranks that file. This harness runs inside a sandbox that happens to export a `CONNECT_TOKEN` of its own,
- * so compose quietly started the box with somebody else's credential: the container came up perfectly, the
- * platform answered every announce with 404, and nothing anywhere said the word "token".
- *
- * A user pasting these two commands is in a fresh terminal, so that is what they get. The allowlist is what a
- * shell needs to find `curl` and reach Docker, and nothing else, a denylist would only ever be as good as the
- * next variable somebody adds to the compose file.
- */
-const PASS_THROUGH = [`PATH`, `HOME`, `DOCKER_HOST`, `DOCKER_CONFIG`, `DOCKER_CERT_PATH`, `DOCKER_TLS_VERIFY`, `XDG_RUNTIME_DIR`];
-
-const freshShellEnv = (): Record<string, string> =>
-    Object.fromEntries(PASS_THROUGH.flatMap((key) => (process.env[key] === undefined ? [] : [[key, process.env[key]]])));
-
-/* The platform's registry, polled until it records a daemon, or until the deadline, with what the row DID say
- * so the failure is diagnosable from the log alone. `announceRefusal` is the field that turns "nothing
- * happened" into a sentence: the platform writes the address a daemon claimed when it refuses it. */
-const waitForAnnounce = async (databaseUrl: string, since: Date, timeoutMs: number): Promise<void> => {
-    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-    const deadline = Date.now() + timeoutMs;
-    try {
-        let last = `no sandbox row yet`;
-        while (Date.now() < deadline) {
-            const rows = await prisma.sandbox.findMany({ select: { id: true, lastSeenAt: true, daemonUrl: true, announceRefusal: true } });
-            /* `lastSeenAt` AFTER this run started, not merely present. The announce handler is the only writer
-             * of it, but a row can carry an address from the moment it is created, which is how the first
-             * version of this wait returned in five seconds, before the container had finished booting. The
-             * timestamp is the part no other code path can produce. */
-            if (rows.some((row) => row.lastSeenAt !== null && row.lastSeenAt >= since)) {
-                return;
-            }
-            if (rows.length > 0) {
-                last = rows
-                    .map((row) => `${row.id}: lastSeenAt=${row.lastSeenAt?.toISOString() ?? `never`}, refusal=${JSON.stringify(row.announceRefusal)}`)
-                    .join(`; `);
-            }
-            await new Promise((resolveWait) => setTimeout(resolveWait, 1_000));
-        }
-        throw new Error(`no sandbox announced itself to the platform within ${Math.round(timeoutMs / 1000)}s: ${last}`);
-    } finally {
-        await prisma.$disconnect();
-    }
-};
-
-const sh = async (command: string, cwd: string, what: string, timeoutMs = 300_000): Promise<string> => {
-    try {
-        const { stdout, stderr } = await run(`sh`, [`-c`, command], {
-            cwd,
-            env: freshShellEnv(),
-            timeout: timeoutMs,
-            maxBuffer: 32 * 1024 * 1024,
-        });
-        return `${stdout}${stderr}`;
-    } catch (cause) {
-        const message = errorMessage(cause);
-        throw new Error(`${what} failed: ${message}`, { cause });
-    }
-};
 
 /* Read a copy button's payload. The label sits beside the button in the same block, which is how the two
  * blocks on this tab are told apart, they are otherwise identical widgets. */

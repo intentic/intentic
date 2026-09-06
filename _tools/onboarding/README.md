@@ -40,6 +40,7 @@ which is why a path costs one adapter rather than a suite of its own.
 | --- | --- |
 | arrive signed in | covered, with a **seeded** session |
 | the wizard mints a code, renders a compose file, the box comes up and announces | covered, end to end |
+| the wizard mints a code, `ic sandbox connect` redeems it, the box comes up dialling its edge | covered, end to end |
 | the browser adopts the box's address and the workspace opens | covered |
 | send a message to the free agent and read the reply | **written and skipped**: see below |
 
@@ -73,6 +74,21 @@ Most of these were discovered by watching this tier fail in ways that named some
 - **The api and the SPA share a host, a scheme and a certificate.** They are separate origins that must stay
   same-site, or the browser drops the session cookie on every call and a signed-in journey looks exactly like
   a broken login. Same-site comparison includes the scheme, so the two move together or not at all.
+- **The CLI lane drives the ic THIS checkout builds, and takes only the setup code off the rendered command.**
+  The one-liner a user copies is a bootstrap shim: it downloads `ic` from the latest GitHub release and gets the
+  machine ready for Docker. Running those bytes here would test the last release rather than the branch (the
+  objection [src/images.ts](src/images.ts) makes about pulling `:latest`), so the lane reads the code out of the
+  copied command, guards that the command names THIS run's platform, and runs the binary from
+  `IC_BIN`/`dist-bin`/`cargo`. Fetching the shim and preparing Docker is what the desktop smokes cover, on both
+  operating systems, against the bytes an installer actually shipped.
+- **`reachedBy` is what the CLI lane asserts, because a hermetic world has no edge.** The grant this world
+  signs names an unroutable `.test` address, so no tunnel can ever come up and asserting one would be asserting
+  a fiction. The daemon's `/health` reports the POSTURE it was configured into instead: `tunnel` when it was
+  handed a grant and an edge and is dialling, `loopback` when it was handed neither. That one field is the
+  fingerprint of the regression this lane was added for — a setup that drops the grant produces a box which is
+  healthy, registers, and answers 502 on its own address for good. For the same reason, `Public DNS` and
+  `Public URL` are the only checks `ic sandbox connect` is allowed to fail here, and any other failing link
+  fails the lane.
 - **The wizard's commands run in a FRESH shell, not this process's environment.** Compose interpolates
   `${CONNECT_TOKEN}` from the `.env` the claim writes: but a shell variable of the same name outranks that
   file. A harness that exported one of its own started the box with somebody else's credential: the container
@@ -95,10 +111,16 @@ pnpm --filter @intentic-app/onboarding e2e:onboarding
 ```
 
 Needs Docker, `openssl`, and Playwright's Chromium: and needs to be running where Docker publishes, since the
-world lives on loopback ports. Two switches earn their keep while working on it:
-`ONBOARDING_SKIP_IMAGE_BUILD=1` reuses whatever is already tagged, and `ONBOARDING_KEEP=1` leaves the world and
-the compose folder standing after a failure, which is the difference between reading a daemon's log and
-reproducing the run to get one.
+world lives on loopback ports. The CLI lane additionally needs this checkout's `ic`: hand one in with `IC_BIN`,
+leave one at `_sandbox/ic/dist-bin/ic-linux-amd64` (`bash _tools/scripts/build/build-ic.sh linux-x64`), or have
+`cargo` on PATH and it builds one. With none of those that lane stands down with the sentence that fixes it and
+the compose lane still runs. Two switches earn their keep while working on it:
+`ONBOARDING_SKIP_IMAGE_BUILD=1` reuses whatever is already tagged, and `ONBOARDING_KEEP=1` leaves the world, the
+compose folder and the CLI lane's sandbox standing after a failure, which is the difference between reading a
+daemon's log and reproducing the run to get one.
+
+In CI this is nightly.yml's `onboarding` job, on the desktop runner because the CLI lane needs the Rust
+toolchain that image bakes.
 
 ## Key files
 
@@ -110,6 +132,11 @@ reproducing the run to get one.
 - [src/provisioner.ts](src/provisioner.ts): the one thing that differs between the paths.
 - [src/provisioners/compose.ts](src/provisioners/compose.ts): the wizard's own bytes, run the way a user runs
   them.
+- [src/provisioners/ic.ts](src/provisioners/ic.ts): the CLI the desktop app and the one-liner hand off to, and
+  the posture assertion that is the point of running it.
+- [src/announce.ts](src/announce.ts): what "connected" means, asked of the platform's own registry.
+- [src/shell.ts](src/shell.ts): the fresh terminal every lane runs its commands in.
+- [src/ic-binary.ts](src/ic-binary.ts): where the CLI lane's binary comes from, and when it stands down.
 - [src/seed.ts](src/seed.ts): the signed-in account, and how far a seeded one can carry a journey.
 - [specs/world.spec.ts](specs/world.spec.ts): the facts everything else rests on, asserted first.
 - [specs/journey.spec.ts](specs/journey.spec.ts): the journey itself.

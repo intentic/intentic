@@ -7,6 +7,7 @@ import {
     dockerOsType,
     humanDuration,
     installedApp,
+    missingEnvNames,
     nonEmpty,
     publishedPort,
     runnerSupervision,
@@ -171,6 +172,34 @@ test("a runner nobody supervises is told apart from the logon task's", () => {
 
     // Windows' own casing is Windows' business.
     expect(runnerSupervision([{ State: `running`, Repetition: `PT3M` }])).toEqual({ kind: `supervised`, repetition: `PT3M` });
+});
+
+/* THE READ-BACK THAT WOULD HAVE CAUGHT A SHIPPED REGRESSION. Tier 2 hands connect.ps1 a grant and an edge and
+ * every other assertion it makes passes on a container that was given neither: the box runs, and its daemon
+ * answers /health on its own port. Only the environment on the container says whether the setup carried them
+ * in — which is why an empty value must read as missing, since that is precisely what a dropped value leaves
+ * behind and what the daemon itself treats as "dial no tunnel". */
+test("a container's environment answers which names arrived, and an empty value never counts as one", () => {
+    const inspected = `PATH=/usr/bin\nSANDBOX_GRANT=ig1.abc\nINGRESS_URL=https://ingress.e2e.test\n`;
+    expect(missingEnvNames(inspected, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([]);
+
+    // The shape of the bug: the names are absent entirely, which is what ic passing them nowhere looks like.
+    expect(missingEnvNames(`PATH=/usr/bin\nCONNECT_TOKEN=tok\n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([
+        `SANDBOX_GRANT`,
+        `INGRESS_URL`,
+    ]);
+
+    // Set-but-empty is the same fact wearing a name, and reporting it as present would report the bug fixed.
+    expect(missingEnvNames(`SANDBOX_GRANT=\nINGRESS_URL=   \n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([
+        `SANDBOX_GRANT`,
+        `INGRESS_URL`,
+    ]);
+
+    // A value with an `=` in it is one value: base64 and signed grants both end in padding.
+    expect(missingEnvNames(`SANDBOX_GRANT=ig1.YWJj==\n`, [`SANDBOX_GRANT`])).toEqual([]);
+    // Docker's own line endings are Docker's business, and an empty dump names everything asked for.
+    expect(missingEnvNames(`SANDBOX_GRANT=ig1.abc\r\n`, [`SANDBOX_GRANT`])).toEqual([]);
+    expect(missingEnvNames(``, [`SANDBOX_GRANT`])).toEqual([`SANDBOX_GRANT`]);
 });
 
 test("a repetition interval is reported in the units a person reads", () => {
