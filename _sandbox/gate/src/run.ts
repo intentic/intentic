@@ -120,7 +120,6 @@ const PARKED_ON: readonly (readonly [string, string])[] = [
     ["plan", "a plan waiting for approval"],
     ["question", "a question"],
     ["permission", "a permission request"],
-    ["service", "a spend approval"],
     ["capability", "something to be connected"],
     ["credential", "a gated credential"],
 ];

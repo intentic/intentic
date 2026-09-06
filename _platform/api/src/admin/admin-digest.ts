@@ -5,7 +5,7 @@ import { sendMail } from "../mail.js";
 import { adminAttention } from "./admin-attention.js";
 
 /* THE OPERATOR'S MORNING MAIL — the attention feed, pushed once a day instead of waiting to be pulled. The
- * panel answers "what needs me" only when somebody opens it; a stuck payout on a week the operator is busy
+ * panel answers "what needs me" only when somebody opens it; a stuck setup on a week the operator is busy
  * elsewhere waits exactly as long as their curiosity does, which is the failure mode this closes.
  *
  * Sends ONLY when there is something to say (an empty feed mails nobody), only to the ADMIN_EMAILS list,

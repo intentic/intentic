@@ -22,7 +22,7 @@ import {
  * click (or the owner's standing auto-approve band) releases a signature. One click pays exactly one price,
  * a repeat parks a fresh card. A prompt-injected model can ask; it cannot spend.
  *
- * Raised OUTSIDE the turn generator for the services gate's reason verbatim: the CLI call arrives as an HTTP
+ * Raised OUTSIDE the turn generator, for a plain reason of shape: the CLI call arrives as an HTTP
  * request while the turn sits inside its Bash tool, so frames are pushed into the live run's frame log and
  * mirrored to the registry by hand, and the card is deliberately not journalled, its waiter is the CLI's
  * held connection, which dies with the daemon.

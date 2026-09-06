@@ -340,10 +340,10 @@ const ATTENTION_WORDS = {
      * reader's to clear at all: the others wait for whoever is looking, this one waits for an exact list of
      * addresses and the daemon refuses everybody else (secrets/credential-gate.ts).
      *
-     * RANKED HERE, above a question and below a spend, for the reason the neighbours are ranked: it blocks the
+     * RANKED HERE, above a question and below a setup, for the reason the neighbours are ranked: it blocks the
      * turn outright the way a setup does, and it is worth the trip because clearing it may mean finding
-     * somebody. It is not first because a plan and a spend are decisions with consequences to read, while this
-     * one is a yes-or-no about a credential whose whole context is on the card.
+     * somebody. It is not first because a plan is a decision with consequences to read, while this one is a
+     * yes-or-no about a credential whose whole context is on the card.
      *
      * THE VERB NAMES THE DESTINATION rather than the action, which is this table's exception and has to be:
      * `Release` would promise something the reader may be unable to do, and a button that reads as an action
@@ -636,7 +636,7 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     }
     /* THE SAME FLAG THE CHIP LED WITH, so the noun in the corner and the verb at the foot of the card are
      * always about one park. They were two ranked lists (see ATTENTION_WORDS) and could disagree: a card
-     * carrying both a question and a spend offer wore "Spend approval" over a press reading "Answer". */
+     * carrying both a question and a missing capability wore "Setup needed" over a press reading "Answer". */
     const park = leadingPark(agent);
     if (park !== undefined) {
         return ATTENTION_WORDS[park].verb;
