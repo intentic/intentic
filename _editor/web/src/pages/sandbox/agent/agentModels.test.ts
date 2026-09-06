@@ -530,22 +530,31 @@ const tick = (host: HTMLElement, label: string): void => {
     box.dispatchEvent(new Event(`change`, { bubbles: true }));
 };
 
-// The bar that appears over the page once anything is ticked, by the words on its buttons.
+/* THE SELECTION'S VERBS LIVE IN THE GROUP'S OWN HEADER, above the rows and stuck there as they scroll. Read
+ * off the words on the buttons rather than off a container id: what a caller has to be able to find is the
+ * verb, and the header is a <RowGroup> slot rather than a landmark of its own. */
 const barButton = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`[aria-label="Selected jobs"] button`)].find((button) =>
-        button.textContent?.includes(label),
-    )!;
+    [...host.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(label))!;
 
-test("no bar until something is ticked: a settings page has no standing toolbar", async () => {
+/* THE VERBS APPEAR WITH A SELECTION AND NOT BEFORE. They used to sit in a pill floating over the canvas, which
+ * covered the last row for as long as a selection was live; in the header they would instead be two greyed
+ * buttons on every visit to a page nobody is bulk-editing, which is the other way to get this wrong. */
+// Every verb on the page, by its words: what has to change when a job is ticked is which of them exist.
+const verbs = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll(`button`)]
+        .map((button) => button.textContent?.replace(/\s+/g, ` `).trim() ?? ``)
+        .filter((label) => label.includes(`Set a model for all`) || label.includes(`Clear models`));
+
+test("no bulk verbs until something is ticked", async () => {
     const host = mount();
     await Promise.resolve();
 
-    expect(host.querySelector(`[aria-label="Selected jobs"]`)).toBeNull();
+    expect(verbs(host)).toEqual([]);
 
     tick(host, `Select commit messages`);
     await nextTick();
 
-    expect(host.querySelector(`[aria-label="Selected jobs"]`)).not.toBeNull();
+    expect(verbs(host)).toEqual([`Set a model for all…`, `Clear models`]);
 });
 
 test("one pick lands on every ticked job, in one patch, and leaves the rest alone", async () => {

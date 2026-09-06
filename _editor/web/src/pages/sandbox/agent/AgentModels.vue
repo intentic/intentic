@@ -336,29 +336,48 @@ const eagernessOptions = [
     <!-- `id` so the chat can send someone straight here: the model picker's "Turn it off for every chat" is the
          only route out of automatic tier selection that reaches beyond one conversation, and a link that lands
          on the top of a long settings page has not answered the question that was asked. -->
-    <RowGroup id="models" label="Models">
-        <!-- ALL OF THEM, FROM THE GROUP'S OWN HEADER. It is the master of the ticks below and sits where a
-             master belongs, above them; it is also the discovery path for the whole gesture, since a reader
-             who has not noticed a quiet box beside a row's own control will read this line.
-             NOT ON A PHONE, with the ticks it commands. The row's trailing cluster is `shrink-0`, so every
-             control in it is taken out of the DESCRIPTION's width — and this page's description column is
-             already the thing that gave way when the Add button was narrowed for a 390px screen
-             (<AddModelButton>). Measured there, one 18px box costs the blurb 24px and two more wrapped lines,
-             on every row in the catalog, to offer a bulk edit nobody performs on a phone. Every row still sets its
-             own model; what is withheld is the shortcut. -->
+    <RowGroup id="models" label="Models" sticky>
+        <!-- THE GROUP SELECTOR: the master box, what it has caught, and the verbs that act on it, in the
+             group's own header and STUCK there as the rows scroll under it. That is what makes the gesture
+             usable on a page this tall — the ticks are spread over two screens, so a control that scrolled
+             away would mean scrolling back to a button you cannot see from the row you just ticked.
+             IT REPLACED A FLOATING PILL over the canvas, which answered the same reach problem and was the
+             wrong answer twice over: a toolbar on a page that has no toolbar, and one that parks itself over
+             the last row for as long as a selection is live.
+             NOT ON A PHONE, with the ticks it commands. The selection column is taken out of the row's own
+             width, and this page's description column is already the thing that gave way when the Add button
+             was narrowed for a 390px screen (<AddModelButton>). Measured there, one box costs the blurb 24px
+             and two more wrapped lines, on every row, to offer a bulk edit nobody performs on a phone. Every
+             row still sets its own model; what is withheld is the shortcut. -->
         <template #actions>
-            <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted max-md:hidden">
-                <Checkbox
-                    :model-value="allSelected"
-                    :indeterminate="someSelected"
-                    binary
-                    size="small"
-                    class="ui-checkbox-quiet"
-                    aria-label="Select every job"
-                    @update:model-value="(value: unknown) => selectAll(value === true)"
-                />
-                <span>{{ selected.length > 0 ? `${selected.length} selected` : `Select jobs` }}</span>
-            </label>
+            <div class="flex flex-wrap items-center gap-2 max-md:hidden">
+                <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
+                    <Checkbox
+                        :model-value="allSelected"
+                        :indeterminate="someSelected"
+                        binary
+                        size="small"
+                        aria-label="Select every job"
+                        @update:model-value="(value: unknown) => selectAll(value === true)"
+                    />
+                    <span>{{ selected.length > 0 ? `${selected.length} selected` : `Select jobs` }}</span>
+                </label>
+                <!-- The verbs appear WITH a selection rather than sitting greyed: there is nothing to act on
+                     until something is ticked, and a disabled pair of buttons in a group header is furniture
+                     on every other visit to this page. The first carries its own element up as the panel's
+                     anchor, the same contract <AddModelButton> has. -->
+                <template v-if="selected.length > 0">
+                    <Button
+                        size="small"
+                        label="Set a model for all…"
+                        :disabled="settings === undefined"
+                        @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement)"
+                    />
+                    <!-- Emptying is the other half of the vocabulary, and with an empty list meaning "off" it
+                         is how a sandbox switches several jobs off at once. -->
+                    <Button size="small" severity="danger" text label="Clear models" :disabled="settings === undefined" @click="clearSelection" />
+                </template>
+            </div>
         </template>
 
         <!-- THE ONE-SHOT JOBS. No conversation, no tools, one string back, and nobody picked a model for any of
@@ -377,23 +396,26 @@ const eagernessOptions = [
             :title="row.role.label"
             :description="row.role.blurb"
         >
-            <!-- THE TICK RIDES WITH THE ROW'S CONTROL RATHER THAN LEADING THE ROW, which is the opposite of
-                 where a multi-select column usually goes and was arrived at by looking at both. In the lead it
-                 pushes the whole page: `#below` is full-width by <Row>'s contract, so every one-line state
-                 ("Not set: …", "Composer default: …") — which on a fresh sandbox is every row on the page —
-                 ends up starting two marks left of the title it belongs to and reads as a footnote on the
-                 card. Turning the spine on to fix that is worse still: the spine centres on the WHOLE lead
-                 cluster, so with two marks in it the rule lands in the gap between them, under neither.
-                 Here it costs the page no geometry at all, and it sits beside the control it modifies. -->
-            <template #control>
+            <!-- THE SELECTION COLUMN, leading the row, in <Row>'s `#before` — which exists so that a mark
+                 here moves the row's whole BODY rather than pushing the title away from the `#below` lines
+                 that belong to it. See the slot's own note for what a mark in `#lead` costs instead.
+                 IT IS THE DESIGN SYSTEM'S ORDINARY CHECKBOX, not `ui-checkbox-quiet`. That modifier is for a
+                 column as long as the list whose ticks are an EXCEPTION (the acceptance board's nine stories,
+                 where empty is the normal state and the loudest thing on the page must not be a box nobody
+                 chose). Here the column is the affordance being offered, and quiet made it read as broken: a
+                 transparent box with a hairline in it, next to a filled field, looks like a control that
+                 failed to draw rather than one waiting to be pressed. -->
+            <template #before>
                 <Checkbox
                     :model-value="isSelected(row.role.id)"
                     binary
                     size="small"
-                    class="ui-checkbox-quiet max-md:hidden"
+                    class="max-md:hidden"
                     :aria-label="`Select ${row.role.label.toLowerCase()}`"
                     @update:model-value="(value: unknown) => selectRole(row.role.id, value === true)"
                 />
+            </template>
+            <template #control>
                 <AddModelButton
                     :label="`Add a model for ${row.role.label.toLowerCase()}`"
                     :disabled="settings === undefined || (row.role.id === JUDGE && judgeOff)"
@@ -433,7 +455,9 @@ const eagernessOptions = [
                          owes an answer for. -->
                     <p v-if="row.role.id === JUDGE && judgeOff" class="text-2xs text-subtle">
                         Nothing is judging commands at the moment, so this is not in use.
-                        <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }" class="text-link hover:underline"
+                        <RouterLink
+                            :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
+                            class="text-link hover:underline"
                             >Turn the judge on</RouterLink
                         >
                         under Safety.
@@ -459,15 +483,17 @@ const eagernessOptions = [
             :title="row.role.label"
             :description="row.role.blurb"
         >
-            <template #control>
+            <template #before>
                 <Checkbox
                     :model-value="isSelected(row.role.id)"
                     binary
                     size="small"
-                    class="ui-checkbox-quiet max-md:hidden"
+                    class="max-md:hidden"
                     :aria-label="`Select ${row.role.label.toLowerCase()}`"
                     @update:model-value="(value: unknown) => selectRole(row.role.id, value === true)"
                 />
+            </template>
+            <template #control>
                 <AddModelButton
                     :label="`Add a model for ${row.role.label.toLowerCase()}`"
                     :disabled="settings === undefined"
@@ -498,9 +524,14 @@ const eagernessOptions = [
              can override a choice the user made a second ago, and a settings page owes that ordering: read down
              and the reach grows, from jobs nobody picked a model for, to runs somebody started, to the
              conversation in front of you. -->
-        <!-- NOT A JOB, SO NOT SELECTABLE, and it needs no spacer to say so: the tick rides in the control
-             cluster, which is right-aligned, so a row without one simply has one fewer control. -->
+        <!-- NOT A JOB, SO NOT SELECTABLE — and it holds the selection column open anyway, empty, so its mark
+             stays in the same column as the rows above it. The width is MEASURED rather than typed: the same
+             box, hidden, is the only thing guaranteed to be exactly as wide as the ones it is lining up with,
+             which is the device <Row> uses for its own spine and for the same reason. -->
         <Row spine icon="credit-card" title="Automatic tier" description="Run simple turns on a cheaper model from the same provider.">
+            <template #before>
+                <span class="invisible flex max-md:hidden" aria-hidden="true"><Checkbox :model-value="false" binary size="small" /></span>
+            </template>
             <template #control>
                 <SegmentedControl
                     :model-value="settings?.autoTier ?? `shadow`"
@@ -563,34 +594,6 @@ const eagernessOptions = [
             </template>
         </Row>
     </RowGroup>
-
-    <!-- THE SELECTION'S OWN BAR, floating rather than filed into the group's header, and that is what makes the
-         gesture usable at all on a page this tall: the ticks are spread over two screens, so a control at the
-         top would mean scrolling back to a button you cannot see from the row you just ticked. It follows the
-         one floating bar this app already draws (the agents board's discard target) and appears only while
-         there is a selection, because a permanent bar over a settings page is a toolbar for a page that has no
-         tools. -->
-    <div
-        v-if="selected.length > 0"
-        class="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-full border border-line-strong bg-card px-3 py-2 shadow-lg"
-        role="group"
-        aria-label="Selected jobs"
-    >
-        <span class="px-1 text-2xs font-medium text-content">{{ selected.length }} {{ selected.length === 1 ? `job` : `jobs` }} selected</span>
-        <!-- The one press this whole feature exists for. It carries its own element up as the panel's anchor,
-             the same contract <AddModelButton> has, so the picker opens over the bar rather than over a row
-             that may be off screen. -->
-        <Button
-            size="small"
-            label="Set a model for all…"
-            :disabled="settings === undefined"
-            @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement)"
-        />
-        <!-- Emptying is the other half of the vocabulary, and with an empty list meaning "off" it is how a
-             sandbox switches several jobs off at once. -->
-        <Button size="small" severity="danger" text label="Clear models" :disabled="settings === undefined" @click="clearSelection" />
-        <Button size="small" severity="secondary" text label="Done" aria-label="Clear the selection" @click="selectAll(false)" />
-    </div>
 
     <!-- ONE PANEL, STANDING BY, opened over whichever trigger raised it. It is mounted rather than created per
          open because the overlay hosts inside it measure and place themselves in a watcher on that flag: a host

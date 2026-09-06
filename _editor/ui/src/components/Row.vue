@@ -233,87 +233,113 @@ const picked = as === `button`;
             selected ? `ui-row-select-on` : ``,
         ]"
     >
-        <div class="flex items-center justify-between gap-4">
-            <!-- The left region. As a `div` it is layout; as a `button` (see `headerButton`) it is the row's
+        <!-- `#before` IS THE SELECTION COLUMN, and it leads the HEADLINE rather than the whole row. Both halves
+             of that are load-bearing.
+             NOT IN `#lead`: a mark there pushes the title right while `#below` stays where it was, so every
+             one-line state under a row starts two marks left of the name it belongs to and reads as a footnote
+             on the group. Turning `spine` on to compensate is worse — the spine centres on the WHOLE lead
+             cluster, so with two marks in it the rule lands in the gap between them, under neither.
+             AND NOT BESIDE THE WHOLE ROW EITHER, which is the shape <DisclosureRow> uses (a checkbox may not
+             nest in the button that toggles a row, so its column sits outside the component). Centred against
+             a row that also carries `#below`, the box drifts down by half of whatever is under the title: on a
+             row with three lines beneath it, the tick that selects the row sits level with a sentence about
+             its state. Here the column is centred on the headline, and `#below` is given a column of the same
+             width so it keeps landing exactly where it did before there was a checkbox at all.
+             It rides INSIDE the row's padding and tint, so the whole line still lights up as one row. -->
+        <div :class="$slots[`before`] ? `flex items-center ${TIERS[tier].gap}` : `contents`">
+            <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
+            <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
+                <div class="flex items-center justify-between gap-4">
+                    <!-- The left region. As a `div` it is layout; as a `button` (see `headerButton`) it is the row's
                  one hit area, and it TAKES THE FREE SPACE (`flex-1`) rather than shrink-wrapping the title:
                  the gap between a short name and the trailing verbs is the easiest part of the row to aim at,
                  and a hit area that stops at the last letter of the name throws it away. -->
-            <component
-                :is="headerButton ? `button` : `div`"
-                :type="headerButton ? `button` : undefined"
-                :aria-expanded="headerButton ? headerExpanded : undefined"
-                :aria-controls="headerButton ? headerControls : undefined"
-                class="flex min-w-0 items-center"
-                :class="[
-                    TIERS[tier].gap,
-                    headerButton
-                        ? `flex-1 cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
-                        : ``,
-                ]"
-                @click="onHeaderClick"
-            >
-                <!-- THE MARK'S SIZE IS THE TIER'S, HANDED OUT RATHER THAN LOOKED UP. `#lead` content lives in
+                    <component
+                        :is="headerButton ? `button` : `div`"
+                        :type="headerButton ? `button` : undefined"
+                        :aria-expanded="headerButton ? headerExpanded : undefined"
+                        :aria-controls="headerButton ? headerControls : undefined"
+                        class="flex min-w-0 items-center"
+                        :class="[
+                            TIERS[tier].gap,
+                            headerButton
+                                ? `flex-1 cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
+                                : ``,
+                        ]"
+                        @click="onHeaderClick"
+                    >
+                        <!-- THE MARK'S SIZE IS THE TIER'S, HANDED OUT RATHER THAN LOOKED UP. `#lead` content lives in
                      the caller's file, so before this the number was typed there: 22 on three record lists, 20
                      on two, 24 on another and 32 on a seventh, all of them meaning "a row's mark". A slot prop
                      leaves the call site with nothing to get wrong — `<template #lead="{ mark }">` — and it
                      tracks the group's density for free, which a constant read at the call site would not. -->
-                <slot name="lead" :mark="TIERS[tier].mark" />
-                <Icon v-if="icon !== undefined" :name="icon" :spin="spin" class="shrink-0" :class="[TIERS[tier].icon, TONES[tone]]" />
-                <div class="min-w-0" @click="onHeadlineClick">
-                    <component
-                        :is="heading === undefined ? `div` : `h${heading}`"
-                        v-if="title !== undefined || $slots[`title`]"
-                        class="min-w-0"
-                        :class="[
-                            TIERS[tier].title,
-                            heading === undefined ? `` : `text-lg`,
-                            picked && !selected ? `text-muted group-hover:text-content` : `text-content`,
-                        ]"
-                    >
-                        <slot name="title">{{ title }}</slot>
+                        <slot name="lead" :mark="TIERS[tier].mark" />
+                        <Icon v-if="icon !== undefined" :name="icon" :spin="spin" class="shrink-0" :class="[TIERS[tier].icon, TONES[tone]]" />
+                        <div class="min-w-0" @click="onHeadlineClick">
+                            <component
+                                :is="heading === undefined ? `div` : `h${heading}`"
+                                v-if="title !== undefined || $slots[`title`]"
+                                class="min-w-0"
+                                :class="[
+                                    TIERS[tier].title,
+                                    heading === undefined ? `` : `text-lg`,
+                                    picked && !selected ? `text-muted group-hover:text-content` : `text-content`,
+                                ]"
+                            >
+                                <slot name="title">{{ title }}</slot>
+                            </component>
+                            <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[tier].description">
+                                <slot name="description">{{ description }}</slot>
+                            </p>
+                        </div>
                     </component>
-                    <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[tier].description">
-                        <slot name="description">{{ description }}</slot>
-                    </p>
-                </div>
-            </component>
-            <div
-                v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
-                class="flex items-center gap-2"
-                :class="wideControl ? `grow basis-0 flex-wrap justify-end` : `shrink-0`"
-            >
-                <!-- Facts, not controls: tabular so a column of sizes or times lines up down the list, and muted
+                    <div
+                        v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
+                        class="flex items-center gap-2"
+                        :class="wideControl ? `grow basis-0 flex-wrap justify-end` : `shrink-0`"
+                    >
+                        <!-- Facts, not controls: tabular so a column of sizes or times lines up down the list, and muted
                      so the row's name stays the thing the eye lands on. -->
-                <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
-                    <slot name="meta" />
-                </div>
-                <!-- ACTIONS NEVER TOGGLE THE ROW. `display: contents` so the cluster's layout is untouched: the
+                        <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
+                            <slot name="meta" />
+                        </div>
+                        <!-- ACTIONS NEVER TOGGLE THE ROW. `display: contents` so the cluster's layout is untouched: the
                      wrapper draws no box, but it is still in the tree, so a press on a Stop button or a switch
                      stops here instead of reaching the row-wide handler <DisclosureRow> puts on this component.
                      Owned here rather than left to call sites, because "remember `@click.stop` on every control"
                      is a rule that gets remembered until it doesn't. #meta is deliberately NOT wrapped: facts
                      are not controls, and a press on one may as well open the row. -->
-                <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
-                <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
+                        <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
+                        <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
+                    </div>
+                </div>
             </div>
         </div>
-        <div v-if="$slots[`below`]" class="mt-3">
-            <!-- THE SPINE. See `spine` above. The first column is the lead cluster drawn again and hidden, so it
-                 measures whatever the mark and the icon actually measure at this tier; the rule is absolutely
-                 positioned inside it so it centres on that column and runs the block's full height without
-                 adding to it. `aria-hidden` on both: the mirror is a duplicate of content already read out, and
-                 a rule is not content. -->
-            <div v-if="spine" class="flex" :class="TIERS[tier].gap">
-                <div class="relative flex shrink-0 justify-center">
-                    <span class="invisible flex items-center" :class="TIERS[tier].gap" aria-hidden="true">
-                        <slot name="lead" :mark="TIERS[tier].mark" />
-                        <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
-                    </span>
-                    <span class="absolute inset-y-0 w-px bg-line-strong" aria-hidden="true" />
+        <div v-if="$slots[`below`]" class="mt-3" :class="$slots[`before`] ? `flex ${TIERS[tier].gap}` : ``">
+            <!-- `#before`'s COLUMN, HELD OPEN UNDER THE HEADLINE. Drawn again and hidden, so it measures
+                 whatever the caller's mark actually measures rather than a number typed here that goes stale
+                 the first time that control changes size — the same device the spine uses one line down, and
+                 for the same reason. `inert` as well as `aria-hidden`: a mirrored checkbox is a second focus
+                 stop and a second labelled input, which is what makes this different from mirroring an icon. -->
+            <span v-if="$slots[`before`]" class="invisible flex shrink-0 items-center" inert aria-hidden="true"><slot name="before" /></span>
+            <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
+                <!-- THE SPINE. See `spine` above. The first column is the lead cluster drawn again and hidden, so it
+                     measures whatever the mark and the icon actually measure at this tier; the rule is absolutely
+                     positioned inside it so it centres on that column and runs the block's full height without
+                     adding to it. `aria-hidden` on both: the mirror is a duplicate of content already read out, and
+                     a rule is not content. -->
+                <div v-if="spine" class="flex" :class="TIERS[tier].gap">
+                    <div class="relative flex shrink-0 justify-center">
+                        <span class="invisible flex items-center" :class="TIERS[tier].gap" aria-hidden="true">
+                            <slot name="lead" :mark="TIERS[tier].mark" />
+                            <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
+                        </span>
+                        <span class="absolute inset-y-0 w-px bg-line-strong" aria-hidden="true" />
+                    </div>
+                    <div class="min-w-0 flex-1"><slot name="below" /></div>
                 </div>
-                <div class="min-w-0 flex-1"><slot name="below" /></div>
+                <slot v-else name="below" />
             </div>
-            <slot v-else name="below" />
         </div>
     </component>
 </template>

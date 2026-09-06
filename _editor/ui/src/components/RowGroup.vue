@@ -59,12 +59,22 @@ import { provideRowDensity, type RowDensity } from "./row.js";
  * Passing it here is still possible and still legitimate for the group that genuinely disagrees — but it is now
  * an argued exception rather than the thing you get by not looking, and `_tools/checks/row-tiers.mjs` refuses a
  * group that merely restates the default. */
+/* `sticky` PINS THE HEADER TO THE TOP OF THE SCROLL while the group's own rows pass under it, for a group
+ * whose header carries a CONTROL over the rows rather than only their name. A label that scrolls away is no
+ * loss; a select-all and the verbs that act on the selection are, because the rows you are ticking are the
+ * ones that have carried you away from them. The alternative a page reaches for is a floating bar over the
+ * canvas, which is a toolbar for a page that has no toolbar and covers the last row while it is open.
+ *
+ * IT NEEDS ITS OWN GROUND. Sticking puts it over the rows, so it takes the canvas colour and the padding that
+ * keeps a row from showing through its descenders — both only when asked, since an unsticky header is drawn on
+ * the canvas already and a background there would paint a band nobody asked for. */
 const { density = `compact` } = defineProps<{
     label?: string;
     count?: string | number;
     caption?: string;
     flat?: boolean;
     undivided?: boolean;
+    sticky?: boolean;
     /** Leave it alone: a group is a list and a list is `compact`. See the note above before overriding. */
     density?: RowDensity;
 }>();
@@ -76,7 +86,16 @@ provideRowDensity(computed(() => density));
     <section>
         <div
             v-if="label !== undefined || $slots[`label`] || $slots[`info`] || $slots[`actions`]"
-            class="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1"
+            class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1"
+            :class="
+                sticky === true
+                    ? // The gap to the surface becomes PADDING rather than margin, so the band the header
+                      // paints reaches the top row instead of stopping short of it: a transparent 10px margin
+                      // is a slot for half a line of the row underneath to scroll through, which reads as the
+                      // header failing to cover rather than as content passing behind it.
+                      `sticky top-0 z-20 -mx-1 bg-canvas px-2 pb-2.5 pt-2`
+                    : `mb-2.5`
+            "
         >
             <slot name="label"
                 ><span v-if="label !== undefined" :class="ui.sectionLabel()">{{ label }}</span></slot
