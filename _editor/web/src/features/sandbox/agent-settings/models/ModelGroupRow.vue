@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ModelRoleBlock } from "@intentic/sandbox-contract";
+import type { ModelRoleBlock, ModelRoleSpec } from "@intentic/sandbox-contract";
 import { Row, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import AddModelButton from "./AddModelButton.vue";
@@ -22,12 +22,19 @@ import ModelPinList from "./ModelPinList.vue";
  * WHAT IT DRAWS WHEN THE JOBS DISAGREE, which is the one case a collapsed view can lie about. The list is the
  * INTERSECTION — the entries every job in the block holds — so nothing here claims to be set on a job that
  * does not have it. The chip says so in two words, because a list that silently shows less than the setting
- * holds is the failure mode of every "simple" view ever built. */
+ * holds is the failure mode of every "simple" view ever built.
+ *
+ * AND THE JOBS ARE HANDED IN RATHER THAN READ OFF THE BLOCK, because a job can be switched off from another tab
+ * (the safety judge, whose own feature has a switch on Safety). One this page cannot write to is not part of
+ * what "one list for all of them" promises, so it is not counted here and not named — the page decides which
+ * those are, and whatever it leaves out it explains in `#note`. */
 
-const { block, list, differs, disabled, loaded } = defineProps<{
-    /** The block being collapsed: its heading names the Add button, its roles are named under the title. */
+const { block, roles, list, differs, disabled, loaded } = defineProps<{
+    /** The block being collapsed: its heading names the Add button, and its id words the empty chip. */
     block: ModelRoleBlock;
-    /** The block's shared list: reads the intersection, writes every role in the block. */
+    /** The jobs this row actually writes — the block's, minus any that cannot run right now. */
+    roles: readonly ModelRoleSpec[];
+    /** The shared list over those jobs: reads what all of them hold, writes all of them. */
     list: PinnedList;
     /** Whether the block's jobs hold different lists, so this row is showing less than the setting holds. */
     differs: boolean;
@@ -44,11 +51,11 @@ const pinned = computed<boolean>(() => list.entries.value.length > 0);
 
 // What this row is. The count is the point of the view — it is how many jobs one press is about to write — so
 // it is in the title rather than in a badge beside the heading, where it used to sit saying nothing.
-const title = computed<string>(() => `One list for all ${block.roles.length} jobs`);
+const title = computed<string>(() => `One list for all ${roles.length} jobs`);
 
 // And WHICH jobs, because a row that writes five settings owes their names: the group heading says what they
 // have in common, this says what they are.
-const jobs = computed<string>(() => block.roles.map((role) => role.label).join(`, `));
+const jobs = computed<string>(() => roles.map((role) => role.label).join(`, `));
 
 /* THE STATE, IN A WORD, and the three it can be. `jobs differ` outranks the other two: while it is true the
  * list on screen is a subset, so "off" (which means no job runs) would be a lie about the jobs holding models
@@ -79,7 +86,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
 <template>
     <!-- NOT A LABEL AND NOT SELECTABLE, unlike the job rows: there is nothing to tick here — the row IS the
          whole group — so `#below` needs none of their `@click.stop` guarding either. -->
-    <Row :spine="pinned" :description="jobs">
+    <Row :spine="pinned || $slots[`note`] !== undefined" :description="jobs">
         <!-- ITS MARK IS THE SAME BOX THE JOB ROWS DRAW, sized from the tier's own `mark` rather than from a
              number typed here, so the one text column does not step sideways when the view is switched.
              `boxes` is the set's plural glyph — several of the same thing — which is what this row is. -->
@@ -106,17 +113,23 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             />
         </template>
 
-        <template v-if="pinned" #below>
-            <!-- The same list the rows draw, with the same four gestures: each one writes the whole order back
-                 into every job of the block. `noteThinking` for the one-shots, where reasoning costs latency a
-                 job meant to land while you are still looking may not want. -->
-            <ModelPinList
-                :entries="list.entries.value"
-                :note-thinking="block.id === `helper`"
-                @promote="list.promote"
-                @remove="list.remove"
-                @edit="(index: number, anchor: HTMLElement) => emit(`open`, index, anchor)"
-            />
+        <template v-if="pinned || $slots[`note`]" #below>
+            <div class="flex flex-col gap-2">
+                <!-- The same list the rows draw, with the same four gestures: each one writes the whole order
+                     back into every job of the block. `noteThinking` for the one-shots, where reasoning costs
+                     latency a job meant to land while you are still looking may not want. -->
+                <ModelPinList
+                    v-if="pinned"
+                    :entries="list.entries.value"
+                    :note-thinking="block.id === `helper`"
+                    @promote="list.promote"
+                    @remove="list.remove"
+                    @edit="(index: number, anchor: HTMLElement) => emit(`open`, index, anchor)"
+                />
+                <!-- Whatever the page had to leave out of this row, in the page's own words: a count that says
+                     four over a block of five owes its reader the fifth. -->
+                <slot name="note" />
+            </div>
         </template>
     </Row>
 </template>

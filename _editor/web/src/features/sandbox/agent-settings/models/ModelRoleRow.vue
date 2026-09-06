@@ -76,9 +76,13 @@ const emit = defineEmits<{ select: [boolean]; open: [number | undefined, HTMLEle
 const glyph = computed<IconName>(() => (isIconName(icon) ? icon : `sparkles`));
 const pinned = computed<boolean>(() => list.entries.value.length > 0);
 
-// Whether this row can be selected at all. See the header: on a phone the column is the glyph and nothing else.
+/* Whether this row can be selected at all. Two ways to be no. On a phone the column is the glyph and nothing
+ * else (see the header). And an INERT row has nothing a selection could do to it — the bulk verbs write models
+ * into the ticked jobs, which is precisely the press this row's own Add button is refusing — so it keeps its
+ * glyph and stays out of the set. Ticking it was how a "set a model for all" reached a job the page had just
+ * greyed out. */
 const { mobile } = useDevice();
-const selectable = computed<boolean>(() => !mobile.value);
+const selectable = computed<boolean>(() => !mobile.value && !disabled);
 
 /* THE SWAP, AS TWO CLASS LISTS rather than one reactive flag, because half of it is a question only CSS can
  * answer: nothing in script knows where the pointer is. Written out in full — no interpolation — so Tailwind's

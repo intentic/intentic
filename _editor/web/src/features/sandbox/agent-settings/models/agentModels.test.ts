@@ -991,6 +991,84 @@ test("collapsing a group takes its ticks with it, and leaves the other groups as
     expect(verbs(host, HELPERS.label)).toEqual([]);
 });
 
+/* ═══ A JOB SWITCHED OFF ELSEWHERE IS NOT PART OF ITS BLOCK'S GESTURES ═══
+ *
+ * The safety judge is the one job here whose feature has a switch on another tab, and its row has always
+ * refused presses while that switch is off. What did NOT honour it was everything that acts on a SET of jobs:
+ * the collapsed list wrote all five including the greyed one, the master box ticked it, and a block whose four
+ * live jobs held identical lists still reported `jobs differ` — sending its owner to look for a difference in
+ * the one row that would not let them fix it. That is the bug these pin, in the three places it showed.
+ *
+ * The other half is what must NOT happen: the judge's own list is left exactly as it was written. It is the
+ * job most likely to have been pinned on purpose (its row says why), so a group gesture made while it is off
+ * may not quietly re-point it for the day it comes back. */
+
+// Every helper but the judge holding one list: the state an owner reaches by setting the live rows while the
+// judge is off, which is the state that used to read as a disagreement.
+const liveHelpers = (pins: ModelPin[]): SandboxSettings[`modelRoles`] =>
+    Object.fromEntries(HELPERS.roles.filter((role) => role.id !== JUDGE).map((role) => [role.id, pins])) as SandboxSettings[`modelRoles`];
+
+test("a block whose only odd job is switched off still opens as one list, and says nothing about differing", async () => {
+    settings.value = { ...settings.value, commandJudge: `off`, modelRoles: liveHelpers([entry(`codex`, `gpt-5.6`)]) };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
+    expect(chips(host)[`One list for all ${HELPERS.roles.length - 1} jobs`]).toBe(``);
+    expect(group(host, HELPERS.label).textContent).not.toContain(`jobs differ`);
+});
+
+// …and the count that drops by one owes its reader the job it dropped, in the same words and with the same link
+// the judge's own row carries in the other view.
+test("the collapsed row counts only the jobs it writes, and says which one it left out", async () => {
+    settings.value = { ...settings.value, commandJudge: `off` };
+    const host = mount();
+    await Promise.resolve();
+
+    const helpers = group(host, HELPERS.label);
+    expect(helpers.textContent).toContain(`One list for all ${HELPERS.roles.length - 1} jobs`);
+    const link = [...helpers.querySelectorAll<HTMLAnchorElement>(`a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
+    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?section=safety`);
+});
+
+test("one model picked in the collapsed list reaches every live job and leaves the switched-off one as it was", async () => {
+    settings.value = { ...settings.value, commandJudge: `off`, modelRoles: { [JUDGE]: [entry(`codex`, `gpt-5.6`)] } };
+    const host = mount();
+    await Promise.resolve();
+
+    addButton(host, groupAdder(HELPERS)).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+
+    const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
+    for (const role of HELPERS.roles) {
+        expect(written[role.id], role.id).toEqual(role.id === JUDGE ? [entry(`codex`, `gpt-5.6`)] : [entry(`claude`, `claude-haiku-4-5`)]);
+    }
+});
+
+// The same rule in the other view: an inert row keeps its glyph and offers no tick, so the set the bulk verbs
+// write cannot contain it.
+test("a switched-off job offers no tick, and the group's master box writes without it", async () => {
+    settings.value = { ...settings.value, commandJudge: `off` };
+    const host = await mountJobs();
+
+    expect(tickBox(host, `Select safety judge`)).toBeUndefined();
+
+    tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
+    await nextTick();
+    groupButton(host, HELPERS.label, `Set a model for all`).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+
+    const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
+    expect(Object.keys(written).toSorted()).toEqual(
+        HELPERS.roles
+            .map((role) => role.id)
+            .filter((id) => id !== JUDGE)
+            .toSorted(),
+    );
+});
+
 /* THE AUTOMATIC-TIER ROW is the only setting on this page that can override a model the user picked a second
  * ago, so what these pin is the two things a reader has to be able to trust: that its DEFAULT changes nothing,
  * and that the screen says so. A control whose default has no visible effect reads as broken unless the row

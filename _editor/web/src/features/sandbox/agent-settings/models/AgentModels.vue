@@ -5,6 +5,7 @@ import {
     type ModelPin,
     type ModelRole,
     type ModelRoleBlockId,
+    type ModelRoleSpec,
     modelPinKey,
     parsePinned,
 } from "@intentic/sandbox-contract";
@@ -149,6 +150,35 @@ const editorFor = (role: ModelRole): PinnedList =>
 const acrossRoles = (roles: readonly ModelRole[], listFor: (role: ModelRole) => ModelPin[]): void =>
     writeRoles(Object.fromEntries(roles.map((role) => [role, listFor(role)])) as Partial<Record<ModelRole, ModelPin[]>>);
 
+/* ═══ THE ONE JOB THAT CAN BE SWITCHED OFF FROM SOMEWHERE ELSE ═══
+ *
+ * A special case in a page otherwise drawn entirely from a table, and it earns that: the judge is the only job
+ * here with a switch of its own (settings.commandJudge, on the Safety tab), so it can go inert while every
+ * neighbour stays live. A disabled control with no explanation is the thing a settings page owes an answer for,
+ * and a row may not ask for a press it has just refused — so while the judge is off its row says so and points
+ * at the switch instead of inviting a pin.
+ *
+ * AND NOTHING ELSE ON THIS PAGE MAY WRITE TO IT EITHER, which is the half that used to be missing. The refusal
+ * was the ROW'S alone: the collapsed list still wrote all five jobs including the one it had just greyed out,
+ * the master box still ticked it, and — the failure that gave this away — a block whose four live jobs held
+ * identical lists still read `jobs differ`, because the fifth was empty for a reason nobody could act on from
+ * this page. A job that cannot run is not a disagreement, and a chip that says otherwise sends its reader
+ * looking for a difference to fix in a row that refuses to be fixed.
+ *
+ * So an inert job drops out of its block's GROUP gestures entirely: not counted, not named, not written, not
+ * tickable. Its own list is left exactly as the owner wrote it, for the day the judge comes back on — which is
+ * the other reason not to fold it in. Of every job here it is the one most likely to be pinned deliberately
+ * (see the note its row carries), and a collapsed row that quietly overwrote that while the feature was off
+ * would spend the owner's best model's absence on their behalf. */
+const JUDGE = `safety-judge`;
+const judgeOff = computed(() => settings.value?.commandJudge === `off`);
+const inert = (role: ModelRole): boolean => role === JUDGE && judgeOff.value;
+
+// A set of jobs as it stands right now, which is what every gesture over SEVERAL jobs acts on: the collapsed
+// list, the differ test that words its chip and opens its view, and the selection's own box and verbs.
+const live = (ids: readonly ModelRole[]): readonly ModelRole[] => ids.filter((role) => !inert(role));
+const liveRoles = (roles: readonly ModelRoleSpec[]): readonly ModelRoleSpec[] => roles.filter((role) => !inert(role.id));
+
 /* ═══ A WHOLE BLOCK AS ONE LIST, WHICH IS ALL THE SIMPLE VIEW IS ═══
  *
  * NOTHING IS STORED PER BLOCK. The setting is one ordered list per job and stays that way — it is the entire
@@ -176,15 +206,16 @@ const sharedPins = (ids: readonly ModelRole[]): readonly ModelPin[] => {
 };
 
 // Whether a block's jobs disagree at all: the same entries in the same order is one answer, anything else is
-// not. It words the collapsed row's chip, and it decides which view the group opens in.
-const jobsDiffer = (ids: readonly ModelRole[]): boolean => new Set(ids.map((role) => listOf(role).map(pinIdentity).join(`\n`))).size > 1;
+// not. It words the collapsed row's chip, and it decides which view the group opens in. Asked of the LIVE jobs
+// alone — a job nothing on this page can write to may not be the reason a block reads as split.
+const jobsDiffer = (ids: readonly ModelRole[]): boolean => new Set(live(ids).map((role) => listOf(role).map(pinIdentity).join(`\n`))).size > 1;
 
 // One editor over a whole block, offering a row's own four gestures: whatever the list becomes is written to
-// every job of that block, in one patch.
+// every live job of that block, in one patch.
 const groupList = (ids: readonly ModelRole[]): PinnedList =>
     pinnedList({
-        read: () => sharedPins(ids),
-        write: (pins) => acrossRoles(ids, () => [...pins]),
+        read: () => sharedPins(live(ids)),
+        write: (pins) => acrossRoles(live(ids), () => [...pins]),
         decode: (pin) => pin,
         encode: (pin) => pin,
         detail: pinKnobSummary,
@@ -198,20 +229,6 @@ const blocks = MODEL_ROLE_BLOCKS.map((block) => {
     const ids = block.roles.map((role) => role.id) as readonly ModelRole[];
     return { ...block, ids, rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })), group: groupList(ids) };
 });
-
-/* THE ONE ROW WHOSE FEATURE CAN BE OFF FROM SOMEWHERE ELSE, and the two sentences it owes because of it.
- *
- * A special case in a page otherwise drawn entirely from a table, and it earns that: the judge is the only job
- * here with a switch of its own (settings.commandJudge, on the Safety tab), so its row can go inert while every
- * neighbour stays live. A disabled control with no explanation is the thing a settings page owes an answer for,
- * and a row may not ask for a press it has just refused — so while the judge is off the row says so and points
- * at the switch instead of inviting a pin.
- *
- * The second sentence is about the CHOICE rather than the switch, and it belongs here rather than only on
- * Safety because this is where the choice is made: of every job on this page, the judge is the one whose input
- * may have been written by whoever the agent was reading. */
-const JUDGE = `safety-judge`;
-const judgeOff = computed(() => settings.value?.commandJudge === `off`);
 
 /* THE CHEAPER-TIER LIST, the one model setting here that is NOT a role and should not become one. It names a
  * substitution automatic tier selection makes on a turn the user started themselves, so it is a property of
@@ -247,18 +264,23 @@ const selectRole = (role: ModelRole, on: boolean): void => {
     selected.value = on ? [...selected.value.filter((held) => held !== role), role] : selected.value.filter((held) => held !== role);
 };
 
-// What is ticked WITHIN one block, in the block's own order rather than in the order they were ticked: it is
-// what the header counts, what the verbs write, and what the panel's header names.
-const selectedIn = (ids: readonly ModelRole[]): readonly ModelRole[] => ids.filter((role) => selected.value.includes(role));
-const allSelectedIn = (ids: readonly ModelRole[]): boolean => selectedIn(ids).length === ids.length;
+/* What is ticked WITHIN one block, in the block's own order rather than in the order they were ticked: it is
+ * what the header counts, what the verbs write, and what the panel's header names. It is the page's one choke
+ * point for "which jobs is this gesture about", so it is where an inert job leaves the set — a bulk write may
+ * not reach a row whose own Add button is refusing presses. */
+const selectedIn = (ids: readonly ModelRole[]): readonly ModelRole[] => live(ids).filter((role) => selected.value.includes(role));
+const allSelectedIn = (ids: readonly ModelRole[]): boolean => selectedIn(ids).length === live(ids).length;
 const someSelectedIn = (ids: readonly ModelRole[]): boolean => {
     const picked = selectedIn(ids).length;
-    return picked > 0 && picked < ids.length;
+    return picked > 0 && picked < live(ids).length;
 };
 // All or nothing, from the group's own header: "every one-shot helper on this model" is the shape a sandbox
-// actually wants, and it is one press.
+// actually wants, and it is one press. Untick drops every id of the block, live or not; tick takes the live
+// ones, so the box can reach `all` on a block holding a job that is switched off.
 const selectAllIn = (ids: readonly ModelRole[], on: boolean): void => {
-    selected.value = on ? [...selected.value.filter((held) => !ids.includes(held)), ...ids] : selected.value.filter((held) => !ids.includes(held));
+    selected.value = on
+        ? [...selected.value.filter((held) => !ids.includes(held)), ...live(ids)]
+        : selected.value.filter((held) => !ids.includes(held));
 };
 
 /* ═══ SIMPLE OR ADVANCED, ONE ANSWER PER GROUP ═══
@@ -539,18 +561,35 @@ const eagernessOptions = [
             </template>
 
             <!-- THE WHOLE GROUP AS ONE ROW. Not a summary of the rows below it — there are no rows below it —
-                 but the same setting read and written a block at a time. The judge's own switch is not honoured
-                 here and does not need to be: a group of five is not inert because one of its jobs is, and the
-                 row that owes that explanation is the judge's own, in the view that draws it. -->
+                 but the same setting read and written a block at a time. It is handed the jobs that can
+                 actually run rather than the block's whole roster: a job switched off elsewhere is one this row
+                 may not count, name or write, and while it was counted a block whose live jobs all agreed
+                 still read `jobs differ` over the one nobody could set. -->
             <ModelGroupRow
                 v-if="viewOf(block.id) === `simple`"
                 :block="block"
+                :roles="liveRoles(block.roles)"
                 :list="block.group"
                 :differs="jobsDiffer(block.ids)"
                 :disabled="!loaded"
                 :loaded="loaded"
                 @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(block.group, index, anchor)"
-            />
+            >
+                <!-- …and it says which job it left out, because a count that drops from five to four with no
+                     word for it reads as a page that has lost a row. Same sentence and same link as the judge's
+                     own row in Advanced: what is inert, and where the switch that revives it lives. -->
+                <template v-if="block.ids.includes(JUDGE) && judgeOff" #note>
+                    <p class="text-2xs text-subtle">
+                        Safety judge is off, so it is not one of these and nothing here writes to it.
+                        <RouterLink
+                            :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
+                            class="text-link hover:underline"
+                            >Turn the judge on</RouterLink
+                        >
+                        under Safety.
+                    </p>
+                </template>
+            </ModelGroupRow>
 
             <!-- …or one row per job, which is what the setting actually is. `v-for` inside a <template v-else>
                  rather than beside a `v-else` of its own: the two directives on one element are a precedence
