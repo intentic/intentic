@@ -587,26 +587,89 @@ export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {
     "network.outbound": "send a request out to the internet",
 };
 
-/* THE PATTERNS BEHIND EACH CLASS, IN WORDS, for the one reader that is a person rather than a gate: the Safety
- * page's "What gets stopped" panel (editor/web/.../AgentSafetyRules.vue). A card says which class fired; this
- * says what the class is, so an owner can see the whole catalog without reading this file.
+/* ONE FRAGMENT THAT FIRES A CLASS, split down the middle, and the split is the whole reason this type exists.
  *
- * PROSE RATHER THAN THE REGEXES THEMSELVES, deliberately. A `/\b(?:docker|podman)\s+volume\s+(?:rm|remove|prune)\b/`
- * on a settings page is a worse answer to "what stops my commands" than "docker volume rm, remove, prune" is,
- * and rendering source at somebody implies they can edit it. Pinned to the tables by the conformance test in
- * command-classes.test.ts, so a pattern added without a line here fails the suite rather than going unlisted. */
-export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly string[]>> = {
-    "git.destructive": ["git push --force / -f / --force-with-lease / --delete", "git reset --hard", "git clean -f", "git branch -D", "git filter-branch"],
-    "files.destructive": ["rm -rf <path>", "fs.rm / rmSync / rmdir with recursive: true", "rimraf(<path>)"],
-    "system.destructive": [
-        "mkfs, wipefs, blkdiscard, sgdisk --zap-all",
-        "dd of=/dev/…, shred /dev/…, > /dev/sda",
-        "rm -rf aimed at a root directory",
+ * `code` IS SHELL OR SCRIPT AND NOTHING ELSE, so a renderer can hand it to a syntax highlighter and get an
+ * answer worth looking at. These used to be one string each — "rm -rf aimed at a root directory", "a
+ * {{secret:NAME}} reference in the command" — which is a sentence with a command inside it, and a sentence with
+ * a command inside it is the one input a shell grammar cannot colour: `aimed`, `at`, `a`, `root` tokenize as
+ * arguments to `rm`, so the highlighting lands on the prose and the reader learns nothing from it. Half the
+ * entries in this table were that shape, which is why the Safety page rendered the lot as grey prose joined by
+ * dots and read as a wall.
+ *
+ * `qualifier` IS EVERYTHING THAT NARROWS IT, in words, unhighlighted. It carries what the fragment overstates
+ * ("rm -rf /" is only this class when the target is a ROOT) and the spellings not worth a chip of their own
+ * (podman beside docker, pnpm beside npm). Absent ⇒ the fragment says it all.
+ *
+ * STILL PROSE RATHER THAN THE REGEXES THEMSELVES. A `/\b(?:docker|podman)\s+volume\s+(?:rm|remove|prune)\b/` on
+ * a settings page is a worse answer to "what stops my commands" than `docker volume rm` is, and rendering source
+ * at somebody implies they can edit it. */
+export interface CommandPattern {
+    /** The literal a shell or a script would carry. Highlightable on its own; never a sentence. */
+    readonly code: string;
+    /** What narrows it, or the spellings folded into it. Prose, and rendered as prose. */
+    readonly qualifier?: string;
+}
+
+/* THE PATTERNS BEHIND EACH CLASS, for the one reader that is a person rather than a gate: the Safety page's
+ * "What gets stopped" panel (editor/web/.../AgentSafetyRules.vue). A card says which class fired; this says what
+ * the class is, so an owner can see the whole catalog without reading this file.
+ *
+ * ONE FRAGMENT PER ENTRY, not one line per regex. `git push --force / -f / --force-with-lease` was three
+ * spellings of one thing crammed into a chip that then had to be read left to right; as four entries they are
+ * four chips a reader's eye picks the relevant one out of. The cost is more entries and it buys scanning.
+ *
+ * Pinned to the tables by the conformance test in safety-policy.test.ts, so a pattern added without a line here
+ * fails the suite rather than going unlisted. */
+export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly CommandPattern[]>> = {
+    "git.destructive": [
+        { code: "git push --force", qualifier: "also -f and --force-with-lease" },
+        { code: "git push --delete" },
+        { code: "git reset --hard" },
+        { code: "git clean -f" },
+        { code: "git branch -D" },
+        { code: "git filter-branch" },
     ],
-    "container.state": ["docker / podman volume rm, remove, prune", "docker / podman system prune", "docker compose down -v"],
-    "secrets.access": ["a {{secret:NAME}} reference in the command", ".env, .ssh/*, id_rsa, .aws/credentials, .npmrc, .git-credentials"],
-    "package.publish": ["npm / pnpm / yarn / bun publish", "cargo publish", "gh release create", "docker push", "twine upload"],
-    "network.outbound": ["curl / wget to a non-loopback https:// host", 'fetch("https://…") in a script'],
+    "files.destructive": [
+        { code: "rm -rf <path>" },
+        { code: "fs.rm(<path>, { recursive: true })", qualifier: "also rmSync, rmdir, rmdirSync" },
+        { code: "rimraf(<path>)" },
+    ],
+    "system.destructive": [
+        { code: "mkfs" },
+        { code: "wipefs" },
+        { code: "blkdiscard" },
+        { code: "sgdisk --zap-all" },
+        { code: "dd of=/dev/…" },
+        { code: "shred /dev/…" },
+        { code: "> /dev/sda" },
+        { code: "rm -rf /", qualifier: "only when the target is a root, listed below" },
+    ],
+    "container.state": [
+        { code: "docker volume rm", qualifier: "also remove, prune, and podman for any of these" },
+        { code: "docker system prune" },
+        { code: "docker compose down -v" },
+    ],
+    "secrets.access": [
+        { code: "{{secret:NAME}}", qualifier: "a stored secret, used in the command itself" },
+        { code: ".env" },
+        { code: ".ssh/*" },
+        { code: "id_rsa" },
+        { code: ".aws/credentials" },
+        { code: ".npmrc" },
+        { code: ".git-credentials" },
+    ],
+    "package.publish": [
+        { code: "npm publish", qualifier: "also pnpm, yarn, bun" },
+        { code: "cargo publish" },
+        { code: "gh release create" },
+        { code: "docker push" },
+        { code: "twine upload" },
+    ],
+    "network.outbound": [
+        { code: "curl https://…", qualifier: "also wget; loopback does not count" },
+        { code: 'fetch("https://…")', qualifier: "in a script" },
+    ],
 };
 
 /* No verdict set lives here any more. Which classes are worth stopping for is a POLICY question now, and it is

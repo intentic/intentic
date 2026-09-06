@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS } from "./command-classes.js";
-import { type CommandClass, CommandClassSchema, type CommandLocus } from "../schemas/agent.js";
+import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS, type CommandPattern } from "./command-classes.js";
+import { type CommandClass, CommandClassSchema, type CommandLocus, CommandLocusSchema } from "../schemas/agent.js";
 
 /* THE OWNER'S SAFETY POLICY, AS PROSE, and the verdict a model reaches by reading it.
  *
@@ -71,44 +71,62 @@ export const hardRuleClasses = (locus: CommandLocus): ReadonlySet<CommandClass> 
  *
  * WHY IT IS HERE rather than assembled in the browser: which tier a class sits in is this file's answer, and a
  * page that worked it out for itself would be a second copy of hardRuleClasses with all the ways to disagree
- * with the first. The editor imports this and renders it; it computes nothing. A conformance test pins it to
- * both loci, so a class added to the enum without a decision here fails the suite.
+ * with the first. The editor imports this and renders it; it computes nothing. A conformance test pins every
+ * class to both loci, so a class added to the enum without a decision here fails the suite.
  *
- * WHAT AN OWNER IS ACTUALLY ASKING when they open that panel is "why was I interrupted, and what else will
- * interrupt me" — so the split that matters is not by class, it is by whether they get a say. Hence `tier`. */
+ * ONE ENTRY PER CLASS, CARRYING BOTH MACHINES' ANSWERS — and this shape is the correction of a real mistake.
+ * It used to be `Record<CommandLocus, CommandRule[]>`: two lists, each a whole catalog, each with its own tier
+ * per class. What an owner is asking is "why was I interrupted, and what else will interrupt me", so the panel
+ * sliced those two lists by TIER — un-waivable first, judged second — and a class that is hard on a laptop and
+ * judged in the container came out in BOTH halves, printed twice with identical patterns under it. Three of the
+ * seven did. The page then spent a paragraph explaining to the reader that it had not contradicted itself.
+ *
+ * A class is one thing. Where it stands DIFFERS BY MACHINE, which makes the machine an attribute of the entry
+ * rather than an axis to split the catalog on: `tiers` is that attribute, the duplication has nowhere to come
+ * from, and the difference between the two machines — the substance of this whole design — becomes two words
+ * side by side rather than a footnote reconciling two lists. */
 export type CommandRuleTier = "hard" | "judged";
 
 export interface CommandRule {
     readonly commandClass: CommandClass;
     // What the command would do, in the card's own words (COMMAND_CLASS_LABELS).
     readonly label: string;
-    // Roughly what fires it, as prose (COMMAND_CLASS_PATTERNS).
-    readonly patterns: readonly string[];
-    /* `hard` ⇒ a card no policy line and no verdict can waive. `judged` ⇒ triage wakes the judge, which reads
-     * the owner's policy and usually allows it. */
-    readonly tier: CommandRuleTier;
+    // Roughly what fires it (COMMAND_CLASS_PATTERNS): a highlightable fragment plus what narrows it.
+    readonly patterns: readonly CommandPattern[];
+    /* Where this class stands at each machine. `hard` ⇒ a card no policy line and no verdict can waive.
+     * `judged` ⇒ triage wakes the judge, which reads the owner's policy and usually allows it. */
+    readonly tiers: Readonly<Record<CommandLocus, CommandRuleTier>>;
     // Present only where the locus changes what the class MEANS, rather than only which tier it sits in.
-    readonly note?: string;
+    readonly notes?: Readonly<Record<CommandLocus, string>>;
 }
 
-const ROOT_NOTE: Readonly<Record<CommandLocus, string>> = {
-    sandbox: `Roots here are / and /history. /work, /usr and /etc are not: the worktree's changes are uncommitted work and the container comes back from its image.`,
-    device: `Roots here are /, a home directory, a Windows drive, and the top-level directories an OS keeps.`,
+const ROOT_NOTES: Readonly<Record<CommandLocus, string>> = {
+    sandbox: `/ and /history. Not /work, /usr or /etc: the worktree's changes are uncommitted work, and the container comes back from its image.`,
+    device: `/, a home directory, a Windows drive, and the top-level directories an OS keeps.`,
 };
 
-const rulesFor = (locus: CommandLocus): CommandRule[] =>
-    CommandClassSchema.options.map((commandClass) => ({
+const tiersFor = (commandClass: CommandClass): Record<CommandLocus, CommandRuleTier> =>
+    Object.fromEntries(
+        CommandLocusSchema.options.map((locus) => [locus, hardRuleClasses(locus).has(commandClass) ? "hard" : "judged"]),
+    ) as Record<CommandLocus, CommandRuleTier>;
+
+// How many machines cannot be talked out of this one, which is the only ranking a reader of the panel is
+// served by: the entries nobody gets a say over are the ones worth knowing before writing a policy line.
+const unwaivableAt = (rule: CommandRule): number => CommandLocusSchema.options.filter((locus) => rule.tiers[locus] === "hard").length;
+
+/* SORTED BY HOW LITTLE SAY THE OWNER HAS, most-locked first, ties in the enum's own order. The panel renders
+ * this list top to bottom and adds no ordering of its own, so "which of this can I actually change?" — the
+ * question the old tier split existed to answer — is answered by the reading order instead of by a second axis
+ * that had to duplicate rows to exist. */
+export const COMMAND_RULE_CATALOG: readonly CommandRule[] = CommandClassSchema.options
+    .map((commandClass) => ({
         commandClass,
         label: COMMAND_CLASS_LABELS[commandClass],
         patterns: COMMAND_CLASS_PATTERNS[commandClass],
-        tier: hardRuleClasses(locus).has(commandClass) ? ("hard" as const) : ("judged" as const),
-        ...(commandClass === "system.destructive" ? { note: ROOT_NOTE[locus] } : {}),
-    }));
-
-export const COMMAND_RULE_CATALOG: Readonly<Record<CommandLocus, readonly CommandRule[]>> = {
-    sandbox: rulesFor("sandbox"),
-    device: rulesFor("device"),
-};
+        tiers: tiersFor(commandClass),
+        ...(commandClass === "system.destructive" ? { notes: ROOT_NOTES } : {}),
+    }))
+    .sort((left, right) => unwaivableAt(right) - unwaivableAt(left));
 
 /* WHETHER THE JUDGE RUNS AT ALL, and whether its answer is allowed to stop anything. The owner's switch over
  * everything below, and the reason it exists is that a tier which spends a model call and can interrupt you is a

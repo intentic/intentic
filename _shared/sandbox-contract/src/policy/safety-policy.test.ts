@@ -53,20 +53,30 @@ describe("hardRuleClasses", () => {
 /* THE CATALOG THE SAFETY PAGE RENDERS. It exists so an owner can see what will interrupt them without reading
  * the source, which only works if it cannot fall behind the source. */
 describe("COMMAND_RULE_CATALOG", () => {
-    test("every class appears at every locus, exactly once", () => {
-        for (const locus of CommandLocusSchema.options) {
-            expect(COMMAND_RULE_CATALOG[locus].map((rule) => rule.commandClass), locus).toEqual([...CommandClassSchema.options]);
-        }
+    /* EXACTLY ONCE, and this is the claim the catalog was reshaped to make true. While it was a list per locus
+     * the panel had to slice it by tier to be readable, and a class hard on a laptop and judged in the container
+     * came out under both headings with the same patterns under it — three of the seven did. One entry per
+     * class, carrying both machines' answers, is what leaves the duplication nowhere to come from. */
+    test("every class appears exactly once", () => {
+        expect(COMMAND_RULE_CATALOG.map((rule) => rule.commandClass).sort()).toEqual([...CommandClassSchema.options].sort());
     });
 
     // The tier is the whole reason a reader opens the panel, so it has to be the gate's own answer rather than
     // a second opinion about it.
-    test("each rule's tier is what the hard rule actually says", () => {
-        for (const locus of CommandLocusSchema.options) {
-            for (const rule of COMMAND_RULE_CATALOG[locus]) {
-                expect(rule.tier, `${locus}/${rule.commandClass}`).toBe(hardRuleClasses(locus).has(rule.commandClass) ? "hard" : "judged");
+    test("each rule's tier is what the hard rule actually says, at each machine", () => {
+        for (const rule of COMMAND_RULE_CATALOG) {
+            for (const locus of CommandLocusSchema.options) {
+                expect(rule.tiers[locus], `${locus}/${rule.commandClass}`).toBe(hardRuleClasses(locus).has(rule.commandClass) ? "hard" : "judged");
             }
         }
+    });
+
+    /* THE READING ORDER IS THE ANSWER TO "CAN I CHANGE THIS?", now that the tier is no longer an axis the list
+     * is split on. Most-locked first, so somebody about to write a policy line meets the rules no line can
+     * reach before they spend time on one. */
+    test("the rules nobody can waive come first", () => {
+        const locked = COMMAND_RULE_CATALOG.map((rule) => CommandLocusSchema.options.filter((locus) => rule.tiers[locus] === "hard").length);
+        expect(locked).toEqual([...locked].sort((left, right) => right - left));
     });
 
     /* A CLASS ADDED TO THE ENUM WITHOUT A LINE FOR A PERSON FAILS HERE, which is the point of pinning it: the
@@ -79,10 +89,30 @@ describe("COMMAND_RULE_CATALOG", () => {
         }
     });
 
-    // The two machines differ, and the panel draws both: a catalog that answered the same at each locus would
-    // mean the split had been undone somewhere.
+    /* THE FRAGMENT IS CODE AND THE QUALIFIER IS PROSE, and the page hands only the first half to a syntax
+     * highlighter. A sentence smuggled into `code` gets tokenized as shell — `rm -rf aimed at a root directory`
+     * colours `aimed`, `at` and `a` as arguments — which is exactly the mush this split exists to end, and it
+     * would go unnoticed because it still renders. A shell fragment is short and has no prose tail: nothing
+     * here needs an article. */
+    test("the highlightable half carries no prose", () => {
+        /* Asked of WHOLE SHELL WORDS rather than of substrings, because the discriminator really is the word
+         * boundary a shell uses: `of=/dev/…` is dd's output operand and `of` inside it is not the preposition,
+         * while `aimed at a root directory` is four bare words in a row. Splitting on whitespace is how a shell
+         * itself tells those apart. */
+        const PROSE = new Set(["a", "an", "the", "in", "to", "of", "with", "and", "or", "aimed", "reference", "any", "when"]);
+        for (const commandClass of CommandClassSchema.options) {
+            for (const pattern of COMMAND_CLASS_PATTERNS[commandClass]) {
+                const prose = pattern.code.split(/\s+/).filter((word) => PROSE.has(word.toLowerCase()));
+                expect(prose, `${commandClass}: ${pattern.code}`).toEqual([]);
+                expect(pattern.qualifier ?? "x", `${commandClass}: ${pattern.code}`).not.toBe("");
+            }
+        }
+    });
+
+    // The two machines differ, and the panel draws both answers side by side: a catalog that answered the same
+    // at each locus would mean the split had been undone somewhere.
     test("the two machines do not describe the same rule set", () => {
-        const tiers = (locus: "sandbox" | "device") => COMMAND_RULE_CATALOG[locus].map((rule) => rule.tier).join(",");
+        const tiers = (locus: "sandbox" | "device") => COMMAND_RULE_CATALOG.map((rule) => rule.tiers[locus]).join(",");
         expect(tiers("sandbox")).not.toBe(tiers("device"));
     });
 });

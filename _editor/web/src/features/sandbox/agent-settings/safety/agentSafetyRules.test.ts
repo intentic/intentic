@@ -5,13 +5,15 @@
 // decisions already taken, and still not find out what else was going to interrupt them or which half of it
 // their policy could reach.
 //
-// TWO CLAIMS, AND BOTH ARE ABOUT NOT LYING. The panel must be generated from the contract, so it cannot come
-// to disagree with the gate the way a hand-written list of the same facts would; and it must not offer a
-// control, because the un-waivable half is un-waivable and a field next to it would say otherwise.
+// THREE CLAIMS, AND THEY ARE ABOUT NOT LYING AND NOT BURYING. The panel must be generated from the contract, so
+// it cannot come to disagree with the gate the way a hand-written list of the same facts would; it must not
+// offer a control, because the un-waivable half is un-waivable and a field next to it would say otherwise; and
+// it must say each class ONCE, because the shape this replaced printed three of the seven twice — once per tier
+// — and then spent a paragraph explaining to the reader that it had not contradicted itself.
 import { COMMAND_RULE_CATALOG } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, defineComponent, h } from "vue";
 
 const { default: AgentSafetyRules } = await import("./AgentSafetyRules.vue");
 
@@ -34,79 +36,88 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-// Both disclosures start closed, so a test that reads their contents has to open them first — the same two
-// presses a reader makes.
-const openAll = async (host: HTMLElement): Promise<void> => {
-    for (const button of host.querySelectorAll<HTMLElement>(`button`)) {
-        button.click();
-    }
-    await nextTick();
-};
+const occurrences = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
 
-test("names both tiers without being opened", () => {
+const text = (host: HTMLElement): string => host.textContent ?? ``;
+
+/* NOTHING TO PRESS FIRST. The list this replaced opened behind two disclosures, so everything below was one
+ * or two clicks from being read; the whole point of cutting it to seven rows is that it now fits on the page
+ * as it stands. A test that had to open something would be the regression. */
+test("lists every class from the contract, with nothing to open first", () => {
     const host = mount();
-    expect(host.textContent).toContain(`Never judged`);
-    expect(host.textContent).toContain(`Gets a second look`);
+    for (const rule of COMMAND_RULE_CATALOG) {
+        expect(text(host), rule.commandClass).toContain(rule.label);
+    }
 });
 
-/* THE CATALOG IS THE SOURCE, so the expected values are read from it rather than transcribed. A rule added to
- * the contract and not to the page fails here, which is the whole reason the constant exists. */
-test("lists every hard-ruled class for both machines, from the contract", async () => {
+/* THE CLAIM THE RESHAPE WAS FOR. `files.destructive`, `container.state` and `system.destructive` each used to
+ * appear twice — hard on a laptop, judged in the container, so once under each tier heading with identical
+ * patterns under it. Counting is the only way to catch that coming back, since a duplicated row still
+ * `toContain` its own label. */
+test("names each class exactly once", () => {
     const host = mount();
-    await openAll(host);
-    for (const locus of [`sandbox`, `device`] as const) {
-        for (const rule of COMMAND_RULE_CATALOG[locus].filter((entry) => entry.tier === `hard`)) {
-            expect(host.textContent, `${locus}/${rule.commandClass}`).toContain(rule.label);
+    for (const rule of COMMAND_RULE_CATALOG) {
+        expect(occurrences(text(host), rule.label), rule.commandClass).toBe(1);
+    }
+});
+
+/* BOTH MACHINES' ANSWERS, FOR EVERY CLASS, which is what the table is for: the same command is judged in a
+ * disposable container and held on somebody's laptop, and a panel showing one set would be telling half the
+ * truth to whichever reader it did not belong to.
+ *
+ * Counted as TWICE the cells in the catalog because each cell is spelled twice in the DOM — an aligned column
+ * for a wide panel, an inline line for a narrow one, with CSS choosing. Both come off the same lookup, and
+ * this is what pins them to each other: a spelling that drifted, or one that stopped being rendered, lands
+ * here rather than on whichever width nobody was looking at. */
+test("says where each class stands on each machine, at both widths", () => {
+    const host = mount();
+    const cells = COMMAND_RULE_CATALOG.flatMap((rule) => [rule.tiers.sandbox, rule.tiers.device]);
+    expect(occurrences(text(host), `Always asks`)).toBe(2 * cells.filter((tier) => tier === `hard`).length);
+    expect(occurrences(text(host), `Judged`)).toBe(2 * cells.filter((tier) => tier === `judged`).length);
+    // Not a table with one answer in it: the machines really do differ, so both words are on the page.
+    expect(cells).toContain(`hard`);
+    expect(cells).toContain(`judged`);
+});
+
+/* THE FRAGMENT IS THE SCANNABLE PART and it was the least visible thing on the panel — grey prose joined by
+ * dots, lighter than the label above it. Every one of them is rendered, and the qualifier beside it too, so a
+ * contract entry cannot go unlisted because the component only reached for half of it. */
+test("draws every pattern fragment and its qualifier", () => {
+    const host = mount();
+    for (const rule of COMMAND_RULE_CATALOG) {
+        for (const pattern of rule.patterns) {
+            expect(text(host), `${rule.commandClass}: ${pattern.code}`).toContain(pattern.code);
+            if (pattern.qualifier !== undefined) {
+                expect(text(host), `${rule.commandClass}: ${pattern.qualifier}`).toContain(pattern.qualifier);
+            }
+        }
+    }
+    // Monospaced and highlightable rather than prose: the fragment goes in a <code>, which is what RuleCommand
+    // renders and what the chip around it is sized for.
+    expect(host.querySelectorAll(`code`).length).toBeGreaterThanOrEqual(
+        COMMAND_RULE_CATALOG.reduce((total, rule) => total + rule.patterns.length, 0),
+    );
+});
+
+/* WHERE THE LOCUS CHANGES WHAT A CLASS MEANS, both answers are given. "Delete a whole root directory" is a
+ * fact about a machine rather than about a string — two paths here, an entire OS layout there — and printing
+ * one of them would mislead whichever reader it did not belong to. */
+test("says what a root is on each machine", () => {
+    const host = mount();
+    const noted = COMMAND_RULE_CATALOG.filter((rule) => rule.notes !== undefined);
+    expect(noted.length).toBeGreaterThan(0);
+    for (const rule of noted) {
+        for (const note of Object.values(rule.notes ?? {})) {
+            expect(text(host), rule.commandClass).toContain(note);
         }
     }
 });
 
-test("lists every judged class, from the contract", async () => {
-    const host = mount();
-    await openAll(host);
-    for (const rule of COMMAND_RULE_CATALOG.sandbox.filter((entry) => entry.tier === `judged`)) {
-        expect(host.textContent, rule.commandClass).toContain(rule.label);
-    }
-});
-
-/* THE DIFFERENCE BETWEEN THE MACHINES IS THE SUBSTANCE, not a footnote: the same command is judged in a
- * disposable container and held on somebody's laptop, and a panel that showed one set would be telling half
- * the truth to whichever reader it did not belong to. */
-test("shows that the two machines have different floors", async () => {
-    const host = mount();
-    await openAll(host);
-    expect(host.textContent).toContain(`This sandbox`);
-    expect(host.textContent).toContain(`My devices`);
-    // Held on a device, judged here — the concrete case that produced this whole change.
-    const deviceOnly = COMMAND_RULE_CATALOG.device.filter(
-        (rule) => rule.tier === `hard` && COMMAND_RULE_CATALOG.sandbox.find((entry) => entry.commandClass === rule.commandClass)?.tier === `judged`,
-    );
-    expect(deviceOnly.map((rule) => rule.commandClass)).toContain(`container.state`);
-});
-
-/* THE CLASSES THAT APPEAR IN BOTH LISTS MUST SAY WHY. Two of them are judged here and un-waivable on a laptop,
- * and a reader who finds the same words under "Never judged" and under "Gets a second look" with nothing
- * joining them concludes the page is confused rather than that the machines differ. */
-test("says which of the judged classes a device holds instead", async () => {
-    const host = mount();
-    await openAll(host);
-    const bothTiers = COMMAND_RULE_CATALOG.sandbox.filter(
-        (rule) => rule.tier === `judged` && COMMAND_RULE_CATALOG.device.find((entry) => entry.commandClass === rule.commandClass)?.tier === `hard`,
-    );
-    expect(bothTiers.length).toBeGreaterThan(0);
-    expect(host.textContent).toContain(`On your own computers`);
-    for (const rule of bothTiers) {
-        expect(host.textContent, rule.commandClass).toContain(rule.label);
-    }
-});
-
 /* READ-ONLY, and this is the claim worth holding: the un-waivable half cannot be edited, so the panel must not
- * grow anything that implies it can. The disclosure toggles are the only presses here; a field, a switch or a
- * remove button appearing in this group is the failure. */
-test("offers nothing to edit", async () => {
+ * grow anything that implies it can. With the disclosures gone there is nothing to press at all, so any button
+ * appearing here is the failure. */
+test("offers nothing to edit", () => {
     const host = mount();
-    await openAll(host);
     expect(host.querySelectorAll(`input, textarea, select, [role="switch"], [role="radio"]`)).toHaveLength(0);
-    // Every button is a disclosure toggle: one per tier, and nothing else.
-    expect(host.querySelectorAll(`button`)).toHaveLength(2);
+    expect(host.querySelectorAll(`button`)).toHaveLength(0);
 });

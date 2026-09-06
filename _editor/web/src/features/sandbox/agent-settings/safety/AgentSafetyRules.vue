@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { COMMAND_RULE_CATALOG, type CommandRule } from "@intentic/sandbox-contract";
-import { DisclosureRow, RowGroup, RowNote } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { COMMAND_RULE_CATALOG, type CommandLocus, type CommandRuleTier } from "@intentic/sandbox-contract";
+import { Row, RowGroup, RowNote } from "@intentic/ui";
+import RuleCommand from "./RuleCommand.vue";
 
 /* WHAT THE GATE STOPS, LISTED, and the reason this group exists at all.
  *
@@ -9,17 +9,36 @@ import { computed, ref } from "vue";
  * things were wrong with that card and only one of them was a bug. The bug was the rule (the catalog now reads
  * container state as its own class and the sandbox's hard rule no longer holds it). The other thing was that
  * there was nowhere to go and look: the page offered a switch, a prose policy and a log of decisions already
- * made, and no answer at all to "what is going to interrupt me, and which of it can I change?". An owner
- * reading their own policy cannot tell which of it is being applied and which is being overruled by something
- * typed, which is exactly the question a card raises and this group answers.
+ * made, and no answer at all to "what is going to interrupt me, and which of it can I change?".
  *
- * THE SPLIT IS BY WHETHER THEY GET A SAY, not by class, not by severity. That is the only cut that changes what
- * somebody does next: one list is worth editing the policy over, the other is not editable by anyone and
- * saying so plainly is kinder than letting them write a line that will never fire.
+ * IT IS A TABLE, because the question is a comparison. Seven classes down the side, two machines across the
+ * top, and the cell is where that class stands on that machine. Everything below follows from taking that
+ * shape seriously.
  *
- * AND BY MACHINE, because the same command is two different acts. The hard rule in this container is three
- * things; on somebody's laptop it is everything that deletes, and that difference is the substance of the
- * design rather than a footnote to it.
+ * WHAT IT REPLACED, and why the shape was the disease rather than the styling. This was two disclosures split
+ * by TIER — "Never judged" over "Gets a second look" — with each half listed per machine inside. The split is
+ * a good instinct: whether the owner gets a say is the only cut that changes what they do next. But three of
+ * the seven classes are hard on a laptop and judged in this container, so each of those three was PRINTED
+ * TWICE, once under each heading, with identical patterns under it. The page then spent a paragraph
+ * ("This is the list for the sandbox. On your own computers, these always ask instead: …") telling the reader
+ * it had not contradicted itself. That is the wall: fourteen rows of rules to say seven things, plus the prose
+ * needed to reconcile them, plus a machine sub-heading inside each half, all set at one size in three greys.
+ *
+ * SO THE TIER STOPPED BEING AN AXIS AND BECAME A CELL. Each class appears exactly once; its two verdicts sit
+ * side by side where the difference between the machines is READ rather than narrated; and the ordering does
+ * the job the tier split was reaching for, since the catalog arrives sorted most-locked-first (safety-policy.ts
+ * argues the sort). Nobody has to be told the machines differ — the columns are the telling.
+ *
+ * THE PATTERNS ARE CODE AND ARE DRAWN AS CODE. They used to be prose strings joined with ` · ` in a grey
+ * LIGHTER than the label above them, so the one genuinely scannable thing on the panel — the actual command
+ * you are about to be stopped for — was the least visible. They are chips now, monospaced and syntax
+ * highlighted through the same Shiki path as every other command in this app. That only became possible when
+ * the contract stopped mixing a fragment and its qualifier into one string (command-classes.ts CommandPattern
+ * argues that split); the qualifier stays prose beside the chip, because highlighting a sentence is what makes
+ * highlighting look broken.
+ *
+ * FOUR SIZES, NOT ONE. Label, code, qualifier and note were all `text-2xs` separated only by grey, which is
+ * why a reader had nothing to scan by and had to read every line to find the one they wanted.
  *
  * READ-ONLY, DELIBERATELY. Every line here comes from the contract (safety-policy.ts COMMAND_RULE_CATALOG),
  * which is the same constant both gates consult, so this cannot drift from enforcement the way a hand-written
@@ -28,111 +47,119 @@ import { computed, ref } from "vue";
  * typo. If a pattern here is wrong, the fix is a line in the policy or a change to the catalog, not a field. */
 
 const MACHINES = [
-    { locus: `sandbox`, label: `This sandbox`, note: `A disposable container. /work is a git worktree; /history holds every other agent's work.` },
-    { locus: `device`, label: `My devices`, note: `Your own computers, reached over the tunnel. Nothing on them is rebuilt from an image.` },
-] as const;
+    { locus: `sandbox`, label: `This sandbox` },
+    { locus: `device`, label: `My devices` },
+] as const satisfies readonly { locus: CommandLocus; label: string }[];
 
-const rulesAt = (locus: `sandbox` | `device`, tier: `hard` | `judged`): readonly CommandRule[] =>
-    COMMAND_RULE_CATALOG[locus].filter((rule) => rule.tier === tier);
+/* THE CELL'S WORDS. "Judged" is the whole sentence because the column head already said which machine and the
+ * note above already said what judging is; "Always asks" is two words rather than "never judged" because the
+ * reader wants the CONSEQUENCE, and the consequence of no judge is a card every time. */
+const VERDICTS: Readonly<Record<CommandRuleTier, string>> = {
+    hard: `Always asks`,
+    judged: `Judged`,
+};
 
-/* The judged list is the same everywhere it is the same, which it nearly is: only the two classes that move
- * tiers differ between the machines. So it is drawn once from the sandbox's side and the difference is stated
- * in the hard-rule block above it, rather than printing two near-identical columns and making a reader diff
- * them. */
-const judged = computed(() => rulesAt(`sandbox`, `judged`));
-
-/* WHICH OF THE JUDGED LIST IS HELD ON A DEVICE, named rather than left to be worked out. Two of these classes
- * appear in BOTH disclosures — judged here, un-waivable on a laptop — and a reader who spots the same words
- * twice with no explanation concludes the page is confused rather than that the machines differ. Derived, so
- * moving a class between tiers rewrites this sentence instead of stranding it. */
-const heldOnDevices = computed(() =>
-    judged.value.filter((rule) => COMMAND_RULE_CATALOG.device.find((entry) => entry.commandClass === rule.commandClass)?.tier === `hard`),
-);
-
-// Both start closed: the group's own note is the answer for most readers, and a settings page that opens two
-// long lists on arrival buries the policy editor under them.
-const openHard = ref(false);
-const openJudged = ref(false);
+// Amber is the app's warning colour and it is spent here on the one thing a reader can do nothing about, so a
+// column skimmed for "where do I have no say" answers before any of it is read.
+const VERDICT_TONE: Readonly<Record<CommandRuleTier, string>> = {
+    hard: `font-medium text-warning`,
+    judged: `text-subtle`,
+};
 </script>
 
 <template>
-    <RowGroup label="What gets stopped">
+    <!-- `@container` and not a viewport breakpoint: this panel is as wide as whatever pane it is in, and the
+         narrow spelling below is about the two verdict columns crowding the label rather than about a phone. -->
+    <RowGroup class="@container" label="What gets stopped" :count="`${COMMAND_RULE_CATALOG.length} kinds`">
         <RowNote>
             A command is only ever looked at if it matches one of these. Everything else runs without a model reading it and without anything being
             recorded.
         </RowNote>
 
-        <!-- The un-waivable half first, because it is the half somebody cannot act on and therefore the half
-             worth knowing before they spend time writing a policy line about it. -->
-        <DisclosureRow
-            v-model:open="openHard"
-            icon="lock"
-            title="Never judged"
-            description="Always asks. No policy line and no verdict can allow these."
-        >
-            <template #below>
-                <div class="flex flex-col gap-4">
-                    <p class="text-2xs text-muted">
-                        These are held even with the judge switched off, because nothing in this product brings the state back. They are typed rather
-                        than written, so they are the one part of this page you cannot change.
-                    </p>
-                    <!-- THE MACHINE IS A HEADING, NOT ANOTHER ROW. Drawn first as plain medium text at the
-                         rules' own left edge, it was the same size, weight and colour as the rule labels under
-                         it, so the one block whose entire point is that the two machines differ read as six
-                         undifferentiated lines. Uppercase and tracked is how this app already spells a divider
-                         inside a group (the RowGroup label above it, AgentSafetyLog, CodeSearchInfo), and the
-                         rail on the list is what says where one machine's rules end. -->
-                    <section v-for="machine in MACHINES" :key="machine.locus" class="flex flex-col gap-1.5">
-                        <h4 class="text-2xs font-semibold tracking-wide text-content uppercase">{{ machine.label }}</h4>
-                        <p class="text-2xs text-subtle">{{ machine.note }}</p>
-                        <ul class="border-line-subtle flex flex-col gap-2 border-l pl-3">
-                            <li v-for="rule in rulesAt(machine.locus, `hard`)" :key="rule.commandClass" class="flex flex-col gap-0.5">
-                                <span class="text-2xs text-content">{{ rule.label }}</span>
-                                <span class="text-2xs text-muted">{{ rule.patterns.join(` · `) }}</span>
-                                <span v-if="rule.note" class="text-2xs text-subtle">{{ rule.note }}</span>
-                            </li>
-                        </ul>
-                    </section>
-                </div>
+        <!-- THE MACHINES ARE NAMED ONCE, AT THE TOP, instead of on all fourteen cells under them. Dropped below
+             `@lg`, where the columns are dropped too.
+
+             IT IS A <Row> WITH NOTHING BUT `#meta`, and that is what makes the table a table: the captions are
+             then drawn by the same cluster, at the same tier padding and the same gap, as the cells they head.
+             Written as a padded <div> instead — which is how this shipped first — the columns aligned only for
+             as long as two hand-typed numbers happened to agree with <Row>'s, and the checkout gate
+             (_tools/checks/row-tiers.mjs) refuses that on exactly those grounds.
+
+             `font-medium` AND NOT `font-semibold`, which is not a weight preference: `.font-semibold.uppercase
+             .tracking-wide` is how this app spells a SECTION LABEL, and the sanctum skin opens every one of
+             them with a gold lozenge. Spelled that way these came out as two more lozenges under the one on
+             "What gets stopped" — the skin's own lane-header rule stands its mark down for exactly this reason
+             ("a bullet that failed to load and got drawn twice"). A column head is subordinate to the group's
+             name in any case, so the lighter weight is what it should have been. -->
+        <div class="hidden @lg:block">
+            <Row>
+                <template #meta>
+                    <span
+                        v-for="machine in MACHINES"
+                        :key="machine.locus"
+                        class="w-22 text-right text-3xs font-medium uppercase tracking-wide"
+                        >{{ machine.label }}</span
+                    >
+                </template>
+            </Row>
+        </div>
+
+        <Row v-for="rule in COMMAND_RULE_CATALOG" :key="rule.commandClass" :title="rule.label">
+            <!-- The verdicts are FACTS, which is precisely what `#meta` is for: it is already tabular, already
+                 trailing, already shrink-0, so a column of them lines up down the list for free. -->
+            <template #meta>
+                <span
+                    v-for="machine in MACHINES"
+                    :key="machine.locus"
+                    class="hidden w-22 text-right @lg:block"
+                    :class="VERDICT_TONE[rule.tiers[machine.locus]]"
+                    >{{ VERDICTS[rule.tiers[machine.locus]] }}</span
+                >
             </template>
-        </DisclosureRow>
 
-        <DisclosureRow
-            v-model:open="openJudged"
-            icon="eye"
-            title="Gets a second look"
-            description="The judge reads your policy and decides. Usually it allows them."
-        >
             <template #below>
-                <div class="flex flex-col gap-4">
-                    <p class="text-2xs text-muted">
-                        Matching one of these is not a finding, it is a reason to look: most of what lands here is ordinary work a pattern caught by
-                        accident. Write a line in your policy below to stop being asked about any of it.
+                <div class="flex flex-col gap-2">
+                    <!-- NARROW: the same two cells, carrying their own machine name because there is no head
+                         above them to borrow one from. Same lookup, same words, so the two spellings of one
+                         answer cannot drift apart. -->
+                    <p class="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs @lg:hidden">
+                        <span v-for="machine in MACHINES" :key="machine.locus">
+                            <span class="text-subtle">{{ machine.label }} — </span>
+                            <span :class="VERDICT_TONE[rule.tiers[machine.locus]]">{{ VERDICTS[rule.tiers[machine.locus]] }}</span>
+                        </span>
                     </p>
-                    <!-- Why two of these words appear in both lists. Without it the page reads as contradicting
-                         itself rather than as describing two machines.
 
-                         The labels are VERB PHRASES ("delete files recursively"), so they cannot sit inside a
-                         sentence: "On your own computers delete files recursively … always asks instead" reads
-                         as an instruction to delete things. They go in a list after a colon instead. -->
-                    <p v-if="heldOnDevices.length > 0" class="text-2xs text-muted">
-                        <span class="text-content">This is the list for the sandbox.</span> On your own computers, these always ask instead:
-                        {{ heldOnDevices.map((rule) => rule.label).join(`; `) }}.
-                    </p>
-                    <ul class="flex flex-col gap-1.5">
-                        <li v-for="rule in judged" :key="rule.commandClass" class="flex flex-col gap-0.5">
-                            <span class="text-2xs text-content">{{ rule.label }}</span>
-                            <span class="text-2xs text-muted">{{ rule.patterns.join(` · `) }}</span>
+                    <!-- THE CHIP AND ITS QUALIFIER ARE ONE FLEX ITEM, so a wrap can never leave "also -f and
+                         --force-with-lease" stranded on the line under a chip it no longer sits beside. -->
+                    <ul class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                        <li v-for="pattern in rule.patterns" :key="pattern.code" class="flex min-w-0 items-center gap-1.5">
+                            <span class="inline-flex max-w-full items-center rounded border border-line-subtle bg-overlay px-1.5 py-0.5 text-2xs">
+                                <RuleCommand :command="pattern.code" />
+                            </span>
+                            <span v-if="pattern.qualifier !== undefined" class="text-2xs text-subtle">{{ pattern.qualifier }}</span>
                         </li>
                     </ul>
-                    <!-- The one thing a reader of this list will otherwise get wrong, and the thing the old
-                         behaviour actually got wrong: a command that TALKS about a delete is not one. -->
-                    <p class="text-2xs text-subtle">
-                        A command that only mentions one of these — printed by an <code>echo</code>, searched for by a <code>grep</code>, written into
-                        a heredoc — is not doing it, and never reaches the rule above.
-                    </p>
+
+                    <!-- THE ONE CLASS WHOSE MEANING IS THE ARGUMENT. "Delete a whole root directory" is not a
+                         fact about a string, it is a fact about a machine, and the two answers are so different
+                         (two paths here, an entire OS layout there) that stating only one would mislead
+                         whichever reader it did not belong to. Railed, so it reads as a footnote to this row
+                         rather than as a new row. -->
+                    <div v-if="rule.notes !== undefined" class="flex flex-col gap-0.5 border-l border-line-subtle pl-2.5">
+                        <p class="text-2xs text-muted">What counts as a root:</p>
+                        <p v-for="machine in MACHINES" :key="machine.locus" class="text-2xs text-subtle">
+                            <span class="text-muted">{{ machine.label }}</span> — {{ rule.notes[machine.locus] }}
+                        </p>
+                    </div>
                 </div>
             </template>
-        </DisclosureRow>
+        </Row>
+
+        <!-- The one thing a reader of this list will otherwise get wrong, and the thing the old behaviour
+             actually got wrong: a command that TALKS about a delete is not one. -->
+        <RowNote>
+            A command that only mentions one of these — printed by an <code class="font-mono text-content">echo</code>, searched for by a
+            <code class="font-mono text-content">grep</code>, written into a heredoc — is not doing it, and never reaches the rules above.
+        </RowNote>
     </RowGroup>
 </template>
