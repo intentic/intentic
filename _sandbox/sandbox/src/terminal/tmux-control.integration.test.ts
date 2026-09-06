@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { attachControlTerminal, type ControlTerminal } from "./tmux-control.js";
+import { attachControlTerminal, type ControlTerminal, spawnControlClient } from "./tmux-control.js";
 
 // @xterm/headless v6 ships as CommonJS whose named exports Node's ESM lexer can't detect (logs/pane-log-clean.ts
 // loads it the same way).
@@ -226,6 +226,38 @@ test("the session being killed from elsewhere is an exit, not a hang", async () 
     await tmux("kill-session", "-t", `=${sessions.at(-1) ?? ""}`);
     await until(() => h.exits.length > 0, "the exit");
     expect(h.exits[0]?.code).toBe(0);
+});
+
+/* The cut is what lets a sync tell "already in the capture" from "new since it", and it is only that if it is
+ * drawn while the stdout chunk carrying the reply is STILL being walked: one chunk routinely holds a reply
+ * block and the `%output` lines tmux wrote after it, and a promise continuation cannot run until the whole
+ * chunk has been parsed, by which time the new output is indistinguishable from the old. */
+test("a batch's cut lands before any continuation on its own promises", async () => {
+    const h = await fresh();
+    await until(() => h.text().includes("\x1bc"), "the initial replay");
+    const order: string[] = [];
+    const client = spawnControlClient(["attach-session", "-t", `=${sessions.at(-1) ?? ""}`], {
+        onOutput: () => undefined,
+        onNotice: () => undefined,
+        onExit: () => undefined,
+    });
+    try {
+        const [reply] = client.send([`display-message -p marker`], () => order.push("cut"));
+        await reply?.then((lines) => order.push(`resolved:${lines.join("")}`));
+    } finally {
+        client.close();
+    }
+    expect(order).toEqual(["cut", "resolved:marker"]);
+});
+
+test("keystrokes that arrive before the attach has found the pane are queued, not swallowed", async () => {
+    // `fresh` hands the harness back in the same tick as the attach, before tmux has answered anything, so
+    // typing here is typing into a tab whose pane is not known yet. The panel takes keyboard focus the moment
+    // a tab opens, which is what makes that a window a real user hits rather than a contrived one.
+    const h = await fresh();
+    h.terminal.input(Buffer.from("echo TYPED-EARLY\r", "utf8"));
+    await until(() => h.text().includes("TYPED-EARLY"), "the early keystrokes reaching the pane");
+    expect(h.text()).toContain("TYPED-EARLY");
 });
 
 test("the tab follows the session's active window: a new window replays, its close returns", async () => {
