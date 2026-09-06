@@ -17,6 +17,12 @@
 **/npm-debug.log*
 **/pnpm-debug.log*
 
+# pnpm's content-addressable store, which an install mints inside the checkout rather than under $HOME whenever
+# the two are on different filesystems: pnpm then falls back to the project's own mountpoint, and in a sandbox
+# where this repo is its own mount that mountpoint is this directory. Hundreds of megabytes of hash-named blobs
+# the next install rebuilds, and thousands of untracked paths in a status read until it is named here.
+**/.pnpm-store
+
 # desktop (Tauri): the Rust build tree, tauri-build's codegen, the launcher scripts staged out of the commit
 # for the bundlers (_tools/scripts/desktop/stage-desktop-scripts.sh), and installers staged into the site for a
 # local download test (_editor/desktop-app/scripts/stage-local-downloads.sh).
