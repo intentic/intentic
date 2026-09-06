@@ -192,8 +192,13 @@ test("stops the moment the user cancels rather than spending the rest of the cha
  * would look the same and the daemon would simply start billing again. So: no catalog read, no adapter asked,
  * and an error a caller can recognise as the owner's own choice rather than a fault. */
 test("asks nothing at all when no model is set for the job", async () => {
-    await expect(askRoleModel(fakeServices([]), ROLE, DRAFT, signal())).rejects.toBeInstanceOf(RoleModelUnsetError);
+    const thrown = await askRoleModel(fakeServices([]), ROLE, DRAFT, signal()).catch((error: unknown) => error);
 
+    expect(thrown).toBeInstanceOf(RoleModelUnsetError);
+    // The whole sentence, and the role it carries: this is what a caller renders and what the safety gates read
+    // to tell "the owner switched this job off" from "the judge could not be reached".
+    expect((thrown as Error).message).toBe(`No model is set for this job, so it does not run. Set one in Sandbox ▸ Agent ▸ Models.`);
+    expect((thrown as InstanceType<typeof RoleModelUnsetError>).role).toBe(ROLE);
     expect(oneShot).not.toHaveBeenCalled();
     expect(geminiOneShot).not.toHaveBeenCalled();
     expect(cursorOneShot).not.toHaveBeenCalled();
@@ -238,8 +243,10 @@ test("walks the pins a caller snapshotted instead of re-reading the role's list"
  * must stay bound: an owner setting a model an hour into a long turn should see it on the NEXT turn, not have
  * the running one acquire a judge underneath a policy it has already been applying without one. */
 test("refuses on the snapshot it was handed rather than re-reading the role's list", async () => {
-    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, signal(), { pins: [] })).rejects.toBeInstanceOf(RoleModelUnsetError);
+    const thrown = await askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, signal(), { pins: [] }).catch((error: unknown) => error);
 
+    expect(thrown).toBeInstanceOf(RoleModelUnsetError);
+    expect((thrown as Error).message).toBe(`No model is set for this job, so it does not run. Set one in Sandbox ▸ Agent ▸ Models.`);
     expect(oneShot).not.toHaveBeenCalled();
 });
 
@@ -254,7 +261,9 @@ test("says the job's accounts have gone rather than failing on a model call", as
 
     expect(thrown).toBeInstanceOf(Error);
     expect(thrown).not.toBeInstanceOf(RoleModelUnsetError);
-    expect((thrown as Error).message).toMatch(/no longer has/);
+    expect((thrown as Error).message).toBe(
+        `Every model set for this job names an account this sandbox no longer has: set one in Sandbox ▸ Agent ▸ Models.`,
+    );
     expect(oneShot).not.toHaveBeenCalled();
 });
 
