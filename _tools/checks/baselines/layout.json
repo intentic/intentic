@@ -1,0 +1,23 @@
+{
+    "fanOut": {
+        "_editor/web/src/extension-host": 33,
+        "_sandbox/sandbox/src/capabilities": 39,
+        "_sandbox/sandbox/src/capabilities/handlers": 35,
+        "_shared/sandbox-contract/src/contracts": 41,
+        "_shared/sandbox-contract/src/schemas": 51,
+        "_site/site/src/components": 37
+    },
+    "collisions": {
+        "_deploy/cli": 2,
+        "_devices/machine": 2,
+        "_extensions/connectors": 1,
+        "_extensions/deployments": 1,
+        "_extensions/devices": 1,
+        "_extensions/knowledge": 2,
+        "_extensions/social": 1,
+        "_platform/prisma": 1,
+        "_sandbox/sandbox": 6,
+        "_search/iq-engine": 1,
+        "_site/site": 2
+    }
+}

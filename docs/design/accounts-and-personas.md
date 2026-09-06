@@ -1,0 +1,259 @@
+# Accounts and personas
+
+Who the sandbox **is** when it acts outside: the model behind connected logins, the cards that group them,
+and the rule that decides which of them a single turn may use.
+
+Read this if you are about to touch anything that signs in somewhere, posts somewhere, or decides what an
+unattended job is allowed to do.
+
+## The short version
+
+There are **two stored things** and **one derived thing**. That is the whole model.
+
+| Word | What it really is | Where it lives |
+| --- | --- | --- |
+| **Capability** | One thing you connected. A GitHub token, a database, a VPN: and, for our purposes, **one login on one site**. | one entry in `.intentic/config/capabilities.json` |
+| **Persona** | A card that says "these logins are the same someone", plus what a session wearing it may do, where it works, what its tree holds and what it runs on. | one entry in `.intentic/config/personas.json` (committed to git) |
+| **Browser session** | *Not a thing you create.* It is the signed-in Chromium profile that a browser capability grows once somebody logs in. | files under `.intentic/local/browser/` |
+
+And one word that people expect to find and **will not**: there is no **Identity** object. See
+[What is deliberately not modelled](#what-is-deliberately-not-modelled).
+
+## The one rule that keeps it simple
+
+**Everything hangs off the capability's id.** You connect Reddit and name it `reddit-work`. That string is then:
+
+- the folder its browser profile lives in,
+- the name of the "is it signed in?" marker beside it,
+- the file its passkey (its software security key) is kept in,
+- its roster line on the site's skill (one skill per *site*, every account of it a line),
+- the `account` argument every browser tool call names (`mcp__browser__browser_click` with `account:
+  "reddit-work"`),
+- the id a persona card lists,
+- the id an automation's persona resolves down to.
+
+One key, used everywhere, minted once. That is why connecting the same site twice just works: `reddit-work` and
+`reddit-personal` are two capabilities, two profiles, two roster lines, and removing one cannot touch the
+other. The **state** is never keyed by the site: keying state by site is the version of this that breaks. The
+two *reading* surfaces are the deliberate exception: the site's skill and the one `browser` MCP server are
+shared, because they are derived text and schemas rather than state, and a copy per account only multiplied
+what every prompt pays (sixteen identities used to mean sixteen skill clones and sixteen copies of the same
+~21 tool schemas).
+
+## How the pieces relate
+
+```mermaid
+flowchart LR
+    persona["<b>Persona card</b> — stored<br/>“these logins are one someone”<br/>name · what it may do · where it works"]
+    cap["<b>Capability</b> — stored<br/>one login on one site<br/>site · optional username + password"]
+    disk["<b>What that login grows on disk</b><br/>browser profile · “signed in” marker<br/>its passkey · a roster line on the site's skill"]
+    tools["<b>What this turn is handed</b><br/>one <code>browser</code> server, every tool taking <code>account</code><br/>+ sign-in helper tools"]
+
+    persona -->|"lists the ids it speaks for"| cap
+    cap -->|"all named after its id"| disk
+    cap ==>|"an accepted account value"| tools
+    persona ==>|"decides which accounts the server accepts"| tools
+```
+
+Read it as: a capability is the account, the disk state is what that account grew, and a persona is a
+**label over a group of accounts** that a turn can be pinned to.
+
+## Connecting an account
+
+Adding the capability does **not** sign you in. It lands the account on its site's skill, makes sure the
+browser is in the image, and marks the account *pending*. Signing in happens by one of two hands, into the very same profile:
+
+- **Yours**: a live browser window streamed into the app; you click through the login like normal.
+- **The agent's**: it drives that account's own browser, and the daemon types the stored username or password
+  into the focused field for it. The agent never sees the password. If it signs *up*, the daemon generates the
+  password and stores it on the card, so even a credential the agent caused to exist is one it never read.
+  Stuck on a captcha or a phone check, it asks you to take over the live window for that one step.
+
+Either way, the account is "connected" only when the marker file exists: a profile folder appears the moment
+Chromium starts, so its presence proves nothing.
+
+## What one turn is allowed to use
+
+This is the part worth getting right, and it lives in one function so it cannot be re-derived differently in
+five places. The question is always: *does anyone name a persona, and is anyone watching?*
+
+```mermaid
+flowchart TB
+    start(["A turn starts"]) --> named{"Did it name<br/>a persona?"}
+    named -->|no| watched{"Is a person<br/>at the composer?"}
+    named -->|"yes, and the card exists"| some["Exactly that card's accounts"]
+    named -->|"yes, but no such card"| none2["No logged-in account<br/>(fail closed, and it is logged)"]
+    watched -->|yes| all["Every connected account"]
+    watched -->|"no (a scheduled or triggered job)"| none["No logged-in account at all"]
+```
+
+The asymmetry is on purpose. A chat has a human who can see what is about to happen and stop it, so making
+them pick a persona before "check our mentions" would tax every ordinary turn. A job firing at 3am has nobody,
+and the mistake it can make (a public post from the wrong account) cannot be taken back. So the default flips
+from *everything* to *nothing* exactly where the supervision stops.
+
+Two details that matter:
+
+- The narrowing happens **before** the browsers are built. An account this turn may not use is absent from the
+  `browser` server's per-turn manifest, so no Chromium is launched and no profile is opened for it, and a call
+  naming it is refused with the granted set spelled out: a legible no, not a tool that mysteriously does not
+  exist. That is the version that survives an agent misreading its instructions.
+- Naming a card that does not exist denies everything. Falling back to "all accounts" would turn a typo into
+  precisely the accident the layer exists to prevent: and a missing card is ordinary (a workspace cloned
+  before its personas were committed).
+
+## Who names one
+
+Two places, and the difference between them is the supervision above.
+
+- **A scheduled or triggered job** names its persona when it is written, on the automation's own form. It is
+  the field that decides whether that job can post at all, so it is answered once and stays answered.
+- **A chat** names one in the composer, beside the model and the mode, and starts at *anyone*: the attended
+  default the rule above describes. Pick a persona and the pill wears its name until you change it: the pick
+  belongs to that chat, rides every message it sends, and can be changed mid-conversation, because the card is
+  resolved per turn rather than at the moment the conversation opened. It is deliberately **not** remembered
+  for the next chat: a narrowing that followed you into a new chat is one you would not remember making.
+
+A chat that names a persona whose accounts are all still signed out says so under the box. The turn would run
+and simply reach nothing: the one persona state a pill cannot show by wearing a name.
+
+## The two ways a session runs things
+
+A card answers "may it run commands" twice, because there are two execution backends and they are not the
+same grant:
+
+- **Run commands**: the shell. Everything on the image, with everything the image can reach. The card's own
+  form says the honest thing about it: while it is on, every other limit is a strong default rather than a
+  wall, because a command can read a credential the card never granted.
+- **Run code**: the JavaScript backend. The agent writes a script instead of a command line, and the daemon
+  runs it in a subprocess whose fence is the runtime's own: file reads and writes follow the card's **Files**
+  answer and its folder scope, and the script cannot start other programs unless **Run commands** is also on.
+  So "code yes, commands no" is a real posture (execution without a shell) with one stated gap: the fence
+  cannot cut the network, so a script can fetch whatever the web shelf says.
+
+Both run under the same owner's rulebook: a script that would read a credential file or reach the open
+internet is classified and gated exactly as the command that would. Which runtimes can host the second
+backend is declared per runtime (`AgentCapabilities.execution`); today that is the Claude Code loop.
+
+## What it carries, what it runs on, and how a new chat finds it
+
+A card is the sandbox's one **static** description of a working posture, and three fields make it the whole
+of one:
+
+- **`context.repos`**: which nested repositories a session wearing the card carries. The workspace repository
+  is always carried; an absent `context` is every repository. This is what the session's tree HOLDS, which is a
+  different question from `workspace.folders` (what its file tools may TOUCH): a repository that is off is not
+  fenced, it is absent from the checkout, and the session is told so on its opening turn. The daemon brings a
+  conversation's checkout to the list on every turn: a repository the card names joins, one it stops naming
+  leaves with its work committed to the branch.
+- **`models`**: an ordered ladder, the same shape as every per-job list under Sandbox ▸ Agent ▸ Models. The
+  composer moves its model pill to the ladder's head when the card goes on; an unattended turn wearing the
+  card fills its silence from the ladder before the job's own list. A model named on the turn itself always
+  wins. Absent means whatever the chat or the job would have run on anyway.
+- **`brief`**: one line, what the persona is for. The line under the name on the Personas page, and the line a
+  new chat is matched on.
+
+**Static on purpose.** Everything a session sees before the user's first word (its accounts, the tool set its
+powers leave, the kit's prompt and skills, the tree it opens on) is a function of the card it wears, so two
+sessions on one card open on the same system prefix and the provider's prompt cache serves the second. A model
+asked to compose a context per session instead either picks badly and the session walks outside it anyway,
+or picks well at the price of a second strong run (`docs/context-composition-plan.md` at the workspace root
+has the whole argument).
+
+**How a new chat finds its card.** The one per-chat decision is *which* card, and it is a classification: the
+`persona-router` helper role reads the first message and one line per card and names one card or `none`,
+once, before the first turn. The composer asks it once per settled draft on a chat with no turns and no
+persona pinned, and what it does with the answer is the **Match new chats to a persona** setting on the
+Personas page:
+
+| Setting | What happens |
+| --- | --- |
+| Off | Never asked. |
+| Suggest (default) | A chip on the composer offers the card ("Act as Backend?"); pressing it puts the card on. Nothing happens at send. |
+| Auto | The card goes on when the message is sent, unless the chip was pressed first, which declines it for that chat. A send that beats the reading waits for it, briefly. |
+
+Putting the card on means its model too, whichever door it came through. A pick made by hand at the persona
+pill, "Anyone" included, overrules routing for that chat. Unattended wakes are never routed: a wake names its
+persona on its own form, and routing one onto a card would grant it accounts the owner never named for it.
+
+## Two very different things both called "account"
+
+The one confusion worth naming out loud, because the two words sit one line apart on the same form:
+
+- **Which account pays**: the AI subscription that runs the turn (Claude, Gemini, …).
+- **Which account acts**: the persona whose logins the turn may post from.
+
+They are separate fields for a reason. Getting them swapped means pinning a nightly job to the right billing
+and the wrong Reddit.
+
+## What is deliberately not modelled
+
+Worth knowing before you plan work on top of this:
+
+**There is no Identity object.** A Gmail address can enter the sandbox three ways: as a website login, as a
+mail inbox connector, as an AI provider sign-in: and **none of them knows about the others**. Nothing records
+that a Reddit account was created *from* a particular mailbox. When the agent signs up somewhere and needs the
+confirmation link, it is told in prose to go look in whatever inbox is connected; that link is guidance, not
+data. If "one person, several accounts, one of them the mailbox the rest were born from" is something we want,
+it is a feature to add: not a tangle to unpick.
+
+**A card carries no wording, and no publish-or-draft switch.** Both used to be fields on it and both are gone.
+The wording was a paragraph on how the persona writes: optional, answered by almost nobody, and a fourth question
+on a form whose other answers all bound something: prose that steers a turn belongs in the workspace's own
+instructions, which every turn already reads. The switch read as a lock and was a sentence: it asked the turn to
+route outward things through the approvals queue and could not stop it posting. The queue is the mechanism, and a
+control that promises more than it delivers is the one an owner trusts. So a card answers three questions: who
+it speaks as, what it may do, where it works: and every field of it changes what a session can reach.
+
+**And it does not choose where its tree lives.** A card used to carry a third workspace field: its own copy,
+the shared one, or whatever the surface that started the session preferred. Every surface already opens in a
+private worktree, so the setting existed only to opt *out* of the isolation that lets several sessions run at
+once, and it asked the question in three phrases a reader had no way to choose between. A persona says where
+it *starts*, which folders its file tools may touch, and (see above) which repositories its tree holds; the
+copy it works in is not up for discussion. Both folder answers are picked from the workspace's own tree rather
+than typed, because a fence naming a folder that does not exist refuses everything, and it does so silently.
+
+The one exception is the desk a Front Desk answers through, whose manner is the product's rather than any
+workspace's: that wording lives in the daemon beside the card the daemon writes, not on the card.
+
+**A persona is not a security boundary, and does not claim to be.** Its card holds no secret, which is exactly
+what lets it be committed and reviewed like any other project config. What it prevents is the wrong-account
+*mistake*. The place it genuinely bites is the unattended job, because there its default is nothing.
+
+**Its fence can be read off the workspace, not just off the card.** The folder limit is the one setting whose
+effect you cannot check by reading it back: the words tell you what somebody typed, not whether they still match
+a folder that exists. So the explorer can be read *as* a persona: pick one under the filter funnel and the folders
+its file tools would refuse go dim, with a line naming who you are looking as. It is a lens and never a lock:
+nothing stops the person at the keyboard opening anything, because they are not the persona, and a folder that
+merely leads to a reachable one stays lit so the road in is never greyed out.
+
+**An open card writes as you change it.** A persona is settings, not a document, so the list is an accordion and
+a flipped switch is flipped: there is no Save button to leave a card half-decided behind. Creating one is the
+exception and keeps an explicit action, because there is nothing to write to until it has a name.
+
+**The site's skill stays loaded either way.** A skill is a project file and loads every turn, so a disallowed
+account's roster line is still readable. The failure is safe and now legible: the tools exist regardless (they
+are the one shared `browser` server), and a call naming a disallowed account is refused with the granted
+accounts spelled out.
+
+## Where it lives
+
+| Piece | Files |
+| --- | --- |
+| The two shapes | [schemas/capabilities.ts](../../_shared/sandbox-contract/src/schemas/capabilities.ts): `CapabilitySchema` (`browser` kind) and [schemas/personas.ts](../../_shared/sandbox-contract/src/schemas/personas.ts): `PersonaSchema` |
+| The rule about which accounts a turn gets | [personas.ts](../../_sandbox/sandbox/src/personas/personas.ts) |
+| The JS execution backend a card can grant | [js-runtime.ts](../../_sandbox/sandbox/src/execution/js-runtime.ts) (the fence and the runner) · [js-tool.ts](../../_sandbox/sandbox/src/execution/js-tool.ts) (the `Code` tool the Claude Code loop mounts) |
+| The disk state behind a login | [session-store.ts](../../_sandbox/sandbox/src/browser/sessions/session-store.ts) |
+| Adding / removing a site login | [handlers/browser.ts](../../_sandbox/sandbox/src/capabilities/handlers/browser.handler.ts) |
+| The one `browser` server routing every account | [browser-router.mjs](../../_sandbox/sandbox/bin/browser-router.mjs) (spawned per turn) · [browser-tools.ts](../../_sandbox/sandbox/src/browser/tools/browser-tools.ts) (its manifest: the persona-filtered account map) |
+| The per-site skills, accounts as roster lines | [account-skills.ts](../../_sandbox/sandbox/src/capabilities/account-skills.ts) (the converge) · [browser-skill.ts](../../_sandbox/sandbox/src/browser/tools/browser-skill.ts) (the core notes) |
+| The agent signing itself in | [accounts-tools.ts](../../_sandbox/sandbox/src/browser/tools/accounts-tools.ts) |
+| Where the rule is applied to a turn | [turn-plan.ts](../../_sandbox/sandbox/src/agent/run/turn-plan.ts) |
+| What a session's tree holds | [conversation-context.ts](../../_sandbox/sandbox/src/agent/context/conversation-context.ts) (the card's `context` becomes the conversation's composition, once) · [worktrees.ts](../../_sandbox/sandbox/src/agents/worktrees/worktrees.ts) (`selection`: the checkout brought to it) · [context-note.ts](../../_sandbox/sandbox/src/agent/context/context-note.ts) (what the session is told) |
+| Which persona a new chat belongs to | [persona-router.ts](../../_sandbox/sandbox/src/agent/prompt/persona-router.ts) (the reading, on the `persona-router` role) · [personaRoute.ts](../../_editor/web/src/features/chat/personas/personaRoute.ts) (when the composer asks, and the three modes) · [ComposerPersonaChip.vue](../../_editor/web/src/features/chat/composer/ComposerPersonaChip.vue) (the chip) |
+| The card's model ladder | [personas.ts (contract)](../../_shared/sandbox-contract/src/schemas/personas.ts) (`personaModels`) · [run-role-model.ts](../../_sandbox/sandbox/src/agent/models/run-role-model.ts) (`personaRunModel`, an unattended turn's fill) · [conversation.ts](../../_editor/web/src/features/chat/session/conversation.ts) (`wearModel`, the composer's pill following the card) |
+| The screens | [SandboxPersonas.vue](../../_editor/web/src/features/sandbox/personas/SandboxPersonas.vue) (who this box is, the whole card) · [DirectoryPersonas.vue](../../_editor/web/src/features/workspace/directory-ui/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../../_editor/web/src/features/capabilities/Capabilities.vue) (what it is signed into) |
+| The card's own fields | [PersonaForm.vue](../../_editor/web/src/features/sandbox/personas/PersonaForm.vue) (the editor) · [PersonaPowersFields.vue](../../_editor/web/src/features/sandbox/personas/PersonaPowersFields.vue) (what it may do, grouped by blast radius: shared with the tree's quick panel) · [FolderPicker.vue](../../_editor/web/src/features/sandbox/devices/FolderPicker.vue) (both location answers, picked from the workspace tree) |
+| Seeing the workspace as one | [personaReach.ts](../../_editor/web/src/features/workspace/directory-ui/personaReach.ts) (the lens, and why it never blocks) · [WorkspaceDesktop.vue](../../_editor/web/src/features/workspace/page/WorkspaceDesktop.vue) (`lensLine`: who you are reading as, on the funnel that is already lit for it) |
+| What both of those must agree about | [personaCard.ts](../../_editor/web/src/features/sandbox/personas/personaCard.ts): the name→id slug, "everything is on" as a form, which answers are worth committing, and which cards start in a folder |
+| Picking one for a chat | [ChatPersonaMenu.vue](../../_editor/web/src/features/chat/personas/ChatPersonaMenu.vue) (the composer's picker) · [ChatPane.vue](../../_editor/web/src/features/chat/panel/ChatPane.vue) (the pill and what it warns about) |

@@ -1,0 +1,207 @@
+import { z } from "zod";
+import { NeedsActionSchema } from "../policy/needs-action.js";
+import { CapabilitySchema } from "../schemas/capabilities.js";
+import { SandboxSettingsSchema } from "../schemas/settings.js";
+
+/* THE SANDBOX DEFINITION: the declarable SHAPE of a sandbox, split off from its state.
+ *
+ * A bundle (BundleSchema, schemas/maintenance.ts) moves everything a sandbox holds; this is the half of it that
+ * is a REFERENCE to a source of truth rather than bytes only this sandbox has: which repos (as remotes a
+ * target can clone), which connections (as shapes a target re-authenticates), which overlay steps (as source
+ * a target's owner approves), which secrets (as NAMES a target asks for), which agent settings. Everything
+ * here can be reproduced against the world; everything a bundle carries beyond it (transcripts, checkpoint
+ * timelines, unpushed branches, ledgers) cannot, which is the line between the two formats.
+ *
+ * ON THE WIRE AND ON DISK IT IS TOML (`sandbox.toml`), hand-writable and diffable; these schemas are what the
+ * parsed document must satisfy. The choice of a definition never relaxes the consent model: applying one
+ * writes the overlay as a PROPOSAL for the owner's approval gate, lands capabilities unauthenticated, and
+ * never carries a credential value, so a definition is safe to publish in a way a bundle never is.
+ */
+
+// One repository, by reference: the id it lands under in the workspace, where a target clones it from, and
+// (optionally) the branch to check out. A repo with NO remote cannot appear here, the exporter reports it as
+// omitted instead of inventing a source for bytes only the source sandbox holds.
+export const DefinitionRepositorySchema = z.strictObject({
+    // Workspace-relative repo id ("intentic", "clients/foo"), the same id the wire {repo} routes use.
+    id: z.string().min(1),
+    // The clone URL, verbatim from the source repo's own remote.
+    remote: z.string().min(1),
+    // The branch to check out; absent means the remote's default.
+    ref: z.string().optional(),
+});
+export type DefinitionRepository = z.infer<typeof DefinitionRepositorySchema>;
+
+/* THE WORKSPACE ITSELF, by reference. `/work` is a git repo of its own (the daemon's `root` scope, git dir on
+ * /history), tracking every workspace file that is not a nested repo, the reference shelf, or daemon-internal
+ * state — which by the versioned-state allowlist means the owner's AUTHORED content: notes, skills, personas,
+ * automations, workflow and loop designs, approvals, workspace extensions. None of that has a source anywhere else,
+ * so before this section a definition could only shrug at it and a bundle was the sole way to move it.
+ *
+ * With a remote it becomes referenceable like any other repo, which is the whole point: `[workspace]` plus
+ * `[[repositories]]` is a sandbox's code AND its way of working, and what remains bundle-only is exactly what
+ * cannot be pushed anywhere — secrets, identity, /history, the built image.
+ *
+ * A workspace with no remote cannot appear here; the exporter says so in `omitted` rather than inventing one. */
+export const DefinitionWorkspaceSchema = z.strictObject({
+    // The clone URL, verbatim from the workspace repo's own remote.
+    remote: z.string().min(1),
+    // The branch to check out; absent means the remote's default.
+    ref: z.string().optional(),
+});
+export type DefinitionWorkspace = z.infer<typeof DefinitionWorkspaceSchema>;
+
+export const DefinitionEnvironmentSchema = z.strictObject({
+    // The image the overlay extends, informational: the target composes against ITS OWN base (see
+    // composeEnvironment's baseImageOf), this records what the source was on.
+    baseImage: z.string().optional(),
+    /* The owner-approved CUSTOM overlay section, as source. Deliberately not the composed file and
+     * deliberately without the approval hash: consent does not travel, so an applied definition parks this at
+     * the target owner's approval gate rather than executing it. */
+    dockerfile: z.string().optional(),
+});
+export type DefinitionEnvironment = z.infer<typeof DefinitionEnvironmentSchema>;
+
+/* The settings section: every SandboxSettings field, optional, WITHOUT its default. `.partial()` alone keeps
+ * each field's `.default()`, so a document naming two flags would parse into the whole surface at today's
+ * defaults — the opposite of "state only decisions", and it would freeze those defaults into every future
+ * apply. Unwrapping first is what makes an absent key STAY absent, so applying merges over the target's own
+ * settings and a definition round-trips through parse byte-identically. */
+// Both wrapper classes, in a loop: a field can be a default inside a prefault, and either one left on would
+// re-materialize its value for an absent key.
+const bareField = (field: z.ZodType): z.ZodType => {
+    let inner = field;
+    while (inner instanceof z.ZodDefault || inner instanceof z.ZodPrefault) {
+        inner = inner.unwrap() as z.ZodType;
+    }
+    return inner;
+};
+
+const definitionSettings = (): z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>> => {
+    const shape = Object.fromEntries(Object.entries(SandboxSettingsSchema.shape).map(([key, field]) => [key, bareField(field).optional()]));
+    return z.strictObject(shape).prefault({}) as unknown as z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>>;
+};
+
+export const SandboxDefinitionSchema = z.strictObject({
+    // Bumped when the layout changes in a way an older daemon would misread. Refused rather than guessed at,
+    // the bundle manifest's own rule.
+    schemaVersion: z.literal(1),
+    // What the source sandbox was called, for the reader; never used to authorize anything.
+    name: z.string().optional(),
+    environment: DefinitionEnvironmentSchema.prefault({}),
+    // The workspace repo itself, when it has a remote to be named by. Absent is the ordinary state of a
+    // workspace nobody has published, not an error.
+    workspace: DefinitionWorkspaceSchema.optional(),
+    repositories: z.array(DefinitionRepositorySchema).prefault([]),
+    /* Each connection IN FULL (id, kind, config), not merely named: the manifest they come from carries the
+     * SHAPE of a connection and never its credential (workspace-state.ts argues the split on the
+     * capabilities.json entry, and the exporter sweeps before reading), so what lands on a target is the card,
+     * visibly unauthenticated, waiting for one credential apiece. */
+    capabilities: z.array(CapabilitySchema).prefault([]),
+    // Secret NAMES only, what the target should ask its owner for. Values never enter a definition.
+    secrets: z.array(z.string()).prefault([]),
+    // The agent settings that differ from their defaults. Partial on purpose: a definition states decisions,
+    // not the whole flag surface, so a flag it does not mention keeps the target's own default.
+    settings: definitionSettings(),
+});
+export type SandboxDefinition = z.infer<typeof SandboxDefinitionSchema>;
+
+// One "do this by hand" line, the honesty unit the arrival surface carries too: a subject the UI bolds and a
+// detail written as an instruction to the owner. Defined in its own leaf module (needs-action.ts says why)
+// and re-exported here, where every consumer of the definition surface finds it.
+export { NeedsActionSchema, type NeedsAction } from "../policy/needs-action.js";
+
+// What GET /definition answers: the emitted TOML, plus what the derivation could not express (a repo with no
+// remote), listed rather than silent, the export's own `excluded` discipline.
+export const DefinitionExportSchema = z.object({
+    toml: z.string(),
+    omitted: z.array(NeedsActionSchema),
+});
+export type DefinitionExport = z.infer<typeof DefinitionExportSchema>;
+
+/* APPLYING one is not here. A definition is one of four things that can ARRIVE in a sandbox, and it lands
+ * through the shared pipeline in arrival.ts (ArrivalPlan → ArrivalApply → ArrivalReport) rather than through
+ * a plan/apply/report trio of its own. What stays on this file is the outbound half and the read: deriving
+ * the document, and where this sandbox stands relative to one. */
+
+// Where this sandbox stands relative to a definition: one line per difference, empty when they agree. The
+// drift answer, computable because the emitter is deterministic.
+export const DefinitionDiffSchema = z.object({
+    differences: z.array(NeedsActionSchema),
+});
+export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
+
+/* ---- publishing the workspace repo, the one step a definition cannot take for itself ----
+ *
+ * `[workspace]` names a remote; nothing can name one that does not exist. So the owner-facing half of the
+ * feature is this: create a PRIVATE repo on a connected git host and push /work to it, or adopt a URL the
+ * owner made themselves. Deliberately its own route rather than a side effect of the export, publishing a
+ * workspace is an outward act with its own confirmation, and deriving a document must stay read-only.
+ */
+export const WorkspacePublishSchema = z.object({
+    /* An existing repo's clone URL. Given, nothing is created: the remote is wired up and pushed to, which is
+     * the path for an owner who made the repo themselves or is moving hosts. */
+    remote: z.string().min(1).optional(),
+    // The repo to create when `remote` is absent. Owner-side default is the sandbox's own name.
+    name: z.string().min(1).optional(),
+    /* The account or organization to create it under; absent means the authenticated user. Ignored when
+     * `remote` is given. */
+    owner: z.string().min(1).optional(),
+});
+export type WorkspacePublish = z.infer<typeof WorkspacePublishSchema>;
+
+// Where the workspace now lives, and what a definition will name. `created` distinguishes "made you a repo"
+// from "wired up the one you gave me", which is the difference the card reports back.
+export const WorkspacePublishResultSchema = z.object({
+    remote: z.string(),
+    branch: z.string(),
+    created: z.boolean(),
+});
+export type WorkspacePublishResult = z.infer<typeof WorkspacePublishResultSchema>;
+
+// What the card renders before anything is published: whether /work has a remote, and which connected git
+// hosts could make one. Read-only, so the button can say "Publish to github.com" rather than opening a form
+// into a void.
+export const WorkspaceRemoteSchema = z.object({
+    remote: z.string().optional(),
+    branch: z.string().optional(),
+    // Hostnames of connected github/gitlab accounts, in the order they would be tried. Empty means the owner
+    // must connect one (or paste a URL).
+    hosts: z.array(z.string()),
+});
+export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;
+
+/* ---- the bundle manifest, restated on the definition ----
+ *
+ * A bundle is DEFINITION + STATE: its manifest embeds the same definition `GET /definition` emits, and the
+ * tar entries behind it carry what no definition can reference (git dirs, transcripts, ledgers). One schema,
+ * two doors, which is what keeps the two formats from drifting into different answers about what an
+ * environment IS. A manifest whose version this daemon does not know is refused rather than guessed at.
+ *
+ * Version 3 added `repos`, and it is the field that made a bundle previewable. Taking one in is now a plan
+ * the owner ticks (arrival.ts), and a plan has to say what is in the tar BEFORE the tar is read: which
+ * repositories a bundle carries could previously only be learned by walking every entry, because
+ * `definition.repositories` lists only the ones that HAVE a remote to be named by. A bundle that cannot
+ * describe its own contents can only be offered whole, which is exactly the all-or-nothing this replaced.
+ */
+export const BundleManifestSchema = z.object({
+    // Bumped when the layout changes in a way an older daemon would misread. Refused rather than guessed at.
+    version: z.literal(3),
+    // Where it came from, for the report's first line. Never used to authorize anything.
+    sandbox: z.object({ name: z.string() }).optional(),
+    createdAt: z.number(),
+    // The owner's export-time choice; the restorer re-derives every decision from the manifests rather than
+    // trusting this, and uses it only to explain what is missing.
+    secrets: z.boolean(),
+    /* Every repository whose real git dir rides in this bundle, by workspace id — INCLUDING the ones no
+     * definition can name, which is the point: a repo with no remote is invisible to `definition.repositories`
+     * and is precisely the one an owner most wants carried by bytes. "root" is not listed; the workspace repo
+     * itself is not a nested repository and travels with the workspace files. */
+    repos: z.array(z.string()),
+    // The declarable shape, exactly what a definition export emits, so the restore report reasons over the
+    // same facts either door delivers.
+    definition: SandboxDefinitionSchema,
+    // Every path class the bundle deliberately left out, with the manifest's own note where it has one. This is
+    // what turns "the export skipped things" from a silence into a list the owner can act on.
+    excluded: z.array(z.object({ path: z.string(), portability: z.string(), note: z.string().optional() })),
+});
+export type BundleManifest = z.infer<typeof BundleManifestSchema>;

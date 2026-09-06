@@ -1,0 +1,41 @@
+  2026-09-05: mapped 28.3% opened with a listing, unmapped 44.7%, and searches did not move (1.5 either way)
+  openedWithListing         mapped 27.6%       unmapped 44.7%
+  searchesBeforeFirstFile   mapped 1.5         unmapped 1.5
+  searchesPerOpeningTurn    mapped 22.3        unmapped 18.8
+  callsBeforeTarget         mapped 15.1        unmapped 15.4
+  reached                   mapped 291         unmapped 389
+  sessions                  mapped 490         unmapped 700
+  first action, mapped    Read 32.2%, bash:cd 18.8%, bash:ls 13.9%, bash:iq 11.4%, none 7.1%
+  first action, unmapped  bash:ls 30.9%, Read 27.9%, bash:cd 13.7%, none 9.3%, ToolSearch 5.0%
+
+payload  (no control group needed: a line nobody uses is waste either way)
+  2026-09-05: 5 areas listed, 1 used, 21.7% of lines used, 59.4% of first files inside one, zoom never fired
+  everEnteredAListedArea        98.0%
+  openedAFile                   448
+  worked                        448
+  sessions                      490
+  areasListed                   5
+  areasUsed                     1
+  linesUsed                     20.9%
+  firstFileInsideAListedArea    59.6%
+  purposeOnTheAreaUsed          97.0%
+  purposeOnAnyRow               64.5%
+  standingInAnArea              0.0%
+  expandedRows                  7.8%
+  omittedSomething              0.0%
+  note size                     median 824 chars, longest 2708
+
+  area line                       listed   used
+  intentic                           448    424  (94.6%)
+  extensions                         448      3  (0.7%)
+  docs                               448     26  (5.8%)
+  registry                           448      1  (0.2%)
+  knowledge                          331      1  (0.3%)
+  intentic/_sandbox                   17      8  (47.1%)
+  intentic/_editor                    17     11  (64.7%)
+  intentic/_extensions                17      1  (5.9%)
+  intentic/_tools                     17      3  (17.6%)
+  intentic/_deploy                    17      1  (5.9%)
+  intentic/_site                      17      1  (5.9%)
+  intentic/_platform                  17      0  (0.0%)
+
