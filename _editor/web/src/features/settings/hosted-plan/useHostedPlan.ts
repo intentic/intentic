@@ -3,11 +3,11 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { HOSTED_PLAN } from "../../../lib/queryKeys";
 import { apiClient } from "../../../lib/useApi";
-import { hoursMeter, hoursSpent, lowOnHours, machineStandingLine, planRow } from "./hostedHours";
+import { hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
 
-/* THE HOSTED PLAN, read once for the whole app: the Billing page's state, the avatar row, the Overview card's
- * line and the chat strip, and whether the platform sells a plan at all (a self-hosted platform does not, and
- * every surface that mentions the plan is absent there).
+/* THE HOSTED PLAN, read once for the whole app: the Billing page's state, the account menu's badge, the
+ * Overview card's line and the chat strip, and whether the platform sells a plan at all (a self-hosted
+ * platform does not, and every surface that mentions the plan is absent there).
  *
  * NOT SANDBOX-SCOPED (see HOSTED_PLAN in queryKeys.ts): the plan belongs to the signed-in person, and it is
  * their hosted sandboxes it keeps always on. A platform with no plan answers this route with `enabled: false`
@@ -50,8 +50,7 @@ export function useHostedPlan() {
         // The free lane's meter, undefined for anyone it does not apply to.
         meter,
         lowOnHours: computed(() => lowOnHours(meter.value)),
-        hoursSpent: computed(() => hoursSpent(meter.value)),
-        planRow: computed(() => planRow(state.value)),
+        planBadge: computed(() => planBadge(state.value)),
         machineStanding: computed(() => machineStandingLine(state.value)),
         setSlots,
         slotsWorking,

@@ -167,7 +167,7 @@ the app. The tab appears on the same condition as today: the platform sells a pl
 
 - **Avatar menu**, a row under the email, a link to `/settings/billing`: free "12 h of 40 h left this month";
   plan "Hosted plan · renews Oct 1" (or "ends Oct 1", or "payment failed"); complimentary "Hosted · complimentary";
-  no row on a platform without a plan. This is the row pricing-model.md §6 asked for.
+  no row on a platform without a plan. This is the row pricing-model.md §6 asked for. **Superseded — see §8.**
 - **Sandbox ▸ Overview's hosted card**: the machine's own line ("Hosted in arn · asleep · covered by your plan"
   or "… · 12 h of 40 h left this month") and a link to Billing, beside the existing "move it to your own
   device".
@@ -230,3 +230,39 @@ Sized so each step lands on its own and the earlier ones are the ones that cost 
 - A bigger shape, annual billing, team billing. Each waits on an ask that has a name attached.
 - `hosted.planMonthlyHours`. Step 2 makes it enforceable; the admin panel's top-owners table says whether it is
   ever needed.
+
+## 8. The avatar row became a chip
+
+The menu row §4 asked for shipped, and then the two surfaces it was standing in for shipped after it: the
+low-hours strip above the composer (`ChatPaneNotices.vue`) and the wake refusal at the gate
+(`connectionNotice.ts`). §4 listed all three as if they were four separate jobs. They were not. Two of them are
+alarms in the reader's path; the third was an alarm behind a click, which is the one place an alarm cannot
+work — a menu is only read by someone who already went looking, and that person was on their way to Billing
+anyway.
+
+The row was also the wrong shape for most of the people who had it. "Hosted plan · renews Oct 1" and "Hosted ·
+complimentary" are not errands; they were links drawn like news, carrying no news, sitting in a menu whose other
+rows are verbs (Settings, Sign out). The complaint that started this was exactly that: why is a comp a menu
+item.
+
+**Now:** `planBadge` (`hostedHours.ts`) returns a `<StatusBadge>` chip rendered inside the identity block of
+`AccountPanel.vue`, under the name, not clickable, with the sentence on hover.
+
+| State | Chip | Tone |
+| --- | --- | --- |
+| Free lane | `free` | neutral |
+| On the plan | `hosted` | primary |
+| Trialing | `trial` | info |
+| Cancelling | `ending` | warning |
+| Comped | `complimentary` | info |
+| `past_due` / `unpaid` / `incomplete` | `payment failed` | danger |
+| Platform sells no plan | *(absent)* | — |
+
+Two deliberate differences from the row. The chip **shows on a platform with no hour ceiling**, where the row
+fell silent: with no hours there was no sentence to write, but "not on the plan" is a fact a chip states
+happily. And a **failing card keeps its alarm here** rather than earning a strip of its own: it is what the
+account *is* (on a plan nobody is paying for), not news about usage, it ends with the machine dropped to the
+free lane, and Settings ▸ Billing is the row immediately beneath it.
+
+Hours, renewal dates, machines and slots are Billing's alone. `hoursSpent` went with the row — the free lane's
+tone was its only caller.
