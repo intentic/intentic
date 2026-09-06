@@ -245,8 +245,12 @@ complimentary" are not errands; they were links drawn like news, carrying no new
 rows are verbs (Settings, Sign out). The complaint that started this was exactly that: why is a comp a menu
 item.
 
-**Now:** `planBadge` (`hostedHours.ts`) returns a `<StatusBadge>` chip rendered inside the identity block of
-`AccountPanel.vue`, under the name, not clickable, with the sentence on hover.
+**Now:** `planBadge` (`hostedHours.ts`) returns a `<StatusBadge>` chip, not clickable, with the sentence on
+hover. It is drawn on the two surfaces that state who this account is: inside the identity block of
+`AccountPanel.vue` (under the name, `size="xs"`), and beside the display name on Settings ▸ Profile
+(`SettingsProfile.vue`, the kit's default size, after the rename pencil rather than between the name and it).
+Two places is not the duplication §8 is about: both are the account's identity, said once each, and neither
+raises an alarm the reader has to act on from there. The row that went was an *alarm* in a menu.
 
 | State | Chip | Tone |
 | --- | --- | --- |

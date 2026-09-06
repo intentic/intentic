@@ -16,6 +16,11 @@ vi.mock(`../auth/useAuth`, () => ({
 const fileToSquareDataUrl = vi.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
 vi.mock(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
 
+/* The plan chip's WORDS are pinned where they are derived (hostedHours.test.ts). Mocked here so this file stays
+ * about the profile row's affordances, and so mounting it does not need a query client. */
+const planBadge = ref<{ label: string; variant: string; detail: string } | undefined>(undefined);
+vi.mock(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
+
 const { default: SettingsProfile } = await import(`./SettingsProfile.vue`);
 
 let app: App | undefined;
@@ -55,6 +60,7 @@ const pickFile = async (el: HTMLElement): Promise<void> => {
 
 beforeEach(() => {
     user.value = { name: `Artur Kurowski`, image: null };
+    planBadge.value = { label: `hosted`, variant: `primary`, detail: `Hosted plan, renews Oct 1.` };
     updateProfile.mockClear();
     fileToSquareDataUrl.mockClear();
 });
@@ -113,4 +119,29 @@ it(`sends the avatar without the name`, async () => {
     const el = mount();
     await pickFile(el);
     expect(updateProfile.mock.calls[0]?.[0]).not.toHaveProperty(`name`);
+});
+
+/* THE PLAN IS STATED, NOT OFFERED. This row is the account's identity strip, so the lane belongs on it — but as
+ * a chip beside the name, never as somewhere to go. A link here would be the avatar-menu row this replaced
+ * (docs/design/billing-view.md §8) in a different shape, and Billing is already a tab in the rail alongside. */
+// Found by the kit pill's own shape, not by the word, so the assertion on the word means something.
+const chip = (el: HTMLElement): HTMLElement | undefined =>
+    [...el.querySelectorAll<HTMLElement>(`span.rounded-full`)].find((s) => s.className.includes(`lowercase`));
+
+it(`states the plan beside the name, as a chip rather than a link`, () => {
+    const el = mount();
+    const badge = chip(el);
+    expect(badge?.textContent?.trim()).toBe(`hosted`);
+    expect(badge?.closest(`a`)).toBeNull();
+    expect(badge?.closest(`button`)).toBeNull();
+});
+
+it(`shows the chip only while the platform sells a plan`, async () => {
+    const el = mount();
+    expect(chip(el)?.textContent?.trim()).toBe(`hosted`);
+
+    // A platform that sells no plan answers `enabled: false`, and there is no lane to name (hostedHours.ts).
+    planBadge.value = undefined;
+    await nextTick();
+    expect(chip(el)).toBeUndefined();
 });
