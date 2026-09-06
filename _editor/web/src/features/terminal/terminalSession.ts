@@ -396,7 +396,12 @@ export const copySelection = (s: TerminalSession): void => {
 export const pasteIntoTerminal = (s: TerminalSession): void => {
     void clipboardOf(s.term.element)
         .readText()
-        .then((text) => s.term.paste(text))
+        .then((text) => {
+            s.term.paste(text);
+            // The paste came from the context menu, whose click took the keyboard: hand it back, so the
+            // cursor sits right after the pasted text instead of the next keystroke landing nowhere.
+            s.term.focus();
+        })
         .catch(() => {});
 };
 

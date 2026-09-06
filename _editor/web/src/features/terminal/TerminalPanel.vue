@@ -541,8 +541,17 @@ const gridItems = computed<MenuItem[]>(() => {
     // Copy and Paste carry no shortcut hint: Ctrl+Shift+C/V are the browser's own (DevTools, paste-as-text) and
     // this panel deliberately binds neither: plain Ctrl+V already pastes, because it arrives as the textarea
     // paste event xterm listens for.
+    // Both clipboard verbs hand the keyboard back to the terminal: the menu's click took it, and without the
+    // refocus the next keystroke lands nowhere (Paste's own refocus rides its async clipboard read).
     const items: MenuItem[] = [
-        { label: `Copy`, disabled: !gridHasSelection.value, command: () => copySelection(session) },
+        {
+            label: `Copy`,
+            disabled: !gridHasSelection.value,
+            command: () => {
+                copySelection(session);
+                session.term.focus();
+            },
+        },
         { label: `Paste`, command: () => pasteIntoTerminal(session) },
         { separator: true },
         { label: `Full scrollback…`, command: () => void openScrollback(name) },
