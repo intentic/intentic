@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { forwardSessionName, parseForwardNames, parseOrphanForwardNames, parseOrphanSyncNames, sessionName } from "./mutagen.js";
+import {
+    CONFLICT_PATHS_MAX,
+    conflictsFrom,
+    forwardSessionName,
+    parseForwardNames,
+    parseOrphanForwardNames,
+    parseOrphanSyncNames,
+    sessionName,
+} from "./mutagen.js";
 
 // What `forward list` hands back decides what gets terminated, so this filter is the line between "retire the
 // forwards this agent left behind" and "terminate the user's own Mutagen sessions". Names are whitespace-free
@@ -83,5 +91,80 @@ describe("parseOrphanSyncNames", () => {
     it("has nothing to retire on a first pairing", () => {
         expect(parseOrphanSyncNames("", [first])).toEqual([]);
         expect(parseOrphanSyncNames(first, [first])).toEqual([]);
+    });
+});
+
+/* WHAT IS ACTUALLY STUCK, off Mutagen's own state.
+ *
+ * Every assertion here is a way the device card lied. It said "10 conflicts" and named no file, and the number
+ * itself was the length of a list Mutagen truncates, so the badge on a session holding forty said ten forever.
+ * The shape is protobuf JSON through Go's encoding/json: absent means absent, and `old`/`new` missing is the
+ * whole message about which way the change went. */
+describe("conflictsFrom", () => {
+    const entry = { kind: 1 };
+
+    it("says nothing at all when Mutagen reported no conflicts", () => {
+        expect(conflictsFrom({})).toBeUndefined();
+        expect(conflictsFrom({ conflicts: [] })).toBeUndefined();
+    });
+
+    it("counts what Mutagen left OUT of the list, which is why a bad session used to read as ten", () => {
+        const conflicts = Array.from({ length: 10 }, (_, at) => ({ root: `src/file-${at}.ts` }));
+        const read = conflictsFrom({ conflicts, excludedConflicts: 30 });
+        expect(read?.count).toBe(40);
+        // The paths are what it described; the count is the whole truth about how many there are.
+        expect(read?.paths).toHaveLength(10);
+    });
+
+    it("reads each side's change kind from which half of it exists", () => {
+        const read = conflictsFrom({
+            conflicts: [
+                {
+                    root: "notes.md",
+                    alphaChanges: [{ path: "notes.md", old: entry, new: entry }],
+                    betaChanges: [{ path: "notes.md", old: entry }],
+                },
+                { root: "new.ts", alphaChanges: [{ path: "new.ts", new: entry }], betaChanges: [{ path: "new.ts", new: entry }] },
+            ],
+        });
+        expect(read?.paths).toEqual([
+            { path: "notes.md", local: "modified", sandbox: "deleted" },
+            { path: "new.ts", local: "created", sandbox: "created" },
+        ]);
+    });
+
+    // A conflict rooted at a directory carries the changes UNDER it, so the word describes the nearest change
+    // there is rather than nothing at all: the path is the finding either way.
+    it("takes the change that is about the conflicted path, and falls back to the first one", () => {
+        const read = conflictsFrom({
+            conflicts: [
+                {
+                    root: "src",
+                    alphaChanges: [{ path: "src/late.ts", new: entry }, { path: "src", old: entry, new: entry }],
+                    betaChanges: [{ path: "src/other.ts", old: entry }],
+                },
+            ],
+        });
+        expect(read?.paths).toEqual([{ path: "src", local: "modified", sandbox: "deleted" }]);
+    });
+
+    /* An empty root is the SYNCED FOLDER itself, which Mutagen reports for a root-level collision. It travels as
+     * "" and is said in words by whatever prints it: a reader that dropped it would lose the loudest conflict
+     * there is. */
+    it("keeps a root-level conflict, which has no path to name", () => {
+        expect(conflictsFrom({ conflicts: [{ root: "" }] })?.paths).toEqual([{ path: "" }]);
+    });
+
+    it("says nothing about a side whose change kind Mutagen did not report", () => {
+        expect(conflictsFrom({ conflicts: [{ root: "a.ts", alphaChanges: [{ path: "a.ts" }] }] })?.paths).toEqual([{ path: "a.ts" }]);
+    });
+
+    // The report is re-read every few seconds by every device card, so the list it carries is capped here as
+    // well as by Mutagen. The COUNT is never capped.
+    it("carries at most CONFLICT_PATHS_MAX of them, and still counts them all", () => {
+        const conflicts = Array.from({ length: CONFLICT_PATHS_MAX + 12 }, (_, at) => ({ root: `f-${at}` }));
+        const read = conflictsFrom({ conflicts });
+        expect(read?.paths).toHaveLength(CONFLICT_PATHS_MAX);
+        expect(read?.count).toBe(CONFLICT_PATHS_MAX + 12);
     });
 });

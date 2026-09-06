@@ -81,6 +81,9 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): DevicePai
         mirroring,
         mutagenStatus: session.status,
         conflicts: session.conflicts,
+        // The stuck paths, not just how many: a count names nothing to go and look at, and this report is the
+        // only way they reach a screen at all (see mutagen.ts conflictsFrom).
+        conflictedPaths: session.conflictedPaths,
         paused: session.paused,
         backupStatus: backup.status,
     };

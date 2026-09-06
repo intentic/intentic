@@ -18,6 +18,7 @@ import {
     type DeviceFolderRow,
     DeviceRunLog,
     type DeviceSandboxGroup,
+    Icon,
     mirroringOff,
     Notice,
     type NoticeModel,
@@ -60,6 +61,8 @@ import {
     syncStopped,
 } from "./deviceFacts";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
+import { type ConflictAsk, conflictAsk } from "./conflictAsk";
+import { startAgent } from "../../agents/fleet/agentActions";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { manageDeviceSandbox, reportStale, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand, useDevices } from "./useDevices";
 import { useRole } from "../secrets/useRole";
@@ -679,6 +682,33 @@ const commandable = (device: Device, group: DeviceSandboxGroup): boolean =>
  * no Mutagen session to pause, and the machine's own CLI says exactly that if asked ("mirror-only enrollment, no
  * file sync to pause"). Better not to draw the button than to draw one whose answer is that sentence. */
 const pausable = (device: Device, group: DeviceSandboxGroup): boolean => commandable(device, group) && group.folder?.mode === `sync`;
+
+/* --- THE ONE THING ON THIS ROW THAT IS NOT A SWITCH ------------------------------------------------------
+ *
+ * A conflict has no button that could resolve it, and it is the state on this card a reader is least equipped
+ * to act on: two copies of one file, both edited, on two computers, one of which they are not sitting at. The
+ * card said "10 conflicts" and stopped, which is a red number about somebody's own files with nowhere to go.
+ *
+ * It is not a switch, so it does not get one: choosing between two copies is judgement, per file, and a
+ * one-click winner would be a one-click way to lose whatever was on the losing side. It is a TURN, and an agent
+ * in this sandbox can reach both ends of it — the sandbox's copy is a file it can open, and the device's copy
+ * is under that machine's own tools, which exist for exactly the machines this button is offered on.
+ *
+ * Same door as the switches above (`commandable`): those tools are the device connection, so a machine that is
+ * asleep or has no device half cannot be worked on by an agent either, and a button whose turn would open with
+ * "that computer is not reachable" is worse than no button. What survives on those rows is the explanation and
+ * the paths, which is what somebody sitting AT the machine needs anyway. */
+const fixable = (device: Device, group: DeviceSandboxGroup): boolean => commandable(device, group) && (group.folder?.conflicts ?? 0) > 0;
+
+const conflictTurn = (device: Device, group: DeviceSandboxGroup): ConflictAsk =>
+    conflictAsk({
+        machine: device.label,
+        // Guarded by `fixable`, which is `commandable`, which is exactly "this device has a host id".
+        hostId: device.hostId ?? ``,
+        localDir: group.folder?.localDir,
+        conflicts: group.folder?.conflicts ?? 0,
+        conflictedPaths: group.folder?.conflictedPaths ?? [],
+    });
 
 // What each command is called on the row, and what to say if the machine would not do it. Kept beside each other
 // rather than inlined at three call sites so a verb and its failure sentence cannot drift apart.
@@ -1402,6 +1432,23 @@ const runRevoke = async (): Promise<void> => {
                                  and type, on the view built to replace that terminal. -->
                                  <template #folder="{ group }">
                                      <div class="mt-1 flex flex-wrap items-center gap-2">
+                                         <!-- FIRST, because a row with conflicts is open BECAUSE of them: the
+                                          count is what unfolded it (groupNeedsAttention) and this is the only
+                                          thing on the row that ends one. It starts a turn rather than running a
+                                          command, because choosing between two edited copies is judgement per
+                                          file — see conflictAsk.ts for what it is told and why it is the shape
+                                          this state gets instead of a "resolve" switch. -->
+                                         <Button
+                                             v-if="fixable(row.device, group)"
+                                             size="small"
+                                             severity="secondary"
+                                             label="Fix with agent"
+                                             :disabled="working"
+                                             v-tooltip.top="conflictTurn(row.device, group).hint"
+                                             @click="startAgent(conflictTurn(row.device, group).prompt)"
+                                         >
+                                             <template #icon><Icon name="sparkles" /></template>
+                                         </Button>
                                          <Button
                                              v-if="pausable(row.device, group)"
                                              size="small"

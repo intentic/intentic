@@ -1,4 +1,4 @@
-import type { HostScopes, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
+import type { HostScopes, DeviceConflict, DeviceConflictChange, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
 import { auditPath, readLinks } from "./device/config.js";
@@ -115,6 +115,51 @@ const fileSyncState = (pairing: DeviceReport["pairings"][number]): (string | und
     pairing.paused === true ? undefined : `backup ${pairing.backupStatus ?? "NOT RUNNING, this sandbox's own state is not being copied here"}`,
 ];
 
+/* THE STUCK PATHS THEMSELVES, printed under the line that counts them.
+ *
+ * "10 conflict(s)" is a symptom; the paths are the only part anybody can act on, and until they travelled in the
+ * report the sole way to see them was `mutagen sync list` against a session name nothing tells you. The browser's
+ * device card lists the same paths from the same field, so the two surfaces cannot disagree about one machine.
+ *
+ * What happened on each SIDE is what decides which copy a person keeps, so it rides along in the words the rest
+ * of this output uses ("here" is the machine you are typing on). An unknown side says nothing rather than
+ * guessing: absent means Mutagen did not report a change kind, never that the file was untouched. */
+const CONFLICT_LINES_MAX = 8;
+
+const HERE: Record<DeviceConflictChange, string> = { created: "created here", modified: "changed here", deleted: "deleted here" };
+const IN_SANDBOX: Record<DeviceConflictChange, string> = {
+    created: "created in the sandbox",
+    modified: "changed in the sandbox",
+    deleted: "deleted in the sandbox",
+};
+
+const conflictLine = (conflict: DeviceConflict): string => {
+    // An empty path is the synced folder itself, which Mutagen reports for a root-level conflict.
+    const what = conflict.path === "" ? "(the folder itself)" : conflict.path;
+    const sides = [
+        conflict.local === undefined ? undefined : HERE[conflict.local],
+        conflict.sandbox === undefined ? undefined : IN_SANDBOX[conflict.sandbox],
+    ].filter((side) => side !== undefined);
+    return `    ${what}${sides.length === 0 ? "" : `  (${sides.join(", ")})`}`;
+};
+
+export const conflictLines = (pairing: DeviceReport["pairings"][number]): string[] => {
+    const conflicts = pairing.conflictedPaths ?? [];
+    if (conflicts.length === 0) {
+        return [];
+    }
+    const shown = conflicts.slice(0, CONFLICT_LINES_MAX);
+    // Counted against the pairing's OWN total, not against the list: the report caps what it carries and Mutagen
+    // caps what it reports, so "and 30 more" is a fact the shown rows cannot state for themselves.
+    const rest = (pairing.conflicts ?? conflicts.length) - shown.length;
+    return [
+        "    Both ends changed these since they last agreed, so neither copy was overwritten and they have stopped syncing:",
+        ...shown.map(conflictLine),
+        ...(rest > 0 ? [`    … and ${rest} more`] : []),
+        "    Resolve one by making both copies the same (or both gone); the session picks it up on its next pass.",
+    ];
+};
+
 export const pairingLine = (pairing: DeviceReport["pairings"][number]): string => {
     const where = pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)";
     const state = [
@@ -176,6 +221,11 @@ const printReport = (report: DeviceReport, out: (message: string) => void): void
     out(`Paired sandboxes (${report.pairings.length}):`);
     for (const pairing of report.pairings) {
         out(pairingLine(pairing));
+        // Only a pairing holding conflicts prints anything more than its own line, so a healthy machine's
+        // output is exactly what it always was.
+        for (const line of conflictLines(pairing)) {
+            out(line);
+        }
     }
     /* The loop's liveness is the whole of sync's liveness, not just mirroring's: it holds the SSH transport
      * every session rides (sync/tunnel.ts), so a dead loop is a stalled file sync and stalled port forwards, not

@@ -5,6 +5,7 @@ import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import type { DeviceConflict, DeviceConflictChange } from "@intentic/sandbox-contract";
 import {
     type CliLauncher,
     clearWindowsRunValue,
@@ -219,6 +220,25 @@ export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): strin
 // JSON omits defaults, so a session with no ignores at all arrives as `"ignore":{}` and vcs:false is simply
 // absent, and by the same rule `status`/`conflicts` are absent on a session that has neither, which is why
 // everything the report reads is optional rather than defaulted here.
+
+/* ONE SIDE'S EDIT to one path, as Mutagen's change.proto carries it: `old` is what was there and `new` is what
+ * is there now, and either being ABSENT is the whole message (nothing before it means created, nothing after it
+ * means deleted). Both are entry trees this agent never looks inside, so they stay `unknown`: presence is the
+ * only thing read, and typing them further would be inventing a shape to ignore. */
+interface LiveChange {
+    readonly path?: string;
+    readonly old?: unknown;
+    readonly new?: unknown;
+}
+
+// One conflicted path plus the changes that collided on it. `root` is the path relative to the session root
+// (conflict.proto keeps it rather than deriving it, precisely so readers like this one do not have to).
+interface LiveConflict {
+    readonly root?: string;
+    readonly alphaChanges?: readonly LiveChange[];
+    readonly betaChanges?: readonly LiveChange[];
+}
+
 interface LiveSession {
     // Both ends carry an optional host now that a session may run either way round: the backup's ALPHA is the
     // sandbox. Protobuf JSON omits a local endpoint's empty host, so `undefined` is what "this machine" looks
@@ -228,7 +248,11 @@ interface LiveSession {
     readonly ignore: { readonly paths?: readonly string[]; readonly vcs?: boolean };
     readonly paused?: boolean;
     readonly status?: string;
-    readonly conflicts?: readonly unknown[];
+    readonly conflicts?: readonly LiveConflict[];
+    // How many conflicts Mutagen left OUT of the list above. Its state truncates the list to keep the daemon's
+    // API answer bounded and reports the remainder here (state.proto), so the list's length is a display cap,
+    // never the count. Non-zero only when the list is non-empty, which is the invariant its own EnsureValid keeps.
+    readonly excludedConflicts?: number;
 }
 
 // The session of this name as the daemon has it, or undefined when there is none. A non-zero exit is Mutagen's
@@ -240,6 +264,61 @@ const readSession = (mutagen: string, name: string): LiveSession | undefined => 
         return undefined;
     }
     return (JSON.parse(result.stdout) as LiveSession[])[0];
+};
+
+/* WHICH FILES ARE STUCK, off the session Mutagen just described.
+ *
+ * Two-way-safe flags a conflict rather than clobbering, which is the right behaviour and was an invisible one:
+ * only the count travelled, and a count names nothing to go and look at. So the paths come with it, each
+ * carrying what happened on both sides, which is what somebody deciding which copy survives actually needs.
+ *
+ * ALPHA IS THIS DEVICE, by construction: the workspace session is created local-end-first (mutagenCreateArgs
+ * with workspaceSpec's `from: "local"`), so alpha is the folder on this machine and beta is the sandbox's
+ * /work. The backup session runs the other way round and is one-way-replica, which cannot conflict at all, and
+ * nothing reads conflicts off it.
+ *
+ * THE COUNT IS NOT THE LIST'S LENGTH. Mutagen truncates the list it reports and counts the remainder in
+ * `excludedConflicts`, so a session holding forty can describe ten, and reading `.length` as the count is how
+ * a badge comes to say "10" forever however bad it gets. The total is the sum; the paths are the ones it
+ * described, capped again here because this report is re-read every few seconds by every device card. */
+export const CONFLICT_PATHS_MAX = 24;
+
+// Created, deleted, or changed in place, from the only thing a change carries: which side of it exists. A
+// change with neither is not a change, and says nothing rather than guessing.
+const changeKind = (change: LiveChange | undefined): DeviceConflictChange | undefined => {
+    if (change === undefined) {
+        return undefined;
+    }
+    const before = change.old !== undefined && change.old !== null;
+    const after = change.new !== undefined && change.new !== null;
+    if (!before) {
+        return after ? "created" : undefined;
+    }
+    return after ? "modified" : "deleted";
+};
+
+// The change that is ABOUT the conflicted path, where one of them is: a conflict rooted at a directory carries
+// the changes underneath it instead, and the first of those is the closest this can honestly get.
+const sideChange = (changes: readonly LiveChange[] | undefined, root: string): LiveChange | undefined =>
+    changes?.find((change) => (change.path ?? "") === root) ?? changes?.[0];
+
+const conflictedPath = (conflict: LiveConflict): DeviceConflict => {
+    // A conflict whose root Mutagen left empty is the synced folder ITSELF, which is a real thing to report:
+    // it stays empty here and is said in words by whatever prints it. The first change's path is the fallback
+    // for a conflict that carried changes but no root.
+    const path = conflict.root ?? sideChange(conflict.alphaChanges, "")?.path ?? sideChange(conflict.betaChanges, "")?.path ?? "";
+    const local = changeKind(sideChange(conflict.alphaChanges, path));
+    const sandbox = changeKind(sideChange(conflict.betaChanges, path));
+    return { path, ...(local === undefined ? {} : { local }), ...(sandbox === undefined ? {} : { sandbox }) };
+};
+
+export const conflictsFrom = (session: Pick<LiveSession, "conflicts" | "excludedConflicts">): { count: number; paths: DeviceConflict[] } | undefined => {
+    const listed = session.conflicts ?? [];
+    const excluded = Number(session.excludedConflicts ?? 0);
+    const count = listed.length + (Number.isFinite(excluded) ? excluded : 0);
+    // Absent means "none reported", the same rule every other field here keeps: zero is never interpolated
+    // into a sentence about what is wrong.
+    return count === 0 ? undefined : { count, paths: listed.slice(0, CONFLICT_PATHS_MAX).map(conflictedPath) };
 };
 
 /* What one pairing's file sync is DOING right now, for the machine report. Mutagen's own word is carried through
@@ -257,13 +336,26 @@ const readSession = (mutagen: string, name: string): LiveSession | undefined => 
 export const readSessionState = (
     mutagen: string,
     name: string,
-): { exists: boolean; status?: string | undefined; paused?: boolean | undefined; conflicts?: number | undefined } => {
+): {
+    exists: boolean;
+    status?: string | undefined;
+    paused?: boolean | undefined;
+    conflicts?: number | undefined;
+    conflictedPaths?: DeviceConflict[] | undefined;
+} => {
     const session = readSession(mutagen, name);
     if (session === undefined) {
         return { exists: false };
     }
+    const conflicts = conflictsFrom(session);
     // An omitted status is the enum's zero value, which is Mutagen's own "disconnected", named rather than dropped.
-    return { exists: true, status: session.status ?? "disconnected", paused: session.paused, conflicts: session.conflicts?.length };
+    return {
+        exists: true,
+        status: session.status ?? "disconnected",
+        paused: session.paused,
+        conflicts: conflicts?.count,
+        conflictedPaths: conflicts?.paths,
+    };
 };
 
 /* Which of these session names the daemon actually HAS. `mutagen sync list a b` is all-or-nothing: one name it

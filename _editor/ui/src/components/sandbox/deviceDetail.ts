@@ -21,6 +21,15 @@ export interface DevicePortRow {
     host?: string | undefined;
 }
 
+/* ONE STUCK PATH, and what happened to it on each side. Structural, like everything else here: the sandbox
+ * contract's DeviceConflict satisfies it. `local` is the folder on the device, `sandbox` is its /work; either
+ * being absent means the machine did not report a change kind for that side, never that the side was untouched. */
+export interface DeviceConflictRow {
+    path: string;
+    local?: `created` | `modified` | `deleted` | undefined;
+    sandbox?: `created` | `modified` | `deleted` | undefined;
+}
+
 export interface DeviceFolderRow {
     sandboxId: string;
     mode: `sync` | `mirror`;
@@ -34,6 +43,9 @@ export interface DeviceFolderRow {
     mirroring?: `on` | `off` | undefined;
     mutagenStatus?: string | undefined;
     conflicts?: number | undefined;
+    /* Which paths those conflicts are ON, as many as the machine's report carries. Absent from an agent too old
+     * to read them off Mutagen, and the card then says the same count it always did with nothing under it. */
+    conflictedPaths?: readonly DeviceConflictRow[] | undefined;
     paused?: boolean | undefined;
     // The second session's word, the one-way mirror carrying the sandbox's own state down. See backupState.
     backupStatus?: string | undefined;
@@ -273,6 +285,88 @@ export const backupTone = (state: string | undefined): `success` | `warning` | `
  * word a later Mutagen invents) stays neutral rather than being guessed at. */
 export const folderTone = (state: string | undefined): `success` | `warning` | `neutral` =>
     state === `watching` ? `success` : state?.startsWith(`halted`) === true ? `warning` : `neutral`;
+
+/* WHAT A CONFLICT ACTUALLY IS, on the one surface in the product that reports one.
+ *
+ * The count was a dead end, and read as one: "10 conflicts" beside a folder path names no file, no cause and no
+ * remedy, and the only other place that word appears is Mutagen's CLI on the machine being described — which is
+ * exactly the machine the reader is not sitting at. A red number about somebody's own files with nowhere to go
+ * is worse than saying nothing.
+ *
+ * So the card says the three things a count cannot. WHAT HAPPENED: both ends changed the same paths since they
+ * last agreed. WHAT IT COSTS: nothing was overwritten, those paths have simply stopped moving, in either
+ * direction, until it is settled. WHAT ENDS IT: make the two copies agree (or agree that it is gone) and the
+ * session picks it up on its next pass — which is also the whole of what the "Fix with agent" button asks for.
+ *
+ * Then the paths, because every decision about a conflict is per file, and what happened on each side is what
+ * decides which copy somebody keeps.
+ *
+ * The lead counts the CONFLICTS, never the rows: the machine caps what it carries and Mutagen caps what it
+ * reports, so a card holding six rows for forty conflicts must not imply that six is the number. */
+const CONFLICT_ROWS_MAX = 6;
+
+type ConflictChange = NonNullable<DeviceConflictRow[`local`]>;
+
+const ON_DEVICE: Record<ConflictChange, string> = {
+    created: `created on this device`,
+    modified: `changed on this device`,
+    deleted: `deleted on this device`,
+};
+
+const IN_SANDBOX: Record<ConflictChange, string> = {
+    created: `created in the sandbox`,
+    modified: `changed in the sandbox`,
+    deleted: `deleted in the sandbox`,
+};
+
+export interface ConflictLine {
+    /** Relative to the synced folder, so it reads the same against the path above and against /work. */
+    readonly path: string;
+    /** What happened on each side, as far as the machine reported it. Empty when it reported neither. */
+    readonly note: string;
+}
+
+export interface FolderConflicts {
+    /** The sentence over the list: what happened to those files, and what ends it. */
+    readonly lead: string;
+    readonly rows: readonly ConflictLine[];
+    /** How many conflicts these rows do NOT account for, counted against the machine's own total. */
+    readonly more: number;
+    /* Why there is no list at all, on the one row that can have none: an agent older than the field reports the
+     * count and nothing else, and that machine's own `status` is no better, it predates printing them too. So
+     * the note names the thing that WOULD list them rather than sending the reader to a terminal that will
+     * repeat the number back. Absent whenever there is a list, however short. */
+    readonly note?: string;
+}
+
+const conflictLine = (conflict: DeviceConflictRow): ConflictLine => ({
+    // An empty path is the synced folder ITSELF, which is what Mutagen reports for a root-level conflict and
+    // what a bare "" would render as a blank row.
+    path: conflict.path === `` ? `the folder itself` : conflict.path,
+    note: [
+        conflict.local === undefined ? undefined : ON_DEVICE[conflict.local],
+        conflict.sandbox === undefined ? undefined : IN_SANDBOX[conflict.sandbox],
+    ]
+        .filter((side) => side !== undefined)
+        .join(` · `),
+});
+
+export const folderConflicts = (folder: DeviceFolderRow | undefined): FolderConflicts | undefined => {
+    const count = folder?.conflicts ?? 0;
+    if (folder === undefined || count === 0) {
+        return undefined;
+    }
+    const rows = (folder.conflictedPaths ?? []).slice(0, CONFLICT_ROWS_MAX).map(conflictLine);
+    return {
+        lead:
+            `${count === 1 ? `One path changed` : `${count} paths changed`} both on this device and in the sandbox since they last agreed, so ` +
+            `neither copy was overwritten and ${count === 1 ? `it has` : `they have`} stopped syncing. Make the two copies match — same ` +
+            `contents, or gone on both sides — and syncing resumes on its own.`,
+        rows,
+        more: count - rows.length,
+        ...(rows.length === 0 ? { note: `This device's agent doesn't report which paths they are. Updating it lists them here.` } : {}),
+    };
+};
 
 /* WHAT A FOLDED ROW SAYS ABOUT ITSELF, the whole reason folding is safe at all.
  *

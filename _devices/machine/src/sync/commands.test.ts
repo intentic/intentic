@@ -1,6 +1,6 @@
 import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { agentLine, buildSkewLine, pairingLine, statusSummary } from "../status.js";
+import { agentLine, buildSkewLine, conflictLines, pairingLine, statusSummary } from "../status.js";
 import { enrollKey, selectPairings } from "./commands.js";
 import type { Pairing, SyncState } from "./config.js";
 
@@ -297,5 +297,58 @@ describe("buildSkewLine and the status summary", () => {
         // A stalled loop outranks it: nothing is being served at all, whichever build is doing the not-serving.
         expect(statusSummary(4242, 0, report({ ...serving, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 60_000 }, "1.240.0"), NOW)).toContain("STALLED");
         expect(statusSummary(undefined, 0, skewed, NOW)).toContain("NOT RUNNING");
+    });
+});
+
+/* THE PATHS UNDER THE COUNT, on the one output that has ever printed the word "conflict".
+ *
+ * The count is a symptom and was the whole message: "[watching, 10 conflict(s)]" and then the next machine. The
+ * paths are the only part anybody can act on, and the browser's device card now lists the same ones from the
+ * same field, so these two surfaces cannot disagree about one machine. */
+describe("conflictLines", () => {
+    const stuck = (overrides: Partial<DevicePairing> = {}): DevicePairing => ({
+        sandboxId: "sandbox-0738cd6b5027-intentic-dev",
+        mode: "sync",
+        localDir: "/home/me/intentic/work",
+        mutagenStatus: "watching",
+        backupStatus: "watching",
+        ...overrides,
+    });
+
+    it("says nothing at all about a pairing that has none, so a healthy machine prints what it always did", () => {
+        expect(conflictLines(stuck())).toEqual([]);
+        expect(conflictLines(stuck({ conflicts: 0, conflictedPaths: [] }))).toEqual([]);
+    });
+
+    it("names each stuck path and what happened to it on each side", () => {
+        const lines = conflictLines(
+            stuck({
+                conflicts: 2,
+                conflictedPaths: [
+                    { path: "src/app.ts", local: "modified", sandbox: "modified" },
+                    { path: "docs/notes.md", local: "deleted", sandbox: "modified" },
+                ],
+            }),
+        ).join("\n");
+        expect(lines).toContain("src/app.ts");
+        expect(lines).toContain("changed here, changed in the sandbox");
+        expect(lines).toContain("deleted here, changed in the sandbox");
+        // And what ends it, which is the sentence the count could never carry.
+        expect(lines).toContain("making both copies the same");
+    });
+
+    /* The remainder is counted against the pairing's OWN total, because two caps sit between Mutagen and this
+     * line: what Mutagen reports and what the report carries. A tail computed from the rows would say nothing
+     * about either. */
+    it("counts what it is not showing against the machine's own total", () => {
+        const conflictedPaths = Array.from({ length: 12 }, (_, at) => ({ path: `f-${at}.ts` }));
+        const lines = conflictLines(stuck({ conflicts: 40, conflictedPaths }));
+        expect(lines.join("\n")).toContain("… and 32 more");
+        // Eight paths, plus the sentence over them, the tail, and the remedy under them.
+        expect(lines).toHaveLength(11);
+    });
+
+    it("says in words the one conflict that has no path: the folder itself", () => {
+        expect(conflictLines(stuck({ conflicts: 1, conflictedPaths: [{ path: "" }] })).join("\n")).toContain("(the folder itself)");
     });
 });

@@ -252,6 +252,31 @@ export const DeviceCommandResultSchema = z.object({
     output: z.string().optional(),
 });
 export type DeviceCommandResult = z.infer<typeof DeviceCommandResultSchema>;
+
+/* WHICH FILES ARE STUCK, and what happened to each of them on both sides.
+ *
+ * A count on its own was a dead end. "10 conflicts" beside a folder path names no file, no cause and no
+ * remedy, and the one surface that could name them (Mutagen's `sync list` on that machine) is on the computer
+ * the reader is being TOLD about rather than sitting at. So the paths travel with the count, and with the one
+ * fact that decides which copy a person keeps: what happened to that path here versus in the sandbox.
+ *
+ * The words are Mutagen's three change kinds read off each side of the conflict. Either side may be absent:
+ * absent means "Mutagen did not say which", never "untouched", so a reader falls back to "changed" rather than
+ * being told something the report does not know. */
+export const DeviceConflictChangeSchema = z.enum(["created", "modified", "deleted"]);
+export type DeviceConflictChange = z.infer<typeof DeviceConflictChangeSchema>;
+
+export const DeviceConflictSchema = z.object({
+    /** Relative to the synced folder, so it reads the same against `localDir` and against /work. Empty is the
+     *  folder ITSELF, which Mutagen reports for a root-level conflict and every reader has to say in words. */
+    path: z.string(),
+    /** What happened on the DEVICE, in that machine's own folder (Mutagen's alpha, see mutagen.ts workspaceSpec). */
+    local: DeviceConflictChangeSchema.optional(),
+    /** And in the sandbox's /work (its beta). */
+    sandbox: DeviceConflictChangeSchema.optional(),
+});
+export type DeviceConflict = z.infer<typeof DeviceConflictSchema>;
+
 // One paired sandbox as the local agent holds it. `localDir` is the answer to the question the Desktop sync card
 // has never been able to answer: which folder on that device this sandbox's /work actually is.
 export const DevicePairingSchema = z.object({
@@ -276,9 +301,15 @@ export const DevicePairingSchema = z.object({
     // Carried verbatim rather than mapped to a traffic light: the halted states name their own cause, and a UI
     // that reduces them to "problem" sends the user back to the terminal this report exists to replace.
     mutagenStatus: z.string().optional(),
-    // Conflicts Mutagen is holding rather than clobbering (the sync mode is two-way-SAFE). Nothing else in the
-    // product surfaces these, so a file edited on both ends stays stuck until someone runs the CLI.
+    /* How many paths Mutagen is holding rather than clobbering (the sync mode is two-way-SAFE): the WHOLE
+     * number, including the conflicts its own state truncates away (state.proto's `excludedConflicts`), because
+     * a badge that reads "10" while the session is holding forty is worse than no badge. */
     conflicts: z.number().int().nonnegative().optional(),
+    /* The conflicted paths themselves, capped by the agent that reads them (CONFLICT_PATHS_MAX): the count
+     * above is the whole truth, this is as much of it as belongs in a report re-read every few seconds.
+     * Optional because only an agent new enough to read them off Mutagen sends any, and a card holding just the
+     * count still renders exactly what it always did. */
+    conflictedPaths: z.array(DeviceConflictSchema).optional(),
     paused: z.boolean().optional(),
     /* The SECOND session's word, the one-way mirror carrying the sandbox's state dir down (sync's backupSpec).
      * Reported separately rather than folded into the status above, because the two fail independently and mean

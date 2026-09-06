@@ -36,6 +36,11 @@ let mirrorAnswer: { ok: boolean; message: string } = { ok: true, message: `Port 
 // Which machine's enrollment was revoked. The sandbox-side door, so unlike the commands above it needs no
 // device connection at all: that is the whole reason it exists beside Unpair.
 const revokeCalls: string[] = [];
+/* THE ONE CONTROL HERE THAT STARTS A TURN rather than running a command, recorded the same way. The real one
+ * summons a chat tab in every window, which this bare createApp has no client for; what is worth pinning is
+ * that the button is offered at all and what it hands the agent, since nobody watches that prompt being made. */
+const startedTurns: string[] = [];
+vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
 /* THE CONTAINER VERBS, recorded the same way: which op left for which machine, and, for the one verb that
  * carries a payload, what the Resources form asked for. The real one streams the machine's own lines; what is
  * worth pinning here is that a click on the form's Apply leaves as the `reshape` op with ONLY what changed. */
@@ -162,6 +167,7 @@ afterEach(() => {
     mirrorCalls.length = 0;
     verbCalls.length = 0;
     revokeCalls.length = 0;
+    startedTurns.length = 0;
     mirrorAnswer = { ok: true, message: `Port mirroring OFF for: work-abc` };
     app?.unmount();
     app = undefined;
@@ -556,6 +562,96 @@ it(`opens the sandbox that wants something and leaves the rest folded`, () => {
     expect(text).toContain(`not on localhost`);
     // The stopped one is not: being stopped is not an errand.
     expect(text).not.toContain(`img:c`);
+});
+
+/* A CONFLICT IS THE STATE ON THIS TAB A READER IS LEAST EQUIPPED TO ACT ON: two copies of one file, both
+ * edited, on two computers, one of which they are not sitting at. The row said "10 conflicts" and stopped —
+ * a red number about somebody's own files, naming none of them, with nothing to press.
+ *
+ * The paths ride in the machine's own report now (sync/mutagen.ts conflictsFrom), so the three tests below are
+ * the three things the badge could not say: what happened, which files, and what ends it. */
+const conflicted = (conflicts = 10): Device => {
+    const machine = busyMachine();
+    const report = machine.report!;
+    return {
+        ...machine,
+        report: {
+            ...report,
+            pairings: report.pairings.map((pairing) =>
+                pairing.sandboxId === `sandbox-0738cd6b5027`
+                    ? {
+                          ...pairing,
+                          mutagenStatus: `watching`,
+                          conflicts,
+                          conflictedPaths: [
+                              { path: `.claude/settings.json`, local: `modified`, sandbox: `modified` },
+                              { path: `docs/notes.md`, local: `deleted`, sandbox: `modified` },
+                          ],
+                      }
+                    : pairing,
+            ),
+        },
+    };
+};
+
+it(`explains a conflict instead of counting it, and names the files it is about`, () => {
+    const text = mount([conflicted()]).textContent ?? ``;
+    // The badge still summarises on the closed line, and the count is Mutagen's whole total.
+    expect(text).toContain(`10 conflicts`);
+    // What happened, what it costs, and what ends it: none of which a count carries.
+    expect(text).toContain(`neither copy was overwritten`);
+    expect(text).toContain(`Make the two copies match`);
+    // Which files, and which side did what, which is what decides which copy somebody keeps.
+    expect(text).toContain(`.claude/settings.json`);
+    expect(text).toContain(`changed on this device`);
+    expect(text).toContain(`deleted on this device`);
+    // Two of ten described: the rest is counted rather than implied away.
+    expect(text).toContain(`and 8 more`);
+});
+
+/* THE ROW THAT HAS THE COUNT AND NOT THE LIST: an agent older than the field reports one and not the other,
+ * which is every machine in the world on the day this ships. "…and 10 more" over an empty list is a sentence
+ * about nothing, so what that row draws instead is why the list is missing and what would produce it. */
+it(`says why a list is missing rather than counting rows it does not have`, () => {
+    const machine = conflicted();
+    const report = machine.report!;
+    const text =
+        mount([
+            {
+                ...machine,
+                report: {
+                    ...report,
+                    pairings: report.pairings.map((pairing) => ({ ...pairing, conflictedPaths: undefined })),
+                },
+            },
+        ]).textContent ?? ``;
+    expect(text).toContain(`10 conflicts`);
+    expect(text).toContain(`neither copy was overwritten`);
+    expect(text).toContain(`doesn't report which paths`);
+    expect(text).not.toContain(`and 10 more`);
+});
+
+/* The turn is the remedy, because choosing between two edited copies is judgement per file and a one-click
+ * winner would be a one-click way to lose the losing side. What it is handed is the whole of the feature: an
+ * agent that is not told the paths cannot open them. */
+it(`offers a turn that can reach both copies, and hands it the paths`, () => {
+    const el = mount([conflicted()]);
+    expect(labels(el)).toContain(`Fix with agent`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Fix with agent`)?.click();
+    expect(startedTurns).toHaveLength(1);
+    expect(startedTurns[0]).toContain(`.claude/settings.json`);
+    expect(startedTurns[0]).toContain(`radarsu-rog`);
+    expect(startedTurns[0]).toContain(`/home/radarsu/intentic/radarsu-local-0738cd6b5027`);
+});
+
+/* AND NOT ON A MACHINE NOTHING CAN REACH, which is the same door every switch on this row uses: the agent
+ * works that computer through its device tools, so a turn started against an asleep laptop would open with
+ * "that machine is not reachable" and end there. What survives is the explanation and the paths, which is
+ * exactly what somebody sitting AT the machine needs. */
+it(`keeps the explanation and drops the button when the machine is not reachable`, () => {
+    const text = mount([{ ...conflicted(), online: false, gap: `offline` }]);
+    expect(text.textContent ?? ``).toContain(`.claude/settings.json`);
+    expect(labels(text)).not.toContain(`Fix with agent`);
 });
 
 // The machine's own line carries the same idea one level up, so a folded device still says how much is under

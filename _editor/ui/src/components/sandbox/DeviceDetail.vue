@@ -31,6 +31,7 @@ import Icon from "../primitives/Icon.vue";
 import {
     backupState,
     backupTone,
+    folderConflicts,
     folderState,
     folderTone,
     groupNeedsAttention,
@@ -119,6 +120,11 @@ defineSlots<{
 }>();
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
+
+/* The conflict block of every row, derived ONCE per render and looked up by sandbox, rather than recomputed at
+ * each of the five places the template needs a piece of it. Keyed by sandbox id, which is what a group is
+ * addressed by everywhere else on this card (portHolder, the flash target). */
+const conflicts = computed(() => new Map(groups.value.map((group) => [group.sandboxId, folderConflicts(group.folder)])));
 
 /* WHICH ROWS ARE UNFOLDED: the change this view most needed.
  *
@@ -427,6 +433,45 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 size="xs"
                                 :label="`${group.folder.conflicts} ${group.folder.conflicts === 1 ? `conflict` : `conflicts`}`"
                             />
+                        </div>
+                        <!-- AND WHAT THOSE CONFLICTS ARE, which the badge could never say.
+                             A count is not a finding: it names no file, no cause and no remedy, and the only
+                             other surface that has ever printed the word is Mutagen's CLI on the machine this
+                             card is ABOUT. So the sentence says what happened and what ends it, and the paths
+                             say where, one line each, with what happened on each side (folderConflicts).
+                             Under the path rather than beside it: this is prose about the folder, and the
+                             badge row is already three chips wide on a bad day. -->
+                        <div v-if="conflicts.get(group.sandboxId)" class="col-start-2 flex min-w-0 flex-col gap-1">
+                            <p class="text-xs text-muted">{{ conflicts.get(group.sandboxId)?.lead }}</p>
+                            <!-- `gap-1`, the ports list's own rhythm below, and for the reason that list gives:
+                                 each entry here is a PAIR (the path, then what happened to it), and on a narrow
+                                 card the second half wraps onto its own line. At a tighter gap the next path
+                                 then sits as close to the previous note as that note does to its own path, and
+                                 six entries read as twelve loose lines. -->
+                            <ul class="flex min-w-0 flex-col gap-1">
+                                <li
+                                    v-for="row in conflicts.get(group.sandboxId)?.rows ?? []"
+                                    :key="row.path"
+                                    class="flex min-w-0 flex-wrap items-baseline gap-x-2"
+                                >
+                                    <span class="break-all font-mono text-2xs text-content">{{ row.path }}</span>
+                                    <span v-if="row.note !== ``" class="text-2xs text-subtle">{{ row.note }}</span>
+                                </li>
+                            </ul>
+                            <!-- The remainder is counted against the machine's own total, so a card showing six
+                                 rows of forty conflicts says so rather than implying six is the number. Only
+                                 UNDER a list, though: "and 10 more" over an empty one is a sentence about
+                                 nothing, and an agent too old to report paths draws exactly that row. What it
+                                 gets instead is the note, which names why the list is missing. -->
+                            <p
+                                v-if="(conflicts.get(group.sandboxId)?.rows.length ?? 0) > 0 && (conflicts.get(group.sandboxId)?.more ?? 0) > 0"
+                                class="text-2xs text-subtle"
+                            >
+                                … and {{ conflicts.get(group.sandboxId)?.more }} more
+                            </p>
+                            <p v-if="conflicts.get(group.sandboxId)?.note" class="text-2xs text-subtle">
+                                {{ conflicts.get(group.sandboxId)?.note }}
+                            </p>
                         </div>
                         <!-- WHAT TO DO ABOUT THIS FOLDER, under it rather than up in the row's verbs, which act
                              on the CONTAINER. A "Pause" beside the Stop that stops the sandbox is two very
