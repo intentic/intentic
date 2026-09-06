@@ -55,10 +55,13 @@ the file. What a failing one prints rides back with the edit's own result. Fix i
 and nothing has been built on it yet.
 
 **When the turn tries to end** (`Verify before you finish`, `cd intentic && pnpm verify:turn`, after edits
-under `intentic/**`): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter, the declarations emit,
-and `turbo run typecheck test --only` over the AFFECTED CLOSURE, the packages holding a changed file plus
-every package that depends on one. That is exactly the set whose fixtures can name a shape you just changed;
-nothing outside it can have been broken by this turn, and nothing inside it is somebody else's red. Every one
+under `intentic/**`): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter over YOUR CHANGED FILES,
+the declarations emit, and `turbo run typecheck test --only` over the AFFECTED CLOSURE, the packages holding a
+changed file plus every package that depends on one. That is exactly the set whose fixtures can name a shape
+you just changed; nothing outside it can have been broken by this turn, and nothing inside it is somebody
+else's red. The gates are judged the same way: a check that fails here is re-run against a throwaway worktree
+at `HEAD`, and one that was already failing there is named and not held against you — you inherited that tree,
+and the land will measure it. Every one
 of those readers runs even when an earlier one failed, and the run ends with a digest naming each step that
 did (`_tools/scripts/lib/steps.mjs`), so one report is the whole list rather than the first item on it: you
 get two follow-ups, and a gate that named one problem per run could not spend them. Do not
@@ -93,7 +96,10 @@ commits a branch push already measured (the release tag, `stable`), so it stands
 range's test files (`_tools/scripts/verify/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
 only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the
 linter; then `cargo fmt --check` on any Rust crate the push touches; then the three steps CI's verify groups
-run. The two cheap tiers collect — a push wrong in four readable ways is told about four — and the boundary
+run. Only the checks whose `gate` is `code` can refuse any of that: a `tidy` failure (`_tools/checks/manifest.mjs`
+says which is which — layout, doc links, path literals, the UI tiers) prints as a warning here and is refused
+by `nightly.yml`'s `tidy` job instead, because a directory another conversation made one file too full is
+nobody's push to stop and no commit in that push can fix it. The two cheap tiers collect — a push wrong in four readable ways is told about four — and the boundary
 before the suite still stops, because a tree already refused by a reader that costs a second should not spend
 ten minutes being refused again. A tree that `pnpm verify` already measured, which after a land is the ordinary case, replays that verdict
 and runs only the build it could not (`_tools/scripts/lib/tree-verdict.mjs`).

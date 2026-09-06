@@ -1,6 +1,7 @@
 {
     "fanOut": {
         "_editor/web/src/extension-host": 33,
+        "_platform/api/src/sandbox/hosted": 31,
         "_sandbox/sandbox/src/capabilities": 39,
         "_sandbox/sandbox/src/capabilities/handlers": 35,
         "_shared/sandbox-contract/src/contracts": 41,

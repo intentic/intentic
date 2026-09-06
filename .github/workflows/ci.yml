@@ -264,7 +264,15 @@ jobs:
       # pre-push hook and by the turn-ending check, so a check cannot again be right and unrun: five of these
       # were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout only, no
       # node_modules, no network, under two seconds.
-      - run: node _tools/checks/run.mjs
+      #
+      # `--tidy=warn` BECAUSE THIS JOB IS A DAG ROOT. Every verify group and e2e-hermetic hangs off it, so a
+      # failure here does not report one problem, it HIDES the rest of the pipeline: the day this flag was added,
+      # a run reddened on ghost directories, and the type error and the two broken tests underneath it were not
+      # discovered until the third round of fixes. The manifest's `gate` field says which failures are worth that
+      # (`code`: the tree does not work or cannot be built) and which are not (`tidy`: the tree costs its readers
+      # more than it should). Tidy failures print here as warnings and are REFUSED by nightly.yml's `tidy` job,
+      # which reads one commit on a GitHub-hosted runner and gates nothing at all.
+      - run: node _tools/checks/run.mjs --tidy=warn
       # actionlint + zizmor over .github/ — the workflows checked by tools that parse them, rather than by the
       # line scanners the checkout gate was growing to approximate a fraction of the same ground. The script says what
       # each tool is for, why they are pinned by sha256 rather than baked into ci-base, and which findings this

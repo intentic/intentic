@@ -33,10 +33,17 @@ const ending = (run: CommandRun): string =>
         ? `did not finish, it hit its time limit and was killed. Treat that as a failure: something hangs, and finding what is part of the fix.`
         : `failed (exit ${run.exitCode ?? `unknown`}).`;
 
+/* WHAT THE AGENT CAN ACTUALLY RE-RUN, said in the ask, because the agent is not standing where the check ran.
+ * The proposal is isolated, so the turn gets a linked worktree, and `pnpm build` cannot run in one at all —
+ * pnpm hardlinks into node_modules after a build and the worktree's is a different filesystem, so the run dies
+ * EXDEV. The push gate knows this and drops the build step there rather than failing (verify-push.mjs), which
+ * means the confirmation an agent can give is real but is a step short of the one that refused the push. An
+ * ask that did not say so is an ask for a confirmation that cannot be produced, and the turn spends itself
+ * either fighting the filesystem or reporting a pass the owner's tree will not repeat. */
 export const checkFixPrompt = (run: CommandRun): string =>
     proposal(
         `\`${run.command}\` ${ending(run)} This is what blocks the push, and it is what CI would have said a few minutes later.`,
-        `Find the cause and fix it, then re-run \`${run.command}\` yourself to confirm.`,
+        `Find the cause and fix it, then re-run \`${run.command}\` yourself to confirm. You are in a worktree, so that run skips the build step (it cannot run in one) and measures everything else; if the build is what failed, say so rather than reporting a pass it did not cover.`,
         run.output,
     );
 
@@ -52,6 +59,44 @@ export const pushFixPrompt = (runs: readonly PushRun[]): string => {
             run.output,
         );
     return runs.map(one).join(`\n\n---\n\n`);
+};
+
+/* WHAT MAKES TWO RED RUNS THE SAME FAILURE, so that pressing "fix this" twice reaches one agent instead of two
+ * (conversation-ids.ts's `pushFixConversationId` is the other half).
+ *
+ * The gates print a digest LAST, on purpose and for a reader exactly like this one (_tools/scripts/lib/steps.mjs):
+ * `verify-push: 2 of 6 steps failed in 12s: checkout gates, lint`. That list of STEP NAMES is the identity of a
+ * failure. Not the exit codes, not the durations, not the line numbers — all of which move between two runs of
+ * the same broken tree — and not the output either, since a typecheck error quotes a path that changes the
+ * moment anything above it is edited.
+ *
+ * READ FROM THE SUMMARY LINE, never from the `✗` lines under it, even though those name the same steps: a
+ * suite's own output is full of `✗` (every failing vitest case prints one) and a signature that swept those up
+ * would change with the name of any test. The summary line has a shape nothing else in the stream has.
+ *
+ * PARENTHESES ARE DROPPED because that is where the digest puts what varies: `assertion ratchet
+ * (a1b2c3d..e4f5g6h)` is the same gate on every push and would otherwise be a new agent on every push.
+ *
+ * A RUN WITH NO DIGEST ended where it stood rather than collecting — an unmeasurable range, a suite that could
+ * not start, a verdict replayed (verify-push.mjs's `refuse`). There the last line is the reason, taken with its
+ * numbers blanked, so that "failed (exit 1)" and "failed (exit 2)" are not two different failures. */
+const DIGEST = /^\s*\S+: \d+ of \d+ steps failed in \d+s: (.+)$/m;
+export const fixSignature = (output: string): string => {
+    const listed = DIGEST.exec(output)?.[1];
+    if (listed !== undefined) {
+        const steps = listed
+            .split(`,`)
+            .map((label) => label.replace(/\s*\([^)]*\)/g, ``).trim())
+            .filter((label) => label !== ``);
+        if (steps.length > 0) {
+            return [...new Set(steps)].sort((left, right) => left.localeCompare(right)).join(`,`);
+        }
+    }
+    const lines = output
+        .split(`\n`)
+        .map((line) => line.trim())
+        .filter((line) => line !== ``);
+    return (lines.at(-1) ?? ``).replace(/\d+/g, `#`);
 };
 
 /* The one line under the command on the card: what happened, without the evidence under it repeating itself.

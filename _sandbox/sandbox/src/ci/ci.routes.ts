@@ -105,10 +105,26 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 client.failedJobLogs(project, input.runId, FIX_LOG_BYTES).catch(() => ""),
             ]);
             const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${input.runId})`;
+            /* THE INSTRUCTION KNOWS WHERE IT IS RUNNING, which the first version of it did not. It said
+             * "reproduce the failure locally before changing anything", and for about half the jobs in this
+             * repository's pipelines that is an instruction to do something impossible: the nightly's jobs
+             * want docker-in-docker and a mounted socket, the desktop ones want a runner with webkit and a
+             * Windows box, the image ones want to build a CI image from scratch. Agents obeyed it anyway,
+             * because it was the instruction — $27 and $33 turns spent building images and guessing, and one
+             * of them needed a second round because the fix could not be tested from here either way.
+             *
+             * So it names the boundary and names the way ACROSS it. A job the local suite covers is reproduced;
+             * a job it does not is read, changed, and verified by dispatching the workflow on the agent's own
+             * branch — which is the only place the runner constraints actually exist. Stated as a rule about
+             * environments rather than as a list of job names, because a list here would be a second copy of
+             * .github/workflows/ that nothing updates when a job moves. */
             const prompt = [
                 `The CI pipeline for the workspace repo "${input.repo}" failed ${where}. Investigate and fix it.`,
                 ...(failedJobs.length > 0 ? [`Failed jobs: ${failedJobs.join(", ")}.`] : []),
-                `Reproduce the failure locally in the repo before changing anything, fix the cause, and verify the failing checks pass. You are in an isolated worktree: commit your fix and it goes through review.`,
+                `The logs below are the evidence — read them first; they are usually enough to name the cause.`,
+                `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN. \`pnpm verify:push\` runs the checkout gates, typecheck, build and tests, which is what the preflight and verify-* jobs run, so those reproduce here exactly. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
+                `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch (\`gh workflow run <workflow.yml> --ref <your branch>\`, then \`gh run watch\`). Say plainly in your summary if you could not verify it and what would.`,
+                `You are in an isolated worktree: commit your fix and it goes through review.`,
                 ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),
             ].join("\n\n");
             /* DERIVED FROM THE RUN, never minted: this is the name the Pipelines board re-computes to find out

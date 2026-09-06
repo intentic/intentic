@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { CI_FIX_PREFIX, ciFixConversationId, newConversationId } from "./conversation-ids.js";
+import { CI_FIX_PREFIX, ciFixConversationId, newConversationId, PUSH_FIX_PREFIX, pushFixConversationId } from "./conversation-ids.js";
 import { ConversationIdSchema } from "../schemas/agent.js";
 
 const mockRandomValues = (values: readonly number[]) => {
@@ -88,4 +88,29 @@ test("every derived id passes the conversation-id guard", () => {
 // The join is a prefix scan over the fleet, so the prefix has to survive a repo name that starts with one.
 test("the prefix is carried by every fix id", () => {
     expect(ciFixConversationId(`ci-fix`, 7)).toBe(`ci-fix-ci-fix-7`);
+});
+
+// The whole point of the derived push id: the second press about the same failure reaches the first agent.
+test("a push fix id is the same string every time the same failure derives it", () => {
+    expect(pushFixConversationId(`intentic`, `checkout gates,lint`)).toBe(pushFixConversationId(`intentic`, `checkout gates,lint`));
+    expect(pushFixConversationId(`intentic`, `checkout gates,lint`)).toMatch(/^push-fix-intentic-[0-9a-z]{7}$/);
+});
+
+// And the other half: a different failure, or the same failure in a different workspace, is different work.
+test("a push fix id separates failures and scopes", () => {
+    expect(pushFixConversationId(`intentic`, `lint`)).not.toBe(pushFixConversationId(`intentic`, `checkout gates`));
+    expect(pushFixConversationId(`web`, `lint`)).not.toBe(pushFixConversationId(`api`, `lint`));
+});
+
+// The id becomes a branch and a path, so the guard is not a matter of taste — and the signature it is derived
+// from is raw gate output, which carries whatever the failing steps were called.
+test("every derived push fix id passes the conversation-id guard", () => {
+    const signatures = [``, `checkout gates`, `✗ lint · pnpm lint`, `a`.repeat(4_000), `../../etc/passwd`, `a\nb\tc`, `résumé`];
+    for (const scope of [`root`, `apps/web`, `my repo`, `___`, `x`.repeat(80)]) {
+        for (const signature of signatures) {
+            const id = pushFixConversationId(scope, signature);
+            expect(ConversationIdSchema.safeParse(id).success).toBe(true);
+            expect(id.startsWith(PUSH_FIX_PREFIX)).toBe(true);
+        }
+    }
 });

@@ -87,12 +87,13 @@
  * and it says how big it is on every run.
  */
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 // By file, not by package name, for the reason _tools/checks/lib/repo.mjs gives: the hook runs on a clone that may never have
 // installed, and a bare specifier resolves through node_modules.
 import { repoRoot } from "../../constants/src/node.mjs";
-import { changedPaths as treeChangedPaths, git as gitIn, isLinkedWorktree } from "../lib/git.mjs";
+import { isLinkedWorktree } from "../../checks/lib/repo.mjs";
+import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { ago, freshFor, readVerdict, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 
@@ -219,8 +220,66 @@ const ranges = () =>
         return base === undefined || base === local ? [] : [[base, local]];
     });
 
-/* ── tier 1: readable from the checkout ──────────────────────────────────────────────────────────────────── */
-step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs")]);
+/* Whether the tree's only change to pnpm-lock.yaml is inside `packageManagerDependencies:` — the block pnpm
+ * rewrites from every command it runs (lockfile-drift.mjs's header carries the whole account).
+ *
+ * JUDGED POSITIONALLY, by which LINES the diff touches, and never by what those lines look like. The block's
+ * own shape — a name, then `specifier:` and `version:` under it — is the shape of every importer entry in the
+ * rest of the file, so a reader that matched on the text would call a real dependency change a rewrite and
+ * tell somebody to throw their work away. The line numbers cannot be confused that way: the block is one
+ * region of one document, and the diff either lands in it or does not. */
+const blockSpan = (text) => {
+    const lines = text.split("\n");
+    const start = lines.findIndex((line) => /^ {4}packageManagerDependencies:[ \t]*$/.test(line));
+    if (start === -1) {
+        return undefined;
+    }
+    let end = lines.length;
+    for (let at = start + 1; at < lines.length; at += 1) {
+        if (/^ {0,4}\S/.test(lines[at])) {
+            end = at;
+            break;
+        }
+    }
+    // 1-based and inclusive: the header line itself through the last line under it.
+    return [start + 1, end];
+};
+
+const lockfileRewriteOnly = () => {
+    // Read rather than assumed: "changed" includes DELETED, and a gate that threw here would crash the push
+    // instead of refusing it.
+    const tree = existsSync(join(root, "pnpm-lock.yaml")) ? readFileSync(join(root, "pnpm-lock.yaml"), "utf8") : "";
+    const inTree = blockSpan(tree);
+    const atHead = blockSpan(git("show", "HEAD:pnpm-lock.yaml") ?? "");
+    // `HEAD` rather than the index: what CI checks out is the commit, so staged-but-uncommitted counts too.
+    const diff = git("diff", "-U0", "HEAD", "--", "pnpm-lock.yaml");
+    if (inTree === undefined || atHead === undefined || diff === undefined) {
+        return false;
+    }
+    const hunks = [...diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)];
+    /* A hunk side with a count of 0 is an insertion point rather than a range: git names the line it sits
+     * AFTER, so it counts as inside when either that line or the one following it is. */
+    const within = ([from, to], at, count) => (count === 0 ? at >= from - 1 && at <= to : at >= from && at + count - 1 <= to);
+    return (
+        hunks.length > 0 &&
+        hunks.every(([, oldAt, oldCount, newAt, newCount]) => {
+            const old = Number(oldAt);
+            const fresh = Number(newAt);
+            return within(atHead, old, oldCount === undefined ? 1 : Number(oldCount)) && within(inTree, fresh, newCount === undefined ? 1 : Number(newCount));
+        })
+    );
+};
+
+/* ── tier 1: readable from the checkout ────────────────────────────────────────────────────────────────────
+ * `--tidy=warn`: WHAT STOPS A PUSH IS WHETHER THE CODE WORKS. The manifest splits the checks by what a failure
+ * MEANS (_tools/checks/manifest.mjs), and only `code` refuses here. The measurement that made the split: of 18
+ * push attempts in one day, 11 were refused and NINE of those were refused in under five seconds by a tidy
+ * check — a ghost directory a landed rename had left, a baseline one count too high after somebody else's
+ * deletion, a README link another conversation had broken. Not one of them was caused by the push being
+ * refused, none could be fixed by the commits in it, and the agent then sent after the failure was working in a
+ * worktree where the ghost was a mount and the failure did not reproduce. Tidy debt is real and is refused in
+ * nightly.yml's `tidy` job, which reads one commit and blocks nobody. */
+step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs"), "--tidy=warn"]);
 {
     const measured = ranges();
     if (measured.length === 0) {
@@ -240,11 +299,23 @@ const changed = changedPaths();
     const committed = changed === undefined ? [] : [...changed].filter((path) => LOCKSTEP.test(path));
     const uncommitted = (treeChangedPaths(root) ?? []).filter((path) => LOCKSTEP.test(path));
     if (committed.length > 0 && uncommitted.length > 0) {
+        /* THE ONE CASE WHERE NOBODY MADE THE CHANGE. pnpm rewrites `packageManagerDependencies:` in the
+         * lockfile's first document from EVERY command it runs, not just the install family — so a `pnpm lint`
+         * is enough to dirty the tree, and this refusal then fires over a diff its author never typed. It is
+         * worth naming rather than folding into the sentence below, because the answer is the opposite one: the
+         * others are "commit them together", this one is "throw it away". (Two pnpm versions taking turns over
+         * one checkout is what makes the rewrite churn rather than settle; lockfile-drift.mjs is what now stops
+         * an environment from being on a different one.) */
+        const rewriteOnly = uncommitted.length === 1 && uncommitted[0] === "pnpm-lock.yaml" && lockfileRewriteOnly();
         fail(
             "manifest/lockfile lockstep",
-            `the push commits ${committed.join(", ")} while ${uncommitted.join(", ")} ${uncommitted.length === 1 ? "is" : "are"} changed and uncommitted ` +
-                `beside it; CI's checkout gets the first without the second and fails the lockfile check (the lockfile no longer records the manifest). ` +
-                `Commit them together`,
+            rewriteOnly
+                ? `the push commits ${committed.join(", ")} while pnpm-lock.yaml is changed and uncommitted beside it — and the only thing changed in it is the ` +
+                      `\`packageManagerDependencies\` block, which pnpm rewrites from every command it runs. Nobody typed that: \`git checkout -- pnpm-lock.yaml\` ` +
+                      `and push again`
+                : `the push commits ${committed.join(", ")} while ${uncommitted.join(", ")} ${uncommitted.length === 1 ? "is" : "are"} changed and uncommitted ` +
+                      `beside it; CI's checkout gets the first without the second and fails the lockfile check (the lockfile no longer records the manifest). ` +
+                      `Commit them together`,
         );
     }
 }
@@ -305,7 +376,7 @@ const suite = (buildOnly) => {
     // VITEST_MAX_WORKERS is what the root `test` script sets and turbo passes through; `turbo run build test`
     // bypasses that script, so it is set here, and the caller's own value wins.
     const env = { ...process.env, INDEXNOW_ENABLED: "0", VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4" };
-    const linked = isLinkedWorktree(root);
+    const linked = isLinkedWorktree();
     if (linked) {
         say("a linked worktree: `build` cannot run here (EXDEV), so tests run off the prepass dist as the turn-ending check does");
     }

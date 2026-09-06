@@ -18,8 +18,11 @@
  *   3. A companion with checks that never calls `fail`. A check that cannot report is a green light with no
  *      subject, which is worse than no check at all.
  *   4. A companion nobody imports. A file that is written and never wired runs never and reads as covered.
- *   5. An UNAUDITED entry naming a directory that no longer exists: a backlog that outlives its subject is how a
- *      list like this quietly stops describing anything.
+ *   5. An UNAUDITED entry naming a directory that no longer exists, or one that has since written its
+ *      invariant.ts. REPORTED, not refused: a backlog that outlives its subject is how a list like this quietly
+ *      stops describing anything, but the turn that paid the debt is not the one to refuse for it, and with a
+ *      dozen conversations landing into one tree a stale entry that fails is everyone else's red until the
+ *      shared list is edited. The line says what to trim; the next edit of this file trims it.
  *
  * Deliberately NOT checked: whether a check is any good. That is review's job, and a gate that tried would only
  * teach people to write checks shaped like whatever it measured.
@@ -88,6 +91,9 @@ const UNAUDITED = new Set([
 const NOT_A_SUBSYSTEM = new Set(["invariants", "e2e", "harness"]);
 
 const failures = [];
+/* Debt this run found already paid: an UNAUDITED entry whose directory is gone, or one that has since written
+ * its invariant.ts. Said on stdout and never counted as a failure, for the reason rule 5 gives. */
+const retired = [];
 
 const directories = readdirSync(src)
     .filter((entry) => statSync(join(src, entry)).isDirectory())
@@ -97,9 +103,7 @@ const directories = readdirSync(src)
 const present = new Set(directories);
 for (const entry of UNAUDITED) {
     if (!present.has(entry)) {
-        failures.push(
-            `UNAUDITED names '${entry}', which is not a directory under _sandbox/sandbox/src: renamed or removed? update the list in ${"_tools/checks/invariant-registry.mjs"} in the same change`,
-        );
+        retired.push(`UNAUDITED names '${entry}', which is not a directory under _sandbox/sandbox/src (renamed or removed)`);
     }
 }
 
@@ -131,7 +135,7 @@ for (const directory of directories) {
         continue;
     }
     if (UNAUDITED.has(directory)) {
-        failures.push(`'${directory}' now has an invariant.ts but is still listed as UNAUDITED: remove it from that list in the same change`);
+        retired.push(`'${directory}' now has an invariant.ts but is still listed as UNAUDITED`);
     }
     // "Has checks" is read structurally rather than by executing the module: the companions are factories over
     // daemon services, and a gate that had to construct those would be a second composition root.
@@ -158,6 +162,11 @@ for (const directory of directories) {
     }
 }
 
+// Said, so the list gets trimmed when this file is next edited, and never a refusal (rule 5).
+for (const line of retired) {
+    console.log(`verify-invariants: ${line}: drop it from UNAUDITED when you next edit this file`);
+}
+
 if (failures.length > 0) {
     console.error(`verify-invariants: ${failures.length} problem(s)\n`);
     for (const failure of failures) {
@@ -166,5 +175,8 @@ if (failures.length > 0) {
     process.exit(1);
 }
 
-const audited = directories.length - UNAUDITED.size;
-console.log(`verify-invariants: ok, ${audited} of ${directories.length} subsystems audited, ${UNAUDITED.size} in the backlog`);
+// The backlog is the UNAUDITED entries that are still true: the retired ones are debt already paid, and counting
+// them would let the summary say the tree is less audited than it is for as long as the list goes untrimmed.
+const backlog = UNAUDITED.size - retired.length;
+const audited = directories.length - backlog;
+console.log(`verify-invariants: ok, ${audited} of ${directories.length} subsystems audited, ${backlog} in the backlog`);

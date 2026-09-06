@@ -506,6 +506,44 @@ jobs:
   mobile:
     uses: ./.github/workflows/mobile.yml
 
+  # THE TIDY GATE: THE ONE PLACE A TIDY CHECK REFUSES.
+  #
+  # _tools/checks/manifest.mjs splits the checks by what a failure MEANS. A `code` failure is refused everywhere
+  # — the push, CI's preflight, the turn — because the tree does not work. A `tidy` failure (a directory of 35
+  # files, a dead link in a README, a hand-spelled root, a subsystem with no invariant) is a real cost with a
+  # measured case behind it in docs/audits/, and it is nobody's push to stop: on the day the split was made, 9
+  # of the 11 pushes the gate refused were refused by tidy checks in under five seconds, for state no single
+  # actor had produced and that the agent then sent after it could not see from its worktree.
+  #
+  # So the refusal lives HERE, where it costs nobody anything: one commit, read on a GitHub-hosted runner, with
+  # no `needs` in either direction. Nothing in this file waits on it, no push waits on it, and a red here is a
+  # message about the tree on main rather than a refusal of whoever pushed last. `--gate=tidy` runs exactly the
+  # checks the other runs downgrade to warnings, so the pair cannot drift: one manifest, two exit codes.
+  #
+  # A FRESH CHECKOUT IS THE POINT. Half of what these rules measure is invisible on a persistent workspace (the
+  # layout check's ghost directories are build output a rename left on a runner that never cleans) and half is
+  # invisible in an agent's worktree (where the isolation layer mounts those same paths back in). A
+  # GitHub-hosted runner clones the commit and nothing else, which is the only tree where all of it can be read.
+  tidy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The node this repository pins, read from the same `engines` field everything else reads, rather than
+      # whatever the hosted image happens to ship this month. No install follows it: `node-version-file` is
+      # here for the version alone, which is the one thing a bare `node` on a hosted runner cannot promise.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: package.json
+      # Checkout only: no install, no network, under two seconds. Same runner as ci-audit for the same reason —
+      # the self-hosted fleet is six processes on one box, and a check that needs nothing from it should want
+      # nothing from it.
+      - run: node _tools/checks/run.mjs --gate=tidy
+
   # WHICH GATE TO BUILD NEXT. The failing steps of the last hundred pipelines on main, grouped and counted, as
   # this job's summary: the extraction docs/ci-failure-audit.md was written from (runs → jobs → failed step →
   # first error line), run every night instead of reconstructed in a two-week retrospective. Reads the Actions

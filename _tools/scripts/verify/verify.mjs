@@ -32,8 +32,12 @@ import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 const root = repoRoot(import.meta.url);
 const { step, skip, finish } = createSteps("verify", root);
 
-// Independent of everything below: it reads the checkout, not the build.
-step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs")]);
+/* Independent of everything below: it reads the checkout, not the build. `--tidy=warn` because this runs after
+ * every LAND, on a tree a dozen conversations are moving: a tidy rule red for a directory nobody in this land
+ * touched would mark the whole run failed, and the verdict it records is what the next push replays — so one
+ * stale baseline entry would spend ten minutes of somebody's push re-running typecheck and tests that had just
+ * passed. What a tidy failure means and where it does refuse: _tools/checks/manifest.mjs. */
+step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs"), "--tidy=warn"]);
 
 /* The scripts' own tests. `_tools/scripts` is plumbing rather than a workspace package, so `turbo run test`
  * cannot reach it and a `*.test.mjs` there would otherwise be a test nothing runs — which is what move-files.mjs,

@@ -1,4 +1,4 @@
-import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
+import { type CommandRun, type PushRun, pushFixConversationId } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 // Statically imported for its LOAD COST alone: every test re-imports it through `load()` below, and the first
 // of those pulled the unmocked half of the graph (the agent-run model resolver and the contract it resolves
@@ -9,7 +9,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 // bound: `load()` resets the module registry and re-executes the (already transformed) graph fresh per test.
 // oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
 import "./usePushFlow";
-import { checkOutcome, outcomeSummary, pushFixPrompt, refusalSummary } from "../health/fixProposal";
+import { checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, refusalSummary } from "../health/fixProposal";
 
 /* THE PROMISE UNDER TEST IS A LIFETIME. Every case here runs with NO component mounted, because that is the
  * situation the flow exists for: the user starts a push, walks off to another view, which destroys the panel
@@ -393,8 +393,44 @@ test(`a push the repository's own hook refused asks with the run, and proposes a
     // The same terminal button a red check gets, pointed at the push's own window.
     expect(flow.terminal.value).toBe(`job-checks`);
     expect(suggestion.composeSession).toHaveBeenCalledTimes(1);
-    expect(suggestion.composeSession).toHaveBeenCalledWith({ prompt: pushFixPrompt([run]), model: `claude:claude-sonnet-4-5`, effort: `high`, isolated: true });
+    expect(suggestion.composeSession).toHaveBeenCalledWith({
+        prompt: pushFixPrompt([run]),
+        model: `claude:claude-sonnet-4-5`,
+        effort: `high`,
+        isolated: true,
+        // Derived the same way the flow derives it, rather than transcribed: a name spelled twice is a join
+        // that can drift, which is the whole reason the id is computed from the failure instead of recorded.
+        conversationId: pushFixConversationId(run.repo, fixSignature(run.output)),
+    });
     expect(flow.proposedFix.value).toEqual(expect.any(Object));
+});
+
+/* THE DEDUPE. The check runs again on every press of Push, so one broken tree raises this question two and
+ * three times over; each press used to mint a fresh conversation, and two frontier agents on the same gates is
+ * two worktrees, two branches and a land conflict between them. The id derived from the failure is what makes
+ * the second press CONTINUE the first agent (composeSession reuses an open conversation with that name), so
+ * what this holds is that the same failure derives the same name and a different one does not. */
+test(`two runs of the same failure propose the same conversation, and a different failure does not`, async () => {
+    /* The name proposed for one red run. Read back before the next `load()`, which resets every mock: the
+     * suggestion module's fn survives `resetModules`, so a call captured after the next load is the next
+     * load's call wearing the first one's name. */
+    const proposedFor = async (output: string): Promise<string | undefined> => {
+        const { flow, finish, suggestion } = await load();
+        flow.askSync(`Push`, `3 commits`, PUSH);
+        finish({ status: `failed`, output });
+        await flush();
+        return vi.mocked(suggestion.composeSession).mock.calls.at(-1)?.[0].conversationId;
+    };
+    const digest = (count: number, seconds: number, steps: string) =>
+        [`verify-push: ${count} of 6 steps failed in ${seconds}s: ${steps}`, ...steps.split(`, `).map((step) => `  ✗ ${step}  exit 1`)].join(`\n`);
+
+    const first = await proposedFor(digest(2, 12, `checkout gates, lint`));
+    // The same two gates, a slower run, listed the other way round: the same breakage, so the same agent.
+    expect(await proposedFor(digest(2, 340, `lint, checkout gates`))).toBe(first);
+    expect(first).toBe(pushFixConversationId(`intentic`, `checkout gates,lint`));
+
+    // A failure that is not that failure is not that agent's work.
+    expect(await proposedFor(digest(1, 12, `typecheck`))).not.toBe(first);
 });
 
 // A rejected ref or a dead host says nothing about the code, so there is nothing to send an agent after: the

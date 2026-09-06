@@ -1,7 +1,7 @@
 import { parsePinned } from "@intentic/sandbox-contract";
 import { Conversation } from "../../chat/session/conversation";
 import { summonChat } from "../../chat/run/summon";
-import { revealConversation } from "./agentActions";
+import { openConversation, revealConversation } from "./agentActions";
 
 /* SUGGESTING A SESSION, the app proposing a specific piece of agent work, with the turn already composed, and
  * the user deciding whether and how to spend it.
@@ -38,6 +38,13 @@ export interface SessionDraft {
     readonly effort?: string;
     // Isolated ⇒ the agent gets its own worktree and lands as a reviewable diff, like any other fleet agent.
     readonly isolated: boolean;
+    /* A DERIVED name, for a proposal that answers a specific failure rather than a specific press
+     * (conversation-ids.ts). Absent ⇒ a fresh random one, which is right for a suggestion the user could make
+     * twice about two different things. Present ⇒ this proposal IS its subject, and pressing the button twice
+     * about the same subject has to reach the same agent: the second press adds a turn to the conversation
+     * already looking at it rather than putting a second frontier model on the same five gates, on a second
+     * branch, to land into the first one's conflict. */
+    readonly conversationId?: string;
 }
 
 /* Build the draft. Composition lives here rather than at each call site so a caller states what it wants done
@@ -47,7 +54,12 @@ export interface SessionDraft {
  * and the composer's connect gate takes over, which is the same handshake choosing it by hand would produce.
  * Quietly falling back to another model would spend an account the user did not pick. */
 export const composeSession = (draft: SessionDraft): Conversation => {
-    const conversation = new Conversation();
+    /* A derived id that is ALREADY OPEN is that conversation, not a second object wearing its name. Two
+     * Conversations with one id would be two tabs, two transcripts and two writers of the same daemon session:
+     * the id is the whole identity (conversation.ts), so the registry is the only thing that decides whether
+     * this is a new one. */
+    const open = draft.conversationId === undefined ? undefined : openConversation(draft.conversationId);
+    const conversation = open ?? new Conversation(draft.conversationId);
     conversation.isolated.value = draft.isolated;
     const pinned = draft.model === undefined ? undefined : parsePinned(draft.model);
     if (pinned !== undefined) {

@@ -109,6 +109,13 @@ export const revealConversation = (conversation: Conversation): void => {
     }
 };
 
+/* The open conversation with this id, or none. The lookup every caller here was already doing inline, exported
+ * for the one caller that has to do it BEFORE there is a conversation: a proposal whose id is derived from its
+ * subject rather than drawn (sessionSuggestion.ts) is the same conversation every time the subject comes back,
+ * and constructing a second object with that id would be two tabs writing one daemon session. */
+export const openConversation = (id: string): Conversation | undefined =>
+    useChat().conversations.value.find((candidate) => candidate.conversationId === id);
+
 // Land: carry the agent's worktree branches into the main trees. The daemon preflights the whole frozen repo
 // composition, so a per-repo conflict refuses every write and every worktree keeps its delta. The user can
 // resolve (main-side), discard, or keep working. `merge` is what the conflict report offers once the user has

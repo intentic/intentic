@@ -30,6 +30,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
+import { writesBaselines } from "./lib/repo.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -219,22 +220,47 @@ for (const [path, count] of perFile) {
         grown.push(`  ${path}: ${count} spelling(s), the baseline allows ${allowed}`);
     }
 }
-const stale = Object.entries(baseline)
-    .filter(([path, allowed]) => (perFile.get(path) ?? 0) < allowed)
-    .map(([path, allowed]) => `${path}: the baseline allows ${allowed}, the file now has ${perFile.get(path) ?? 0}: lower or remove its entry in _tools/checks/baselines/path-literals.json in the same change`);
+/* AN ENTRY THE TREE HAS BEATEN IS TIGHTENED, NEVER FAILED. This ratchet used to fail both ways — a count that
+ * grew, and a count that shrank without the baseline being lowered in the same change — so that the file kept
+ * describing the tree. With a dozen conversations landing into one tree, failing on a shrink means every
+ * DELETION becomes everyone else's red: an agent removes one spelling, and every other agent's turn and the
+ * owner's next push are refused over a number in a shared file none of them touched, until somebody edits it,
+ * and two of them editing it is a merge conflict. So the improvement is written down here, by this check,
+ * wherever the write can become a commit, and merely reported everywhere else — in an agent's worktree it
+ * would be one more line for the owner's tree to reconcile against every other turn's, and on a CI runner
+ * nobody commits anything at all (lib/repo.mjs's `writesBaselines` is the one place that decides). Nothing
+ * fails for having improved; the ratchet still cannot slip, because it is this check that lowers it. */
+const tightened = [];
+const next = { ...baseline };
+for (const [path, allowed] of Object.entries(baseline)) {
+    const now = perFile.get(path) ?? 0;
+    if (now < allowed) {
+        tightened.push(`${path}: ${allowed} → ${now}`);
+        if (now === 0) {
+            delete next[path];
+        } else {
+            next[path] = now;
+        }
+    }
+}
+if (tightened.length > 0) {
+    if (writesBaselines()) {
+        writeFileSync(BASELINE, `${JSON.stringify(Object.fromEntries(Object.entries(next).sort(([a], [b]) => a.localeCompare(b))), null, 4)}\n`);
+        console.log(`path-literals: tightened _tools/checks/baselines/path-literals.json to what the tree has (${tightened.join(", ")}); it rides the next commit`);
+    } else {
+        console.log(
+            `path-literals: the tree beats its baseline (${tightened.join(", ")}); the checkout that commits tightens _tools/checks/baselines/path-literals.json on its next run`,
+        );
+    }
+}
 
-if (grown.length > 0 || stale.length > 0) {
+if (grown.length > 0) {
     for (const line of grown) {
         console.error(line);
     }
-    if (grown.length > 0) {
-        console.error(
-            `\nA new hardcoded path. A location spelled in two files becomes two locations; a counted root breaks silently when its file moves. Use the constants; the baseline only covers what predates the rule.`,
-        );
-    }
-    for (const line of stale) {
-        console.error(line);
-    }
+    console.error(
+        `\nA new hardcoded path. A location spelled in two files becomes two locations; a counted root breaks silently when its file moves. Use the constants; the baseline only covers what predates the rule.`,
+    );
     process.exit(1);
 }
 

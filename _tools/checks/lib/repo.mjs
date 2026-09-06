@@ -105,6 +105,40 @@ export const sourceOf = (file, specifier) => {
     return [path.replace(/\.[cm]?js$/, ".ts"), path.replace(/\.[cm]?js$/, ".tsx"), `${path}.ts`].find((candidate) => existsSync(candidate));
 };
 
+/* Whether this checkout is a linked worktree rather than the primary one: a checkout whose git dir is not its
+ * common dir. Every conversation runs in one, and two different things read it.
+ *
+ * The PUSH GATE reads it to decide whether `pnpm build` can run at all: pnpm hardlinks into `node_modules`
+ * after a build, a worktree's `node_modules` is a different filesystem, and the run dies EXDEV.
+ *
+ * The RATCHETED CHECKS read it through `writesBaselines` below.
+ *
+ * `--path-format=absolute` on both, because the two answers are otherwise spelled differently by default —
+ * `--git-dir` answers `.git` relative to the cwd in the primary checkout and an absolute path in a worktree —
+ * so a comparison of the raw strings is right for the wrong reason and stops being right the moment either
+ * call is made from a subdirectory. */
+export const isLinkedWorktree = () => {
+    const gitDir = git("rev-parse", "--path-format=absolute", "--git-dir")?.trim();
+    const commonDir = git("rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();
+    return gitDir !== undefined && commonDir !== undefined && gitDir !== commonDir;
+};
+
+/* WHETHER A CHECK MAY WRITE A BASELINE BACK INTO THIS CHECKOUT, which is the same question as "can this write
+ * become a commit". A ratchet the tree has beaten tightens its own baseline rather than failing (nothing here
+ * fails for having improved, and a shared baseline that has to be hand-edited is everybody else's red until
+ * somebody does). That repair is only worth making where it can be kept:
+ *
+ *   · the PRIMARY CHECKOUT, where the tightened file rides the owner's next commit. Yes.
+ *   · an agent's WORKTREE, where it would land as one more line for the owner's tree to reconcile against
+ *     every other turn's. No — reported instead, and the primary checkout writes it on its next run.
+ *   · a CI RUNNER, where nobody commits anything and the workspace is either thrown away or force-reset by the
+ *     next checkout. No: a check that dirties a tracked file there has changed nothing and left a tree that
+ *     no longer matches the commit under every job that runs after it on the same workspace.
+ *
+ * `CI` is the variable every forge sets and the one convention there is; GitHub Actions, GitLab CI and the
+ * self-hosted runners in this repository's fleet all set it to `true`. */
+export const writesBaselines = () => process.env.CI === undefined && !isLinkedWorktree();
+
 // A git question answered from the checkout, or undefined when git says no.
 export const git = (...args) => {
     const result = spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -118,3 +152,13 @@ export const trackedFiles = () =>
     (git("ls-files", "-z") ?? "")
         .split("\0")
         .filter((path) => path !== "" && existsSync(path));
+
+/* Every path git sees and does not track and would not ignore: a file an agent's land put in the tree that
+ * nobody has `git add`ed yet, a new package's whole source. The half of "what is in this directory" that
+ * `trackedFiles` cannot answer, and the difference between a directory that is EMPTY of anything git would
+ * ever want (build output around a package that moved away) and one that is merely not committed yet. A rule
+ * that reads only the tracked set calls both a ghost, and a repair that deletes ghosts would delete the second. */
+export const untrackedFiles = () =>
+    (git("ls-files", "--others", "--exclude-standard", "-z") ?? "")
+        .split("\0")
+        .filter((path) => path !== "");

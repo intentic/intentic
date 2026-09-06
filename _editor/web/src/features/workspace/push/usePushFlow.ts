@@ -1,4 +1,4 @@
-import { type AgentHarness, type AgentProvider, type CommandRun, commandRunOutcome, type PushRun, modelPinKey } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type CommandRun, commandRunOutcome, type PushRun, modelPinKey, pushFixConversationId } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/ui";
 import { computed, ref, shallowRef, watch } from "vue";
 import { composeSession, startSession } from "../../agents/fleet/sessionSuggestion";
@@ -7,7 +7,7 @@ import type { Conversation } from "../../chat/session/conversation";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { prepushCommandOf } from "../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { checkFixPrompt, checkOutcome, outcomeSummary, pushFixPrompt } from "../health/fixProposal";
+import { checkFixPrompt, checkOutcome, fixSignature, outcomeSummary, pushFixPrompt } from "../health/fixProposal";
 import { type SyncTarget, useChanges } from "../changes/useChanges";
 import { usePrepush } from "./usePrepush";
 import { resetPushRuns, usePushRun } from "./usePushRun";
@@ -42,6 +42,12 @@ export interface PendingPush {
     readonly what: string;
     readonly targets: readonly SyncTarget[];
 }
+
+/* What a fix conversation's derived name is scoped to (conversation-ids.ts): the repos this push was about,
+ * sorted so that the same two repos in either order are the same scope. The failing gates alone would not do
+ * it — two workspaces can fail the same three gates, and their fixes are not each other's. */
+const scopeOf = (push: PendingPush): string =>
+    [...new Set(push.targets.map((target) => target.repo))].sort((left, right) => left.localeCompare(right)).join(`-`);
 
 // Which half of the flow is in flight. Undefined the moment it settles: nothing is "running" while a question
 // is waiting, and the two states drive different surfaces.
@@ -220,7 +226,14 @@ const send = async (push: PendingPush): Promise<void> => {
     question.value = refusalQuestion(push, refused);
     const byHook = runs.filter((run) => run.refusedBy === `hook`);
     if (byHook.length > 0) {
-        proposedFix.value = composeSession({ prompt: pushFixPrompt(byHook), ...fixWith, isolated: true });
+        proposedFix.value = composeSession({
+            prompt: pushFixPrompt(byHook),
+            ...fixWith,
+            isolated: true,
+            // Every repo that refused, and everything they refused on: one hook failure across three repos is
+            // one fix in one worktree (pushFixPrompt makes it one prompt), so it is one conversation.
+            conversationId: pushFixConversationId(byHook.map((run) => run.repo).join(`-`), fixSignature(byHook.map((run) => run.output).join(`\n`))),
+        });
     }
 };
 
@@ -351,6 +364,11 @@ export function usePushFlow() {
                     // fix belongs in a worktree of its own and arrives as a diff to review rather than as edits
                     // landing underneath the push the user is still deciding about.
                     isolated: true,
+                    /* NAMED AFTER WHAT FAILED, not after this press (conversation-ids.ts). The check runs again
+                     * every time the user tries the push, so the same broken tree raises this question two and
+                     * three times over; each press used to mint a fresh agent, and two of them on the same
+                     * gates is two worktrees, two branches and a land conflict between them. */
+                    conversationId: pushFixConversationId(scopeOf(push), fixSignature(settled.output)),
                 });
             }
         });

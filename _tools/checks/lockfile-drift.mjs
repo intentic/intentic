@@ -25,10 +25,10 @@
  * a name match, because the subtree is the point: 169 entries went dead behind those three, and only the
  * graph knows which. */
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { idOf, readCatalogs, readLockfile, readPackageManagerPin } from "./lib/lockfile.mjs";
 import { finish } from "./lib/report.mjs";
-import { packages, root } from "./lib/repo.mjs";
+import { packages, root, trackedFiles } from "./lib/repo.mjs";
 
 const { recorded, installed, catalogued, edges } = readLockfile();
 const catalogs = readCatalogs();
@@ -146,6 +146,52 @@ for (const importer of recorded.keys()) {
     }
 }
 
+/* AND EVERY ENVIRONMENT INSTALLS THAT SAME PNPM, which is the other half of the block above and the half that
+ * was missing while it cost the most.
+ *
+ * The rule above catches a lockfile whose recorded package manager is wrong. It cannot catch what PUT it there:
+ * a machine running a different pnpm from the one this repository pins. Both Dockerfiles corepack-prepare a
+ * version, the extension seed declares one of its own, and none of them was compared to anything — so a bump
+ * of the root pin left the images on the old one, an image's pnpm 11 rewrote `packageManagerDependencies` back
+ * to the pnpm-11 shape on every command it ran, the next pnpm 12 command anywhere removed it again, and the
+ * tree went dirty by itself between the two. Nine `fix: lock` commits in two weeks, and a manifest/lockfile
+ * lockstep at the push gate refusing pushes over a lockfile change nobody had made.
+ *
+ * BY DISCOVERY, not by a list (AGENTS.md): every tracked file that PINS a pnpm for somebody to run — a
+ * `packageManager` field, a `corepack prepare`. Both are structural, so prose that mentions a version (the
+ * worked example in workspace-setup's own comment and its test) is not swept up, and a fifth environment added
+ * tomorrow is compared without this file being edited. */
+{
+    const pin = rootManifest.packageManager;
+    const version = (spec) => spec.split("+")[0];
+    const elsewhere = [];
+    for (const path of trackedFiles()) {
+        const name = basename(path);
+        if (name === "package.json") {
+            if (path === "package.json") {
+                continue; // the pin itself
+            }
+            try {
+                const declared = JSON.parse(readFileSync(join(root, path), "utf8")).packageManager;
+                if (declared !== undefined) {
+                    elsewhere.push([path, declared]);
+                }
+            } catch {
+                // Unreadable or not JSON: the manifest checks above are what answer for that.
+            }
+        } else if (name.startsWith("Dockerfile")) {
+            for (const [, prepared] of readFileSync(join(root, path), "utf8").matchAll(/corepack\s+prepare\s+(\S+)/g)) {
+                elsewhere.push([path, prepared]);
+            }
+        }
+    }
+    for (const [path, declared] of elsewhere) {
+        if (version(declared) !== version(pin)) {
+            drift.push(`${path} installs ${declared}, package.json pins ${pin}: a checkout run by two pnpm versions rewrites the lockfile under itself`);
+        }
+    }
+}
+
 /* The catalogs, compared where both copies speak: an entry the lockfile snapshotted has to still say what
  * pnpm-workspace.yaml says, and has to still be in pnpm-workspace.yaml at all. Only where both speak, because
  * the two are not the same set: pnpm records an entry once some importer resolves through it, so a catalog may
@@ -217,7 +263,7 @@ finish(
     [
         `lockfile: ${importers.length} importers record the specifiers their package.json declares, ` +
             `${catalogued.values().reduce((all, entries) => all + entries.size, 0)} catalogued versions are the ones pnpm-workspace.yaml names, ` +
-            `and the recorded package manager is ${rootManifest.packageManager} and nothing beside it`,
+            `and the recorded package manager is ${rootManifest.packageManager}, which is what every environment that pins one installs`,
         `lockfile reachability: all ${edges.size} packages in the lockfile are depended on by something`,
     ],
 );

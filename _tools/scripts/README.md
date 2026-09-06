@@ -29,7 +29,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 | [npm-publish-retry.sh](lib/npm-publish-retry.sh) | the same judgment for an **npm publish** the transparency log dropped |
 | [desktop-artifacts.sh](lib/desktop-artifacts.sh) | what a desktop artifact is CALLED, for everything that builds, verifies or ships one |
 | [dind-host.sh](lib/dind-host.sh) | a clean Docker-in-Docker host to run a user's setup on (`start_dind_host`, `in_host`) |
-| [git.mjs](lib/git.mjs) | `git`, `changedPaths`, `isLinkedWorktree` — one spawn wrapper with the buffer a release range needs |
+| [git.mjs](lib/git.mjs) | `git`, `changedPaths` — one spawn wrapper with the buffer a release range needs (`isLinkedWorktree` lives beside the checks that ratchet, in [repo.mjs](../checks/lib/repo.mjs)) |
 | [steps.mjs](lib/steps.mjs) | the step runner the three verify tiers share: every reader speaks, then one digest |
 | [tree-verdict.mjs](lib/tree-verdict.mjs) | one measurement per tree, keyed by content, shared across checkouts |
 

@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 /* WHAT THE DIRECTORY TREE OWES AN AGENT THAT HAS TO FIND SOMETHING IN IT.
  *
- *   node _tools/checks/layout.mjs                  # every rule
- *   node _tools/checks/layout.mjs --prune          # delete the ghost directories instead of reporting them
+ *   node _tools/checks/layout.mjs                  # every rule (and the ghost sweep below, which always runs)
+ *   node _tools/checks/layout.mjs --prune          # the ghost sweep alone, for the callers that run before an install
  *   node _tools/checks/layout.mjs --write-baseline # adopt today's counts for the two ratcheted rules
  *
  * The measurement behind each rule is in docs/audits/directory-structure-audit.md, mined from 1,862 agent
  * conversations. The short version: an agent pays for structure in listings it cannot read, in names it
  * cannot tell apart, and in paths it guesses wrong. Six rules, each one a cost that was counted:
  *
- *   1. GHOSTS. A directory with zero tracked files still shows up in `ls`, still gets listed, still gets
- *      guessed at. Seventeen of them existed the day this was written, left behind by renames — build output
- *      of packages that had already moved. Nothing in git can remove them, so the rule names the directory
- *      and the command.
+ *   1. GHOSTS. A directory with nothing in it git would keep still shows up in `ls`, still gets listed, still
+ *      gets guessed at. Seventeen of them existed the day this was written, left behind by renames — build
+ *      output of packages that had already moved. This one is REPAIRED rather than reported (see the sweep
+ *      below): nothing in git can remove a ghost, so a rule that only named it refused the same tree on every
+ *      push until somebody typed the `rm -rf` by hand.
  *   2. FAN-OUT. A directory of 159 files answers a listing with 4,000 characters an agent has to read before
  *      it can do anything. 29 listings of `_editor/web` came back that big in one month.
  *   3. TWINS. `agent/` beside `agents/`: 84 sessions read both, most of them by accident. A pair like that is
@@ -28,11 +29,22 @@
  *
  * TWO OF THE SIX ARE RATCHETED (fan-out, basename collisions) because they cannot be brought to zero in one
  * change: `_tools/checks/baselines/layout.json` records today's violators, an entry may only shrink or be
- * deleted, and anything not listed fails on its first offence. The other four are absolute. */
+ * deleted, and anything not listed fails on its first offence. One is REPAIRED (ghosts). The other three are
+ * absolute.
+ *
+ * A RATCHET FAILS ON GROWTH AND ONLY ON GROWTH. It used to fail the other way too, "the baseline allows 37, the
+ * tree now has 36: lower it in the same change", so that the file kept describing the tree. With a dozen
+ * conversations landing into one tree that rule turned every deletion into everyone else's red: an agent
+ * removed one component, and every other agent's turn and the owner's next push were refused over a number in
+ * a file none of them had touched, until somebody edited the shared baseline, and two of them editing it was a
+ * merge conflict. So an entry the tree has beaten is TIGHTENED HERE, by this check, wherever the write can
+ * become a commit, and merely reported everywhere else (lib/repo.mjs's `writesBaselines` decides which is
+ * which). Nothing fails for having improved, and the ratchet still cannot slip, because it is this check that
+ * lowers it. */
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { finish } from "./lib/report.mjs";
-import { EXCLUDED, SKIP_DIRS, packages, root, trackedFiles } from "./lib/repo.mjs";
+import { EXCLUDED, packages, root, SKIP_DIRS, trackedFiles, untrackedFiles, writesBaselines } from "./lib/repo.mjs";
 
 const BASELINE = join(root, "_tools/checks/baselines/layout.json");
 const writeBaseline = process.argv.includes("--write-baseline");
@@ -56,6 +68,12 @@ for (const path of tracked) {
 /* ── 1. Ghosts ─────────────────────────────────────────────────────────────────────────────────────────────
  * A directory git has never heard of, at a depth where an agent orienting itself will see it: the parts and
  * their packages, and the modules inside a package's src/.
+ *
+ * "NEVER HEARD OF" MEANS NO TRACKED FILE AND NO UNTRACKED ONE IT WOULD NOT IGNORE. A land puts an agent's new
+ * package in the owner's tree as files nobody has `git add`ed yet; by the tracked set alone that directory is a
+ * ghost, and `--prune` would have deleted a turn's work. What makes a ghost is that everything under it is
+ * IGNORED (dist, node_modules, .turbo, a tsbuildinfo) or nothing at all: the build output a rename leaves
+ * around a directory that has no source left.
  *
  * THE ONE PLACE THIS CANNOT JUDGE is an agent's own worktree. A worktree checks out tracked files only, and
  * the isolation layer then mounts the main checkout's node_modules/dist over the same paths — which
@@ -85,7 +103,8 @@ const childDirs = (dir) => {
         .map((entry) => (dir === "" ? entry.name : `${dir}/${entry.name}`));
 };
 
-const hasTracked = (dir) => tracked.some((path) => path.startsWith(`${dir}/`));
+const untracked = untrackedFiles();
+const hasContent = (dir) => tracked.some((path) => path.startsWith(`${dir}/`)) || untracked.some((path) => path.startsWith(`${dir}/`));
 
 const ghostCandidates = [
     ...childDirs("").flatMap((part) => [part, ...childDirs(part)]),
@@ -94,7 +113,7 @@ const ghostCandidates = [
 const ghosts = [];
 const mirroredGhosts = [];
 for (const dir of ghostCandidates) {
-    if (hasTracked(dir) || EXCLUDED.has(dir)) {
+    if (hasContent(dir) || EXCLUDED.has(dir)) {
         continue;
     }
     (isMirrored(dir) ? mirroredGhosts : ghosts).push(dir);
@@ -102,20 +121,41 @@ for (const dir of ghostCandidates) {
 // A ghost inside another ghost is one removal, not two.
 const topGhosts = ghosts.filter((dir) => !ghosts.some((other) => dir.startsWith(`${other}/`)));
 
-/* --prune: DELETE the ghosts rather than report them. Ghosts are untracked by definition, so no commit can
- * remove one — they accumulate wherever a checkout outlives a rename, which is exactly CI's persistent runner
- * workspaces (checkout there is `clean: false` so a warm node_modules survives, and a moved package's old
- * directory keeps its own node_modules/dist forever). Preflight prunes before it checks. Mirrored ghosts stay
- * untouched: their content is a mount of the main checkout, and removing a mount's root is what
- * @intentic/constants/mirror-roots exists to forbid. */
+/* A GHOST IS REPAIRED, NOT REPORTED. It used to be a failure with `rm -rf …` in the message, and that message
+ * was the single most expensive line in this repository: ghosts are untracked by definition, so no commit can
+ * remove one and no branch can carry the fix. They accumulate wherever a checkout outlives a rename — CI's
+ * persistent runner workspaces (checkout there is `clean: false`, so a warm node_modules survives and a moved
+ * package's old directory keeps its dist forever) and the owner's own tree, where every landed rename leaves
+ * one. So the same tree went red on every push, the failure named a one-second `rm -rf`, and the agent sent
+ * after it was working in a worktree where the isolation layer had mounted those paths back in and the failure
+ * did not exist. Three separate changes added `--prune` in three separate places and the owner's tree still had
+ * none.
+ *
+ * Deleting is safe because of the definition above: a ghost holds no tracked file and no untracked file git
+ * would not ignore, so everything under it is build output (dist, node_modules, .turbo, a tsbuildinfo) or
+ * nothing at all. A land's brand-new package, whose source nobody has `git add`ed yet, is untracked-but-not-
+ * ignored and is therefore not a ghost — which is the bug the tracked-set-only version of this rule had, and
+ * the reason the repair could not be turned on until `untrackedFiles` existed.
+ *
+ * MIRRORED GHOSTS STAY UNTOUCHED and stay unjudgeable: their remaining content is a mount of the main
+ * checkout, removing an overlay's root is what @intentic/constants/mirror-roots exists to forbid, and the tree
+ * that can fix them is the one without the mounts.
+ *
+ * `--prune` now means "repair and stop", for the two callers that run before an install rather than as a check:
+ * CI's preflight, and the pnpm-setup composite (a stale directory with a node_modules in it is something the
+ * install itself trips over, so it is cleared before pnpm runs, not after). */
+const swept = [];
+for (const dir of topGhosts) {
+    rmSync(join(root, dir), { recursive: true, force: true });
+    swept.push(dir);
+}
+if (swept.length > 0) {
+    console.log(`layout: swept ${swept.length} ghost director${swept.length === 1 ? "y" : "ies"} a rename left behind: ${swept.join(", ")}`);
+}
+if (mirroredGhosts.length > 0) {
+    console.log(`layout: ${mirroredGhosts.length} ghost director${mirroredGhosts.length === 1 ? "y is" : "ies are"} mirror mounts of a tree this worktree cannot fix; the primary checkout sweeps them`);
+}
 if (prune) {
-    for (const dir of topGhosts) {
-        rmSync(join(root, dir), { recursive: true, force: true });
-    }
-    console.log(
-        `layout: pruned ${topGhosts.length} ghost director${topGhosts.length === 1 ? "y" : "ies"}${topGhosts.length > 0 ? `: ${topGhosts.join(", ")}` : "" 
-            }${mirroredGhosts.length > 0 ? ` (${mirroredGhosts.length} left: mirror mounts of a tree this worktree cannot fix)` : ""}`,
-    );
     process.exit(0);
 }
 
@@ -283,33 +323,51 @@ if (writeBaseline) {
 }
 const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { fanOut: {}, collisions: {} };
 
-// A ratcheted rule fails two ways: a count that grew, and an entry the tree has already beaten (which has to
-// be lowered in the same change, or the ratchet quietly stops holding).
+/* A ratcheted rule fails one way: a count that grew. An entry the tree has already beaten is TIGHTENED to what
+ * the tree has (or dropped, at zero) rather than failed: the header says why. `tightened` is what changed, so
+ * the run can say so, and the write below happens once for both rules. */
 const ratchet = (found, allowed, describe) => {
     const grown = [...found]
         .filter(([key, count]) => count > (allowed[key] ?? 0))
         .map(([key, count]) => `${describe(key, count)}${allowed[key] === undefined ? "" : `, the baseline allows ${allowed[key]}`}`);
-    const stale = Object.entries(allowed)
-        .filter(([key, count]) => (found.get(key) ?? 0) < count)
-        .map(([key, count]) => `${key}: the baseline allows ${count}, the tree now has ${found.get(key) ?? 0}: lower or remove its entry in ${"_tools/checks/baselines/layout.json"}`);
-    return [grown, stale];
+    const tightened = [];
+    const next = { ...allowed };
+    for (const [key, count] of Object.entries(allowed)) {
+        const now = found.get(key) ?? 0;
+        if (now < count) {
+            tightened.push(`${key}: ${count} → ${now}`);
+            if (now === 0) {
+                delete next[key];
+            } else {
+                next[key] = now;
+            }
+        }
+    }
+    return [grown, tightened, next];
 };
-const [fanOutGrown, fanOutStale] = ratchet(fanOut, baseline.fanOut ?? {}, (dir, count) => `${dir}: ${count} files`);
-const [collisionsGrown, collisionsStale] = ratchet(collisions, baseline.collisions ?? {}, (pkg, count) => `${pkg}: ${count} colliding basename(s)`);
+const [fanOutGrown, fanOutTightened, fanOutNext] = ratchet(fanOut, baseline.fanOut ?? {}, (dir, count) => `${dir}: ${count} files`);
+const [collisionsGrown, collisionsTightened, collisionsNext] = ratchet(collisions, baseline.collisions ?? {}, (pkg, count) => `${pkg}: ${count} colliding basename(s)`);
+const tightened = [...fanOutTightened, ...collisionsTightened];
+if (tightened.length > 0) {
+    if (writesBaselines()) {
+        writeFileSync(BASELINE, `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(fanOutNext))), collisions: asObject(new Map(Object.entries(collisionsNext))) }, null, 4)}\n`);
+        console.log(`layout: tightened _tools/checks/baselines/layout.json to what the tree has (${tightened.join(", ")}); it rides the next commit`);
+    } else {
+        console.log(`layout: the tree beats its baseline (${tightened.join(", ")}); the checkout that commits tightens _tools/checks/baselines/layout.json on its next run`);
+    }
+}
+const twinsRetired = [...TOLERATED_TWINS.keys()].filter((key) => !seenTwins.has(key));
+if (twinsRetired.length > 0) {
+    console.log(`layout: TOLERATED_TWINS names ${twinsRetired.join(", ")}, no longer a pair: drop the entry when you next edit _tools/checks/layout.mjs`);
+}
 
 finish(
     [
-        [
-            "these directories hold no tracked file: they are what a rename left behind, and every `ls` still shows them\n" +
-                `  remove them: rm -rf ${topGhosts.join(" ")}`,
-            topGhosts,
-        ],
         [
             `these directories hold more than ${MAX_FILES_PER_DIR} files, so listing one costs an agent a page it has to read before it can act\n` +
                 "  split by what the files DO (see docs/audits/directory-structure-audit.md), or lower the entry in _tools/checks/baselines/layout.json",
             fanOutGrown,
         ],
-        ["a directory in _tools/checks/baselines/layout.json is no longer that full: lower or remove its entry in the same change", fanOutStale],
         [
             "these sibling directories differ by one character, so neither listing nor a guessed path can tell them apart\n" +
                 "  rename one, or — if both names are wire groups — the pair is vocabulary and belongs in TOLERATED_TWINS with its reason",
@@ -317,16 +375,10 @@ finish(
         ],
         ["a package's directory name must be its npm name without the scope (ARCHITECTURE.md, Conventions)", nameMismatches],
         [
-            "TOLERATED_TWINS in _tools/checks/layout.mjs names a pair that is no longer a pair: remove the entry in the\n" +
-                "  same change, or the list stops describing the tree",
-            [...TOLERATED_TWINS.keys()].filter((key) => !seenTwins.has(key)),
-        ],
-        [
             "these packages hold two files with the same name, so a guessed path lands on the wrong one\n" +
                 "  rename by what each one does, or lower the entry in _tools/checks/baselines/layout.json",
             collisionsGrown,
         ],
-        ["a package in _tools/checks/baselines/layout.json no longer collides that often: lower or remove its entry", collisionsStale],
         [
             "these lines name a directory this repository removed, which is where agents keep learning to type it\n" +
                 "  point them at the real path (see DEAD_NAME_OK in _tools/checks/layout.mjs for the mentions that are about somebody else's tree)",
@@ -334,7 +386,7 @@ finish(
         ],
     ],
     [
-        `${ghostCandidates.length} directories at part, package and module level: no ghosts${ 
+        `${ghostCandidates.length} directories at part, package and module level: no ghosts${swept.length > 0 ? ` (${swept.length} swept)` : ""}${
             mirroredGhosts.length > 0 ? ` (${mirroredGhosts.length} unjudgeable here: mirror mounts of a tree this worktree cannot fix)` : ""}`,
         `${packages.length} packages: every directory named after its package, no new over-full directory, no new colliding basename, no twin siblings outside the wire's own vocabulary`,
         `${tracked.length} tracked files: no dead directory name`,

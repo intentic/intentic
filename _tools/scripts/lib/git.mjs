@@ -43,9 +43,3 @@ export const changedPaths = (root) => {
               .filter(Boolean)
               .map((line) => line.slice(3).trim().split(" -> ").at(-1));
 };
-
-/* Whether this checkout is a linked worktree rather than the primary one — a checkout whose git dir is not its
- * common dir. Every agent turn runs in one, and it is what decides whether `pnpm build` can run at all: pnpm
- * hardlinks into `node_modules` after a build, a worktree's `node_modules` is a different filesystem, and the
- * run dies EXDEV. */
-export const isLinkedWorktree = (root) => git(root, "rev-parse", "--git-dir")?.trim() !== git(root, "rev-parse", "--git-common-dir")?.trim();

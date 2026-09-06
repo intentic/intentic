@@ -205,3 +205,38 @@ const repoSlug = (repo: string): string =>
         .slice(0, REPO_SLUG_MAX)
         .replace(/^-+|-+$/g, "") || "repo";
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
+
+/* WHAT A PUSH-CHECK FIX CONVERSATION IS CALLED, derived for the same reason the CI one is and keyed by
+ * something different, because a refused push has no run number to be keyed by.
+ *
+ * The CI board answers "is anybody already on this?" from a run id. The push gate has none: the check runs on
+ * the owner's machine, against a working tree, as often as they press the button. So the key is WHAT FAILED —
+ * the set of gate names the run refused on (fixProposal.ts's `fixSignature` extracts it) — and that turns out
+ * to be the better key anyway, because it is what makes two failures THE SAME FAILURE. A red check, a fix
+ * agent, another push, the same three gates red again: the second press continues the conversation that is
+ * already looking at those three gates instead of opening a rival agent on a rival branch, which is what a run
+ * id would have done.
+ *
+ * The waste this was written for: two presses three minutes apart put two frontier agents on the same five
+ * gates, one hit a land conflict against the other, and $13.74 and four turns later the failure had been fixed
+ * three times — twice by them and once by the owner's own tree landing the same repair.
+ *
+ * The signature is HASHED where the run id was spelled, because the alternative is a branch name with
+ * "checkout-gates-lint-assertion-ratchet" in it. The pairing is still readable from the other end: the fix
+ * agent's first message quotes the gates by name. */
+export const PUSH_FIX_PREFIX = "push-fix-";
+
+/* FNV-1a over the signature, base36. A hash rather than a cryptographic digest because nothing here is a
+ * secret and nothing is defended: the only property needed is that the same failure produces the same seven
+ * characters in every browser and in node, which is what makes the id re-derivable rather than recorded. */
+const FNV_OFFSET = 0x811c_9dc5;
+const FNV_PRIME = 0x0100_0193;
+const digest = (text: string): string => {
+    let hash = FNV_OFFSET;
+    for (let index = 0; index < text.length; index += 1) {
+        hash = Math.imul(hash ^ text.charCodeAt(index), FNV_PRIME);
+    }
+    return (hash >>> 0).toString(36).padStart(7, "0");
+};
+
+export const pushFixConversationId = (scope: string, signature: string): string => `${PUSH_FIX_PREFIX}${repoSlug(scope)}-${digest(signature)}`;

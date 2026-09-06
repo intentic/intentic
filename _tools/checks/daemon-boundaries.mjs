@@ -11,7 +11,8 @@
  *
  * Two shapes are recognized, each by reading the source, and each is held to a backlog that may shrink and
  * may not grow (the same mechanism as invariant-registry.mjs: the debt is a list in the open, a new entry fails
- * by name, a stale entry fails too):
+ * by name, a stale entry is REPORTED and never fails: with a dozen conversations landing into one tree, the
+ * turn that removed a cycle is not the one that should be refused for it, and neither is everyone else's):
  *
  *   1. A NARROW TAKER OF `Services`. composition.ts states the rule in its own words: "Take the whole thing
  *      where you pass the whole thing on; name what you use where you use a few." A module that binds a
@@ -196,11 +197,10 @@ for (const path of narrowTakers) {
         );
     }
 }
+const retired = [];
 for (const path of NARROW_TAKERS) {
     if (!narrowTakers.has(path)) {
-        failures.push(
-            `NARROW_TAKERS names ${path}, which no longer takes Services whole (or no longer exists): remove it from the list in the same change`,
-        );
+        retired.push(`NARROW_TAKERS names ${path}, which no longer takes Services whole (or no longer exists)`);
     }
 }
 
@@ -284,8 +284,12 @@ for (const pair of mutual) {
 }
 for (const pair of MUTUAL_PAIRS) {
     if (!mutual.has(pair)) {
-        failures.push(`MUTUAL_PAIRS names '${pair}', which is no longer a cycle: remove it from the list in the same change`);
+        retired.push(`MUTUAL_PAIRS names '${pair}', which is no longer a cycle`);
     }
+}
+// Debt that has been paid: said, so the list gets trimmed when this file is next edited, and never a refusal.
+for (const line of retired) {
+    console.log(`verify-daemon-boundaries: ${line}: drop it from the list when you next edit this file`);
 }
 
 if (failures.length > 0) {
