@@ -21,7 +21,8 @@ import { useLayout } from "../useLayout";
  *   - THE ORDER (`largestFirst`). The obvious move is to sort the biggest to the top, and on its own it is the
  *     wrong default: path order is stable, learned, and the thing a reader navigates by, and the grouping over it
  *     (repo, then package) is how attention gets allocated in the first place. So it is a reading the user asks
- *     for, and when they ask, it is applied WITHIN the hierarchy rather than flattening it, see the panels.
+ *     for ONCE, in Settings › Appearance, and when they ask, it is applied WITHIN the hierarchy rather than
+ *     flattening it, see the panels.
  *
  * ADDED LINES ARE THE MEASURE, NOT TOTAL CHURN, and this is the decision the whole file turns on.
  *
@@ -110,6 +111,11 @@ export const sumShown = (stats: readonly ShownStat[]): ShownStat =>
  * same reason: "how do I read a change list" is not a question anyone wants to answer twice, and the workspace's
  * Changes panel and the fleet's agent review disagreeing about the order of one change set is exactly the seam
  * that makes two panels feel like two products.
+ *
+ * ASKED FOR IN ONE PLACE, Settings › Appearance, and nowhere else. The panels used to carry a toggle of their own
+ * on the Changes bar and the agent review's bar, and it was a control too many: a reading you set once and forget
+ * does not need a button parked over every list that obeys it, and three copies of it made two review surfaces
+ * look busier than the thing they were reviewing.
  *
  * OFF by default. Path order is what a reader navigates by and what every other git surface shows them; the rail
  * already answers "which is the big one" without moving anything, so the reorder is left as the stronger ask it

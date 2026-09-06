@@ -29,7 +29,6 @@ import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from
 import { useChangeGrouping } from "../composables/workspace/useChangeGrouping";
 import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../composables/workspace/changeWeight";
 import ChangeRowName from "../components/ChangeRowName.vue";
-import ChangeOrderButton from "../components/ChangeOrderButton.vue";
 import ModuleLabel from "../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
@@ -873,11 +872,6 @@ const endResize = (event: PointerEvent): void => {
                     <span class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
                         <Icon name="check" class="text-2xs" />{{ bodyViewed }}/{{ bodyFiles.length }}
                     </span>
-                    <!-- The stronger half of "show me what matters": the rails on the rows rank the list without
-                         moving it, and this reorders it, at repo, package and row scope alike. At the bar's
-                         right edge, where this panel's other actions live, and shared verbatim with the
-                         workspace's Changes panel, which offers the same preference from its own bar. -->
-                    <ChangeOrderButton />
                 </div>
 
                 <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">

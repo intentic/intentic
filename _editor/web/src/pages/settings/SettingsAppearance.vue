@@ -32,7 +32,8 @@ const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
-// The review lists' reading, the same preference the Changes panel's own header toggle flips.
+// The review lists' reading. Grouping is also flipped from the Changes panel's own header toggle; the order is
+// asked for here alone (changeWeight.ts) — it is set once, so it does not need a button over every list it moves.
 const { groupByModule } = useChangeGrouping();
 const { largestFirst } = useChangeWeight();
 // How much of an agent's working-out a transcript shows, the same preference the chat's own readout row flips,
@@ -200,7 +201,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>
             <!-- The reorder half of "which of these files matters" (composables/workspace/changeWeight.ts). The
-                 other half, the rail beside every row's +/−, is always on and has nothing to switch. -->
+                 other half, the rail beside every row's +/−, is always on and has nothing to switch. Like the
+                 diff landing below, this is the only place it is asked for: it is a reading you settle once. -->
             <Row
                 as="label"
                 icon="sort-desc"
