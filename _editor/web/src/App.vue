@@ -11,14 +11,14 @@
      definition: an account, and a sandbox for it to be pointed at. Signed out there is nothing to connect to,
      and with no sandbox selected there is nothing to connect to yet. -->
 <script setup lang="ts">
-import HostModelPicker from "./chat/HostModelPicker.vue";
+import HostModelPicker from "./features/chat/models/HostModelPicker.vue";
 import { watch } from "vue";
 import { useRouter } from "vue-router";
-import { useAuth } from "./composables/useAuth";
-import { useSandbox } from "./composables/sandbox/useSandbox";
-import { startNotificationSources } from "./composables/notificationSources";
-import NotificationHost from "./shell/NotificationHost.vue";
-import GoogleSigninGate from "./sandbox-gates/GoogleSigninGate.vue";
+import { useAuth } from "./features/auth/useAuth";
+import { useSandbox } from "./features/sandbox/client/useSandbox";
+import { startNotificationSources } from "./shell/notifications/notificationSources";
+import NotificationHost from "./shell/notifications/NotificationHost.vue";
+import GoogleSigninGate from "./features/sandbox/gates/GoogleSigninGate.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 
 const { user } = useAuth();

@@ -16,8 +16,8 @@
         { "path": "../../_deploy/state-resolver" },
         { "path": "../../_deploy/engine" },
         { "path": "../../_deploy/providers" },
-        { "path": "../../_sandbox/sandbox-contract" },
-        { "path": "../../_sandbox/sandbox-run" },
+        { "path": "../../_shared/sandbox-contract" },
+        { "path": "../../_shared/sandbox-run" },
         { "path": "../../_sandbox/scaffold" },
         { "path": "../../_deploy/sdk" }
     ],

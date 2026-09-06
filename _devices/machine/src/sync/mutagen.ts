@@ -457,7 +457,7 @@ interface DownloadOptions {
  * agent's own `upgrade` uses to fetch a ~95 MB binary, on machines that were sometimes doing nothing else well.
  * It also meant a transfer that dropped at 90% had achieved nothing at all.
  *
- * The shape is the one downloadWeights already uses for model files (localmodel.ts): ask for a range when
+ * The shape is the one downloadWeights already uses for model files (localmodel.handler.ts): ask for a range when
  * there is something to continue, believe only a 206 about it, and write with backpressure rather than
  * queueing every chunk in memory behind a slow disk. A failure mid-flight LEAVES the part file — that is what
  * the next attempt continues from, and why `resume` is the caller's decision rather than this one's. */

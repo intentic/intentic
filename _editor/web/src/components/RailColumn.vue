@@ -18,8 +18,8 @@
      whatever surface hosts it. -->
 <script setup lang="ts">
 import { ref } from "vue";
-import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../composables/rail";
-import { toAppPx, uiLength } from "../composables/uiScale";
+import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/board/columnWidth";
+import { toAppPx, uiLength } from "../shell/window/uiScale";
 
 const frame = ref<HTMLElement | null>(null);
 const resizing = ref(false);

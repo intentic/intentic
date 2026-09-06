@@ -11,7 +11,7 @@ import HoverCard from "./HoverCard.vue";
 
 // The bytes behind a workspace path are fetched off the daemon; the card's job here is only to ask for them and
 // draw what comes back, so the fetch is stubbed and the src it produces is what the test reads.
-vi.mock(`../composables/chat/attachmentPreviews`, () => ({ attachmentPreview: (path: string) => `blob:${path}` }));
+vi.mock(`../features/chat/drafts/attachmentPreviews`, () => ({ attachmentPreview: (path: string) => `blob:${path}` }));
 
 // The anchor a real trigger would be: show() measures event.currentTarget, so it has to be a live element.
 // jsdom lays nothing out, so a placement test hands in the box the anchor would have had on screen.

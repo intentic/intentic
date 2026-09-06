@@ -11,9 +11,9 @@
     "references": [
         { "path": "../../_tools/base" },
         { "path": "../../_devices/browser" },
-        { "path": "../../_devices/desktop" },
+        { "path": "../../_devices/desktop-automation" },
         { "path": "../../_devices/local-agent" },
-        { "path": "../../_sandbox/sandbox-contract" }
+        { "path": "../../_shared/sandbox-contract" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

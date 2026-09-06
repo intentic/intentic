@@ -41,7 +41,7 @@ jobs:
   # credential must not do is fail the job.
   #
   # `pnpm e2e` is the WHOLE scope on purpose — the turbo task name is what decides which tiers run, not a
-  # filter list here that would drift the first time a suite is added. The browser tier (@intentic-app/e2e) is
+  # filter list here that would drift the first time a suite is added. The browser tier (@intentic/e2e) is
   # `e2e:browser` for exactly that reason: it addresses its stack on localhost, which is nobody's postgres here.
   e2e:
     runs-on: [self-hosted, intentic]
@@ -83,7 +83,7 @@ jobs:
       - run: mkdir -p "$HOME/.cache" "$GITHUB_WORKSPACE/.cache/intentic-e2e" && ln -sfn "$GITHUB_WORKSPACE/.cache/intentic-e2e" "$HOME/.cache/intentic-e2e"
       - run: pnpm e2e
 
-  # THE ONBOARDING JOURNEY (@intentic-app/onboarding), once per way of getting a sandbox.
+  # THE ONBOARDING JOURNEY (@intentic/onboarding), once per way of getting a sandbox.
   #
   # It stands the whole platform up from the branch's own images and walks a new account through the wizard to
   # a connected sandbox, twice: through the compose file that wizard renders, and through `ic sandbox connect`,
@@ -138,7 +138,7 @@ jobs:
         working-directory: _tools/onboarding
       # musl/static, so the same binary runs wherever this tier puts it.
       - run: bash _tools/scripts/build/build-ic.sh linux-x64
-      - run: pnpm --filter @intentic-app/onboarding e2e:onboarding
+      - run: pnpm --filter @intentic/onboarding e2e:onboarding
 
   # Desktop verification tier 3: verify-desktop-setup.sh runs the connect.sh EXTRACTED FROM THE INSTALLER on a
   # clean Docker host and waits for the sandbox daemon to answer /health. It pulls the sandbox image, so it is

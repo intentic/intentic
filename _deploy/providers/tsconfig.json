@@ -12,7 +12,7 @@
         { "path": "../../_tools/base" },
         { "path": "../graph" },
         { "path": "../engine" },
-        { "path": "../../_sandbox/sandbox-run" }
+        { "path": "../../_shared/sandbox-run" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

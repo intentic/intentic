@@ -1,4 +1,4 @@
-import { type Desktop, DesktopError, type WindowInfo } from "@intentic/desktop";
+import { type Desktop, DesktopError, type WindowInfo } from "@intentic/desktop-automation";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 

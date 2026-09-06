@@ -52,12 +52,16 @@ export const sourceAliases = (): Record<string, string> => ({
     // Ahead of `@intentic/ui/markdown` as well as of the barrel, because a string alias matches `<key>/…` and
     // the two names share a prefix: listed after it, `…/markdown-document` resolves to a directory INSIDE the
     // markdown engine and the import dies with ENOTDIR.
-    "@intentic/ui/markdown-document": fromRoot("_editor/ui/src/components/markdownDocument.ts"),
+    "@intentic/ui/markdown-document": fromRoot("_editor/ui/src/components/markdown/markdownDocument.ts"),
     "@intentic/ui/markdown": fromRoot("_editor/ui/src/markdown/index.ts"),
     // Same reason and the same ordering requirement: the DAG layout is plain TypeScript that DagGraph and its
     // unit tests both call, and a test for a pure function must not have to boot the component graph (and a DOM
     // with it) to reach it.
-    "@intentic/ui/dag": fromRoot("_editor/ui/src/components/dagLayout.ts"),
+    // Two components a bundle may want without the barrel — the shared transcript page pulls exactly these
+    // two and nothing else. Ahead of the barrel for the same reason as the markdown pair above.
+    "@intentic/ui/icon": fromRoot("_editor/ui/src/components/primitives/Icon.vue"),
+    "@intentic/ui/markdown-view": fromRoot("_editor/ui/src/components/markdown/Markdown.vue"),
+    "@intentic/ui/dag": fromRoot("_editor/ui/src/components/charts/dagLayout.ts"),
     // Same reason and the same ordering requirement again: splitting a path into name + directory is what every
     // file row in the app does, including the ones in unit-tested pure modules (fileType.ts, explorerPaste.ts).
     "@intentic/ui/path": fromRoot("_editor/ui/src/lib/path.ts"),
@@ -73,11 +77,11 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/ui/highlighter": fromRoot("_editor/ui/src/composables/useHighlighter.ts"),
     // Same again: the chart palette's slot→colour lookup is called by the usage/savings PROJECTIONS, which are
     // pure functions with their own unit tests, reaching it through the barrel boots Picker.vue and wants a DOM.
-    "@intentic/ui/series": fromRoot("_editor/ui/src/components/seriesAccent.ts"),
+    "@intentic/ui/series": fromRoot("_editor/ui/src/components/charts/seriesAccent.ts"),
     // And again: what a failure IS, the shape, the severity order, the duplicate collapsing, is plain data
     // reached by composables that never render (useAsyncAction builds one from a caught value) and by their
     // unit tests. <Notice> and <NoticeStack> come from the barrel like every other component.
-    "@intentic/ui/notice": fromRoot("_editor/ui/src/components/notice.ts"),
+    "@intentic/ui/notice": fromRoot("_editor/ui/src/components/feedback/notice.ts"),
     // And once more: the 1h/24h/7d/All vocabulary is arithmetic over a timestamp, called by the feeds' pure
     // projections and pinned by their unit tests, none of which should need a DOM to ask how far back "7d" is.
     "@intentic/ui/time": fromRoot("_editor/ui/src/lib/timeWindow.ts"),
@@ -108,7 +112,7 @@ export const sourceAliases = (): Record<string, string> => ({
     // And again, for the gate an extension's own artwork passes through on its way to an <img>: it decides what
     // a registry row is allowed to paint, which is a claim worth a test, and one that must not need a DOM, a
     // network, or <BrandMark> itself to be asked.
-    "@intentic/ui/brand-mark": fromRoot("_editor/ui/src/components/brandMark.ts"),
+    "@intentic/ui/brand-mark": fromRoot("_editor/ui/src/components/brand/brandMark.ts"),
     // And again, for what every one of those settings is DECLARED with: the preference primitive is reached by
     // plain state modules all over the app (every `ui-*` key in web/composables goes through it), and it is
     // itself nothing but vue and localStorage. Through the barrel, asking which theme is on would cost mermaid.
@@ -127,11 +131,11 @@ export const sourceAliases = (): Record<string, string> => ({
     // draws it, and the Devices tab's own derivations (deviceFacts.ts) reason over the same shapes without
     // rendering anything, so through the barrel a pure module's unit test would boot the component graph, whose
     // theme reader touches `document` at import time.
-    "@intentic/ui/device": fromRoot("_editor/ui/src/components/deviceDetail.ts"),
+    "@intentic/ui/device": fromRoot("_editor/ui/src/components/sandbox/deviceDetail.ts"),
     // And its neighbour, for what a sandbox's SHARE of that device means: where the Resources form starts, what
     // the engine will accept, and what changed when Apply is pressed. <SandboxResourcesDialog> draws it, and the
     // test that pins the arithmetic must not have to boot the component graph to add two GiB.
-    "@intentic/ui/sandbox-resources": fromRoot("_editor/ui/src/components/sandboxResources.ts"),
+    "@intentic/ui/sandbox-resources": fromRoot("_editor/ui/src/components/sandbox/sandboxResources.ts"),
     // And again, for the guard that keeps a stylesheet from being replaced by a write that changes nothing. The
     // dev-style manifest (vite.shared.ts) installs it on Vite's own `<style data-vite-dev-id>` nodes before the
     // app mounts, from a generated module that holds imports and one call — nothing there can afford the
@@ -146,37 +150,37 @@ export const sourceAliases = (): Record<string, string> => ({
      * it was about to provide.
      *
      * Subpath before barrel, per the note at the top of this file. */
-    "@intentic/extension-ui/names": fromRoot("_editor/extension-ui/names.mjs"),
-    "@intentic/extension-ui/format": fromRoot("_editor/extension-ui/src/format.ts"),
-    "@intentic/extension-ui": fromRoot("_editor/extension-ui/src/index.ts"),
-    "@intentic-app/api-contract": fromRoot("_platform/api-contract/src/index.ts"),
+    "@intentic/extension-ui/names": fromRoot("_shared/extension-ui/names.mjs"),
+    "@intentic/extension-ui/format": fromRoot("_shared/extension-ui/src/format.ts"),
+    "@intentic/extension-ui": fromRoot("_shared/extension-ui/src/index.ts"),
+    "@intentic/api-contract": fromRoot("_shared/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the
     // cost was a silent wrong answer rather than a build error: the app resolved its `dist` instead, so a new
     // CAPABILITY_CATEGORIES entry did not exist as far as `contributionCard` was concerned and every card
     // declaring it fell through to the "extend" catch-all, a card in the wrong section, with nothing failing.
-    "@intentic-app/capability-catalog": fromRoot("_platform/capability-catalog/src/index.ts"),
+    "@intentic/capability-catalog": fromRoot("_shared/capability-catalog/src/index.ts"),
     // Same reason as the markdown subpath above, and the same ordering requirement: the session-name derivation
     // is a dependency-free leaf that the daemon, the app and an extension all reach for, so it is exported off
     // the barrel (a unit test that only wants a session name must not resolve the whole wire contract).
-    "@intentic/sandbox-contract/session-names": fromRoot("_sandbox/sandbox-contract/src/session-names.ts"),
+    "@intentic/sandbox-contract/session-names": fromRoot("_shared/sandbox-contract/src/ids/session-names.ts"),
     // The chore book, what routine maintenance a repository is owed, and the verdict logic the Maintenance
     // surface, its rail badge and the codebase-health panel's refactor asks all run. Off the barrel for the same
     // reason as the two above: it is derivation over the wire types rather than the wire itself, and a caller
     // that only wants to compose an ask must not resolve every schema in the contract to get there.
-    "@intentic/sandbox-contract/chores": fromRoot("_sandbox/sandbox-contract/src/chores/index.ts"),
+    "@intentic/sandbox-contract/chores": fromRoot("_shared/sandbox-contract/src/chores/index.ts"),
     // The transcript fold, the one that turns a turn's frames into the rows every reader draws: the daemon runs
     // it, and the chat applies its patches. Off the barrel for the same reason again, it is derivation over the
     // wire types, and the chat's transcript state (and its unit tests) reach it without the wire behind it.
-    "@intentic/sandbox-contract/transcript-fold": fromRoot("_sandbox/sandbox-contract/src/transcript-fold.ts"),
+    "@intentic/sandbox-contract/transcript-fold": fromRoot("_shared/sandbox-contract/src/text/transcript-fold.ts"),
     // The batch-run substrate, where a batch's conversation ids, run ids and manifest paths are DERIVED, shared
     // by acceptance, documentation and maintenance so the three surfaces cannot disagree about where a run
     // lives. Off the barrel for the same reason as the three above: naming a path is arithmetic over strings,
     // and the extensions that do it reach it without resolving every schema in the wire contract.
-    "@intentic/sandbox-contract/batch-runs": fromRoot("_sandbox/sandbox-contract/src/batch-runs.ts"),
-    "@intentic/sandbox-contract": fromRoot("_sandbox/sandbox-contract/src/index.ts"),
+    "@intentic/sandbox-contract/batch-runs": fromRoot("_shared/sandbox-contract/src/policy/batch-runs.ts"),
+    "@intentic/sandbox-contract": fromRoot("_shared/sandbox-contract/src/index.ts"),
     // The extension-registry file format, imported by the wire contract (schemas.ts), so without this line
     // the dev server resolves it to a dist/ that only exists once the lib has been built.
-    "@intentic/registry": fromRoot("_sandbox/registry/src/index.ts"),
-    "@intentic/extension-api": fromRoot("_sandbox/extension-api/src/index.ts"),
+    "@intentic/registry": fromRoot("_shared/registry/src/index.ts"),
+    "@intentic/extension-api": fromRoot("_shared/extension-api/src/index.ts"),
     ...extensionAliases,
 });

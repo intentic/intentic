@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
-import Icon from "../../../ui/src/components/Icon.vue";
+import Icon from "@intentic/ui/icon";
 import type { IconName } from "../../../ui/src/icons/iconSets.js";
 import { installUi } from "../../../ui/src/plugin.js";
 

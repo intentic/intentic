@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
 
 import ReviewStat from "./ReviewStat.vue";
-import { useLayout } from "../composables/useLayout";
+import { useLayout } from "../shell/window/useLayout";
 import type { LineStat } from "@intentic/code-read";
 
 const { showComments, toggleShowComments } = useLayout();

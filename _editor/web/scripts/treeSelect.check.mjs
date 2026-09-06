@@ -1,7 +1,7 @@
 // Runnable, framework-free check for the tree selection math (the web app has no test runner).
 // Run: node _editor/web/scripts/treeSelect.check.mjs  (Node 24 strips the imported .ts types natively.)
 import assert from "node:assert/strict";
-import { selectRange, stepLead } from "../src/pages/workspace/treeSelect.ts";
+import { selectRange, stepLead } from "../src/features/workspace/explorer/treeSelect.ts";
 
 const order = ["a", "b/x", "b/y", "c"];
 

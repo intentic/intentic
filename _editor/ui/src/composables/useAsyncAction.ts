@@ -1,4 +1,4 @@
-import type { NoticeModel, NoticeTone } from "../components/notice.js";
+import type { NoticeModel, NoticeTone } from "../components/feedback/notice.js";
 import { ref } from "vue";
 
 /* The one shape every user-facing mutation reports through: a busy flag + a surfaced notice. Errors are

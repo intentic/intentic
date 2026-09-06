@@ -17,7 +17,7 @@ const project = {
     plugins: [vue()],
     resolve: {
         alias: {
-            "@intentic-app/web": fromRoot("_editor/web/src"),
+            "@intentic/web": fromRoot("_editor/web/src"),
             "@intentic/ui/src": fromRoot("_editor/ui/src"),
             ...sourceAliases(),
         },

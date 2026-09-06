@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { CapabilitySummary } from "@intentic-app/api-contract";
+import type { CapabilitySummary } from "@intentic/api-contract";
 import { Button, ContextMenu, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, reactive, ref } from "vue";
-import { useVpn } from "../composables/sandbox/useVpn";
+import { useVpn } from "../features/sandbox/devices/useVpn";
 
 /* THE VPN CARD'S CONNECTIONS LIST: what each configured tunnel is carrying right now, and the connect /
  * disconnect controls for it. This is the answer to "is the sandbox on the VPN, and which one": the assigned

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { StatusBadge } from "@intentic/ui";
-import { type ReconcileContext, statusGerund, statusLabel, statusVariant } from "../composables/extensions/reconcileStatus";
+import { type ReconcileContext, statusGerund, statusLabel, statusVariant } from "../features/extensions/reconcileStatus";
 
 /* One resource's reconcile verdict as a row: its id (mono) beside a status badge, with the reason (if any) as
  * a muted second line. The single row renderer shared by the live apply progress and the live-status "live

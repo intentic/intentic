@@ -13,7 +13,7 @@ sites their browser is already signed into.
 
 On the machine, enforcement covers what a command SAYS, not only whether commands are allowed at all. `shell`
 opens the door; a command the shared classifier
-([sandbox-contract/src/command-classes.ts](../_sandbox/sandbox-contract/src/command-classes.ts)) reads as
+([sandbox-contract/src/command-classes.ts](../_shared/sandbox-contract/src/policy/command-classes.ts)) reads as
 destructive — a recursive delete, a formatted disk, a removed Docker volume — additionally needs `destructive`,
 which is off until its owner turns it on. The sandbox's own gate holds far less than this, because a container
 is disposable and a laptop is not.

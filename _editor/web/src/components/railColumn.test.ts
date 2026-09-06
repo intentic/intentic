@@ -13,11 +13,11 @@ import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 // Statically imported for chatTabsMenu.test.ts's reason: this graph is the whole app's, and compiling it cold
 // inside a hook outlasts vitest's hookTimeout, where the same work at import time is simply the file's load.
-import ChatTabs from "../chat/ChatTabs.vue";
+import ChatTabs from "../features/chat/tabs/ChatTabs.vue";
 import RailColumn from "./RailColumn.vue";
-import { chatFullDock } from "../shell/dockSlots";
-import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../composables/rail";
-import { queryClient } from "../composables/queryPersistence";
+import { chatFullDock } from "../shell/window/dockSlots";
+import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/board/columnWidth";
+import { queryClient } from "../lib/queryPersistence";
 import { router } from "../router";
 
 vi.hoisted(() => {

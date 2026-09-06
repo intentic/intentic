@@ -5,9 +5,9 @@ import { repoRoot } from "@intentic/constants/node";
 import { defineConfig } from "vite";
 // Relative, not through the package's exports: Vite bundles a config's RELATIVE imports (so the .ts sources
 // behind them are compiled with it) and leaves bare specifiers to Node, which cannot load TypeScript. The same
-// reason @intentic-dev/demo reaches the app's shared config this way.
+// reason @intentic/demo reaches the app's shared config this way.
 import { sourceAliases } from "../web/source-aliases.ts";
-import { SHARE_VIEWER_BASE } from "../../_sandbox/sandbox-contract/src/share-paths.ts";
+import { SHARE_VIEWER_BASE } from "../../_shared/sandbox-contract/src/ids/share-paths.ts";
 
 /* The build of the page a shared conversation is published as.
  *
@@ -34,7 +34,7 @@ export default defineConfig({
             // The app's chat components, by the path this package's own source names them with. Listed BEFORE
             // the workspace aliases for the same reason source-aliases.ts orders its own subpaths: a string
             // alias also matches `<key>/…`.
-            "@intentic-app/web": fromRoot("_editor/web/src"),
+            "@intentic/web": fromRoot("_editor/web/src"),
             // The design system by FILE rather than through its barrel, see boot.ts for why this page cannot
             // use the barrel's own entry point. Ordered before `@intentic/ui` (which sourceAliases maps to the
             // barrel file) so the deeper key wins.

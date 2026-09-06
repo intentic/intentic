@@ -191,7 +191,7 @@ pnpm db:up                # Postgres on :5440 (docker-compose.yml) + prisma migr
 pnpm dev                  # turbo: api on https://localhost:6480, web on https://localhost:47145
 ```
 
-Dev serves over HTTPS via `@intentic-app/localhost-https` (Google FedCM One Tap refuses `http://localhost`).
+Dev serves over HTTPS via `@intentic/localhost-https` (Google FedCM One Tap refuses `http://localhost`).
 `pnpm install` mints a root and a certificate into your own data directory, outside every checkout;
 `pnpm cert:trust` is what puts that root in your trust store, and you run it once per machine rather than once
 per clone. Skip it and everything still works behind a browser warning. Run both on the machine whose browser
@@ -233,7 +233,7 @@ driven by the `intentic deploy` command group (`init` · `resolve` · `plan` · 
 
 It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for: no
 more a "feature" than `psql` or `docker`: and it lives in this repo only for convenience. Its walkthrough,
-capabilities and known limits are documented separately in **[docs/deploy-engine.md](docs/deploy-engine.md)**.
+capabilities and known limits are documented separately in **[docs/deploy-engine.md](docs/design/deploy-engine.md)**.
 
 ## Releases
 

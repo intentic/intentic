@@ -32,7 +32,7 @@
         "import/no-unassigned-import": [
             "error",
             {
-                "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/composables/sandbox/sandboxScreen", "**/extension-host/hostModules"]
+                "allow": ["**/*.css", "**/sandbox/client/sandboxScope", "**/sandbox/client/sandboxScreen", "**/extension-host/hostModules"]
             }
         ],
         // `_` is this repo's throwaway binding, not a private-member sigil. `_all`/`_count`/`_sum` are Prisma's
@@ -499,11 +499,11 @@
                 "_site/demo/**",
                 "_tools/fake-upstream/**",
                 "_platform/example-provider/**",
-                "_sandbox/connector-runtime/**",
+                "_shared/connector-runtime/**",
                 "_sandbox/acp-bridge/**",
                 "_sandbox/sandbox/src/extensions/backend/**",
-                "_editor/web/src/composables/perf.ts",
-                "_editor/web/src/composables/chat/focusTrace.ts"
+                "_editor/web/src/app/perf.ts",
+                "_editor/web/src/features/chat/run/focusTrace.ts"
             ],
             "rules": {
                 "no-console": "off"
@@ -549,16 +549,16 @@
                             },
                             {
                                 "group": [
-                                    "@intentic-app/*",
                                     "**/_devices/**",
                                     "**/_deploy/**",
                                     "**/_editor/**",
                                     "**/_platform/**",
                                     "**/_sandbox/**",
                                     "**/_search/**",
+                                    "**/_shared/**",
                                     "**/_site/**"
                                 ],
-                                "message": "Extensions must not reach the app plane (@intentic-app/*) or other packages' internals by path. Use @intentic/extension-ui for UI and @intentic/sandbox-contract for wire types. See _extensions/README.md."
+                                "message": "Extensions must not reach another package's internals BY PATH — the rule above decides which packages an extension may name, and a relative path is how that decision gets bypassed. Use @intentic/extension-ui for UI and @intentic/sandbox-contract for wire types. See _extensions/README.md."
                             }
                         ]
                     }

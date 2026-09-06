@@ -1,4 +1,4 @@
-import type { ChatSurface } from "@intentic-app/web/chat/chatSurface";
+import type { ChatSurface } from "@intentic/web/features/chat/tools/chatToolSurface";
 
 /* WHAT A TOOL CARD CAN REACH ON A PUBLISHED PAGE: its own pictures, and nothing else.
  *

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { DiffStat } from "@intentic/ui";
 import { computed } from "vue";
-import { useLayout } from "../composables/useLayout";
+import { useLayout } from "../shell/window/useLayout";
 import type { LineStat } from "@intentic/code-read";
-import { addedIn, shownStat, weightFill } from "../composables/workspace/changeWeight";
+import { addedIn, shownStat, weightFill } from "../features/workspace/changes/changeWeight";
 
 /* A changed file's +/− IN THE READING THE SURFACE IS SHOWING: the review's rows and headings, and the bar over
  * the open diff. Every one of them renders this rather than DiffStat directly, because the choice it makes has

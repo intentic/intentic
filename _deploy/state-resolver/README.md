@@ -24,4 +24,4 @@ Stage 2 of the pipeline: `need-resolver` produces `Need`s, this maps each to an 
 ## Conventions & gotchas
 
 - Adding a resource kind means emitting it here **and** registering its type/outputs in `resources` and a provider in `providers`.
-- Emitter changes are snapshot-tested ([src/emit.test.ts](src/emit.test.ts), [src/state.test.ts](src/state.test.ts)): update fixtures deliberately. See [ARCHITECTURE.md](../../ARCHITECTURE.md).
+- Emitter changes are snapshot-tested ([src/emit/emit.test.ts](src/emit/emit.test.ts), [src/state.test.ts](src/state.test.ts)): update fixtures deliberately. See [ARCHITECTURE.md](../../ARCHITECTURE.md).

@@ -123,5 +123,5 @@ if [ "$staged" -eq 0 ]; then
 fi
 
 echo
-echo "Serve them with the local site (pnpm --filter @intentic-dev/site dev) — the web app's dev"
+echo "Serve them with the local site (pnpm --filter @intentic/site dev) — the web app's dev"
 echo "download links point at http://localhost:4321/desktop/<file>."

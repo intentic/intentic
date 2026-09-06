@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { basename } from "@intentic/ui/path";
-import { attachmentPreview } from "../composables/chat/attachmentPreviews";
+import { attachmentPreview } from "../features/chat/drafts/attachmentPreviews";
 
 /* The floating card a truncated name gets on hover: one component for every surface that shows an agentic
  * session under a width it doesn't fit in: the chat tab strip and the Changes panel's origin chips today.

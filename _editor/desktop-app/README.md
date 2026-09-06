@@ -25,7 +25,7 @@ sign in, click **Run on this computer**.
 ## What it is: and is not
 
 The app **preserves the product model**: a sandbox is still a Docker container, the UI is still
-`@intentic-app/web` talking to the daemon directly, and the browser path keeps working on the same sandbox
+`@intentic/web` talking to the daemon directly, and the browser path keeps working on the same sandbox
 from any device. The app adds no third plane. It is three thin native things around the existing product:
 
 1. **A shell for the hosted SPA.** The workspace screen loads `https://app.intentic.dev`
@@ -377,7 +377,7 @@ public id therefore cannot collect or consume the credentials intended for the a
 
 Four actions, and it is the whole channel between the SPA and the app
 ([`src-tauri/src/setup_link.rs`](src-tauri/src/setup_link.rs), built browser-side in
-[`_editor/web/src/environments/desktop.ts`](../web/src/environments/desktop.ts)):
+[`_editor/web/src/environments/desktop.ts`](../web/src/app/environments/desktop.ts)):
 
 | Link | From | What it does |
 | --- | --- | --- |
@@ -472,7 +472,7 @@ Two things make the join and the restraint work:
 
 - **The install id** (`state.rs`): random, minted once, kept in the app's config dir. The launcher sends its
   events under it, and the workspace window is marked with it, so the SPA carries it as a property too
-  ([`web/src/composables/analytics.ts`](../web/src/composables/analytics.ts)). Without it the two webviews:
+  ([`web/src/composables/analytics.ts`](../web/src/app/analytics.ts)). Without it the two webviews:
   separate origins, separate storage: read as two unrelated strangers. It says *this installation*, never a
   hostname, a username or anything about the machine.
 - **What may be sent**: outcomes, durations, and the `intentic: …` step labels the scripts print about
@@ -538,7 +538,7 @@ Authenticode signature from a certificate issued to a verified legal entity. Eve
 here: `bundle.windows.signCommand` points at
 [`_tools/scripts/build/sign-windows.sh`](../../_tools/scripts/build/sign-windows.sh), which signs through jsign or
 osslsigncode, no-ops silently when its variables are unset, and is documented in
-[`docs/windows-code-signing.md`](../../docs/windows-code-signing.md). **The only missing piece is a purchased
+[`docs/windows-code-signing.md`](../../docs/ops/windows-code-signing.md). **The only missing piece is a purchased
 certificate.** Until there is one, every download ends at a scare dialog, and it is the largest single drop in
 this funnel.
 
@@ -607,7 +607,7 @@ exit — which is what the air-gapped installs and the executable smoke tiers re
 `app.intentic.dev` in a webview that is *hidden* on close rather than destroyed, deliberately, so it keeps its
 session — which also means it is never reloaded and can sit on a weeks-old web build. The SPA polls its own
 `build.json` and offers a reload from the same banner
-([`web/src/composables/appUpdate.ts`](../web/src/composables/appUpdate.ts)). One banner, two meanings: *Restart*
+([`web/src/composables/appUpdate.ts`](../web/src/app/appUpdate.ts)). One banner, two meanings: *Restart*
 in the app, *Reload* in a browser.
 
 `POSTHOG_KEY` is the release workflow's other secret, and it is set on the desktop jobs only: a compiled app

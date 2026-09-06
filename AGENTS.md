@@ -17,6 +17,13 @@
 that invalidated it.** There is no second place to remember: the repository-level map lives in
 `docs/architecture/` (`repo.json`, `repo.md`, and a generated `index.json`), and nothing else does.
 
+`docs/architecture/` also holds how the system is put together, one subject per page — `topology.md`,
+`sandbox.md`, `platform.md`, `app-plane.md`, `extensions.md`, `capabilities.md`, `packages.md`,
+`conventions.md`, `testing.md`, `deploy-engine.md` — and `ARCHITECTURE.md` at the root is the index into them,
+nothing more. A decision and its reasons go in `docs/design/`, a measurement in `docs/audits/`, the machinery
+around the code in `docs/ops/` (`docs/README.md` states the line). Anything about the WORKSPACE rather than
+this repository belongs in `/work/docs/`.
+
 - The `# H1` and the **one sentence** under it are parsed: that sentence becomes the package's one-liner
   wherever it is named without being opened. `## Key files` is parsed too: three to six package-relative links,
   each with a reason, each of which must resolve. Everything else on the page is free-form.

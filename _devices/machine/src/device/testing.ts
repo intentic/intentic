@@ -1,9 +1,9 @@
-import type { Desktop, MouseButton, Point, ScrollDirection, WindowInfo } from "@intentic/desktop";
+import type { Desktop, MouseButton, Point, ScrollDirection, WindowInfo } from "@intentic/desktop-automation";
 
 /* The fake desktop the tool tests drive, the repo's `testing.ts` convention (excluded from the build, like the
  * sandbox's own), so both tool suites share ONE double rather than each keeping a copy that drifts.
  *
- * It exists because @intentic/desktop's methods end in a real cursor moving on a real screen: they can only be
+ * It exists because @intentic/desktop-automation's methods end in a real cursor moving on a real screen: they can only be
  * exercised by a human watching. Everything worth asserting about the layer above, was the action refused, was
  * the coordinate checked, did the right method get called with the right arguments, needs a Desktop that
  * records instead of acts. That is the entire argument for keeping the mechanics in their own package. */

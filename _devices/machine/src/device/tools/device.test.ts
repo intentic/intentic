@@ -1,4 +1,4 @@
-import { DesktopError } from "@intentic/desktop";
+import { DesktopError } from "@intentic/desktop-automation";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { ScopeError } from "../policy.js";

@@ -5,11 +5,11 @@ import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
  * a side effect no bundler will drop. Reached through the barrel, prose costs this page a fifth of a megabyte of
  * Vue Flow: in the bundle a stranger downloads to read someone's transcript, for a canvas a conversation almost
  * never contains. Reached by file, a `dag` figure loads it on demand and nothing else pays. */
-import Icon from "@intentic/ui/src/components/Icon.vue";
-import Markdown from "@intentic/ui/src/components/Markdown.vue";
+import Icon from "@intentic/ui/icon";
+import Markdown from "@intentic/ui/markdown-view";
 import { formatDate, formatDateTime } from "@intentic/ui/format";
-import { CHAT_SURFACE } from "@intentic-app/web/chat/chatSurface";
-import ChatToolCard from "@intentic-app/web/chat/ChatToolCard.vue";
+import { CHAT_SURFACE } from "@intentic/web/features/chat/tools/chatToolSurface";
+import ChatToolCard from "@intentic/web/features/chat/tools/ChatToolCard.vue";
 import { computed, provide, ref } from "vue";
 import { readPayload } from "./payload";
 import { shareSurface } from "./shareSurface";
@@ -31,7 +31,7 @@ const result = readPayload();
 const payload = computed(() => (result.ok ? result.payload : undefined));
 
 // The cards on this page reach nothing beyond their own pictures: the whole difference between the app's
-// transcript and a published one, stated once here (chatSurface.ts).
+// transcript and a published one, stated once here (chatToolSurface.ts).
 provide(CHAT_SURFACE, shareSurface);
 
 /* Prose goes through the shared component with NO decorator. The app passes one that turns file mentions into

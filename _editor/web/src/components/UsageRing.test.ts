@@ -6,7 +6,7 @@
 // surface that draws one is a column of rows, so a box over or under the ring covers the rows being compared.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
-import { formatReset, type PlanHeadroom } from "../composables/chat/usageStatus";
+import { formatReset, type PlanHeadroom } from "../features/chat/session/usageStatus";
 import UsageRing from "./UsageRing.vue";
 
 // The @intentic/ui barrel this component reaches for (the ring, the placement) calls window.matchMedia at

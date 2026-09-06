@@ -1,7 +1,7 @@
 // Runnable, framework-free check for the bounded upload chunker (the web app has no test runner).
 // Run: node _editor/web/scripts/uploadChunking.check.mjs  (Node 24 strips the imported .ts types natively.)
 import assert from "node:assert/strict";
-import { CHUNK_BYTES, CHUNK_FILES, chunkItems } from "../src/composables/workspace/uploadChunking.ts";
+import { CHUNK_BYTES, CHUNK_FILES, chunkItems } from "../src/features/workspace/files/uploadChunking.ts";
 
 const mk = (n, size) => Array.from({ length: n }, (_, i) => ({ id: i, size }));
 const bytesOf = (chunk) => chunk.reduce((sum, item) => sum + item.size, 0);

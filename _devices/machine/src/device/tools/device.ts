@@ -1,12 +1,12 @@
 import { sleep } from "@intentic/base/async";
-import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDirection } from "@intentic/desktop";
+import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDirection } from "@intentic/desktop-automation";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 
 /* GUI work: the tool that lets the agent do the things with no command-line way in, a dialog with an OK button,
  * a native app with no API, a settings pane.
  *
- * THE MECHANICS ARE NOT HERE. @intentic/desktop knows how to move a pointer on Windows and on Wayland; this file
+ * THE MECHANICS ARE NOT HERE. @intentic/desktop-automation knows how to move a pointer on Windows and on Wayland; this file
  * knows whether it is ALLOWED to, whether the coordinates make sense, and what to write down afterwards. The
  * split is what makes any of this testable: the package's methods end in a real cursor moving on a real screen
  * and can only be exercised by hand, while everything below takes a Desktop and can be driven by a fake.

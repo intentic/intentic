@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { AgentOrigin } from "@intentic/sandbox-contract";
-import { originMeta } from "../composables/agents/agentStatus";
+import { originMeta } from "../features/agents/fleet/agentStatus";
 
 /* "This conversation came in from outside": the one mark that tells an agent an automation opened for a
  * Discord mention, a web-chat visitor or a webhook apart from one the user started. Everything else about it

@@ -24,7 +24,7 @@
     },
     "devDependencies": {
         "@iconify/vue": "catalog:",
-        "@intentic-app/web": "workspace:*",
+        "@intentic/web": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/testing": "workspace:*",

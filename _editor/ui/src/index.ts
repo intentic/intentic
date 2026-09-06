@@ -16,81 +16,81 @@ export {
     probePreview,
 } from "./lib/portPreview.js";
 export { ui } from "./lib/ui.js";
-export { default as AgentRunButton } from "./components/AgentRunButton.vue";
+export { default as AgentRunButton } from "./components/sandbox/AgentRunButton.vue";
 export { type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
-export { default as AnchoredOverlay } from "./components/AnchoredOverlay.vue";
-export { default as Avatar } from "./components/Avatar.vue";
+export { default as AnchoredOverlay } from "./components/overlays/AnchoredOverlay.vue";
+export { default as Avatar } from "./components/brand/Avatar.vue";
 export { type Cross, placeAnchored, type Placement, type Side } from "./lib/anchorPlacement.js";
-export { default as BarChart } from "./components/BarChart.vue";
-export { type BarItem } from "./components/barChart.js";
-export { default as BottomSheet } from "./components/BottomSheet.vue";
+export { default as BarChart } from "./components/charts/BarChart.vue";
+export { type BarItem } from "./components/charts/barChart.js";
+export { default as BottomSheet } from "./components/layout/BottomSheet.vue";
 // <Avatar> for things rather than people: the logo → glyph → initials ladder every surface that LISTS
 // something needs, and that four call sites had each got a different amount of right.
-export { default as BrandMark } from "./components/BrandMark.vue";
+export { default as BrandMark } from "./components/brand/BrandMark.vue";
 /* THE APP'S ACTION BUTTON, and the reason nothing should import `primevue/button` directly any more. It is
  * PrimeVue's, pixel for pixel, with the one thing a bare button cannot do: a press whose handler returns a
  * promise locks the button in the same tick and draws itself working if the wait outlives a beat. Every
  * "I clicked Approve twice and got an error" is that lock missing, and a design system is the only place to
  * fix it once for three hundred call sites. `v-action` is the same behaviour for hand-styled elements. */
-export { default as Button } from "./components/Button.vue";
+export { default as Button } from "./components/primitives/Button.vue";
 export { vAction } from "./lib/pressAction.js";
-export { default as Card } from "./components/Card.vue";
+export { default as Card } from "./components/layout/Card.vue";
 // The two halves of a changed-file row, shipped together because they are always drawn together: git's status
 // letter in its fixed-width cell, and the +/- line-count badge beside it. Six surfaces had each written both by
 // hand, and the seventh caller was an extension, which could reach none of the six.
-export { default as ChangeStatusMark } from "./components/ChangeStatusMark.vue";
-export { type ChangeStatus } from "./components/changeStatus.js";
-export { default as DiffStat } from "./components/DiffStat.vue";
-export { default as Code } from "./components/Code.vue";
+export { default as ChangeStatusMark } from "./components/feedback/ChangeStatusMark.vue";
+export { type ChangeStatus } from "./components/feedback/changeStatus.js";
+export { default as DiffStat } from "./components/charts/DiffStat.vue";
+export { default as Code } from "./components/primitives/Code.vue";
 // The writing half of <Code>, the same colours, with a caret in them. Ships beside it for the reason <Row>
 // ships beside <RowGroup>: the read-only block on its own is what made every surface that also had to EDIT
 // the file fall back to a bare grey <textarea> next to it.
-export { default as CodeField } from "./components/CodeField.vue";
-export { default as ConfirmDialog } from "./components/ConfirmDialog.vue";
-export { default as ContextMenu } from "./components/ContextMenu.vue";
-export { default as CopyButton } from "./components/CopyButton.vue";
-export { type TallyItem, default as StatusTally } from "./components/StatusTally.vue";
-export { default as DagEditor } from "./components/DagEditor.vue";
-export { default as DagGraph } from "./components/DagGraph.vue";
+export { default as CodeField } from "./components/forms/CodeField.vue";
+export { default as ConfirmDialog } from "./components/overlays/ConfirmDialog.vue";
+export { default as ContextMenu } from "./components/overlays/ContextMenu.vue";
+export { default as CopyButton } from "./components/primitives/CopyButton.vue";
+export { type TallyItem, default as StatusTally } from "./components/charts/StatusTally.vue";
+export { default as DagEditor } from "./components/charts/DagEditor.vue";
+export { default as DagGraph } from "./components/charts/DagGraph.vue";
 /* The app's ONE expandable record row: <Row> plus the chevron, the ARIA, the open tint and the indented rail
  * beneath. It ships because fourteen lists had each answered those four questions alone and arrived at five
  * chevron spellings, four indents and four tints — and, on the ports list, at an `(i)` that toggled, thirty
  * pixels below an <InfoHint> whose `(i)` does not. */
-export { default as DisclosureRow } from "./components/DisclosureRow.vue";
+export { default as DisclosureRow } from "./components/rows/DisclosureRow.vue";
 /* <Row>'s tier table, exported because <DisclosureRow> draws the lead cluster a SECOND time (hidden) to
  * offset the block below it, and a mirror built from restated numbers is a mirror that goes stale.
  *
  * `useRowDensity` is the other half: the tier is declared once on a <RowGroup> and read by every row, outline
  * and note on its surface. A view needs it only for a row it draws itself and cannot express as a <Row>. */
-export { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TONES, type RowDensity, type RowTone, useRowDensity } from "./components/row.js";
+export { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TONES, type RowDensity, type RowTone, useRowDensity } from "./components/rows/row.js";
 // Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
 // does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
 // DOM with it) to call one. See the note above renderMarkdown's subpath.
 // `layoutDag` ships beside the types because a caller sometimes needs to know WHERE the graph put things,
 // the chat panel groups a run's steps into the columns the reader can see, and computing that from the
 // dependency depth instead would be a second opinion about a layout dagre has already decided.
-export { type DagEdge, type DagNode, layoutDag } from "./components/dagLayout.js";
+export { type DagEdge, type DagNode, layoutDag } from "./components/charts/dagLayout.js";
 // The instrument above a list, free text, the controls that narrow it, and any bare action. In the kit rather
 // than in any one view because six views had written the row by hand and no two of them agreed.
-export { default as FilterBar } from "./components/FilterBar.vue";
+export { default as FilterBar } from "./components/forms/FilterBar.vue";
 // A textarea as tall as its content, for the composers <ProseField>'s grid replica is not a drop-in for. Four
 // of them had each measured it themselves, and had three different answers to the same two edge cases.
 export { growTextarea } from "./lib/growTextarea.js";
-export { default as Icon } from "./components/Icon.vue";
+export { default as Icon } from "./components/primitives/Icon.vue";
 // THE surface that shows a picture, the workspace file viewer's images (through the viewers extension), the
 // SVG preview, and both sides of a binary diff. In the kit rather than in either caller so zoom, pan and the
 // transparency checkerboard behave identically wherever an image appears.
-export { default as ImageView } from "./components/ImageView.vue";
-export { type ImageViewState, isRenderableImage } from "./components/imageView.js";
-export { default as InfoDialog } from "./components/InfoDialog.vue";
-export { default as InfoHint } from "./components/InfoHint.vue";
-export { default as InfoTable } from "./components/InfoTable.vue";
+export { default as ImageView } from "./components/primitives/ImageView.vue";
+export { type ImageViewState, isRenderableImage } from "./components/primitives/imageView.js";
+export { default as InfoDialog } from "./components/overlays/InfoDialog.vue";
+export { default as InfoHint } from "./components/feedback/InfoHint.vue";
+export { default as InfoTable } from "./components/feedback/InfoTable.vue";
 // One device's desktop-sync detail, folders, localhost ports, watcher liveness. The BODY only: the desktop
 // app and the web's Devices tab frame it differently and state exactly the same facts inside.
-export { default as DeviceDetail } from "./components/DeviceDetail.vue";
+export { default as DeviceDetail } from "./components/sandbox/DeviceDetail.vue";
 // The pane under a working row: the machine's own output, verbatim. Shared for the same reason the row above
 // it is, both apps drive the same containers and had grown their own.
-export { default as DeviceRunLog } from "./components/DeviceRunLog.vue";
+export { default as DeviceRunLog } from "./components/sandbox/DeviceRunLog.vue";
 export {
     type GroupSummary,
     groupNeedsAttention,
@@ -109,16 +109,16 @@ export {
     // The same grouping the view draws, for a caller that has to COUNT what it is about to draw, the
     // Devices tab's folded machine line says how many sandboxes are under it and how many want attention.
     sandboxGroups,
-} from "./components/deviceDetail.js";
+} from "./components/sandbox/deviceDetail.js";
 /* The form behind the row's Resources… verb: a sandbox's memory and CPU caps, privileged, GPU, applied as a
  * recreate onto the same image. Shared for the reason the row is, and its arithmetic ships beside it (and as
  * `@intentic/ui/sandbox-resources`, so the tests that pin it need no DOM): the caller hands over the container's
  * share and the machine's engine, and forwards the ask that comes back without reading it. */
-export { default as SandboxResourcesDialog } from "./components/SandboxResourcesDialog.vue";
-export { type EngineFacts, type ResourcesAsk } from "./components/sandboxResources.js";
+export { default as SandboxResourcesDialog } from "./components/sandbox/SandboxResourcesDialog.vue";
+export { type EngineFacts, type ResourcesAsk } from "./components/sandbox/sandboxResources.js";
 // The verb row on one sandbox's line, which buttons exist, their order, their words, and which one is red.
 // Here because the desktop manager and the web Devices tab render the same row and had drifted apart.
-export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";
+export { default as SandboxVerbs } from "./components/sandbox/SandboxVerbs.vue";
 export {
     DESTRUCTIVE_VERB,
     menuVerbs,
@@ -127,32 +127,32 @@ export {
     sandboxVerbPrompt,
     type SandboxVerbPrompt,
     VERB_LABEL,
-} from "./components/sandboxVerbs.js";
-export { default as Markdown } from "./components/Markdown.vue";
+} from "./components/sandbox/sandboxVerbs.js";
+export { default as Markdown } from "./components/markdown/Markdown.vue";
 /* THE ONE SURFACE A MARKDOWN CONFIG IS WRITTEN ON: rendered prose you type straight into, with the app's only
  * two save policies behind one status line. Exported and <MarkdownDocumentSurface> deliberately is NOT: the
  * surface is the engine (a `contenteditable` that owns its own DOM and has no opinion about persistence), and
  * shipping it alongside would offer a second, worse answer to the question this component exists to settle.
  * A caller that wants a frame around one builds it, or reuses <NoteEditor>, which is exactly that. */
-export { default as MarkdownDocument } from "./components/MarkdownDocument.vue";
-export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
+export { default as MarkdownDocument } from "./components/markdown/MarkdownDocument.vue";
+export { default as MarkdownFigure } from "./components/charts/MarkdownFigure.vue";
 // A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported
 // because a view holding a diagram outside prose (a stored architecture note, a generated report) should not
 // have to wrap it in a markdown document to get one.
-export { default as MermaidDiagram } from "./components/MermaidDiagram.vue";
+export { default as MermaidDiagram } from "./components/charts/MermaidDiagram.vue";
 // THE centred box, and the only thing that should reach for PrimeVue's Dialog. Seventeen dialogs had each
 // typed their own width into a style attribute, thirteen different ones, and exactly one of the seventeen
 // carried the viewport clamp that stops a modal running off the side of a phone. The width is a named size
 // here and the clamp is not the caller's to remember. <ConfirmDialog> and <InfoDialog> are built on it.
-export { default as Modal } from "./components/Modal.vue";
+export { default as Modal } from "./components/overlays/Modal.vue";
 // The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome; the row stays
 // the caller's, because a rail's rows differ for good reasons and its scrollbar never did.
-export { default as NavRail } from "./components/NavRail.vue";
-export { type NavGroup } from "./components/navRail.js";
+export { default as NavRail } from "./components/layout/NavRail.vue";
+export { type NavGroup } from "./components/layout/navRail.js";
 // One markdown note, read and curated: the action cluster, the delete confirmation, the error strip, and the
 // one surface a file is both read and written on. Two extensions had each built the frame around <ScrollFrame>;
 // `useNoteDraft` is the lifecycle underneath it, which they had each built too.
-export { default as NoteEditor } from "./components/NoteEditor.vue";
+export { default as NoteEditor } from "./components/forms/NoteEditor.vue";
 export { type NoteDraft, type NoteDraftOptions, useNoteDraft } from "./composables/useNoteDraft.js";
 // Where those unsaved edits live while the pane above them is reused: the draft map the note lifecycle asks
 // its caller for, held once instead of in every view that opens one.
@@ -160,24 +160,24 @@ export { useKeyedDraft } from "./composables/useKeyedDraft.js";
 // How the app says something went wrong: a sentence it wrote, the raw cause underneath, at most one way out.
 // The stack is what a view with more than one thing wrong renders, it ranks by severity and collapses repeats,
 // so the reading order stops being an accident of where the boxes sit in the template.
-export { default as Notice } from "./components/Notice.vue";
-export { default as NoticeStack } from "./components/NoticeStack.vue";
-export { type NoticeAction, type NoticeModel, type NoticeTone } from "./components/notice.js";
-export { default as Page } from "./components/Page.vue";
+export { default as Notice } from "./components/feedback/Notice.vue";
+export { default as NoticeStack } from "./components/feedback/NoticeStack.vue";
+export { type NoticeAction, type NoticeModel, type NoticeTone } from "./components/feedback/notice.js";
+export { default as Page } from "./components/layout/Page.vue";
 // The button that goes in <PageHeader #actions>, and the only thing that should, the named recipe that keeps
 // PrimeVue Button's variant matrix out of the one slot every view fills.
-export { default as PageAction } from "./components/PageAction.vue";
-export { default as PageHeader } from "./components/PageHeader.vue";
+export { default as PageAction } from "./components/layout/PageAction.vue";
+export { default as PageHeader } from "./components/layout/PageHeader.vue";
 /* The way out of a full-screen view, which <PageHeader> wears and the mobile shell publishes. Exported because
  * the shell that provides it lives in the web app, not here; nothing else should need either half. */
-export { type PageBack, providePageBack, usePageBack } from "./components/pageBack.js";
+export { type PageBack, providePageBack, usePageBack } from "./components/layout/pageBack.js";
 /* <Avatar>'s counterpart for a name nobody has a photograph of: a cartoon character assembled from the name
  * itself, so a persona looks like somebody rather than like a label. It sat in the web app until the two
  * surfaces where you CHOOSE a persona turned out to be extensions, which could reach nothing in there, the
  * same reason <BrandMark> and <SplitView> ended up here. A face is identity, and identity has to be the same
  * drawing on every surface or it is not identity. */
-export { default as PersonaFace } from "./components/PersonaFace.vue";
-export { type PersonaLike } from "./components/personaFace.js";
+export { default as PersonaFace } from "./components/brand/PersonaFace.vue";
+export { type PersonaLike } from "./components/brand/personaFace.js";
 // A bordered surface: its own header, its own interrupting strips, one scrolling body. Header and frame are one
 // component because every caller of the header wrapped it in the frame, and the min-h-0/overflow-hidden scroll
 // contract it owns is the failure three views had each rediscovered, one of them incorrectly.
@@ -187,52 +187,52 @@ export { type PersonaLike } from "./components/personaFace.js";
 // of the screen", which is a word this component cannot own. It also meant the one name a view could not learn:
 // none of those thirteen used it, and thirty-nine files hand-wrote the scroll contract instead. `ScrollFrame`
 // says what it does and collides with nothing (not even Vue Flow's own <Panel>, which DagEditor imports).
-export { default as ScrollFrame } from "./components/ScrollFrame.vue";
-export { default as Picker } from "./components/Picker.vue";
-export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/picker.js";
-export { default as ProgressRing } from "./components/ProgressRing.vue";
+export { default as ScrollFrame } from "./components/layout/ScrollFrame.vue";
+export { default as Picker } from "./components/forms/Picker.vue";
+export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/forms/picker.js";
+export { default as ProgressRing } from "./components/charts/ProgressRing.vue";
 // The writing field, `ui.input()`'s counterpart for text read in sentences. Borderless, and as tall as what
 // has been typed into it.
-export { default as ProseField } from "./components/ProseField.vue";
-export { default as PullToRefresh } from "./components/PullToRefresh.vue";
+export { default as ProseField } from "./components/forms/ProseField.vue";
+export { default as PullToRefresh } from "./components/layout/PullToRefresh.vue";
 // "Which repository", as the narrowing column two workspace-wide boards had each written: the pinned "all" row,
 // one number per repository, and the same rail folded into a <Picker> once the split is too narrow for it.
-export { default as RepoRail } from "./components/RepoRail.vue";
-export { type RepoRailAll, type RepoRailGroup, type RepoRailRow } from "./components/repoRail.js";
+export { default as RepoRail } from "./components/layout/RepoRail.vue";
+export { type RepoRailAll, type RepoRailGroup, type RepoRailRow } from "./components/layout/repoRail.js";
 // The drag strip between two panes. Four screens had written it by hand before this existed, and the fifth
 // caller was an extension, which could not have reached any of the four.
-export { default as ResizeSeam } from "./components/ResizeSeam.vue";
+export { default as ResizeSeam } from "./components/layout/ResizeSeam.vue";
 // The app's standard touch swap, anchored panel on desktop, bottom sheet on a phone, behind one open flag.
 // <Picker> had encapsulated it internally without exposing it, so five other menus wrote the pair out by hand.
-export { default as ResponsiveOverlay } from "./components/ResponsiveOverlay.vue";
-export { default as Row } from "./components/Row.vue";
-export { default as RowGroup } from "./components/RowGroup.vue";
+export { default as ResponsiveOverlay } from "./components/overlays/ResponsiveOverlay.vue";
+export { default as Row } from "./components/rows/Row.vue";
+export { default as RowGroup } from "./components/rows/RowGroup.vue";
 // The lines on a group's surface that are not records: its empty state, its explanatory sentence, its "add one".
 // Draws at the group's own tier, which is what the 58 hand-written ones could not do. See the component's note.
-export { default as RowNote } from "./components/RowNote.vue";
-export { default as SearchBar } from "./components/SearchBar.vue";
-export { default as SegmentedControl } from "./components/SegmentedControl.vue";
+export { default as RowNote } from "./components/rows/RowNote.vue";
+export { default as SearchBar } from "./components/forms/SearchBar.vue";
+export { default as SegmentedControl } from "./components/forms/SegmentedControl.vue";
 // The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds
 // authored accents (a documentation map's components, say) has to paint them the way a figure would.
-export { seriesColor } from "./components/seriesAccent.js";
+export { seriesColor } from "./components/charts/seriesAccent.js";
 // The shape of a list that is still loading, built out of real <Row>s so it cannot drift from the list it
 // stands in for. The single-bar case needs no component, that is the `skeleton` class on any box.
-export { default as SkeletonRows } from "./components/SkeletonRows.vue";
+export { default as SkeletonRows } from "./components/feedback/SkeletonRows.vue";
 // The index-and-body screen, five views were four implementations of it, and the one that had solved it
 // (HubLayout) lived in the web app where no extension could reach it.
-export { default as SplitView } from "./components/SplitView.vue";
+export { default as SplitView } from "./components/layout/SplitView.vue";
 // Whether that screen has folded its index above its body, what a rail asks so its own compact form arrives at
 // the same width the shell's does.
-export { useCompact } from "./components/splitView.js";
-export { default as StatStrip } from "./components/StatStrip.vue";
-export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
-export { default as StepSection } from "./components/StepSection.vue";
+export { useCompact } from "./components/layout/splitView.js";
+export { default as StatStrip } from "./components/charts/StatStrip.vue";
+export { default as StatusBadge, type StatusVariant } from "./components/feedback/StatusBadge.vue";
+export { default as StepSection } from "./components/layout/StepSection.vue";
 /* ONE MEASURED ANSWER — the figure, its unit, what qualifies it, what it was measured over — in the three ranks
  * a card, a settings row and a second reading of the same experiment are drawn at. It ships because the app
  * reports the SAME A/B experiments on two tabs and had two languages for them: a 2xl figure in a <SavingsCard>
  * on Usage, and a `bg-canvas` well inside a <Row>'s `#below` on Agent, each with its own copy of the tone map. */
-export { default as Verdict } from "./components/Verdict.vue";
-export { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from "./components/verdict.js";
+export { default as Verdict } from "./components/charts/Verdict.vue";
+export { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from "./components/charts/verdict.js";
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
 // The markdown ENGINE is not re-exported here, it ships as `@intentic/ui/markdown` so plain .ts modules
@@ -323,5 +323,5 @@ export { type ColorScheme, useTheme } from "./composables/useTheme.js";
 // The one colour the app wears, as a control. The maths behind it stays inside the kit (themeColor.ts turns
 // the picked colour into the ramps every surface, border and link resolves through), a caller only ever
 // needs the picker and `useTheme().accent`.
-export { default as ColorPicker } from "./components/ColorPicker.vue";
+export { default as ColorPicker } from "./components/forms/ColorPicker.vue";
 export { type TextSize, useTextSize } from "./composables/useTextSize.js";

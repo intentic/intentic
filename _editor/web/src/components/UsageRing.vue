@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { placeAnchored, type Placement, ProgressRing, type Side } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
-import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDetail, usageTone } from "../composables/chat/usageStatus";
+import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDetail, usageTone } from "../features/chat/session/usageStatus";
 
 /* THE USAGE CIRCLE, WHEREVER IT IS DRAWN: the composer's headroom chip, the model picker's account rows, the
  * Agent tab's connection rows: together with the panel that opens beside it. One component, because those four

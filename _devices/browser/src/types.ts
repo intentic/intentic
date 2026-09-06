@@ -2,7 +2,7 @@ import type { PageState } from "./page.js";
 
 /* Driving a browser at the level of what is ON the page, rather than where it is on screen.
  *
- * The whole reason this package exists beside @intentic/desktop: a browser can be operated by clicking pixels,
+ * The whole reason this package exists beside @intentic/desktop-automation: a browser can be operated by clicking pixels,
  * and it is miserable. The coordinates move when the window moves, a scroll invalidates every one of them, and
  * "the Submit button" is a guess about which grey rectangle is which. A browser will simply TELL you what it is
  * showing, so ask it, act by reference, and the same instruction works at any window size on any machine.
@@ -19,7 +19,7 @@ export interface Browser {
     readonly click: (ref: string) => Promise<void>;
     // Focus the element and enter text. `submit` presses Enter afterwards, the ordinary end of filling a field.
     readonly fill: (ref: string, text: string, submit?: boolean) => Promise<void>;
-    // A key for the page as a whole, in @intentic/desktop's vocabulary ("Return", "Escape", "ctrl+f").
+    // A key for the page as a whole, in @intentic/desktop-automation's vocabulary ("Return", "Escape", "ctrl+f").
     readonly press: (combo: string) => Promise<void>;
     // The page as readable text, what a person would get by selecting all of it, minus the chrome.
     readonly text: () => Promise<string>;
@@ -32,7 +32,7 @@ export interface Browser {
 }
 
 /* A browser that could not do the thing, with a sentence naming what would fix it. Same shape as
- * @intentic/desktop's error for the same reason: every caller treats it identically, surface the message, and
+ * @intentic/desktop-automation's error for the same reason: every caller treats it identically, surface the message, and
  * the alternative is a result type threaded through every method that succeeds in the ordinary case. */
 export class BrowserError extends Error {
     readonly hint: string | undefined;

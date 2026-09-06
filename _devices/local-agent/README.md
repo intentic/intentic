@@ -113,7 +113,7 @@ desktop file sync stayed off until somebody went looking.
 `ic`'s `_sandbox/ic/src/ui.rs`. One question decides everything: is stdout a terminal. A **pipe** gets the
 `intentic: [phase] message` marker stream and nothing else, because the desktop app parses it into a progress
 bar and CI reads it out of a log: that shape is a contract, written down in
-[docs/cli-output-protocol.md](../../docs/cli-output-protocol.md). A **terminal** gets a banner, a numbered
+[docs/cli-output-protocol.md](../../docs/ops/cli-output-protocol.md). A **terminal** gets a banner, a numbered
 checklist with durations, one repainting status line and a ranked ending. And a third mode, **nested**, is what
 makes an install read as one program rather than three: `ic` runs these agents inside its own checklist and
 sets `INTENTIC_UI=nested`, so their output lands as detail under its step instead of opening a second banner in

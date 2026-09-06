@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { browser } from "@intentic/browser";
-import { desktop, pngSize } from "@intentic/desktop";
+import { desktop, pngSize } from "@intentic/desktop-automation";
 import { type HostScopes, SandboxResourcesAskFieldsSchema } from "@intentic/sandbox-contract";
 import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";

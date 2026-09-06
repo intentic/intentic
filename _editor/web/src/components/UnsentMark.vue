@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { relativeTime } from "../composables/chat/catalog";
+import { relativeTime } from "../features/chat/models/catalog";
 
 /* WORDS OF THE USER'S STILL SITTING IN A CHAT'S COMPOSER (Conversation.unsent). Everything else on a session
  * card is the agent's account of itself; this is the reader's own unfinished business, and the only thing on

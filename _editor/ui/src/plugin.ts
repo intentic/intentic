@@ -8,7 +8,7 @@ import DrawerStyle from "primevue/drawer/style";
 import PopoverStyle from "primevue/popover/style";
 import ToggleSwitchStyle from "primevue/toggleswitch/style";
 import type { App } from "vue";
-import Icon from "./components/Icon.vue";
+import Icon from "./components/primitives/Icon.vue";
 import { BUNDLED_ICONS } from "./icons/iconData.generated.js";
 import { Theme } from "./styles/theme.js";
 import { vAction } from "./lib/pressAction.js";

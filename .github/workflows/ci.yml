@@ -503,11 +503,16 @@ jobs:
   # share-view's `^build` dependency, which is what keeps a web source change invalidating share-view.
   # verify-platform owns web's tests; a web break still blocks the platform deploy, the artifact it can
   # actually break.
+  #
+  # THE SCOPE IS NO LONGER A PARTITION. There used to be three of them — @intentic, @intentic-app, @intentic-dev
+  # — and each of the three verify jobs below was spelled as one of them. One repository publishing under three
+  # scopes was worth less than it cost (a package's name said which job ran it and nothing else), so there is
+  # now one scope and each job NAMES the set it owns. This one is everything, minus what a job below owns.
   verify-core:
     needs: preflight
     uses: ./.github/workflows/verify.yml
     with:
-      filters: "--filter=@intentic/*... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke --filter=!@intentic-app/web"
+      filters: "--filter=@intentic/*... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke --filter=!@intentic/web"
     secrets: inherit
 
   # The hosted platform — api, web, prisma, api-contract, capability-catalog, e2e — and their closure, which
@@ -520,7 +525,7 @@ jobs:
       # @intentic/ingress rides this gate rather than only verify-core's, because this job is the one thing
       # that decides whether production rolls — and the edge is now part of what rolls. A package shipped by a
       # pipeline it is not verified by is a package that can ship broken.
-      filters: "--filter=@intentic-app/*... --filter=@intentic/ingress..."
+      filters: "--filter=./_platform/*... --filter=@intentic/web... --filter=@intentic/api-contract... --filter=@intentic/capability-catalog... --filter=@intentic/e2e... --filter=@intentic/localhost-https... --filter=@intentic/onboarding..."
     secrets: inherit
 
   # THE PROVIDER CONFORMANCE GATE: every provider's REAL CLI, driven by the real adapter, against a local
@@ -572,7 +577,7 @@ jobs:
     needs: preflight
     uses: ./.github/workflows/verify.yml
     with:
-      filters: "--filter=@intentic-dev/*..."
+      filters: "--filter=./_site/*..."
     secrets: inherit
 
   # The desktop app: Rust fmt/clippy/tests + the launcher UI build. Runs only when the desktop tree changes —
@@ -1092,7 +1097,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web --filter=@intentic/ingress
+      - run: pnpm turbo run docker:release --filter=@intentic/api --filter=@intentic/web --filter=@intentic/ingress
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
       - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/platform/deploy-platform.sh
         shell: bash

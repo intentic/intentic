@@ -10,25 +10,33 @@
             "types": "./src/index.ts",
             "default": "./src/index.ts"
         },
+        "./icon": {
+            "types": "./src/components/primitives/Icon.vue",
+            "default": "./src/components/primitives/Icon.vue"
+        },
+        "./markdown-view": {
+            "types": "./src/components/markdown/Markdown.vue",
+            "default": "./src/components/markdown/Markdown.vue"
+        },
         "./markdown": {
             "types": "./src/markdown/index.ts",
             "default": "./src/markdown/index.ts"
         },
         "./markdown-document": {
-            "types": "./src/components/markdownDocument.ts",
-            "default": "./src/components/markdownDocument.ts"
+            "types": "./src/components/markdown/markdownDocument.ts",
+            "default": "./src/components/markdown/markdownDocument.ts"
         },
         "./dag": {
-            "types": "./src/components/dagLayout.ts",
-            "default": "./src/components/dagLayout.ts"
+            "types": "./src/components/charts/dagLayout.ts",
+            "default": "./src/components/charts/dagLayout.ts"
         },
         "./brand-color": {
             "types": "./src/lib/brandColor.ts",
             "default": "./src/lib/brandColor.ts"
         },
         "./brand-mark": {
-            "types": "./src/components/brandMark.ts",
-            "default": "./src/components/brandMark.ts"
+            "types": "./src/components/brand/brandMark.ts",
+            "default": "./src/components/brand/brandMark.ts"
         },
         "./format": {
             "types": "./src/lib/format.ts",
@@ -51,20 +59,20 @@
             "default": "./src/composables/useHighlighter.ts"
         },
         "./device": {
-            "types": "./src/components/deviceDetail.ts",
-            "default": "./src/components/deviceDetail.ts"
+            "types": "./src/components/sandbox/deviceDetail.ts",
+            "default": "./src/components/sandbox/deviceDetail.ts"
         },
         "./sandbox-resources": {
-            "types": "./src/components/sandboxResources.ts",
-            "default": "./src/components/sandboxResources.ts"
+            "types": "./src/components/sandbox/sandboxResources.ts",
+            "default": "./src/components/sandbox/sandboxResources.ts"
         },
         "./notice": {
-            "types": "./src/components/notice.ts",
-            "default": "./src/components/notice.ts"
+            "types": "./src/components/feedback/notice.ts",
+            "default": "./src/components/feedback/notice.ts"
         },
         "./series": {
-            "types": "./src/components/seriesAccent.ts",
-            "default": "./src/components/seriesAccent.ts"
+            "types": "./src/components/charts/seriesAccent.ts",
+            "default": "./src/components/charts/seriesAccent.ts"
         },
         "./preference": {
             "types": "./src/composables/preference.ts",

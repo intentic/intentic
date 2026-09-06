@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { argv } from "node:process";
 import { pathToFileURL } from "node:url";
 import { packageRoot } from "@intentic/constants/node";
-import { extensionUiNames } from "../../../_editor/extension-ui/names.mjs";
+import { extensionUiNames } from "../../../_shared/extension-ui/names.mjs";
 
 // Generates public/ext-shims/*.js: the static ESM shims that re-export the host's module instances from
 // globalThis.__intenticHost (published by src/extension-host/hostModules.ts). The import map in index.html

@@ -30,7 +30,7 @@
         "@intentic/base": "workspace:*",
         "@intentic/browser": "workspace:*",
         "@intentic/constants": "workspace:*",
-        "@intentic/desktop": "workspace:*",
+        "@intentic/desktop-automation": "workspace:*",
         "@intentic/local-agent": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",

@@ -40,9 +40,9 @@ import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import { formatElapsed } from "../composables/agents/agentStatus";
-import { markSegments } from "../composables/agents/markSegments";
-import IdentityTile from "./IdentityTile.vue";
+import { formatElapsed } from "../features/agents/fleet/agentStatus";
+import { markSegments } from "../features/agents/review/markSegments";
+import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
 import MatchLine from "./MatchLine.vue";
 
 const props = defineProps<{

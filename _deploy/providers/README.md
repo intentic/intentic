@@ -12,8 +12,8 @@ The real **Provider SPI implementations** the engine reconciles against: the onl
 ## Key files
 
 - [src/index.ts](src/index.ts): `createProviders` + `ProviderDeps`; re-points to every `create*Provider` factory.
-- `src/<kind>.ts`, one provider per kind: e.g. [src/cloudflare.ts](src/cloudflare.ts), [src/forgejo.ts](src/forgejo.ts), [src/komodo.ts](src/komodo.ts), [src/deployment.ts](src/deployment.ts), [src/cf-route.ts](src/cf-route.ts), [src/ci.ts](src/ci.ts).
-- `src/<system>-api.ts`, HTTP adapters: [src/forgejo-api.ts](src/forgejo-api.ts), [src/komodo-api.ts](src/komodo-api.ts), [src/cloudflare-api.ts](src/cloudflare-api.ts), [src/authentik-api.ts](src/authentik-api.ts); fakes like [src/forgejo-api.fake.ts](src/forgejo-api.fake.ts).
+- `src/<kind>.ts`, one provider per kind: e.g. [src/network/cloudflare.ts](src/network/cloudflare.ts), [src/forgejo/forgejo.ts](src/forgejo/forgejo.ts), [src/komodo/komodo.ts](src/komodo/komodo.ts), [src/komodo/deployment.ts](src/komodo/deployment.ts), [src/network/cf-route.ts](src/network/cf-route.ts), [src/forgejo/ci.ts](src/forgejo/ci.ts).
+- `src/<system>-api.ts`, HTTP adapters: [src/forgejo/forgejo-api.ts](src/forgejo/forgejo-api.ts), [src/komodo/komodo-api.ts](src/komodo/komodo-api.ts), [src/network/cloudflare-api.ts](src/network/cloudflare-api.ts), [src/auth/authentik-api.ts](src/auth/authentik-api.ts); fakes like [src/forgejo/forgejo-api.fake.ts](src/forgejo/forgejo-api.fake.ts).
 - [src/backings](src/backings): `sshExecutor` (+ `SshExecutor`/`SshSession`); [src/api-validation.test.ts](src/api-validation.test.ts), input-validation coverage.
 - The three **skeletons** every Docker-deploying provider is built from, so a new one is a spec rather than another copy of `read`/`diff`/`apply`/`delete`/`list`:
     - [src/core/backing-provider.ts](src/core/backing-provider.ts) — one container per node id (postgres, valkey, garage, authentik): a schema, a compose file, a readiness probe.

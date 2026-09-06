@@ -1,5 +1,5 @@
 import { addCollection } from "@iconify/vue";
-import Icon from "@intentic/ui/src/components/Icon.vue";
+import Icon from "@intentic/ui/icon";
 import { BUNDLED_ICONS } from "@intentic/ui/src/icons/iconData.generated.js";
 import { vTooltip } from "@intentic/ui/src/lib/tooltip.js";
 import type { App } from "vue";

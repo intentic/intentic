@@ -12,7 +12,7 @@
  */
 import type { MatchSnippet } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { markSegments } from "../composables/agents/markSegments";
+import { markSegments } from "../features/agents/review/markSegments";
 
 const props = defineProps<{
     snippet: MatchSnippet;
