@@ -1,6 +1,6 @@
 import type { PaymentOffer, WalletConfig } from "@intentic/sandbox-contract";
 import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseCard, type SettledCard, whyOf } from "../agent/run/offer-card.js";
-import type { RelayedAnswer } from "../platform/relay.js";
+import type { RelayedAnswer } from "../platform/platform-relay.js";
 import type { SignRequest } from "./wallet-signer.js";
 import { type OpenedPayment, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";
 import {
@@ -14,8 +14,8 @@ import {
     usdToAtomic,
 } from "./x402.js";
 
-/* THE PAYMENT GATE, the services spend gate's shape (platform/service-offer.ts), pointed at the open x402
- * web instead of the platform's catalog. The agent's `wallet fetch` PARKS here: the daemon makes the unpaid
+/* THE PAYMENT GATE, the shape the platform's own spend gate had before the services catalog was removed,
+ * pointed at the open x402 web instead. The agent's `wallet fetch` PARKS here: the daemon makes the unpaid
  * request itself, parses the endpoint's own 402 challenge, checks the owner's policy, raises an offer card
  * whose every number is the daemon's arithmetic over that challenge and the wallet's ledger (never anything
  * the model typed, the model owns the URL, the request body, and one line of why), and only the owner's

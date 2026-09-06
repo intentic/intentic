@@ -4,10 +4,9 @@
 and what shipped follows it: see "What was built" at the end for the file-level map and the two deliberate
 substitutions. Phases 2–4 (budgets beyond the first band, discovery/reputation, other rails) are not built.
 
-Written 2026-08-19. Companion to [services-integration-snowball.md](../audits/services-integration-snowball.md),
-whose "x402 fork" section (lines 139–195) anticipated this feature and whose conclusions this design
-adopts: the spend gate is the product, the rail is a swappable back end, and the agent must never hold
-keys. This note adds the missing halves: what a real vendor actually shipped, what protocol compliance
+Written 2026-08-19. It began as a companion to the services integration snowball audit, removed with the
+services feature; the conclusions this design adopts from it stand on their own: the spend gate is the
+product, the rail is a swappable back end, and the agent must never hold keys. This note adds the missing halves: what a real vendor actually shipped, what protocol compliance
 concretely requires, and the file-level design for this repo.
 
 ---

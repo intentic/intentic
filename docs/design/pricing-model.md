@@ -4,10 +4,9 @@ A rethink of the price list, written 2026-09-06 from the source as it stands. Th
 prices credits, premium extensions and paid services; a membership also lifts the hosted sandbox's hour cap;
 the product is free on your own machine. How should those be positioned, and should one go? The answer,
 stated once here and argued below: **sell the machine, drop the credit economy.** Companion to
-[positioning.md](../marketing/positioning.md) (the business-model paragraph), [messaging.md](../marketing/messaging.md)
-(the pricing page rule) and the two audits this supersedes,
-[services-integration-snowball.md](../audits/services-integration-snowball.md) and
-[services-admission-design.md](services-admission-design.md).
+[positioning.md](../marketing/positioning.md) (the business-model paragraph) and [messaging.md](../marketing/messaging.md)
+(the pricing page rule). It replaces the two services audits — the integration snowball and the admission
+design — which were removed with the feature they described.
 
 ## 1. What is sold today
 

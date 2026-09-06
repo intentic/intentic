@@ -86,7 +86,6 @@ const MUTUAL_PAIRS = new Set([
     "agent <-> runtimes/minted",
     "agent <-> runtimes/kimi",
     "agent <-> runtimes/pi",
-    "agent <-> platform",
     "agent <-> rules",
     "agent <-> runners",
     "agent <-> secrets",

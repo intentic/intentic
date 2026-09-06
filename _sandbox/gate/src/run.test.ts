@@ -69,7 +69,7 @@ test("the card reader takes a schema-valid summary and maps every status onto an
         updatedAt: 1,
         branch: "agent/ci-1-1",
         title: "Fix the flaky test",
-        attention: { plan: false, question: true, permission: false, service: false, capability: false, credential: false, conflict: false },
+        attention: { plan: false, question: true, permission: false, capability: false, credential: false, conflict: false },
     });
     const card = readCard(summary);
     expect(card?.status).toBe("awaiting");

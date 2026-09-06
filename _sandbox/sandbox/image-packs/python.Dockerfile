@@ -7,7 +7,7 @@
 #             without uv every modern python repo dropped into /work reports `unsupported` and nothing in the
 #             product can install it. It is also what BUILDS the `.venv` that isolated turns mirror
 #             (@intentic/constants/mirror-roots), which is why the recipes name one path and one name.
-#   ruff    — the per-edit check for a `.py` file (agent/verification/python-diagnostics.ts). It answers a file
+#   ruff    — the per-edit check for a `.py` file (agent/verification/python/python-diagnostics.ts). It answers a file
 #             in milliseconds and needs no environment at all, which is what lets the post-edit hook run it on
 #             every edit the way the TypeScript half runs tsgo.
 #   pyright — the type half of that check, and the only one of the two that can see a wrong attribute or a bad

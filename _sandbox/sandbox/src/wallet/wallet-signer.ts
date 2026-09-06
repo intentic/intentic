@@ -1,5 +1,5 @@
 import type { Config } from "../env.config.js";
-import { relayPlatform, type RelayedAnswer } from "../platform/relay.js";
+import { relayPlatform, type RelayedAnswer } from "../platform/platform-relay.js";
 import type { TransferAuthorization } from "./x402.js";
 
 /* THE SIGNER RELAY, the daemon's door onto the platform's wallet signer, and the whole of what this

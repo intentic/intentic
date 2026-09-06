@@ -26,7 +26,7 @@ import type { IconName } from "@intentic/extension-ui";
 export type FixStanceKind =
     // A turn is in flight. Nothing is owed by the reader.
     | `working`
-    // Parked on the user: a question, a plan, a permission, a spend, a setup, a conflict.
+    // Parked on the user: a question, a plan, a permission, a setup, a conflict.
     | `needs-you`
     // The fix is written and held on the agent's branch, waiting to be reviewed and landed.
     | `ready`

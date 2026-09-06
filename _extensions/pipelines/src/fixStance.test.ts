@@ -2,7 +2,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fixStance } from "./fixStance";
 
-const NO_ATTENTION = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
+const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
 const agent = (over: Partial<AgentSummary> = {}): AgentSummary => ({
     id: `ci-fix-web-42`,
@@ -37,10 +37,10 @@ test("a parked turn is read off the attention flag, not the status", () => {
     expect(stance.ongoing).toBe(true);
 });
 
-// Money and setup outrank a plain question: those are the ones where waiting costs the agent its call.
-test("a spend approval outranks a question raised beside it", () => {
-    const stance = fixStance(agent({ status: `awaiting`, attention: { ...NO_ATTENTION, question: true, service: true } }));
-    expect(stance.label).toBe(`Spend approval`);
+// Setup outranks a plain question: it is the one where waiting blocks the agent outright.
+test("a setup that is not connected yet outranks a question raised beside it", () => {
+    const stance = fixStance(agent({ status: `awaiting`, attention: { ...NO_ATTENTION, question: true, capability: true } }));
+    expect(stance.label).toBe(`Setup needed`);
 });
 
 test("a turn parked with no flag yet still says it is waiting on you", () => {

@@ -3,8 +3,8 @@ import { access, constants } from "node:fs/promises";
 import os from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import type { CheckPlacement } from "@intentic/lsp/client";
-import { onPath } from "../../platform/boot/on-path.js";
-import type { DiagAnswer, DiagRequest } from "./agent-diagnostics.js";
+import { onPath } from "../../../platform/boot/on-path.js";
+import type { DiagAnswer, DiagRequest } from "../agent-diagnostics.js";
 
 /* THE PYTHON HALF OF THE POST-EDIT CHECK, the same seam the TypeScript one answers on (agent-diagnostics.ts's
  * DiagRunner), a different pair of tools behind it.

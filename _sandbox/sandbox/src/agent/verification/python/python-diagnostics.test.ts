@@ -1,3 +1,4 @@
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { pyrightErrors, ruffFindings } from "./python-diagnostics.js";
 
@@ -20,7 +21,7 @@ test("ruff's two diagnostic spellings both parse, and the prose around them does
             "Found 2 errors.",
             "",
         ].join("\n"),
-        "/work/app",
+        `${WORKSPACE_ROOT}/app`,
         asIs,
     );
 
@@ -33,8 +34,8 @@ test("ruff's two diagnostic spellings both parse, and the prose around them does
 test("a relative path is resolved against the run's own directory before it is reported in the agent's names", () => {
     // Both halves of what stands between a tool's idea of a path and the agent's: ruff names the file relative
     // to where it ran, and an unanchored turn's checker stands in the worktree while the agent stands in /work.
-    const findings = ruffFindings("deep/main.py:2:12: F821 Undefined name `x`", "/history/worktrees/c1/app", (file) =>
-        file.replace("/history/worktrees/c1", "/work"),
+    const findings = ruffFindings("deep/main.py:2:12: F821 Undefined name `x`", `${HISTORY_ROOT}/worktrees/c1/app`, (file) =>
+        file.replace(`${HISTORY_ROOT}/worktrees/c1`, WORKSPACE_ROOT),
     );
 
     expect(findings.map((finding) => finding.text)).toEqual(["/work/app/deep/main.py:2:12: error F821: Undefined name `x`"]);
@@ -46,20 +47,20 @@ const PYRIGHT_JSON = JSON.stringify({
     version: "1.1.413",
     generalDiagnostics: [
         {
-            file: "/work/app/main.py",
+            file: `${WORKSPACE_ROOT}/app/main.py`,
             severity: "error",
             message: 'Cannot access attribute "titel" for class "str"\n  Attribute "titel" is unknown',
             range: { start: { line: 11, character: 4 }, end: { line: 11, character: 9 } },
             rule: "reportAttributeAccessIssue",
         },
         {
-            file: "/work/app/main.py",
+            file: `${WORKSPACE_ROOT}/app/main.py`,
             severity: "warning",
             message: 'Import "os" is not accessed',
             range: { start: { line: 0, character: 0 }, end: { line: 0, character: 9 } },
         },
         {
-            file: "/work/app/main.py",
+            file: `${WORKSPACE_ROOT}/app/main.py`,
             severity: "error",
             message: 'Import "httpx" could not be resolved',
             range: { start: { line: 2, character: 7 }, end: { line: 2, character: 12 } },

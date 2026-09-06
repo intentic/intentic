@@ -5,7 +5,7 @@
         "_sandbox/sandbox/src/capabilities/handlers": 35,
         "_shared/sandbox-contract/src/contracts": 41,
         "_shared/sandbox-contract/src/schemas": 51,
-        "_site/site/src/components": 37
+        "_site/site/src/components": 36
     },
     "collisions": {
         "_deploy/cli": 2,

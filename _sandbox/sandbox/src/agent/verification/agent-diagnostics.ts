@@ -5,7 +5,7 @@ import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../..
 import { modulesNear, type NearbyModules } from "../../workspace/deps/dependency-drift.js";
 import type { ShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOLS, editedPath } from "../../rules/edit-tools.js";
-import { PYTHON_EXTENSIONS, PYTHON_UNAVAILABLE_NOTE, runPythonDiag } from "./python-diagnostics.js";
+import { PYTHON_EXTENSIONS, PYTHON_UNAVAILABLE_NOTE, runPythonDiag } from "./python/python-diagnostics.js";
 
 /* Post-edit diagnostics feedback, the VSCode Claude Code loop, reproduced daemon-side: after every native
  * Edit/Write the touched file is type-checked and any COMPILE ERRORS ride back to the model as additionalContext,
