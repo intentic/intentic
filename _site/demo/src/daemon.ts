@@ -551,6 +551,30 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/extensions/{id}/settings`, () => json({ ok: true })],
     [`GET`, `/approvals`, () => json({ approvals: [], invalid: [] })],
     [`GET`, `/members`, () => json({ members: [] })],
+    /* THE API TOKENS the Access tab lists and mints (auth/control-tokens.ts): two on the roster, one of them
+     * never used and one expiring, which is the state the roster exists to make visible, and a mint that
+     * answers the once-shown value the section renders with its snippets. */
+    [
+        `GET`,
+        `/system/control/tokens`,
+        () =>
+            json({
+                tokens: [
+                    {
+                        id: `ct_ci`,
+                        label: `nightly CI`,
+                        scope: `drive`,
+                        createdAt: Date.now() - 12 * 24 * 3_600_000,
+                        createdBy: `ada@acme.dev`,
+                        expiresAt: Date.now() + 78 * 24 * 3_600_000,
+                        lastUsedAt: Date.now() - 6 * 3_600_000,
+                    },
+                    { id: `ct_zed`, label: `Zed on laptop`, scope: `editor`, createdAt: Date.now() - 40 * 24 * 3_600_000, createdBy: `ada@acme.dev` },
+                ],
+            }),
+    ],
+    [`POST`, `/system/control/tokens`, () => json({ id: `ct_new`, token: `ict_demo-shown-once-Q7xk2Lm9vRt4Bw8zN1pC3sYf6Hd0Ja5Ke` })],
+    [`DELETE`, `/system/control/tokens/{id}`, () => json({ ok: true })],
     [`GET`, `/environment`, () => json(demoEnvironment())],
     [`GET`, `/environment/contents`, () => json(demoEnvironmentContents())],
     /* MOVING THE SANDBOX, the Environment tab's other half: one card for what leaves and one for what arrives.

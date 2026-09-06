@@ -154,10 +154,12 @@ describe(`editing a stored automation`, () => {
 });
 
 describe(`editing preserves fields outside the changed control`, () => {
-    it(`keeps a webhook's token and disabled state`, () => {
+    it(`keeps a webhook's daily ceiling and disabled state`, () => {
+        // The token is not on the record any more (the daemon keeps it with the door), so what an edit has to
+        // carry through untouched is the trigger's own setting and the switch.
         const automation: Automation = {
             id: `deploy-hook`,
-            trigger: { kind: `event`, token: `stable-secret` },
+            trigger: { kind: `event`, dailyMax: 40 },
             prompt: `Handle the deploy.`,
             enabled: false,
         };

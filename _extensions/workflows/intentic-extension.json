@@ -12,6 +12,7 @@
             "POST /workflows",
             "DELETE /workflows/*",
             "POST /workflows/*/run",
+            "POST /workflows/*/gate/rotate",
             "GET /workflows/runs",
             "POST /workflows/runs/*/stop",
             "GET /loops/designs",

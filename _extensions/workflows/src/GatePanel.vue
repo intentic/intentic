@@ -9,13 +9,16 @@ import GateAccess from "./GateAccess.vue";
  * The engine has been finished for a while (gate.routes.ts); what was missing was any way to declare one
  * without hand-editing the manifest. The form asks exactly what the schema asks and nothing else: which step
  * decides, which of its declared fields carries the decision, which values ship, and how many runs a day the
- * owner will pay for. The webhook token is deliberately NOT a field here: it is minted on save and kept
- * across edits (workflows.routes.ts), so the panel only ever shows it, via <GateAccess>.
+ * owner will pay for. The webhook token is deliberately NOT a field here, nor on the design at all: the daemon
+ * mints it with the door on save and keeps it across edits (workflows.routes.ts), and hands it back beside the
+ * saved design, so the panel only ever shows it, via <GateAccess>.
  *
  * Presence is the switch, so there is no enabled toggle to get out of sync with the token behind it: adding
  * the gate opens the door on the next save, removing it closes the door and revokes the URL with it. */
 
-const { workflow } = defineProps<{ workflow: Workflow }>();
+// `gateToken` is what the designer's last save (or the list) answered for this design: the draft itself never
+// carries a credential, so the panel is handed it separately and renders it only once it exists.
+const { workflow, gateToken } = defineProps<{ workflow: Workflow; gateToken?: string }>();
 const emit = defineEmits<{ patch: [gate: WorkflowGate | undefined] }>();
 
 const gate = computed(() => workflow.gate);
@@ -145,7 +148,7 @@ const setDailyMax = (raw: string): void => {
                 </span>
             </label>
 
-            <GateAccess v-if="gate.token !== undefined" :workflow="workflow" />
+            <GateAccess v-if="gateToken !== undefined" :workflow="{ id: workflow.id, name: workflow.name, gateToken }" />
             <p v-else class="text-2xs text-subtle">Saving mints the webhook URL: it appears here and under the gate badge on the workflow's card.</p>
 
             <button type="button" :class="ui.linkButton(`self-start text-danger`)" @click="emit(`patch`, undefined)">

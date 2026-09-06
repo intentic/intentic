@@ -146,6 +146,9 @@ export const PersistedAgentSchema = z.object({
     // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat
     // visitor, a webhook) instead of the user starting it. Absent ⇒ a user-started agent.
     origin: AgentOriginSchema.optional(),
+    // Who asked for the first turn (a member's email, or `token:<label>`), latched like `origin`. Absent when
+    // the request carried no verified identity or principal.
+    startedBy: z.string().optional(),
     // Where this conversation was cut from, when it is a fork of another (ForkedFromSchema). Written from the
     // fork's first turn and never cleared, both ends of the relationship read it from here.
     forkedFrom: ForkedFromSchema.optional(),

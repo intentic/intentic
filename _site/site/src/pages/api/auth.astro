@@ -11,9 +11,18 @@ import ReferenceLayout from "../../components/ReferenceLayout.astro";
 const mint = `curl -X POST "$SANDBOX/system/control/tokens" \\
   -H "authorization: Bearer $OWNER_SESSION" \\
   -H "content-type: application/json" \\
-  -d '{"label":"nightly CI","scope":"read"}'
+  -d '{"label":"nightly CI","scope":"read","expiresAt":1790000000000}'
 
 { "id": "6f1c…", "token": "ict_9wQ…" }`;
+
+const ci = `- uses: intentic/gate-action@v1
+  with:
+    url: https://sandbox-….intentic.dev
+    token: \${{ secrets.INTENTIC_TOKEN }}
+    prompt: "Review this change: \${{ github.event.pull_request.html_url }}"
+
+# Any other CI, the same exchange:
+INTENTIC_URL=… INTENTIC_TOKEN=… npx @intentic/gate run "review the change at $URL"`;
 
 const use = `# A program, anywhere: the control token
 curl "$SANDBOX/git/root/status" -H "x-intentic-control: $INTENTIC_TOKEN"
@@ -26,6 +35,7 @@ const headings = [
     { id: "a-person", text: "A person, in a browser", level: 2 as const },
     { id: "a-program", text: "A program, anywhere", level: 2 as const },
     { id: "scopes", text: "What a scope reaches", level: 2 as const },
+    { id: "from-ci", text: "From a pipeline", level: 2 as const },
     { id: "open-on-purpose", text: "Open on purpose", level: 2 as const },
 ];
 ---
@@ -60,11 +70,19 @@ const headings = [
     <p>
         Anything outside a browser presents a <strong>control token</strong> in the <code>x-intentic-control</code> header instead. A control
         token is shown once, when it is minted. The daemon keeps only its hash, so it cannot be recovered and it can be revoked at any moment.
+        It may carry an expiry, and the daemon records who minted it and when it was last used, so the roster can say which tokens are
+        forgotten.
+    </p>
+    <p>
+        The app mints one under <strong>Sandbox → Access → API tokens</strong>: pick the scope and how long it lives, and the token appears once
+        with the paste-ready form for a shell, a GitHub Actions workflow or an editor. The same tab lists every token against the sandbox,
+        whichever surface minted it, with its scope, expiry and last use, and revokes them one at a time. <strong>Sandbox → Devices → Editor
+        bridge</strong> mints the <code>editor</code> slice with the editor's own settings snippet. The route behind both:
     </p>
     <DocsCodeBlock code={mint} lang="bash" title="Minting one as the owner" />
     <p>
-        The app mints one for you under <strong>Sandbox → Devices → Editor bridge</strong>, at <code>editor</code> scope, together with the
-        settings an editor needs to use it. Any other scope is minted through the route above, which requires an owner session.
+        A turn a token starts is attributed to it: the activity log's rows and the agent's card say <code>token:&lt;label&gt;</code> where a
+        person's turn says their email, which is the whole reason a token has a label.
     </p>
 
     <h2 id="scopes">What a scope reaches</h2>
@@ -72,6 +90,12 @@ const headings = [
         A scope is chosen when the token is minted and stored with it, rather than worked out from the caller. That is deliberate: the daemon
         cannot tell an editor from a build job from a cron script, because all three are just a program holding a secret. The only honest
         moment to decide how far one reaches is when a person decides it.
+    </p>
+    <p>
+        What a rung reaches is <em>derived from the member tiers</em> rather than kept as a second list: <code>read</code> is every read a
+        viewer may make, <code>drive</code> is everything a collaborator may do, and <code>land</code> adds the one press a collaborator's
+        grant turns into a request. Whatever tier a route floors at, no token reaches the sandbox's own trust surface: secrets, connected
+        accounts, the member roster, sessions, this token list, the terminal, logs, exports, money and the network.
     </p>
     <table>
         <thead>
@@ -98,11 +122,25 @@ const headings = [
         token presented on a route outside its scope gets a <a href={referenceHref("errors")}>403 that says so</a>, never a confusing 401.
     </p>
 
+    <h2 id="from-ci">From a pipeline</h2>
+    <p>
+        A CI job holding a <code>drive</code> token can start a turn, wait for it to settle and read how it ended, without learning the
+        API: the Marketplace action <code>intentic/gate-action</code> and <code>npx @intentic/gate run</code> do the three calls
+        (<code>POST /agent</code>, <code>GET /agents/&#123;id&#125;</code> until the card settles, <code>POST /agents/&#123;id&#125;/land</code>
+        when asked). The turn runs in its own conversation and branch, one per workflow run; a <code>land</code> token may also merge
+        it. The step ends <code>completed</code>, <code>parked</code> (the agent asked a person for something), <code>failed</code>,
+        or <code>timeout</code> (the deadline decided, and the agent keeps working).
+    </p>
+    <DocsCodeBlock code={ci} lang="yaml" title="The token goes in the repository's secret store once" />
+
     <h2 id="open-on-purpose">Open on purpose</h2>
     <p>
         A handful of routes check no credential, because the caller provably cannot present one: <code>/health</code>, the web-chat widget's
         routes, an automation's webhook, a forge's pipeline webhook, a workflow gate, and the enrolment routes a new computer redeems a
-        one-time pairing token on. Each carries its own narrower check instead of the general one.
+        one-time pairing token on. Each carries its own narrower check instead of the general one. A webhook or a gate takes its own token
+        as <code>?token=</code>, the one shape a webhook sender can carry, or as <code>authorization: Bearer …</code> from a caller that can
+        set a header; the sandbox keeps those tokens out of its versioned configuration, shows them to maintainers only, and rotates them
+        on demand.
     </p>
     <p>
         Only <code>/health</code> is missing from this reference, and that is on purpose too: it is not part of the contract. It exists so a

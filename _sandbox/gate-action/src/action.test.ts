@@ -1,7 +1,7 @@
 import { GateVerdictSchema } from "@intentic/sandbox-contract";
 import { WAIT_DEFAULT_S } from "@intentic/gate";
 import { expect, test } from "vitest";
-import { annotationOf, defaultRequest, outputLines, parseInputs, stepExitOf, summaryOf } from "./action.js";
+import { annotationOf, defaultRequest, outputLines, parseInputs, runAnnotationOf, runOutputLines, runStepExitOf, runSummaryOf, stepExitOf, summaryOf } from "./action.js";
 
 const GATE_URL = "https://box.example/workflows/wf/gate?token=t";
 const FIRE_URL = "https://box.example/automations/nightly/fire?token=t";
@@ -10,8 +10,39 @@ test("a gate URL and nothing else is a call with the defaults", () => {
     const parsed = parseInputs({ INPUT_URL: GATE_URL });
     expect(parsed).toEqual({
         kind: "inputs",
-        inputs: { url: GATE_URL, door: "gate", request: "", waitS: WAIT_DEFAULT_S, blockedAsFailure: false },
+        inputs: { url: GATE_URL, door: "gate", request: "", waitS: WAIT_DEFAULT_S, blockedAsFailure: false, land: false },
     });
+});
+
+/* THE THIRD ROAD is selected by the token, not by the URL's shape: the sandbox's own address plus a control token
+ * drives the agent. A door URL beside a token is a wiring mistake and says so, rather than one credential
+ * quietly winning over the other. */
+test("a token turns the sandbox's address into a run, with the prompt as the request", () => {
+    const parsed = parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t", INPUT_PROMPT: "review the change", INPUT_AGENT: "codex", INPUT_LAND: "true" });
+    expect(parsed).toEqual({
+        kind: "inputs",
+        inputs: { url: "https://box.example", door: "run", request: "review the change", waitS: WAIT_DEFAULT_S, blockedAsFailure: false, token: "ict_t", agent: "codex", land: true },
+    });
+    // A run with nothing to say, and a bad land flag, are refused before anything is started.
+    expect(parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t" })).toMatchObject({ kind: "error", message: expect.stringContaining("prompt") });
+    expect(parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t", INPUT_PROMPT: "go", INPUT_LAND: "yes" }).kind).toBe("error");
+    // A door URL carries its own credential; a token beside it is a mistake worth naming.
+    expect(parseInputs({ INPUT_URL: GATE_URL, INPUT_TOKEN: "ict_t", INPUT_PROMPT: "go" })).toMatchObject({ kind: "error", message: expect.stringContaining("door URL carries its own token") });
+    // And without a token, the sandbox's bare address is neither door.
+    expect(parseInputs({ INPUT_URL: "https://box.example" })).toMatchObject({ kind: "error", message: expect.stringContaining("add `with: token`") });
+});
+
+test("a run's outputs, summary, annotation and exit follow its ending", () => {
+    const done = { status: "completed" as const, conversationId: "ci-1-1", branch: "agent/ci-1-1", summary: "Fixed the flaky test" };
+    expect(runOutputLines(done, "D")).toBe("status<<D\ncompleted\nD\nconversation-id<<D\nci-1-1\nD\nbranch<<D\nagent/ci-1-1\nD\nsummary<<D\nFixed the flaky test\nD\n");
+    expect(runOutputLines({ ...done, landed: true }, "D")).toContain("landed<<D\ntrue\nD\n");
+    expect(runSummaryOf({ ...done, landed: false })).toContain("not landed");
+    expect(runAnnotationOf(done)).toBeUndefined();
+    expect(runAnnotationOf({ ...done, status: "parked", summary: "a question" })).toBe("::warning::parked: a question");
+    expect(runAnnotationOf({ ...done, status: "failed", summary: "50% done\nplan spent" })).toBe("::error::failed: 50%25 done%0Aplan spent");
+    expect(runStepExitOf(done)).toBe(0);
+    expect(runStepExitOf({ ...done, status: "parked" })).toBe(1);
+    expect(runStepExitOf({ ...done, status: "timeout" })).toBe(2);
 });
 
 test("the URL's own path names the door: no mode input to disagree with it", () => {

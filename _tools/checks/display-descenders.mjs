@@ -32,7 +32,7 @@
  * Deliberately NOT checked: how deep the padding is. 0.2em clears Playfair with room to spare, but the number
  * belongs to whoever is looking at the type, not to a script that cannot see it. */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
@@ -88,7 +88,8 @@ const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_site/site/src`, `_edito
     maxBuffer: 64 * 1024 * 1024,
 })
     .split(`\0`)
-    .filter((path) => path !== ``);
+    // On disk as well as in the index: a deletion left unstaged is still listed by git and has nothing to read.
+    .filter((path) => existsSync(`${root}/${path}`) && path !== ``);
 
 const marks = CLIPPED_TYPE.flatMap(({ marks: selectors }) => selectors);
 

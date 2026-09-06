@@ -4,6 +4,7 @@ import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { startConversationTurn } from "../agent/turn-resume.js";
 import type { WakeFn } from "../automations/scheduler.js";
+import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
@@ -41,9 +42,12 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
         return project;
     };
     return {
-        runs: i.runs.handler(async () => {
+        runs: i.runs.handler(async ({ context }) => {
             const projects = await ciProjects(services);
             const warnings = services.ciHooks.warnings();
+            // The recipe carries the webhook SECRET, so it reaches an operator's screen and nobody else's: not a
+            // viewer reading the board, not a program holding a read token (auth/operator.ts).
+            const operator = operatorHere(services, context);
             const repos: CiRepo[] = projects.map((project) => {
                 const warning = warnings.get(project.repo);
                 return {
@@ -51,7 +55,8 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                     host: project.account.provider,
                     project: project.project,
                     url: ciClientFor(project.account.provider, fetchFn).projectUrl(project),
-                    ...(warning !== undefined ? { hookWarning: warning } : {}),
+                    ...(warning !== undefined ? { hookWarning: warning.reason } : {}),
+                    ...(operator && warning?.recipe !== undefined ? { hookRecipe: warning.recipe } : {}),
                 };
             });
             const cached = services.ciRuns.sweep();

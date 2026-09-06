@@ -57,7 +57,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", {
-            warnings: () => new Map(warned ? [["web", "Pipeline webhooks are off: this sandbox has no public URL."]] : []),
+            warnings: () => new Map(warned ? [["web", { reason: "Pipeline webhooks are off: this sandbox has no public URL." }]] : []),
         }),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),

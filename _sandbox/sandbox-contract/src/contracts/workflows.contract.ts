@@ -1,5 +1,5 @@
 import { oc } from "@orpc/contract";
-import { OkSchema } from "../schemas/shared.js";
+import { DoorTokenSchema, OkSchema } from "../schemas/shared.js";
 import {
     WorkflowIdParamSchema,
     WorkflowRunIdParamSchema,
@@ -7,8 +7,8 @@ import {
     WorkflowRunsListSchema,
     WorkflowRunStartSchema,
     WorkflowSaveSchema,
-    WorkflowSchema,
     WorkflowsListSchema,
+    WorkflowSavedSchema,
 } from "../schemas/workflows.js";
 
 /* The workflow routes, "run these sessions, in this order, each handing its result to the next".
@@ -49,7 +49,18 @@ export const workflowsContract = {
                 "Writes a workflow design. Say which of the two you mean, so an id that happens to collide cannot silently overwrite somebody's work. A design that could never run is refused, in the same words the editor shows while you type: a loop in the steps, a step waiting on one that is not there, a step with no way of knowing it is finished.",
         })
         .input(WorkflowSaveSchema)
-        .output(WorkflowSchema),
+        .output(WorkflowSavedSchema),
+    // The gate's credential, minted anew; the URL every pipeline was taught stops working the moment this answers.
+    rotateGateToken: oc
+        .route({
+            method: "POST",
+            path: "/workflows/{id}/gate/rotate",
+            summary: "Rotate a release gate's token",
+            description:
+                "Mints a new credential for the workflow's release gate and retires the old one at once. Every pipeline wired to the gate has to be handed the new URL. Refused for a workflow that declares no gate.",
+        })
+        .input(WorkflowIdParamSchema)
+        .output(DoorTokenSchema),
     // Deleting a workflow does NOT stop a run of it that is in flight, and does not delete its history: the run
     // snapshotted its definition when it started, so it stays readable and stays stoppable.
     remove: oc

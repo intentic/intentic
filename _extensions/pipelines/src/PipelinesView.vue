@@ -374,8 +374,11 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                                 </a>
                             </template>
 
+                            <!-- The reason is everyone's; the recipe (URL + the secret deliveries are signed with) is
+                                 attached by the daemon for a maintainer or the owner only, so it renders when it came. -->
                             <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
                                 {{ standing.repo.hookWarning }}
+                                <template v-if="standing.repo.hookRecipe"> {{ standing.repo.hookRecipe }}</template>
                             </Notice>
 
                             <PipelineRunRow

@@ -6,8 +6,8 @@ import { objectParse } from "../store/unknown-keys.js";
 // The CI module's daemon-recorded state (<workspace>/.intentic/secrets/ci.json): the per-sandbox webhook secret, the
 // last TERMINAL conclusion per repo+branch, what makes a success after a failure read as `pipeline_fixed`, and
 // a failure after a success as `pipeline_broken`, across daemon restarts, and the poller's memory of which
-// runs it has already announced. It carries a secret, so the file rides the CONTROL_PLANE_ENTRIES denylist
-// (workspace-files-paths.ts) like capabilities.json.
+// runs it has already announced. It carries a secret, so the file is one of the contract's LOCKED_STATE_ENTRIES
+// (workspace-state.ts), closed to the file API like capabilities.json and the door tokens beside it.
 //
 // Nothing records that the owner has LOOKED at the board: the rail badge stands for the state of CI, not for
 // unread news, so the only thing that clears it is a commit that passes (ext-pipelines' ciStreaks.ts).

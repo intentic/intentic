@@ -8,6 +8,7 @@ import { unstubbed } from "@intentic/testing";
 import { createAgentsRegistry } from "./agents/agents-registry.js";
 import { createAuthConnections } from "./auth/connections.js";
 import type { ControlScope } from "./auth/control-tokens.js";
+import { memoryDoorTokens } from "./auth/door-tokens.js";
 import { createMediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets } from "./auth/ws-tickets.js";
 import type { Services } from "./composition.js";
@@ -225,11 +226,18 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         /* In-memory control-token fake: one fixed token per scope, named for it, so a middleware test can
          * present the exact reach it means to exercise without a store file. `ict_valid` is the editor scope
          * because that is the grant that existed first and the one most tests are about. */
+        // The doors' credentials, in memory: a test seeds one with `ensure` and presents it, exactly as an
+        // operator copies the URL off the row.
+        doorTokens: memoryDoorTokens(),
         controlTokens: {
             mint: async (label, scope) => ({ id: "ct-1", token: `ict_minted-${scope}-${label}` }),
-            scopeOf: async (presented) =>
-                ({ ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" })[presented] as
-                    ControlScope | undefined,
+            resolve: async (presented) => {
+                const scope = ({ ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" })[presented] as
+                    | ControlScope
+                    | undefined;
+                return scope === undefined ? undefined : { id: `ct-${scope}`, label: `${scope} token`, scope };
+            },
+            touch: async () => undefined,
             list: async () => [{ id: "ct-1", label: "test", scope: "editor", createdAt: 0 }],
             revoke: async () => true,
         },

@@ -9,12 +9,12 @@
 // those three apart, which is why they are three tests.
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // What this component's import chain reads at module eval: the app's environment (the API client) and a media
 // query (the UI barrel's useDevice), exactly as DesktopSyncCard.test.ts cuts the same edge.
 
-const sandboxJson = vi.fn(async () => ({ members: [] }));
+const sandboxJson = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
 vi.mock(`../../composables/sandbox/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
 
 const create = vi.fn();
@@ -22,8 +22,13 @@ const list = vi.fn(async () => ({ members: [] }));
 vi.mock(`../../composables/useApi`, () => ({ apiClient: { invite: { list: () => list(), create: (...a: unknown[]) => create(...a) } } }));
 
 vi.mock(`../../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+const role = ref<`owner` | `viewer`>(`owner`);
 vi.mock(`../../composables/sandbox/useSandbox`, () => ({
-    useSandbox: () => ({ active: ref({ name: `radarsu-mig`, role: `owner` }), activeSandboxId: ref(`s1`) }),
+    useSandbox: () => ({
+        active: computed(() => ({ name: `radarsu-mig`, role: role.value })),
+        activeSandboxId: ref(`s1`),
+        daemonUrl: ref(`https://sandbox-abc.example.test`),
+    }),
 }));
 vi.mock(`../../composables/sandbox/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
 vi.mock(`../../composables/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
@@ -65,6 +70,7 @@ const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
 afterEach(() => {
     sandboxJson.mockReset();
     sandboxJson.mockResolvedValue({ members: [] });
+    role.value = `owner`;
     create.mockReset();
     list.mockReset();
     list.mockResolvedValue({ members: [] });
@@ -167,7 +173,8 @@ it(`arms sign-out-everywhere before firing it, and says who it hits`, async () =
 
     buttonLabelled(`Sign out all browsers`)?.click();
     await nextTick();
-    expect(sandboxJson).not.toHaveBeenCalled();
+    // The tab READS on mount (tokens, the other doors); arming must not WRITE.
+    expect((sandboxJson.mock.calls as unknown[][]).some(([, init]) => (init as { method?: string } | undefined)?.method === `POST`)).toBe(false);
     expect(shown()).toContain(`has to sign in again`);
 
     buttonLabelled(`Cancel`)?.click();
@@ -189,4 +196,49 @@ it(`revokes only on the confirming click, then reports it`, async () => {
 
     expect(sandboxJson).toHaveBeenCalledWith(`/system/sessions/revoke`, { method: `POST` });
     expect(shown()).toContain(`Every browser has been signed out`);
+});
+
+/* THE API TOKENS SECTION, the one credential surface on this tab that is not about a person. Owner-only, mints
+ * with a scope and an expiry, and shows the raw value exactly once, with the shell snippet a program needs. */
+it(`mints an API token as the owner and shows it once with its snippet`, async () => {
+    sandboxJson.mockImplementation(async (path: unknown, init?: unknown) => {
+        if (path === `/system/control/tokens` && (init as { method?: string } | undefined)?.method === `POST`) {
+            return { id: `ct-1`, token: `ict_shown-once` };
+        }
+        if (path === `/system/control/tokens`) {
+            return { tokens: [{ id: `ct-1`, label: `nightly CI`, scope: `read`, createdAt: Date.parse(`2026-09-01T00:00:00Z`), createdBy: `owner@example.com` }] };
+        }
+        return { members: [], automations: [], workflows: [], repos: [] };
+    });
+    mount();
+    await nextTick();
+    await nextTick();
+    expect(shown()).toContain(`API tokens`);
+    expect(shown()).toContain(`nightly CI`);
+    expect(shown()).toContain(`never used`);
+
+    buttonLabelled(`Mint token`)?.click();
+    await nextTick();
+    await nextTick();
+    expect(shown()).toContain(`ict_shown-once`);
+    expect(shown()).toContain(`Shown once`);
+    const mintCall = (sandboxJson.mock.calls as unknown[][]).find(
+        ([path, init]) => path === `/system/control/tokens` && (init as { method?: string } | undefined)?.method === `POST`,
+    );
+    if (mintCall === undefined) {
+        throw new Error(`no mint request reached the sandbox`);
+    }
+    const body = JSON.parse((mintCall[1] as { body: string }).body) as { scope: string; expiresAt?: number };
+    // The default rung is the narrow one and the default life is bounded, so a token minted without thought
+    // is the safe one; the daemon never sees an expiry when the form says never.
+    expect(body.scope).toBe(`read`);
+    expect(body.expiresAt).toBeGreaterThan(Date.now());
+});
+
+it(`keeps the token surfaces off a member's tab`, async () => {
+    role.value = `viewer`;
+    mount();
+    await nextTick();
+    expect(shown()).not.toContain(`API tokens`);
+    expect(shown()).not.toContain(`Other ways in`);
 });

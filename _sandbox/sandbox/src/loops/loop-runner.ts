@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import type { AgentEvent, AgentTurn, Loop, LoopDocument, LoopIteration, LoopRecord, LoopState } from "@intentic/sandbox-contract";
 import { startTurnRun } from "../agent/turn-runs.js";
+import type { TurnInput } from "../agent/turn-actor.js";
 import { sumUsage, type UsageFrame } from "../agent/turn-usage.js";
 import type { Services } from "../composition.js";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
@@ -50,7 +51,7 @@ export const stopLoop = (conversationId: string): boolean => {
 
 // The turn generator, injected, streamAgent's shape. Same reason the scheduler takes its WakeFn: importing
 // agent.routes here would close a cycle through the workspace events it emits.
-export type TurnFn = (services: Services, input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
+export type TurnFn = (services: Services, input: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
 // The tree an iteration works in, an isolated loop's own checkout, or the workspace itself. What the stop
 // command runs against and what the stall detector digests, so the two can never disagree about which tree the

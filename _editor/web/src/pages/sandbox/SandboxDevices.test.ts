@@ -82,7 +82,7 @@ const capabilities = ref<{ id: string; config: Record<string, string> }[]>([]);
 vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 // The two cards below the list have their own daemon calls; this mounts the list and nothing else.
 vi.mock(`./DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./BridgeTokensCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`./ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // A blocked machine's "open its permissions" is a link now, so the mock carries a stand-in for it.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),

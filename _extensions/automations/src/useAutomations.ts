@@ -14,14 +14,16 @@ import { host } from "./host";
 // well inside this; a long turn's outcome arrives with the next ordinary refetch.
 const RUN_SETTLE_POLL_MS = 5_000;
 
-// The event automation's webhook URL (with its daemon-minted token) for pasting into GitHub/Sentry/monitor
-// settings, rendered by both the list rows and the create dialog's done screen.
+/* The event automation's webhook URL (with its daemon-minted token) for pasting into GitHub/Sentry/monitor
+ * settings, rendered by both the list rows and the create dialog's done screen. The token is not on the record:
+ * the daemon attaches it to the listed summary for a maintainer or the owner (`webhookToken`) and for nobody
+ * else, so a viewer's list carries no URL to render, which is the point rather than a gap. */
 export const webhookUrl = (automation: AutomationSummary): string | undefined => {
     const base = host().sandbox.origin();
-    if (automation.trigger.kind !== `event` || base === undefined) {
+    if (automation.trigger.kind !== `event` || base === undefined || automation.webhookToken === undefined) {
         return undefined;
     }
-    return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${automation.trigger.token ?? ``}`;
+    return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${encodeURIComponent(automation.webhookToken)}`;
 };
 
 /* The one line a customer pastes into their site to put a Front Desk on it. The daemon's own origin serves both
@@ -105,6 +107,11 @@ export function useAutomations() {
         mutationFn: (id: string) => api.sandbox.json(`/automations/${encodeURIComponent(id)}`, { method: `DELETE` }),
         onSuccess: invalidate,
     });
+    // A fresh webhook token (or intake key), the old one retired at once; the list re-reads to show the new URL.
+    const rotateToken = useMutation({
+        mutationFn: (id: string) => api.sandbox.json(`/automations/${encodeURIComponent(id)}/rotate-token`, { method: `POST` }),
+        onSuccess: invalidate,
+    });
     /* Fire one now, without waiting for its cron / forging its webhook / provoking a Discord mention. The daemon
      * acks immediately and runs the turn detached, so success here means "it started", not "it finished", the run
      * row is where the outcome lands. Hence the two invalidations: one now for the fire, one a few seconds later
@@ -123,6 +130,7 @@ export function useAutomations() {
         save,
         setEnabled,
         remove,
+        rotateToken,
         run,
     };
 }

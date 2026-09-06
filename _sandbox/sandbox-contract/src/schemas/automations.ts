@@ -8,10 +8,11 @@ import { IssuesConfigSchema } from "./issues.js";
 // trigger, runs the optional guard command (a shell command in the workspace; non-zero exit skips the wake),
 // then runs one agent turn with the prompt. The manifest is user config; run history is daemon-recorded.
 
-// `schedule` fires on its cron; `event` fires when an external system POSTs /automations/{id}/fire?token=…
-// (a plain Hono route, webhook bodies are arbitrary). The token is the webhook's own auth (senders can't do
-// Google ID tokens): optional on input, the daemon generates one on upsert, and always present in stored and
-// listed automations, so the owner's UI can render the copyable URL.
+// `schedule` fires on its cron; `event` fires when an external system POSTs /automations/{id}/fire (a plain
+// Hono route, webhook bodies are arbitrary). The webhook's own auth is a token the daemon mints and keeps OUTSIDE
+// this manifest (.intentic/secrets/doors.json): the manifest is versioned and readable by every agent turn and
+// every viewer, which is no place for a credential. The listed record carries it (`webhookToken` on the summary)
+// for a maintainer or the owner only, so their UI can render the copyable URL.
 // `listener` fires from a realtime source's connection to the provider (an extension's gateway process holds
 // it, e.g. Discord), no cron, no token, never reachable via /fire. channelId narrows to one channel; absent ⇒
 // every channel the bot can read. eventType narrows to one kind of event (a Discord message, a live voice
@@ -91,11 +92,16 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     }),
     z.object({
         kind: z.literal("event").describe("When something calls its webhook."),
-        token: z
-            .string()
-            .min(1)
+        /* Calls per UTC day, across every caller. A webhook is a paid door reachable with no person in the loop
+         * (a monitor that flaps fires it every minute), and a leaked URL is unlimited agent turns until somebody
+         * notices. Absent ⇒ FIRE_DAILY_MAX_DEFAULT, never uncapped, for the reason the gate's ceiling is not
+         * optional either. */
+        dailyMax: z
+            .number()
+            .int()
+            .positive()
             .optional()
-            .describe("The credential a caller presents. It is the only one in the exchange, because an outside sender has no identity here."),
+            .describe("How many webhook calls a day may wake the agent, across every caller. Absent is a modest default rather than unlimited."),
     }),
     z.object({
         kind: z.literal("listener").describe("When a message arrives from somewhere outside."),
@@ -425,9 +431,23 @@ export const AutomationRunSchema = z.object({
 });
 export type AutomationRun = z.infer<typeof AutomationRunSchema>;
 // The list row: the stored automation + its recent runs + the next scheduled fire (absent when disabled).
+// The event webhook's daily ceiling when the trigger names none. Generous enough for a busy monitor, small
+// enough that a leaked URL is a bad day rather than a bad month.
+export const FIRE_DAILY_MAX_DEFAULT = 200;
 export const AutomationSummarySchema = AutomationSchema.extend({
     runs: z.array(AutomationRunSchema),
     nextRun: z.number().optional(),
+    /* THE DOOR'S CREDENTIALS, attached by the daemon for a maintainer or the owner and for nobody else: not a
+     * viewer, and never a program holding a control token. They live in the secrets store rather than in the
+     * manifest above, so this is the only road they travel, and it is the one a person copies a URL from. */
+    webhookToken: z
+        .string()
+        .optional()
+        .describe("What a caller presents at /automations/{id}/fire, for an event automation. Shown to a maintainer or the owner only."),
+    ingestKey: z
+        .string()
+        .optional()
+        .describe("What a client with no website origin presents to a bug intake. Shown to a maintainer or the owner only."),
 });
 export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
 export const AutomationsListSchema = z.object({ automations: z.array(AutomationSummarySchema) });

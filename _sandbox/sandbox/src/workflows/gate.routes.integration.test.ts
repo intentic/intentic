@@ -6,6 +6,7 @@ import { type AgentEvent, type AgentTurn, LOOP_DIR, SandboxSettingsSchema, type 
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { expect, test } from "vitest";
+import { memoryDoorTokens } from "../auth/door-tokens.js";
 import type { Services } from "../composition.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
@@ -19,8 +20,12 @@ import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js"
  * silently spend the other tests' allowance.
  */
 
-const TOKEN = "gate-token-abc";
 const REPOS = [{ repo: "root", base: "1111111111111111111111111111111111111111" }] as const;
+
+// ONE door store for the file: every test names its own workflow id, so the credentials never collide, and
+// `post` below presents the one the door was issued, exactly as an operator copies it off the gate panel.
+const DOORS = memoryDoorTokens();
+const token = (id: string): Promise<string> => DOORS.ensure("gate", id);
 
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
@@ -28,6 +33,7 @@ const fakeServices = (root: string): Services =>
         workflows: fileWorkflowsStore(join(root, "workflows.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         workflowRuns: fileWorkflowRunsStore(join(root, "workflow-runs.json")),
+        doorTokens: DOORS,
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         agents: unstubbed<Services["agents"]>("agents", { sessionIdOf: () => undefined }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root, snapshot: async () => REPOS }),
@@ -39,7 +45,7 @@ const gated = (id: string, over: Partial<Workflow> = {}): Workflow => ({
     id,
     name: "release gate",
     maxParallel: 1,
-    gate: { step: "judge", field: "release", pass: ["pass"], token: TOKEN },
+    gate: { step: "judge", field: "release", pass: ["pass"] },
     steps: [
         {
             id: "judge",
@@ -76,8 +82,12 @@ const appFor = (services: Services, wake: TurnFn): Hono => new Hono().post("/wor
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "gate-"));
 
-const post = async (app: Hono, id: string, query = `token=${TOKEN}`, body = ""): Promise<Response> =>
-    app.request(`/workflows/${id}/gate?${query}`, { method: "POST", body });
+// No query ⇒ the door's own credential, as the bearer header the gate CLI and the action send; a query is the
+// test's own wording (a wrong token, a deadline beside the token) and rides the URL as a webhook sender's would.
+const post = async (app: Hono, id: string, query?: string, body = ""): Promise<Response> =>
+    query === undefined
+        ? app.request(`/workflows/${id}/gate`, { method: "POST", body, headers: { authorization: `Bearer ${await token(id)}` } })
+        : app.request(`/workflows/${id}/gate?${query}`, { method: "POST", body });
 
 test("a passing judgment ships, and the run is the one the gate started", async () => {
     const root = tempRoot();
@@ -112,7 +122,7 @@ test("the request body reaches the step as the run's request", async () => {
     const services = fakeServices(root);
     const prompts: string[] = [];
     await services.workflows.save(gated("wf-body"), true);
-    await post(appFor(services, judging(root, "pass", prompts)), "wf-body", `token=${TOKEN}`, "sha=deadbeef url=https://preview.example");
+    await post(appFor(services, judging(root, "pass", prompts)), "wf-body", `token=${await token("wf-body")}`, "sha=deadbeef url=https://preview.example");
 
     expect(prompts[0]).toContain("https://preview.example");
 });
@@ -146,7 +156,7 @@ test("a gate past its daily ceiling refuses without starting a run", async () =>
     const root = tempRoot();
     const services = fakeServices(root);
     await services.workflows.save(
-        gated("wf-ceiling", { gate: { step: "judge", field: "release", pass: ["pass"], token: TOKEN, dailyMax: 1 } }),
+        gated("wf-ceiling", { gate: { step: "judge", field: "release", pass: ["pass"], dailyMax: 1 } }),
         true,
     );
     const app = appFor(services, judging(root, "pass"));
@@ -162,7 +172,7 @@ test("a gate past its daily ceiling refuses without starting a run", async () =>
 test("a gate pointed at a field nobody declares is refused at call time", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    await services.workflows.save(gated("wf-broken", { gate: { step: "judge", field: "shipit", pass: ["pass"], token: TOKEN } }), true);
+    await services.workflows.save(gated("wf-broken", { gate: { step: "judge", field: "shipit", pass: ["pass"] } }), true);
     const response = await post(appFor(services, judging(root, "pass")), "wf-broken");
 
     expect(response.status).toBe(400);
@@ -181,7 +191,7 @@ test("a run that outlasts the deadline is stopped and answers blocked", async ()
     };
 
     const startedAt = Date.now();
-    const response = await post(appFor(services, slow), "wf-slow", `token=${TOKEN}&wait=0.05`);
+    const response = await post(appFor(services, slow), "wf-slow", `token=${await token("wf-slow")}&wait=0.05`);
     const elapsed = Date.now() - startedAt;
 
     expect((await response.json()).outcome).toBe("blocked");

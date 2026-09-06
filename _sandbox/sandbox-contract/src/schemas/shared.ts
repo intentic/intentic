@@ -19,6 +19,13 @@ export type GrantedRole = z.infer<typeof GrantedRoleSchema>;
 // exactly one place.
 const MEMBER_ROLE_RANK: Record<MemberRole, number> = { viewer: 0, collaborator: 1, maintainer: 2, owner: 3 };
 export const roleAtLeast = (role: MemberRole, floor: MemberRole): boolean => MEMBER_ROLE_RANK[role] >= MEMBER_ROLE_RANK[floor];
+/* THE ANSWER TO ROTATING A DOOR'S CREDENTIAL, one shape for the event webhook, the release gate and the bug
+ * intake, because the act is the same at every door: the old value stops working the moment this answers, and
+ * the new one is shown to the maintainer who asked, to be pasted into the caller's secret store once. */
+export const DoorTokenSchema = z.object({
+    token: z.string().min(1).describe("The freshly minted credential. The previous one stopped working the moment this answered."),
+});
+export type DoorToken = z.infer<typeof DoorTokenSchema>;
 // Which repo a git route targets: "root" (the /work workspace repo) or a repo id, the repo's root-relative
 // dir, which may be nested ("clients/foo"; URL-encoded in the path param). Kept as a bare string on the wire
 // (not an enum) so an unknown repo is a handler-thrown NOT_FOUND, matching the daemon's prior 404, rather

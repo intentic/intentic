@@ -414,24 +414,31 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
     expect((await app.request("/ports", { headers: { "x-intentic-sync": "ist_bogus" } })).status).toBe(401);
 });
 
-test("POST /automations/:id/fire skips bearer auth, enforces the automation token, and records a run", async () => {
+test("POST /automations/:id/fire skips bearer auth, enforces the door's token from the query or a bearer header, and records a run", async () => {
     const store = memoryAutomationsStore([
-        { id: "deploy", trigger: { kind: "event", token: "tok-1" }, prompt: "handle the event", enabled: true, runs: [] },
-        { id: "paused", trigger: { kind: "event", token: "tok-2" }, prompt: "x", enabled: false, runs: [] },
+        { id: "deploy", trigger: { kind: "event" }, prompt: "handle the event", enabled: true, runs: [] },
+        { id: "paused", trigger: { kind: "event" }, prompt: "x", enabled: false, runs: [] },
         { id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "x", enabled: true, runs: [] },
     ]);
-    // Bearer auth rejects everything, so a 200 proves the route's exemption; the token is the only gate.
-    const app = createApp(services({ automations: store, auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
-    const fire = (path: string) => app.request(path, { method: "POST", body: "payload" });
+    // Bearer auth rejects everything, so a 200 proves the route's exemption; the door's token is the only gate.
+    const composed = services({ automations: store, auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } });
+    const app = createApp(composed);
+    // The credential lives in the door store, never on the record: this is what an operator copies off the row.
+    const deployToken = await composed.doorTokens.ensure("automation", "deploy");
+    const pausedToken = await composed.doorTokens.ensure("automation", "paused");
+    const fire = (path: string, headers: Record<string, string> = {}) => app.request(path, { method: "POST", body: "payload", headers });
 
-    expect((await fire("/automations/ghost/fire?token=tok-1")).status).toBe(404);
+    expect((await fire(`/automations/ghost/fire?token=${deployToken}`)).status).toBe(404);
     // Schedule automations can't be fired externally.
     expect((await fire("/automations/cron/fire?token=anything")).status).toBe(404);
     expect((await fire("/automations/deploy/fire?token=wrong")).status).toBe(401);
     expect((await fire("/automations/deploy/fire")).status).toBe(401);
-    expect((await fire("/automations/paused/fire?token=tok-2")).status).toBe(409);
+    expect((await fire(`/automations/paused/fire?token=${pausedToken}`)).status).toBe(409);
+    // A caller that can set a header keeps the credential out of the URL, and the header wins over a stale query.
+    expect((await fire("/automations/paused/fire?token=stale", { authorization: `Bearer ${pausedToken}` })).status).toBe(409);
+    expect((await fire("/automations/deploy/fire", { authorization: "Bearer wrong" })).status).toBe(401);
 
-    const ok = await fire("/automations/deploy/fire?token=tok-1");
+    const ok = await fire(`/automations/deploy/fire?token=${deployToken}`);
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ ok: true });
     // The turn runs detached (the fake agent completes instantly) and lands in the run history.

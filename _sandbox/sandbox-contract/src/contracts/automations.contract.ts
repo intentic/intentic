@@ -8,7 +8,7 @@ import {
     AutomationSchema,
     AutomationsListSchema,
 } from "../schemas/automations.js";
-import { OkSchema } from "../schemas/shared.js";
+import { DoorTokenSchema, OkSchema } from "../schemas/shared.js";
 
 // The sandbox's automations manifest (scheduled agent wake-ups). `list` returns each automation with its recent
 // runs + next fire time. `upsert` adds or edits by id (nothing to provision, the scheduler picks it up on its
@@ -65,6 +65,19 @@ export const automationsContract = {
         })
         .input(AutomationIdParamSchema)
         .output(OkSchema),
+    /* Mint a new credential for the automation's door, the event webhook's token or the bug intake's key, and
+     * retire the old one in the same breath. The one answer to a leaked URL that does not involve deleting the
+     * automation and re-teaching every caller its id. */
+    rotateToken: oc
+        .route({
+            method: "POST",
+            path: "/automations/{id}/rotate-token",
+            summary: "Rotate an automation's webhook token or intake key",
+            description:
+                "Mints a new credential for the door this automation opens and retires the old one at once. Every caller has to be handed the new URL; that is the point. Refused for an automation with no door.",
+        })
+        .input(AutomationIdParamSchema)
+        .output(DoorTokenSchema),
     /* Fire one automation NOW, by hand, the answer to "I wrote a 3 a.m. cron and I have no way to try it".
      * It runs the SAME path the real trigger runs: a schedule stays a headless main-tree wake, because a
      * test-fire that proves an isolated worktree works proves nothing about the fire it is standing in for. The

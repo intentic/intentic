@@ -417,7 +417,14 @@ export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
         readonly runner?: string;
         readonly provider: NonNullable<AgentTurn["agent"]>;
         readonly harness: NonNullable<AgentTurn["harness"]>;
+        // Who asked for this turn, as the daemon verified it (agent/turn-actor.ts). Latched on the first turn.
+        readonly startedBy?: string;
     };
+
+// Who asked for the conversation's FIRST turn, the same latch rule `begin` applies to `origin`: an existing
+// entry keeps its answer, and only a conversation the registry has never seen takes the request's.
+const startedByOf = (existing: PersistedAgent | undefined, turn: AgentTurnIdentity): { readonly startedBy?: string } =>
+    opt("startedBy", existing?.startedBy ?? turn.startedBy);
 
 export interface AgentsRegistry {
     readonly init: () => Promise<void>;
@@ -742,6 +749,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // under it would be describing a turn the board no longer shows as the last word.
             ...reportedFailure(entry, status),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
+            ...opt("startedBy", entry.startedBy),
             ...(entry.forkedFrom !== undefined ? { forkedFrom: entry.forkedFrom } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
@@ -1057,6 +1065,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(existing?.tier !== undefined ? { tier: existing.tier } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
+                ...startedByOf(existing, turn),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),
                 // The read marker survives the rebuild too, a new turn makes the agent unread again (updatedAt
                 // now outruns it), but WHEN it was last opened is what tells "New" from "Updated".

@@ -9,7 +9,6 @@ import {
 import type { Context } from "hono";
 import type { z } from "zod";
 import { streamAgent } from "../agent/agent.routes.js";
-import { tokenEquals } from "../auth/auth.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { createPublicDoor, type PublicDoor, type PublicDoorSpec } from "../automations/public-door.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -88,8 +87,7 @@ export const INTAKE_DOOR: PublicDoorSpec<IssuesConfig> = {
      *               what it buys is that a leaked one can be rotated in a click while the web stays covered by
      *               the allowlist. The ceilings are what actually bound the damage, which is the honest way
      *               round. */
-    admit: (automation, config, origin, key) => {
-        const keyed = config.ingestKey !== undefined && key !== undefined && tokenEquals(key, config.ingestKey);
+    admit: (automation, config, origin, keyed) => {
         if (origin === undefined) {
             return keyed ? undefined : "this intake needs a valid key";
         }

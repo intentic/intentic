@@ -53,6 +53,8 @@ import { createViewFrameLedger } from "./agent-viewing.js";
 import { nudgeUnverifiedWork } from "./verify-nudge.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { conversationOf } from "./agent-requests.js";
+import { actorOf, type TurnInput } from "./turn-actor.js";
+import { opt } from "./opt.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
 import {
@@ -230,7 +232,7 @@ async function* withSilentEnding(frames: AsyncIterable<AgentEvent>, silent: () =
 // sends no cancel frame, so the browser alone can't) and, on the Claude Code harness, the SteeringQueue
 // /agent/steer injects mid-turn user messages into. Both are registered under the conversationId for the
 // life of the turn; the remaining no-id path is reserved for internal one-shot calls that are not conversations.
-export async function* streamAgent(services: Services, input: AgentTurn, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
+export async function* streamAgent(services: Services, input: TurnInput, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
     const controller = new AbortController();
     if (signal?.aborted === true) {
         controller.abort();
@@ -353,7 +355,7 @@ async function* anchorIsolatedTurn(
 // chooses the placement-specific worktree/land flow inside that shared lifecycle.
 async function* runConversationTurn(
     services: Services,
-    input: AgentTurn,
+    input: TurnInput,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
@@ -412,6 +414,7 @@ async function* runConversationTurn(
             ...(input.tierHold !== undefined ? { tierHold: input.tierHold } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
+            ...opt("startedBy", input.actor),
             /* A fork names its source on its first turn and only then, `forkOf` rides exactly one request, and
              * the entry keeps what it said. `keep` counts the source's record rows above the cut, which IS the
              * index of the message the cut sat above, so the source can put its own mark back in that gap. */
@@ -1076,7 +1079,7 @@ const settleRefusals = (services: Services, provider: string, account: string | 
 // SDK session store follow.
 async function* runTurn(
     services: Services,
-    input: AgentTurn,
+    input: TurnInput,
     signal: AbortSignal | undefined,
     worktree:
         | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<AgentEvent | undefined> }
@@ -1317,7 +1320,8 @@ async function* runTurn(
     const resolvedAccount = plan.account;
     // The stamp itself, spread into every frame that carries the attribution, so the four sites that answer
     // "whose account was this" cannot drift into answering it three different ways.
-    const attribution: { account?: string } = resolvedAccount !== undefined ? { account: resolvedAccount } : {};
+    // Who asked (agent/turn-actor.ts) rides beside whose account served: the two halves of "whose turn was this".
+    const attribution: { account?: string; actor?: string } = { ...opt("account", resolvedAccount), ...opt("actor", input.actor) };
     let request = plan.request;
     // Bring every repo with a remote up to its latest commit before the agent reads the tree, so the turn works
     // on current code. Clean-only fast-forward, a dirty/diverged/detached repo is left as-is and its stale state
@@ -2041,16 +2045,19 @@ export const createAgentRoutes = (services: Services) => {
         // Start the conversation's turn as a detached run, the ack carries the run id and the turn executes
         // regardless of what happens to this request (the request signal is deliberately not wired in; the
         // only cancel is /agent/stop). CONFLICT = another window/device is mid-turn on this conversation.
-        run: i.run.handler(async ({ input }) => {
+        run: i.run.handler(async ({ input, context }) => {
             if (input.conversationId === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
             const conversationId = input.conversationId;
+            // Who is asking, from what the middleware verified on THIS request (a member, or a control token's
+            // principal), never from the body: it is the one attribution no client wrote (agent/turn-actor.ts).
+            const actor = actorOf(context.identity, context.principal);
             // Push notifications ride the run's lifecycle, not this request's: the point is to reach a user
             // whose tab is asleep or closed, which is exactly when nobody is reading the response. Every send
             // goes through notifyIfAway, so a user watching the turn finish is told nothing. The journal entry
             // rides along too, see startConversationTurn.
-            const run = await startConversationTurn(services, streamAgent, { ...input, conversationId });
+            const run = await startConversationTurn(services, streamAgent, { ...input, conversationId, ...opt("actor", actor) });
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }

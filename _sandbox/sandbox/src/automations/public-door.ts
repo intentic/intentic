@@ -5,6 +5,7 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { dailyBudget } from "../store/daily-budget.js";
+import { rateWindow } from "../store/rate-window.js";
 import { fileInstallsStore, type InstallsStore } from "../store/installs.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation, type FireOptions, type FireOutcome, type WakeFn } from "./scheduler.js";
@@ -41,8 +42,10 @@ export interface PublicDoorSpec<Config> {
     readonly disabled: string;
     /* Whether this caller may reach the automation, or the sentence refusing it. Absent ⇒ the trigger's origin
      * allowlist alone, the good gate: it cannot be lifted out of a bundle and reused. A door with a second
-     * kind of caller (a phone with no Origin header presenting a key) supplies its own. */
-    readonly admit?: (automation: AutomationRecord, config: Config, origin: string | undefined, key: string | undefined) => string | undefined;
+     * kind of caller (a phone with no Origin header presenting a key) supplies its own; `keyed` is whether the
+     * key it presented is the one this door was issued (auth/door-tokens.ts), already checked, so the door
+     * decides what a valid key buys and never touches the credential itself. */
+    readonly admit?: (automation: AutomationRecord, config: Config, origin: string | undefined, keyed: boolean) => string | undefined;
     // The fixed window per automation+caller: how many arrivals a minute before the door answers 429.
     readonly rateMax: number;
     // The query parameter the challenge route reads the caller's id from, so a solution cannot be moved.
@@ -109,12 +112,22 @@ export interface PublicDoor<Config> {
     };
 }
 
+// The door's own gate, or the default one: the trigger's origin allowlist, which a browser on the page satisfies
+// and nothing else can.
+const admission = <Config>(spec: PublicDoorSpec<Config>, automation: AutomationRecord, config: Config, origin: string | undefined, keyed: boolean): string | undefined => {
+    if (spec.admit !== undefined) {
+        return spec.admit(automation, config, origin, keyed);
+    }
+    const allowed = automation.trigger.kind === "listener" ? (automation.trigger.allowedOrigins ?? []) : [];
+    return origin === undefined || !allowed.includes(origin) ? "origin not allowed" : undefined;
+};
+
 export const createPublicDoor = <Config>(
-    services: Pick<Services, "automations" | "threadSessions" | "workspace">,
+    services: Pick<Services, "automations" | "threadSessions" | "workspace" | "doorTokens">,
     spec: PublicDoorSpec<Config>,
     installs: InstallsStore = fileInstallsStore(spec.installs(services.workspace.root)),
 ): PublicDoor<Config> => {
-    const hits = new Map<string, number[]>();
+    const window = rateWindow(RATE_WINDOW_MS);
     const daily = dailyBudget();
 
     const resolve = async (id: string, origin: string | undefined, key?: string): Promise<Resolved<Config>> => {
@@ -131,12 +144,10 @@ export const createPublicDoor = <Config>(
          * is deliberate rather than overlooked: an automation id is PUBLIC by construction, it sits in the
          * snippet on the customer's own page, so there is nothing for a uniform answer to protect, and the two
          * cases are the two different things a site owner has to fix. */
-        const refused =
-            spec.admit === undefined
-                ? origin === undefined || !(automation.trigger.allowedOrigins ?? []).includes(origin)
-                    ? "origin not allowed"
-                    : undefined
-                : spec.admit(automation, config, origin, key);
+        // The key is checked against the door's own store BEFORE the spec sees it, and only when one was
+        // presented: a browser on the allowlist never causes a read of the credential it does not hold.
+        const keyed = key !== undefined && (await services.doorTokens.verify("intake", automation.id, key));
+        const refused = admission(spec, automation, config, origin, keyed);
         if (refused !== undefined) {
             return { status: 403, error: refused, automation };
         }
@@ -153,15 +164,7 @@ export const createPublicDoor = <Config>(
 
     return {
         resolve,
-        rateLimited: (key, now) => {
-            const recent = (hits.get(key) ?? []).filter((at) => at > now - RATE_WINDOW_MS);
-            hits.set(key, recent);
-            if (recent.length >= spec.rateMax) {
-                return true;
-            }
-            recent.push(now);
-            return false;
-        },
+        rateLimited: (key, now) => window.limited(key, spec.rateMax, now),
         overDailyCeiling: (automationId, max, now) => daily.spend(automationId, max, now),
         antiBotPassed: (mode, config, answer, callerId, c, now) => antiBotAccepted(mode, config, answer, callerId, remoteIpOf(c), now),
         thread,

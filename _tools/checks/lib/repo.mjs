@@ -111,8 +111,10 @@ export const git = (...args) => {
     return result.status === 0 ? result.stdout : undefined;
 };
 
-// Every tracked path, the set most byte- and text-level checks walk.
+// Every tracked path, the set most byte- and text-level checks walk. Filtered to what is ON DISK: the index
+// still lists a file whose deletion is unstaged, and a gate that read it would crash on the working tree the
+// gates exist to judge, rather than judging it without the file.
 export const trackedFiles = () =>
     (git("ls-files", "-z") ?? "")
         .split("\0")
-        .filter((path) => path !== "");
+        .filter((path) => path !== "" && existsSync(path));

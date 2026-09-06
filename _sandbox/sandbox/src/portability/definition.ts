@@ -83,9 +83,12 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     { path: ".intentic/config/approvals/", note: "Approvals arrive awaiting a yes, which is the only state they act in." },
     {
         path: ".intentic/config/automations.json",
-        note: "Arrive DISABLED: the scheduler fires enabled automations, and nobody consented to a stranger's schedule.",
+        note: "Arrive DISABLED: the scheduler fires enabled automations, and nobody consented to a stranger's schedule. A webhook or intake mints a fresh credential here; the old URL stays behind with the source.",
     },
-    { path: ".intentic/config/workflows.json", note: "Workflow designs are inert until someone runs one." },
+    {
+        path: ".intentic/config/workflows.json",
+        note: "Workflow designs are inert until someone runs one. A release gate mints a fresh token here; the URL its pipelines were taught stays behind with the source.",
+    },
     { path: ".intentic/config/loop-designs.json", note: "Loop designs are inert until someone runs one." },
     { path: ".intentic/config/extension-settings.json", note: "Per-extension settings, beside the extensions they configure." },
     {

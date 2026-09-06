@@ -94,9 +94,12 @@ const roles = [
 
     <h2>Programs, not people</h2>
     <p>
-        Programs without a sign-in, such as CI jobs, editor bridges and scripts, use a <strong>control token</strong> instead of a role. Those
-        carry their own scopes, are minted by the owner, and are revocable one at a time. See{" "}
-        <a href="/api/">the sandbox API</a>.
+        Programs without a sign-in, such as CI jobs, editor bridges and scripts, use a <strong>control token</strong> instead of a role. The
+        owner mints them under <strong>API tokens</strong> on this same tab, choosing a scope that maps onto the tiers above (<code>read</code>
+        sees what a viewer sees, <code>drive</code> does what a collaborator does, <code>land</code> may also merge) and how long the token
+        lives. The tab lists every token with its scope, expiry, last use and who minted it, and revokes them one at a time. Under it,{" "}
+        <strong>Other ways in</strong> counts the sandbox's remaining doors, webhooks, release gates and CI notifications, and names where each
+        is managed. See <a href="/api/auth/">authorising a call</a>.
     </p>
 
     <h2>If you lose a laptop</h2>

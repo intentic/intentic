@@ -20,29 +20,11 @@
  * editor bridge has no business reading the fleet, and saying so costs one row.
  */
 
-/** The `x-intentic-control` scopes, widening downward, with what each one reaches. Mirrors CONTROL_SCOPES. */
-export const CONTROL_SCOPE_REACH: readonly { scope: string; reach: string; note: string }[] = [
-    {
-        scope: "editor",
-        reach: "One conversation: run a turn, answer a card it parked on, read transcripts, search the tree.",
-        note: "What an editor bridge holds. It cannot see the fleet and it cannot land work.",
-    },
-    {
-        scope: "read",
-        reach: "Observation only: the fleet, past sessions, workspace search, listening ports.",
-        note: "The one genuinely narrow rung, which is why it exists separately rather than as a politeness.",
-    },
-    {
-        scope: "drive",
-        reach: "Everything read sees, plus making an agent work: start, answer, steer and stop a turn.",
-        note: "Stops short of anything that moves code into the main tree. A stolen token at this rung is the agent's reach.",
-    },
-    {
-        scope: "land",
-        reach: "Everything drive does, plus merging a conversation's worktree into the main tree, and discarding one.",
-        note: "Separate because the usual arrangement is a program that works and a person who decides.",
-    },
-];
+import { CONTROL_SCOPE_REACH } from "@intentic/sandbox-contract";
+
+/* The scope ladder is the contract's (control-scopes.ts), re-exported here so the site's authorisation page and
+ * this document's security scheme read the same rows the daemon and the app do. */
+export { CONTROL_SCOPE_REACH };
 
 export const securitySchemes = (): Record<string, unknown> => ({
     session: {

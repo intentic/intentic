@@ -104,6 +104,8 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: `cnv_latency_p99`,
+        // Started by a CI job holding a control token: the card's second provenance line (StartedByMark).
+        startedBy: `token:nightly CI`,
         sessionId: `ses_01j9latency`,
         title: `Investigate the p99 latency spike on /checkout`,
         status: `running`,

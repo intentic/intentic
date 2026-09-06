@@ -22,6 +22,7 @@ import { registerTurn } from "./agent-steering.js";
 import { outageRetryDue, outageRetryFired } from "./provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
+import type { TurnInput } from "./turn-actor.js";
 
 /* RE-RUNNING A TURN WHOSE BLOCKER HAS CLEARED, three conditions, one mechanism.
  *
@@ -496,7 +497,7 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
 export const startConversationTurn = async (
     services: Services,
     wake: WakeFn,
-    started: AgentTurn & { conversationId: string },
+    started: TurnInput & { conversationId: string },
     attempts = 0,
 ): Promise<TurnRun | undefined> => {
     const turn = await withRoleModel(services, started);

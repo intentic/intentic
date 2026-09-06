@@ -402,8 +402,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     };
 
     // The record to upsert. The editor owns the fields it exposes and carries every opaque field from the loaded
-    // record through untouched. Identity-bearing values (the webhook token and enabled state) never change as a
-    // side effect of editing some other field.
+    // record through untouched. The enabled state never changes as a side effect of editing some other field,
+    // and the webhook token is not on the record at all: the daemon keeps it with the door and keeps it across
+    // every re-post, so nothing here has to carry it.
     const build = (): Automation => {
         const trigger: Automation["trigger"] =
             form.kind === `schedule`
@@ -411,7 +412,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
                 : form.kind === `event`
                   ? {
                         kind: `event`,
-                        ...(original?.trigger.kind === `event` && original.trigger.token !== undefined ? { token: original.trigger.token } : {}),
+                        ...(original?.trigger.kind === `event` && original.trigger.dailyMax !== undefined ? { dailyMax: original.trigger.dailyMax } : {}),
                     }
                   : form.kind === `workspace`
                     ? { kind: `workspace`, event: form.workspaceEvent, ...(form.repo.trim() !== `` ? { repo: form.repo.trim() } : {}) }

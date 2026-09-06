@@ -387,6 +387,14 @@ export const AgentSummarySchema = z.object({
     origin: AgentOriginSchema.optional().describe(
         "Where the conversation came from when nobody typed it: a chat mention, a visitor's message, a webhook. Absent means a person started it.",
     ),
+    /* WHO STARTED IT, as the daemon verified the first turn's request: a member's email, or `token:<label>` for a
+     * program holding a control token. The card's other provenance line: `origin` says which automation opened
+     * a conversation for an outside message, this says which person or program asked for one directly. Latched
+     * on the first turn like `origin`; a follow-up by somebody else does not rewrite who began it. */
+    startedBy: z
+        .string()
+        .optional()
+        .describe("Who asked for the first turn, as the sandbox verified it: a member's email, or token:<label> for a program's control token. Absent when nothing was verified (a wake, a loopback caller)."),
     /* Where this conversation was cut from, when it was cut from another. Recorded once, from the fork's very
      * first turn, and never cleared, it is the relationship, not a pending state.
      *

@@ -1,6 +1,6 @@
 import { GateVerdictSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { clientTimeoutMs, exitOf, parseArgs, readVerdict, targetOf, WAIT_DEFAULT_S } from "./gate.js";
+import { clientTimeoutMs, dialOf, exitOf, parseArgs, readVerdict, WAIT_DEFAULT_S } from "./gate.js";
 
 test("a URL, some words, and nothing else is a call with the defaults", () => {
     const parsed = parseArgs(["--url", "https://box.example/workflows/wf/gate?token=t", "commit", "abc123"], undefined);
@@ -35,7 +35,14 @@ test("wait and blocked land where they say", () => {
 });
 
 test("the wait rides beside the token without corrupting the URL", () => {
-    expect(targetOf("https://box.example/workflows/wf/gate?token=t", 300)).toBe("https://box.example/workflows/wf/gate?token=t&wait=300");
+    // The token leaves the URL for the header, so the address that reaches every log names the door alone.
+    expect(dialOf("https://box.example/workflows/wf/gate?token=t", 300)).toEqual({
+        url: "https://box.example/workflows/wf/gate?wait=300",
+        headers: { authorization: "Bearer t" },
+    });
+    // A fire has no deadline, and a URL with no token sends no header rather than an empty one.
+    expect(dialOf("https://box.example/automations/a/fire?token=t")).toEqual({ url: "https://box.example/automations/a/fire", headers: { authorization: "Bearer t" } });
+    expect(dialOf("https://box.example/automations/a/fire")).toEqual({ url: "https://box.example/automations/a/fire", headers: {} });
 });
 
 // The client must outlast the server's hold, so the deadline that fires is the daemon's, which stops the

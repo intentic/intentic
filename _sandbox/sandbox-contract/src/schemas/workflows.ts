@@ -164,14 +164,10 @@ export const WorkflowGateSchema = z.object({
         .describe(
             "Which values mean ship it. Everything else fails. A list of what passes rather than what fails, because a step answering mostly-pass or pass-with-notes must not ship, and this gets that right without anybody having had to enumerate the ways a model can hedge.",
         ),
-    // The webhook's own auth, minted on save exactly as an event automation's is. The caller is a pipeline
-    // runner with no Google identity, so this is the only credential in the exchange.
-    token: z
-        .string()
-        .optional()
-        .describe(
-            "The credential the calling pipeline presents. It is the only one in the exchange, because a build runner has no identity of its own here.",
-        ),
+    /* THE TOKEN IS NOT HERE. The webhook's own auth, the only credential in the exchange because a build runner
+     * has no Google identity, is minted on save and kept in the secrets store (.intentic/secrets/doors.json)
+     * rather than in this versioned design, which every agent turn and every viewer can read. The saved answer
+     * and the listed summary carry it (`gateToken`) for a maintainer or the owner. */
     /* Runs per UTC day, across every caller. A gate is a paid endpoint reachable with no person in the loop:
      * one of these wired into a push-triggered pipeline is a fan-out of sessions per commit, and the
      * per-request deadline bounds one call's WALL CLOCK without bounding the day's SPEND. Absent ⇒
@@ -379,7 +375,16 @@ export const WorkflowRunSchema = z.object({
 });
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
 // The list row: the stored workflow plus the runs it has had, newest first.
-export const WorkflowSummarySchema = WorkflowSchema.extend({ runs: z.array(WorkflowRunSchema).describe("Its runs, newest first.") });
+// The gate's credential, attached for a maintainer or the owner and for nobody else (see WorkflowGateSchema).
+const gateToken = z
+    .string()
+    .optional()
+    .describe("What a pipeline presents at /workflows/{id}/gate, when the design declares a gate. Shown to a maintainer or the owner only.");
+// What a save answers with: the design as stored, plus the gate's credential, because the designer has no
+// other way to learn the URL it has to hand the pipeline.
+export const WorkflowSavedSchema = WorkflowSchema.extend({ gateToken });
+export type WorkflowSaved = z.infer<typeof WorkflowSavedSchema>;
+export const WorkflowSummarySchema = WorkflowSchema.extend({ runs: z.array(WorkflowRunSchema).describe("Its runs, newest first."), gateToken });
 export type WorkflowSummary = z.infer<typeof WorkflowSummarySchema>;
 export const WorkflowsListSchema = z.object({ workflows: z.array(WorkflowSummarySchema).describe("Every saved design with its own run history.") });
 export const WorkflowRunsListSchema = z.object({

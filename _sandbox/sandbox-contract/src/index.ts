@@ -91,6 +91,7 @@ export * from "./card-status.js";
 export * from "./mentions.js";
 export * from "./sse.js";
 export * from "./routes.js";
+export * from "./control-scopes.js";
 /* THE CONTAINER'S FIXED DIRECTORY LAYOUT, re-exported so extensions can reach it.
  *
  * The names are defined once in @intentic/constants, which sits at the bottom of the dependency graph. An

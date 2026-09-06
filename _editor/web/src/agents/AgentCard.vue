@@ -7,6 +7,7 @@ import { requestLandAgent } from "../composables/agents/agentActions";
 import { refreshAcross } from "../composables/sandbox/fleetAcross";
 import { useRole } from "../composables/sandbox/useRole";
 import OriginMark from "../components/OriginMark.vue";
+import StartedByMark from "../components/StartedByMark.vue";
 import UnsentMark from "../components/UnsentMark.vue";
 import UnfinishedMark from "../components/UnfinishedMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
@@ -661,8 +662,9 @@ const grab = (event: PointerEvent): void => {
             </p>
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user never started, "who asked for
-                 this" outranks what it runs on. Both render nothing for a user-started agent. -->
+                 this" outranks what it runs on. All three render nothing for a user-started agent. -->
             <OriginMark :origin="agent.origin" />
+            <StartedByMark :started-by="agent.startedBy" />
             <WorkflowMark :workflow="agent.workflow" />
 
             <div

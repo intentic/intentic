@@ -1,6 +1,7 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { tokenEquals } from "./auth.js";
 import { type ControlTokens, controlScoped } from "./control-tokens.js";
+import type { Principal } from "./principal.js";
 
 /* GRANTS, every credential the daemon accepts INSTEAD OF the owner's Google bearer, in one table.
  *
@@ -22,13 +23,21 @@ import { type ControlTokens, controlScoped } from "./control-tokens.js";
 
 export type GrantVerdict = "ok" | "unauthorized" | "out-of-scope";
 
+/* What a grant answers. `principal` rides only on an admission, and only from a grant whose credential names a
+ * party (auth/principal.ts): the per-boot secrets admit a process and say nothing more, exactly as before. */
+export type GrantOutcome = { readonly verdict: "ok"; readonly principal?: Principal } | { readonly verdict: "unauthorized" | "out-of-scope" };
+
+const OK: GrantOutcome = { verdict: "ok" };
+const UNAUTHORIZED: GrantOutcome = { verdict: "unauthorized" };
+const OUT_OF_SCOPE: GrantOutcome = { verdict: "out-of-scope" };
+
 export interface Grant {
     // The header the holder presents its secret in.
     readonly header: string;
     // How a refusal names it ("bridge token", "sync token"), the credential's name, not the header's, because
     // the person reading the error is holding the former.
     readonly name: string;
-    readonly authorize: (presented: string, method: string, path: string) => Promise<GrantVerdict>;
+    readonly authorize: (presented: string, method: string, path: string) => Promise<GrantOutcome>;
 }
 
 /* The shape three of the four share: one secret fixed for the daemon's lifetime, one static allowlist.
@@ -41,9 +50,9 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
     name,
     authorize: async (presented, method, path) => {
         if (!reaches(method, path)) {
-            return "out-of-scope";
+            return OUT_OF_SCOPE;
         }
-        return tokenEquals(presented, secret) ? "ok" : "unauthorized";
+        return tokenEquals(presented, secret) ? OK : UNAUTHORIZED;
     },
 });
 
@@ -180,6 +189,35 @@ const SYNC_TRANSPORT = "/system/sync/ssh";
 const syncReach = (method: string, path: string): boolean =>
     (method === "GET" && path === "/ports") || (method === "GET" && path === SYNC_TRANSPORT) || (method === "POST" && path === "/system/sync/report");
 
+/* THE GRANT LOOP, the one place any non-bearer credential is admitted. A non-empty header SELECTS a grant and
+ * commits the request to it; the first grant whose header is present answers for the request. `undefined` means
+ * no grant header was presented at all, and the caller falls through to the bearer path. */
+export type GrantAdmission = { readonly admitted: true; readonly principal?: Principal } | { readonly admitted: false; readonly status: 401 | 403; readonly error: string };
+
+export const admitByGrant = async (
+    grants: readonly Grant[],
+    header: (name: string) => string | undefined,
+    method: string,
+    path: string,
+): Promise<GrantAdmission | undefined> => {
+    for (const grant of grants) {
+        const presented = header(grant.header);
+        if (presented === undefined || presented === "") {
+            continue;
+        }
+        const outcome = await grant.authorize(presented, method, path);
+        if (outcome.verdict === "ok") {
+            return outcome.principal === undefined ? { admitted: true } : { admitted: true, principal: outcome.principal };
+        }
+        // Out of scope is its own answer on purpose: a holder of the RIGHT credential on the wrong route should
+        // read "this may not go there", not a baffling missing-bearer 401.
+        return outcome.verdict === "out-of-scope"
+            ? { admitted: false, status: 403, error: `${grant.name} not valid for this route` }
+            : { admitted: false, status: 401, error: "unauthorized" };
+    }
+    return undefined;
+};
+
 export interface GrantSources {
     readonly panelToken: string;
     readonly agentToken: string;
@@ -209,9 +247,9 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
         authorize: async (presented, method, path) => {
             const grant = verifyExtension(presented);
             if (grant === undefined) {
-                return "unauthorized";
+                return UNAUTHORIZED;
             }
-            return sandboxRouteAllowed(grant.permissions, method, path) ? "ok" : "out-of-scope";
+            return sandboxRouteAllowed(grant.permissions, method, path) ? OK : OUT_OF_SCOPE;
         },
     },
     {
@@ -222,11 +260,18 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
              * scope to check until we know which token this is. That inverts the order the grants above use,
              * and the inversion is free, it also leaks less, since an unknown token now gets the same answer
              * for every route instead of a map of which ones exist. */
-            const scope = await controlTokens.scopeOf(presented);
-            if (scope === undefined) {
-                return "unauthorized";
+            const token = await controlTokens.resolve(presented);
+            if (token === undefined) {
+                return UNAUTHORIZED;
             }
-            return controlScoped(scope, method, path) ? "ok" : "out-of-scope";
+            if (!controlScoped(token.scope, method, path)) {
+                return OUT_OF_SCOPE;
+            }
+            /* The touch is the admission's side effect, not its condition: a write that fails must not refuse a
+             * request the token was good for, and the store coalesces the writes so this is cheap. Awaited so a
+             * test can read the mark back deterministically; it is one debounced JSON update. */
+            await controlTokens.touch(token.id).catch(() => undefined);
+            return { verdict: "ok", principal: { kind: "control", id: token.id, label: token.label, scope: token.scope } };
         },
     },
     {
@@ -234,12 +279,12 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
         name: "sync token",
         authorize: async (presented, method, path) => {
             if (!syncReach(method, path)) {
-                return "out-of-scope";
+                return OUT_OF_SCOPE;
             }
             // The transport is not a check-in: it is a pipe Mutagen holds open on its own schedule (see
             // verifySyncToken). The two polling routes are the watcher's own, and they are what the card's
             // "Syncing from X, just now" is entitled to be built on.
-            return (await verifySync(presented, path !== SYNC_TRANSPORT)) ? "ok" : "unauthorized";
+            return (await verifySync(presented, path !== SYNC_TRANSPORT)) ? OK : UNAUTHORIZED;
         },
     },
 ];

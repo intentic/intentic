@@ -157,6 +157,12 @@ const firstOf = <T>(events: readonly ActivityEvent[], pick: (event: ActivityEven
     return undefined;
 };
 
+/* WHO A ROW IS ABOUT, in order of how directly they said it: the outside sender a listener relayed
+ * (`origin.author`), the inbound message's own author, or the party the daemon verified asking for the turn
+ * (`actor`: a member's email, or `token:<label>` for a control token). One answer for both the folded turn and
+ * the single event, so a CI-started turn and a Discord-started one fill the same column. */
+const whoAsked = (event: ActivityEvent): string | undefined => event.origin?.author ?? event.author ?? event.actor;
+
 /* One turn's events → one episode. `events` is that turn's rows, oldest first.
  *
  * The label walks three fallbacks because each one is a real state of a real turn: a titled conversation has a
@@ -185,7 +191,7 @@ const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode 
         ...(firstOf(events, (event) => event.origin?.channelId) !== undefined
             ? { channelId: firstOf(events, (event) => event.origin?.channelId) }
             : {}),
-        ...(firstOf(events, (event) => event.origin?.author) !== undefined ? { author: firstOf(events, (event) => event.origin?.author) } : {}),
+        ...(firstOf(events, whoAsked) !== undefined ? { author: firstOf(events, whoAsked) } : {}),
         ...(firstOf(events, (event) => event.sessionId) !== undefined ? { sessionId: firstOf(events, (event) => event.sessionId) } : {}),
         ...(firstOf(events, (event) => event.automationIds) !== undefined ? { automationIds: firstOf(events, (event) => event.automationIds) } : {}),
         failed: failure !== undefined,
@@ -222,7 +228,7 @@ const looseEpisode = (event: ActivityEvent): Episode => ({
     // channel, already the row's source, so repeating it would just be noise.
     ...(isTurn(event) && event.provider !== undefined ? { runtime: event.provider } : {}),
     ...(event.channelId !== undefined ? { channelId: event.channelId } : {}),
-    ...(event.author !== undefined ? { author: event.author } : {}),
+    ...(whoAsked(event) !== undefined ? { author: whoAsked(event) } : {}),
     ...(event.sessionId !== undefined ? { sessionId: event.sessionId } : {}),
     ...(event.automationIds !== undefined ? { automationIds: event.automationIds } : {}),
     failed: event.outcome === `error`,

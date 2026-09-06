@@ -174,14 +174,12 @@ export type IssueStatusInput = z.infer<typeof IssueStatusInputSchema>;
  * already established. `allowedOrigins` is NOT here: it lives on the trigger, because it is the admission gate
  * the ingest route reads rather than a rendering choice, and one gate in two places is one gate. */
 export const IssuesConfigSchema = z.object({
-    /* The key a client with no Origin presents (a mobile app, a server, a desktop build). Minted by the daemon
-     * on upsert like the event webhook's token, and for the same reason: every sender supports "paste this
-     * string", and nothing else is available to a caller with no identity and no browser.
-     *
-     * It is an abuse LABEL, not a secret, and the difference matters: it ships inside a binary anyone can pull
-     * apart. What it buys is that a leaked key can be rotated in one click while the origin allowlist keeps
-     * covering the web. The ceilings are what actually bound the damage. */
-    ingestKey: z.string().min(1).optional().describe("The key an app with no website origin presents. Rotate it freely: the limits, not this, are what bound the damage."),
+    /* THE INGEST KEY IS NOT HERE. A client with no Origin (a mobile app, a server, a desktop build) presents one,
+     * minted by the daemon like the event webhook's token and kept beside it in the secrets store rather than in
+     * this versioned config (AutomationSummary.ingestKey carries it to a maintainer's screen). It is an abuse
+     * LABEL more than a secret, it ships inside a binary anyone can pull apart, and what it buys is that a leaked
+     * key can be rotated in one click while the origin allowlist keeps covering the web. The ceilings below are
+     * what actually bound the damage. */
     /* Whether a browser with no allowed origin may still report by presenting the key. Off by default: the
      * commonest way an intake gets abused is its key ending up in a public web bundle, and the allowlist is
      * the thing that stops that mattering. */

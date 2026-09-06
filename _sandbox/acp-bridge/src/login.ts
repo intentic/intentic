@@ -10,7 +10,7 @@ export const runLogin = async (): Promise<number> => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
         console.log("Connect this machine's editor to your intentic sandbox.");
-        console.log("Mint a bridge token in the sandbox app under Sandbox → Sync → Editor bridge (ACP).\n");
+        console.log("Mint an editor token in the sandbox app under Sandbox → Devices → Editor bridge (ACP), or Sandbox → Access → API tokens.\n");
         const url = (await rl.question("Sandbox URL (https://sandbox-…): ")).trim().replace(/\/$/, "");
         const token = (await rl.question("Control token (ict_…): ")).trim();
         const agent = (await rl.question("Agent [claude]: ")).trim();

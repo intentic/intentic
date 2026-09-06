@@ -16,6 +16,7 @@
             "POST /automations/*/enabled",
             "DELETE /automations/*",
             "POST /automations/*/run",
+            "POST /automations/*/rotate-token",
             "GET /webchat/*/installs"
         ]
     },

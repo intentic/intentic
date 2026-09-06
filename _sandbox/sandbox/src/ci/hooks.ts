@@ -41,14 +41,24 @@ const scopeHint = (project: CiProject): string =>
         ? `creating webhooks needs admin:repo_hook on a classic PAT (or the "Webhooks: write" repo permission on a fine-grained token)`
         : `creating webhooks needs the api scope and at least the Maintainer role on the project`;
 
+/* Why a repo's hook is not live, in two halves with two audiences. `reason` is what happened and what it costs
+ * (the sandbox polls instead), for everyone who can see the board. `recipe` is the manual wiring, the receiver
+ * URL and the SECRET the sandbox signs deliveries with, and it is for an operator only: the secret is what makes
+ * a delivery trusted, so it travels to a maintainer's screen and never to a viewer's or a read token's
+ * (ci.routes.ts attaches it under that gate). Absent when there is nothing to paste (no public URL). */
+export interface HookWarning {
+    readonly reason: string;
+    readonly recipe?: string;
+}
+
 export interface CiHookReconciler {
     readonly start: () => void;
     readonly stop: () => void;
     // One reconcile pass; `start` runs it immediately and then on the interval. Exposed for tests and callers
     // that just changed what a pass reconciles against (a capability apply).
     readonly reconcile: () => Promise<void>;
-    // repo → why its hook isn't live + the manual recipe. Empty ⇒ every mapped repo is wired.
-    readonly warnings: () => ReadonlyMap<string, string>;
+    // repo → why its hook isn't live (+ the manual recipe). Empty ⇒ every mapped repo is wired.
+    readonly warnings: () => ReadonlyMap<string, HookWarning>;
 }
 
 export const createCiHookReconciler = (
@@ -61,7 +71,7 @@ export const createCiHookReconciler = (
     },
     fetchFn: FetchFn = fetch,
 ): CiHookReconciler => {
-    const warnings = new Map<string, string>();
+    const warnings = new Map<string, HookWarning>();
     // What the previous pass had wired, keyed host+project, how an unmapped repo's hook gets noticed.
     let wired = new Map<string, CiProject>();
     let timer: NodeJS.Timeout | undefined;
@@ -76,18 +86,17 @@ export const createCiHookReconciler = (
         for (const project of projects) {
             next.set(`${project.account.provider}\n${project.project}`, project);
             if (publicUrl === "") {
-                warnings.set(project.repo, `Pipeline webhooks are off: this sandbox has no public URL for the provider to deliver to.`);
+                warnings.set(project.repo, { reason: `Pipeline webhooks are off: this sandbox has no public URL for the provider to deliver to.` });
                 continue;
             }
             const url = webhookUrlFor(publicUrl, project.account.provider);
             try {
                 await ciClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
             } catch (error) {
-                const reason = errorMessage(error);
-                warnings.set(
-                    project.repo,
-                    `Pipeline webhook registration failed: ${reason}. ${scopeHint(project)}. ${manualRecipe(project, url, secret)}`,
-                );
+                warnings.set(project.repo, {
+                    reason: `Pipeline webhook registration failed: ${errorMessage(error)}. ${scopeHint(project)}.`,
+                    recipe: manualRecipe(project, url, secret),
+                });
             }
         }
         // Unmapped while the account survived: the hook would keep delivering events for a repo the workspace

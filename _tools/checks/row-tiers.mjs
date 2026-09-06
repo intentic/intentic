@@ -45,7 +45,7 @@
  * which is what it already is. That leaves the exception possible and visible, and makes not-thinking land on
  * the answer every other list in the app gives. */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
@@ -64,7 +64,8 @@ const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_editor/web/src`, `_edit
     maxBuffer: 64 * 1024 * 1024,
 })
     .split(`\0`)
-    .filter((path) => path.endsWith(`.vue`));
+    // On disk as well as in the index: a deletion left unstaged is still listed by git and has nothing to read.
+    .filter((path) => existsSync(`${root}/${path}`) && path.endsWith(`.vue`));
 
 /* THE TEMPLATE, AND ONLY THE TEMPLATE, with everything else BLANKED rather than stripped: every newline is
  * kept, so a line number computed off the result is the line number in the file.

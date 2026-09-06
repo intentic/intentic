@@ -17,6 +17,7 @@ import { fileTurnJournal } from "../agent/turn-journal.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
+import { memoryDoorTokens } from "../auth/door-tokens.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { createIntakeRoutes } from "./intake.routes.js";
@@ -30,6 +31,7 @@ const ORIGIN = "https://shop.example";
 const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
+        doorTokens: memoryDoorTokens(),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
@@ -230,20 +232,23 @@ test("an origin nobody listed is refused, and nothing is recorded for it", async
  * `keyFromBrowsers` stays off by default because the commonest way an intake is abused is its key ending up in
  * a public web bundle, and the allowlist is what stops that mattering. */
 test("a keyless client is admitted by its key, and a browser is not, unless the owner said so", async () => {
-    const { services, issues } = await setup(intake("bugs", { issues: { ingestKey: "intake_secret" } }));
+    const { services, issues } = await setup(intake("bugs"));
     const app = appFor(services, fakeWake([]), issues);
+    // The key lives in the door store, never on the record: this is what an operator copies off the install panel.
+    const key = await services.doorTokens.ensure("intake", "bugs");
 
     // No origin at all (a phone), with the key: admitted.
-    expect((await post(app, "bugs", { key: "intake_secret" }, {})).status).toBe(200);
+    expect((await post(app, "bugs", { key }, {})).status).toBe(200);
     // No origin, wrong key: refused, and told which door it was trying.
     const wrong = await post(app, "bugs", { key: "nope" }, {});
     expect(wrong.status).toBe(403);
     expect(await wrong.json()).toEqual({ error: "this intake needs a valid key" });
     // A browser on an unlisted origin cannot buy its way in with the key while `keyFromBrowsers` is off.
-    expect((await post(app, "bugs", { key: "intake_secret" }, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await post(app, "bugs", { key }, { origin: "https://evil.example" })).status).toBe(403);
 
-    await services.automations.upsert(intake("open-bugs", { issues: { ingestKey: "intake_secret", keyFromBrowsers: true } }));
-    expect((await post(app, "open-bugs", { key: "intake_secret" }, { origin: "https://evil.example" })).status).toBe(200);
+    await services.automations.upsert(intake("open-bugs", { issues: { keyFromBrowsers: true } }));
+    const openKey = await services.doorTokens.ensure("intake", "open-bugs");
+    expect((await post(app, "open-bugs", { key: openKey }, { origin: "https://evil.example" })).status).toBe(200);
 });
 
 test("a disabled intake and an unknown one answer differently, because they are different things to fix", async () => {
@@ -336,7 +341,9 @@ test("the admission floor holds the wake, with the issue's own brief on the card
 });
 
 test("the config route serves resolved settings and never the ingest key", async () => {
-    const { services, issues } = await setup(intake("bugs", { issues: { ingestKey: "intake_secret", title: "Something wrong?" } }));
+    const { services, issues } = await setup(intake("bugs", { issues: { title: "Something wrong?" } }));
+    // A key exists for this door; the public config must not carry it.
+    await services.doorTokens.ensure("intake", "bugs");
     const app = appFor(services, fakeWake([]), issues);
     const res = await app.request("/intake/bugs/config", { headers: { origin: ORIGIN } });
     expect(res.status).toBe(200);

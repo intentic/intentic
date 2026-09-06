@@ -176,9 +176,9 @@ test("the release-gate template ships wired: one step, gate on its required verd
     expect(gated?.steps).toHaveLength(1);
     expect(gated?.gate?.step).toBe(gated?.steps[0]?.id);
     expect(gated?.gate?.pass.length).toBeGreaterThan(0);
-    // No token in the template: it is minted per save, and a prefilled one would be the same credential in
-    // every workspace that ever picked this card.
-    expect(gated?.gate?.token).toBeUndefined();
+    // No credential anywhere in the template, or in any design: the gate's token is minted per save and kept
+    // with the door (the daemon's secrets store), so a template cannot carry one even by accident.
+    expect(Object.keys(gated?.gate ?? {})).not.toContain(`token`);
     const step = gated?.steps[0];
     const field = step?.output.kind === `json` ? step.output.fields.find((entry) => entry.name === gated?.gate?.field) : undefined;
     expect(field?.required, `the gate reads a field the step may omit`).toBe(true);

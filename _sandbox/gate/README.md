@@ -20,9 +20,31 @@ npx @intentic/gate "commit $SHA on $BRANCH — preview at $URL"
   ceiling, network), which needs the pipeline's owner rather than the product's.
 
 The URL (token and all) comes from `--url` or the `INTENTIC_GATE_URL` environment variable: the shape every
-CI secret store hands things over in. The request is the arguments joined, or stdin when none are given. The
+CI secret store hands things over in. On the wire the token leaves the URL: it is sent as `authorization:
+Bearer …`, so the address that reaches the edge, the tunnel and every proxy's log names the door and nothing
+else (`dialOf`). The request is the arguments joined, or stdin when none are given. The
 `--wait` deadline (default 1800 s) rides to the server, and the HTTP client waits a minute longer, so the
 deadline that fires is the server's: which stops the run instead of abandoning it mid-spend.
+
+## Driving the agent: `intentic-gate run`
+
+The same binary's second exchange, and not a door: with a control token minted on **Sandbox → Access → API
+tokens** (`drive` scope, or `land` to merge as well) it starts an agent turn at the sandbox's own address, polls
+the agent's card until it settles, and exits on how it ended:
+
+```sh
+INTENTIC_URL=https://sandbox-….intentic.dev INTENTIC_TOKEN=ict_… \
+  npx @intentic/gate run --land "fix the flaky test in ci and open the diff"
+```
+
+- `completed` exits 0; `parked` (the agent asked a person for something) and `failed` exit 1, with the card's
+  own sentence; `timeout` exits 2, the deadline decided and the agent keeps working in the sandbox.
+- One conversation per CI run and attempt (`--conversation` to pin one), its own branch, landed only with
+  `--land`. `--agent` picks the runtime, `--wait` the patience.
+
+[src/run.ts](src/run.ts) is that exchange as pure functions plus `runExchange` with its effects injected, so the
+CLI here and the Marketplace action share one implementation and [src/run.test.ts](src/run.test.ts) drives it
+against a scripted daemon.
 
 ## Pipeline templates
 

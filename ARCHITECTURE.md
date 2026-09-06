@@ -113,9 +113,14 @@ flowchart TB
   env, naming this sandbox's id and the owner `OWNER_EMAIL` already names, so the platform sign-in is the only
   one a hosted user makes. It adds no power the hosted exception below does not already grant. Additional
   collaborators are granted via `/work/.intentic/identity/members.json`, and owner/membership are re-checked
-  per request, so revoking a member kills their live sessions too. The platform never holds or forges
-  either credential, so a platform breach can read the stored URL but **cannot drive any sandbox**:
-  a breach's blast radius is bounded to identity + the sandbox URL.
+  per request, so revoking a member kills their live sessions too. A PROGRAM (a CI job, a script, an editor
+  bridge) holds a **control token** instead ([control-tokens.ts](_sandbox/sandbox/src/auth/control-tokens.ts)):
+  owner-minted on Sandbox ▸ Access, presented as `x-intentic-control`, hashed at rest, optionally expiring, and
+  scoped at mint to a rung derived from the same role floors (`read` = a viewer's reads, `drive` = a
+  collaborator's routes, `land` = + merge/discard; the sandbox's own trust surface is closed to every rung). A
+  turn a token starts is attributed to `token:<label>` in the activity log and on the card. The platform never
+  holds or forges any of these credentials, so a platform breach can read the stored URL but **cannot drive
+  any sandbox**: a breach's blast radius is bounded to identity + the sandbox URL.
 
   **The HOSTED lane is the stated exception to that boundary**, and since onboarding stopped asking it is
   what every browser arrival gets: the setup page starts one on arrival rather than opening on a picker
@@ -255,8 +260,14 @@ survive reconnects. Its subsystems:
   github/gitlab capability (`projects.ts`: self-hosted GitLab included, via the capability's instance url). A
   reconciler keeps a webhook on every mapped repo pointing at the public receiver `/ci/webhook/:host`,
   authenticated by a per-sandbox secret in `.intentic/secrets/ci.json` (GitHub signs the body, GitLab echoes the
-  token); a refusal (token scope, role) degrades that repo to a warning carrying the manual hook recipe, the
-  ssh-key-registration posture. Completed pipelines dispatch the core listener provider **`ci`**: the webchat
+  token); a refusal (token scope, role) degrades that repo to a warning, with the manual hook recipe (secret
+  included) attached for a maintainer or the owner only, the ssh-key-registration posture. The other public
+  doors, an event automation's webhook, a workflow's release gate and a bug intake's key, keep their credentials
+  in `.intentic/secrets/doors.json` ([door-tokens.ts](_sandbox/sandbox/src/auth/door-tokens.ts)) rather than in
+  the versioned manifests that declare them, accept them as `?token=` or a bearer header, and are rotatable. A
+  pipeline that wants to DRIVE the agent rather than knock on a door holds a control token instead:
+  `intentic/gate-action` and `npx @intentic/gate run` start an isolated turn, poll its card and land it on
+  request ([gate/src/run.ts](_sandbox/gate/src/run.ts)). Completed pipelines dispatch the core listener provider **`ci`**: the webchat
   precedent: no gateway extension, the daemon's own receiver is the source, with event types
   `pipeline_failed` / `pipeline_succeeded` / `pipeline_fixed` (a success ending a recorded failure streak on
   that repo+branch, remembered across restarts in `ci.json`), so a listener automation narrows by repo

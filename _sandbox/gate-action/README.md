@@ -23,6 +23,15 @@ workflow's event payload (the same JSON a GitHub webhook would have delivered) a
 comes back as step outputs (`outcome`, `reason`, `run-id`, `value`) and a step summary, so a team can chain
 its own PR comment without this action learning how to write one.
 
+The third road is not a door: with a control token (`token`, minted on Sandbox → Access → API tokens at
+`drive` scope, `land` to merge as well) the step drives the agent at the sandbox's own address: it starts an
+isolated turn with `prompt`, polls the agent's card until it settles, and lands the branch when `land: true`
+(`@intentic/gate`'s `run.ts` is the exchange). It ends as `completed` (green), `parked` on a card only a
+person can answer or `failed` (red, with the card's own sentence), or `timeout` (exit 2: the deadline decided,
+the agent keeps working). Outputs: `status`, `conversation-id`, `branch`, `summary`, `landed`. On the wire
+every door token leaves the URL for a bearer header (`dialOf`), so the address that reaches the logs names the
+door alone.
+
 The runner protocol: `INPUT_*` variables in, `GITHUB_OUTPUT`/`GITHUB_STEP_SUMMARY` appends and `::error::`
 lines out, is spoken by hand: `@actions/core` would be the only dependency in a closure that is otherwise
 @intentic/gate's zero, bundled into the dist every workflow downloads.

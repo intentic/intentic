@@ -49,6 +49,7 @@ import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.
 import { createPiAgent } from "./pi/pi-agent.js";
 import { piSpawner } from "./pi/pi-rpc.js";
 import { type ControlTokens, fileControlTokens } from "./auth/control-tokens.js";
+import { type DoorTokens, fileDoorTokens } from "./auth/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
@@ -454,6 +455,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // CI state (.intentic/secrets/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
     // success after a failure read as `pipeline_fixed`.
     readonly ciStore: CiStore;
+    // The credentials behind the public doors (.intentic/secrets/doors.json): an event automation's webhook token,
+    // a workflow's gate token, a bug intake's key. Kept out of the versioned manifests that declare the doors;
+    // attached to a listed automation or workflow for an operator only (auth/door-tokens.ts).
+    readonly doorTokens: DoorTokens;
     // The dependency verifier's memory (.intentic/records/verify.json): last check verdict per project + consecutive
     // red count, what makes `deps.fixed` an edge and lets a fix chore's guard cap its own retries.
     readonly verifyStore: VerifyStore;
@@ -1375,6 +1380,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/identity/control-tokens.json")),
+        doorTokens: fileDoorTokens(statePath(workspace.root, ".intentic/secrets/doors.json")),
         automations: fileAutomationsStore(
             statePath(workspace.root, ".intentic/config/automations.json"),
             statePath(workspace.root, ".intentic/records/automation-runs.json"),

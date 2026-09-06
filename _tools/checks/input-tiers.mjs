@@ -55,7 +55,7 @@
  * reason — the same shape as button-tiers.mjs and tailwind-bypass.mjs, and for the same reason. An entry that
  * no longer matches anything is reported as stale, so the list cannot outlive the code it excuses. */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
@@ -137,7 +137,8 @@ const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_editor`, `_extensions`]
     maxBuffer: 64 * 1024 * 1024,
 })
     .split(`\0`)
-    .filter((path) => path.endsWith(`.vue`));
+    // On disk as well as in the index: a deletion left unstaged is still listed by git and has nothing to read.
+    .filter((path) => existsSync(`${root}/${path}`) && path.endsWith(`.vue`));
 
 /* The template and only the template, BLANKED rather than stripped so a line number computed off the result is
  * the line number in the file. The <script> block goes because this repo's design notes are long comments full

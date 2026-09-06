@@ -10,7 +10,7 @@ line up in the editor.
 
 ## Setup
 
-1. In the intentic app: **Sandbox → Sync → Editor bridge (ACP) → Mint token**. Copy the token (shown once)
+1. In the intentic app: **Sandbox → Devices → Editor bridge (ACP) → Mint token** (or **Sandbox → Access → API tokens**, at `editor` scope). Copy the token (shown once)
    or the generated snippet.
 2. Zed `settings.json` (JetBrains takes the same command + env):
 

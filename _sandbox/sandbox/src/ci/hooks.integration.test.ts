@@ -62,9 +62,11 @@ test("a refusal degrades to a warning carrying the scope hint and the manual rec
     const reconciler = createCiHookReconciler(services, fetchFn);
     await reconciler.reconcile();
     const warning = reconciler.warnings().get("web");
-    expect(warning).toContain("admin:repo_hook");
-    expect(warning).toContain("https://github.com/acme/web/settings/hooks");
-    expect(warning).toContain(await services.ciStore.secret());
+    expect(warning?.reason).toContain("admin:repo_hook");
+    // The recipe, with the secret, is its own half: the route hands it to an operator and to nobody else.
+    expect(warning?.recipe).toContain("https://github.com/acme/web/settings/hooks");
+    expect(warning?.recipe).toContain(await services.ciStore.secret());
+    expect(warning?.reason).not.toContain(await services.ciStore.secret());
 });
 
 test("no public URL means no registration attempt: just the warning", async () => {
@@ -79,5 +81,6 @@ test("no public URL means no registration attempt: just the warning", async () =
     const reconciler = createCiHookReconciler(services, fetchFn);
     await reconciler.reconcile();
     expect(calls).toEqual([]);
-    expect(reconciler.warnings().get("web")).toMatch(/no public URL/i);
+    expect(reconciler.warnings().get("web")?.reason).toMatch(/no public URL/i);
+    expect(reconciler.warnings().get("web")?.recipe).toBeUndefined();
 });

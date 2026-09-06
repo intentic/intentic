@@ -134,7 +134,8 @@ test("control-token mint/list/revoke are owner-gated plain routes; mint returns 
                     minted.push({ label, scope });
                     return { id: "ct-9", token: "ict_raw-once" };
                 },
-                scopeOf: async () => undefined,
+                resolve: async () => undefined,
+                touch: async () => undefined,
                 list: async () => [{ id: "ct-9", label: "zed", scope: "editor", createdAt: 1 }],
                 revoke: async (id) => id === "ct-9",
             },

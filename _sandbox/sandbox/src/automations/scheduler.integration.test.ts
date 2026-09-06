@@ -107,7 +107,7 @@ test("a guard is told which automation it is, and which directory to prune", asy
 
 test("event automations never tick; fireAutomation hands the payload to the guard and the prompt", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("hook", { trigger: { kind: "event", token: "t" }, guard: `test "$AUTOMATION_PAYLOAD" = "ping"` }));
+    await services.automations.upsert(automation("hook", { trigger: { kind: "event" }, guard: `test "$AUTOMATION_PAYLOAD" = "ping"` }));
     await services.automations.upsert(automation("sched"));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
@@ -211,7 +211,7 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
 test("a holdForSeconds fire is held with a deadline, and the tick releases it once the countdown passes on a quiet fleet", async () => {
     const live: string[] = ["turn-1"];
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, live);
-    await services.automations.upsert(automation("fixer", { trigger: { kind: "event", token: "t" }, holdForSeconds: 1 }));
+    await services.automations.upsert(automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
@@ -240,11 +240,11 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
 
 test("cancelling is just removing the hold, and disabling the automation mid-countdown counts as the cancel", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("fixer", { trigger: { kind: "event", token: "t" }, holdForSeconds: 1 }));
+    await services.automations.upsert(automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
-    await services.automations.upsert({ ...automation("fixer", { trigger: { kind: "event", token: "t" }, holdForSeconds: 1 }), enabled: false });
+    await services.automations.upsert({ ...automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }), enabled: false });
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(Date.now() + 2_000);
     // The stale hold is dropped rather than left to fire the day the automation is re-enabled.
@@ -255,7 +255,7 @@ test("cancelling is just removing the hold, and disabling the automation mid-cou
 test(`requireApproval wins over holdForSeconds: "ask me" never becomes "unless I'm slow"`, async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(
-        automation("gated-fixer", { trigger: { kind: "event", token: "t" }, requireApproval: true, holdForSeconds: 1 }),
+        automation("gated-fixer", { trigger: { kind: "event" }, requireApproval: true, holdForSeconds: 1 }),
     );
     const prompts: string[] = [];
     const record = (await services.automations.get("gated-fixer")) as AutomationRecord;
@@ -329,7 +329,7 @@ test("disabled automations and not-yet-due crons never fire; agent errors land a
 
 test("a wake journals itself while in flight and clears the entry when it settles", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("nightly", { trigger: { kind: "event", token: "t" } }));
+    await services.automations.upsert(automation("nightly", { trigger: { kind: "event" } }));
     const record = (await services.automations.get("nightly")) as AutomationRecord;
     // Observed from INSIDE the wake: the entry exists exactly for the window where the daemon could die.
     let inFlightEntry: unknown;

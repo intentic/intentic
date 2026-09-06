@@ -52,6 +52,12 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "agent.steer": "collaborator",
     "agent.stop": "collaborator",
     "agent.rewind": "collaborator",
+    /* Resuming is starting the SAME turn again: the one a spent allowance or an outage cut short, with everything
+     * it originally carried. A tier that may start a turn and answer it but could not say "go on" after a
+     * refusal would leave every collaborator-driven automation one refusal from stuck. Auto-land is deliberately
+     * NOT here: arming it is a landing decision, and a collaborator's landings are requests. */
+    "agent.resume": "collaborator",
+    "agents.resumeAfterOutage": "collaborator",
     "agents.rename": "collaborator",
     "agents.seen": "collaborator",
     "agents.seenAll": "collaborator",

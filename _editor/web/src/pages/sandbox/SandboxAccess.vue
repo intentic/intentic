@@ -27,6 +27,8 @@ import { useSandboxSession } from "../../composables/sandbox/sandboxSession";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { identityHue } from "../../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../../composables/usePresence";
+import { useAccessInventory } from "../../composables/sandbox/useAccessInventory";
+import ControlTokensSection from "./ControlTokensSection.vue";
 
 /* The Sandbox hub's "Access" tab. Owner-only invites for the ACTIVE sandbox: inviting is two writes, the
  * daemon's ENFORCED /members list (pushed first from the owner's browser, since the server can't reach the
@@ -86,6 +88,33 @@ const notice = ref<NoticeModel>();
 // The accept link the owner has to carry, whenever the mail didn't. Beside `notice` rather than inside it: a
 // link is markup (it wraps, it is selected, it is never shortened), which the plain-string model can't hold.
 const handover = ref<string>();
+
+/* THE OTHER DOORS, counted (useAccessInventory). Each is minted and copied where it is configured, an event
+ * automation's row, a workflow's gate panel, the Pipelines view, and this tab does not duplicate any of that.
+ * What it adds is the inventory: the answer to "what else can reach this sandbox without a person" in one
+ * place, with the door named and the surface that manages it beside the count. Owner-only like the token
+ * roster, because the counts are about the sandbox's own trust rather than about the work. */
+const { inventory, loading: inventoryLoading } = useAccessInventory();
+
+// The plural is spelled, not suffixed: "repositorys" is what a suffix rule wrote here once.
+const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+const webhooksLine = computed(() =>
+    inventory.value.webhooks === undefined ? `Not readable right now.` : `${plural(inventory.value.webhooks, `event automation`, `event automations`)}, each with its own webhook URL and token. Rotate or remove one on its row in Automations.`,
+);
+const gatesLine = computed(() =>
+    inventory.value.gates === undefined ? `Not readable right now.` : `${plural(inventory.value.gates, `gated workflow`, `gated workflows`)}, each answering a pipeline at its own URL and token. Managed in the workflow designer's gate panel.`,
+);
+const ciLine = computed(() => {
+    const repos = inventory.value.ciRepos;
+    if (repos === undefined) {
+        return `Not readable right now.`;
+    }
+    if (repos.total === 0) {
+        return `No repository is wired to a forge. Connect GitHub or GitLab to receive pipeline results.`;
+    }
+    return `${plural(repos.total, `repository`, `repositories`)} wired to a forge, ${repos.hooked} with a webhook the sandbox registered and signs with a per-sandbox secret. The rest are polled. Details on Pipelines.`;
+});
 
 // Both together, always: a link with no sentence over it is noise, and a sentence about a link that is no
 // longer shown is worse. Every action starts here.
@@ -453,6 +482,11 @@ const revoke = async (target: string): Promise<void> => {
             </template>
         </RowGroup>
 
+        <!-- PROGRAMS, after people: the tokens a CI job, a script or an editor bridge present instead of a
+             sign-in (ControlTokensSection). Every scope is mintable here, and every token against this sandbox is
+             listed here, whichever surface minted it. -->
+        <ControlTokensSection />
+
         <!-- The credential kill switch. Owner-only, and separate from the member list above on purpose: this
              answers \"is anything still holding a way in\", not \"who is allowed in\".
 
@@ -510,6 +544,18 @@ const revoke = async (target: string): Promise<void> => {
                     </p>
                 </template>
             </Row>
+        </RowGroup>
+
+        <!-- EVERY OTHER WAY IN, as an inventory: the doors a machine knocks on with a credential that is neither
+             a sign-in nor a control token. Counted here, managed where each lives. -->
+        <RowGroup v-if="isOwner" label="Other ways in">
+            <div v-if="inventoryLoading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
+            <template v-else>
+                <Row icon="bolt" title="Webhooks" :description="webhooksLine" />
+                <Row icon="shield" title="Release gates" :description="gatesLine" />
+                <Row icon="sitemap" title="CI notifications" :description="ciLine" />
+                <Row icon="desktop" title="Paired devices and runners" description="Each holds its own enrollment key, revoked per device on Devices." />
+            </template>
         </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->

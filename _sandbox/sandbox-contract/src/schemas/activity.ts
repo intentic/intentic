@@ -34,6 +34,14 @@ export const ActivityEventSchema = z.object({
     channelId: z.string().optional().describe("Which channel or thread it happened in."),
     // Inbound author display name.
     author: z.string().optional().describe("Who sent it, for something that arrived."),
+    /* WHO ASKED FOR A TURN, as the daemon verified the request that started it: a member's email, or
+     * `token:<label>` for a control token. Distinct from `author` (the outside sender a listener relayed) and
+     * from `account` (the provider account that served it). Absent for a wake nothing asked for (a schedule, a
+     * listener, a boot-time resume), whose provenance is its origin. */
+    actor: z
+        .string()
+        .optional()
+        .describe("Who asked for the turn, as the sandbox verified it: a member's email, or token:<label> for a program's control token. Absent for a wake nothing asked for."),
     // Full message text (inbound) or sent payload content (outbound).
     content: z.string().optional().describe("The message, in full, whichever direction it went."),
     // Outbound HTTP method + endpoint path (tokens ride headers, never URLs).

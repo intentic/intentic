@@ -61,6 +61,11 @@ const LOCKED: Record<string, LockedFile> = {
         manage: { label: `Access`, to: `/sandbox/access` },
     },
     "secrets/ci.json": { subject: `ci.json`, holds: `the secret your builds use to reach this sandbox` },
+    "secrets/doors.json": {
+        subject: `doors.json`,
+        holds: `the tokens behind your webhooks, release gates and bug intakes`,
+        manage: { label: `Access`, to: `/sandbox/access` },
+    },
     /* The provider CLI's own home, which sits at the state dir's root rather than in a group: it is written by
      * the agent's runtime, not by any daemon store. */
     "claude.json": {

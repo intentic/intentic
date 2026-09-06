@@ -10,8 +10,19 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
-import { clientTimeoutMs, readVerdict, targetOf } from "@intentic/gate";
-import { annotationOf, defaultRequest, outputLines, parseInputs, stepExitOf, summaryOf } from "./action.js";
+import { clientTimeoutMs, conversationIdFor, dialOf, readVerdict, RunExchangeError, type RunOutcome, runExchange } from "@intentic/gate";
+import {
+    annotationOf,
+    defaultRequest,
+    outputLines,
+    parseInputs,
+    runAnnotationOf,
+    runOutputLines,
+    runStepExitOf,
+    runSummaryOf,
+    stepExitOf,
+    summaryOf,
+} from "./action.js";
 
 // A runner file is append-only shared state; absent (running outside a runner) the write is simply skipped,
 // the log lines below carry the same facts.
@@ -60,12 +71,43 @@ const eventText = ((): string => {
     }
 })();
 
+/* THE RUN: the API with a control token, no door involved. Start the turn, wait for the card to settle, land if
+ * asked, and say how it ended in the runner's own vocabulary (run.ts in @intentic/gate is the exchange; this is
+ * the process around it, like the two doors below). */
+if (inputs.door === "run") {
+    const call = {
+        origin: new URL(inputs.url).origin,
+        token: inputs.token ?? "",
+        prompt: inputs.request,
+        conversationId: conversationIdFor(process.env, randomUUID),
+        ...(inputs.agent === undefined ? {} : { agent: inputs.agent }),
+        waitS: inputs.waitS,
+        land: inputs.land,
+    };
+    let outcome: RunOutcome;
+    try {
+        outcome = await runExchange(call, { fetch, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now: Date.now });
+    } catch (error) {
+        wiring(error instanceof RunExchangeError ? error.message : `the agent could not be run: ${errorMessage(error)}`);
+    }
+    appendTo(process.env["GITHUB_OUTPUT"], runOutputLines(outcome, randomUUID()));
+    appendTo(process.env["GITHUB_STEP_SUMMARY"], runSummaryOf(outcome));
+    console.log(`${outcome.status}: ${outcome.summary}`);
+    console.log(`conversation ${outcome.conversationId}${outcome.branch === undefined ? "" : ` on ${outcome.branch}`}`);
+    const runAnnotation = runAnnotationOf(outcome);
+    if (runAnnotation !== undefined) {
+        console.log(runAnnotation);
+    }
+    process.exit(runStepExitOf(outcome));
+}
+
 if (inputs.door === "fire") {
     const body = inputs.request !== "" ? inputs.request : eventText;
     let response: Response;
     try {
         // The fire route answers immediately, the minute is for the network, not for the agent.
-        response = await fetch(inputs.url, { method: "POST", body, signal: AbortSignal.timeout(60_000) });
+        const dial = dialOf(inputs.url);
+        response = await fetch(dial.url, { method: "POST", headers: dial.headers, body, signal: AbortSignal.timeout(60_000) });
     } catch (error) {
         wiring(`the automation could not be reached: ${errorMessage(error)}`);
     }
@@ -90,8 +132,10 @@ if (request === "") {
 
 let response: Response;
 try {
-    response = await fetch(targetOf(inputs.url, inputs.waitS), {
+    const dial = dialOf(inputs.url, inputs.waitS);
+    response = await fetch(dial.url, {
         method: "POST",
+        headers: dial.headers,
         body: request,
         signal: AbortSignal.timeout(clientTimeoutMs(inputs.waitS)),
     });

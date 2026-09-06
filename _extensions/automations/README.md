@@ -61,7 +61,10 @@ disagreement waiting for whichever was edited second.
   timer passes on a quiet fleet: cancel and start-now stay one click away the whole time, on the Approvals page.
   When both are set, approval wins.
 - Enablement is a narrow mutation, while an edit starts from the complete stored record. Switching or editing a
-  row therefore preserves webhook identity, disabled state, provider-owned settings and security restrictions.
+  row therefore preserves disabled state, provider-owned settings and security restrictions. The webhook token
+  is not on the record at all: the daemon keeps it with the door (its secrets store), attaches it to the listed
+  summary (`webhookToken`, `ingestKey`) for a maintainer or the owner only, and keeps it across every re-post; a
+  row's **Rotate** mints a new one and retires the old URL at once.
 - "Run now" answers "I wrote a 3 a.m. cron and cannot try it", so it exists for the triggers you would otherwise
   have to wait for or forge: and NOT on a chat listener, whose whole prompt is a brief about handling the
   messages riding with the fire. By hand there are none, so the button could only ever produce an agent asking

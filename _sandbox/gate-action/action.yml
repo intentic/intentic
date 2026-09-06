@@ -2,7 +2,7 @@
 # repository by the release pipeline (publish-action.sh), alongside the bundled dist this metadata points at.
 # The runner reads THIS file; the package's own build and tests exist to keep what it promises true.
 name: "Intentic Agent Gate"
-description: "Run your intentic agent from CI — block on an agent-judged release gate, or wake the agent with the event payload"
+description: "Run your intentic agent from CI — block on an agent-judged release gate, wake the agent with the event payload, or drive it with a prompt and a control token"
 author: "intentic"
 # The Marketplace tile, and the ONLY logo an unpublished-by-a-verified-creator action gets: GitHub renders a
 # glyph from its own fixed set over one of eight colours, and ignores any image. A verified creator's listing
@@ -17,7 +17,31 @@ inputs:
     description: >-
       The door URL copied from your sandbox, token included — a release gate (…/workflows/<id>/gate) to wait
       on, or an event automation's webhook (…/automations/<id>/fire) to wake. Store it as a repository secret.
+      With `token`, the sandbox's own address instead (https://sandbox-….intentic.dev), which is not a secret.
     required: true
+  token:
+    description: >-
+      A control token minted on Sandbox → Access → API tokens, at drive scope (land scope to merge as well).
+      Selects the third road: the step drives the agent directly with `prompt`. Store it as a repository secret.
+    required: false
+    default: ""
+  prompt:
+    description: >-
+      What to ask the agent, for a run with `token`. The turn runs in its own conversation and branch inside
+      the sandbox; the step waits for it to settle.
+    required: false
+    default: ""
+  agent:
+    description: >-
+      Which agent runs the prompt (claude, codex, …). Defaults to the sandbox's own choice.
+    required: false
+    default: ""
+  land:
+    description: >-
+      For a run: merge the branch into the sandbox's main tree once the turn completes ("true" or "false").
+      Needs a land-scoped token.
+    required: false
+    default: "false"
   request:
     description: >-
       What to tell the agent. Defaults to the commit, branch and pull-request link for a gate, and to the
@@ -26,7 +50,8 @@ inputs:
     default: ""
   wait:
     description: >-
-      How many seconds a gate holds the connection before the run is stopped (the server caps it at 3 hours).
+      How many seconds a gate holds the connection, or a run is waited on, before the step gives up (the
+      server caps a gate at 3 hours; a run keeps working in the sandbox).
     required: false
     default: "1800"
   blocked-as:
@@ -44,6 +69,16 @@ outputs:
     description: "The run's id inside the sandbox, where the full transcript lives."
   value:
     description: "The raw judged value behind the verdict, when the gated workflow produced one."
+  status:
+    description: "How a run ended: completed, parked (waiting on a person), failed, or timeout. Only set for a run."
+  conversation-id:
+    description: "The conversation the run opened in the sandbox. Only set for a run."
+  branch:
+    description: "The branch the run worked on (agent/<conversation-id>). Only set for a run."
+  summary:
+    description: "The run's own account: its title, the sentence it failed on, or the card it parked on."
+  landed:
+    description: "Whether the run's branch was merged into the main tree. Only set when `land` was asked for."
 runs:
   using: "node24"
   main: "dist/index.mjs"

@@ -34,12 +34,16 @@ import { useWorkflows } from "./useWorkflows";
  * line. So the seam is draggable, double-click puts it back, and the width is remembered.
  */
 
-const { initial, creating } = defineProps<{ initial: Workflow; creating: boolean }>();
+// `initial` is the list's summary for a saved design (which carries the gate's token for an operator) or a
+// bare template for a new one. The token is held apart from the draft: the draft is what gets saved, and a
+// credential must never ride in it.
+const { initial, creating } = defineProps<{ initial: Workflow & { readonly gateToken?: string }; creating: boolean }>();
 const emit = defineEmits<{ close: []; saved: [id: string] }>();
 
 const { save } = useWorkflows();
 // `editableCopy`, not structuredClone: `initial` is a reactive proxy here. See workflowDraft.ts.
 const draft = ref<Workflow>(editableCopy(initial));
+const gateToken = ref<string | undefined>(initial.gateToken);
 const selectedId = ref<string | undefined>(initial.steps[0]?.id);
 // The edge the reader last clicked, as its endpoints. Drives the little edge card over the canvas.
 const pickedEdge = ref<{ from: string; to: string }>();
@@ -54,6 +58,7 @@ watch(
     () => initial,
     (next) => {
         draft.value = editableCopy(next);
+        gateToken.value = next.gateToken;
         selectedId.value = next.steps[0]?.id;
         pickedEdge.value = undefined;
         failure.value = undefined;
@@ -142,7 +147,8 @@ const commit = async (): Promise<void> => {
          * label and not a description of done. It is absent now, and absent has a real meaning: the step is
          * measured against what the run was asked to do. The inspector already stores a cleared box as absent
          * rather than as ``, so there is nothing left to normalize on the way out. */
-        await save.mutateAsync({ workflow: draft.value, create: creating });
+        const saved = await save.mutateAsync({ workflow: draft.value, create: creating });
+        gateToken.value = saved.gateToken;
         emit(`saved`, draft.value.id);
     } catch (error) {
         failure.value = error instanceof Error ? error.message : `The workflow could not be saved.`;
@@ -283,7 +289,7 @@ const commit = async (): Promise<void> => {
 
         <!-- The gate: how a CI pipeline runs this design and reads a verdict back. -->
         <Popover ref="gatePanel">
-            <GatePanel :workflow="draft" @patch="(gate) => patch({ gate })" />
+            <GatePanel :workflow="draft" :gate-token="gateToken" @patch="(gate) => patch({ gate })" />
         </Popover>
     </div>
 </template>

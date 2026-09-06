@@ -113,8 +113,10 @@ export const CiJobsResponseSchema = z.object({
 });
 export type CiJobsResponse = z.infer<typeof CiJobsResponseSchema>;
 // One mapped repo's CI wiring state. `hookWarning` is the manual-setup story when webhook registration was
-// refused (token scope, role) or impossible (no public URL): what happened plus the target URL + secret to
-// paste into the repo's webhook settings, the git-access sshRegistrationWarning pattern.
+// refused (token scope, role) or impossible (no public URL): what happened, for everyone who can see the board.
+// `hookRecipe` is the other half, the target URL + secret to paste into the repo's webhook settings, and it is
+// attached for a maintainer or the owner only: the secret signs every delivery this sandbox trusts, and a viewer
+// (or a program's read token) reading the board has no business holding it.
 export const CiRepoSchema = z.object({
     repo: z.string().describe("Which workspace repository."),
     host: CiHostSchema.describe("Which forge it lives on."),
@@ -125,8 +127,12 @@ export const CiRepoSchema = z.object({
         .string()
         .optional()
         .describe(
-            "Present when the sandbox could not register for instant notifications, with what happened and what to paste in by hand. Without them the sandbox polls instead, so this costs a couple of minutes' delay rather than the feature.",
+            "Present when the sandbox could not register for instant notifications, with what happened. Without them the sandbox polls instead, so this costs a couple of minutes' delay rather than the feature.",
         ),
+    hookRecipe: z
+        .string()
+        .optional()
+        .describe("What to paste into the repository's webhook settings by hand, secret included. Shown to a maintainer or the owner only."),
 });
 export type CiRepo = z.infer<typeof CiRepoSchema>;
 /* How often the daemon polls a repo whose webhook could NOT be registered (ci/poller.ts), the fallback that

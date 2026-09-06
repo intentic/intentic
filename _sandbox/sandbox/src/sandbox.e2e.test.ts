@@ -208,10 +208,12 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it("automation approval hold: a webhook fire on a requireApproval automation lands in the queue, reject drops it", async () => {
         await client.automations.upsert({ id: "e2e-approval", trigger: { kind: "event" }, prompt: "noop", requireApproval: true, enabled: true });
+        // The webhook's token is not on the record: the daemon attaches it to the listed summary for the
+        // owner (webhookToken), which is what an operator copies off the row.
         const { automations } = await client.automations.list();
-        const token = automations.find((automation) => automation.id === "e2e-approval")?.trigger;
-        expect(token?.kind).toBe("event");
-        const fireToken = token?.kind === "event" ? token.token : undefined;
+        const listed = automations.find((automation) => automation.id === "e2e-approval");
+        expect(listed?.trigger.kind).toBe("event");
+        const fireToken = listed?.webhookToken;
         expect(fireToken).toEqual(expect.any(String));
 
         // Wrong token is refused; the real token fires and the wake is HELD, not run: the whole trigger path
@@ -235,8 +237,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it("automation guard: a failing guard records the run as skipped and never wakes the agent", async () => {
         await client.automations.upsert({ id: "e2e-guard", trigger: { kind: "event" }, guard: "exit 1", prompt: "noop", enabled: true });
         const { automations } = await client.automations.list();
-        const trigger = automations.find((automation) => automation.id === "e2e-guard")?.trigger;
-        const fireToken = trigger?.kind === "event" ? trigger.token : undefined;
+        const fireToken = automations.find((automation) => automation.id === "e2e-guard")?.webhookToken;
 
         expect((await fetch(`${base}/automations/e2e-guard/fire?token=${fireToken}`, { method: "POST" })).status).toBe(200);
         const run = await until(async () => {
@@ -245,10 +246,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }, "the skipped run");
         expect(run.outcome).toBe("skipped");
 
-        // A disabled automation refuses to fire at all.
+        // A disabled automation refuses to fire at all. The re-post carries no token: the door keeps its own
+        // across every save, which is what makes the same URL still answer (409, not 401) below.
         await client.automations.upsert({
             id: "e2e-guard",
-            trigger: { kind: "event", token: fireToken },
+            trigger: { kind: "event" },
             guard: "exit 1",
             prompt: "noop",
             enabled: false,

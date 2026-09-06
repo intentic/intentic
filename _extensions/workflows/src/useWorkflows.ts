@@ -1,4 +1,13 @@
-import { type Workflow, type WorkflowRun, type WorkflowSummary, WorkflowsListSchema } from "@intentic/sandbox-contract";
+import {
+    type DoorToken,
+    DoorTokenSchema,
+    type Workflow,
+    type WorkflowRun,
+    type WorkflowSaved,
+    WorkflowSavedSchema,
+    type WorkflowSummary,
+    WorkflowsListSchema,
+} from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
@@ -37,13 +46,23 @@ export function useWorkflows() {
         await queryClient.invalidateQueries({ queryKey: runsKey });
     };
 
+    // Answers with the design as stored PLUS the gate's token when the design declares one: the designer has no
+    // other way to learn the URL it has to hand the pipeline (WorkflowSavedSchema).
     const save = useMutation({
-        mutationFn: ({ workflow, create }: { workflow: Workflow; create: boolean }) =>
-            api.sandbox.json(`/workflows`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ workflow, create }),
-            }),
+        mutationFn: async ({ workflow, create }: { workflow: Workflow; create: boolean }): Promise<WorkflowSaved> =>
+            WorkflowSavedSchema.parse(
+                await api.sandbox.json(`/workflows`, {
+                    method: `POST`,
+                    headers: { "content-type": `application/json` },
+                    body: JSON.stringify({ workflow, create }),
+                }),
+            ),
+        onSuccess: invalidate,
+    });
+    // A fresh gate token, the old one retired at once; every pipeline wired to the gate is re-taught.
+    const rotateGateToken = useMutation({
+        mutationFn: async (id: string): Promise<DoorToken> =>
+            DoorTokenSchema.parse(await api.sandbox.json(`/workflows/${encodeURIComponent(id)}/gate/rotate`, { method: `POST` })),
         onSuccess: invalidate,
     });
     const remove = useMutation({
@@ -81,6 +100,7 @@ export function useWorkflows() {
         error: computed(() => query.error.value?.message ?? runsQuery.error.value?.message),
         isLoading: query.isLoading,
         save,
+        rotateGateToken,
         remove,
         start,
         stop,

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
-import { clientTimeoutMs, exitOf, parseArgs, readVerdict, targetOf, USAGE } from "./gate.js";
+import { clientTimeoutMs, dialOf, exitOf, parseArgs, readVerdict, USAGE } from "./gate.js";
+import { exitOfRun, parseRunArgs, RUN_USAGE, RunExchangeError, type RunOutcome, runExchange } from "./run.js";
 
 /* The process around gate.ts: stdin, one fetch, stdout, an exit code. No CLI framework, two options and a
  * body do not earn one (the acp-bridge CLI set the precedent).
@@ -18,6 +20,37 @@ const readStdin = async (): Promise<string> => {
     }
     return Buffer.concat(chunks).toString("utf8");
 };
+
+/* `intentic-gate run …` is the second exchange this binary speaks: not a door but the API itself, with a
+ * control token (run.ts). Dispatched on the first word so the gate's own options stay exactly as they were. */
+if (process.argv[2] === "run") {
+    const parsedRun = parseRunArgs(process.argv.slice(3), process.env, randomUUID);
+    if (parsedRun.kind === "help") {
+        console.log(RUN_USAGE);
+        process.exit(0);
+    }
+    if (parsedRun.kind === "error") {
+        console.error(parsedRun.message);
+        console.error(`\n${RUN_USAGE}`);
+        process.exit(2);
+    }
+    const { call } = parsedRun;
+    const prompt = call.prompt !== "" ? call.prompt : process.stdin.isTTY ? "" : (await readStdin()).trim();
+    if (prompt === "") {
+        console.error("nothing to tell the agent: pass the prompt as arguments or on stdin");
+        process.exit(2);
+    }
+    let outcome: RunOutcome;
+    try {
+        outcome = await runExchange({ ...call, prompt }, { fetch, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now: Date.now });
+    } catch (error) {
+        console.error(error instanceof RunExchangeError ? error.message : errorMessage(error));
+        process.exit(2);
+    }
+    console.log(`${outcome.status}: ${outcome.summary}`);
+    console.log(`conversation ${outcome.conversationId}${outcome.branch === undefined ? "" : ` on ${outcome.branch}`}${outcome.landed === undefined ? "" : outcome.landed ? ", landed" : ", not landed"}`);
+    process.exit(exitOfRun(outcome.status));
+}
 
 const parsed = parseArgs(process.argv.slice(2), process.env["INTENTIC_GATE_URL"]);
 if (parsed.kind === "help") {
@@ -37,8 +70,10 @@ const request = call.request !== "" ? call.request : process.stdin.isTTY ? "" : 
 
 let response: Response;
 try {
-    response = await fetch(targetOf(call.url, call.waitS), {
+    const dial = dialOf(call.url, call.waitS);
+    response = await fetch(dial.url, {
         method: "POST",
+        headers: dial.headers,
         body: request,
         signal: AbortSignal.timeout(clientTimeoutMs(call.waitS)),
     });

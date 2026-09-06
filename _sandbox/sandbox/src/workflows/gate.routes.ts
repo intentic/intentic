@@ -3,7 +3,7 @@ import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFa
 import type { Context } from "hono";
 import { streamAgent } from "../agent/agent.routes.js";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
-import { tokenEquals } from "../auth/auth.js";
+import { presentedDoorToken } from "../auth/door-tokens.js";
 import { sessionStart } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import type { Services } from "../composition.js";
@@ -26,9 +26,10 @@ import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
  *
  * WHY IT IS TOKEN-AUTHED AND NOT ORIGIN-AUTHED. The Front Desk's gate is its embed-origin allowlist, which works
  * because its caller is a browser on a page the owner controls. A pipeline runner sends no Origin at all, the
- * Front Desk would refuse it by design, so this takes the event automation's model instead: a minted token in
- * the query string, the one mechanism every CI system can carry. Enforced ALWAYS, fail-closed even in loopback,
- * because the token always exists once a gate is declared.
+ * Front Desk would refuse it by design, so this takes the event automation's model instead: a minted token
+ * (auth/door-tokens.ts), in the query string for a caller that can carry nothing else, or as a bearer header
+ * from the gate CLI and the Marketplace action, which can. Enforced ALWAYS, fail-closed even in loopback: a
+ * gate with no credential admits nobody.
  *
  * WHY THERE IS NO `enabled` TOGGLE. A workflow does not have one, on the argument that nothing fires it on its
  * own. Something does now, but the GATE's presence is the switch: declare one and the door opens, drop it and
@@ -73,7 +74,9 @@ export const createGateRoute =
             return c.json({ error: "no gated workflow with that id" }, 404);
         }
         const { gate } = workflow;
-        if (gate.token === undefined || !tokenEquals(c.req.query("token") ?? "", gate.token)) {
+        // The door's credential (auth/door-tokens.ts), as `?token=` or as a bearer header from a caller that can
+        // set one; a gate saved before the store existed has no credential yet and admits nobody until listed.
+        if (!(await services.doorTokens.verify("gate", workflow.id, presentedDoorToken(c.req.raw.headers, c.req.query("token"))))) {
             return c.json({ error: "unauthorized" }, 401);
         }
         /* Re-checked at call time, not only at save time: a manifest can be hand-edited, and a gate whose field

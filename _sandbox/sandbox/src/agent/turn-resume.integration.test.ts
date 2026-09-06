@@ -910,7 +910,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
     // The guard passes only because the payload reached it: proof the re-fire runs the real gate, not around it.
     await services.automations.upsert({
         id: "hook",
-        trigger: { kind: "event", token: "t" },
+        trigger: { kind: "event" },
         guard: `test "$AUTOMATION_PAYLOAD" = "ping"`,
         prompt: "handle it",
         enabled: true,

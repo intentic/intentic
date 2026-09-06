@@ -42,7 +42,7 @@ import { noticeFrom, useNow } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import DeviceRunners from "../../components/DeviceRunners.vue";
 import { type RouteLocationRaw, RouterLink, useRoute } from "vue-router";
-import BridgeTokensCard from "./BridgeTokensCard.vue";
+import ControlTokensSection from "./ControlTokensSection.vue";
 import {
     type AgentChip,
     agentBehind,
@@ -1527,7 +1527,10 @@ const runRevoke = async (): Promise<void> => {
         </RowGroup>
 
         <DesktopSyncCard :highlight="highlight" />
-        <BridgeTokensCard />
+        <!-- The editor bridge (ACP): run this sandbox's agents from Zed, JetBrains, or any ACP editor, paired with
+             Desktop sync as the two halves of working from your own machine. The token it needs is the editor slice
+             of the API tokens the Access tab manages, minted here with the editor's own paste-ready snippet. -->
+        <ControlTokensSection :scopes="[`editor`]" :snippets="[`acp`]" :roster="false" default-expiry="never" />
 
         <!-- Red only for removal: the swaps commit the sandbox to another image and keep its files, and a
              danger button on those would say "this deletes something", which is the one thing they do not. -->

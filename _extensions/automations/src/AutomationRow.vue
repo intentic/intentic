@@ -135,8 +135,15 @@ const editForm = useAutomationForm(
     computed(() => props.listenerSources),
     computed(() => props.templates),
 );
-const { save } = useAutomations();
+const { save, rotateToken } = useAutomations();
 const saving = computed(() => save.isPending.value);
+/* Rotating the webhook token is two presses, like every other press here that cannot be undone: the old URL
+ * stops working the moment the daemon answers, and every sender wired to it has to be handed the new one. */
+const confirmingRotate = ref(false);
+const rotate = async (): Promise<void> => {
+    confirmingRotate.value = false;
+    await rotateToken.mutateAsync(props.automation.id);
+};
 
 const startEdit = (): void => {
     editForm.load(props.automation);
@@ -419,13 +426,31 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
 
                     <div v-if="trigger.kind === `event`" class="flex flex-col gap-1">
                         <span :class="ui.sectionLabel(`text-2xs`)">Webhook</span>
-                        <div class="flex items-center gap-1.5">
+                        <!-- The URL carries the door's token, which the daemon hands to a maintainer or the owner
+                             only: a viewer sees that there is a webhook and not what opens it. -->
+                        <div v-if="webhookUrl(automation) !== undefined" class="flex items-center gap-1.5">
                             <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
                             <CopyButton
                                 :text="webhookUrl(automation) ?? ``"
                                 :aria-label="`Copy webhook URL for ${automation.id}`"
                                 v-tooltip.top="`Copy URL`"
                             />
+                            <Button
+                                v-if="!confirmingRotate"
+                                label="Rotate"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                :disabled="rotateToken.isPending.value"
+                                v-tooltip.top="`Mint a new token; the current URL stops working`"
+                                @click="confirmingRotate = true"
+                            />
+                        </div>
+                        <p v-else class="text-2xs text-subtle">Its URL is shown to maintainers and the owner.</p>
+                        <div v-if="confirmingRotate" class="flex flex-wrap items-center justify-end gap-2">
+                            <span class="mr-auto text-2xs text-subtle">Sure? Every sender wired to this URL has to be handed the new one.</span>
+                            <Button label="Cancel" size="small" severity="secondary" :text="true" @click="confirmingRotate = false" />
+                            <Button label="Rotate token" size="small" severity="danger" :loading="rotateToken.isPending.value" @click="rotate" />
                         </div>
                     </div>
 

@@ -661,6 +661,19 @@ const STATE_FILES = [
         portability: "secret",
         note: "Re-add the CI webhook on the Pipelines view, its secret is per-sandbox.",
     },
+    /* THE TOKENS BEHIND THE DAEMON'S PUBLIC DOORS: an event automation's webhook, a workflow's release gate, a bug
+     * intake's key. They used to sit inside the manifests that declare those doors (automations.json,
+     * workflows.json), which are VERSIONED: tracked in git, landed into the owner's tree, readable by every agent
+     * turn and every viewer. A credential has no business in a file with that audience, so they live here, in
+     * the same class as the CI secret, and reach a maintainer's screen only through the route that lists the
+     * automation or workflow. */
+    {
+        path: ".intentic/secrets/doors.json",
+        invalidates: [],
+        why: "The credentials behind the event webhooks, release gates and bug intakes; each surface reads its own through /automations and /workflows, never off disk.",
+        portability: "secret",
+        note: "Webhook, gate and intake URLs are minted fresh on the first read here: re-copy each into its caller's secret store.",
+    },
     /* THE ONE ENTRY THAT OPTS OUT OF THE BACKUP, and the reason the flag exists rather than the rule simply
      * reading `portability !== "derived"`. It is `identity` like the three below it, so the derived answer would
      * copy it down with them, but where those are a name, a workspace id and a role per row, these are tokens
@@ -961,6 +974,7 @@ export const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
     "identity/control-tokens.json",
     "config/capabilities.json",
     "secrets/ci.json",
+    "secrets/doors.json",
     "secrets/auth",
     "records/sessions",
     "local/browser",

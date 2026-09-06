@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
     type Workflow,
     workflowFaults,
@@ -10,6 +9,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { archiveAgents } from "../agents/archive.js";
+import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { abandonRun, openRun, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
@@ -34,12 +34,19 @@ export const createWorkflowsRoutes = (services: Services) => {
         return run;
     };
     return {
-        list: i.list.handler(async () => {
+        list: i.list.handler(async ({ context }) => {
             const [workflows, runs] = await Promise.all([services.workflows.list(), services.workflowRuns.list()]);
-            // Joined here rather than stored joined: the ledger is keyed by run and a workflow's runs are
-            // whichever runs snapshotted it, which stays true after the workflow is edited or deleted.
-            const withRuns = (workflow: Workflow): WorkflowSummary => ({ ...workflow, runs: runs.filter((run) => run.workflow.id === workflow.id) });
-            return { workflows: workflows.map(withRuns) };
+            /* Joined here rather than stored joined: the ledger is keyed by run and a workflow's runs are
+             * whichever runs snapshotted it, which stays true after the workflow is edited or deleted. The gate's
+             * credential rides along for an OPERATOR only, minted here if the gate has none yet (a design saved
+             * before the door store existed), and never for a viewer or a program's read token. */
+            const operator = operatorHere(services, context);
+            const withRuns = async (workflow: Workflow): Promise<WorkflowSummary> => ({
+                ...workflow,
+                runs: runs.filter((run) => run.workflow.id === workflow.id),
+                ...(operator && workflow.gate !== undefined ? { gateToken: await services.doorTokens.ensure("gate", workflow.id) } : {}),
+            });
+            return { workflows: await Promise.all(workflows.map(withRuns)) };
         }),
         save: i.save.handler(async ({ input }) => {
             /* The same sentences the designer shows while you type, enforced here, a rule the daemon holds
@@ -50,14 +57,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             if (faults.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: faults.join(" ") });
             }
-            /* Mint the gate's webhook token, exactly as an event automation's is minted and for the same
-             * reason, its caller is a machine that cannot present a Google identity. A round-tripped token is
-             * KEPT, because the designer re-posts the whole workflow on every edit: a gate whose URL changed
-             * each time somebody renamed a step would be one every pipeline had to be re-taught. */
-            const workflow =
-                input.workflow.gate !== undefined && input.workflow.gate.token === undefined
-                    ? { ...input.workflow, gate: { ...input.workflow.gate, token: randomBytes(24).toString("base64url") } }
-                    : input.workflow;
+            const { workflow } = input;
             const saved = await services.workflows.save(workflow, input.create);
             if (saved === "conflict") {
                 throw new ORPCError("CONFLICT", { message: "A workflow with that id already exists. Reopen the list and try again." });
@@ -65,14 +65,33 @@ export const createWorkflowsRoutes = (services: Services) => {
             if (saved === "missing") {
                 throw new ORPCError("NOT_FOUND", { message: "That workflow no longer exists. Reopen the list before saving." });
             }
-            // Returned rather than echoing the input: the token is minted here, and the designer has no other
-            // way to learn the URL it has to hand the pipeline.
-            return workflow;
+            /* The gate's credential lives with the door, not in the design: minted the first time a gate is
+             * saved, KEPT across every later save (the designer re-posts the whole workflow on every edit, and
+             * a gate whose URL changed each time somebody renamed a step would be one every pipeline had to be
+             * re-taught), and dropped the moment the design stops declaring a gate. Returned rather than the
+             * input echoed, because the designer has no other way to learn the URL it has to hand the pipeline. */
+            if (workflow.gate === undefined) {
+                await services.doorTokens.remove("gate", workflow.id);
+                return workflow;
+            }
+            return { ...workflow, gateToken: await services.doorTokens.ensure("gate", workflow.id) };
+        }),
+        // A fresh credential for the gate, the old one retired in the same write; every wired pipeline is re-taught.
+        rotateGateToken: i.rotateGateToken.handler(async ({ input }) => {
+            const workflow = await services.workflows.get(input.id);
+            if (workflow === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "No workflow with that id." });
+            }
+            if (workflow.gate === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: "That workflow declares no gate, so there is no token to rotate." });
+            }
+            return { token: await services.doorTokens.rotate("gate", workflow.id) };
         }),
         // Deliberately does not stop a run of it that is in flight, and does not delete its history: a run
         // snapshotted its definition when it started, so it stays readable and stays stoppable.
         remove: i.remove.handler(async ({ input }) => {
             await services.workflows.remove(input.id);
+            await services.doorTokens.remove("gate", input.id);
             return { ok: true as const };
         }),
         run: i.run.handler(async ({ input }) => {

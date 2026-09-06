@@ -6,6 +6,7 @@ import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
+import type { TurnInput } from "../agent/turn-actor.js";
 import type { Services } from "../composition.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
@@ -28,7 +29,7 @@ export const TITLE_MAX = 80;
 // "Wake the agent", streamAgent's shape, INJECTED by every caller rather than imported here. Importing it
 // would put this module downstream of agent.routes, which is itself an emitter of the workspace events
 // workspace-events.ts turns back into fireAutomation calls: a cycle. Same reason turn-runs takes its TurnFn.
-export type WakeFn = (services: Services, input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
+export type WakeFn = (services: Services, input: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
 /* A live sink for a turn's assistant text. The Discord source backs it with a channel message it edits as token
  * deltas arrive, so a mention reply appears as it's written instead of only when the turn ends. undefined ⇒ no

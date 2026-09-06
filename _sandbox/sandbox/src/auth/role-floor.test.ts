@@ -22,6 +22,10 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/agent/steer")).toBe("collaborator");
         expect(routeFloor("POST", "/agents/abc/rename")).toBe("collaborator");
         expect(routeFloor("POST", "/agents/abc/request-land")).toBe("collaborator");
+        // Resuming is the same turn again, so it belongs to whoever may start one; arming auto-land does not.
+        expect(routeFloor("POST", "/agent/resume")).toBe("collaborator");
+        expect(routeFloor("POST", "/agents/abc/resume-after-outage")).toBe("collaborator");
+        expect(routeFloor("POST", "/agents/abc/auto-land")).toBe("maintainer");
         expect(routeFloor("POST", "/workspace/upload")).toBe("collaborator");
         expect(routeFloor("POST", "/system/ws-ticket")).toBe("collaborator");
         expect(routeFloor("POST", "/system/sync/pair")).toBe("collaborator");

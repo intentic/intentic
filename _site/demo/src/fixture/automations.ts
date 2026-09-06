@@ -76,7 +76,8 @@ const seed = (now: number): AutomationSummary[] => [
     },
     {
         id: `aut_ci_red`,
-        trigger: { kind: `event`, token: `ci` },
+        trigger: { kind: `event` },
+        webhookToken: `demo-ci-webhook-token`,
         prompt: `A pipeline went red. Read the failed job's log, reproduce the failure in the sandbox, and either fix it or explain in one paragraph why it is not a code problem.`,
         agent: `codex`,
         harness: `native`,

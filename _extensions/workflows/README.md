@@ -53,7 +53,9 @@ conversations, so the fleet carries that news.
   the workspace's normal unattended model. A step can separately act as a persona; without one it keeps the
   unattended default: full tools, no logged-in accounts.
 - The gate's webhook token is minted by the daemon on first save and kept across every later edit, so the URL a
-  pipeline was taught survives renames and re-pointed fields. Removing the gate revokes it; a future gate gets a
-  new one.
+  pipeline was taught survives renames and re-pointed fields. It is NOT on the design: it lives in the daemon's
+  secrets store and arrives beside the saved design and on the listed summary (`gateToken`) for a maintainer or
+  the owner only, so the versioned `workflows.json` carries no credential and a viewer's list carries no URL.
+  Removing the gate revokes it; a future gate gets a new one; **Rotate** on the gate panel mints a new one at once.
 - The run ledger keeps all active runs and the newest 50 ended runs. Long step responses live under
   `.intentic/workflow-runs/<run>/<step>.md`; the ledger stores only a bounded preview.

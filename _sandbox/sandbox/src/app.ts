@@ -14,7 +14,7 @@ import { createAccessRoutes } from "./auth/access.routes.js";
 import { createControlTokenRoutes } from "./auth/control-tokens.routes.js";
 import { createMembersRoutes } from "./auth/members.routes.js";
 import { routeFloor } from "./auth/role-floor.js";
-import { grantsOf } from "./auth/grants.js";
+import { admitByGrant, grantsOf } from "./auth/grants.js";
 import { createAutomationFireRoute } from "./automations/fire.routes.js";
 import { createCapabilityAskRoutes } from "./capabilities/ask.routes.js";
 import type { Services } from "./composition.js";
@@ -373,22 +373,19 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             /* The non-bearer credentials, a panel's backend, the in-container `vpn` CLI, a control token
              * (the ACP bridge, and whatever drives this sandbox from outside), the desktop-sync agent. One
              * table in auth/grants.ts says what each reaches; this loop is the only place any of them is
-             * admitted. Identity stays unset for all four (documented-legal, the panel-token precedent):
-             * each acts as the owner's tool rather than as a member. */
-            for (const grant of grants) {
-                const presented = c.req.header(grant.header);
-                if (presented === undefined || presented === "") {
-                    continue;
+             * admitted. Identity stays unset for all of them (documented-legal, the panel-token precedent):
+             * each acts as the owner's tool rather than as a member. A grant that can NAME its holder (a
+             * control token, minted with a label) hands back a principal, stashed for the handlers that
+             * attribute work (auth/principal.ts). */
+            const admission = await admitByGrant(grants, (name) => c.req.header(name), c.req.method, routedPath(c.req.path));
+            if (admission !== undefined) {
+                if (!admission.admitted) {
+                    return c.json({ error: admission.error }, admission.status);
                 }
-                const verdict = await grant.authorize(presented, c.req.method, routedPath(c.req.path));
-                if (verdict === "ok") {
-                    return next();
+                if (admission.principal !== undefined) {
+                    c.set("principal", admission.principal);
                 }
-                // Out of scope is its own answer on purpose: a holder of the RIGHT credential on the wrong
-                // route should read "this may not go there", not a baffling missing-bearer 401.
-                return verdict === "out-of-scope"
-                    ? c.json({ error: `${grant.name} not valid for this route` }, 403)
-                    : c.json({ error: "unauthorized" }, 401);
+                return next();
             }
             try {
                 const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined);

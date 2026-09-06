@@ -91,12 +91,25 @@ export const parseArgs = (argv: readonly string[], envUrl: string | undefined): 
     return { kind: "call", call: { url, waitS, blockedExit, request: words.join(" ") } };
 };
 
-// The URL as actually dialled: the caller's own deadline rides as a query parameter beside the token. Through
-// the URL API rather than string glue, so a URL that already carries parameters is extended, not corrupted.
-export const targetOf = (url: string, waitS: number): string => {
+/* THE URL AS ACTUALLY DIALLED, and the headers that go with it. The door URL a sandbox hands out carries its
+ * token as `?token=`, the one shape a webhook sender can carry; this caller can set a header, so the token is
+ * lifted out of the query and sent as `authorization: Bearer …` instead, and the URL that reaches the edge, the
+ * tunnel and every proxy's log between here and the daemon names the door and nothing else. The caller's own
+ * deadline rides as a query parameter (`wait`) when it has one; a fire has none. Through the URL API rather
+ * than string glue, so a URL that already carries parameters is extended, not corrupted. */
+export interface Dial {
+    readonly url: string;
+    readonly headers: Record<string, string>;
+}
+
+export const dialOf = (url: string, waitS?: number): Dial => {
     const target = new URL(url);
-    target.searchParams.set("wait", String(waitS));
-    return target.toString();
+    const token = target.searchParams.get("token");
+    target.searchParams.delete("token");
+    if (waitS !== undefined) {
+        target.searchParams.set("wait", String(waitS));
+    }
+    return { url: target.toString(), headers: token === null || token === "" ? {} : { authorization: `Bearer ${token}` } };
 };
 
 // How long the HTTP client itself waits: a minute past the gate's own hold, so the deadline that fires is
@@ -129,3 +142,7 @@ export const exitOf = (verdict: GateVerdict, blockedExit: number): number => {
     }
     return verdict.outcome === "fail" ? 1 : blockedExit;
 };
+
+// The run door, the API reached with a control token rather than a door URL, shares this package for the
+// reason above: one zero-dependency install for every way a pipeline talks to a sandbox.
+export * from "./run.js";
