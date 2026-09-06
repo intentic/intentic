@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // touches them.
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../analytics", () => ({ track: vi.fn() }));
+// The roster's own report when it catches itself behind (auditRoster) posts through sandboxTarget, which is one
+// more of those import-time reads.
+vi.mock("../clientDiagnostics", () => ({ reportClient: vi.fn() }));
 vi.mock("../sandbox/useSandbox", async () => {
     const { ref } = await import("vue");
     return {

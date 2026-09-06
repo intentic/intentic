@@ -2,6 +2,8 @@ import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contrac
 import { ref, shallowRef, watch } from "vue";
 import { invalidateAgentTranscript } from "../chat/agentTranscript";
 import { useChat } from "../chat/useChat";
+import { reportClient } from "../clientDiagnostics";
+import { reloadOnHotUpdate } from "../hotReload";
 import { onScreen } from "../onScreen";
 import { AGENT_DIFF } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
@@ -385,6 +387,52 @@ watch(registry, (entries) => {
     }
 });
 
+/* --- The beat's audit of this roster ---------------------------------------------------------------------
+ * WHAT HAPPENS WHEN A SNAPSHOT NEVER LANDS. Everything above is written for frames that ARRIVE: out of order,
+ * racing a read, racing this browser's own optimistic move. None of it can see the frame that was never
+ * applied at all — dropped by the revision guard, delivered into a store instance nothing renders any more
+ * (a dev hot update), lost with a consumer that stopped pulling. The roster is push-only, so the board simply
+ * stops moving at that instant: the cards stay, the window keeps working, the chat keeps streaming, and only
+ * a reload puts it right. That is the "the /agents view still says Question for you, I answered it minutes
+ * ago" report, and until this there was nothing in the stream that could have told the browser.
+ *
+ * So the daemon's heartbeat carries the revision it was sent at (HeartbeatSchema), and this is what reads it.
+ * A beat only goes out when that connection's queue is EMPTY, so by the time one arrives every frame the
+ * daemon sent before it has already been applied here: a disagreement is not a race to be waited out, it is
+ * proof that a snapshot went missing, and the answer is to read the roster once.
+ *
+ * A LOWER REVISION THAN WE HOLD IS THE SAME REPORT FROM THE OTHER SIDE, and the pull alone cannot fix it: the
+ * guard would drop the pull's own answer as "older than what we have", which is exactly the freeze being
+ * repaired. The daemon is the authority on its own revision line, so the line is adopted rather than defended.
+ *
+ * FREE WHEN NOTHING IS WRONG, which is what makes it affordable at all: the number rides a frame that was
+ * already flying, an agreeing beat does nothing, and a busy fleet sends no beats because its queue is never
+ * idle. One read in flight at a time, so a slow answer under load cannot stack a queue of them behind it. */
+let auditing: Promise<void> | undefined;
+
+export const auditRoster = (rev: number): void => {
+    if (rev === appliedRev) {
+        return;
+    }
+    /* SAID OUT LOUD, ONCE PER OCCURRENCE, because a repair nobody can see is how this took two hours of log
+     * archaeology to narrow the first time: every window looked healthy, the daemon's own records showed the
+     * frames going out, and the only account of it was a person saying the board had stopped moving. The line
+     * lands in logs/client.jsonl with the two revisions on it (mcp diagnostics `errors --source browser`), so
+     * the next occurrence is a dated, counted fact about WHICH window fell behind and by how much, and a repair
+     * that starts happening every few seconds is visible as a repair rather than as silence. The reporter
+     * dedupes per kind, so a persistent one cannot flood the log. */
+    reportClient(`fleet.roster-behind`, `the roster missed a snapshot and was read back`, {
+        level: `warn`,
+        fields: { held: appliedRev, beat: rev },
+    });
+    if (rev < appliedRev) {
+        appliedRev = -1;
+    }
+    auditing ??= refresh().finally(() => {
+        auditing = undefined;
+    });
+};
+
 /* Explicit registry pull, the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
  *
  * Exported as `refreshAgents` for sandboxScope, which calls it on the seam where a switch lands. The roster
@@ -491,3 +539,15 @@ export const loadArchived = async (): Promise<void> => {
     })();
     await archiveInFlight;
 };
+
+/* ONE ROSTER PER WINDOW, told to the dev server's hot updater (hotReload.ts), and the same argument the chat's
+ * singletons make one directory over. A hot update re-executes this module as a NEW instance while the stream
+ * that feeds it keeps the binding it captured to the old one: the board then renders a store nothing writes to,
+ * frozen at whatever the board's own mount read painted on the way past, in a window that is otherwise
+ * perfectly alive — the chat streams, the tree refreshes, the popped-out window's every note still lands. Only
+ * a reload has ever cleared it.
+ *
+ * The beat's audit above repairs a roster that MISSED a frame; it cannot repair one whose feed is talking to a
+ * different object, because the beat is delivered to that object too. Reloading is the only update a store like
+ * this can honestly apply. */
+reloadOnHotUpdate(import.meta);

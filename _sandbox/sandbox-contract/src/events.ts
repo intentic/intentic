@@ -1672,9 +1672,22 @@ export const resumeDisclosure = (prompt: string): ResumeDisclosure | undefined =
 export const IntenticLineSchema = z.looseObject({ kind: z.string() });
 export type IntenticLine = z.infer<typeof IntenticLineSchema>;
 
-// The daemon's liveness heartbeat frame: the browser holds the events stream open and trips a watchdog if the
-// frames stop (the tunnel drops the proxied response when the origin dies).
-export const HeartbeatSchema = z.object({ kind: z.literal("heartbeat") });
+/* The daemon's liveness heartbeat frame: the browser holds the events stream open and trips a watchdog if the
+ * frames stop (the tunnel drops the proxied response when the origin dies).
+ *
+ * IT ALSO SAYS WHERE THE FLEET STANDS, and that one number is what makes the roster self-correcting. The
+ * roster is otherwise push-only: the daemon frames it on every change (AgentsSchema) and the browser applies
+ * what arrives, so a snapshot that never lands — dropped by the revision guard, applied into a store nothing
+ * reads any more, lost with a frame the consumer never pulled — is a board frozen at that instant, silently,
+ * until somebody reloads the page. That is the "the /agents view stopped moving while the chat kept working"
+ * report, and nothing in the stream could tell the browser it had happened.
+ *
+ * A beat is only sent when this connection's queue is EMPTY (system.routes.ts), so by the time one is read the
+ * browser has already applied every frame the daemon sent before it. `rev` disagreeing with what the browser
+ * holds is therefore not a race, it is proof that a snapshot went missing, and the browser answers it with one
+ * GET /agents (useAgents-registry's auditRoster). Costs nothing when nothing is wrong: the number rides a frame
+ * that was already flying, and an agreeing beat does nothing at all. */
+export const HeartbeatSchema = z.object({ kind: z.literal("heartbeat"), rev: z.number() });
 export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 
 // One step of the daemon's boot chain. `key` is the stable id the daemon declares it under, `label` the words

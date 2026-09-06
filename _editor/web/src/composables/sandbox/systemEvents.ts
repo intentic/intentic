@@ -4,7 +4,7 @@ import { emitFilesChanged } from "../../extension-host/fileEvents";
 import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { desyncAgents } from "../agents/useAgents";
-import { refreshAgents, setAgents } from "../agents/useAgents-registry";
+import { auditRoster, refreshAgents, setAgents } from "../agents/useAgents-registry";
 import { providerRefusals, setAccountUsage } from "../chat/providerAccounts";
 import { useChat } from "../chat/useChat";
 import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../queryKeys";
@@ -132,7 +132,12 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         }
         case `heartbeat`:
-            // Liveness only, the connection machine already consumed this frame's arrival.
+            /* Liveness for the connection machine, which already consumed this frame's arrival — and, for the
+             * fleet, the one moment the daemon can be believed about where the roster stands: a beat is only
+             * sent when this connection has nothing queued, so everything it was told has been applied here.
+             * A revision that disagrees is a snapshot this browser never got, and the roster reads itself back
+             * rather than staying frozen at it (useAgents-registry's auditRoster). */
+            auditRoster(event.rev);
             return;
         case `boot`:
             // A step moved. The frame IS the whole snapshot (snapshot-not-diff, like the rosters), and the

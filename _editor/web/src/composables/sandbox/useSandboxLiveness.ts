@@ -1,6 +1,7 @@
 import { sleep } from "@intentic/base/async";
 import { watch } from "vue";
 import { desyncAgents } from "../agents/useAgents";
+import { reloadOnHotUpdate } from "../hotReload";
 import { queryClient } from "../queryPersistence";
 import { presenceStreamOpened, resetPresence } from "../usePresence";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
@@ -327,3 +328,11 @@ watch(daemonBase, () => {
 export function useSandboxLiveness() {
     return { start, stop };
 }
+
+/* ONE DRIVER PER WINDOW, told to the dev server's hot updater (hotReload.ts). This module IS a running loop and
+ * a `running` flag guarding it, so a hot update that re-executes it leaves the window with two of them or with
+ * none: the old loop still consuming a stream nobody reads any more, and a new module whose `start` the shell
+ * may never call again — or the reverse, a shell that starts the new one while the old one goes on pushing
+ * frames into the stores it captured. Both shapes are a workspace that has quietly stopped hearing from its
+ * daemon while looking entirely healthy, which is the one failure this file exists to make impossible. */
+reloadOnHotUpdate(import.meta);

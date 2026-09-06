@@ -192,7 +192,11 @@ async function* systemEvents(
                 };
             });
             if (!abort.aborted && timedOut) {
-                yield { kind: "heartbeat" };
+                /* WITH THE FLEET REVISION ON IT, which is only honest because of where this line sits: the
+                 * queue is empty, so everything this connection was ever going to be told has been yielded.
+                 * The number is therefore "what you should be holding", and a browser holding anything else
+                 * has demonstrably missed a snapshot rather than merely raced one (see HeartbeatSchema). */
+                yield { kind: "heartbeat", rev: services.agents.revision() };
             }
         }
     } finally {

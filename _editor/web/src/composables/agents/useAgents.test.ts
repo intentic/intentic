@@ -15,6 +15,9 @@ vi.mock("../sandbox/useSandbox", async () => {
 // key out (activeSandbox is a leaf module: it needs no browser, only a predictable answer).
 vi.mock("../sandbox/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+// And the fourth: the roster says out loud when it caught itself behind (auditRoster), and the reporter posts
+// to the daemon through sandboxTarget, which reads window.env the moment it is imported.
+vi.mock("../clientDiagnostics", () => ({ reportClient: vi.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
@@ -27,7 +30,7 @@ import { useNotifications } from "../notifications";
 import { queryClient } from "../queryPersistence";
 import { resetAgents, useAgents } from "./useAgents";
 import { canArchive, FINISHED_WINDOW, type FleetAgent, windowFinished } from "./useAgents-fleet";
-import { resetArchive, setAgents } from "./useAgents-registry";
+import { auditRoster, resetArchive, setAgents } from "./useAgents-registry";
 
 /* The Finished lane's cap, and the one card it is never allowed to drop. The board draws a ring on whatever the
  * docked chat is pointing at, so a lane that culls that card leaves the ring nowhere at all, which reads as
@@ -251,6 +254,89 @@ describe("roster frames the board can skip", () => {
         setAgents([summary(`a1`, { title: `Old name` })], 2);
         await nextTick();
         expect(cardsById().get(`a1`)?.title).toBe(`Old name`);
+    });
+});
+
+/* THE BEAT'S AUDIT: what happens about the snapshot that never arrived.
+ *
+ * Everything above is about frames that LAND. The failure this covers is the one nothing in the stream used to
+ * report: a roster frame that was never applied, so the board sits at that instant — cards present, statuses
+ * frozen, the window otherwise alive — until somebody reloads the page. The daemon's heartbeat now states the
+ * revision it was sent at, and a beat only goes out when that connection has nothing queued, so a disagreement
+ * is proof rather than a race. */
+describe("the beat's audit of the roster", () => {
+    const summary = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
+        id,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        seenAt: 2_000,
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
+        ...extra,
+    });
+    const asking = (id: string): AgentSummary =>
+        summary(id, {
+            status: `awaiting`,
+            attention: { plan: false, question: true, permission: false, service: false, capability: false, credential: false, conflict: false },
+        });
+    // What the roster says about one agent right now, which is the whole of what a stale board gets wrong.
+    const parked = (id: string): boolean => useAgents().fleet.value.find((card) => card.id === id)?.attention.question === true;
+    const answers = (agents: AgentSummary[], rev: number): void => {
+        vi.mocked(sandboxJson).mockResolvedValue({ agents, rev });
+    };
+
+    beforeEach(() => {
+        resetAgents();
+        vi.mocked(sandboxJson).mockReset();
+    });
+
+    it("asks for nothing while the beat agrees with what it holds", async () => {
+        setAgents([asking(`a1`)], 7);
+        await nextTick();
+
+        auditRoster(7);
+        await nextTick();
+
+        expect(sandboxJson).not.toHaveBeenCalled();
+    });
+
+    it("reads the roster back when the beat is ahead: the frame in between never landed", async () => {
+        setAgents([asking(`a1`)], 7);
+        await nextTick();
+        expect(parked(`a1`)).toBe(true);
+        // The answer the board never heard about: the question is settled and the agent is working again.
+        answers([summary(`a1`)], 8);
+
+        auditRoster(8);
+        await vi.waitFor(() => expect(parked(`a1`)).toBe(false));
+
+        expect(sandboxJson).toHaveBeenCalledWith(`/agents`);
+    });
+
+    /* A REVISION LOWER THAN THE ONE WE HOLD, which the pull alone could not repair: the guard exists to drop
+     * snapshots older than the last applied, so it would drop this read's own answer and leave the board
+     * exactly as frozen as it found it. The daemon owns its revision line, so the line is adopted. */
+    it("adopts a revision line that moved backwards instead of defending the one it holds", async () => {
+        setAgents([asking(`a1`)], 50);
+        await nextTick();
+        answers([summary(`a1`)], 4);
+
+        auditRoster(3);
+        await vi.waitFor(() => expect(parked(`a1`)).toBe(false));
+    });
+
+    it("keeps one read in flight, however many beats disagree while it runs", async () => {
+        setAgents([asking(`a1`)], 7);
+        await nextTick();
+        answers([summary(`a1`)], 9);
+
+        auditRoster(8);
+        auditRoster(9);
+        auditRoster(9);
+        await vi.waitFor(() => expect(parked(`a1`)).toBe(false));
+
+        expect(vi.mocked(sandboxJson).mock.calls.filter(([path]) => path === `/agents`)).toHaveLength(1);
     });
 });
 

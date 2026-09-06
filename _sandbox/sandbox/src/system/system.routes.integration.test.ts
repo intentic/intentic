@@ -540,3 +540,55 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
 
     controller.abort();
 });
+
+test("events: the beat states the fleet revision it was sent at, so a browser can tell a roster went missing", async () => {
+    /* WHY A LIVENESS FRAME CARRIES A NUMBER. The fleet roster is push-only: this stream frames it on every
+     * registry change and the browser applies what arrives. Nothing in that arrangement can report the snapshot
+     * that never arrived — dropped by the browser's revision guard, delivered into a store instance nothing
+     * renders any more, lost with a consumer that stopped pulling — so the board simply stopped moving at that
+     * instant and only a reload put it right.
+     *
+     * The beat is where the answer belongs because of WHEN it is sent: only with this connection's queue empty,
+     * so everything the daemon meant to say has already gone out. That is what makes the number a promise
+     * ("this is what you should be holding") rather than a race, and what lets the browser answer a
+     * disagreement with one read instead of a reload (useAgents-registry's auditRoster). */
+    const svc = services();
+    const client = clientFor(createApp(svc));
+    const controller = new AbortController();
+    const frames = (await client.system.events({ clientId: "beat-1" }, { signal: controller.signal }))[Symbol.asyncIterator]();
+
+    // Read to the next beat, keeping the revision of the last roster this connection was sent on the way. The
+    // pair is the whole invariant: what the beat says, and what it was actually told before saying it.
+    const toBeat = async (roster: number | undefined): Promise<{ beat: number; roster: number }> => {
+        let last = roster;
+        for (;;) {
+            const { value, done } = await frames.next();
+            if (done === true) {
+                throw new Error(`the stream ended before it beat`);
+            }
+            if (value.kind === "agents") {
+                last = value.rev;
+            }
+            if (value.kind === "heartbeat") {
+                if (last === undefined) {
+                    // Every connection is sent the roster on subscribe, before it can ever go idle enough to
+                    // beat. A beat arriving first would mean the number below stands for nothing.
+                    throw new Error(`the connection beat before it was ever sent a roster`);
+                }
+                return { beat: value.rev, roster: last };
+            }
+        }
+    };
+
+    // The immediate snapshot every connection opens with, then a published change on top of it: an empty
+    // archive moves no agent and broadcasts anyway, so what this measures is the beat rather than the archiving.
+    const opened = await toBeat(undefined);
+    expect(opened.beat).toBe(opened.roster);
+
+    await svc.agents.setArchived([], Date.now());
+    const moved = await toBeat(opened.roster);
+    expect(moved.roster).toBeGreaterThan(opened.roster);
+    expect(moved.beat).toBe(moved.roster);
+
+    controller.abort();
+});
