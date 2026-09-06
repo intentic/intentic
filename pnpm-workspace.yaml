@@ -65,6 +65,11 @@ overrides:
   # arbitrary-file-read advisories (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849). Same major, and it dedupes onto
   # the 8.5.x copy the rest of the tree already resolves.
   "tw-to-css>postcss": 8.5.25
+  # prisma and better-auth both carry mysql2 as an optional driver dependency, and both resolved 3.15.3, which
+  # leaks plaintext credentials on an auth-plugin downgrade to mysql_clear_password (GHSA-3f6p-5ww8-9rcr,
+  # fixed in 3.22.0). Nothing here connects to MySQL — the datasource in _platform/prisma/schema.prisma is
+  # postgresql — so this is a tree hygiene bump, not a live exposure; same major, no code of ours touches it.
+  mysql2: 3.24.3
   # onnxruntime-node's `adm-zip: ^0.5.16` is used only by its postinstall unpacker, which `allowBuilds` disables
   # here — so GHSA-xcpc-8h2w-3j85 is unreachable in this workspace. Pinned to the patched 0.6.0 anyway so the
   # tree does not carry a known-bad copy for whoever enables that build later.
