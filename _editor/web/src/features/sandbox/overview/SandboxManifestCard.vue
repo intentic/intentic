@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { DisclosureRow, RowGroup, StatusBadge } from "@intentic/ui";
+import { Button, DisclosureRow, Notice, RowGroup, StatusBadge } from "@intentic/ui";
+import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useManifestProblems } from "../extensions/useManifestProblems";
 import { openWorkspaceRef } from "../../workspace/files/openFileRef";
-import { manifestNotices } from "./manifestNotice";
+import { type ManifestRepairAction, manifestNotices } from "./manifestNotice";
 
 /* "Something in your settings files isn't being read": the companion to SandboxBehindCard.
  *
@@ -28,9 +29,13 @@ import { manifestNotices } from "./manifestNotice";
  *   • THE TAG NAMES THE DAMAGE, never a count of complaints. "1 to fix" was too vague to act on and loud
  *     enough to alarm; "using defaults" is what decides whether this is opened now or after lunch.
  *   • THE FILE NAME OPENS THE FILE, because every one of these ends there and the app is an editor with the
- *     file in it. `hit="pair"` is what lets that click coexist with a row-wide press that opens the row. */
+ *     file in it. `hit="pair"` is what lets that click coexist with a row-wide press that opens the row.
+ *   • A STRAY KEY IS FIXED HERE, not by going to the file. It is the one problem on this card whose remedy is
+ *     already fully known by the time the line is drawn — the daemon named the key and guessed the spelling —
+ *     so the line that says "did you mean skills?" ends in the click that means it. Which lines earn a button
+ *     and which do not is manifestNotice.ts's decision, with the reasoning; the card just draws them. */
 
-const { reports, hasProblems } = useManifestProblems();
+const { reports, hasProblems, repair } = useManifestProblems();
 
 const notices = computed(() => manifestNotices(reports.value));
 
@@ -39,6 +44,28 @@ const notices = computed(() => manifestNotices(reports.value));
 const opened = ref<Record<string, boolean>>({});
 const toggle = (path: string, open: boolean): void => {
     opened.value = { ...opened.value, [path]: open };
+};
+
+/* ONE BUSY FLAG AND ONE NOTICE FOR THE WHOLE CARD, rather than per button. These are sub-second writes of a
+ * kilobyte file, and a reader who clicks one is not clicking another mid-flight; a `useAsyncAction` per row
+ * would be state proportional to the list for a case that cannot happen. `useAsyncAction` also ignores re-entry
+ * while busy, so the double-click that would otherwise send the same removal twice is already a no-op.
+ *
+ * THE FAILURES ARE WORTH PRINTING, which is why there is a Notice here at all. The likeliest of the daemon's
+ * refusals are races with the reader's own editor — the key is already gone, or the name is already taken —
+ * and they arrive as sentences saying so. Swallowing those would leave a button that visibly does nothing on
+ * the one card whose subject is things quietly not working. */
+const { busy, notice: repairNotice, run } = useAsyncAction();
+// Which file the last press was against, so a refusal is drawn under THAT row rather than beneath the list. On
+// a card that can hold three files, a failure at the bottom of all of them is a message the reader has to
+// place before they can read it.
+const acting = ref<string | undefined>(undefined);
+const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> => {
+    acting.value = path;
+    return run(
+        () => repair({ path, key: action.key, ...(action.to === undefined ? {} : { to: action.to }) }),
+        action.to === undefined ? `Couldn't remove "${action.key}".` : `Couldn't rename "${action.key}".`,
+    );
 };
 </script>
 
@@ -71,9 +98,43 @@ const toggle = (path: string, open: boolean): void => {
             </template>
             <template #below>
                 <div class="flex flex-col gap-1 pb-1 text-2xs">
-                    <p v-for="(line, index) in notice.lines" :key="index" class="text-muted">{{ line }}</p>
+                    <!-- The buttons sit ON the line they answer, not collected under the list. A row can carry
+                         several stray keys, and a strip of "Remove it"s at the bottom would make the reader
+                         match each to a line by position, which is exactly the work the button was added to
+                         save. `items-baseline` keeps the small labels sitting on the sentence's own line. -->
+                    <div v-for="(line, index) in notice.lines" :key="index" class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <p class="text-muted">{{ line.text }}</p>
+                        <!-- A LINE'S ACTIONS WRAP AS A PAIR. Nested rather than laid out beside the sentence,
+                             because in a narrow panel the flat version broke BETWEEN the two buttons: "Rename
+                             it" finishing one line's sentence and "Remove it" starting the next, directly
+                             above a different key's sentence, which is the one arrangement where a click can
+                             land on the wrong key's repair. The inner wrap is kept so a pair too wide for the
+                             panel still breaks rather than overflowing.
+
+                             Short on screen, complete to a hover and to a screen reader: the visible label
+                             leans on the sentence it follows, and `spoken` is that sentence's subject put
+                             back for whoever reaches the button without it. -->
+                        <span v-if="line.repairs.length > 0" class="flex flex-wrap items-center gap-2">
+                            <Button
+                                v-for="action in line.repairs"
+                                :key="action.label"
+                                size="small"
+                                severity="secondary"
+                                :label="action.label"
+                                :aria-label="action.spoken"
+                                :title="action.spoken"
+                                :disabled="busy"
+                                @click="void applyRepair(notice.path, action)"
+                            />
+                        </span>
+                    </div>
                     <!-- The action outranks the diagnosis: the one line here anybody has to do anything with. -->
                     <p v-if="notice.fix !== undefined" class="text-content">{{ notice.fix }}</p>
+                    <!-- Only the refusals reach here. A repair that WORKED says so by the row disappearing:
+                         the write moves the file, the watcher invalidates `manifests`, and the daemon re-reads
+                         it on the way to answering — so a success banner would be a second announcement of
+                         something the reader is already watching happen. -->
+                    <Notice v-if="repairNotice && acting === notice.path" :of="repairNotice" />
                 </div>
             </template>
         </DisclosureRow>

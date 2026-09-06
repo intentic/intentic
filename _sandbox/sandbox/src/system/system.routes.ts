@@ -37,6 +37,7 @@ import { stagedUpdate } from "../platform/boot/staged-update.js";
 import { runtimeHealth } from "../agent/providers/adapter-health.js";
 import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest-problems.js";
+import { repairManifest } from "../store/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
@@ -272,6 +273,38 @@ export const createSystemRoutes = (services: Services) => {
         manifestProblems: i.manifestProblems.handler(async () => {
             await Promise.all([services.sandboxSettings.get(), services.capabilities.list(), services.personas.list()]);
             return manifestProblems(services.workspace.root);
+        }),
+        /* Take one stray key back out of a manifest, the button on the notice above.
+         *
+         * NOTHING TO INVALIDATE AFTERWARDS, which is worth saying because it looks like an omission: the write
+         * lands through the store's own queue, the workspace watcher sees the file change and broadcasts the
+         * `manifests` key (workspace-state.ts), and the refetch that triggers re-reads the three hand-edited
+         * manifests on its way past the route above. The notice clears itself for the same reason it clears
+         * when the file is fixed by hand, which is the property the whole design was chosen for.
+         *
+         * THE REFUSALS ARE RACES, NOT FAULTS, and each gets the status that says so. Somebody hand-editing the
+         * file while the notice was on screen is the ordinary way to reach two of these, and reporting that as
+         * a server error would blame the user's own fix. The message is what the browser shows. */
+        repairManifest: i.repairManifest.handler(async ({ input }) => {
+            const refusal = await repairManifest({ root: services.workspace.root, ...input });
+            if (refusal === "unknown file") {
+                throw new ORPCError("NOT_FOUND", { message: `not a settings file this sandbox reports on: ${input.path}` });
+            }
+            if (refusal === "not repairable") {
+                throw new ORPCError("NOT_FOUND", { message: `nothing in this sandbox owns ${input.path}` });
+            }
+            if (refusal === "unreadable file") {
+                throw new ORPCError("CONFLICT", {
+                    message: `${input.path} isn't valid JSON right now, so there is no "${input.key}" to take out — open it and fix it by hand`,
+                });
+            }
+            if (refusal === "no such key") {
+                throw new ORPCError("CONFLICT", { message: `"${input.key}" is not in ${input.path} any more — it looks like it has already been fixed` });
+            }
+            if (refusal === "name taken") {
+                throw new ORPCError("CONFLICT", { message: `${input.path} already has a "${input.to}" — remove "${input.key}" instead of renaming it` });
+            }
+            return { ok: true };
         }),
         // Exchange the request's verified bearer for a daemon-minted session (the steady-state browser
         // credential, see auth/session.ts). The bearer middleware already verified WHO is asking (a Google ID

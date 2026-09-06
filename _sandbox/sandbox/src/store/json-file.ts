@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
+import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
 
 /* The substrate under every `*-store.ts` in the daemon: one JSON file on disk, read through a schema and
  * written whole. Each store used to hand-roll this cycle, try/readFile/JSON.parse/safeParse/fallback on the
@@ -131,6 +132,42 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
     // It never rejects, a failed update settles the chain so the next one still runs, while the caller of
     // that update still sees its own error.
     let queue: Promise<unknown> = Promise.resolve();
+
+    /* AN EDIT OF THE RAW JSON, on the same queue, which is the whole reason it lives in here rather than in the
+     * module that wants it (manifest-repair.ts, and the argument for the split is there). One caller: taking a
+     * key the schema does not know back out of a file, which cannot be expressed as an `update` because `parse`
+     * has already dropped that key from every value an update can see.
+     *
+     * It writes nothing unless the edit returns something, and it never sets unreadable bytes aside the way
+     * `update` does: there is nothing to protect from a downgrade here, because a file this could not parse is
+     * a file it declines to touch. */
+    const editRaw = (edit: ManifestEdit): Promise<boolean> => {
+        const next = queue.then(async () => {
+            let raw: unknown;
+            try {
+                raw = JSON.parse(await readFile(path, "utf8"));
+            } catch {
+                // Absent, or not JSON at all. Either way there is no named key to remove, and rewriting what
+                // could not be read is exactly what the DOWNGRADES rule forbids.
+                return false;
+            }
+            if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+                return false;
+            }
+            const updated = edit(raw as Record<string, unknown>);
+            if (updated === undefined) {
+                return false;
+            }
+            await writeJsonFile(path, updated, mode);
+            return true;
+        });
+        queue = next.catch(() => undefined);
+        return next;
+    };
+
+    // Announced by CONSTRUCTION, so a manifest cannot be reportable and unrepairable at the same time. Costs
+    // one map entry per store and nothing at all for the files nothing ever asks to repair.
+    registerManifestEditor(path, editRaw);
 
     return {
         read: async () => (await readState()).value,

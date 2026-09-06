@@ -156,6 +156,39 @@ export const ManifestProblemReportSchema = z.object({
 });
 export type ManifestProblemReport = z.infer<typeof ManifestProblemReportSchema>;
 export const ManifestProblemsSchema = z.array(ManifestProblemReportSchema);
+
+/* THE ONE REPAIR A BUTTON MAY PERFORM: drop a stray top-level key, or rename it to the one it was meant to be.
+ *
+ * Narrow on purpose, and the narrowness is the whole design. Of the three ways a manifest can be wrong, this is
+ * the only one where the remedy is fully determined by what the daemon ALREADY reported: it named the key, and
+ * `suggestion` named what it probably should have been. There is nothing left to decide, which is exactly the
+ * case a button should take off somebody's hands.
+ *
+ * The other two are not offered, and refusing them is deliberate:
+ *   • an UNREADABLE file has nothing to act on, only bytes a person has to look at, and in the version-skew
+ *     case the file is probably RIGHT (store/manifest-problems.ts) — a "repair" there is how a good config gets
+ *     broken by hand.
+ *   • an INVALID ENTRY could only be dropped, and that deletes a capability or persona somebody wrote. A stray
+ *     key does nothing today and does nothing after it is gone; a skipped entry is configuration they meant.
+ *     Same card, different risk class, so one gets a button and the other gets the file opened.
+ *
+ * Not a general "write this JSON": the caller sends a key, never a value, so the worst a compromised or
+ * confused browser can do here is remove something the daemon had already declared inert. */
+export const ManifestRepairSchema = z.object({
+    path: z
+        .string()
+        .describe(
+            "The file to repair, as the workspace path the problem was reported under. Only the handful of manifests a person hand-edits can be named; anything else is refused.",
+        ),
+    key: z.string().describe("The stray top-level key, exactly as it was reported. Absent from the file already means there is nothing to do."),
+    to: z
+        .string()
+        .optional()
+        .describe(
+            "Rename the key to this instead of removing it, carrying its value across. Absent means remove it. Naming a key that is already in the file is refused rather than silently overwriting what is there.",
+        ),
+});
+export type ManifestRepair = z.infer<typeof ManifestRepairSchema>;
 // A daemon-minted session (system.session): the steady-state browser credential, exchanged for a verified
 // Google ID token so Google UI is a sign-in moment instead of an hourly renewal. `expiresAt` is epoch ms,
 // the browser renews ahead of it without parsing the token; `email` is who the daemon verified.

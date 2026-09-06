@@ -5,13 +5,14 @@
 // standing beside the list, alarming enough to notice and too vague to act on. Both read as fine in the source
 // and as a block of amber text on the screen, which is what a rendered assertion is for.
 import { STATE_DIR } from "@intentic/constants";
-import type { ManifestProblemReport } from "@intentic/sandbox-contract";
+import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 const reports = ref<ManifestProblemReport[]>([]);
+const repair = vi.fn<(request: ManifestRepair) => Promise<void>>(async () => undefined);
 vi.mock(`../extensions/useManifestProblems`, () => ({
-    useManifestProblems: () => ({ reports, hasProblems: computed(() => reports.value.length > 0) }),
+    useManifestProblems: () => ({ reports, hasProblems: computed(() => reports.value.length > 0), repair }),
 }));
 
 const opened = vi.fn();
@@ -45,9 +46,20 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     opened.mockReset();
+    repair.mockClear();
     reports.value = [];
     document.body.replaceChildren();
 });
+
+// The row's own chevron. Every assertion about the opened state goes through it, because the diagnosis and the
+// buttons are deliberately behind it: a collapsed row is a name and a tag and nothing else.
+const open = async (el: HTMLElement): Promise<void> => {
+    el.querySelector<HTMLElement>(`[aria-expanded="false"]`)?.click();
+    await nextTick();
+};
+
+const pressable = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.trim() === label);
 
 it(`says nothing while every manifest reads clean`, () => {
     expect(mount([]).textContent?.trim()).toBe(``);
@@ -69,8 +81,7 @@ it(`is a name and a tag until somebody asks for more`, () => {
 
 it(`opens into the cause and the one instruction`, async () => {
     const el = mount(SKEW);
-    el.querySelector<HTMLElement>(`[aria-expanded="false"]`)?.click();
-    await nextTick();
+    await open(el);
 
     const text = el.textContent ?? ``;
     expect(text).toContain(`It was written by intentic 1.233.0, newer than this sandbox (1.199.0).`);
@@ -79,10 +90,60 @@ it(`opens into the cause and the one instruction`, async () => {
 
 it(`opens the file from its name, without opening the row`, () => {
     const el = mount([{ kind: `unknownKey`, detail: `skils`, suggestion: `skills` }]);
-    const name = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`settings.json`));
+    const name = [...el.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(`settings.json`));
     name?.click();
-    // Every one of these ends with the file open in the editor; the name is the shortest way there. The full
-    // path is what gets opened, and what a hover reports.
+    // The remaining way out for everything a button can't do: the file, in the editor. The full path is what
+    // gets opened, and what a hover reports.
     expect(opened).toHaveBeenCalledWith(SETTINGS);
     expect(name?.title).toBe(SETTINGS);
+});
+
+it(`keeps the repair behind the chevron, like everything else on the row`, () => {
+    // The buttons are detail. A card that showed them collapsed would be offering an irreversible-looking
+    // action to somebody who has not yet read which key it is about.
+    const el = mount([{ kind: `unknownKey`, detail: `contextShelf` }]);
+    expect(pressable(el, `Remove it`)).toBeUndefined();
+});
+
+it(`takes the stray key out from the row itself`, async () => {
+    const el = mount([{ kind: `unknownKey`, detail: `contextShelf` }]);
+    await open(el);
+
+    pressable(el, `Remove it`)?.click();
+    // No `to`: a removal, of exactly the key the line named, in the file the row is titled with.
+    expect(repair).toHaveBeenCalledWith({ path: SETTINGS, key: `contextShelf` });
+});
+
+it(`sends the guess as a rename, carrying the value across`, async () => {
+    const el = mount([{ kind: `unknownKey`, detail: `skils`, suggestion: `skills` }]);
+    await open(el);
+
+    pressable(el, `Rename it`)?.click();
+    expect(repair).toHaveBeenCalledWith({ path: SETTINGS, key: `skils`, to: `skills` });
+});
+
+it(`says why a repair did not happen, where it was asked for`, async () => {
+    // The daemon's refusals are races with the reader's own editor ("already fixed"), and a button that
+    // visibly does nothing is the exact failure this card exists to report.
+    repair.mockRejectedValueOnce(new Error(`"contextShelf" is not in .intentic/config/settings.json any more`));
+    const el = mount([{ kind: `unknownKey`, detail: `contextShelf` }]);
+    await open(el);
+
+    pressable(el, `Remove it`)?.click();
+    await nextTick();
+    await nextTick();
+    expect(el.textContent).toContain(`Couldn't remove "contextShelf".`);
+});
+
+it(`says nothing at all when a repair works`, async () => {
+    const el = mount([{ kind: `unknownKey`, detail: `contextShelf` }]);
+    await open(el);
+
+    pressable(el, `Remove it`)?.click();
+    await nextTick();
+    await nextTick();
+    // The row going away IS the confirmation: the write moves the file, the watcher invalidates, the daemon
+    // re-reads. A success banner would announce something the reader is already watching happen.
+    expect(repair).toHaveBeenCalledTimes(1);
+    expect(el.textContent).not.toMatch(/couldn't/i);
 });

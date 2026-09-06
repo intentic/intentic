@@ -11,7 +11,7 @@ import {
 } from "../schemas/devices.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
 import { OkSchema } from "../schemas/shared.js";
-import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema } from "../schemas/system.js";
+import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
@@ -51,6 +51,28 @@ export const systemContract = {
                 "Anything the daemon tripped over in its own configuration on disk: a file it had to fall back from, a key it did not recognise, an entry it skipped. Separate from the identity call because it goes stale for a different reason, namely a file changing.",
         })
         .output(ManifestProblemsSchema),
+    /* Take one stray key out of a manifest, or rename it to the one it was meant to be — the button behind the
+     * notice above, rather than a sentence telling somebody to go and edit a line.
+     *
+     * It exists because the diagnosis was already complete: the daemon named the key and guessed the spelling,
+     * so everything a person would do next is known, and what is left is a two-second edit of a JSON file. The
+     * alternatives were both worse. A sentence ("did you mean skills?") makes the reader do work the daemon has
+     * already done. An agent makes it a worktree, a turn and a landing decision — and settings.json is written
+     * live by the settings page, so a branched edit landed later would revert whatever was toggled in between.
+     *
+     * The write goes through the owning store's own queue (store/manifest-repair.ts), which is the reason this
+     * is a route at all rather than the file API: these files have a daemon writing them, and a repair that
+     * raced a save would lose one of the two. */
+    repairManifest: oc
+        .route({
+            method: "POST",
+            path: "/system/manifest-problems/repair",
+            summary: "Take a stray setting out of a file",
+            description:
+                "Removes a key the sandbox does not recognise from one of its settings files, or renames it to the one it was probably meant to be, keeping the value. Only the files a person hand-edits can be named, and only a key — never a value — so this can only ever remove something already being ignored. Renaming onto a key the file already has is refused instead of overwriting it.",
+        })
+        .input(ManifestRepairSchema)
+        .output(OkSchema),
     // Exchange the request's verified bearer (a Google ID token, or a still-valid session, which makes this
     // route sliding renewal) for a daemon-minted session, the credential every steady-state call presents.
     session: oc
