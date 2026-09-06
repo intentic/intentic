@@ -2,6 +2,7 @@
 /* WHAT THE DIRECTORY TREE OWES AN AGENT THAT HAS TO FIND SOMETHING IN IT.
  *
  *   node _tools/checks/layout.mjs                  # every rule
+ *   node _tools/checks/layout.mjs --prune          # delete the ghost directories instead of reporting them
  *   node _tools/checks/layout.mjs --write-baseline # adopt today's counts for the two ratcheted rules
  *
  * The measurement behind each rule is in docs/audits/directory-structure-audit.md, mined from 1,862 agent
@@ -28,13 +29,14 @@
  * TWO OF THE SIX ARE RATCHETED (fan-out, basename collisions) because they cannot be brought to zero in one
  * change: `_tools/checks/baselines/layout.json` records today's violators, an entry may only shrink or be
  * deleted, and anything not listed fails on its first offence. The other four are absolute. */
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { EXCLUDED, SKIP_DIRS, packages, root, trackedFiles } from "./lib/repo.mjs";
 
 const BASELINE = join(root, "_tools/checks/baselines/layout.json");
 const writeBaseline = process.argv.includes("--write-baseline");
+const prune = process.argv.includes("--prune");
 const MAX_FILES_PER_DIR = 30;
 
 const tracked = trackedFiles();
@@ -99,6 +101,23 @@ for (const dir of ghostCandidates) {
 }
 // A ghost inside another ghost is one removal, not two.
 const topGhosts = ghosts.filter((dir) => !ghosts.some((other) => dir.startsWith(`${other}/`)));
+
+/* --prune: DELETE the ghosts rather than report them. Ghosts are untracked by definition, so no commit can
+ * remove one — they accumulate wherever a checkout outlives a rename, which is exactly CI's persistent runner
+ * workspaces (checkout there is `clean: false` so a warm node_modules survives, and a moved package's old
+ * directory keeps its own node_modules/dist forever). Preflight prunes before it checks. Mirrored ghosts stay
+ * untouched: their content is a mount of the main checkout, and removing a mount's root is what
+ * @intentic/constants/mirror-roots exists to forbid. */
+if (prune) {
+    for (const dir of topGhosts) {
+        rmSync(join(root, dir), { recursive: true, force: true });
+    }
+    console.log(
+        `layout: pruned ${topGhosts.length} ghost director${topGhosts.length === 1 ? "y" : "ies"}${topGhosts.length > 0 ? `: ${topGhosts.join(", ")}` : "" 
+            }${mirroredGhosts.length > 0 ? ` (${mirroredGhosts.length} left: mirror mounts of a tree this worktree cannot fix)` : ""}`,
+    );
+    process.exit(0);
+}
 
 /* ── 2. Fan-out ───────────────────────────────────────────────────────────────────────────────────────────*/
 const srcDirs = (pkg) => {

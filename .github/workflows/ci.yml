@@ -246,6 +246,12 @@ jobs:
           # Same reason as the `changes` job: this one also runs in every pipeline, and a clean checkout here
           # is a cold install charged to whichever job lands on this workspace next.
           clean: false
+      # THE WORKSPACE OUTLIVES THE COMMIT: checkout here is `clean: false` (above), so a rename leaves its old
+      # directories on this persistent runner — a moved package's former directory keeps its node_modules/dist
+      # and no git operation will ever remove it. The layout check then fails on ghosts no commit can fix
+      # (5464 tracked files all green, and still red). Prune them first; --prune deletes exactly the
+      # directories the check would have named.
+      - run: node _tools/checks/layout.mjs --prune
       # EVERY CHECK THE MANIFEST LISTS, side by side (_tools/checks/manifest.mjs says what each is for): the
       # lockfile against the manifests, every test file in a type-check program and under a budget, the workflow
       # policy (fork boundary, permission ceilings, provenance runners, tag triggers), the byte scan, the
