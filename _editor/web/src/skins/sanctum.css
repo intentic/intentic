@@ -1278,9 +1278,24 @@
     }
 
     /* Solid accent controls — checkbox, radio, switch — read as inlay: the unticked box is cut down into the
-     * plate like a field, and the ticked one is the metal filling it. */
-    [data-skin="sanctum"] .p-checkbox-box,
-    [data-skin="sanctum"] .p-radiobutton-box {
+     * plate like a field, and the ticked one is the metal filling it.
+     *
+     * THE FIELD IS THE UNTICKED STATE'S ALONE, AND THE SELECTOR HAS TO SAY SO. Written flat — every
+     * `.p-checkbox-box` — this cut the ticked box as well, and it won: PrimeVue injects its own component CSS
+     * into `@layer primeng`, this file is `@layer components`, and a later layer beats any specificity in an
+     * earlier one. So `checkbox.checked.background` never landed, and what shipped was the state the fills token
+     * above names first ("a ticked box, a thrown switch, a progress bar") drawn as a near-black square with an
+     * ember rule round it. The tick was there the whole time, in --color-fill-content over a field mixed from
+     * --color-surface-950: #100d0b on #050403, about 1.05:1 — a mark that is drawn, takes its place in the box,
+     * and cannot be seen. A ticked box then said what it was with a border colour alone.
+     *
+     * SO ONLY THE UNTICKED BOX IS CUT, and ticked, hovered, focused and disabled go back to Aura, which paints
+     * them from this skin's own fills: --color-primary-fill behind --color-fill-content, close to 7:1, the metal
+     * filling the field this comment claimed all along. Indeterminate keeps the cut on purpose — PrimeVue leaves
+     * `p-checkbox-checked` off a partial box, and its dash is drawn in the form field's own cream ink, which is
+     * the mark that belongs on a field rather than on metal. */
+    [data-skin="sanctum"] .p-checkbox:not(.p-checkbox-checked) .p-checkbox-box,
+    [data-skin="sanctum"] .p-radiobutton:not(.p-radiobutton-checked) .p-radiobutton-box {
         background-color: color-mix(in oklab, var(--color-surface-950) 66%, black);
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
     }
