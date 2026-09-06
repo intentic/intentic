@@ -3,7 +3,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
+import { GenericContainer, PullPolicy, type StartedTestContainer, Wait } from "testcontainers";
 
 // Shared harness for the gated *.e2e.test.ts suites (sandbox + discord): boot the REAL sandbox image in
 // loopback mode and play the outside-executor role for overlay builds. Test-only, excluded from the package
@@ -33,6 +33,15 @@ const buildSourceImage = async (): Promise<void> => {
     });
 };
 
+/* A REFERENCE THAT NAMES A REGISTRY, so a moving tag can be re-resolved rather than assumed (see the pull
+ * policy below). The first path segment is a registry host only if it carries a dot or a port, docker's own
+ * rule, which is what separates `ghcr.io/intentic/sandbox:latest` from a tag that exists nowhere but this
+ * machine. */
+const registryQualified = (image: string): boolean => {
+    const [first = "", ...rest] = image.split("/");
+    return rest.length > 0 && (first.includes(".") || first.includes(":") || first === "localhost");
+};
+
 // Build the image from this repo's Dockerfile (the artifact CI publishes) unless SANDBOX_E2E_IMAGE points at a
 // prebuilt one, then start it in loopback: GOOGLE_CLIENT_ID / PLATFORM_URL stay unset, so auth + announce are
 // off and the only requirement is a Docker daemon.
@@ -43,6 +52,19 @@ export const startSandboxContainer = async (environment: Record<string, string>)
         await buildSourceImage();
         image = SOURCE_IMAGE_TAG;
     }
+    /* PULL THE MOVING TAG, EVERY RUN. testcontainers' default policy skips the pull whenever the docker host
+     * already holds the tag, which is right for a pinned digest and wrong for `:latest`: a long-lived runner
+     * boots whatever `:latest` meant the last time anything on that host pulled it, and the suite then asserts
+     * today's expectations against a daemon that can be days old. Four consecutive nightlies failed here that
+     * way, each morning differently: a device row with no `sync` half, the per-device revoke answering 404,
+     * and finally `/system/devices` answering Hono's plain-text "404 Not Found" (which reaches the test as a
+     * JSON parse error) because the cached image still served the pre-rename /system/computers. The published
+     * image was right every time. The suite was not looking at it.
+     *
+     * Only for a reference a registry can answer for. A locally built tag (the from-source build above, or
+     * whatever a debugging session points this at) has nowhere to pull from, and forcing one would fail the
+     * run on an image that is already correct. */
+    const pullPolicy = registryQualified(image) ? PullPolicy.alwaysPull() : PullPolicy.defaultPolicy();
     // Unprivileged like every production runner's default: the image bakes a Docker Engine but it stays
     // dormant (dockerd starts only when a docker capability is enabled AND the container runs privileged,
     // the overlay-rebuild grant the suites don't exercise).
@@ -52,6 +74,7 @@ export const startSandboxContainer = async (environment: Record<string, string>)
     // sight, and this is the acknowledgement it accepts instead. Set HERE, once, rather than in each suite's
     // environment map, a suite that forgot it would fail as an opaque 180s /health timeout.
     return new GenericContainer(image)
+        .withPullPolicy(pullPolicy)
         .withEnvironment({ SANDBOX_ALLOW_UNAUTHENTICATED: "1", ...environment })
         .withExposedPorts(8787, 22)
         .withWaitStrategy(Wait.forHttp("/health", 8787).forStatusCode(200))
