@@ -180,9 +180,6 @@ services:
             APNS_TEAM_ID: ${APNS_TEAM_ID:-}
             APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
             APNS_URL: ${APNS_URL:-}
-            # Where the connect bootstrap scripts are served from — the URL the setup wizard's copy-paste
-            # command and the desktop handoff both fetch. A self-hosted platform points this at its own site.
-            SCRIPT_ORIGIN: ${SCRIPT_ORIGIN:-}
             # Sandbox-invite email via Resend (optional — invites are logged server-side until set).
             EMAIL_API_KEY: ${EMAIL_API_KEY:-}
             EMAIL_FROM: ${EMAIL_FROM:-}
