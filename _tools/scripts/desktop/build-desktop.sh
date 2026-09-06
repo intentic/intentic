@@ -138,7 +138,7 @@ fi
 # `file` is the same kind of input one level down: linuxdeploy's appimage output plugin shells into
 # appimagetool, which refuses to start without it — "file command is missing but required, please install it",
 # reported back through tauri as the contentless `failed to run linuxdeploy`. Absent from the CI job image
-# (node:24-bookworm-slim carries no /usr/bin/file), present on most desktops, which is exactly the shape of
+# (node:24-trixie-slim carries no /usr/bin/file), present on most desktops, which is exactly the shape of
 # dependency that only ever fails in CI.
 # p7zip-full/rpm are not build inputs — they are what verify-desktop-bundle.sh (run at the end of this
 # script) uses to read back the rpm and the NSIS installer it just produced. Installed here so the verification

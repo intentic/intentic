@@ -10,14 +10,14 @@
 # the tempting shortcut of a docker-cli-alpine base with node bolted on: under musl, pnpm resolves musl builds
 # of those prebuilts and the glibc sandbox cannot load them.
 # ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical.
-FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc
+FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
 
 # What LINKS the GHCR package to this repository, and the reason is not cosmetic: an unlinked private package
 # is one the repository's own GITHUB_TOKEN cannot pull, so every job that runs in this image dies at
 # `Error response from daemon: denied` before its first step. That is exactly how the first Actions run failed.
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
-# Everything the jobs actually need, and nothing else — the full `node:24.18.0` image would supply most of this
+# Everything the jobs actually need, and nothing else — the full `node:24.20.0` image would supply most of this
 # but costs ~1.2GB more for a pile of toolchains no job invokes.
 #   ca-certificates + curl  fetch the docker apt key below; curl also backs assorted script steps
 #   git                     turbo hashes inputs through `git ls-files`, and semantic-release drives git directly
@@ -36,7 +36,7 @@ RUN apt-get update \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
     && rm -rf /var/lib/apt/lists/*
@@ -55,8 +55,8 @@ RUN git config --system --add safe.directory '*'
 
 # bun — _tools/scripts/build/build-agent-binaries.sh cross-compiles the release's intentic-machine binaries with
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
-# version is digest-pinned and this layer needs no network. -slim is bookworm, so the binary is linked against
-# the same glibc as this image.
+# version is digest-pinned and this layer needs no network. -slim is Debian, and an older one than this image's
+# trixie, so the binary is linked against a glibc this one already satisfies.
 # ponytail: keep in lockstep with _platform/api/Dockerfile and _platform/ingress/Dockerfile — all three
 # ship bun 1.4.1 via the same digest-pinned canary-slim until 1.4.1-slim exists on Docker Hub.
 COPY --from=oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b4334faa009a500594b71 /usr/local/bin/bun /usr/local/bin/bun
@@ -68,7 +68,7 @@ COPY --from=oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a
 # ponytail: bump together with package.json's packageManager field.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable \
-    && corepack prepare pnpm@12.2.1 --activate \
+    && corepack prepare pnpm@12.3.4 --activate \
     && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
 
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.

@@ -25,7 +25,7 @@ export const IMAGES = Object.freeze({
     // bind-mounted from the host by the runner provider). renovate: datasource=docker depName=data.forgejo.org/oci/node
     forgejoRunnerJob: "data.forgejo.org/oci/node:24-bookworm@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be",
     // renovate: datasource=docker depName=cloudflare/cloudflared
-    cloudflared: "cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf",
+    cloudflared: "cloudflare/cloudflared:2026.8.3@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339",
     // renovate: datasource=docker depName=ghcr.io/moghtech/komodo-core
     komodoCore: "ghcr.io/moghtech/komodo-core:2.1.0@sha256:4915d91b5c6e9de4e8fd59391eed5cad090ec84dcf6a1a9233d97edfdbbb88e7",
     // renovate: datasource=docker depName=ghcr.io/moghtech/komodo-periphery

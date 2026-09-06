@@ -173,8 +173,8 @@ the live package graph, and flags any page whose code has moved on since it was 
 
 ## Develop locally
 
-> Requires **Node 24** and **pnpm 12**: `engines` names `24.18.0` and `12.2.1`, the pair CI runs. Another
-> Node 24 patch is fine; a pnpm below 12.2.0 is not, and `packageManager` makes corepack fetch the right one.
+> Requires **Node 24** and **pnpm 12**: `engines` names `24.20.0` and `12.3.4`, the pair CI runs. Another
+> Node 24 patch is fine; a pnpm below 12.3.0 is not, and `packageManager` makes corepack fetch the right one.
 >
 > **On Windows, put `openssl` on PATH first.** `pnpm install` mints this machine's development certificate
 > with it and fails without it. Git for Windows already ships one in `C:\Program Files\Git\usr\bin`: add that

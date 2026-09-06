@@ -19,7 +19,7 @@
 # inject agent credentials (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at
 # /work — neither is baked into the image.
 
-FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc AS runtime
+FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS runtime
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
@@ -191,7 +191,7 @@ RUN printf '%s\n' \
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # chmod as in the build stage: in-sandbox `pnpm install` (dev in /work, scaffold inject) compiles node-pty
 # from source, and corepack strips the exec bit off its bundled node-gyp gyp_main.py (else Error 126).
-RUN corepack enable && corepack prepare pnpm@12.2.1 --activate \
+RUN corepack enable && corepack prepare pnpm@12.3.4 --activate \
     && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
 # node-gyp on PATH, for the native rebuild that runs after the tree COPYs below (node-pty) and
 # for an agent compiling a native dep by hand. Installed HERE, above those COPYs, because it used to share the
@@ -211,7 +211,7 @@ RUN corepack enable && corepack prepare pnpm@12.2.1 --activate \
 # survive for the next build instead of being thrown away — which matters because every layer here re-runs
 # whenever the image's own base or an earlier layer moves. Cleaning it now would only empty the mount.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g node-gyp@13.0.1 && node-gyp --version
+    npm install -g node-gyp@13.0.2 && node-gyp --version
 # The provider CLIs — `opencode` (Grok), `cli-proxy-api` (the subscription translator) and `codex` — are
 # feature packs: connected-provider state decides whether each rides the overlay (environment/provider-packs.ts),
 # and the standard profile bakes them all.
@@ -221,7 +221,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # fabric; that fabric is the platform's own edge now, which the daemon dials over an outbound WebSocket with
 # no binary to install (sandbox-contract/ingress-contract.ts). Placed HERE, before the tree COPYs below, so
 # the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.7.3
+ARG CLOUDFLARED_VERSION=2026.8.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
@@ -277,7 +277,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # with a preferred answer. Debian's own `yq` package is a DIFFERENT program (a Python wrapper around jq) whose
 # write syntax is not the one every model has learned, so this is upstream's Go binary — pinned and
 # version-checked like cloudflared, same rationale.
-ARG YQ_VERSION=4.53.3
+ARG YQ_VERSION=4.53.6
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq \

@@ -29,7 +29,7 @@ pub fn run() -> Result<()> {
     let host_user = env("HOST_USER").unwrap_or_else(|| "intentic".to_string());
     let sandbox_image =
         env("SANDBOX_IMAGE").unwrap_or_else(|| "ghcr.io/intentic/sandbox:stable".to_string());
-    let cloudflared_version = env("CLOUDFLARED_VERSION").unwrap_or_else(|| "2026.7.2".to_string());
+    let cloudflared_version = env("CLOUDFLARED_VERSION").unwrap_or_else(|| "2026.8.3".to_string());
 
     // Pre-provisioned host tunnel (intentic-provided sandboxes): the platform minted tunnel + DNS under its
     // own zone. HOST_NAME is then REQUIRED: the minted tunnel id is salted with the name picked on the Infra

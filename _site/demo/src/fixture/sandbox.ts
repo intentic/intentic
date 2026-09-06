@@ -329,7 +329,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             tools: [
                 { name: `playwright`, version: `1.56.2` },
                 { name: `chromium`, version: `140.0.7339` },
-                { name: `node`, version: `24.18.0` },
+                { name: `node`, version: `24.20.0` },
                 { name: `xvfb-run` },
             ],
             extras: 34,
@@ -379,7 +379,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `Node.js`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `node`, version: `24.18.0` }],
+            tools: [{ name: `node`, version: `24.20.0` }],
             purpose: `The runtime everything JavaScript in here runs on.`,
         },
         {
@@ -387,7 +387,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `pnpm`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `pnpm`, version: `12.2.1` }],
+            tools: [{ name: `pnpm`, version: `12.3.4` }],
             purpose: `Installs and runs workspace packages.`,
         },
         {
@@ -403,7 +403,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `Python`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `python3`, version: `3.11.2` }],
+            tools: [{ name: `python3`, version: `3.13.5` }],
             purpose: `Scripting, plus anything reached for with pip inside a virtual environment.`,
         },
         {
@@ -419,7 +419,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `jq`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `jq`, version: `1.7.1` }],
+            tools: [{ name: `jq`, version: `1.7` }],
             purpose: `Reads and rewrites JSON on the command line.`,
         },
         {
@@ -427,7 +427,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `SQLite`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `sqlite3`, version: `3.40.1` }],
+            tools: [{ name: `sqlite3`, version: `3.46.1` }],
             purpose: `Opens and queries a local database file.`,
         },
         {
@@ -435,7 +435,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `cloudflared`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `cloudflared`, version: `2026.7.3` }],
+            tools: [{ name: `cloudflared`, version: `2026.8.3` }],
             purpose: `Puts a local port on a public URL.`,
         },
     ],
