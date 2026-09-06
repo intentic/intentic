@@ -51,8 +51,78 @@ const openMore = async (page: Page): Promise<void> => {
     await page.locator(`nav [aria-label^="More areas"]`).click();
 };
 
+/* One unseated area, taken from the menu rather than named here: which areas are quiet depends on what the
+ * fixture makes badge, and a spec that hardcoded "Automations" would start failing the day that changed for a
+ * reason it is not about. Returns the row's route and its label, which is all either test below needs. */
+const anUnseatedArea = async (page: Page): Promise<{ href: string; label: string }> => {
+    const keep = page.locator(`button[aria-label^="Keep "]`).first();
+    await expect(keep).toBeAttached();
+    const aria = (await keep.getAttribute(`aria-label`)) ?? ``;
+    const row = page.locator(`div:has(> button[aria-label="${aria}"])`).first();
+    return { href: (await row.locator(`a[href]`).getAttribute(`href`)) ?? ``, label: aria.replace(/^Keep /, ``).replace(/ on the rail$/, ``) };
+};
+
 test.beforeEach(async ({ page }) => {
     await stubFacts(page);
+});
+
+/* THE SEAT AN AREA BORROWS WHILE YOU ARE IN IT, and the way to stop borrowing it.
+ *
+ * Opening an area from the More menu seats its tile by the fact that you are standing on it and nothing else
+ * (core-views/registry.ts, `seatedOnlyByVisit`), so the tile leaves the column the moment you go elsewhere.
+ * That is the rule working, and read as an event it is the shell throwing away where you just were, which is
+ * why the tile says so while it is there and why the pin that ends it is on the menu row rather than only
+ * behind a right-click on a tile the reader may no longer have.
+ *
+ * Both halves are asserted in the real app because both are chrome: a predicate can be unit-tested and a
+ * hover-revealed control in a teleported overlay cannot. */
+test(`a tile opened from More says its seat lasts only as long as the visit`, async ({ page }) => {
+    await page.goto(`/agents`);
+    await shellReady(page);
+    await openMore(page);
+    const area = await anUnseatedArea(page);
+
+    // Not on the rail while it is in the menu: the two runs are cut from one list.
+    await expect(page.locator(`nav a[href="${area.href}"]`)).toHaveCount(0);
+
+    await page.locator(`a[href="${area.href}"]`).first().click();
+    const tile = page.locator(`nav a[href="${area.href}"]`);
+    await expect(tile).toBeVisible();
+    // The clause that is the whole point: what this seat is, and the remedy, on the tile it is true of.
+    await expect(tile).toHaveAttribute(`aria-label`, /here while you are · right-click to keep/);
+
+    // And it goes when the reader does, which is the behaviour the sentence above was warning about.
+    await page.goto(`/agents`);
+    await shellReady(page);
+    await expect(page.locator(`nav a[href="${area.href}"]`)).toHaveCount(0);
+});
+
+test(`an area is kept on the rail from the menu row it was found on`, async ({ page }) => {
+    await page.goto(`/agents`);
+    await shellReady(page);
+    await openMore(page);
+    const area = await anUnseatedArea(page);
+    const keep = page.locator(`button[aria-label="Keep ${area.label} on the rail"]`);
+
+    // Quiet until reached for: the menu's job is to get the reader to an area, so the pin is not a second
+    // errand on every row until the pointer is on one.
+    await expect(keep).toHaveCSS(`opacity`, `0`);
+    await page.locator(`div:has(> button[aria-label="Keep ${area.label} on the rail"])`).first().hover();
+    await expect(keep).toHaveCSS(`opacity`, `1`);
+
+    await keep.click();
+    // The row leaves as it is pressed and the tile arrives in the column beside it: that departure IS the
+    // feedback, and it is only honest if the seat is real.
+    await expect(page.locator(`nav a[href="${area.href}"]`)).toBeVisible();
+    await expect(keep).toHaveCount(0);
+
+    // A pin outlives the visit, which is the entire difference between it and the seat the other test describes.
+    await page.goto(`/agents`);
+    await shellReady(page);
+    const tile = page.locator(`nav a[href="${area.href}"]`);
+    await expect(tile).toBeVisible();
+    // …and a tile that is staying has nothing to warn about.
+    await expect(tile).not.toHaveAttribute(`aria-label`, /right-click to keep/);
 });
 
 test(`the rail and its More menu show exactly the views the fixture activates`, async ({ page }) => {

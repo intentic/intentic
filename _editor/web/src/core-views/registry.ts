@@ -202,6 +202,24 @@ export const railSeated = (
     context: { readonly pinned: boolean; readonly active: boolean },
 ): boolean => seatPolicy(tile.id) === `always` || context.pinned || context.active || tile.badge !== undefined;
 
+/* SEATED ONLY BECAUSE YOU ARE STANDING ON IT: the `active` clause above holding a tile up on its own, with no
+ * other clause behind it. That is the one tile in the run that will be gone the moment the reader goes
+ * anywhere else, and it is the whole of the "where did it go" complaint: an area opened from More takes a seat
+ * INSIDE the ranked run, so leaving it also shifts every tile below back up a seat, in the same instant the
+ * hand is clicking one of them.
+ *
+ * The fix is not to make the seat linger, which would only move an unexplained reflow to a later frame the
+ * reader caused even less. It is to say, on the tile itself while it is still there, that this is a seat for
+ * the visit and how to make it permanent: the pin already exists (shell/railPins.ts), it just could not be
+ * found from here. So this is a LABEL predicate, not a seat one, and railSeated above is untouched by it.
+ *
+ * Derived rather than written out at the call site so the two cannot drift: everything this returns true for
+ * is something railSeated returns true for, by the `active` clause and no other. */
+export const seatedOnlyByVisit = (
+    tile: { readonly id: string; readonly badge?: ViewBadge | undefined },
+    context: { readonly pinned: boolean; readonly active: boolean },
+): boolean => context.active && !railSeated(tile, { pinned: context.pinned, active: false });
+
 /* WHAT THE MOBILE TAB BAR HAS ALREADY PROMOTED, and therefore what the mobile menu must not list again.
  *
  * A phone has four thumb tabs and the rail's whole column behind the fourth of them, so a surface can be

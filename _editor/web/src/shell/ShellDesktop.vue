@@ -25,6 +25,7 @@ import {
     railRank,
     railSeated,
     seatPolicy,
+    seatedOnlyByVisit,
 } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../composables/chat/chatSurface";
@@ -393,6 +394,26 @@ const moreTiles = computed<readonly AreaTile[]>(() =>
         .toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
+/* THE NAVIGATION RUN'S LABEL: `tileLabel`, plus one clause on the tile that is only here for the visit.
+ *
+ * An area opened from More is seated by the reader standing on it and by nothing else, so it leaves the column
+ * the moment they go elsewhere: the tile they just used disappears, and the run below it closes up, while their
+ * eye is still on the rail. Read as a rule that is exactly right (the rail carries what is permanent and what
+ * has something to say, and this is neither); read as an event, with no warning and no remedy in sight, it is
+ * the shell throwing away where you just were.
+ *
+ * So the tile says it, once, on the only tile it can be true of, while it is still there to be hovered: what
+ * the seat is, and that the pin is a right-click away. It costs nothing on any other tile, and it stops being
+ * said the moment the reader acts on it, because a pinned tile is no longer seated by the visit.
+ *
+ * NOT `tileLabel` ITSELF, which the runtime cluster below the divider also uses. Browsers and Subagents come
+ * and go with what the agent is running, they are not seats and they cannot be pinned, so a sentence about
+ * keeping them on the rail would be an offer nothing can accept. */
+const railTileLabel = (tile: AreaTile): string => {
+    const visiting = seatedOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) });
+    return visiting ? `${tileLabel(tile)} · here while you are · right-click to keep` : tileLabel(tile);
+};
+
 /* THE SEATS WORTH REMEMBERING ARE THE ONES THAT WILL BE THERE TOMORROW: the permanent tiles and this reader's
  * pins. railMemory exists to stop the run assembling itself in front of the reader across a load (see its
  * header), and a signal-seated tile is not part of that problem: it is seated by a badge that is live state, so
@@ -567,6 +588,9 @@ const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
  * up), but a menu of eight quiet areas is scanned by name, so the reader should not have to remember which band
  * a surface belongs to.
  *
+ * AND EACH ROW CARRIES THE PIN (keepOnRail), because this list is the only place the reader is looking at the
+ * areas the pin is for. It is the menu's second job and stays visibly second: revealed on hover, never at rest.
+ *
  * IT NEVER BADGES, and it cannot: anything with something to say is seated by that very fact, so a count here
  * could only ever be zero. A More tile that lit up would mean the seat rule had stopped working. */
 const moreTrigger = ref<HTMLButtonElement | null>(null);
@@ -578,6 +602,26 @@ const dismissMore = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         moreOpen.value = false;
     }
+};
+/* PIN IT FROM THE MENU, which is where the reader is standing when they want it.
+ *
+ * The pin has always been on the tile's own right-click menu (railPins.ts), and that is the one place a reader
+ * who wants it cannot be: the areas worth pinning are the quiet ones, a quiet area has no tile to right-click,
+ * and the tile it borrows while being visited is gone by the time its absence is what prompts the thought. A
+ * menu of unseated areas is the exact list of things this decision is about, so the decision belongs on its
+ * rows.
+ *
+ * ROWS ARE ONE-WAY HERE: everything in this menu is unseated, so a pin can only ever be turned ON from it, and
+ * the row leaves as it is pressed, because a pinned area is a seated area and the two runs are cut from one
+ * list. That departure IS the feedback: the row goes and the tile arrives in the column beside it. Unpinning
+ * stays on the tile, where the tile now is.
+ *
+ * WHICH TAKES THE PRESSED CONTROL WITH IT, so focus goes back to the door rather than to the document body: a
+ * keyboard reader would otherwise be left standing in an open menu with nothing focused, one Tab from the top
+ * of the page. The menu stays open on purpose (the reader may want two), and the pointer never notices. */
+const keepOnRail = (tile: AreaTile): void => {
+    pins.toggle(tile.to);
+    moreTrigger.value?.focus();
 };
 
 // Collapse the chat column to nothing whenever the panel does not live in it: teleported into its own window
@@ -697,8 +741,8 @@ useKeybindings();
                             :to="tile.to"
                             class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
                             :class="{ 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
-                            :aria-label="tileLabel(tile)"
-                            v-tooltip.right="tileLabel(tile)"
+                            :aria-label="railTileLabel(tile)"
+                            v-tooltip.right="railTileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
                             <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
@@ -757,18 +801,44 @@ useKeybindings();
             <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
                 <div class="flex w-48 flex-col gap-0.5 p-1">
                     <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">Every area is on the rail</p>
-                    <RouterLink
+                    <!-- A ROW IS TWO CONTROLS: go there, and keep it on the rail (keepOnRail). Siblings rather
+                         than a button inside the link, which is not a thing a link may contain and would take
+                         the row's own ⌘-click and "copy link address" with it. The hover fill moves to this
+                         wrapper so it still lights the whole row while the pointer is over either half. -->
+                    <div
                         v-for="tile in moreTiles"
                         :key="tile.to"
-                        :to="tile.to"
-                        class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
-                        @click="dismissMore"
+                        class="group flex items-center rounded-md text-xs text-content transition-colors hover:bg-content/5"
                     >
-                        <span v-if="tile.icon !== undefined" class="flex h-5 w-5 shrink-0 items-center justify-center">
-                            <Icon :name="tile.icon" class="text-xs text-muted" />
-                        </span>
-                        <span class="min-w-0 flex-1 truncate">{{ tile.label }}</span>
-                    </RouterLink>
+                        <RouterLink :to="tile.to" class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left" @click="dismissMore">
+                            <span v-if="tile.icon !== undefined" class="flex h-5 w-5 shrink-0 items-center justify-center">
+                                <Icon :name="tile.icon" class="text-xs text-muted" />
+                            </span>
+                            <span class="min-w-0 flex-1 truncate">{{ tile.label }}</span>
+                        </RouterLink>
+                        <!-- QUIET UNTIL REACHED FOR: the menu's job is to get the reader to an area, and a
+                             column of pins competing with the names would be a second errand on every row. It
+                             appears on hover, on keyboard focus anywhere in the row, and always on a coarse
+                             pointer, where there is no hover to reveal it with. -->
+                        <button
+                            type="button"
+                            :class="[
+                                // `transition`, not the recipe's own `transition-colors`, and passed THROUGH it
+                                // so twMerge drops the one it replaces: two transition-* utilities on one
+                                // element are a conflict CSS settles by stylesheet order rather than by the
+                                // order they are written in, and the one that loses here is the fade this
+                                // control appears with. The default property list covers colour and opacity
+                                // both, which is exactly the pair this button animates.
+                                ui.iconButton(`mr-1 h-5 w-5 rounded text-subtle transition`),
+                                `opacity-0 pointer-coarse:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100`,
+                            ]"
+                            :aria-label="`Keep ${tile.label} on the rail`"
+                            v-tooltip.top="`Keep on the rail`"
+                            @click="keepOnRail(tile)"
+                        >
+                            <Icon name="pin" class="text-xs" />
+                        </button>
+                    </div>
                 </div>
             </AnchoredOverlay>
 

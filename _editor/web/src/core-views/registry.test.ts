@@ -5,7 +5,7 @@ import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
 import { describe, expect, it } from "vitest";
-import { RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy } from "./registry";
+import { RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy, seatedOnlyByVisit } from "./registry";
 
 // apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
 // static core views (infrastructure/live-status/directory-ui). Register the packaged detects here so the
@@ -346,6 +346,38 @@ describe(`rail seats`, () => {
     it(`lets a pin overrule the table for one route without touching the others`, () => {
         expect(railSeated({ id: `deployments` }, { pinned: true, active: false })).toBe(true);
         expect(railSeated({ id: `deployments` }, resting)).toBe(false);
+    });
+
+    it(`knows which seat is only a visit, so the tile can say so before it goes`, () => {
+        const visiting = { pinned: false, active: true };
+        // The case the label is for: opened from More, nothing else holding it up, gone when the reader leaves.
+        expect(seatedOnlyByVisit({ id: `automations` }, visiting)).toBe(true);
+        // Everything with a second clause behind it keeps its seat after the visit, so there is nothing to warn
+        // about: a permanent area, a pinned one, and one seated by what it has to say.
+        expect(seatedOnlyByVisit({ id: `workspace` }, visiting)).toBe(false);
+        expect(seatedOnlyByVisit({ id: `automations` }, { pinned: true, active: true })).toBe(false);
+        expect(seatedOnlyByVisit({ id: `approvals`, badge: { count: 3 } }, visiting)).toBe(false);
+        // And it is a claim about the tile you are ON: an area you are not standing in is either seated for a
+        // reason of its own or not seated at all.
+        expect(seatedOnlyByVisit({ id: `automations` }, resting)).toBe(false);
+    });
+
+    it(`says only-a-visit exactly where railSeated rests on the visit alone`, () => {
+        // The two are one rule read twice, so they are checked against each other rather than against a list
+        // copied out of the table: seated-with-the-visit and seated-without-it differ only for these tiles.
+        const cases = [
+            { id: `workspace` },
+            { id: `automations` },
+            { id: `documentation` },
+            { id: `some-third-party-view` },
+            { id: `approvals`, badge: { count: 1 } },
+        ] as const;
+        for (const pinned of [false, true]) {
+            for (const tile of cases) {
+                const stillSeatedAfterwards = railSeated(tile, { pinned, active: false });
+                expect(seatedOnlyByVisit(tile, { pinned, active: true })).toBe(!stillSeatedAfterwards);
+            }
+        }
     });
 
     it(`gives an unlisted third-party view the same terms as a first-party one`, () => {
