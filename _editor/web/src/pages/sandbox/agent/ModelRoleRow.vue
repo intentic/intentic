@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ModelRoleSpec } from "@intentic/sandbox-contract";
-import { type IconName, Row, StatusBadge } from "@intentic/ui";
+import { type IconName, Row, StatusBadge, useDevice } from "@intentic/ui";
 import { isIconName } from "@intentic/ui/icons";
 import Checkbox from "primevue/checkbox";
 import { computed } from "vue";
@@ -28,8 +28,24 @@ import ModelPinList from "./ModelPinList.vue";
  * THE TICK IS NEVER MERELY HIDDEN. It is opacity, not `display`, so it keeps its place in the tab order and in
  * the accessibility tree, and `group-focus-within` brings it up the moment it takes focus — a control a pointer
  * alone can reveal is one a keyboard cannot find. A coarse pointer gets it outright, because a tablet at this
- * width has no hover to reveal anything with. Phones drop the column altogether (the page says why), which is
- * why the box is `max-md:hidden` there rather than merely quiet.
+ * width has no hover to reveal anything with.
+ *
+ * ═══ AND THE WHOLE HEADLINE IS THE TARGET ═══
+ *
+ * The row is a `<label>`, so the mark, the name, the chip, the description and the empty space out to the Add
+ * button all toggle this job — <Row>'s own documented mode for it, which also brings the app's one hover wash
+ * and, through `selected`, its one selected tint. A 18px box was the entire target before, which is a hard
+ * thing to hit deliberately and an easy one to hit by accident, and it asked the eye to aim at the smallest
+ * element on a row whose name is right there.
+ *
+ * TWO REGIONS ARE CARVED BACK OUT. `#control` is carved out by <Row> itself (its cluster swallows its own
+ * clicks), and `#below` is carved out HERE, because a label activates from anywhere inside it: without the
+ * stop, re-pointing a pinned model or dropping one from the order would silently tick the job as well.
+ *
+ * A PHONE GETS NONE OF IT, and that is why `mobile` is read in script rather than expressed as `max-md:`. A
+ * label whose control is merely `display: none` still toggles that control, so a CSS-hidden box would make
+ * every tap on a row change a state nothing on screen reports. Below `md` there is no box, no label and no
+ * swap: the glyph simply stays.
  *
  * ═══ THE STATE IS A CHIP, NOT A PARAGRAPH ═══
  *
@@ -60,17 +76,22 @@ const emit = defineEmits<{ select: [boolean]; open: [number | undefined, HTMLEle
 const glyph = computed<IconName>(() => (isIconName(icon) ? icon : `sparkles`));
 const pinned = computed<boolean>(() => list.entries.value.length > 0);
 
+// Whether this row can be selected at all. See the header: on a phone the column is the glyph and nothing else.
+const { mobile } = useDevice();
+const selectable = computed<boolean>(() => !mobile.value);
+
 /* THE SWAP, AS TWO CLASS LISTS rather than one reactive flag, because half of it is a question only CSS can
  * answer: nothing in script knows where the pointer is. Written out in full — no interpolation — so Tailwind's
- * scanner finds every one of these classes in this file.
- *
- * The `md:` on the selected states is not decoration either: below it the box is gone, so a row ticked on a
- * desktop and then read on a narrow window would show an empty column instead of its glyph. */
-const glyphClass = computed<string>(() =>
-    selected ? `md:opacity-0` : `md:group-hover:opacity-0 md:group-focus-within:opacity-0 md:pointer-coarse:opacity-0`,
-);
+ * scanner finds every one of these classes in this file. On a phone both are empty: there is no box to swap to,
+ * so a glyph that faded on `pointer-coarse` would leave the column blank. */
+const glyphClass = computed<string>(() => {
+    if (!selectable.value) {
+        return ``;
+    }
+    return selected ? `opacity-0` : `group-hover:opacity-0 group-focus-within:opacity-0 pointer-coarse:opacity-0`;
+});
 const boxClass = computed<string>(() =>
-    selected ? `opacity-100` : `opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:pointer-coarse:opacity-100`,
+    selected ? `opacity-100` : `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100`,
 );
 
 /* WHAT AN EMPTY LIST MEANS, WHICH IS NOT THE SAME FOR THE TWO KINDS OF JOB, and that difference is why the chip
@@ -101,7 +122,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
          guessed: 233px against a title column at 267px. It read as the GROUP talking rather than as this row's
          own footnote. The checkbox column used to indent it for free; the mark swap took that column away, so
          the row has to ask for the indent it was getting by accident. -->
-    <Row :spine="pinned || $slots[`note`] !== undefined" :description="role.blurb">
+    <Row :as="selectable ? `label` : `div`" :selected="selected" :spine="pinned || $slots[`note`] !== undefined" :description="role.blurb">
         <!-- ONE MARK, TWO STATES. See the header. The box is sized from the tier's own `mark` rather than from a
              number typed here, so the lead stays exactly as wide as every other row's at every density, and the
              tick is centred ON the glyph instead of laid out beside it. -->
@@ -109,10 +130,11 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             <span class="relative flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
                 <Icon :name="glyph" aria-hidden="true" class="text-sm text-subtle transition-opacity" :class="glyphClass" />
                 <Checkbox
+                    v-if="selectable"
                     :model-value="selected"
                     binary
                     size="small"
-                    class="absolute transition-opacity max-md:hidden"
+                    class="absolute transition-opacity"
                     :class="boxClass"
                     :aria-label="`Select ${role.label.toLowerCase()}`"
                     @update:model-value="(value: unknown) => emit(`select`, value === true)"
@@ -142,8 +164,12 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             />
         </template>
 
+        <!-- `@click.stop` BECAUSE THE ROW IS A LABEL. Everything under the headline has controls of its own —
+             re-point a pin, move one up the order, drop one — and a label activates from anywhere inside it, so
+             without this every one of those presses would tick the job on its way past. <Row> does exactly this
+             for `#control`, and says why; `#below` is the caller's, so the caller owes it. -->
         <template v-if="pinned || $slots[`note`]" #below>
-            <div class="flex flex-col gap-2">
+            <div class="flex flex-col gap-2" @click.stop>
                 <!-- Each entry names the tier it will run at beside the model, because that is a property of the
                      entry: press it to change either half. `noteThinking` for the one-shots alone, where reasoning
                      costs latency a job meant to land while you are still looking may not want. -->

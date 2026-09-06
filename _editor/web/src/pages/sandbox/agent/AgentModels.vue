@@ -131,6 +131,7 @@ const editorFor = (role: ModelRole): PinnedList =>
  * filter kept in step here. */
 const blocks = MODEL_ROLE_BLOCKS.map((block) => ({
     ...block,
+    ids: block.roles.map((role) => role.id) as readonly ModelRole[],
     rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })),
 }));
 
@@ -159,24 +160,41 @@ const fast = pinnedList({
     encode: (pin) => modelPinKey(pin),
 });
 
-/* ═══ SETTING SEVERAL JOBS AT ONCE ═══
+/* ═══ SETTING SEVERAL JOBS AT ONCE, ONE BLOCK AT A TIME ═══
  *
  * WHAT IS TICKED, as an ordered list rather than a Set, because it is also read as "how many" and iterated to
  * write; the catalog is a couple of dozen rows at most, so `includes` is cheaper than the reactivity a Set proxy
  * costs. It is per-visit state and deliberately not persisted: a selection is a gesture in progress, and one
- * restored from last week would have the next pick land on jobs nobody is looking at. */
-const ROLE_IDS = MODEL_ROLES.map((role) => role.id) as readonly ModelRole[];
+ * restored from last week would have the next pick land on jobs nobody is looking at.
+ *
+ * THE GESTURE BELONGS TO A BLOCK, NOT TO THE PAGE, and that is what the split changed rather than a detail of
+ * where the control was parked. While this was one list of eighteen, "all of these on one model" was the only
+ * sentence available and a page-wide bar was the honest place for it. With the blocks named, the sentence
+ * somebody actually wants is a block's: put the one-shot helpers on something cheap, hold the runs nobody is
+ * watching to a budget. A page-wide select-all now spans three claims that have nothing to do with each other,
+ * and the verbs beside it would be acting on a set spread over three surfaces, only one of which is on screen.
+ *
+ * So every job group carries its own master box and its own verbs, on the right of its own heading, and each
+ * acts on THAT block's rows and no others. A tick still means the same thing everywhere — one flat list of
+ * ticked roles underneath — but nothing offers to act on more of it than the group you are looking at. */
 const selected = ref<readonly ModelRole[]>([]);
 const isSelected = (role: ModelRole): boolean => selected.value.includes(role);
 const selectRole = (role: ModelRole, on: boolean): void => {
     selected.value = on ? [...selected.value.filter((held) => held !== role), role] : selected.value.filter((held) => held !== role);
 };
-// All or nothing, from the page's own bar: the master box is the whole gesture for "everything on this page
-// runs on one model", which is the shape most sandboxes actually want.
-const allSelected = computed(() => selected.value.length === ROLE_IDS.length);
-const someSelected = computed(() => selected.value.length > 0 && !allSelected.value);
-const selectAll = (on: boolean): void => {
-    selected.value = on ? [...ROLE_IDS] : [];
+
+// What is ticked WITHIN one block, in the block's own order rather than in the order they were ticked: it is
+// what the header counts, what the verbs write, and what the panel's header names.
+const selectedIn = (ids: readonly ModelRole[]): readonly ModelRole[] => ids.filter((role) => selected.value.includes(role));
+const allSelectedIn = (ids: readonly ModelRole[]): boolean => selectedIn(ids).length === ids.length;
+const someSelectedIn = (ids: readonly ModelRole[]): boolean => {
+    const picked = selectedIn(ids).length;
+    return picked > 0 && picked < ids.length;
+};
+// All or nothing, from the group's own header: "every one-shot helper on this model" is the shape a sandbox
+// actually wants, and it is one press.
+const selectAllIn = (ids: readonly ModelRole[], on: boolean): void => {
+    selected.value = on ? [...selected.value.filter((held) => !ids.includes(held)), ...ids] : selected.value.filter((held) => !ids.includes(held));
 };
 
 /* THE PIN THE OPEN BULK PANEL HAS WRITTEN, or undefined before it has written one. It is what turns a bulk
@@ -185,13 +203,13 @@ const selectAll = (on: boolean): void => {
  * the model lands first and the panel stays up on it. */
 const bulkPin = shallowRef<ModelPin | undefined>(undefined);
 
-/* Models already written into EVERY selected job, which is the only honest reading of "already taken" for a
- * selection: one that is in some of the lists and not others still has somewhere to land, and greying it out
- * would refuse a press that would have done something. */
-const sharedTaken = computed<readonly string[]>(() => {
-    const lists = selected.value.map((role) => listOf(role).map((pin) => modelPinKey(pin)));
+/* Models already written into EVERY job of the set being edited, which is the only honest reading of "already
+ * taken" for a selection: one that is in some of the lists and not others still has somewhere to land, and
+ * greying it out would refuse a press that would have done something. */
+const sharedTaken = (roles: readonly ModelRole[]): readonly string[] => {
+    const lists = roles.map((role) => listOf(role).map((pin) => modelPinKey(pin)));
     return lists.length === 0 ? [] : lists.reduce((shared, keys) => shared.filter((key) => keys.includes(key)));
-});
+};
 
 /* ONE JOB'S LIST WITH THIS PIN IN IT, which is an UPSERT rather than an append, in three cases and in this
  * order:
@@ -209,25 +227,25 @@ const withPin = (list: readonly ModelPin[], pin: ModelPin, replacing: ModelPin |
     return at === -1 ? [...kept, pin] : kept.map((held, index) => (index === at ? pin : held));
 };
 
-// Every ticked job, written together, so a selection of nine is one save rather than nine racing ones: the
+// Every job of the set, written together, so a selection of nine is one save rather than nine racing ones: the
 // settings patch merges at the top level, so nine separate writes would each carry a record read before the
 // last one landed.
-const acrossSelection = (listFor: (role: ModelRole) => ModelPin[]): void =>
-    writeRoles(Object.fromEntries(selected.value.map((role) => [role, listFor(role)])) as Partial<Record<ModelRole, ModelPin[]>>);
+const acrossRoles = (roles: readonly ModelRole[], listFor: (role: ModelRole) => ModelPin[]): void =>
+    writeRoles(Object.fromEntries(roles.map((role) => [role, listFor(role)])) as Partial<Record<ModelRole, ModelPin[]>>);
 
-// The model, and every knob turned after it, onto every ticked job.
-const applyToSelection = (pin: ModelPin): void => {
+// The model, and every knob turned after it, onto every job of the set.
+const applyToRoles = (roles: readonly ModelRole[], pin: ModelPin): void => {
     const replacing = bulkPin.value;
     bulkPin.value = pin;
-    acrossSelection((role) => withPin(listOf(role), pin, replacing));
+    acrossRoles(roles, (role) => withPin(listOf(role), pin, replacing));
 };
 
-/* EMPTYING THE TICKED JOBS, which is a real gesture now rather than a destructive convenience: an empty list
- * is a one-shot switched off and a session handed back to the composer, so this is how a sandbox says "stop
- * choosing models for these" in one press instead of one per job. No confirmation, for the same reason removing
- * the last entry of one row needs none — the models are named on screen and adding them back is the gesture
- * beside it. */
-const clearSelection = (): void => acrossSelection(() => []);
+/* EMPTYING THE TICKED JOBS OF ONE GROUP, which is a real gesture rather than a destructive convenience: an
+ * empty list is a one-shot switched off and a session handed back to the composer, so this is how a sandbox
+ * says "stop choosing models for these" in one press instead of one per job. No confirmation, for the same
+ * reason removing the last entry of one row needs none — the models are named on screen and adding them back is
+ * the gesture beside it. */
+const clearRoles = (ids: readonly ModelRole[]): void => acrossRoles(selectedIn(ids), () => []);
 
 /* ═══ THE ONE PICKER ═══
  *
@@ -278,18 +296,24 @@ const openRowPicker = (list: PinnedList, index: number | undefined, anchor: HTML
     };
 };
 
-const openBulkPicker = (anchor: HTMLElement): void => {
+/* THE BULK PANEL, RAISED BY ONE GROUP'S HEADER AND BOUND TO THAT GROUP'S TICKS.
+ *
+ * The set is CAPTURED at open rather than read live, and that is what keeps the header honest: it names a
+ * number, the panel stays open across a model and then a tier, and a set that grew underneath it would leave
+ * "Model for 3 jobs" writing to four. Ticking more while it is open is answered by opening it again. */
+const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void => {
     bulkPin.value = undefined;
+    const roles = selectedIn(ids);
     editing.value = {
         anchor,
         // The header is the safeguard against the one mistake this panel can make: it looks exactly like the
-        // one a single row opens, and a pick from it spends across nine jobs.
-        header: `Model for ${selected.value.length} ${selected.value.length === 1 ? `job` : `jobs`}`,
+        // one a single row opens, and a pick from it spends across every job it holds.
+        header: `Model for ${roles.length} ${roles.length === 1 ? `job` : `jobs`}`,
         knobs: true,
         pin: () => bulkPin.value,
-        taken: () => sharedTaken.value,
-        apply: applyToSelection,
-        configure: applyToSelection,
+        taken: () => sharedTaken(roles),
+        apply: (pin) => applyToRoles(roles, pin),
+        configure: (pin) => applyToRoles(roles, pin),
         stayOpen: true,
     };
 };
@@ -346,52 +370,52 @@ const eagernessOptions = [
          only route out of automatic tier selection that reaches beyond one conversation, and a link that lands
          on the top of a long settings page has not answered the question that was asked. -->
     <div id="models" class="flex flex-col gap-6">
-        <!-- THE SELECTION BAR, above every group and STUCK to the top of the scroll, because the thing it
-             commands is spread over four surfaces and two screens: a control that scrolled away would mean
-             scrolling back to a button you cannot see from the row you just ticked.
-             IT IS THE PAGE'S, NOT A GROUP'S. It used to ride the single group's header (<RowGroup sticky>),
-             which was right while there was one group; with four, that header would either duplicate the verbs
-             on every surface or scope them to a block, and a selection that spans blocks is the commonest one
-             there is — "everything on this page, on one model" is the whole gesture.
-             IT REPLACED A FLOATING PILL over the canvas, which answered the same reach problem and was the
-             wrong answer twice over: a toolbar on a page that has no toolbar, and one that parks itself over
-             the last row for as long as a selection is live. This sits in the flow, so nothing is covered and
-             nothing moves when a selection starts.
-             NOT ON A PHONE, with the ticks it commands. The mark column is a job's glyph there and never a
-             box: a bulk edit is not a gesture anybody performs on a 390px screen, and every row still sets its
-             own model. What is withheld is the shortcut. -->
-        <div class="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-canvas px-1 py-2 max-md:hidden">
-            <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
-                <Checkbox
-                    :model-value="allSelected"
-                    :indeterminate="someSelected"
-                    binary
-                    size="small"
-                    aria-label="Select every job"
-                    @update:model-value="(value: unknown) => selectAll(value === true)"
-                />
-                <span>{{ selected.length > 0 ? `${selected.length} selected` : `Select jobs` }}</span>
-            </label>
-            <!-- The verbs appear WITH a selection rather than sitting greyed: there is nothing to act on until
-                 something is ticked, and a disabled pair of buttons is furniture on every other visit to this
-                 page. The first carries its own element up as the panel's anchor, the same contract
-                 <AddModelButton> has. -->
-            <template v-if="selected.length > 0">
-                <Button
-                    size="small"
-                    label="Set a model for all…"
-                    :disabled="!loaded"
-                    @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement)"
-                />
-                <!-- Emptying is the other half of the vocabulary, and with an empty list meaning "off" it is how
-                     a sandbox switches several jobs off at once. -->
-                <Button size="small" severity="danger" text label="Clear models" :disabled="!loaded" @click="clearSelection" />
-            </template>
-        </div>
-
         <!-- ONE GROUP PER BLOCK, from the catalog. The heading and the line under it are the block's own, so a
-             group cannot end up describing a set of rows it no longer holds. -->
-        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" :count="block.rows.length" :caption="block.caption">
+             group cannot end up describing a set of rows it no longer holds.
+             STICKY, because the header now carries a CONTROL over the rows rather than only their name, which
+             is exactly what <RowGroup>'s own `sticky` is for: the rows you are ticking are the ones that carry
+             you away from the button that acts on them. -->
+        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" :count="block.rows.length" :caption="block.caption" sticky>
+            <!-- THE SELECTION, IN THIS GROUP'S OWN HEADER AND ACTING ON THIS GROUP ALONE. It used to be one bar
+                 over the whole page, which was the right shape while this page was one list of eighteen: "all of
+                 these on one model" was then the only sentence available. With the blocks named it is the wrong
+                 one — a page-wide select-all spans three claims with nothing to do with each other, and its
+                 verbs would write to rows on two surfaces you cannot see from the one you are on. The sentence
+                 somebody wants is a block's, so the control is a block's.
+                 NOT ON A PHONE, with the ticks it commands. The mark column is a job's glyph there and never a
+                 box (see <ModelRoleRow>): a bulk edit is not a gesture anybody performs on a 390px screen, and
+                 every row still sets its own model. What is withheld is the shortcut. -->
+            <template #actions>
+                <div class="flex flex-wrap items-center gap-2 max-md:hidden">
+                    <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
+                        <Checkbox
+                            :model-value="allSelectedIn(block.ids)"
+                            :indeterminate="someSelectedIn(block.ids)"
+                            binary
+                            size="small"
+                            :aria-label="`Select every job under ${block.label.toLowerCase()}`"
+                            @update:model-value="(value: unknown) => selectAllIn(block.ids, value === true)"
+                        />
+                        <span>{{ selectedIn(block.ids).length > 0 ? `${selectedIn(block.ids).length} selected` : `Select jobs` }}</span>
+                    </label>
+                    <!-- The verbs appear WITH a selection rather than sitting greyed: there is nothing to act on
+                         until something is ticked, and a disabled pair of buttons in three headers is furniture
+                         on every other visit to this page. The first carries its own element up as the panel's
+                         anchor, the same contract <AddModelButton> has. -->
+                    <template v-if="selectedIn(block.ids).length > 0">
+                        <Button
+                            size="small"
+                            label="Set a model for all…"
+                            :disabled="!loaded"
+                            @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement, block.ids)"
+                        />
+                        <!-- Emptying is the other half of the vocabulary, and with an empty list meaning "off" it
+                             is how a sandbox switches several jobs off at once. -->
+                        <Button size="small" severity="danger" text label="Clear models" :disabled="!loaded" @click="clearRoles(block.ids)" />
+                    </template>
+                </div>
+            </template>
+
             <ModelRoleRow
                 v-for="row in block.rows"
                 :key="row.role.id"

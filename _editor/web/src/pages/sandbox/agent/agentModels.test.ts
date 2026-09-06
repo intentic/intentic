@@ -444,10 +444,10 @@ test("an agent-run entry names its own tier, and one left at the provider's defa
     settings.value = {
         ...settings.value,
         modelRoles: {
-                [RUN]: [
-                    { provider: `claude`, model: `claude-haiku-4-5`, effort: `high` },
-                    { provider: `codex`, model: `gpt-5.6` },
-                ],
+            [RUN]: [
+                { provider: `claude`, model: `claude-haiku-4-5`, effort: `high` },
+                { provider: `codex`, model: `gpt-5.6` },
+            ],
         },
     };
     const host = mount();
@@ -464,7 +464,10 @@ test("an agent-run entry names its own tier, and one left at the provider's defa
 test("a tier off the model's own scale is drawn as the one that will actually run", async () => {
     // Claude's API refuses `max` with thinking disabled, and THIS entry disabled it, so the row must not promise
     // a rung this run cannot use. The stored pick is left alone underneath.
-    settings.value = { ...settings.value, modelRoles: { [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: false }] } };
+    settings.value = {
+        ...settings.value,
+        modelRoles: { [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: false }] },
+    };
     const host = mount();
     await Promise.resolve();
 
@@ -486,10 +489,10 @@ test("pressing an agent-run row opens the picker over that entry, with its knobs
     settings.value = {
         ...settings.value,
         modelRoles: {
-                [RUN]: [
-                    { provider: `codex`, model: `gpt-5.6` },
-                    { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
-                ],
+            [RUN]: [
+                { provider: `codex`, model: `gpt-5.6` },
+                { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
+            ],
         },
     };
     const host = mount();
@@ -540,10 +543,10 @@ test("a knob moved in the picker lands on that entry alone", async () => {
     settings.value = {
         ...settings.value,
         modelRoles: {
-                [RUN]: [
-                    { provider: `codex`, model: `gpt-5.6`, effort: `high` },
-                    { provider: `claude`, model: `claude-haiku-4-5` },
-                ],
+            [RUN]: [
+                { provider: `codex`, model: `gpt-5.6`, effort: `high` },
+                { provider: `claude`, model: `claude-haiku-4-5` },
+            ],
         },
     };
     const host = mount();
@@ -555,10 +558,10 @@ test("a knob moved in the picker lands on that entry alone", async () => {
 
     expect(patch).toHaveBeenCalledWith({
         modelRoles: {
-                [RUN]: [
-                    { provider: `codex`, model: `gpt-5.6`, effort: `high` },
-                    { provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: true },
-                ],
+            [RUN]: [
+                { provider: `codex`, model: `gpt-5.6`, effort: `high` },
+                { provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: true },
+            ],
         },
     });
     // The panel stays open over the entry it is configuring, and now reads the new state: these are settings of
@@ -571,10 +574,10 @@ test("re-pointing an entry replaces it where it stands, because its position is 
     settings.value = {
         ...settings.value,
         modelRoles: {
-                [RUN]: [
-                    { provider: `codex`, model: `gpt-5.6` },
-                    { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
-                ],
+            [RUN]: [
+                { provider: `codex`, model: `gpt-5.6` },
+                { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
+            ],
         },
     };
     const host = mount();
@@ -586,10 +589,10 @@ test("re-pointing an entry replaces it where it stands, because its position is 
 
     expect(patch).toHaveBeenCalledWith({
         modelRoles: {
-                [RUN]: [
-                    { provider: `claude`, model: `claude-opus-5`, effort: `max` },
-                    { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
-                ],
+            [RUN]: [
+                { provider: `claude`, model: `claude-opus-5`, effort: `max` },
+                { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
+            ],
         },
     });
 });
@@ -619,14 +622,20 @@ test("adding appends to the end of the order, and leaves every other job's list 
     });
 });
 
-/* ═══ SETTING SEVERAL JOBS AT ONCE ═══
+/* ═══ SETTING SEVERAL JOBS AT ONCE, ONE GROUP AT A TIME ═══
  *
- * THE COST OF ONE LIST PER JOB, PAID BACK. Seventeen true per-job settings are the right model and they made
- * the commonest sentence anybody wants to say — "all of these, on this, at this tier" — seventeen trips
+ * THE COST OF ONE LIST PER JOB, PAID BACK. Eighteen true per-job settings are the right model and they made
+ * the commonest sentence anybody wants to say — "all of these, on this, at this tier" — eighteen trips
  * through the same panel. What these tests pin is that the saving is real and that it is EXACT: one patch, the
  * ticked jobs and no others, the model AND the tier, and the untouched jobs still standing afterwards. A bulk
  * writer that quietly caught a neighbouring role would be invisible on screen and would re-point a job the
- * owner never selected. */
+ * owner never selected.
+ *
+ * AND THE SET IS A GROUP'S, WHICH IS THE PROPERTY MOST WORTH GUARDING NOW. The verbs live in each block's own
+ * header and write that block's ticked rows alone. A page-wide writer would look identical on screen — the
+ * ticks are the same ticks — and would silently re-point jobs on two surfaces the user cannot see from the
+ * header they pressed. So every assertion below names the group it pressed in and checks what the OTHER groups
+ * still hold. */
 
 // A job's tick, by the row it belongs to. PrimeVue draws the box as a wrapper around a real checkbox input,
 // and the aria-label rides that input, which is also the thing a click has to land on.
@@ -639,34 +648,106 @@ const tick = (host: HTMLElement, label: string): void => {
     box.dispatchEvent(new Event(`change`, { bubbles: true }));
 };
 
-/* THE SELECTION'S VERBS LIVE IN THE GROUP'S OWN HEADER, above the rows and stuck there as they scroll. Read
+// One block's surface, found by the heading the catalog gave it. Every selection helper below goes through
+// this, because "which group did that press belong to" is the question these tests exist to answer.
+const group = (host: HTMLElement, label: string): HTMLElement =>
+    [...host.querySelectorAll<HTMLElement>(`section`)].find((section) => section.textContent?.includes(label))!;
+
+/* THE SELECTION'S VERBS LIVE IN THE GROUP'S OWN HEADER, above its rows and stuck there as they scroll. Read
  * off the words on the buttons rather than off a container id: what a caller has to be able to find is the
  * verb, and the header is a <RowGroup> slot rather than a landmark of its own. */
-const barButton = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(label))!;
+const groupButton = (host: HTMLElement, block: string, label: string): HTMLButtonElement =>
+    [...group(host, block).querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(label))!;
 
 /* THE VERBS APPEAR WITH A SELECTION AND NOT BEFORE. They used to sit in a pill floating over the canvas, which
  * covered the last row for as long as a selection was live; in the header they would instead be two greyed
  * buttons on every visit to a page nobody is bulk-editing, which is the other way to get this wrong. */
-// Every verb on the page, by its words: what has to change when a job is ticked is which of them exist.
-const verbs = (host: HTMLElement): string[] =>
-    [...host.querySelectorAll(`button`)]
+// One group's verbs, by their words: what has to change when a job is ticked is which of them exist, and WHERE.
+const verbs = (host: HTMLElement, block: string): string[] =>
+    [...group(host, block).querySelectorAll(`button`)]
         .map((button) => button.textContent?.replace(/\s+/g, ` `).trim() ?? ``)
         .filter((label) => label.includes(`Set a model for all`) || label.includes(`Clear models`));
 
-test("no bulk verbs until something is ticked", async () => {
+// The blocks by name, so a test names a heading and gets the roles the catalog put under it rather than a list
+// transcribed here that goes stale the day a role moves.
+const HELPERS = MODEL_ROLE_BLOCKS[0]!;
+const PRESSED = MODEL_ROLE_BLOCKS[1]!;
+
+/* ═══ THE ROW IS THE TARGET, NOT THE BOX ═══
+ *
+ * An 18px checkbox was the whole of it, which is a hard thing to hit on purpose and an easy one to miss. The
+ * row is a `<label>` now, so the mark, the name, the chip, the description and the space out to the Add button
+ * all tick the job. Two regions are carved back out of it, and those are what can actually regress: a press on
+ * the Add button, and a press on the pinned list below. Both sit INSIDE the label, so both would tick the job
+ * as a side effect if their stop ever came off — silently, while doing the thing you asked for. */
+
+// The row's own element, by the job it names. What the label mode changes is the tag, so the tag is asserted.
+const rowOf = (host: HTMLElement, label: string): HTMLElement =>
+    [...host.querySelectorAll<HTMLElement>(`[class*="font-medium"] > span > span`)]
+        .find((name) => name.textContent?.trim() === label)!
+        .closest(`.group`)!;
+
+test("the whole headline ticks the job, so the target is the row rather than an 18px box", async () => {
     const host = mount();
     await Promise.resolve();
 
-    expect(verbs(host)).toEqual([]);
+    const row = rowOf(host, `Commit messages`);
+    expect(row.tagName).toBe(`LABEL`);
+
+    // A press on the row's DESCRIPTION — the furthest thing from the box that is still the row's own text.
+    row.querySelector(`p`)!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    await nextTick();
+
+    expect(tickBox(host, `Select commit messages`).checked).toBe(true);
+    expect(verbs(host, HELPERS.label)).toEqual([`Set a model for all…`, `Clear models`]);
+});
+
+test("the Add button opens the picker without ticking the job it belongs to", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    addButton(host, `Add a model for commit messages`).click();
+    await flush();
+
+    expect(opened?.pin).toBeUndefined();
+    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
+});
+
+test("a press on the pinned list stays in the list rather than ticking the job under it", async () => {
+    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
+    const host = mount();
+    await Promise.resolve();
+
+    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
+    await nextTick();
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [] } });
+    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
+});
+
+/* THE VERBS BELONG TO ONE GROUP AND APPEAR THERE ALONE. Ticking a one-shot may not arm a "Set a model for all"
+ * over the runs: that button is a promise about the rows under the heading it sits in, and a selection made two
+ * surfaces away is not a set anybody on this screen can see. */
+test("no bulk verbs until something is ticked, and then only in that group's header", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    expect(verbs(host, HELPERS.label)).toEqual([]);
+    expect(verbs(host, PRESSED.label)).toEqual([]);
 
     tick(host, `Select commit messages`);
     await nextTick();
 
-    expect(verbs(host)).toEqual([`Set a model for all…`, `Clear models`]);
+    expect(verbs(host, HELPERS.label)).toEqual([`Set a model for all…`, `Clear models`]);
+    // …and the group that holds no ticked row is exactly as it was.
+    expect(verbs(host, PRESSED.label)).toEqual([]);
 });
 
-test("one pick lands on every ticked job, in one patch, and leaves the rest alone", async () => {
+/* ONE PRESS WRITES THAT GROUP'S TICKED ROWS, ALL OF THEM, AND NOTHING ELSE. Both halves are the test: a writer
+ * that missed a ticked sibling is visible on screen, and one that reached into another group is not — the ticks
+ * look identical either way, and the rows it re-pointed are on a surface the user was not looking at when they
+ * pressed. So a job in a DIFFERENT block is ticked here too, and must come through untouched. */
+test("one pick lands on every ticked job in that group, in one patch, and never on another group's", async () => {
     // One job starts with a list of its own, so the write is visibly an ADD to what is there rather than a
     // replacement: a bulk editor that flattened existing orders would silently drop the fallbacks somebody
     // wrote by hand.
@@ -675,9 +756,11 @@ test("one pick lands on every ticked job, in one patch, and leaves the rest alon
     await Promise.resolve();
 
     tick(host, `Select commit messages`);
+    tick(host, `Select session titles`);
+    // Ticked, in another block, and pressed from the helpers' header: it may not be written.
     tick(host, `Select pipeline fixes`);
     await nextTick();
-    barButton(host, `Set a model for all`).click();
+    groupButton(host, HELPERS.label, `Set a model for all`).click();
     await flush();
     answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
 
@@ -685,10 +768,11 @@ test("one pick lands on every ticked job, in one patch, and leaves the rest alon
     expect(patch).toHaveBeenCalledWith({
         modelRoles: {
             [COMMIT]: [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)],
-            [RUN]: [entry(`claude`, `claude-haiku-4-5`)],
+            [`session-title`]: [entry(`claude`, `claude-haiku-4-5`)],
         },
     });
-    // The job that was not ticked is not in the record at all, so nothing was written for it.
+    // The ticked job in the other group is not in the record at all, and neither is an unticked neighbour.
+    expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[RUN]).toBeUndefined();
     expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[JUDGE]).toBeUndefined();
 });
 
@@ -703,7 +787,7 @@ test("the tier chosen after the model reaches the same entry in every ticked job
     tick(host, `Select commit messages`);
     tick(host, `Select session titles`);
     await nextTick();
-    barButton(host, `Set a model for all`).click();
+    groupButton(host, HELPERS.label, `Set a model for all`).click();
     await flush();
     answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
     await flush();
@@ -731,7 +815,7 @@ test("picking again supersedes the model the same panel just wrote", async () =>
 
     tick(host, `Select commit messages`);
     await nextTick();
-    barButton(host, `Set a model for all`).click();
+    groupButton(host, HELPERS.label, `Set a model for all`).click();
     await flush();
     answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
     answer?.pick({ provider: `codex`, model: `gpt-5.6` });
@@ -749,26 +833,45 @@ test("clearing the ticked jobs empties their lists, which is how several jobs ar
 
     tick(host, `Select commit messages`);
     await nextTick();
-    barButton(host, `Clear models`).click();
+    groupButton(host, HELPERS.label, `Clear models`).click();
 
     expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [], [JUDGE]: [entry(`claude`, `claude-haiku-4-5`)] } });
 });
 
-test("the master box ticks every job on the page, and only the jobs", async () => {
+/* THE MASTER BOX IS A GROUP'S, and "every one-shot helper on one model" is the sentence it exists to make one
+ * press. What it may not do is reach past its own heading: the roles it writes are exactly the ones the catalog
+ * put in that block, derived here rather than listed, so a role that moves between blocks moves this assertion
+ * with it. */
+test("a group's master box ticks that block's jobs, and only those", async () => {
     const host = mount();
     await Promise.resolve();
 
-    tick(host, `Select every job`);
+    tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
     await nextTick();
-    barButton(host, `Set a model for all`).click();
+    groupButton(host, HELPERS.label, `Set a model for all`).click();
     await flush();
     answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
 
     const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
-    expect(Object.keys(written).toSorted()).toEqual(MODEL_ROLES.map((role) => role.id).toSorted());
-    // Automatic tier is a setting rather than a job, so the master box may not reach it: it is not a role, and
-    // its list stores keys without knobs, which a pin written here would not be.
+    expect(Object.keys(written).toSorted()).toEqual(HELPERS.roles.map((role) => role.id).toSorted());
+    // Automatic tier is a setting rather than a job, so no master box may reach it: it is not a role, and its
+    // list stores keys without knobs, which a pin written here would not be.
     expect(patch.mock.calls.at(-1)?.[0]?.autoFastModels).toBeUndefined();
+});
+
+// …and each group's box answers for its own block alone: ticking every helper leaves the runs' box empty, which
+// is the visible half of the same claim.
+test("one group's master box does not tick another group's", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
+    await nextTick();
+
+    expect(verbs(host, PRESSED.label)).toEqual([]);
+    for (const role of PRESSED.roles) {
+        expect(tickBox(host, `Select ${role.label.toLowerCase()}`).checked, role.id).toBe(false);
+    }
 });
 
 /* THE AUTOMATIC-TIER ROW is the only setting on this page that can override a model the user picked a second
