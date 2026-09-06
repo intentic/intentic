@@ -300,12 +300,16 @@
    them but scale. Nothing is cropped, nothing is padded, and there is no per-shot anything here. `cover`
    below is only there to eat a rounding error. */
 .home .shell.verbs-open {
-    /* The opener and the first stage's title belong to one screenful: a reader coming off the hero should
-       meet the eyebrow, five words, a verb and a picture, in that order, without scrolling twice.
-       It names `.shell` as well as the modifier so it outranks the phone rule at the foot of this file
-       that resets every shell's vertical padding to 4rem — otherwise the tightening survives on a laptop
-       and is thrown away on a phone, which is where two lines read together matters most. */
-    padding-bottom: 0.5rem;
+    /* The eyebrow and the first stage's verb belong to one screenful: a reader coming off the hero should
+       meet the section label, Run and a picture, in that order, without scrolling twice. Only an eyebrow
+       lives here now — no carved heading beneath it — so the shell's default top padding is more than
+       this label needs. It names `.shell` as well as the modifier so it outranks the phone rule at the
+       foot of this file that resets every shell's vertical padding to 4rem. */
+    padding-top: clamp(3rem, 5vh, 4rem);
+    padding-bottom: 0;
+}
+.home .shell.verbs-open + .stage {
+    padding-top: 1.25rem;
 }
 .home .shell.verbs-close {
     padding-top: 1.5rem;
@@ -325,7 +329,7 @@
 .home .stage-head {
     margin-bottom: clamp(1.5rem, 3vh, 2.25rem);
 }
-/* The verb, and it stays in the body sans. The band's carved heading is the chapter's, once — five stone
+/* The verb, and it stays in the body sans. The band's eyebrow is the chapter's label, once — five stone
    headings down one section is a mason's sampler, and each of these is the caption on a picture that is
    about to take the rest of the screen. */
 .home .stage-verb {

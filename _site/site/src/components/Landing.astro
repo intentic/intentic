@@ -218,14 +218,14 @@ const machineStep = content.connect.steps.at(-1)!;
                  Every verb now takes a stage: its name, its one line, its link, and then the screen itself,
                  filling the page's own column in a 16:9 frame. The four `stage-*` captures are SHOT at that
                  shape rather than fitted to it (`_tools/e2e/shots/capture.mts`), which is what lets this page
-                 scale them and do nothing else. The chapter opener is the band's only carved type, which is
-                 what puts a reader coming off the hero in front of five words and then a picture. -->
+                 scale them and do nothing else. The chapter label is the band's eyebrow, sitting just above
+                 the first verb. -->
             <section class="band" id="verbs">
                 <div class="wall" aria-hidden="true"></div>
 
                 <div class="shell verbs-open fade-in">
                     <div class="eyebrow">{content.verbs.eyebrow}</div>
-                    <h2 class="h2 display">{content.verbs.heading}</h2>
+                    {content.verbs.heading !== undefined && <h2 class="h2 display">{content.verbs.heading}</h2>}
                 </div>
 
                 {

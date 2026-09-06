@@ -115,10 +115,10 @@ export interface LandingContent {
      *
      * THE ONLY BAND OPENER ON THE PAGE WITH NO `sub`, and the pictures under it are why. The section is a
      * showcase now — one verb, one screenful, one screenshot at the width of the window — so everything
-     * between the hero and the first of those screenshots is read INSTEAD of it. An eyebrow and a heading
-     * short enough to hold in one glance is all that fits there. The one mechanical fact the retired sub
+     * between the hero and the first of those screenshots is read INSTEAD of it. An eyebrow, the same label
+     * style as the bands below, is all that fits there. The one mechanical fact the retired sub
      * carried (an agent works on a branch of its own) is still on the page: `#workspace` closes on it. */
-    verbs: Omit<LandingSectionIntro, "sub"> & { items: VerbTourItem[]; cta: string };
+    verbs: Omit<LandingSectionIntro, "sub" | "heading"> & { heading?: string; items: VerbTourItem[]; cta: string };
     workspace: LandingSectionIntro & { comparison: WorkspaceComparison };
     economics: LandingSectionIntro & { accounts: { name: string; logo: ProviderBrand; detail: string }[]; points: string[] };
     /* Who is behind the promises the page just made. It sits here, last before `#connect`, because the
@@ -212,17 +212,9 @@ export const landingContent: LandingContent = {
     // a screenshot: it is diagram-led everywhere, because no honest capture of an automations screen
     // exists and a mockup would be the one lie on this page.
     verbs: {
-        eyebrow: "A day at the board",
-        /* FIVE WORDS, because what comes after them is a picture the width of the window. The heading is a
-         * scene, not a to-do list. Three versions preceded it. First three bare verbs in a row ("Run
-         * agents. Connect your tools. Read every change."), which read as a chore chart. Then "One board
-         * holds every agent working for you", which said almost exactly what the Run line below it says,
-         * so the reader met the same sentence twice. Then the scene plus its own resolution ("…and you
-         * never lose the thread"), which was the right thought at the wrong length: two clauses and a
-         * supporting sentence under them is four lines of reading between the hero and the first
-         * screenshot, and this section's whole problem was that it talked where it should have shown.
-         * What is left is the claim only — the fleet — and the screens make the rest of the argument. */
-        heading: "A whole fleet at work.",
+        eyebrow: "What you do",
+        /* One eyebrow, same class as "Why a workspace", then the first verb. No carved heading under it —
+         * the five verbs and their screenshots make the argument. */
         items: [
             {
                 verb: "Run",
