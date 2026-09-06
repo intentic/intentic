@@ -88,7 +88,7 @@ the whole point of the lean-core split: see the extension system in [ARCHITECTUR
   `intentic-extension.json` manifest + an `activate` that calls `api.views.register`), and wire it into
   [src/extension-host/builtins.ts](src/extension-host/builtins.ts). It reaches the daemon only through the
   routes its manifest declares, and consumes the shared UI slice via `@intentic/extension-ui`. Start from an
-  existing extension (e.g. [`_extensions/logs`](../../_extensions/logs)) as the template.
+  existing extension (e.g. [`_extensions/activity`](../../_extensions/activity)) as the template.
 - **New file viewer:** contribute a `viewers` entry from an extension (see
   [`_extensions/viewers`](../../_extensions/viewers)): the host owns the fetch and hands your component the
   bytes. Don't add a branch to `FileViewer.vue`.

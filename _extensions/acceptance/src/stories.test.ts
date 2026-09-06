@@ -130,20 +130,19 @@ describe(`criteriaOf`, () => {
 describe(`newStoryMarkdown`, () => {
     const written = newStoryMarkdown(`  Sign in  `);
 
-    it(`is the title, trimmed, as the file's heading`, () => {
+    /* The whole document to the byte, because every part of it is load-bearing and the parsers below only read
+     * the parts they name. The empty bullet is where the caret lands and where Enter then keeps going, so it
+     * has to be a LIST LINE the editor's continuation recognises rather than a bare dash, and the blank line
+     * above the heading is what keeps that section a heading rather than a paragraph's second line. */
+    it(`is the trimmed title, the section the run grades against, and an empty bullet to type into`, () => {
+        expect(written).toBe(`# Sign in\n\n## Acceptance criteria\n\n- \n`);
+    });
+
+    /* And it has to read back as the story it looks like: a fresh story promises nothing, so the row's tally
+     * says "no criteria" until somebody types one, and the empty bullet must not count as the first. */
+    it(`round-trips through the parsers as a titled story with no criteria yet`, () => {
         expect(titleOf(`x.md`, written)).toBe(`Sign in`);
-    });
-
-    it(`opens the section the run grades against, with nothing in it yet`, () => {
-        expect(written).toContain(`## Acceptance criteria`);
         expect(criteriaOf(written)).toEqual([]);
-    });
-
-    /* The empty bullet is where the caret lands and where Enter then keeps going, so it has to be a LIST LINE
-     * the editor's continuation recognises rather than a bare dash. It must also not read as a criterion: a
-     * fresh story promises nothing, and the row's tally says "no criteria" until somebody types one. */
-    it(`leaves an empty bullet to type into that counts as no criterion`, () => {
-        expect(written.endsWith(`- \n`)).toBe(true);
     });
 });
 
