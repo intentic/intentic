@@ -1,0 +1,845 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import type { Event } from "@opencode-ai/sdk";
+import type { AgentEvent } from "@intentic/sandbox-contract";
+import { expect, test } from "vitest";
+import { resolveRequest } from "../../agent/tools/agent-requests.js";
+import { createGrokAgent, createGrokRunner, type GrokRunner, type GrokTurn } from "./grok-agent.js";
+import type { OpenCodeService } from "./opencode.js";
+
+// A fake runner yielding one canned OpenCode Event list per invocation (plan turns invoke it repeatedly),
+// capturing each turn's prompt/session/agent/model: no server, no network. The production runner does the
+// session filtering; the fake yields one session's events directly.
+const fakeRunner = (...turns: unknown[][]): { runner: GrokRunner; calls: GrokTurn[] } => {
+    const calls: GrokTurn[] = [];
+    const runner: GrokRunner = async function* (turn) {
+        calls.push(turn);
+        yield* (turns[Math.min(calls.length - 1, turns.length - 1)] ?? []) as Event[];
+    };
+    return { runner, calls };
+};
+
+const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
+
+// Collect all events; `onPlan` schedules a decision for each plan frame AFTER the generator parks on the
+// pending-plan bridge (the yield suspends before wait() registers, hence the macrotask).
+const collect = async (
+    agent: ReturnType<typeof createGrokAgent>,
+    turnRequest: Parameters<ReturnType<typeof createGrokAgent>>[0],
+    onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
+): Promise<AgentEvent[]> => {
+    const events: AgentEvent[] = [];
+    for await (const event of agent(turnRequest)) {
+        events.push(event);
+        if (event.kind === "plan" && onPlan !== undefined) {
+            const decision = onPlan(event.requestId);
+            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+        }
+    }
+    return events;
+};
+
+test("a turn maps OpenCode events onto session, thinking, tools, todos, deltas, and done", async () => {
+    const { runner } = fakeRunner([
+        { type: "session.created", properties: { info: { id: "s1" } } },
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "reasoning", id: "r1", sessionID: "s1", messageID: "m1", text: "planning the edit", time: { start: 0 } } },
+        },
+        {
+            type: "message.part.updated",
+            properties: {
+                part: {
+                    type: "tool",
+                    id: "tp1",
+                    sessionID: "s1",
+                    messageID: "m1",
+                    callID: "c1",
+                    tool: "bash",
+                    state: { status: "running", input: { command: "pnpm test" }, time: { start: 0 } },
+                },
+            },
+        },
+        {
+            type: "message.part.updated",
+            properties: {
+                part: {
+                    type: "tool",
+                    id: "tp1",
+                    sessionID: "s1",
+                    messageID: "m1",
+                    callID: "c1",
+                    tool: "bash",
+                    state: {
+                        status: "completed",
+                        input: { command: "pnpm test" },
+                        output: "1 passed",
+                        title: "pnpm test",
+                        metadata: {},
+                        time: { start: 0, end: 1 },
+                    },
+                },
+            },
+        },
+        { type: "todo.updated", properties: { sessionID: "s1", todos: [{ content: "add route", status: "pending", priority: "high", id: "t1" }] } },
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Added the route." } },
+        },
+        {
+            type: "message.updated",
+            properties: {
+                info: {
+                    id: "m1",
+                    sessionID: "s1",
+                    role: "assistant",
+                    time: { created: 0, completed: 1 },
+                    cost: 0.02,
+                    tokens: { input: 1000, output: 200, reasoning: 50, cache: { read: 800, write: 120 } },
+                },
+            },
+        },
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    const events = await collect(createGrokAgent(runner), request);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "thinking", text: "planning the edit" },
+        { kind: "tool_call", id: "c1", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" },
+        { kind: "tool_call_update", id: "c1", status: "completed", content: [{ type: "text", text: "1 passed" }] },
+        { kind: "todos", items: [{ content: "add route", status: "pending" }] },
+        { kind: "delta", text: "Added the route." },
+        { kind: "usage", inputTokens: 1000, outputTokens: 200, cacheReadTokens: 800, cacheCreationTokens: 120, costUsd: 0.02 },
+        { kind: "done" },
+    ]);
+});
+
+test("a build turn resumes the session on the xai provider, passes the model, and folds attachments into the prompt", async () => {
+    const { runner, calls } = fakeRunner([]);
+    await collect(createGrokAgent(runner), {
+        ...request,
+        sessionId: "s9",
+        model: "grok-4.20-0309-non-reasoning",
+        attachments: [`${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/a/report.pdf`],
+    });
+    expect(calls).toHaveLength(1);
+    const turn = calls[0]!;
+    expect(turn.sessionId).toBe("s9");
+    expect(turn.model).toBe("grok-4.20-0309-non-reasoning");
+    expect(turn.agent).toBe("build");
+    expect(turn.prompt).toContain("/work/.intentic/records/artifacts/attachments/a/report.pdf");
+    expect(turn.images).toBeUndefined();
+});
+
+// Images are split out of the attachments and sent as native picture parts; that half needs real files on disk,
+// so it lives in grok-agent.integration.test.ts.
+
+test("a failing tool first seen at its error state arrives as one whole failed tool_call", async () => {
+    const { runner } = fakeRunner([
+        {
+            type: "message.part.updated",
+            properties: {
+                part: {
+                    type: "tool",
+                    id: "tp1",
+                    sessionID: "s1",
+                    messageID: "m1",
+                    callID: "c1",
+                    tool: "bash",
+                    state: { status: "error", input: { command: "pnpm test" }, error: "1 failed", time: { start: 0, end: 1 } },
+                },
+            },
+        },
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    const events = await collect(createGrokAgent(runner), request);
+    expect(events).toEqual([
+        {
+            kind: "tool_call",
+            id: "c1",
+            name: "Bash",
+            category: "execute",
+            status: "failed",
+            target: "pnpm test",
+            content: [{ type: "text", text: "1 failed" }],
+        },
+        { kind: "done" },
+    ]);
+});
+
+test("a plan turn proposes read-only on the plan agent, then executes on build after approval", async () => {
+    const { runner, calls } = fakeRunner(
+        [
+            { type: "session.created", properties: { info: { id: "s2" } } },
+            {
+                type: "message.part.updated",
+                properties: { part: { type: "text", id: "p1", sessionID: "s2", messageID: "m1", text: "Plan: add the route, then test." } },
+            },
+            { type: "session.idle", properties: { sessionID: "s2" } },
+        ],
+        [
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p2", sessionID: "s2", messageID: "m2", text: "Done." } } },
+            { type: "session.idle", properties: { sessionID: "s2" } },
+        ],
+    );
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s2" },
+        { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
+        // The card's release: the id tells the fleet the turn stopped waiting, and the approval riding with it
+        // is what lets a replayed run freeze the card instead of re-offering it.
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
+        { kind: "delta", text: "Done." },
+        { kind: "done" },
+    ]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]!.agent).toBe("plan");
+    expect(calls[0]!.prompt).toContain("add a /ping route");
+    expect(calls[1]!.agent).toBe("build");
+    expect(calls[1]!.sessionId).toBe("s2");
+});
+
+test("a rejected plan loops another read-only planning turn carrying the feedback", async () => {
+    const { runner, calls } = fakeRunner(
+        [
+            { type: "session.created", properties: { info: { id: "s3" } } },
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p1", sessionID: "s3", messageID: "m1", text: "Plan v1" } } },
+            { type: "session.idle", properties: { sessionID: "s3" } },
+        ],
+        [
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p2", sessionID: "s3", messageID: "m2", text: "Plan v2" } } },
+            { type: "session.idle", properties: { sessionID: "s3" } },
+        ],
+        [
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p3", sessionID: "s3", messageID: "m3", text: "Executed." } } },
+            { type: "session.idle", properties: { sessionID: "s3" } },
+        ],
+    );
+    let planCount = 0;
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => {
+        planCount += 1;
+        return planCount === 1 ? { approve: false, feedback: "use fastify" } : { approve: true };
+    });
+
+    expect(events.filter((event) => event.kind === "plan").map((event) => (event as { text: string }).text)).toEqual(["Plan v1", "Plan v2"]);
+    expect(events.at(-2)).toEqual({ kind: "delta", text: "Executed." });
+    expect(calls).toHaveLength(3);
+    expect(calls[1]!.prompt).toContain("use fastify");
+    expect(calls[1]!.agent).toBe("plan");
+    expect(calls[1]!.sessionId).toBe("s3");
+});
+
+test("a plan turn captures only the assistant's text, never the echoed user prompt", async () => {
+    // OpenCode broadcasts the USER message (the echoed prompt) on the SAME session stream as the assistant's, and a
+    // text part carries no role, the plan must be the assistant's text alone (regression: prompt leaking into planText).
+    const { runner } = fakeRunner(
+        [
+            { type: "session.created", properties: { info: { id: "s5" } } },
+            // The user message + its text part (the prompt echo): role recorded, then the part is skipped.
+            { type: "message.updated", properties: { info: { id: "mu", sessionID: "s5", role: "user" } } },
+            {
+                type: "message.part.updated",
+                properties: {
+                    part: { type: "text", id: "up1", sessionID: "s5", messageID: "mu", text: "Before making any changes… add a /ping route" },
+                },
+            },
+            // The assistant's actual plan.
+            {
+                type: "message.updated",
+                properties: {
+                    info: {
+                        id: "ma",
+                        sessionID: "s5",
+                        role: "assistant",
+                        cost: 0,
+                        tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+                    },
+                },
+            },
+            {
+                type: "message.part.updated",
+                properties: { part: { type: "text", id: "ap1", sessionID: "s5", messageID: "ma", text: "Plan: add the route." } },
+            },
+            { type: "session.idle", properties: { sessionID: "s5" } },
+        ],
+        [{ type: "session.idle", properties: { sessionID: "s5" } }],
+    );
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const plan = events.find((event) => event.kind === "plan") as { text: string } | undefined;
+    expect(plan?.text).toBe("Plan: add the route.");
+});
+
+test("a plan turn that errors after partial text emits the error and NO plan frame", async () => {
+    // Partial assistant text was captured, then the turn errored (e.g. out of credits): a failed turn must surface
+    // only the error, never a bogus plan built from the partial/echoed text.
+    const { runner } = fakeRunner([
+        { type: "session.created", properties: { info: { id: "s6" } } },
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "text", id: "ap1", sessionID: "s6", messageID: "ma", text: "Partial plan…" } },
+        },
+        { type: "session.error", properties: { sessionID: "s6", error: { name: "PaymentRequiredError", data: { message: "Payment Required" } } } },
+    ]);
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const });
+    expect(events).toEqual([{ kind: "session", sessionId: "s6" }, { kind: "error", message: "Payment Required" }, { kind: "done" }]);
+    expect(events.some((event) => event.kind === "plan")).toBe(false);
+});
+
+test("a session error and a thrown runner become error events followed by done", async () => {
+    const failing = fakeRunner([
+        { type: "session.error", properties: { sessionID: "s1", error: { name: "UnknownError", data: { message: "xai auth rejected" } } } },
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    // A plain (non-model) error stays uncoded.
+    expect(await collect(createGrokAgent(failing.runner), request)).toEqual([{ kind: "error", message: "xai auth rejected" }, { kind: "done" }]);
+
+    // A model-not-found error is tagged so the client reloads the live catalog and drops the bad pinned model.
+    const badModel = fakeRunner([
+        {
+            type: "session.error",
+            properties: {
+                sessionID: "s1",
+                error: {
+                    name: "ProviderModelNotFoundError",
+                    data: { message: "Model not found: xai/grok-code-fast-1. Did you mean: grok-4.20-0309-reasoning?" },
+                },
+            },
+        },
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    expect(await collect(createGrokAgent(badModel.runner), request)).toEqual([
+        { kind: "error", code: "grok-model-invalid", message: "Model not found: xai/grok-code-fast-1. Did you mean: grok-4.20-0309-reasoning?" },
+        { kind: "done" },
+    ]);
+
+    const throwing: GrokRunner = async function* () {
+        yield { type: "session.created", properties: { info: { id: "s4" } } } as Event;
+        throw new Error("opencode server blew up");
+    };
+    expect(await collect(createGrokAgent(throwing), request)).toEqual([
+        { kind: "session", sessionId: "s4" },
+        { kind: "error", message: "opencode server blew up" },
+        { kind: "done" },
+    ]);
+});
+
+/* A REFUSAL THAT IS ONLY ABOUT HOW MUCH HAS BEEN ASKED, coded as one. Uncoded it read as a crash: a red line,
+ * and the chat's offer to Continue, which on a spent weekly allowance re-fails the instant it is pressed. */
+test("a spent allowance is coded rate_limit, whatever wording the provider refuses in", async () => {
+    const refusal = (message: string): unknown[][] => [
+        [
+            { type: "session.error", properties: { sessionID: "s1", error: { name: "APICallError", data: { message } } } },
+            { type: "session.idle", properties: { sessionID: "s1" } },
+        ],
+    ];
+    // Google's own sentence, as CLIProxyAPI hands it back once its walk across the account fleet is spent...
+    const google = "429 RESOURCE_EXHAUSTED: You exceeded your current quota for gemini models";
+    expect(await collect(createGrokAgent(fakeRunner(...refusal(google)).runner), request)).toEqual([
+        { kind: "error", code: "rate_limit", message: google },
+        { kind: "done" },
+    ]);
+    // ...and a bare rate-limit sentence, which reaches this path only after OpenCode's own in-turn retries.
+    const bare = "Rate limit exceeded, please try again later";
+    expect(await collect(createGrokAgent(fakeRunner(...refusal(bare)).runner), request)).toEqual([
+        { kind: "error", code: "rate_limit", message: bare },
+        { kind: "done" },
+    ]);
+    // An ordinary failure is still uncoded: the code is what stops Continue being offered, so it has to be earned.
+    expect(await collect(createGrokAgent(fakeRunner(...refusal("connection reset")).runner), request)).toEqual([
+        { kind: "error", message: "connection reset" },
+        { kind: "done" },
+    ]);
+    /* A PARAMETER NOTHING HERE SENDS, refused above us: every routed provider shares the proxy and the upstream
+     * defaults that can produce it, so this adapter reads it too. Coded as an outage (the turn is worth making
+     * again and there is no request of the user's to fix) and NOT as a bad model pick, which the sentence's own
+     * "on this model" would otherwise earn it, at the cost of dropping a pinned model that was never at fault. */
+    const unsent = "400 prompt_cache_retention is not supported on this model";
+    const failure = (await collect(createGrokAgent(fakeRunner(...refusal(unsent)).runner), request)).find((event) => event.kind === "error") as
+        { code?: string; message: string } | undefined;
+    expect(failure?.code).toBe("provider-outage");
+    expect(failure?.message).toContain(unsent);
+});
+
+/* THE WAIT THAT USED TO LOOK LIKE A HANG. OpenCode rides out a refused request inside the turn and says so
+ * once, with the instant it will try again, and emits nothing else meanwhile, so a chat with no frame for it
+ * sits on "Thinking…" for the whole backoff while the one move against an apparent hang throws the work away. */
+test("an in-turn retry surfaces as provider_retry, naming a rate limit when that is what it is", async () => {
+    const next = Date.now() + 42_000;
+    const { runner } = fakeRunner([
+        { type: "session.created", properties: { info: { id: "s1" } } },
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "retry", attempt: 2, message: "429 quota exceeded", next } } },
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "retry", attempt: 3, message: "socket hang up", next } } },
+        // Every other status is liveness only: the watchdog counts it, the transcript says nothing about it.
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } },
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    expect(await collect(createGrokAgent(runner), request)).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "provider_retry", attempt: 2, nextAttemptAt: next, status: 429 },
+        { kind: "provider_retry", attempt: 3, nextAttemptAt: next },
+        { kind: "done" },
+    ]);
+});
+
+// A fake OpenCode whose SSE stream yields `events` then STAYS OPEN (like the real global subscription), so
+// these exercise how createGrokRunner terminates against an open stream (idle/error/timeout), which a fake
+// GrokRunner (a finite array) can't reproduce. `return()` releases the hang so the runner's cleanup never blocks.
+//
+// `closes` is the other thing a real stream can do: END, which is the shared `opencode serve` going away
+// mid-turn (a restart, a crash, a dropped socket) rather than the turn ending on it.
+const fakeOpenCode = (
+    events: Event[],
+    rejectModel?: { id: string; message: string },
+    closes = false,
+): {
+    openCode: OpenCodeService;
+    aborted: () => boolean;
+    recorded: string[][];
+    prompts: (string | undefined)[];
+    systems: (string | undefined)[];
+    // The directories the turn subscribed and registered a delegation watcher for. Both are scoped, and a
+    // subscription that loses its scope does not fail: it goes silent, so the scope is asserted, not assumed.
+    scopes: { subscribed: string[]; watched: string[] };
+    // "read" / "create", in the order they happened: see `order` in the body.
+    order: string[];
+} => {
+    let aborted = false;
+    let releaseHang: (() => void) | undefined;
+    // Captures for the self-heal path: the model ids each promptAsync fired with, and every recordModels payload.
+    const prompts: (string | undefined)[] = [];
+    // The standing instructions each message carried, in order: the only proof this runtime is `instructions:
+    // "append"` rather than one that drops the setting on the floor.
+    const systems: (string | undefined)[] = [];
+    const recorded: string[][] = [];
+    /* Every real stream opens with `server.connected`, and the runner AWAITS it: that hello is how it knows the
+     * subscription is live before it creates a session whose `session.created` it would otherwise miss. A double
+     * that stayed silent would make every turn here pay the connect bound in full, which is a fake being
+     * unfaithful rather than a runner being slow. It belongs to no session, so it changes nothing else. */
+    const withHello: Event[] = [{ type: "server.connected", properties: {} } as unknown as Event, ...events];
+    const stream = {
+        [Symbol.asyncIterator]() {
+            let i = 0;
+            let closed = false;
+            return {
+                next(): Promise<IteratorResult<Event>> {
+                    if (order[0] === undefined) {
+                        order.push("read");
+                    }
+                    if (closed) {
+                        return Promise.resolve({ done: true, value: undefined as never });
+                    }
+                    if (i < withHello.length) {
+                        return Promise.resolve({ done: false, value: withHello[i++]! });
+                    }
+                    if (closes) {
+                        return Promise.resolve({ done: true, value: undefined as never });
+                    }
+                    return new Promise<IteratorResult<Event>>((resolve) => {
+                        releaseHang = () => resolve({ done: true, value: undefined as never });
+                    });
+                },
+                return(): Promise<IteratorResult<Event>> {
+                    closed = true;
+                    releaseHang?.();
+                    return Promise.resolve({ done: true, value: undefined as never });
+                },
+            };
+        },
+    };
+    const client = {
+        event: { subscribe: async () => ({ stream }) },
+        session: {
+            create: async () => {
+                order.push("create");
+                return { data: { id: "s1" } };
+            },
+            promptAsync: async (options: { body?: { model?: { modelID?: string }; system?: string } }) => {
+                const modelID = options.body?.model?.modelID;
+                prompts.push(modelID);
+                systems.push(options.body?.system);
+                // Mimic OpenCode/xAI REJECTING an unknown model id (a thrown ProviderModelNotFoundError, the way
+                // the real server does) instead of emitting a session.error event: the initial-send path.
+                if (rejectModel !== undefined && modelID === rejectModel.id) {
+                    throw new Error(rejectModel.message);
+                }
+                return {};
+            },
+            abort: async () => {
+                aborted = true;
+                return {};
+            },
+        },
+    };
+    const scopes = { subscribed: [] as string[], watched: [] as string[] };
+    // The order that matters: `subscribe()` only opens the HTTP stream when something reads it, so a first read
+    // issued after the session exists misses `session.created`, and with it the id the next message resumes on.
+    const order: string[] = [];
+    const openCode = {
+        client: async () => client,
+        events: async (directory: string) => {
+            scopes.subscribed.push(directory);
+            return { stream };
+        },
+        watch: async (directory: string) => void scopes.watched.push(directory),
+        recordModels: async (ids: string[]) => void recorded.push(ids),
+    };
+    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts, systems, scopes, order };
+};
+
+const runnerTurn: GrokTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build", signal: new AbortController().signal };
+
+/* THE SILENT FAILURE THIS FILE EXISTS TO PREVENT A SECOND TIME.
+ *
+ * OpenCode's event stream is scoped to one exact directory. Subscribing without one still connects, still
+ * answers 200 and still delivers heartbeats: it just carries no session events, so every turn on this runtime
+ * watched a stream its own session would never appear on, rode out the inactivity watchdog and died as "timed
+ * out waiting for OpenCode" while the turn itself ran to completion upstream and spent the user's allowance.
+ *
+ * Nothing about that is observable from the frames a turn emits, which is why it is asserted on the CALL. */
+test("createGrokRunner subscribes and watches scoped to the turn's own directory", async () => {
+    const { openCode, scopes } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const worktree = "/history/worktrees/wise-condor/repo";
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, cwd: worktree })) {
+        void event;
+    }
+    expect(scopes.subscribed).toEqual([worktree]);
+    // The delegation watcher is scoped the same way, and the boot only knows the workspace root, so an isolated
+    // turn's worktree is watched because the turn itself registered it.
+    expect(scopes.watched).toEqual([worktree]);
+});
+
+/* The stream is READ before the session is created, not merely subscribed to.
+ *
+ * `subscribe()` hands back a lazy generator: the HTTP request is not made until the first read. So subscribing
+ * early proves nothing on its own, and a first read issued after the prompt arrives too late for the
+ * `session.created` that carries the id every later message in this conversation resumes on. */
+test("createGrokRunner opens the stream before the session it must not miss the creation of", async () => {
+    const { openCode, order } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)(runnerTurn)) {
+        seen.push(event.type);
+    }
+    expect(order).toEqual(["read", "create"]);
+    // And the creation still reaches the caller, which is the whole point of reading first.
+    expect(seen).toEqual(["session.created", "session.idle"]);
+});
+
+// The runtime is shared: `intentic-gemini` is the same adapter serving Google. A user who picked Claude Opus 4.6
+// there and hit the watchdog was told "Grok turn timed out", naming a product they had not chosen.
+test("a stalled turn is reported against the backend the user actually picked", async () => {
+    const stalled = (provider: string | undefined): Promise<void> =>
+        (async () => {
+            for await (const event of createGrokRunner(
+                fakeOpenCode([]).openCode,
+                20,
+            )({ ...runnerTurn, ...(provider !== undefined ? { provider } : {}) })) {
+                void event;
+            }
+        })();
+    const geminiMessage = await stalled("intentic-gemini").catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
+    const grokMessage = await stalled(undefined).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
+    expect(geminiMessage).toMatch(/Google/);
+    expect(grokMessage).toMatch(/Grok/);
+    expect(geminiMessage).toContain("OpenCode");
+    expect(grokMessage).toContain("OpenCode");
+    expect(geminiMessage).not.toBe(grokMessage);
+});
+
+// session.status is the only event a model that thinks for minutes before its first token emits. It is not
+// consumed anywhere, and it is carried purely so the watchdog counts it as life rather than killing that turn.
+test("a session.status keeps the inactivity watchdog alive", async () => {
+    const { openCode } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)(runnerTurn)) {
+        seen.push(event.type);
+    }
+    expect(seen).toEqual(["session.created", "session.status", "session.idle"]);
+});
+
+/* THE OTHER WAY A TURN ON THIS RUNTIME CAN GO QUIET, and the one that used to read as a success.
+ *
+ * `session.idle` and `session.error` are the only two endings a turn here has. When the shared `opencode serve`
+ * goes away instead — a restart, a crash, a dropped socket — the stream simply ENDS, and the runner used to
+ * return on that: no error, so the daemon recorded the turn as `ok` and the agent's card settled into the
+ * board's Finished lane over work that had been cut off mid-tool-call. */
+test("a stream that ends without ending the turn is the server going away, not a finished turn", async () => {
+    const { openCode } = fakeOpenCode(
+        [
+            { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+            {
+                type: "message.part.updated",
+                properties: {
+                    part: {
+                        type: "tool",
+                        id: "tp1",
+                        sessionID: "s1",
+                        messageID: "m1",
+                        callID: "c1",
+                        tool: "bash",
+                        state: { status: "running", input: { command: "pnpm test" }, time: { start: 0 } },
+                    },
+                },
+            } as unknown as Event,
+        ],
+        undefined,
+        true,
+    );
+    const events = await collect(createGrokAgent(createGrokRunner(openCode), "intentic-gemini"), request);
+    // The turn's LAST word is the failure, and `done` still follows it: the adapter's contract is that every
+    // turn ends with one, failed or not. The tool call is left where it was, in_progress, which is the truth.
+    expect(events.map((event) => event.kind)).toEqual(["session", "tool_call", "error", "done"]);
+    // Named for the backend the user actually picked, like every other failure sentence on this shared runtime.
+    expect(events[2]).toMatchObject({ message: "Google stopped sending events before the turn ended." });
+});
+
+// …unless the user is the one who closed it. Stop aborts the session, which ends this very stream, so a throw
+// here would report their own press as a provider failure.
+test("a stream that ends because the turn was stopped is not reported as a failure", async () => {
+    const { openCode } = fakeOpenCode([{ type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event], undefined, true);
+    const controller = new AbortController();
+    controller.abort();
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, signal: controller.signal })) {
+        seen.push(event.type);
+    }
+    expect(seen).toEqual(["session.created"]);
+});
+
+test("createGrokRunner ends the turn on session.error even while the stream stays open", async () => {
+    const { openCode } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.error", properties: { sessionID: "s1", error: { name: "X", data: { message: "boom" } } } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)(runnerTurn)) {
+        seen.push(event.type);
+    }
+    expect(seen).toEqual(["session.created", "session.error"]);
+});
+
+test("createGrokRunner aborts and throws when no event arrives within the inactivity window", async () => {
+    const { openCode, aborted } = fakeOpenCode([{ type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event]);
+    const drain = async (): Promise<void> => {
+        for await (const event of createGrokRunner(openCode, 20)(runnerTurn)) {
+            void event;
+        }
+    };
+    await expect(drain()).rejects.toThrow(/timed out/);
+    expect(aborted()).toBe(true);
+});
+
+/* A STOP THAT LANDED BEFORE THE SESSION EXISTED IS STILL A STOP.
+ *
+ * The abort can only be registered once there is a session id to abort, and getting to one is the slowest
+ * stretch of the turn: booting the OpenCode server, opening the scoped stream, and up to CONNECT_MS waiting for
+ * it to say hello. A Stop anywhere in there arrives at an ALREADY-aborted signal, and `addEventListener` on one
+ * of those never fires — so OpenCode was never told, and the session it had just been handed ran to completion
+ * spending the user's allowance while the chat showed the turn stopped.
+ *
+ * Asserted on the CALL rather than on the frames, for the same reason as the scoping test above: the turn ends
+ * either way, and the only evidence of the difference is whether OpenCode heard about it. */
+test("a turn stopped before its session existed still tells OpenCode to abort it", async () => {
+    const { openCode, aborted } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const controller = new AbortController();
+    controller.abort();
+
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, signal: controller.signal })) {
+        void event;
+    }
+
+    expect(aborted()).toBe(true);
+});
+
+/* A RETRY NAMES WHEN IT WILL SPEAK AGAIN, and the watchdog has to wait that long: OpenCode's backoff outgrows
+ * two minutes on a provider that keeps refusing, and a turn killed during a wait it announced would be the same
+ * false timeout as the one this file already fixed, dressed as a rate limit. */
+test("a retry's announced next attempt pushes the inactivity deadline past it", async () => {
+    const { openCode, aborted } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        {
+            type: "session.status",
+            properties: { sessionID: "s1", status: { type: "retry", attempt: 1, message: "429", next: Date.now() + 150 } },
+        } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    const startedAt = Date.now();
+    // The stream goes quiet after the retry and never speaks again, so the turn does die here: the assertion is
+    // WHEN. With a 20ms window it would have been aborted almost immediately; the promised instant is 150ms out,
+    // so anything past that proves the wait was honoured rather than merely slow.
+    await expect(
+        (async () => {
+            for await (const event of createGrokRunner(openCode, 20)(runnerTurn)) {
+                seen.push(event.type);
+            }
+        })(),
+    ).rejects.toThrow(/timed out/);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(150);
+    expect(aborted()).toBe(true);
+    expect(seen).toEqual(["session.created", "session.status"]);
+});
+
+test("createGrokRunner self-heals a model-not-found rejection: records the named models and re-prompts once", async () => {
+    const { openCode, recorded, prompts } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        {
+            type: "session.error",
+            properties: {
+                sessionID: "s1",
+                error: { name: "ProviderModelNotFoundError", data: { message: "Model not found: xai/grok-4-stale. Did you mean: grok-4-latest?" } },
+            },
+        } as unknown as Event,
+        // The corrected turn (same session) streams normally after the silent re-prompt.
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } },
+        } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-4-stale" })) {
+        seen.push(event.type);
+    }
+    // The rejection is swallowed (never yielded) and the turn produces the corrected content instead.
+    expect(seen).toEqual(["session.created", "message.part.updated", "session.idle"]);
+    expect(recorded).toEqual([["grok-4-latest"]]);
+    expect(prompts).toEqual(["grok-4-stale", "grok-4-latest"]);
+});
+
+test("createGrokRunner's self-heal ignores a stale idle from the failed prompt, waiting for the corrected turn", async () => {
+    const { openCode } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        {
+            type: "session.error",
+            properties: { sessionID: "s1", error: { data: { message: "Model not found: xai/grok-4-stale. Did you mean: grok-4-latest?" } } },
+        } as unknown as Event,
+        // A lingering idle from the rejected prompt: must NOT end the turn before the retry streams.
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } },
+        } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-4-stale" })) {
+        seen.push(event.type);
+    }
+    expect(seen).toEqual(["session.created", "message.part.updated", "session.idle"]);
+});
+
+test("createGrokRunner surfaces a model error it cannot self-heal (no named alternatives), recording nothing", async () => {
+    const { openCode, recorded, prompts } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.error", properties: { sessionID: "s1", error: { data: { message: "Model not found: xai/grok-x." } } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-x" })) {
+        seen.push(event.type);
+    }
+    // No "Did you mean" ⇒ no retry: the error is surfaced (and terminal), and nothing is recorded/re-prompted.
+    expect(seen).toEqual(["session.created", "session.error"]);
+    expect(recorded).toEqual([]);
+    expect(prompts).toEqual(["grok-x"]);
+});
+
+test("createGrokRunner self-heals a model-not-found REJECTION from the initial prompt (thrown, not a session.error event)", async () => {
+    // The real promptAsync REJECTS on a bad model (a thrown ProviderModelNotFoundError with the SessionPrompt
+    // stack) rather than emitting a session.error, and the initial send is OUTSIDE the event loop, so this is the
+    // path that surfaced raw in production. It must heal identically: record xAI's named models, re-prompt once.
+    const { openCode, recorded, prompts } = fakeOpenCode(
+        [
+            { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+            {
+                type: "message.part.updated",
+                properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } },
+            } as unknown as Event,
+            { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+        ],
+        { id: "grok-4", message: "Model not found: xai/grok-4. Did you mean: grok-4.3?" },
+    );
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-4" })) {
+        seen.push(event.type);
+    }
+    // The thrown rejection is swallowed (never surfaced) and the corrected turn's content streams instead.
+    expect(seen).toEqual(["session.created", "message.part.updated", "session.idle"]);
+    expect(recorded).toEqual([["grok-4.3"]]);
+    expect(prompts).toEqual(["grok-4", "grok-4.3"]);
+});
+
+test("a thrown model-not-found with no named alternatives surfaces as a tagged grok-model-invalid error", async () => {
+    // promptAsync rejects with a model error that names no alternatives, so the runner can't self-heal and
+    // re-throws. runGrokAgent must tag it grok-model-invalid (parity with the event path) so the client reloads the
+    // catalog + drops the bad pinned model, instead of surfacing the raw stack-trace error.
+    const { openCode, recorded, prompts } = fakeOpenCode([], { id: "grok-x", message: "Model not found: xai/grok-x." });
+    const events = await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, model: "grok-x" });
+    const error = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
+    expect(error?.code).toBe("grok-model-invalid");
+    expect(error?.message).toContain("grok-x");
+    expect(events.at(-1)).toEqual({ kind: "done" });
+    expect(recorded).toEqual([]);
+    expect(prompts).toEqual(["grok-x"]);
+});
+
+/* THIS SANDBOX'S STANDING INSTRUCTIONS REACH THE MODEL, which for most of this runtime's life they did not: the
+ * system-prompt setting was composed inside the Claude Code arm, so a Grok or Gemini turn ran without it and
+ * nothing on screen said so. OpenCode takes one per MESSAGE (`system` on the prompt body), so the assertion
+ * that matters is per message rather than per session. */
+test("the turn's standing instructions ride the prompt body", async () => {
+    const { openCode, systems } = fakeOpenCode([{ type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event]);
+
+    await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, systemAppend: "House rules: be brief." });
+
+    expect(systems).toEqual(["House rules: be brief."]);
+});
+
+// A turn with nothing to say sends no system field at all, rather than an empty one: an empty system message is
+// not the same request as no system message, and OpenCode's own prompt is what should stand.
+test("nothing to say sends no system field", async () => {
+    const { openCode, systems } = fakeOpenCode([{ type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event]);
+
+    await collect(createGrokAgent(createGrokRunner(openCode)), request);
+
+    expect(systems).toEqual([undefined]);
+});
+
+/* BOTH PHASES OF THE PLAN EMULATION CARRY THEM, and that is the case with teeth: the plan is proposed in one
+ * message and executed in another, so instructions on only the first would let a turn agree to a plan under the
+ * owner's prompt and then carry it out without one. */
+test("a planned turn carries the same instructions into its execute phase", async () => {
+    const { runner, calls } = fakeRunner(
+        [
+            { type: "session.created", properties: { info: { id: "s9" } } },
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p1", sessionID: "s9", messageID: "m1", text: "Plan." } } },
+            { type: "session.idle", properties: { sessionID: "s9" } },
+        ],
+        [
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p2", sessionID: "s9", messageID: "m2", text: "Done." } } },
+            { type: "session.idle", properties: { sessionID: "s9" } },
+        ],
+    );
+
+    await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const, systemAppend: "House rules: be brief." }, () => ({
+        approve: true,
+    }));
+
+    expect(calls.map((call) => call.system)).toEqual(["House rules: be brief.", "House rules: be brief."]);
+});

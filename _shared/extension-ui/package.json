@@ -1,0 +1,54 @@
+{
+    "name": "@intentic/extension-ui",
+    "version": "0.0.0",
+    "description": "The UI kit intentic extensions render with, host-provided at runtime (the app's own components via the import map), so extension UI is always native to the shell",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_shared/extension-ui"
+    },
+    "files": [
+        "dist",
+        "src",
+        "names.mjs"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/types/extension-ui/src/index.d.ts",
+    "exports": {
+        ".": {
+            "@intentic/src": "./src/index.ts",
+            "types": "./dist/types/extension-ui/src/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./format": {
+            "@intentic/src": "./src/format.ts",
+            "types": "./dist/types/extension-ui/src/format.d.ts",
+            "default": "./dist/format.js"
+        },
+        "./names": "./names.mjs"
+    },
+    "scripts": {
+        "build": "node scripts/build.mjs",
+        "prepack": "node scripts/build.mjs",
+        "typecheck": "vue-tsc --noEmit"
+    },
+    "dependencies": {
+        "primevue": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@intentic/ui": "workspace:*",
+        "typescript": "catalog:",
+        "vue": "catalog:",
+        "vue-tsc": "catalog:"
+    },
+    "peerDependencies": {
+        "vue": "3"
+    }
+}

@@ -1,0 +1,210 @@
+{
+    "name": "@intentic/sandbox-contract",
+    "version": "0.0.0",
+    "description": "oRPC wire contract for the intentic sandbox daemon, shared by the daemon and its browser client",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_shared/sandbox-contract"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./chores": {
+            "types": "./dist/chores/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/chores/index.ts",
+                "default": "./dist/chores/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/chores/index.ts",
+                "default": "./dist/chores/index.js"
+            }
+        },
+        "./batch-runs": {
+            "types": "./dist/policy/batch-runs.d.ts",
+            "import": {
+                "@intentic/src": "./src/policy/batch-runs.ts",
+                "default": "./dist/policy/batch-runs.js"
+            },
+            "require": {
+                "@intentic/src": "./src/policy/batch-runs.ts",
+                "default": "./dist/policy/batch-runs.js"
+            }
+        },
+        "./embed": {
+            "types": "./dist/text/embed.d.ts",
+            "import": {
+                "@intentic/src": "./src/text/embed.ts",
+                "default": "./dist/text/embed.js"
+            },
+            "require": {
+                "@intentic/src": "./src/text/embed.ts",
+                "default": "./dist/text/embed.js"
+            }
+        },
+        "./peer-dial": {
+            "types": "./dist/protocol/peer-dial.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/peer-dial.ts",
+                "default": "./dist/protocol/peer-dial.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/peer-dial.ts",
+                "default": "./dist/protocol/peer-dial.js"
+            }
+        },
+        "./peer-mcp-server": {
+            "types": "./dist/protocol/peer-mcp-server.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/peer-mcp-server.ts",
+                "default": "./dist/protocol/peer-mcp-server.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/peer-mcp-server.ts",
+                "default": "./dist/protocol/peer-mcp-server.js"
+            }
+        },
+        "./tunnel-ids": {
+            "types": "./dist/ids/tunnel-ids.d.ts",
+            "import": {
+                "@intentic/src": "./src/ids/tunnel-ids.ts",
+                "default": "./dist/ids/tunnel-ids.js"
+            },
+            "require": {
+                "@intentic/src": "./src/ids/tunnel-ids.ts",
+                "default": "./dist/ids/tunnel-ids.js"
+            }
+        },
+        "./ingress-contract": {
+            "types": "./dist/protocol/ingress-contract.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/ingress-contract.ts",
+                "default": "./dist/protocol/ingress-contract.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/ingress-contract.ts",
+                "default": "./dist/protocol/ingress-contract.js"
+            }
+        },
+        "./owner-ticket": {
+            "types": "./dist/policy/owner-ticket.d.ts",
+            "import": {
+                "@intentic/src": "./src/policy/owner-ticket.ts",
+                "default": "./dist/policy/owner-ticket.js"
+            },
+            "require": {
+                "@intentic/src": "./src/policy/owner-ticket.ts",
+                "default": "./dist/policy/owner-ticket.js"
+            }
+        },
+        "./ingress-protocol": {
+            "types": "./dist/protocol/ingress-protocol.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/ingress-protocol.ts",
+                "default": "./dist/protocol/ingress-protocol.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/ingress-protocol.ts",
+                "default": "./dist/protocol/ingress-protocol.js"
+            }
+        },
+        "./share-paths": {
+            "types": "./dist/ids/share-paths.d.ts",
+            "import": {
+                "@intentic/src": "./src/ids/share-paths.ts",
+                "default": "./dist/ids/share-paths.js"
+            },
+            "require": {
+                "@intentic/src": "./src/ids/share-paths.ts",
+                "default": "./dist/ids/share-paths.js"
+            }
+        },
+        "./capability-env": {
+            "types": "./dist/policy/capability-env.d.ts",
+            "import": {
+                "@intentic/src": "./src/policy/capability-env.ts",
+                "default": "./dist/policy/capability-env.js"
+            },
+            "require": {
+                "@intentic/src": "./src/policy/capability-env.ts",
+                "default": "./dist/policy/capability-env.js"
+            }
+        },
+        "./session-names": {
+            "types": "./dist/ids/session-names.d.ts",
+            "import": {
+                "@intentic/src": "./src/ids/session-names.ts",
+                "default": "./dist/ids/session-names.js"
+            },
+            "require": {
+                "@intentic/src": "./src/ids/session-names.ts",
+                "default": "./dist/ids/session-names.js"
+            }
+        },
+        "./transcript-fold": {
+            "types": "./dist/text/transcript-fold.d.ts",
+            "import": {
+                "@intentic/src": "./src/text/transcript-fold.ts",
+                "default": "./dist/text/transcript-fold.js"
+            },
+            "require": {
+                "@intentic/src": "./src/text/transcript-fold.ts",
+                "default": "./dist/text/transcript-fold.js"
+            }
+        },
+        "./webext-links": {
+            "types": "./dist/protocol/webext-links.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/webext-links.ts",
+                "default": "./dist/protocol/webext-links.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/webext-links.ts",
+                "default": "./dist/protocol/webext-links.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lock": "tsgo -b && node scripts/write-lock.mjs"
+    },
+    "dependencies": {
+        "@intentic/constants": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
+        "@intentic/registry": "workspace:*",
+        "@orpc/contract": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

@@ -1,0 +1,653 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import type { CredentialGate } from "@intentic/sandbox-contract";
+import { capabilitiesOf, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { unstubbed } from "@intentic/testing";
+import { createAgentsRegistry } from "../agents/registry/agents-registry.js";
+import { createAuthConnections } from "../auth/connections.js";
+import type { ControlScope } from "../auth/control-tokens.js";
+import { memoryDoorTokens } from "../auth/door-tokens.js";
+import { createMediaTickets } from "../auth/media-tickets.js";
+import { createWsTickets } from "../auth/ws-tickets.js";
+import type { Services } from "../composition.js";
+import { createLogger } from "../logger.js";
+import { createAnnouncer } from "../platform/boot/announce.js";
+import { createBootTracker } from "../platform/boot/boot.js";
+import { createPerfTracker } from "../platform/resources/perf.js";
+import { createReachReporter } from "../platform/listeners/reach-report.js";
+import { syncPairBurnPath, type SyncMode } from "../platform/sync.js";
+import { createPortForwards } from "../ports/port-forwards.js";
+import { rejectAuth } from "./route-client.testing.js";
+import { fakeFiles, fakeHistory, fakeProcesses, fakeServiceProcesses } from "./route-fakes.testing.js";
+import {
+    memoryAutomationsStore,
+    memoryCapabilitiesStore,
+    memoryDismissalsStore,
+    memoryMintedStore,
+    memoryPersonasStore,
+    memorySecretVault,
+    memoryThreadSessionsStore,
+} from "./route-stores.testing.js";
+import { createCredentialGrants } from "../secrets/credential-grants.js";
+import type { SecretUse } from "../secrets/secret-uses.js";
+import { IN_MEMORY, openSearchIndex } from "../sessions/search-index.js";
+import { windowOf } from "../sessions/transcript-record.js";
+import { spokenLinesOf } from "../sessions/transcript-search.js";
+import { pairings } from "../store/enrollment.js";
+import { createTerminalRunner } from "../terminal/terminal-run.js";
+import { noIsolation, testConfig } from "../testing.js";
+import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { workspacePaths } from "../workspace/workspace.js";
+
+/* The route harness: the daemon's `Services`, composed for a test, which every suite driving the daemon's HTTP
+ * surface builds on. Lifted out of app.integration.test.ts when that file reached 3,632 lines and 116 tests, one
+ * file that 92 of the last 573 commits had to touch, so two agents working on unrelated routes collided in it
+ * every time. The route suites live next to the routes they drive now; this is what they share, split by what a
+ * suite reaches for: the in-memory stores (route-stores.testing.ts), the recording fakes (route-fakes.testing.ts),
+ * the client and its auth stubs (route-client.testing.ts) and the turn runner (route-turns.testing.ts). Not part
+ * of the build (tsconfig excludes `*.testing.ts`), type-checked with the tests (tsconfig.test.json). */
+
+/* Where the agent worktrees' MAIN checkouts would be, a path under tmpdir that is never created, so on every
+ * host it is definitively absent. This suite drives the ROUTES; the worktree and land git mechanics have their
+ * own suites against real repos (worktrees.integration.test.ts, land.integration.test.ts). The land pass a turn runs at its end reads
+ * the main checkout with real git, so naming the product's own "/work" here made the outcome depend on whether
+ * the machine running the tests happens to have one: absent on CI, a LIVE repo on a developer's own intentic
+ * sandbox, where the land then shelled git at a worktree that was never created and failed the turn. Absent
+ * everywhere, the pass reports "main checkout vanished" and returns without spawning anything.
+ */
+const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
+
+// Where a conversation's checkout lives, in the layout the daemon uses. Shared by the worktree fake and by the
+// workspace scope composed from it, so the two cannot name different directories for the same conversation.
+const conversationDir = (id: string): string => `${HISTORY_ROOT}/worktrees/${id}`;
+
+/* The seams a route test names but never exhausts. `auth` has five members and a test cares about one; `git`
+ * has thirty-seven and a route touches two. Spelling the rest out per call site is what rotted: each new
+ * method landed in the daemon, none landed in the fakes, and the gap only spoke as a 500 from whichever route
+ * reached it first. Declared Partial here and completed by `unstubbed`, so a test still says exactly what it
+ * relies on, an unstubbed call names ITSELF, and growing one of these interfaces stops touching this file.
+ */
+export interface WideSeamOverrides {
+    readonly auth?: Partial<NonNullable<Services["auth"]>>;
+    readonly git?: Partial<Services["git"]>;
+    readonly usage?: Partial<Services["usage"]>;
+    readonly claudeStore?: Partial<Services["claudeStore"]>;
+    readonly cliProxy?: Partial<Services["cliProxy"]>;
+    readonly sandboxSettings?: Partial<Services["sandboxSettings"]>;
+    readonly iq?: Partial<Services["iq"]>;
+}
+export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
+
+// Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model. Exported
+// because `providerCatalogs` is one field holding a row per provider: a test that needs ONE provider to answer
+// differently spreads this and replaces its row, rather than restating the ones it does not care about.
+//
+// ENUMERATED on purpose, unlike the registry these stand in for: a test double is a claim about behaviour, and
+// deriving the claims would be testing the derivation. The compiler names any provider missing a row.
+export const testProviderCatalogs: Services["providerCatalogs"] = {
+    claude: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+    codex: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }) },
+    cursor: { models: async () => ({ models: [{ id: "auto", label: "Auto" }], default: "auto" }) },
+    grok: { models: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }) },
+    kimi: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
+    gemini: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
+    meta: { models: async () => ({ models: [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }], default: "muse-spark-1.2" }) },
+    zai: { models: async () => ({ models: [{ id: "glm-5.3", label: "GLM-5.3" }], default: "glm-5.3" }) },
+};
+
+/* The minted providers' slice, with nothing connected: the ordinary state of a test sandbox, and the one a turn
+ * on Meta or Z.ai is refused from. A FACTORY, not a constant, because the stores below hold state: two suites
+ * sharing one instance would have the first suite's connected plan still present in the second.
+ *
+ * A test that wants a connected provider calls `store.connect` on the sandbox it built, which is the same call
+ * the sign-in makes — rather than hand-building a store, which is how a double stops resembling the thing it
+ * stands in for.
+ *
+ * The sign-in itself is a driver that refuses: these doubles serve route suites, and a suite that wants a real
+ * handshake stands up a fake vendor and passes its own driver (minted/minted-login.integration.test.ts). A
+ * driver that tried to reach auth.meta.com from a unit test is the one thing worse than one that throws. */
+export const testMintedSlices = (): Services["minted"] => {
+    const slice = (providerName: string, models: { id: string; label: string }[]): Services["minted"]["meta"] => {
+        const catalog = { models: async () => ({ models, default: models[0]?.id ?? "" }), forget: () => {} };
+        return {
+            store: memoryMintedStore(providerName),
+            login: async () => {
+                throw new Error(`${providerName} sign-in is not available in tests: pass a driver`);
+            },
+            catalogOf: () => catalog,
+            catalog,
+        };
+    };
+    return {
+        meta: slice("Meta", [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }]),
+        zai: slice("Z.ai", [{ id: "glm-5.3", label: "GLM-5.3" }]),
+    };
+};
+
+export const services = (overrides: ServiceOverrides = {}): Services => {
+    const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
+    /* A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
+     * worktree git mechanics are stubbed, the worktree suites cover them against real git. Neither derived
+     * half is computed here: these suites drive the routes, and where a card's work stands, plus how much of
+     * it is still in the tree, belongs to the integration suites that have real git. Every agent this harness
+     * makes therefore reads at its turn lifecycle, with nothing landed missing.
+     *
+     * Hoisted out of the literal below because the workspace SCOPE is composed from it: whose copy of the
+     * workspace a read means is answered by the registry plus the worktree layout, and a second registry
+     * standing in for it there would let the two disagree. */
+    const agents = createAgentsRegistry(
+        { load: async () => [], save: async () => {} },
+        { of: () => "idle", refresh: async () => false, forget: () => {} },
+        { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
+    );
+    const workspace = workspacePaths(WORKSPACE_ROOT);
+    /* Real, like the registry above and for the same reason: a suite that enrolls a machine mints its pairing
+     * through this table and the route redeems it through the same one, so a stand-in would only be a second
+     * implementation of single-use to keep in step. It follows whatever config the test supplied, because a
+     * pairing table is per-history-root state like every store beside it. Nothing here writes to that root —
+     * only a REPLAYABLE pairing touches the burn file, and only the setup-time env token is one. */
+    const syncPairings = pairings<SyncMode>(syncPairBurnPath((rest.config ?? testConfig).historyRoot));
+    // The phrase index these suites search through: the production schema and the production SQL, on nothing.
+    const testSaid = openSearchIndex(IN_MEMORY);
+    /* Completed by `unstubbed`, not spelled out. What follows is only what these suites RELY on; every other
+     * member of Services answers with its own name if a route reaches it. That is what takes this file off the
+     * breakage path of the daemon growing a service: it used to enumerate all seventy members, so every feature
+     * that added one turned this fake red, always in CI, on main, after the merge, and never in the suite that
+     * cared. `komodoStore` was the last of those. */
+    const merged: Services = unstubbed<Services>("services", {
+        config: testConfig,
+        logger: createLogger(testConfig),
+        // No chain declared ⇒ converged from birth, so these tests exercise the routes and not a boot gate.
+        // The gate's own behaviour is covered below by a tracker with a declared chain.
+        boot: createBootTracker(createLogger(testConfig)),
+        // The real tracker, like every other suite's fake services: it is in-memory, its summary timer is
+        // unref'd, and the request middleware records through it on EVERY route below, a stub would be more
+        // code standing in for something that already costs nothing.
+        perf: createPerfTracker(createLogger(testConfig)),
+        // Real too, and never started: creating one registers nothing and arms no timer, so /health reads the
+        // `off` it reports on a daemon that has no platform to announce to, the loopback/test shape.
+        announcer: createAnnouncer(testConfig, createLogger(testConfig)),
+        // Its other half, on the same terms: never started, so /health reads the `off` it reports on a daemon
+        // with no public address to probe, which is exactly the loopback/test shape.
+        reach: createReachReporter(testConfig, createLogger(testConfig)),
+        workspace,
+        syncPairings,
+        /* The ledger as an empty memory shell: /environment folds it into every payload, so an unstubbed member
+         * would throw on the first ordinary read of any environment route. NOT the file store on a temp path —
+         * this module is a fixture the test-programs check reads through, and opening a temp tree in this closure would
+         * reclassify every route suite as machine-touching. The store's real semantics live in its own
+         * integration suite. */
+        runtimeInstalls: {
+            read: async () => ({ installs: [] }),
+            record: async () => {},
+            saveDrift: async () => {},
+            decline: async () => {},
+        },
+        processes: fakeProcesses(),
+        serviceProcesses: fakeServiceProcesses(),
+        dependencies: unstubbed<Services["dependencies"]>("dependencies", {
+            status: async () => [],
+            issueAt: async () => undefined,
+            requestInstall: async () => ({ projects: [], queued: [] }),
+            reconcileLand: async () => undefined,
+            watch: () => () => {},
+            subscribe: () => () => {},
+            subscribeFailures: () => () => {},
+        }),
+        // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
+        portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
+        scanPorts: async () => [],
+        terminalRun: createTerminalRunner(),
+        // The real thing: pure in-memory state with no side effects, and a fake would only re-implement the
+        // single-use rule the /system/ws-ticket test is there to check.
+        wsTickets: createWsTickets(),
+        // Real too, for the same reason: the path binding IS what /workspace/media checks, and a fake would
+        // only restate it.
+        mediaTickets: createMediaTickets(),
+        /* A backend host that is simply not running, the honest default for route tests: the extensions list
+         * reads statusOf per row (undefined ⇒ the host's own state answers), the /x proxy answers 503, and no
+         * extension token verifies. The supervisor's real behaviour is covered by its own integration suite,
+         * which spawns the actual host process. */
+        extensionBackend: {
+            start: async () => {},
+            restart: () => {},
+            stop: () => {},
+            status: () => ({ state: "stopped", extensions: [] }),
+            statusOf: () => undefined,
+            proxyTarget: () => undefined,
+            verifyExtensionToken: () => undefined,
+        },
+        panelToken: "panel-secret",
+        // The /vpn-scoped secret the in-container CLI presents. A fixed value here so a route test can present
+        // it; production mints one per boot.
+        agentToken: "agent-secret",
+        /* In-memory control-token fake: one fixed token per scope, named for it, so a middleware test can
+         * present the exact reach it means to exercise without a store file. `ict_valid` is the editor scope
+         * because that is the grant that existed first and the one most tests are about. */
+        // The doors' credentials, in memory: a test seeds one with `ensure` and presents it, exactly as an
+        // operator copies the URL off the row.
+        doorTokens: memoryDoorTokens(),
+        controlTokens: {
+            mint: async (label, scope) => ({ id: "ct-1", token: `ict_minted-${scope}-${label}` }),
+            resolve: async (presented) => {
+                const scope = ({ ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" })[presented] as
+                    | ControlScope
+                    | undefined;
+                return scope === undefined ? undefined : { id: `ct-${scope}`, label: `${scope} token`, scope };
+            },
+            touch: async () => undefined,
+            list: async () => [{ id: "ct-1", label: "test", scope: "editor", createdAt: 0 }],
+            revoke: async () => true,
+        },
+        info: undefined,
+        tools: [],
+        capabilities: memoryCapabilitiesStore(),
+        // No dev platform, so no TLS to terminate: the shape of every deployed daemon, already settled. A fake
+        // rather than unstubbed because the translator's compat entries read it on every capability write.
+        platformTunnel: { url: () => undefined, ready: Promise.resolve(), close: () => {} },
+        // Read while composing EVERY turn's environment (extension settings declared `secret` live here), not
+        // only by the routes that write settings, so it is a fake, not an unstubbed member.
+        extensionSecretVault: memorySecretVault(),
+        // Nothing stored and nothing spent, the state of a sandbox before its first secret. In-memory rather
+        // than unstubbed because the inventory route reads both on every call.
+        secretRegistry: async () => [],
+        secretUses: (() => {
+            const uses: SecretUse[] = [];
+            return {
+                record: async (use: SecretUse) => {
+                    uses.push(use);
+                },
+                all: async () => uses,
+            };
+        })(),
+        /* NOTHING GATED, which is the state of a sandbox whose owner has never put a credential behind a
+         * named person — and the state nearly every route suite here wants, because a gate changes what the
+         * inventory renders and what an exit is allowed to do. A suite that wants one writes it through the
+         * store. In-memory rather than unstubbed because the inventory route reads the policy on every call. */
+        credentialGates: (() => {
+            let gates: CredentialGate[] = [];
+            return {
+                list: async () => gates,
+                set: async (gate: CredentialGate) => {
+                    gates = [...gates.filter((entry) => entry.subject !== gate.subject), gate];
+                },
+                remove: async (subject: string) => {
+                    gates = gates.filter((entry) => entry.subject !== subject);
+                },
+                forName: async () => undefined,
+                forCapability: async () => undefined,
+            };
+        })(),
+        credentialGrants: createCredentialGrants(),
+        // Nothing is gated above, so the gate allows everything and asks nobody; the gated matrix is tested
+        // where the gate lives (secrets/credential-gate.test.ts).
+        credentialGate: { check: async () => ({ allow: true as const }) },
+        // Nothing declined by default: every route suite wants the catalog answering as it does on a sandbox
+        // nobody has said no on yet.
+        capabilityDismissals: memoryDismissalsStore(),
+        /* No personas by default, which is the state of a sandbox nobody has named one in. Note what that means for
+         * the suites here: an unattended turn reaches no logged-in account, because an unpinned wake is denied
+         * rather than waved through (personas/personas.ts). A suite that wants a wake to act as somebody
+         * builds the card AND the browser capability behind it. */
+        personas: memoryPersonasStore(),
+        automations: memoryAutomationsStore(),
+        // No held wakes: agents.list projects them as `held`, and no suite here holds one.
+        heldWakes: {
+            list: async () => [],
+            get: async () => undefined,
+            add: async (approval) => ({ ...approval, id: "held-1" }),
+            remove: async () => false,
+        },
+        // Inert turn journal: every fire path writes an in-flight entry and clears it, and nothing here resumes.
+        turnJournal: {
+            list: async () => [],
+            recordTurn: async () => {},
+            recordFire: async () => {},
+            clearTurn: async () => {},
+            clearFire: async () => {},
+        },
+        // In-memory thread sessions: every inbound-message fire (Front Desk, listener gateway) resolves which
+        // conversation it belongs to through this, and these suites only need it to answer consistently.
+        threadSessions: memoryThreadSessionsStore(),
+        activity: { append: async () => {}, list: async () => [] },
+        usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
+        // The schema's own defaults, not a copy of them, every flag is opt-in, so parsing an empty object is
+        // exactly what the daemon reads from a workspace that has never written a settings file.
+        sandboxSettings: unstubbed("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse({}),
+            set: async () => {},
+            ...sandboxSettings,
+        }),
+        // The shipped policy, for the same reason: a planned turn snapshots it for the judge before it
+        // dispatches, so every route that runs a turn reads it whether or not the suite is about safety.
+        safetyPolicy: unstubbed("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
+        // A connected account by default, so the /agent guard (no token + no env creds) doesn't short-circuit
+        // turns under test. Tests that exercise the disconnected path override this.
+        claudeStore: unstubbed("claudeStore", {
+            read: async (id) => (id === "default" ? { id: "default", label: "Claude", connectedAt: 0, accessToken: "tok-xyz" } : undefined),
+            write: async () => {},
+            clear: async () => {},
+            list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
+            withRefreshLock: async (_id, act) => act(),
+            logger: createLogger(testConfig),
+            ...claudeStore,
+        }),
+        // Every seat is live. On the turn path for the same reason providerRefusals is: the picker reads it to
+        // skip an account no organization will serve, and an answered turn clears whatever it holds.
+        claudeSeats: { read: async () => ({}), refuse: async () => {}, clear: async () => {} },
+        // No usage measured by default, an account that hasn't run a turn since its window reset reports none.
+        accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
+        // …and nothing sweeps for one: the reader would need a live OAuth usage endpoint to reach. Records
+        // and clears are swallowed for the same reason the store's are: the turn path writes through here.
+        headroom: {
+            refresh: async () => {},
+            record: async () => {},
+            clear: async () => {},
+            read: async () => ({}),
+            onChange: () => () => {},
+            start: () => () => {},
+        },
+        // Nothing has ever been refused. Both writes are on the turn path, a refusal is filed when the plan says
+        // no, and the account's standing refusal is settled the moment a turn produces content, so every test
+        // that runs a turn at all touches this store whether or not it is about refusals.
+        providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} },
+        // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
+        cliProxy: unstubbed("cliProxy", {
+            accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),
+            connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
+            complete: async () => {},
+            disconnect: async () => {},
+            models: async () => [],
+            headroom: { targets: async () => [] },
+            sharedUsageKey: async () => undefined,
+            turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
+            ...cliProxy,
+        }),
+        codexHome: `${WORKSPACE_ROOT}/${stateRelPath(".intentic/secrets/auth/", "codex")}`,
+        codexThreadExists: async () => true,
+        providerCatalogs: testProviderCatalogs,
+        // Held directly too, exactly as in composition, the native Codex turn's model resolution and its
+        // self-heal both read it, and neither goes through the table above.
+        codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
+        /* The direct per-provider catalogs the provider modules read (each module's `catalog`, and the arms
+         * that resolve a concrete model). Mirrors testProviderCatalogs row for row: `providerCatalogs` above is
+         * the DOUBLE for the record the registry would derive from these, so a suite that overrides one
+         * without the other is overriding exactly the seam it means to. */
+        claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+        geminiModels: {
+            models: async () => ({
+                models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text"] }],
+                default: "gemini-pro-agent",
+            }),
+        },
+        kimiModels: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
+        // The minted providers' stores, sign-ins and catalogs. Nothing connected, for the same reason Cursor's double
+        // below holds nothing: no guard depends on them, so the honest default is a sandbox where they were
+        // never set up, and the suites that exercise them say so.
+        minted: testMintedSlices(),
+        /* NOTHING CONNECTED by default, which is the opposite of the Claude double above and deliberately so.
+         * Claude's is populated because the /agent guard short-circuits every turn without it, so an empty one
+         * would break suites that are not about accounts at all. Nothing guards on Cursor, so the honest
+         * default is a sandbox where it has not been set up, and the suites that exercise it say so. */
+        cursorStore: {
+            read: async () => undefined,
+            write: async () => {},
+            clear: async () => {},
+            list: async () => [],
+            credentials: async () => [],
+            logger: createLogger(testConfig),
+        },
+        cursorModels: { models: async () => ({ models: [{ id: "auto", label: "Auto" }], default: "auto" }), item: async () => undefined },
+        // Registered but never consulted: with no live turn the gate answers allow, which is what an unwired
+        // hook service does anyway.
+        cursorHooks: {
+            start: async () => {},
+            register: () => () => {},
+            ready: () => false,
+            paths: () => ({ socket: "", script: "", hooks: "" }),
+            close: async () => {},
+        },
+        async *cursorAgent() {
+            yield { kind: "done" };
+        },
+        history: fakeHistory(),
+        async *agent() {
+            yield { kind: "done" };
+        },
+        async *codexAgent() {
+            yield { kind: "done" };
+        },
+        async *grokAgent() {
+            yield { kind: "done" };
+        },
+        openCode: {
+            client: async () => ({}) as never,
+            stop: async () => {},
+            events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
+            watch: async () => {},
+
+            connected: async () => false,
+            sessionExists: async () => true,
+            xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
+            recordModels: async () => {},
+            disconnect: async () => {},
+        },
+        async *intentic() {},
+        // Thirty-seven methods, of which the routes below reach a dozen; the rest stay unstubbed and name
+        // themselves if a route ever does reach one.
+        git: unstubbed("git", {
+            init: async () => {},
+            status: async () => ({ branch: "main", dirty: false, files: [] }),
+            listFiles: async () => [],
+            commitAll: async () => false,
+            clone: async () => {},
+            changedFiles: async () => ({ conflicted: [], staged: [], unstaged: [], blobs: new Map() }),
+            stagePaths: async () => {},
+            unstagePaths: async () => {},
+            commitIndex: async () => false,
+            discardPaths: async () => {},
+            deleteTag: async () => {},
+            pushTag: async () => ({ ok: true as const }),
+            listBranches: async () => [],
+            listRemoteBranches: async () => [],
+            createBranch: async () => {},
+            deleteBranch: async () => {},
+            remoteState: async () => ({ ahead: 0, behind: 0 }),
+            // Not mid-anything, which is every repo almost all of the time, a test about a halted one overrides it.
+            operationInProgress: async () => undefined,
+            abortOperation: async () => {},
+            stashList: async () => [],
+            stashChanges: async () => [],
+            stashPush: async () => ({ ok: true as const }),
+            stashApply: async () => ({ ok: true as const }),
+            stashDrop: async () => {},
+            undoableAction: async () => undefined,
+            undoLastAction: async () => ({ ok: false as const, reason: "nothing to undo" }),
+            fetchRemote: async () => ({ ok: true as const }),
+            pullRemote: async () => ({ ok: true as const }),
+            stagedFileDiff: async () => ({}),
+            unstagedFileDiff: async () => ({}),
+            fileDiff: async () => ({}),
+            ...git,
+        }),
+        agents,
+        // Inert: archive/discard call its hard stop on every press, and a route suite has no tmux server,
+        // no stamped processes and no browsers to reap, the reaper's own policy is covered in its unit suite.
+        reaper: { start: () => {}, stop: () => {}, sweep: async () => {}, reapConversation: async () => {}, metrics: () => ({}) },
+        agentWorktrees: {
+            conversationDir,
+            worktreeDir: (id, repo) => (repo === "root" ? `${HISTORY_ROOT}/worktrees/${id}` : `${HISTORY_ROOT}/worktrees/${id}/${repo}`),
+            mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
+            exists: async () => false,
+            // A live checkout, so the routes read the worktree path, the steady state these fakes model.
+            attached: async () => true,
+            snapshot: async () => [{ repo: "root", base: "a".repeat(40) }],
+            ensure: async (id) => ({
+                cwd: `${HISTORY_ROOT}/worktrees/${id}`,
+                branch: `agent/${id}`,
+                repos: [{ repo: "root", base: "a".repeat(40) }],
+            }),
+            remove: async () => {},
+            retire: async () => {},
+            reapRepoCheckout: async () => {},
+            prune: async () => {},
+            withRepoLock: (_repo, task) => task(),
+        },
+        /* Whose copy of the workspace a read means (workspace/workspace-scope.ts). Composed from the same two
+         * lookups the daemon uses, an unscoped read is the shared tree, exactly as in production, and a scoped
+         * one resolves against a worktree dir that does not exist here, which is the archived-checkout case the
+         * resolver's own suite covers on real disk.
+         *
+         * Read through `merged` rather than off the locals, like the session reader below, because a suite that
+         * points `workspace` at a temp dir must move the file routes with it, a scope frozen at /work would
+         * have every read answer from a tree that suite never wrote to. */
+        workspaceScope: {
+            get main() {
+                return merged.workspace.root;
+            },
+            entry: (id) => merged.agents.entry(id),
+            worktreeDir: conversationDir,
+        },
+        // Namespace isolation off, which is what a test runner (and any container without CAP_SYS_ADMIN) really
+        // gets: turns then run straight in the worktree path, the behaviour every route assertion below expects.
+        // The isolation.integration.test.ts suite covers the plan these routes would build when it IS available.
+        // No mount capability, like a container launched without CAP_SYS_ADMIN, the plan still describes where
+        // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
+        turnIsolation: noIsolation(WORKSPACE_ROOT),
+        // No agent has landed anything into these fake repos, so every changed file is the user's, and with no
+        // ids to attribute, `identify` has nobody to resolve.
+        agentOrigins: { forRepo: async () => ({}), identify: () => ({}), metrics: () => ({}) },
+        files: fakeFiles(),
+        workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0, barren: [] }),
+        // Inert resident search, no index, no rg. The search route test overrides `run` with a canned outcome.
+        iq: unstubbed<Services["iq"]>("iq", {
+            metrics: () => ({
+                files: 0,
+                generation: 0,
+                dirtySequence: 0,
+                appliedSequence: 0,
+                revalidated: true,
+                sweepAgeMs: 0,
+                embedBacklog: 0,
+                queryWorker: { live: false, pendingRequests: 0 },
+            }),
+            run: async () => ({
+                result: { mode: "q", total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" as const }, truncated: false },
+                text: "",
+                exitCode: 1 as const,
+            }),
+            health: async () => ({
+                totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
+                hotspots: [],
+                modules: [],
+                freshness: { state: "fresh" as const },
+            }),
+            invalidateHealth: () => {},
+            markDirty: () => {},
+            warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
+            close: async () => {},
+            ...iq,
+        }),
+        sessions: {
+            list: async () => [],
+            read: async () => [],
+            // Empty is the shape a runtime with no readable store answers with, so the default here is the
+            // documented fallback: an interrupted turn recorded from its prompt alone.
+            readTail: async () => [],
+            search: async () => [],
+            exists: async () => true,
+        },
+        members: { list: async () => [], add: async () => {}, remove: async () => {} },
+        /* Loopback mode unless a test asks for the exposed daemon, `auth: undefined` is the mode, so it is the
+         * ABSENCE of the key that means loopback, not an override that happens to be undefined. (CORS is not
+         * part of this switch: it emits in every mode, from config.webOrigin, see createApp.) */
+        auth:
+            auth === undefined
+                ? undefined
+                : {
+                      authorize: rejectAuth,
+                      authorizeOwner: rejectAuth,
+                      authorizeRetirement: rejectAuth,
+                      mintSession: async () => ({ token: "sess-token", expiresAt: 0 }),
+                      // Owner-only and destructive: a suite that reaches it without saying so is asserting on a
+                      // rotation that never happened, so the default names itself rather than answering 200.
+                      rotateSessions: async () => {
+                          throw new Error("auth.rotateSessions was called, and this test did not stub it");
+                      },
+                      disableBrowserAccess: async () => {
+                          throw new Error("auth.disableBrowserAccess was called, and this test did not stub it");
+                      },
+                      connections: createAuthConnections(),
+                      ...auth,
+                  },
+        authRoot: `${WORKSPACE_ROOT}/${STATE_DIR}`,
+        // A conversation's transcript defaults to the same claude-code-only shape production reads before a
+        // provider-native record exists: the SDK session `sessions.read` already stands in for (agent-transcript.ts),
+        // keyed off the same registry `sessionIdOf` the route asks. Reads through `merged` (not the pre-override
+        // fakes above) so a test overriding `sessions.read` or `agents` is exactly what a transcript() call sees.
+        transcripts: {
+            read: async (agent) => {
+                const sessionId =
+                    capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? merged.agents.sessionIdOf(agent.id) : undefined;
+                return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
+            },
+            // Derived from `read` through production's own window rule, not a hand-rolled slice: a fake that
+            // paged differently than the daemon would let a route test agree with a client that the real
+            // daemon then disagrees with.
+            page: async (agent, window = {}) => windowOf(await merged.transcripts.read(agent), window),
+            // Inert, and present because it is on the turn path: a fork's first turn opens through THIS door
+            // (openTurnTranscript), so a fake without it fails every forkOf turn with a bare "Internal server
+            // error", and nothing catches that from the types: tsconfig excludes *.test.ts, so the fake rots in
+            // silence. There is no record behind the fake to copy a prefix out of.
+            fork: async () => {},
+            append: async () => {},
+            // Both derived from `read`, so the fake's three answers cannot disagree with each other the way a
+            // hand-written constant would. `count` is on the TURN path (it files each checkpoint's index), so
+            // omitting it here is the failure mode this fake's comment above describes: every agent.run test in
+            // the file dies on a bare "Internal server error" and no type catches it.
+            count: async (agent) => (await merged.transcripts.read(agent)).length,
+            // Inert: there is no store behind this fake to shorten. It still answers what a real truncate WOULD
+            // have dropped, so a rewind test can assert on the count without standing up a transcript file.
+            truncate: async (agent, keep) => Math.max(0, (await merged.transcripts.read(agent)).length - keep),
+        },
+        /* THE REAL INDEX, in memory, not a fake of it. The phrase search is one SQL query now, so a stand-in
+         * here would mean no suite ever runs the query, the folding, or the user-words-win ordering that the
+         * routes' whole behaviour rests on: exactly the way this file's other fakes have rotted before.
+         *
+         * `search` syncs from `transcripts.read` first because the fake's `append` is inert (production's index
+         * is written by settling turns, and here nothing settles into a store). A handful of registry entries
+         * per test makes that free, and it keeps `read` the fake's single source of truth, which is the property
+         * every comment above is protecting. */
+        saidIndex: {
+            search: async (needle, kind, caseSensitive) => {
+                if (kind === "conversation") {
+                    for (const id of merged.agents.ids()) {
+                        const entry = merged.agents.entry(id);
+                        if (entry !== undefined) {
+                            testSaid.put(id, "conversation", "test", spokenLinesOf(await merged.transcripts.read(entry)));
+                        }
+                    }
+                }
+                return testSaid.search(needle, kind, caseSensitive);
+            },
+            backfill: async () => {},
+            indexing: () => false,
+        },
+        purgeConversationState: async () => {},
+        ...rest,
+    });
+    return merged;
+};
+
+// A translator-backed config and a proxy with a connected Codex account, the pair every subscription-path
+// turn test stands on, in the daemon's own shape.
+export const withTranslator = { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local-bearer" } };
+export const codexConnectedProxy = {
+    accounts: async () => ({ codex: [{ name: "codex-user.json", label: "user@example.com" }], grok: [], kimi: [], gemini: [] }),
+    connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
+    complete: async () => {},
+    disconnect: async () => {},
+    models: async () => [],
+};

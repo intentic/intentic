@@ -1,0 +1,304 @@
+import { upgradeWebSocket } from "@hono/node-server";
+import { errorMessage } from "@intentic/base/errors";
+import type { WSContext } from "hono/ws";
+import type { BrowserContext, Page } from "playwright";
+import { ensureDisplay } from "../cast/display.js";
+import { startLiveView, type LiveView } from "../cast/live-view.js";
+import { armPasskeys } from "../tools/passkeys.js";
+import type { ScreencastClientMessage } from "../cast/screencast.js";
+import { resolveProfileExit } from "./browser-exit.js";
+import { acceptLanguage, browserFingerprint } from "./fingerprint.js";
+import { acquireProfileLock, markConnected, passkeyPath, profileOwner, releaseProfileLock, sessionDir } from "./session-store.js";
+import { stealthInit } from "./stealth.js";
+import type { Services } from "../../composition.js";
+import { redeemTicket } from "../../auth/ws-tickets.js";
+import { browserUrls, contributionKey, contributionRegistry } from "../../capabilities/contributions.js";
+import { identityLoginUrl } from "../../capabilities/handlers/identity.handler.js";
+
+// The socket the handlers below answer on, named once so each of them does not repeat hono's generic.
+type Socket = WSContext;
+
+/* The /system/browser-profile route: THE OWNER'S OWN HANDS ON ONE CONNECTED ACCOUNT'S BROWSER. Like
+ * /system/terminal it's a WebSocket the header-less browser drives, so it authorizes token+connect from the
+ * query string (app.ts exempts it from the bearer middleware). The daemon launches the persistent
+ * (profile-backed) Chromium for one account, screencasts it to the client, and forwards the owner's
+ * mouse/keyboard back over CDP.
+ *
+ * ADDRESSED BY CAPABILITY, NOT BY SITE: the window opens ONE ENTRY, a browser account, or an IDENTITY, whose
+ * "site" is its own email provider and whose sign-in is the one login this product keeps in the owner's hands
+ * (an automated Google login is exactly what Google blocks). Several accounts of one site can be connected at
+ * once (reddit-work, reddit-personal). The PROFILE the window opens is the entry's owner's (profileOwner): an
+ * identity-born account's window is a window into its identity's shared browser, which is the point, the
+ * owner clearing a captcha on Reddit is sitting in the same browser the Google session lives in.
+ *
+ * Two modes over one window, because they are the same browser at two moments of its life:
+ *   login , open the site's sign-in page; when the owner clicks Done the profile holds the auth cookies
+ *            and the session is marked connected, so the agent's @playwright/mcp reuses it.
+ *   browse, open the site's home page in the profile that ALREADY has those cookies. Nothing is marked:
+ *            this is the owner using their own connected account by hand (check a message, clear a captcha,
+ *            change a setting the agent shouldn't), and a session it cannot judge is not one to re-attest.
+ * Browsing needs an address bar, which a screencast of the page alone can't provide (there is no window chrome
+ * in the picture), hence the `go`/`back`/`reload` frames and the `url` frames going the other way.
+ *
+ * One window per PROFILE at a time (a persistent profile can't be opened twice), the same lock that parks the
+ * agent's browser tools for that profile while the owner has the wheel. Two standalone accounts stay
+ * independently drivable; an identity's browser is one browser, so holding it holds every account inside. */
+export const createBrowserProfileRoute = (services: Services) =>
+    upgradeWebSocket((c) => {
+        // The capability id of the entry this window drives, what "done" marks connected.
+        let account: string | undefined;
+        // Whose profile that entry lives in (profileOwner), the dir, the passkeys and the lock are all its.
+        let owner: string | undefined;
+        let context: BrowserContext | undefined;
+        let view: LiveView | undefined;
+        let closed = false;
+        let unregisterAccess: (() => void) | undefined;
+        // Whether finishing means "this account is now connected" (login) or just "close the window" (browse).
+        let signingIn = true;
+
+        const cleanup = async (): Promise<void> => {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            unregisterAccess?.();
+            unregisterAccess = undefined;
+            await view?.stop();
+            view = undefined;
+            try {
+                await context?.close();
+            } catch (err) {
+                services.logger.warn({ err }, "browser-profile: context close failed");
+            }
+            if (owner !== undefined) {
+                releaseProfileLock(owner);
+            }
+        };
+
+        // Finish. Close first so Chromium flushes the profile's cookies to disk, then mark connected: a browse
+        // window changes nothing about whether the account is connected, so it only closes.
+        const onDone = async (ws: Socket): Promise<void> => {
+            const finished = account;
+            await cleanup();
+            if (signingIn && finished !== undefined) {
+                await markConnected(services.workspace.root, finished);
+            }
+            ws.send(JSON.stringify({ type: "saved" }));
+            ws.close(1000, "done");
+        };
+
+        /* THE WINDOW-LEVEL HALF of this socket: finishing, and the clipboard. Everything that used to be here
+         * besides those two is GONE, and the deletions are the point of the X-capture design rather than a side
+         * effect of it:
+         *
+         *   - NO ADDRESS BAR. `go`, `back` and `reload` existed because the picture was the page alone, so the
+         *     browser's own chrome had to be redrawn in HTML and wired back to Playwright calls. The picture is
+         *     the window now; the real address bar and the real back button are in it, and XTEST clicks them.
+         *   - NO DROP-DOWN PROBE. `selectOption` existed because an open <select> is a native menu Chromium
+         *     draws outside the page, so no frame ever carried it and the options had to be read out of the DOM
+         *     and re-drawn as a menu of our own. It is on the display, so it is in the picture, so it is
+         *     clickable.
+         *
+         * The clipboard stays, because it is not a picture problem: the Chromium at the far end has a clipboard
+         * inside the sandbox that nothing on the owner's machine can read, and that is true however good the
+         * video is. */
+        const handleWindow = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> => {
+            if (message.type === "done") {
+                await onDone(ws);
+                return true;
+            }
+            if (message.type === "selection") {
+                // Ctrl+C over the picture: hand back what the page has selected so the client can put it on the
+                // clipboard of the machine the person is actually sitting at. Answered even when empty, because
+                // the client is waiting on it before it lets the keystroke go.
+                ws.send(JSON.stringify({ type: "selection", text: (await view?.selection()) ?? "" }));
+                return true;
+            }
+            return false;
+        };
+
+        return {
+            onOpen: async (_event, ws) => {
+                const url = new URL(c.req.url);
+                try {
+                    // Signing a live Chromium into a service adds a credential, so it takes the operating tier.
+                    const caller = redeemTicket(services, url, "maintainer");
+                    if (caller !== undefined) {
+                        unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
+                    }
+                } catch (err) {
+                    services.logger.warn({ err }, "browser-profile ticket rejected");
+                    ws.close(1008, "unauthorized");
+                    return;
+                }
+                // An entry is real iff the manifest holds a browser account or an identity with that id, the
+                // profile this window opens is its OWNER's, so an id nobody added has no profile to open.
+                const requested = url.searchParams.get("capability") ?? "";
+                const capability = await services.capabilities.get(requested);
+                if (capability === undefined || (capability.kind !== "browser" && capability.kind !== "identity")) {
+                    ws.close(1008, "invalid capability");
+                    return;
+                }
+                let urls: { loginUrl: string; homeUrl: string };
+                if (capability.kind === "browser") {
+                    // Its CARD is what knows where to open, real iff an enabled extension declares it, the same
+                    // registry the browser handler resolves against.
+                    const contribution = (await contributionRegistry(services)).get(contributionKey("browser", capability.config.platform));
+                    if (contribution === undefined || contribution.spec.kind !== "browser") {
+                        ws.close(1008, "invalid platform");
+                        return;
+                    }
+                    // Pinned by a site card, answered on the form by a generic session (see browserUrls). Absent from
+                    // both is impossible here, the add that wrote this entry would have failed, so a missing pair is
+                    // a rotted install, and closing says so rather than opening a window on nothing.
+                    const resolved = browserUrls(contribution.spec, capability.config);
+                    if (resolved === undefined) {
+                        ws.close(1008, "this connection has no page to open: re-add it");
+                        return;
+                    }
+                    urls = resolved;
+                } else {
+                    // An identity's "site" is its own email provider: signing in and browsing both start there,
+                    // because the provider's landing page IS the webmail once the session exists.
+                    const login = identityLoginUrl(capability.config);
+                    urls = { loginUrl: login, homeUrl: login };
+                }
+                signingIn = url.searchParams.get("mode") !== "browse";
+                // Signed in, a login page only bounces to the feed, so a browse window starts where the owner
+                // means to be. The two are separate answers because some sites sign in somewhere else entirely
+                // (YouTube at accounts.google.com).
+                const startUrl = signingIn ? urls.loginUrl : urls.homeUrl;
+                const profile = profileOwner(capability);
+                if (!acquireProfileLock(profile)) {
+                    ws.close(1008, "this browser is already open in another window");
+                    return;
+                }
+                account = requested;
+                owner = profile;
+                /* A profile BOUND TO A GEO EXIT is resolved before Chromium starts, and a refusal closes the
+                 * window rather than opening one. Opening anyway would sign this account in from the sandbox's
+                 * own address, which for an account whose whole purpose is to appear to be somewhere else is
+                 * the one outcome worth failing loudly over, a login is exactly when a site records where you
+                 * are. Starts the exit if it was down; see browser-exit.ts. */
+                const bound = await resolveProfileExit(await services.capabilities.list(), profile).catch((error: unknown) => ({
+                    refusal: `its exit could not be resolved (${errorMessage(error)})`,
+                }));
+                if (bound !== undefined && "refusal" in bound) {
+                    ws.send(JSON.stringify({ type: "error", message: bound.refusal }));
+                    await cleanup();
+                    ws.close(1011, "exit unavailable");
+                    return;
+                }
+                const boundExit = bound?.exit;
+                let playwright: typeof import("playwright");
+                try {
+                    playwright = await import("playwright");
+                } catch {
+                    ws.send(JSON.stringify({ type: "error", message: "browser not installed, rebuild the sandbox (Environment card) first" }));
+                    await cleanup();
+                    ws.close(1011, "browser missing");
+                    return;
+                }
+                try {
+                    /* Run HEADED on a virtual display of this profile's OWN: the headless shell is
+                     * fingerprinted and blocked by anti-bot WAFs (Reddit's "network security"), and the display
+                     * is now also the picture the owner watches, so it cannot be shared with another browser
+                     * (display.ts says why). Xvfb rides the capability's Dockerfile fragment. */
+                    const display = await ensureDisplay(profile);
+                    /* THE SAME DEVICE THE AGENT'S BROWSER PRESENTS, derived from the same seed for the same
+                     * profile owner (fingerprint.ts). This window and @playwright/mcp share one profile, so a
+                     * site watches the owner sign in here and then meets the agent later on what has to be the
+                     * same machine: a device that changes underneath a live cookie is precisely what
+                     * session-binding checks are built to catch, and the answer is a logout or a captcha. */
+                    const fingerprint = await browserFingerprint(services.workspace.root, profile, boundExit?.place);
+                    context = await playwright.chromium.launchPersistentContext(sessionDir(services.workspace.root, profile), {
+                        headless: false,
+                        env: { ...process.env, DISPLAY: display.name },
+                        /* THE WINDOW IS THE VIEWPORT. `null` turns off Playwright's device-metrics emulation so
+                         * the page is exactly the size of the window around it — which matters because the
+                         * picture is now the whole DISPLAY, chrome included, and an emulated viewport inside a
+                         * differently-sized window renders clipped. It is also what makes the coordinates one
+                         * space: a point in the picture is a point on the display is a point XTEST can click. */
+                        viewport: null,
+                        /* Look like a normal desktop browser (headed full Chromium already has a real UA /
+                         * window.chrome). The clock and the language come from the fingerprint, which was
+                         * derived with this profile's exit as its place, so a bound profile claims the country
+                         * its traffic actually leaves by and an unbound one claims the sandbox's. */
+                        locale: fingerprint.locale,
+                        timezoneId: fingerprint.timezoneId,
+                        // Explicit, not derived from `locale`: Playwright would send only the one tag, which
+                        // contradicts the `navigator.languages` the init script installs a few lines below.
+                        extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
+                        // Where that traffic goes. Set together with the pair above, never one without the
+                        // other: an address in Berlin under a New York clock is worse than not having moved.
+                        ...(boundExit === undefined ? {} : { proxy: { server: boundExit.proxy } }),
+                        // --no-sandbox: Chromium runs as root and the container IS the isolation boundary. --disable-dev-shm-usage:
+                        // a container's tiny /dev/shm crashes Chromium. The blink flag drops navigator.webdriver.
+                        // --window-position pins the window to the origin (there is no window manager on an
+                        // Xvfb, so it lands where Chromium asks), which is what makes a grab of the screen a
+                        // grab of exactly this window.
+                        args: [
+                            "--no-sandbox",
+                            "--disable-blink-features=AutomationControlled",
+                            "--disable-dev-shm-usage",
+                            "--window-position=0,0",
+                            `--window-size=${display.width},${display.height}`,
+                        ],
+                    });
+                    // Patch the residual server tells (SwiftShader GPU, a host's core count) before the first navigation.
+                    await context.addInitScript(stealthInit(fingerprint));
+                    const ctx = context;
+                    // A persistent context opens with one page; make sure it exists BEFORE the screencast starts,
+                    // so the stream has something to bind to (it follows every later page, popups included,
+                    // by itself; see screencast.ts).
+                    const page = ctx.pages()[0] ?? (await ctx.newPage());
+                    // The profile owner's software security key, plugged in BEFORE the first navigation: this
+                    // window is where the owner enrolls it (a site's "Add security key" lands on the virtual
+                    // authenticator and persists) and where a stored one answers a 2FA prompt. One key per
+                    // browser, an identity's accounts share theirs the way its cookies are shared; two
+                    // standalone accounts enroll their own, as they would on two physical keys.
+                    const storePath = passkeyPath(services.workspace.root, profile);
+                    const arm = (target: Page): void =>
+                        void armPasskeys(ctx, target, storePath).catch((err: unknown) =>
+                            services.logger.warn({ err }, "browser-profile: passkey arm failed"),
+                        );
+                    ctx.on("page", arm);
+                    arm(page);
+                    view = await startLiveView(ctx, profile, { send: (data) => ws.send(data) }, (reason) => {
+                        services.logger.warn({ reason }, "browser-profile stream failed");
+                    });
+                    // Don't hard-fail on a slow page; the user can still interact once it paints.
+                    await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
+                        services.logger.warn({ err }, "browser-profile initial nav");
+                    });
+                } catch (err) {
+                    services.logger.warn({ err }, "browser-profile launch failed");
+                    ws.send(JSON.stringify({ type: "error", message: err instanceof Error ? err.message : "failed to start the browser" }));
+                    await cleanup();
+                    ws.close(1011, "launch failed");
+                }
+            },
+            onMessage: async (event, ws) => {
+                if (view === undefined || closed) {
+                    return;
+                }
+                let message: ScreencastClientMessage;
+                try {
+                    message = JSON.parse(String(event.data)) as ScreencastClientMessage;
+                } catch {
+                    return;
+                }
+                // Window-level first (finishing, the clipboard); whatever it does not claim is a pointer or a
+                // keystroke for the browser, and live-view.ts decides where those actually land.
+                if (!(await handleWindow(message, ws))) {
+                    await view.input(message);
+                }
+            },
+            onClose: () => {
+                void cleanup();
+            },
+            onError: () => {
+                void cleanup();
+            },
+        };
+    });
