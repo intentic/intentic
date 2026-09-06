@@ -3,7 +3,7 @@ import { computed, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import { closedDrafts } from "../chat/closedDrafts";
 import { draftPreview } from "../chat/draftPreview";
-import type { TabFacts } from "../chat/tabFacts";
+import { type TabFacts, unasked } from "../chat/tabFacts";
 import type { StoredTab } from "../chat/tabSnapshot";
 import { rememberedProviderFor } from "../chat/turnDefaults";
 import { useChat } from "../chat/useChat";
@@ -246,7 +246,14 @@ export const fleet = computed<FleetAgent[]>(() => {
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
     // not be rendered a second time by this one, whatever the latch says.
-    const drafts = strip.tabs.filter((tab) => !tab.registered && !carded.has(tab.id)).map((tab): FleetAgent => draftCard(tab, unsent.get(tab.id)));
+    /* ...EXCEPT THE BLANK A PANEL IS ONLY STANDING ON (tabFacts.unasked): the chat a window with nothing to
+     * restore opens on, and the one a close leaves behind when it takes the last card. Every other tab here
+     * stands for something the user did; that one stands for the panel needing to show something, and carding it
+     * put "New agent" in this lane wearing the selection ring the moment somebody closed their last chat. It
+     * joins the board on its own the instant anything happens in it, which is what `unasked` stops answering to. */
+    const drafts = strip.tabs
+        .filter((tab) => !tab.registered && !carded.has(tab.id) && !unasked(tab))
+        .map((tab): FleetAgent => draftCard(tab, unsent.get(tab.id)));
     /* ARCHIVED, AND BACK ON THE BOARD ANYWAY, the sessions the user has started writing in.
      *
      * Reading an agent out of the archive opens its chat by design, and typing there is the most ordinary thing

@@ -745,9 +745,10 @@ const total = computed(
     () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length,
 );
 /* HAS ANYTHING EVER HAPPENED HERE: a different question from `total`, and the one the first-run screen turns
- * on. The docked chat always holds one conversation, and a conversation the fleet has never heard of is a
- * `draft` CARD on this board (useAgents.fleet): so a workspace where nobody has done anything still counts one,
- * `total` is never 0 on it, and the first-run screen would be dead on exactly the workspace it exists for.
+ * on. A conversation the fleet has never heard of is a `draft` CARD on this board (useAgents.fleet), and a
+ * draft is a chat the user asked for rather than work: pressing New agent and typing nothing must not turn the
+ * first-run screen off, or it is dead on exactly the workspace it exists for. (The blank a panel is left
+ * standing on when nothing is open is not even carded: tabFacts.unasked.)
  *
  * An untouched draft is the empty composer one column over, not work. Anything else counts, the archive
  * included: agents that ran and were filed away are a history, and this board should show a person with one the

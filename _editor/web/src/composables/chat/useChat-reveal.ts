@@ -344,6 +344,10 @@ export const draftConversation = (): Conversation => {
      * created — a model the user had not chosen, under a heading saying "New agent". Safe because the draft is
      * untouched by definition, and free because a pick made in that very draft IS the remembered pick. */
     open.seedPicks();
+    /* ...AND THE PRESS IS THE ASKING. A blank the panel was only standing on (Conversation.standIn) has no card
+     * on the fleet board by design; handed back for a New agent press it becomes a chat the user started, and a
+     * press that left the board looking exactly as it did is a press that did nothing. */
+    open.standIn.value = false;
     return open;
 };
 

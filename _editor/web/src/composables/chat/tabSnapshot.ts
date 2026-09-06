@@ -103,6 +103,12 @@ export interface StoredTab {
      * flag would pin a tab nobody asked to keep and dropping the tab would close the chat being read. A peek is
      * always the focused tab, so it comes back as what it was: still a look. */
     readonly peek?: boolean;
+    /* Whether this tab is the blank the panel was only standing on (Conversation.standIn): the chat a window
+     * with nothing to restore opens on, and the one a close leaves behind when it takes the last card. Persisted
+     * beside the look above and for the same reason — this snapshot is the pop-out handoff as well as the reload
+     * — since a flag dropped here would put a "New agent" card on the fleet board, selected, every time the
+     * panel changed windows. */
+    readonly standIn?: boolean;
     readonly title?: string;
     readonly draft: string;
     // When this composer first held something unsent (Conversation.draftAt), so the unsent mark's age survives
@@ -146,6 +152,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     session: conversation.session.value,
     forkOf: conversation.pendingForkOf.value,
     peek: conversation.peek.value,
+    standIn: conversation.standIn.value,
     title: conversation.title.value ?? undefined,
     draft: conversation.draft.value,
     draftAt: conversation.draftAt.value,
@@ -288,6 +295,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readFlag(`fast`, raw[`fast`]),
         ...readFlag(`autoContinue`, raw[`autoContinue`]),
         ...readFlag(`peek`, raw[`peek`]),
+        ...readFlag(`standIn`, raw[`standIn`]),
         ...readFlag(`tierHold`, raw[`tierHold`]),
         ...readTier(raw[`tier`]),
         ...readHarness(raw[`harness`]),

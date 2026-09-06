@@ -51,6 +51,17 @@ export const untouchedDraft = (conversation: Conversation): boolean => untouched
  * reason about is the one with a message at stake. */
 const transient = (conversation: Conversation): boolean => untouchedDraft(conversation) || (conversation.peek.value && !conversation.unsent.value);
 
+/* THE BLANK A WINDOW SHOWS WHEN NOTHING IS OPEN (Conversation.standIn). Minted here rather than by a bare
+ * `new Conversation()` at each site, because both floors leave the same thing behind: a window with no tabs to
+ * restore, and a close that took the last card. What the flag buys is on the fleet board, which cards every
+ * open tab the fleet has never heard of: a chat the user never asked for gets no card there and takes no ring,
+ * so closing the last card selects nothing rather than selecting a "New agent" nobody started. */
+const standIn = (): Conversation => {
+    const conversation = new Conversation();
+    conversation.standIn.value = true;
+    return conversation;
+};
+
 /** Promote a peeked tab into an ordinary one, named by id: what the card's pin, its menu row and the surfaces
  *  that hold an id rather than a live chat press. A chat acted on promotes itself (Conversation.keep). */
 export const keepChat = (conversationId: string): void => {
@@ -233,6 +244,10 @@ export const restoreTab = (tab: StoredTab): Conversation => {
      * close the chat they are in the middle of reading. It is always the focused tab, so a restored peek is
      * simply "still a look", swept by the first click that goes elsewhere. */
     conversation.peek.value = tab.peek === true;
+    // ...and a blank the panel was only standing on comes back as one (Conversation.standIn). It rides the same
+    // snapshot for the same reason the look above does: this is the pop-out handoff as well as the reload, and a
+    // flag dropped here would put a "New agent" card on the fleet board every time the panel changed windows.
+    conversation.standIn.value = tab.standIn === true;
     restoreComposer(conversation, tab);
     conversation.title.value = tab.title ?? null;
     // Restore the harness before the model, the native/claude-code model lists diverge for codex/grok.
@@ -317,7 +332,9 @@ export const restoreTabs = (): void => {
     // is on screen. Rare (a sandbox switch, a boot) and invisible when it isn't, hence the line.
     traceFocus(`restore-tabs`, { sandbox: scopedSandboxId ?? `none`, stored: stored?.tabs.length ?? 0, active: stored?.active ?? `none` });
     if (stored === undefined) {
-        const conversation = new Conversation();
+        // Nothing to restore, so this window opens on the blank: a composer to start in, and no card anywhere
+        // for a chat the user has not started (Conversation.standIn).
+        const conversation = standIn();
         setConversations([conversation], conversation.conversationId, `first-tab`);
         return;
     }
@@ -574,7 +591,12 @@ const closing = (ids: ReadonlySet<string>, unsent: `keep` | `drop`): void => {
         }
     }
     const remaining = conversations.value.filter((conversation) => !ids.has(conversation.conversationId));
-    const next = remaining.length > 0 ? remaining : [new Conversation()];
+    /* CLOSING THE LAST CARD MEANS NOTHING IS OPEN, and the blank left standing says exactly that: a composer to
+     * start in, no card on the fleet board, and so no card selected there either (Conversation.standIn). It used
+     * to be a plain `new Conversation()`, indistinguishable from a "New agent" the user had pressed, so the
+     * press that emptied the chat put a fresh card in the board's Active lane and ringed it — /agents claiming a
+     * session was selected while the window that closed it showed an empty chat. */
+    const next = remaining.length > 0 ? remaining : [standIn()];
     setConversations(next, activeId.value, `close`);
 };
 

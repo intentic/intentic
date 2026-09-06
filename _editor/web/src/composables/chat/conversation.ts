@@ -382,6 +382,23 @@ export class Conversation {
         this.peek.value = false;
     }
 
+    /* THE BLANK A PANEL FALLS BACK TO, which nobody asked for: the chat a window opens on when it has no tabs
+     * to restore, and the one left behind when a close takes the last card. The panel always holds a
+     * conversation (useChat-tabs' one writer), so "nothing is open" has to be SHOWN as something, and the
+     * something is an empty composer.
+     *
+     * The flag exists for the surfaces OUTSIDE the panel. The fleet board cards every open tab the fleet has
+     * never heard of (useAgents-fleet's drafts), so that blank arrived on /agents as a "New agent" card wearing
+     * the selection ring: work nobody started, selected, while the window that had just closed its last card sat
+     * there showing an empty chat. Closing the last card leaves the board with nothing selected instead, which
+     * is what the press means.
+     *
+     * It says nothing about what the chat IS. The moment anything happens in it — a word typed, a turn sent, a
+     * name given — it is a draft like every other and the board draws its card, because then it stands for
+     * something the user did (`unasked`, tabFacts.ts, is that pair of tests as one reading). Pressing New agent
+     * on it is the other way out: that press IS the asking (draftConversation). */
+    readonly standIn = ref(false);
+
     // The conversation's worktree identity from the turn's `worktree` frame: its agent/<id> branch and the
     // root repo's short base sha. Undefined until the first isolated turn runs (or on main-tree conversations).
     readonly worktree = ref<{ branch: string; base: string } | undefined>();

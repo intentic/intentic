@@ -95,6 +95,9 @@ const newChat = () => {
 };
 
 const { closedDrafts } = await import("./closedDrafts");
+// The strip's own reading of a tab, so the cases below assert what every surface outside the panel is told
+// rather than a flag they would have to trust (tabFacts.ts).
+const { tabFacts, unasked } = await import("./tabFacts");
 const { selectedAccountId, usageByAccount } = await import("./providerAccounts");
 const { Conversation } = await import("./conversation");
 const { endpointProviders, endpointsLoaded, trialStatus } = await import("./providerCatalog");
@@ -1025,6 +1028,7 @@ describe(`abandoned drafts`, () => {
                             registered: false,
                             standing: `draft`,
                             peek: false,
+                            standIn: false,
                             provider: `claude`,
                             harness: `native`,
                             model: ``,
@@ -1200,6 +1204,73 @@ describe(`chats opened for a look`, () => {
 
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
         expect(chat.active.value.peek.value).toBe(true);
+    });
+});
+
+/* THE BLANK A PANEL STANDS ON WHEN NOTHING IS OPEN (Conversation.standIn). The panel always holds a
+ * conversation, so "I closed my last chat" has to be shown as something, and the something is an empty
+ * composer. The report this is the fix for is what that blank did OUTSIDE the panel: the fleet board cards
+ * every open tab the fleet has never heard of, so closing the last card in the popped-out chat put a fresh
+ * "New agent" in the Active lane wearing the selection ring — /agents saying a session was selected while the
+ * window that emptied itself sat there showing nothing. */
+describe(`the blank left when the last chat closes`, () => {
+    beforeEach(async () => {
+        storage.clear();
+        resetChat();
+        await nextTick();
+    });
+
+    // A window with nothing to restore opens on one, which is the same state by the other door.
+    it(`is what a window with no tabs to restore opens on`, () => {
+        expect(unasked(tabFacts(useChat().active.value))).toBe(true);
+    });
+
+    it(`is what a close that takes the last card leaves behind`, () => {
+        const chat = useChat();
+        // A chat the reader kept, so the blank this window opened on is swept by the focus move and the close
+        // below is genuinely the last card going.
+        const kept = openAgentConversation({ id: `agent-a`, provider: `claude`, harness: `native`, title: `Someone's work` });
+
+        chat.closeTabs(new Set([kept.conversationId]));
+
+        const left = chat.active.value;
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([left.conversationId]);
+        expect(left.conversationId).not.toBe(kept.conversationId);
+        expect(unasked(tabFacts(left))).toBe(true);
+    });
+
+    // The flag is provenance and nothing more: the first word typed makes this somebody's work, and the board
+    // draws its card again on its own, with no promotion for anything to remember.
+    it(`stops being one the moment something is typed in it`, async () => {
+        const blank = useChat().active.value;
+
+        blank.draft.value = `fix the login redirect`;
+        await nextTick();
+
+        expect(unasked(tabFacts(blank))).toBe(false);
+    });
+
+    // "New agent" hands back the untouched draft already open rather than minting a twin (draftConversation),
+    // and that press IS the asking: a press that left the board looking exactly as it did would be a press that
+    // did nothing.
+    it(`becomes a chat the user started when New agent is pressed on it`, () => {
+        const blank = useChat().active.value;
+
+        expect(draftConversation().conversationId).toBe(blank.conversationId);
+        expect(unasked(tabFacts(blank))).toBe(false);
+    });
+
+    // The pop-out handoff is this same snapshot (restoreTab), so a blank that came back "asked for" would put
+    // the card on the board every time the panel changed windows.
+    it(`comes back a blank through the snapshot the panel is handed off with`, async () => {
+        const chat = useChat();
+        const blank = chat.active.value.conversationId;
+        await nextTick();
+
+        resetChat();
+
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([blank]);
+        expect(unasked(tabFacts(chat.active.value))).toBe(true);
     });
 });
 

@@ -343,6 +343,9 @@ describe("draft cards", () => {
         registered: false,
         standing: `draft`,
         peek: false,
+        // A draft the user asked for ("New agent", a card click): the blank a panel is only standing on is the
+        // case below, and the board's whole answer to it is not to draw a card at all.
+        standIn: false,
         provider: `claude`,
         harness: `native`,
         model: ``,
@@ -378,6 +381,35 @@ describe("draft cards", () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`fresh`)];
 
         expect(activeIds()).toEqual([`fresh`]);
+    });
+
+    /* ...AND DRAWS NOTHING FOR THE BLANK A CLOSE LEAVES BEHIND, which is the same shape of tab and a different
+     * thing entirely (Conversation.standIn). The panel always holds a conversation, so closing the last card
+     * leaves an empty composer standing; carding that put a "New agent" in this lane wearing the selection ring
+     * the moment somebody closed their last chat, which is the reported glitch: /agents saying a session was
+     * selected while the popped-out window that emptied itself showed nothing. */
+    it("draws no card for the blank left standing when the last chat closes", () => {
+        const chat = useChat();
+
+        chat.closeTabs(new Set(chat.conversations.value.map((conversation) => conversation.conversationId)));
+
+        // The panel kept its one conversation, and the board is empty: nothing was started, so nothing is
+        // carded and nothing can be ringed.
+        expect(chat.conversations.value).toHaveLength(1);
+        expect(activeIds()).toEqual([]);
+    });
+
+    // ...and it is a card again the instant it stands for something the user did. Nothing remembers the
+    // promotion: the words in the composer are the whole of the difference (tabFacts.unasked).
+    it("cards that blank once words land in it", async () => {
+        const chat = useChat();
+        chat.closeTabs(new Set(chat.conversations.value.map((conversation) => conversation.conversationId)));
+        const blank = chat.active.value;
+
+        blank.draft.value = `fix the login redirect`;
+        await nextTick();
+
+        expect(activeIds()).toEqual([blank.conversationId]);
     });
 
     /* A CHAT WITH NO TAB LEFT ANYWHERE, closed with its message still in it (chat/closedDrafts). The board is

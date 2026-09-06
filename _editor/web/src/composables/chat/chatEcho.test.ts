@@ -49,6 +49,7 @@ const draftTab = (id: string, preview?: string): TabFacts => ({
     registered: false,
     standing: `draft`,
     peek: false,
+    standIn: false,
     provider: `claude`,
     harness: `native`,
     model: ``,

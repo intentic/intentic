@@ -32,6 +32,10 @@ export interface TabFacts {
     // the card that has to SAY so is usually in another window — the fleet board while the chat is popped out —
     // and this is the one account of the strip such a window reads (chatEcho.ts).
     readonly peek: boolean;
+    // The blank the panel is only standing on (Conversation.standIn): a window with nothing to restore opens on
+    // one, and a close that takes the last card leaves one. Carried because the surface that has to IGNORE it is
+    // the fleet board, which is usually in another window (`unasked`, below).
+    readonly standIn: boolean;
     readonly sessionId?: string;
     // The model the next turn will run on: what a card for a prepared message names as its spend.
     readonly model: string;
@@ -113,6 +117,7 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         box: conversation.box.value,
         title: conversation.title.value ?? undefined,
         peek: conversation.peek.value,
+        standIn: conversation.standIn.value,
         sessionId: conversation.session.value?.id,
         model: conversation.model.value,
         unsent: conversation.unsent.value,
@@ -127,3 +132,14 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
  * (useChat.draftConversation), and the strip writer sweeps one the moment the focus leaves it
  * (useChat.setConversations); both ask this. */
 export const untouched = (tab: TabFacts): boolean => !tab.registered && tab.standing === `draft` && !tab.unsent && tab.title === undefined;
+
+/* A TAB NOBODY ASKED FOR: the blank a panel falls back to when nothing is open (Conversation.standIn), for as
+ * long as nothing has happened in it. The fleet board draws a card for every open tab the fleet has never heard
+ * of, which is right for a "New agent" the user pressed and wrong for this one: the press that closed the last
+ * card put a fresh card in the Active lane and ringed it, so /agents said a session was selected while the
+ * window that emptied itself showed an empty chat.
+ *
+ * BOTH HALVES MATTER. The flag alone is provenance and nothing more, so it stops answering the moment the blank
+ * becomes somebody's work: a word typed in it, a turn sent from it, a name given to it, each makes it a draft
+ * like any other, and its card comes back on its own with no promotion to remember anywhere. */
+export const unasked = (tab: TabFacts): boolean => tab.standIn && untouched(tab);
