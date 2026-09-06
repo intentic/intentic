@@ -220,6 +220,9 @@ const onTrial = computed(() => isTrialProvider(provider.value));
 const scroller = ref<HTMLElement>();
 const content = ref<HTMLElement>();
 const input = ref<HTMLTextAreaElement>();
+// The whole sticky footer, textarea included: what it measures is how much of the pane the composer's chrome
+// already spends, which is what is left over for the box itself to grow into (`measureCap`).
+const footer = ref<HTMLElement>();
 // The pickers: ONE open flag per menu, whichever surface renders it, an anchored panel on desktop, a bottom
 // sheet on mobile, which ResponsiveOverlay picks between. One flag, not one per surface: the pair drifted apart
 // once already, with the close-on-disconnect watch below reaching only the desktop half. The PILL is what says
@@ -428,11 +431,55 @@ const modeIcon = computed(() => modeMeta(mode.value).icon);
  * guarantees nothing about the box being laid out and styled yet. Believing that measurement left a composer
  * permanently the height of its own padding with the placeholder sliced through the middle: worst in a
  * floating window, where the panel is measured in the window it left and dressed in the one it arrived in, so
- * nothing this pane does ever re-measures it. */
-const MAX_COMPOSER_HEIGHT = 192;
-const grow = (): void => {
-    growTextarea(input.value, MAX_COMPOSER_HEIGHT);
+ * nothing this pane does ever re-measures it.
+ *
+ * HOW TALL THE BOX MAY GET IS MEASURED, NOT CHOSEN. The cap was a flat 192px, which is a fair answer under a
+ * screenful of transcript and the wrong one for the case people actually write a long message in: a fresh
+ * conversation, where the pane is empty and the box still grew a scrollbar six lines in with half the column
+ * blank above it. So the ceiling is the room that is genuinely free: the scroller's own height, less the
+ * composer's chrome (the control row, attachment chips, notices and the queued stack: everything the footer
+ * holds that is not the textarea, read off the DOM so a wrapped control row or a stack of banners takes its
+ * space back automatically), less a strip of transcript kept visible so a grown box reads as a tall field
+ * rather than as having swallowed the pane. Floored at the old 192 so a short pane behaves exactly as it did,
+ * and re-measured on every resize of the pane, because what is free is a fact about the window, the panel
+ * split and how many panes are sharing it. */
+const COMPOSER_FLOOR = 192;
+const TRANSCRIPT_PEEK = 72;
+const composerCap = ref(COMPOSER_FLOOR);
+const measureCap = (): void => {
+    const box = scroller.value;
+    const shell = footer.value;
+    const field = input.value;
+    // Nothing laid out yet measures nothing, and writing that back would pin the box to its floor with no
+    // later measurement to undo it: the last good cap stands until there is a real one.
+    if (box === undefined || shell === undefined || field === undefined || shell.offsetHeight <= 0) {
+        return;
+    }
+    const chrome = shell.offsetHeight - field.offsetHeight;
+    composerCap.value = Math.max(COMPOSER_FLOOR, box.clientHeight - chrome - TRANSCRIPT_PEEK);
 };
+const grow = (): void => {
+    measureCap();
+    growTextarea(input.value, composerCap.value);
+};
+
+/* The pane changed size, so what was free changed with it: a window resized, the panel split, a pane opened
+ * beside this one. Only the SCROLLER is watched, never the footer: the box growing changes the footer's height
+ * by definition, and observing that would be a loop that ends in the browser's depth limit. */
+const paneSize = typeof ResizeObserver === `undefined` ? undefined : new ResizeObserver(() => grow());
+watch(
+    scroller,
+    (now, before) => {
+        if (before !== undefined) {
+            paneSize?.unobserve(before);
+        }
+        if (now !== undefined) {
+            paneSize?.observe(now);
+        }
+    },
+    { immediate: true },
+);
+onBeforeUnmount(() => paneSize?.disconnect());
 
 /* WHERE THIS CONVERSATION LIVES, and everything that follows from it being somewhere else.
  *
@@ -1485,7 +1532,7 @@ watch(
                      not one the app's controls have to line up on. Capped at all for the floating window,
                      where a full-width composer is a 150-character line with its Send button half a screen from
                      the text. -->
-                <div class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">
+                <div ref="footer" class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">
                     <!-- THE TWO STATES WHERE THERE IS NO COMPOSER TO EXPLAIN ITSELF, and only those two. A
                          sandbox that is merely BUSY is not one of them: it says so once, in the app's
                          notification lane, and what this pane owed its reader was never a second copy of that
@@ -1662,7 +1709,8 @@ watch(
                                     name="draft"
                                     :disabled="!canDrive"
                                     :placeholder="composerPlaceholder"
-                                    class="field-bare scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto px-4 py-3 leading-relaxed md:text-xs"
+                                    class="field-bare scrollbar-thin block w-full resize-none overflow-y-auto px-4 py-3 leading-relaxed md:text-xs"
+                                    :style="{ maxHeight: `${composerCap}px` }"
                                     @input="onInput"
                                     @keydown="onKeydown"
                                     @keyup="syncCaret"
