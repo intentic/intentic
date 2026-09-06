@@ -29,8 +29,8 @@ import { type SearchScope, useWorkspaceSearch } from "../search/useWorkspaceSear
 import { MATCH_TOGGLES, useSearchOptions } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { dragOffer, watchDragSource } from "../explorer/dragSource";
-import { filesToEntries } from "../explorer/dropEntries";
+import { dragOffer, watchDragSource } from "../explorer/transfer/dragSource";
+import { filesToEntries } from "../explorer/transfer/dropEntries";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/HistoryPanel.vue";

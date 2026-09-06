@@ -251,6 +251,11 @@ jobs:
       # and no git operation will ever remove it. The layout check then fails on ghosts no commit can fix
       # (5464 tracked files all green, and still red). Prune them first; --prune deletes exactly the
       # directories the check would have named.
+      #
+      # INLINE HERE AND ONLY HERE: the prune's real home is the pnpm-setup composite, beside the other repairs
+      # the persistent workspace needs, which is what covers verify-core and verify-platform — they run this
+      # same check through `pnpm prepass` and were reddened by it (run 34046947138). This job is the one that
+      # deliberately uses no composite (checkout only, no node_modules, no network), so it carries its own.
       - run: node _tools/checks/layout.mjs --prune
       # EVERY CHECK THE MANIFEST LISTS, side by side (_tools/checks/manifest.mjs says what each is for): the
       # lockfile against the manifests, every test file in a type-check program and under a budget, the workflow

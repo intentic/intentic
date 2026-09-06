@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/ui/async";
 import { reactive, type Ref, ref } from "vue";
-import { collectDroppedFiles } from "../../workspace/explorer/dropEntries";
+import { collectDroppedFiles } from "../../workspace/explorer/transfer/dropEntries";
 import { forgetPreview, rememberPreview } from "./attachmentPreviews";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJsonVia, sandboxUpload } from "../../sandbox/client/sandboxClient";

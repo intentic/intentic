@@ -9,7 +9,15 @@
 # prebuilts (sharp, onnxruntime, ast-grep, davey, mediaplex) glibc-identical by construction. It also rules out
 # the tempting shortcut of a docker-cli-alpine base with node bolted on: under musl, pnpm resolves musl builds
 # of those prebuilts and the glibc sandbox cannot load them.
-# ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical.
+#
+# AND THE DEBIAN RELEASE IS WHAT THE DESKTOP BINARY IS LINKED AGAINST. ci-desktop builds on this image, so the
+# .deb and the AppImage that come out ask for whatever glibc this base ships (trixie: 2.41, and the binary
+# asks for GLIBC_2.39). _tools/desktop-smoke/Dockerfile is the host they are then installed and RUN on, and it
+# was left on bookworm when this moved to trixie — desktop-verify died in the loader on every artifact, twice
+# per run, on a build that was otherwise correct (run 34046947138). A smoke host older than this base does not
+# test an older user's machine; it tests a machine the artifact was never built for.
+# ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical — and
+# move _tools/desktop-smoke/Dockerfile's FROM to the same Debian release.
 FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
 
 # What LINKS the GHCR package to this repository, and the reason is not cosmetic: an unlinked private package

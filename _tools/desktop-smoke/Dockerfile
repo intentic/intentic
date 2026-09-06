@@ -11,7 +11,23 @@
 # to bundle is missing here too — except the handful the AppImage excludelist deliberately leaves to the host
 # (libfribidi, libharfbuzz, libEGL …). Those are installed by smoke.sh in the appimage tier ONLY, so this image
 # stays bare for the deb's Depends.
-FROM debian:bookworm-20260803-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#
+# TRIXIE, AND IT TRACKS THE BUILD BASE. This host has to be at least as new as the image the binary is
+# LINKED in, because a glibc symbol is versioned: ci-desktop builds on ci-base, ci-base is
+# node:24.20.0-trixie-slim (glibc 2.41), and the binary that comes out asks for GLIBC_2.39. This host was
+# bookworm (glibc 2.36), so both tiers got as far as installing and then died in the loader —
+#
+#   intentic-desktop: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found
+#
+# — with a ✗ on "the workspace window opened" and 44 more lines of the same for every library the AppImage
+# vendors (run 34046947138, desktop-verify). The deb installed cleanly on the way there, and that is worth
+# knowing: the bundler's Depends does not name a libc6 floor, so apt cannot refuse the package it should.
+#
+# The version the two share is the ONLY thing coupled here. The package set below stays bare, so what this
+# tier is for — an incomplete Depends, a library the AppImage forgot — is unchanged; a host older than the
+# build base does not test an older user's machine, it tests a machine the artifact was never built for.
+# BUMP THIS WITH _tools/ci-base/Dockerfile, to the same Debian release.
+FROM debian:trixie-20260803-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
 
 # Xvfb + dbus: a Tauri app is a GTK app, and GTK needs both a display and a session bus. xdg-utils carries
 # xdg-open and xdg-mime — the real OS path a deep link takes, and the thing the .desktop MIME entry feeds.

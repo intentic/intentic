@@ -1,7 +1,7 @@
 // Runnable, framework-free check for the drop-traversal recursion (the web app has no test runner).
 // Run: node _editor/web/scripts/dropEntries.check.mjs  (Node 24 strips the imported .ts types natively.)
 import assert from "node:assert/strict";
-import { collectDroppedFiles, filesToEntries, isRootGitPath } from "../src/features/workspace/explorer/dropEntries.ts";
+import { collectDroppedFiles, filesToEntries, isRootGitPath } from "../src/features/workspace/explorer/transfer/dropEntries.ts";
 
 // Fake FileSystemEntry builders (only the fields the walk touches). fullPath is required: the walk dedupes on it
 // to break symlink cycles; the real API always supplies a unique string, so the fakes do too (defaults to name).

@@ -1,7 +1,7 @@
 // Runnable, framework-free check for the streaming tar packer (the web app has no test runner).
 // Run: node _editor/web/scripts/tarStream.check.mjs  (Node 24 strips the imported .ts types natively.)
 import assert from "node:assert/strict";
-import { packTar } from "../src/features/workspace/explorer/tarStream.ts";
+import { packTar } from "../src/features/workspace/explorer/transfer/tarStream.ts";
 
 const td = new TextDecoder();
 const readCStr = (buf, off, len) => {

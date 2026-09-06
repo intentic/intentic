@@ -45,6 +45,26 @@ runs:
         # otherwise going to remove by hand.
         rm -rf "$HOME/.cache/ms-playwright"
 
+    - name: Drop the directories a rename left behind
+      shell: bash
+      run: |
+        # THE WORKSPACE OUTLIVES THE COMMIT. Every job on the fleet checks out with `clean: false`, so a
+        # rename leaves its OLD directory standing: the moved package's node_modules and dist are untracked,
+        # `git clean -ffdx` keeps both by name at any depth (prepare-workspace's allowlist), and no git
+        # operation will ever remove the directory around them. It is then a ghost — zero tracked files, still
+        # in every `ls`, still guessed at — which is exactly what the layout check's first rule fails on.
+        #
+        # AND NO COMMIT COULD FIX IT. The check ran green on a fresh clone and red on the fleet, naming
+        # directories that do not exist in git; `pnpm prepass` runs it in preflight, in verify-core and in
+        # verify-platform, so one stale runner reddened three jobs at once and a re-run reproduced it exactly
+        # (run 34046947138). The prune belongs HERE, beside the corepack, Playwright and pnpm-state cleanups
+        # above, for the same reason they are here: it is the persistent workspace being repaired, so it has to
+        # happen in the step every job on that workspace shares rather than in whichever job noticed last.
+        #
+        # --prune deletes exactly the directories the check would have named, and nothing else: a ghost whose
+        # remaining content is a live mount is left alone (that is an agent worktree, not a runner).
+        node _tools/checks/layout.mjs --prune
+
     - name: Install
       shell: bash
       run: |

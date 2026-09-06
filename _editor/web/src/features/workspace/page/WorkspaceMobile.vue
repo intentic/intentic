@@ -36,7 +36,7 @@ import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { filesToEntries } from "../explorer/dropEntries";
+import { filesToEntries } from "../explorer/transfer/dropEntries";
 import { explorerShows } from "../explorer/explorerFilter";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/HistoryPanel.vue";
