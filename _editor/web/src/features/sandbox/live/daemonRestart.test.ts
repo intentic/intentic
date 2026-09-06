@@ -1,0 +1,100 @@
+// @vitest-environment jsdom
+import { beforeEach, expect, it, vi } from "vitest";
+
+// The stream router's import chain reaches the app's environment read at module eval; jsdom plus this is the
+// whole of what it wants (see useChat.test.ts, which cuts the same edge).
+
+// The same edges useAgents.test.ts cuts, for the same reason: the fleet store sits behind the app shell, and
+// this file's subject is one wire between the stream router and that store: nothing here wants a browser.
+vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
+vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
+vi.mock("../client/useSandbox", async () => {
+    const { ref } = await import("vue");
+    return {
+        useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
+        sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
+    };
+});
+vi.mock("../client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+
+import type { AgentSummary } from "@intentic/sandbox-contract";
+import { resetAgents, useAgents } from "../../agents/fleet/useAgents";
+import { setAgents } from "../../agents/fleet/useAgents-registry";
+import { sandboxJson } from "../client/sandboxClient";
+import { applySystemEvent } from "./systemEvents";
+
+/* A DAEMON THAT RESTARTED IS A NEW REVISION LINE, and a browser tab outlives many of them.
+ *
+ * The fleet roster is versioned by a counter the daemon keeps in its own memory: it starts at 0 and is bumped
+ * per published change, so a rebuild, an update or a crash hands the next connection numbers far below the
+ * high-water mark this tab is holding. `setAgents` drops those as out-of-order, which is right within one
+ * daemon and catastrophic across two: the board freezes at the instant before the restart, agents started
+ * since never appear, and only a reload clears it.
+ *
+ * The stream's failure path reset the line, but that is one of four ways a stream ends and a REBUILD takes
+ * another (the loopback listener dies with the container and the client demotes to the tunnel). So the reset
+ * moved to the hello frame, which every connection begins with, whichever way the last one ended, and that is
+ * what these hold it to. */
+const SANDBOX = `sbx-1`;
+
+const summary = (id: string, updatedAt: number): AgentSummary => ({
+    id,
+    status: `idle`,
+    provider: `claude`,
+    harness: `native`,
+    updatedAt,
+    attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
+});
+
+const hello = (): void => applySystemEvent({ kind: `hello`, workspaceId: `workspace`, build: `build-1` }, SANDBOX);
+const roster = (agents: AgentSummary[], rev: number): void => applySystemEvent({ kind: `agents`, agents, rev }, SANDBOX);
+// The roster's own cards. The board also carries the chat's client-only draft (an untouched "New agent" tab
+// is a card before it is an agent), which is not what a revision line is about.
+const ids = (): string[] =>
+    useAgents()
+        .fleet.value.filter((agent) => agent.status !== `draft`)
+        .map((agent) => agent.id);
+
+beforeEach(() => {
+    resetAgents();
+    vi.mocked(sandboxJson).mockReset();
+});
+
+it(`takes the roster of a daemon that started counting again`, () => {
+    // A tab that has been open a while: hundreds of published changes deep into one daemon's line.
+    setAgents([summary(`a1`, 1_000)], 800);
+
+    hello(); // the reconnect — to a daemon that has just been rebuilt, numbering from scratch
+    roster([summary(`a1`, 2_000), summary(`a2`, 2_000)], 1);
+
+    expect(ids()).toEqual([`a1`, `a2`]);
+});
+
+it(`ignores a roster read answering for the daemon it has already left`, async () => {
+    setAgents([summary(`a1`, 1_000)], 800);
+    /* Two reads are in play, and they answer for two different daemons. The first is the stale one this test
+     * is about; the second is the hello's own held-wakes pull (systemEvents), issued on the line the hello just
+     * opened, so it answers with the NEW daemon's numbering, which starts low. Both are held open and both are
+     * released, because a single resolver slot would be overwritten by the second read and leave the first
+     * awaiting forever. */
+    const answers: (() => void)[] = [];
+    vi.mocked(sandboxJson).mockImplementation(
+        async () =>
+            new Promise((resolve) => {
+                const rev = answers.length === 0 ? 900 : 1;
+                answers.push(() => resolve({ agents: [summary(`a1`, 1_000)], rev }));
+            }),
+    );
+
+    const inFlight = useAgents().refresh(); // issued to the daemon that is about to go away
+    hello(); // …which it does, and the connection that replaces it starts a new line
+    for (const answer of answers) {
+        answer();
+    }
+    await inFlight;
+    await Promise.resolve();
+
+    // The stale answer's revision 900 must not have become the mark the new daemon has to beat.
+    roster([summary(`a1`, 2_000), summary(`a2`, 2_000)], 2);
+    expect(ids()).toEqual([`a1`, `a2`]);
+});

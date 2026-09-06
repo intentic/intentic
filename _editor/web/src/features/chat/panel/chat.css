@@ -1,0 +1,996 @@
+/* Long transcripts: let the browser skip layout and paint for turns that are scrolled out of view. A message
+   that has painted once keeps its real height (the `auto` remembered size); the 3rem estimate only carries a
+   row that has never painted — a transcript restored straight to its bottom, or streamed in while the user was
+   scrolled away. Estimated rows must NOT be left to realize lazily on scroll: real messages run hundreds of px,
+   so each realization rewrites scrollHeight (measured at ~4× the estimate over a whole transcript), and the
+   native scrollbar maps the thumb against the CURRENT scrollHeight — a drag through estimated rows had the
+   thumb leaping hundreds of px away from the cursor on every jump. Scroll anchoring never covers this case:
+   it stabilizes content, not the thumb-to-scrollTop mapping. So ChatPanel warms every wholesale-swapped
+   transcript through .chat-realize below, and this rule only ever skips rows whose height is already known. */
+.chat-message {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 3rem;
+    /* Nothing pasted into or printed by a turn may set the width of the panel. A token with no break
+       opportunity in it — a signed registry URL, a base64 blob, a 64-char digest — is one unbreakable word to
+       the layout, and `pre-wrap` alone does not break words: it ran out of the prompt bubble and dragged the
+       transcript's scrollWidth to ~3× its client width (measured), which is a shell scrolled sideways with the
+       sidebar clipped off screen.
+       `anywhere` rather than `break-word` because the fix has to hold in both shapes the chat renders text in.
+       They wrap identically, but only `anywhere` counts its break opportunities toward MIN-CONTENT width, and
+       min-content is what sizes an item in a flex row that isn't `min-w-0` — the tool card's `$ command` row is
+       exactly that, and stays 1.7× over its box under `break-word`. Where a percentage or `w-full` cap already
+       bounds the box (the prompt bubble at 85%) either value contains it; one rule covers both.
+       Inherited by the whole turn (bubbles, tool bodies, rendered markdown) rather than restated per surface:
+       all of it is text the user or the agent produced. It breaks a word only when the word cannot fit a line of
+       its own, so ordinary prose is untouched, and code blocks are exempt for free — `white-space: pre` disables
+       wrapping outright, so they keep scrolling horizontally in their own box. */
+    overflow-wrap: anywhere;
+}
+/* The warm-up pass (ChatPanel.warmTranscript): while the scroller holds this class nothing may be skipped, so
+   one idle-time layout records every row's real height as its remembered size. The class then comes off and
+   skipping resumes with truthful heights — the scrollbar stays stable through the whole transcript. */
+.chat-realize .chat-message {
+    content-visibility: visible;
+}
+/* A ROW THAT HOSTS A CONTROL IN THE GUTTER CANNOT BE PAINT-CONTAINED, and this is the rule that says so once
+   instead of each control discovering it.
+   `content-visibility: auto` above brings paint containment with it, which CLIPS the row to its own box. The
+   gutter is deliberately outside that box (the pencil hangs off the prompt's right edge at `left-full`,
+   --chat-gutter wide), so a control there is not cropped, it is painted out of existence: invisible, and
+   `elementFromPoint` cannot find it either, so it is unclickable in the bargain.
+   It went unnoticed because `.chat-prompt` opts out for a reason of its own (a sticky row may not be skipped),
+   and `.chat-prompt` is on every user message EXCEPT the ones a turn folded. So the same pencil, on the same
+   kind of message, worked on an opening prompt and silently vanished on a "keep going" — which read as the edit
+   affordance being arbitrary rather than as one CSS rule reaching one set of rows and not the other.
+   Keyed on hosting a control rather than on being a prompt, so the next thing put in that lane is covered by
+   the fact that it is there, and the perf mechanism still covers everything else: the agent's rows, tool cards
+   and errands are the bulk of a long transcript and none of them reach into the gutter. */
+.chat-gutter-host {
+    content-visibility: visible;
+}
+/* The prompt stays on screen for as long as its answer does: it pins to the top of the transcript while the
+   turn scrolls beneath it, and the next turn's prompt pushes it out. Claude Code's transcript, and for the same
+   reason — a long turn otherwise buries the question it is answering, and re-finding it means scrolling away
+   from the output you were reading.
+   The pin is bounded by the per-turn <section> the panel groups messages into; without that grouping every
+   prompt would stick to the same top edge and stack.
+   Opaque --color-card (the scroller's own background) because a pinned row floats over the messages it holds
+   above: invisible in place, solid once it lifts. Applied ONLY in the pinned state, though: the padding above
+   and below the bubble is air the next and previous rows' margins reach into, and a run bar's row is pulled a
+   half-rem into exactly that space (see .chat-message:has(.chat-run-bar)) — with the band painted in flow, its
+   bottom strip lay over the count mark's top and shaved its ring off whenever a turn's calls sat right under
+   their prompt (and the top strip did the same to a run just above one). In flow nothing passes under the band,
+   so the paint is needed only once it lifts.
+   content-visibility is dropped for the same reason — a pinned row is on screen for the whole turn, so it must
+   never be skipped.
+   `top: -1px` rather than 0 so the row's top edge lifts a pixel clear of the scroller's the moment it pins,
+   which is the difference ChatMessageView measures to know that it has (there is no :stuck selector). The pixel
+   is spent out of the padding above the bubble and never shows.
+   The band's own inset is the transcript's gap (see --chat-gap), not a second number — but a padding is air the
+   row PAYS FOR, and the column has already spaced this row by that same gap, so in flow the two stacked: a
+   prompt sat twice as far from the answer under it as any other two events sat from each other (measured 22px
+   above the run bar against 13 below it), which is exactly the unevenness the single gap exists to prevent. The
+   band therefore gives the padding straight back as a negative margin: pinned, the row still has its inset,
+   because that is what the padding is for; in flow it occupies the height it would with no padding at all and
+   the column's one gap is the only air around it. The same cancelling the run bar's row does for its mark
+   (see .chat-message:has(.chat-run-bar)).
+   The sentinel pixel is NOT given back — margin cancels the gap alone. Handed back too, the band's opaque top
+   edge would start a pixel above the previous surface and paint over its last row of pixels; left in, the
+   prompt sits one pixel lower than a perfectly even gap, which is not a distance anybody can see. */
+.chat-prompt {
+    position: sticky;
+    top: -1px;
+    z-index: 5;
+    margin-block: calc(-1 * var(--chat-gap));
+    padding-top: calc(var(--chat-gap) + 1px);
+    padding-bottom: var(--chat-gap);
+    content-visibility: visible;
+}
+/* The clip edge, named — and ONLY while the row is actually pinned. The opaque background arrives with the
+   pin (see .chat-prompt for why it is not always on): a rectangle ending at the row's own last pixel, so the
+   turn sliding beneath a pinned prompt was cut off mid-glyph against nothing — which reads as a rendering
+   fault rather than as one layer passing under another. A
+   hairline at the row's bottom edge draws the boundary the way a sticky header's divider does: the surface
+   ends here, and what is cut below is passing under it. It replaced a drop shadow, which read as a halo
+   hanging off the prompt rather than an edge of the band — worst in the floating window, where the band
+   runs wide of the bubble and the dark-mode alpha the shadow needed to register smeared the first line of
+   every reply.
+   A pseudo-element rather than border-bottom because a border is a pixel of height appearing at the pin
+   threshold, and any height change there yanks the transcript (see .chat-prompt-text) — and rather than a
+   box-shadow because a shadow follows the BORDER box, which in a wide pane reaches 5.75rem into the right
+   margin so run marks pass under it (see below): the hairline would run on past the column's edge, a divider
+   ruling off empty air. The margin strip stays covered — the background is the band's own — only the line
+   stops at the edge of the reading measure, which is what the inset in that container query is for. Gated
+   because a divider under an in-flow row would fence the prompt off from the transcript it sits in. */
+.chat-prompt-pinned {
+    /* `background-color` only — not the `background` shorthand. Skins paint the chat panel's `bg-card` with a
+       plate texture on top of this token; shorthand would wipe that image and leave a flat rectangle in a
+       band that is supposed to read as the same surface the transcript sits on (worst in the floating window,
+       where the mismatch runs the full width beside the bubbles). */
+    background-color: var(--color-card);
+}
+/* WHAT AN UNSENT EDIT WOULD THROW AWAY (ChatPane's `doomed`) — the edited prompt and everything under it, drawn
+   as already gone while still entirely there.
+
+   Fade AND strike, not one or the other. Fading alone is the vocabulary this transcript already spends on
+   "quiet": the meta tier, a settled tool row, the timestamps. Read at a glance, a faded turn says "less
+   important", which is the opposite of what this row needs to say — it is about to be deleted. The strike is
+   the half that means removal, and it is the half that survives being glanced at rather than read.
+
+   Kept LEGIBLE at 55% rather than pushed to the edge of visible: the whole reason the rows stay on screen is
+   that the count of what is being spent is the number nobody holds in their head, and a strip of grey mush is
+   not a count. The user has to be able to read the answer they are about to discard — that is often what
+   settles whether they discard it.
+
+   line-through is inherited by the text and skipped by everything that draws its own box: `text-decoration` does
+   not cross into a nested block formatting context, so the struck rows keep readable tool cards, diffs and code
+   blocks inside a struck turn instead of ruling a line through a syntax-highlighted panel.
+
+   THE RULE IS currentColor, so it is exactly as present as whatever it crosses — and it has to be stated,
+   because the obvious choice is wrong here. A border token (--color-line-strong) is built to sit UNDER text at
+   about 40% lightness; drawn across prose at 98% on a dark pane it came out a faint smudge between the words,
+   which reads as a rendering artefact rather than as a line through a sentence. Tracking the text also means
+   the strike lands correctly on every tier it passes over in one turn — prose, the meta rows, a code chip — and
+   in both themes, with no second token to keep in step.
+
+   Pointer events stay ON. A doomed row is still a row: its tool cards open, its code copies, its clamped prompt
+   expands. Nothing here has happened yet, and disabling a transcript the user is reading in order to decide
+   would be the one thing that makes the preview useless. */
+.chat-doomed {
+    opacity: 0.55;
+    text-decoration: line-through;
+    text-decoration-color: currentColor;
+    transition: opacity 120ms ease-out;
+}
+.chat-prompt-pinned::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    height: 1px;
+    background: var(--color-line);
+}
+/* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
+   to be read in — and an unbounded one (a pasted spec, a continued transcript) took half the panel for the
+   whole turn. Six lines is the recall budget: enough to know which question you are reading the answer to,
+   which is all a pinned prompt is for, and above what nearly every hand-typed prompt ever reaches.
+   The clamp is unconditional rather than applied when the row pins, though only the pinned state needs it: a
+   sticky element's flow box IS the element, so shrinking it at the moment it pins pulls everything below up by
+   the difference — measured at 355px on the transcript that prompted this — yanking the answer out from under
+   the reader mid-sentence. Clamped in both states, the pin costs nothing at the threshold.
+   Six lines is stated as arithmetic, not as the rem it happened to work out to: the bubble is `text-xs
+   leading-relaxed px-3 py-2`, so its line box is 1.625 × --text-xs and its padding is 1rem. A literal height
+   silently becomes five-and-a-bit lines the next time that token moves. */
+.chat-prompt-text {
+    max-height: calc(6 * 1.625 * var(--text-xs) + 1rem);
+    overflow: hidden;
+}
+/* The open/close control rides ON the bubble, over the 1.75rem of gradient the clamp already spends saying
+   "there is more of this" — the two say the same thing, so they share the same pixels. Below the bubble it
+   was a row of its own: ~24px of chrome under a 133px recall budget, on the one row of the transcript that
+   is always on screen. Icon-only for the same reason (the fade is the label), and it keeps the fade's own
+   end colour so it stays legible where an open bubble scrolls text underneath it. */
+.chat-prompt-toggle {
+    position: absolute;
+    right: 0.375rem;
+    bottom: 0.25rem;
+    border-radius: var(--radius-md);
+    padding: 0.125rem 0.25rem;
+    color: var(--color-subtle);
+    background: color-mix(in srgb, var(--color-overlay) 55%, var(--color-card));
+    transition: color 120ms ease;
+}
+.chat-prompt-toggle:hover {
+    color: var(--color-content);
+}
+/* Clear of the scrollbar an open bubble grows past its cap — the chip is on the frame, so it would otherwise
+   sit on top of the thumb. */
+.chat-prompt-open .chat-prompt-toggle {
+    right: 0.75rem;
+}
+/* The "there is more of this" fade, applied only to a prompt the clamp actually cut (ChatMessageView measures
+   it). An overlay INSIDE the bubble rather than a mask on it: a mask erases the ELEMENT — rounded border and
+   background included — so the bubble's bottom edge dissolved mid-curve and whatever sat below showed through
+   it, reading as a shadow bleeding over the edge rather than as text continuing past a fold. The overlay fades
+   the text into the bubble's resting colour and leaves the box crisp. That colour is mixed by hand because
+   .chat-surface is a translucent wash: what the eye sees is the wash composited over the card everything in
+   the panel sits on — the same mix pinned (the row's own card backdrop) or in flow (the scroller's). */
+.chat-prompt-clamped::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 1.75rem;
+    border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-overlay) 55%, var(--color-card)));
+    pointer-events: none;
+}
+/* Opening a prompt is a deliberate "I want to read this again" — asked, more often than not, while the answer
+   to it is streaming underneath, which is precisely when the pin earns its keep. So an open prompt STAYS
+   sticky (unpinning here scrolled the very text the click asked for straight out of the viewport); what it may
+   not do is take the panel, so the bubble caps at 45dvh and scrolls on its own past that — even a pasted spec
+   leaves the answer readable below it. The cap is unconditional for the same reason the six-line clamp is
+   (above): a height that changed at the pin threshold would yank the transcript by the difference. */
+.chat-prompt-open .chat-prompt-text {
+    max-height: 45dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.chat-surface {
+    background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
+}
+.chat-surface-assistant {
+    background: color-mix(in srgb, var(--color-overlay) 35%, transparent);
+    border: 1px solid var(--color-line);
+}
+/* The loading outline (ChatTranscriptSkeleton) fades out at its top edge. It stands in for the END of a
+   conversation — the rest of which is above the viewport — so a hard first row would claim the transcript
+   starts there, and the arriving content, which is scrolled to its own bottom, would contradict it. The fade
+   is the same statement the clamped prompt's gradient makes: there is more of this than you can see. */
+.chat-skeleton {
+    mask-image: linear-gradient(to bottom, transparent, black 4rem);
+}
+/* ── Chat type scale ─────────────────────────────────────────────────────────────────────────────
+   The chat column runs on the APP's type scale — it does not keep one of its own. Three tiers, and
+   nothing else in here:
+
+     meta   text-2xs  0.6875rem  tool cards, timestamps, badges, hints, option descriptions
+     body   text-xs   0.75rem    everything read or typed: bubbles, prose, composer, menu rows, todos,
+                                 and the question card's ask — a sentence, so it reads at the size of one
+     title  text-sm   0.875rem   card header lines that are labels, not prose (plan / permission)
+
+   The column is dense on purpose: a turn is mostly chrome around an answer, and a chat panel is read
+   beside the code it is about, not instead of it. A pass that lifted every tier ~8-18% (and split
+   prose off at 0.875rem) is what made the panel feel bloated; it was reverted. If a tier ever needs
+   retuning, it is the app's token in _editor/ui/src/styles/tokens.css that moves, so the chat
+   and the rest of the shell stay on one scale — do NOT reintroduce a chat-local scale that quietly
+   redefines what `text-xs` means inside this subtree, and do NOT put absolute font sizes in the chat
+   templates.
+
+   Touch bumps a step, so shared surfaces are written as a pair — `text-base md:text-xs` on inputs
+   (16px is iOS's zoom threshold), `text-sm md:text-xs` on menu rows. The mobile-only components
+   (ChatTabsMobile) sit at the touch sizes throughout.
+   Labelled .composer-ghost buttons are chrome, not content: they take the meta tier wherever they
+   appear (the composer's model/mode row, the picker's footer, the connect gate's provider tabs), so
+   the controls framing the input never out-weigh the message being written in it.
+   Mono runs a tier below its sans context — it reads optically larger at the same nominal size. */
+
+/* The assistant's rendered answer. Everything about how markdown looks lives in prose.css, which the
+   workspace file preview shares — this is only the chat's tuning of it. The preview is a document surface
+   and keeps prose.css's larger default; the transcript sets prose to the column's own body tier, so a
+   rendered answer matches the bubbles and cards it is stacked between instead of standing a size above them. */
+.chat-markdown {
+    --prose-size: var(--text-xs);
+    --prose-code: var(--text-2xs);
+    /* A step tighter than the preview's 1.7. Leading is a ratio, so the preview's airier default buys real
+       pixels back at this size — and the transcript is a scrolling column where every one of them is a line
+       of the answer pushed below the fold. */
+    --prose-lead: 1.625;
+    /* No per-block measure: .chat-turns already caps the whole column at a readable width, and capping
+       the text a second time inside it would set prose short of the code blocks and tables beside it. */
+    --prose-measure: none;
+}
+/* Reading width for the transcript. A docked panel is narrower than this and never sees it; a panel dragged
+   wide, floating, or on a big screen would otherwise run prose to 150+ characters a line, where the eye
+   loses its place returning to the left edge. Capping the COLUMN rather than the paragraphs keeps one edge
+   for everything in a turn — tool cards, bubbles, prose, code blocks, decision cards — so the ragged right
+   reads as a margin instead of as a block that failed to fill its box.
+   The side inset is the column's own, not the scroller's: the composer shares that scroller and is
+   deliberately wider than this (ChatPanel's footer), which a padding on the scroller would make impossible.
+   Stated as the cap PLUS the inset, since border-box sizing would otherwise spend the inset out of the
+   measure and quietly set the transcript two characters narrower than the number above says. */
+.chat-turns {
+    width: 100%;
+    max-width: calc(48rem + 2 * var(--chat-gutter));
+    padding-inline: var(--chat-gutter);
+    margin-inline: auto;
+}
+/* THE ONE GAP THE WHOLE TRANSCRIPT IS SPACED BY, and the only place it is written down.
+   A transcript is a column of events — a prompt, the calls a turn made, its answer, a question card, a
+   permission ask — and the air between any two of them says the same thing wherever they meet: these are two
+   things, not one. So it is a single number applied at every nesting that stacks them (the column of turns, the
+   messages inside a turn, the blocks inside a message), never a value picked per block. Picked per block, the
+   three nestings drift: the app's column ran at 0.25rem while the shared page and the subagent view — the same
+   column, drawn from the same sheet — ran at 0.75rem, and inside a turn an answer's bubble and a question card
+   under it met at 4px, which at that distance reads as one surface split by a seam rather than as two cards.
+   0.5rem is the narrowest value that still reads as a boundary. The floor is set by the padding INSIDE the
+   surfaces it separates (a bubble is 0.625rem top and bottom): much under half a rem and the gap is a seam in
+   one card rather than the space between two. The ceiling is the panel — this is a dense column read beside
+   the code it is about, and every step of air is spent on every boundary in a long turn at once, so the
+   roomier 0.75rem the other two columns happened to stand at reads as loose here. Between the two, the tighter
+   one, and the other columns come down to it: one number, and the chat is what it has to suit.
+   Inherited from the column rather than restated, so a stack nested at any depth resolves to the same value —
+   and one edit moves the whole transcript, which is the property the per-block values did not have.
+   Only the GAP is set here: the column is borrowed by the subagent view for its reading width alone (a
+   rendered report, not a stack), and `gap` on something that is not a flex container is simply ignored —
+   whereas a display declared here would silently reflow it. Every stack still says it is one in its own
+   markup. */
+.chat-turns {
+    --chat-gap: 0.5rem;
+}
+.chat-turns,
+.chat-stack {
+    gap: var(--chat-gap);
+}
+/* The margin the fork mark stands in (ChatForkCut). It is the column's OWN inset rather than space borrowed
+   off the scroller: an absolute element hung outside the column would be clipped in a narrow panel — or drag a
+   horizontal scrollbar across the transcript — whereas padding is width the column already owns at every size.
+   Wider wherever the pane can spare it, so the mark stands clear of the words instead of hard against them.
+   The threshold is exactly the width the WIDENED column needs (48 + 2 × 2.25 = 52.5rem, plus a hair): the
+   reading measure is 48rem on both sides of it, so past that point the extra inset costs the text nothing at
+   all and there is no reason to withhold it. Under it the gutter thins back to the plain inset and the mark
+   tucks in beside the words, which is the right trade in a panel narrow enough to have no margin to give.
+   @container, so it answers to a dragged panel edge and a floating window rather than to the screen — and note
+   the root here is 17.6px, so this breakpoint lands near 930px rather than the 848 the number reads as. */
+.chat-turns {
+    --chat-gutter: 1rem;
+}
+@container (min-width: 53rem) {
+    /* Scoped to the pane on purpose: .chat-turns is borrowed by the subagent view for the same reading
+       measure, and that one has no mark in its margin to make room for. */
+    .chat-pane .chat-turns {
+        --chat-gutter: 2.25rem;
+    }
+}
+/* THE SCROLLER RESERVES ITS SCROLLBAR ON BOTH EDGES, so the column re-centres in the width the reader
+   actually sees. This one box holds the transcript AND the composer, and everything in it is centred or
+   symmetrically padded (.chat-turns' gutter, the composer's mx-auto cap) — measured from the scroller's
+   CONTENT box. A vertical scrollbar is carved out of that content box on the inline-end alone, so the whole
+   column — every bubble and the composer under it — sat shifted towards the start by a scrollbar's width:
+   in the docked panel the left margin came up a scrollbar narrower than the right, which is the unevenness
+   the centring exists to prevent. `both-edges` reserves the same strip on the start edge too — empty, the
+   scrollbar draws in the end one — so the content box is symmetric within the panel again and the two
+   margins match. `stable` alone (the .scrollbar-stable utility) reserves only the end edge and keeps the
+   very offset this fixes, which is why the gutter is set here rather than borrowed from that class. The
+   reserved width tracks the thin scrollbar (`scrollbar-width: thin`, or the 6px `::-webkit-scrollbar`), so
+   it is a few pixels each side, not the classic bar's strip. */
+.chat-scroller {
+    scrollbar-gutter: stable both-edges;
+}
+/* HOW WIDE THAT RESERVED STRIP IS, as a number other layout can be built against — the headroom rail is placed
+   with it (ChatPanel's --capacity-rail block), because a column standing where the transcript's scrollbar draws
+   would swallow the drags aimed at it: a pointer landing on a thumb that is UNDER another element hits that
+   element instead, and the bar simply stops answering with nothing on screen to say why.
+   The thin bar's width in Chromium, which is the only engine this ships on (Electron). Being a few px out costs
+   nothing either way: too small and the rail clears the bar with room to spare, too large and it clears it by
+   less — the failure mode the number prevents needs the rail drawn ON the strip, not near it. */
+.chat-panel {
+    --chat-scrollbar: 10px;
+}
+/* WHERE THE HEADROOM RAIL'S WIDTH COMES FROM, now that the rail is drawn over the margin rather than standing
+   in the row (ChatCapacityRail, mounted in ChatPanel).
+
+   It used to be a column in that row, and that cost the transcript the very thing ChatPanel's opening note
+   argues hardest for: the scroller ended a rail's width short of the window, so the bar a reader moves all day
+   left the edge it owned and became a strip floating mid-window. The pane keeps the whole width instead and
+   the rail's room is taken as PADDING inside the scroller beside it. The text stops in the same place either
+   way; the SCROLLER is what changes, and it now runs to the window's edge and draws its bar there.
+
+   THE LAST PANE, because that is the one the rail stands over. Its basis hands the padding back as width, so
+   what a reader compares between two chats — the text in them — stays equal: without it a split would put a
+   full transcript beside one squeezed by 240px, which is a worse thing to do to two columns drawn side by side
+   for comparison than anything this rail has to tell them.
+
+   Qualified by .chat-panel to outrank ChatPanel's own `flex: 1 1 0` on the same elements, which is a scoped
+   rule and therefore injected after this file however the two are ordered. */
+.chat-panel .chat-panes > .chat-pane:last-child {
+    flex-basis: var(--capacity-rail, 0px);
+}
+.chat-panel .chat-panes > .chat-pane:last-child .chat-scroller {
+    padding-right: var(--capacity-rail, 0px);
+}
+/* THE MARK A HIDDEN RUN OF TOOL CALLS LEAVES BEHIND (ChatToolRun) — and where it stands.
+
+   Narrow, it sits on the end of its own line, and that line is as tall as the mark: the transcript has no room
+   beside it, and hanging the mark outside the column would either clip it or drag a horizontal scrollbar across
+   the whole panel (the same reason ChatForkCut's mark lives in the column's inset rather than past it).
+
+   Given room, the mark moves OUT into the margin and the line stops carrying it. Two things follow, which is
+   the point of the move: the line is then a hairline rather than a row tall enough to hold a badge, and it can
+   run the column's full width instead of stopping short of one.
+
+   And opened, the line goes entirely — the mark is out in the margin and no longer needs a line to stand on, so
+   the calls start where the line was rather than one row below it. The bar stays in the DOM at zero height:
+   the mark is inside it (one control, one hit target, whichever way it is drawn) and is positioned against it,
+   so the way to close a run is the same mark that opened it, now beside the first call instead of above it.
+
+   THE MARGIN IS TWO LANES, AND WHICH ONE IS WHICH IS FIXED. The gutter — the strip flush to the text edge,
+   exactly --chat-gutter wide — belongs to the turn's CONTROLS: the pencil that reopens a prompt
+   (ChatMessageView) and the fork mark at the close of an answer (ChatForkCut), each one glyph centred in a
+   target the width of the gutter. This mark takes the strip PAST that, and begins where the controls' lane ends.
+
+   It used to be pinned by its RIGHT edge 3.5rem out, which left its left end a third of the way back inside the
+   controls' lane. That is invisible nearly always, because the two are anchored to different things and so
+   almost never come to the same height: the fork mark hangs off the BOTTOM of a turn, this one is pinned to the
+   top of the answer's first row. They meet when there is nothing between those two points — an answer that is
+   so far nothing but its calls — and then the fork glyph sat on the pill's left end and, being the higher layer,
+   punched a hole through its ring. Every turn that opens with a tool call passes through that state, and a cut
+   somebody has already forked from wears its mark lit rather than on hover, so it was not merely a hover artifact.
+
+   Pinning by the LEFT edge instead is what makes the boundary hold at any count: the pill grows OUTWARD as the
+   number of calls climbs instead of creeping back toward the words. That is the honest direction for a number
+   that counts up while the turn streams — the reading column's edge stays put, and the lane below it cannot be
+   encroached on by a run that happens to be three digits deep.
+
+   The threshold is what the two lanes need side by side, and it is measured against the SCROLLER'S CLIENT BOX
+   rather than the pane: .chat-scroller reserves its scrollbar on both edges (see it), which is ~10px a side that
+   the pane has and the marks may not use. So the room is (pane − both reservations − .chat-turns' 52.5rem) / 2,
+   plus the column's own 2.25rem inset, and what has to fit in it is the controls' 2.25rem plus the widest pill —
+   measured 3.3rem at three digits. 61rem clears that by a few px at both text sizes. 58rem, where this used to
+   switch over, is a whole pill short of it, and 60rem still shaves the right edge off a three-digit ring.
+   Under the threshold the mark stays on its line, INSIDE the column, where it cannot reach the gutter at all —
+   which is why the narrow rendering has never had this to fix, and why falling back to it costs nothing but the
+   wider look. */
+.chat-run-bar {
+    padding-block: 0.125rem;
+}
+@container (min-width: 61rem) {
+    /* THE ROW HAS TO REACH THE MARGIN BEFORE THE MARK CAN STAND IN IT. Every message row is
+       `content-visibility: auto` (see .chat-message — it is what keeps a long transcript's scrollbar honest),
+       and that paints with containment: anything outside the row's own box is not clipped-with-a-scrollbar, it
+       is silently not drawn. Positioned out in the margin, the mark laid out correctly and was never painted —
+       leaving the bare line the mark was the whole point of.
+       So the row that carries a run grows outward by the mark's reach and gives the width straight back as
+       padding. The content box does not move — the reading measure, the bubbles and the line are all exactly
+       where they were — but the clip edge now sits past the mark: 5.75rem against the 5.55rem a three-digit pill
+       reaches, so the two are never flush at fractional zoom and a count one digit longer than anything real
+       still has room. Only rows that HAVE a mark pay it; nothing else in a turn is drawn outside its row, so
+       nothing else needs the room.
+
+       VERTICALLY TOO, and for the same reason: a turn's calls are drawn above that turn's own words, so the bar
+       is the first thing in its row — and the mark, being a badge on a hairline, stands ~7px past the bar at
+       each end. The top of it was over the row's edge and came off in the same clip, which reads as a pill with
+       its lid sliced. The block outset cancels the same way the inline one does, so the row occupies exactly
+       the height it did and the turns keep their spacing — and it is quoted deliberately over what the mark
+       asks for, so tightening the bar again does not silently start slicing lids. */
+    .chat-pane .chat-message:has(.chat-run-bar) {
+        margin-right: -5.75rem;
+        padding-right: 5.75rem;
+        margin-block: -0.5rem;
+        padding-block: 0.5rem;
+    }
+    .chat-pane .chat-run-bar {
+        padding-block: 0.25rem;
+    }
+    /* Left edge on the far side of the controls' gutter, right edge wherever the count leaves it: see the lane
+       rule above. `right` is deliberately not set — with both, the pill would be stretched to the outset rather
+       than sized by its contents, and the ring would run out past the number it is drawn around.
+       `max-content` is what makes that legal rather than merely intended. An absolute box with no `right` is
+       shrink-to-fit against the space LEFT of its containing block's far edge, and `left: 100%` leaves exactly
+       none of it — so the pill fell back to its min-content width. That is normally the whole string, but a
+       transcript inherits `overflow-wrap: anywhere` (see .chat-message, which needs it so a 64-char digest
+       cannot set the width of the panel), and `anywhere` makes every character a break opportunity that COUNTS
+       toward min-content. The count is the one number in the app made of nothing but characters that may break:
+       a 3-call run measured one glyph wide and 2.5 rows tall, the digits stacked down the pill. Sizing to
+       max-content takes the available width out of it entirely; the room to draw into is the row's own outset. */
+    .chat-pane .chat-run-mark {
+        position: absolute;
+        top: 50%;
+        left: calc(100% + var(--chat-gutter));
+        width: max-content;
+        translate: 0 -50%;
+    }
+    .chat-pane .chat-run-bar-open {
+        height: 0;
+        padding-block: 0;
+    }
+    .chat-pane .chat-run-bar-open .chat-run-line {
+        display: none;
+    }
+    /* Centred on the first call's row rather than on the bar it no longer has: half a row down from where the
+       bar collapsed to. */
+    .chat-pane .chat-run-bar-open .chat-run-mark {
+        top: 0.55rem;
+    }
+    /* ...BUT ITS HAIRLINE MAY NOT FOLLOW IT OUT THERE. The line under a pinned prompt says "the surface ends
+       here, what is cut below is passing under it", and it can only say that along the edge of the thing being
+       read: the band's padded box now runs 5.75rem into the margin, and an absolute inset of 0 spans padding
+       and all — so the divider carried on past the column and ruled off a strip of empty air, which reads as a
+       line that has slipped sideways rather than as an edge. It ends where the reading measure does; the strip
+       beyond stays covered by the band's own background, which is what the width was for. */
+    .chat-pane .chat-prompt-pinned::after {
+        right: 5.75rem;
+    }
+    /* ...AND THE PINNED PROMPT HAS TO REACH THE MARGIN TOO, or the marks do not pass under it. The band's
+       opaque rectangle stops at the column's own edge, while the rows carrying a mark now run 5.75rem wider —
+       so a turn scrolling beneath its pinned prompt slid its LINES out of sight on schedule and left every one
+       of their marks stacked up in the strip beside the prompt, a column of pills attached to nothing. It reads
+       as the turn's calls having come loose, which is exactly what it looks like and nothing like what happened.
+       The same width, cancelled the same way, so the prompt's content box and its bubble do not move a pixel —
+       only the surface that hides what passes under it gets as wide as the rows passing under it. */
+    .chat-pane .chat-prompt {
+        margin-right: -5.75rem;
+        padding-right: 5.75rem;
+    }
+}
+/* HOW A RUN'S CALLS ARRIVE (the Transition in ChatToolRun). A single grid row taken from no height to its
+   content's — the only way to animate to a height that is only known once the rows are mounted, and the reason
+   the wrapper is a grid at all rather than a plain block.
+   160ms because the motion is not the point: it exists so the paragraph below the run slides to its new place
+   instead of teleporting there, which is what tells you the page moved rather than changed. Long enough to be
+   followed, short enough that clicking twice never feels like waiting on anything.
+   Reduced motion keeps the fade and drops the travel — the same bargain the app strikes everywhere else (see
+   utilities.css), stated here because that block answers for animations and this is a transition. */
+.chat-run-reveal-enter-active,
+.chat-run-reveal-leave-active {
+    transition:
+        grid-template-rows 160ms ease-out,
+        opacity 160ms ease-out;
+}
+.chat-run-reveal-enter-from,
+.chat-run-reveal-leave-to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+.chat-run-reveal-enter-to,
+.chat-run-reveal-leave-from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-run-reveal-enter-active,
+    .chat-run-reveal-leave-active {
+        transition-property: opacity;
+    }
+}
+
+/* An assistant body is a run of parts (useMarkdown): prose in .md-part wrappers — at least two while the turn
+   streams, since the settled prefix and the still-writing tail are rendered apart — and any figures the answer
+   drew, which are components and so sit here as themselves. display:contents removes the prose wrappers from
+   layout so the text inside still behaves as direct children of .chat-markdown — but prose.css's first/last-child
+   edge rules then match the WRAPPER, where margin does nothing, so they are restated one level down. A figure
+   needs no such restatement: it is a real child, so prose.css collapses its outer edge directly. Empty parts are
+   dropped by the engine, so whichever exists is correctly first/last. */
+.chat-markdown > .md-part {
+    display: contents;
+}
+.chat-markdown > .md-part:first-child > :first-child {
+    margin-top: 0;
+}
+.chat-markdown > .md-part:last-child > :last-child {
+    margin-bottom: 0;
+}
+/* A plan card's body is a card's contents, not a turn's answer: it is bounded by the card and read in one
+   sitting, so it drops the reading measure and flattens the heading scale to the card's own title size. */
+.chat-markdown-compact {
+    --prose-measure: none;
+    --prose-gap: 0.6em;
+}
+.chat-markdown-compact h1,
+.chat-markdown-compact h2,
+.chat-markdown-compact h3,
+.chat-markdown-compact h4 {
+    font-size: 1.05em;
+    margin: 1.1em 0 0.4em;
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
+/* A Read tool card's highlighted file body (ChatCodeBody.vue). A flex row of a sticky line-number gutter and
+   the Shiki-colored code: the whole box scrolls, long lines don't wrap (one visual row per line keeps every
+   gutter number beside its code), and the gutter stays pinned on horizontal scroll. The gutter and `.shiki`
+   carry identical metrics (inherited font-size/line-height, matched padding-top) so line N sits beside number
+   N. Dark mode flips Shiki's tokens to their `--shiki-dark` var — the same mechanism code.css uses for the
+   design system's <Code>, replicated here since this body carries its own compact chrome, not `ui-code`. */
+.chat-code {
+    display: flex;
+    max-height: 12rem;
+    overflow: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background-color: var(--color-canvas);
+    font-family: var(--font-mono);
+    font-feature-settings: var(--font-mono--font-feature-settings);
+    font-size: var(--text-2xs);
+    line-height: 1.5;
+}
+.chat-code-gutter {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    flex: none;
+    padding: 0.375rem 0.5rem;
+    text-align: right;
+    white-space: pre;
+    user-select: none;
+    color: var(--color-subtle);
+    background-color: var(--color-canvas);
+    border-right: 1px solid var(--color-line);
+    font-variant-numeric: tabular-nums;
+}
+/* Never wrap — a wrapped line would take two rows in the code but one in the gutter and drift them apart. */
+.chat-code .shiki,
+.chat-code .shiki code {
+    white-space: pre;
+}
+.chat-code .shiki {
+    margin: 0;
+    padding: 0.375rem 0.75rem;
+    /* Over Shiki's inline light-theme background; the plain fallback gets the app's content color (Shiki's own
+       output overrides it per-token). */
+    background-color: var(--color-canvas) !important;
+    color: var(--color-content);
+    font-size: inherit;
+    line-height: inherit;
+    overflow: visible;
+}
+[data-mode="dark"] .chat-code .shiki,
+[data-mode="dark"] .chat-code .shiki span {
+    color: var(--shiki-dark) !important;
+}
+.chat-tab {
+    color: var(--color-muted);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition:
+        background-color 0.15s,
+        color 0.15s,
+        border-color 0.15s;
+}
+.chat-tab:hover {
+    background: color-mix(in srgb, var(--color-content) 6%, transparent);
+    color: var(--color-content);
+}
+.chat-tab-on {
+    background: color-mix(in srgb, var(--color-overlay) 70%, transparent);
+    color: var(--color-content);
+    border-color: var(--color-line);
+}
+/* ── A DECISION CARD'S INNER SPACING ─────────────────────────────────────────────────────────────
+   ONE rule for all eight cards (ChatCard's callers in ChatMessageView), because this is the exact thing that
+   drifted before: every card wrote `px-3.5 py-3` by hand, so the band under the header was a caller's decision
+   eight times over and no two of them could be corrected together.
+
+   THREE NUMBERS, and each is a different question.
+
+   14px at the sides matches the header's own inset, so the title, the body and the answers sit on one margin.
+
+   8px on top, because the HEADER already contributes 8: the reader sees the sum, and 12+8 opened a band under
+   the title wide enough to read as a missing element — most visibly on the question card, where what follows
+   the header is a document's own name row and the empty strip above it had an edge to be measured against. The
+   same 8 is what .chat-card-doc-head spends, so the two stand off the header identically. 8+8 is
+   the same 16 the card spends above its title (8 padding, and the title's own leading), so the header now sits
+   in an even band rather than a top-heavy one.
+
+   10px at the bottom, not 8 and not 12: a card ends on TEXT, and a line box carries a couple of pixels of
+   leading below its glyphs that padding cannot see. 12 measured even and looked bottom-heavy; 10 plus that
+   slack is what the 8 above the title actually looks like. Where the body is followed by a document or the
+   answers row it is a gap between two blocks rather than the card's edge, and the same 10 reads correctly
+   there too.
+
+   Unlayered, like everything else in this file, so it outranks the Tailwind padding utilities the call sites
+   used to carry: a card that needs a different inside says so here, not in its own template. */
+.chat-card-body {
+    padding: 8px 14px 10px;
+}
+/* A card's own ROWS: the answers strip under the body (ChatCard), and the status lines and receipts the offer
+   cards add beside it. Same 14px inset as everything else on the card, and a shorter band top and bottom than
+   the body gets, because a row is one line of controls or one line of figures rather than a block of prose. */
+.chat-card-row {
+    padding: 10px 14px;
+}
+/* ── THE DOCUMENT A CARD IS ABOUT ────────────────────────────────────────────────────────────────
+   (ChatDocumentBody in its `in-card` form: the plan being approved, the write-up a question is about.)
+
+   A SECTION OF THE CARD, NOT A BOX ON IT, and the change is the difference between reading the plan and
+   squinting at a quotation of it.
+
+   It used to be the transcript's boxed form — a rounded border and `bg-canvas` — dropped inside `.chat-card-body`
+   and inset 14px on each side. Three things went wrong at once, and every one of them is charged to the
+   longest-form thing in the panel:
+
+     TWO FRAMES. The card's 14px inset, the box's border and its own 12px padding is 27px a side of a docked
+     panel spent on chrome around the one block of text the card exists to show. At the column's body size that
+     is about four characters off every line of the document, on both sides, for the whole length of it.
+
+     AN INVERTED GROUND. `.chat-surface` is a light wash and `bg-canvas` is the panel's darkest surface, so the
+     document sat DARKER than the card containing it. Depth reads as recession: the plan the reader is being
+     asked to approve rendered as an attachment quoted inside the ask, which is exactly backwards.
+
+     A LETTERBOX. 22rem of a scrolling box, inside a scrolling transcript, is a plan read six lines at a time.
+
+   So: no border, no ground of its own, and the card's own 14px margin, which puts the summary above it, the
+   document, and the Approve button below it on ONE left edge. A hairline is the whole boundary — the same
+   statement the box was making, at 1px instead of a frame. The height cap is the call site's (see
+   ChatMessageView) and is viewport-relative now: a card's answers still have to be reachable under it, and how
+   much room that leaves is a fact about the window, not a number in a stylesheet.
+
+   Full-bleed rather than inset, which is what makes a hairline here a divider rather than a floating rule: it
+   spans the card, so it separates two bands of one surface instead of underlining a block sitting on it. */
+.chat-card-doc {
+    /* The card's own side inset, named once here and spent by both rows below, so the document's name row, its
+       prose, the body above it and the answers under it are provably on one margin — which is the entire claim
+       this redraw makes. The number is .chat-card-body's, and that block explains why it is 14. */
+    --chat-card-doc-inset: 14px;
+}
+/* WHICH EDGES CARRY A HAIRLINE is the call site's, because it depends on what the document sits between.
+
+   THE BOTTOM EDGE IS THE ONE THAT MATTERS, and it is the one thing the box was genuinely doing: a document
+   longer than the cap is cut mid-sentence by the scroll, and with nothing under it but air, the plan reads as
+   having stopped there rather than as continuing past the fold. A rule says where the band ends; the scrollbar
+   inside it says there is more. Both cards take it.
+
+   The TOP edge is only ambiguous on the plan card, which runs summary → document → answers: prose under prose
+   on one ground, with no other tell, so it gets the line too. The question card runs question → document →
+   options, and its top edge is the card's own HEADER — ChatCard argues (with the reasoning) that a rule under a
+   card's title reads as a banner rather than as a boundary, and none is needed: the document's name row is 2xs,
+   muted and led by a chevron, already a different register from the sentence above it, and it stands off the
+   header by the same 16px the body does. */
+.chat-card-doc-top-rule {
+    border-top: 1px solid var(--color-line);
+}
+.chat-card-doc-bottom-rule {
+    border-bottom: 1px solid var(--color-line);
+}
+/* The name row, at the same 8px the body spends under the header (see .chat-card-body for why that number and
+   not 12). Folded, this row IS the section and 8/8 reads even; open, the bottom 8 is the air between the
+   document's name and its first line. */
+.chat-card-doc-head {
+    padding: 8px var(--chat-card-doc-inset);
+}
+/* The prose. No top padding — the row above already spent it — and the body's own 10px at the bottom, for the
+   line-box leading that padding cannot see.
+   `overscroll-behavior: contain` because this is a scroller inside the transcript's scroller: without it,
+   reaching the end of the plan hands the wheel straight to the transcript and throws the card being read off
+   the screen. */
+.chat-card-doc-body {
+    padding: 0 var(--chat-card-doc-inset) 10px;
+    overscroll-behavior: contain;
+}
+
+/* The taken option on a DECIDED card. Quieter than the live `.ui-row-select-on` it replaces when the card
+   settles — a live selection is a state the user is still moving, this one is settled — and its border is what
+   separates it from the options it was chosen over, which carry none. No :hover pair on purpose: a decided
+   card responds to nothing, which is also why it is not a `.ui-row-select` at all. */
+.chat-option-picked {
+    background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+}
+/* THE HELD COMMAND'S OWN COLOURS (ChatCommandBlock). Every Shiki surface in this app is coloured twice over:
+   an inline `color` carrying the LIGHT theme's token, and a `--shiki-dark` custom property beside it carrying
+   the dark one. Dark mode is then a pure CSS swap, no re-highlighting — but it only happens where a rule like
+   this one says it does, and an inline style can only be beaten with `!important`. Without it the card renders
+   light-plus on a near-black ground, which is the palette at its very worst: #a31515 paths, #0000ff flags and
+   #098658 numbers, every one of them a dark colour chosen to be read on white. The same flip, for the same
+   reason, as `.chat-code` above, `.ui-code` in the design system's code.css, and the workspace search list. */
+[data-mode="dark"] .chat-command-block span {
+    color: var(--shiki-dark) !important;
+}
+/* THE TWO HALVES OF A HELD COMMAND: the fragment the gate stopped it for, and everything else. Both rules are
+   drawn OVER those same colours, so neither may set `color` — the grammar has to keep reading through both.
+
+   The dim is opacity rather than a colour, for exactly that reason: a grey would erase the syntax highlighting
+   this card just gained, and the point is a hierarchy within colour, not instead of it.
+
+   80%, and the number was arrived at by looking rather than reasoned to. The first draft was 62%, which is a
+   defensible figure against black text on white and too deep a cut here: dark-plus is a mid-brightness palette
+   to begin with, so on the card's dark wash the two reductions compound and the command comes out a grey smear
+   with one amber word floating in it. That is a card that has made itself dishonest to buy the mark some
+   contrast — the unmarked text is still the command someone is about to approve, and most of what they need to
+   judge is in it. At 80% the whole line reads as code and the mark still lands first, which is all the dim was
+   ever for. */
+.chat-command-dim {
+    opacity: 0.8;
+}
+/* THE MARK. A tinted ground says "here", and the underline is what makes that survive greyscale, a reader who
+   cannot separate the amber, and a screen in daylight — this is the one thing on the card that must never
+   depend on hue alone. `text-decoration` rather than a border because a fragment can wrap across lines, and a
+   border would draw a box around the wrap; a decoration follows the text. */
+.chat-command-mark {
+    background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+    border-radius: 2px;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--color-warning) 70%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+/* The composer is stuck to the bottom of the transcript's own scroller (ChatPanel's footer), and most of the
+   box it occupies is transparent — the padding around the rounded composer, the gaps between it and whatever
+   banners are stacked above it. Once the user scrolls up, those pixels show the messages passing beneath, so
+   they must behave like them too: a click or a drag through them belongs to the transcript, not to a footer
+   that happens to be lying over it. The rows themselves take their events back, since they are the part of the
+   footer that is actually there. */
+.chat-footer {
+    pointer-events: none;
+}
+.chat-footer > * {
+    pointer-events: auto;
+}
+/* The one strip of that transparent box which must NOT show the transcript: the padding below the composer,
+   between its bottom edge and the scroller's, with the panel's status bar directly under it. Everywhere else
+   the transparency reads as depth — messages visibly pass beneath a floating box. Nothing passes through this
+   band: it is the end of the scroller, so what shows in it is a sliver of a message cut off top and bottom,
+   sitting in a slot of its own between the composer and the status row. It reads as a rendering fault rather
+    than as a layer, which is what it looked like in every screenshot of it. Painted with the panel's own surface
+    (--color-card, the scroller's background and the ground the status bar below sits on) the composer meets that
+    row on one continuous background, and the transcript ends where the composer's opaque box cuts it off.
+    Its height IS the footer's bottom padding (py-3 in ChatPanel) — the strip the composer's box does not cover.
+    The pseudo-element resolves against .chat-footer, which is positioned by being sticky. Behind that box
+    (z-index: -1) rather than over it: the composer's drop shadow falls into exactly this band, and an opaque
+    rectangle painted on top of it would cut the shadow off square at the box's edge. Negative only WITHIN the
+    footer's own stacking context (sticky + z-10), so the band still covers the transcript — it is the footer's
+    background, not a layer between the panel and the messages. */
+.chat-footer::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 0.75rem;
+    z-index: -1;
+    background: var(--color-card);
+    pointer-events: none;
+}
+.composer-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+        background-color 0.15s,
+        color 0.15s;
+}
+.composer-ghost:hover {
+    background: color-mix(in srgb, var(--color-content) 8%, transparent);
+    color: var(--color-content);
+}
+/* A composer control the picked workflow decides instead of this chat — see the footer row in ChatPane.
+   Dimmed and inert rather than hidden, so the row keeps its shape and the badge that took the control
+   away stays one press from giving it back. */
+.composer-steered {
+    opacity: 0.4;
+    pointer-events: none;
+}
+.composer-active {
+    background: color-mix(in srgb, var(--color-primary-500) 16%, transparent);
+    color: var(--color-primary-500);
+}
+.composer-active:hover {
+    background: color-mix(in srgb, var(--color-primary-500) 24%, transparent);
+    color: var(--color-primary-500);
+}
+/* A GHOST CONTROL THAT IS A TOGGLE, and therefore has to look pressable in the state where it is doing
+   nothing. Plain `.composer-ghost` paints nothing at rest and only fills on :hover, which is right for a
+   control that always does something when pressed (the model pill, the mode menu) and wrong for a switch: the
+   off state rendered as bare muted text, indistinguishable from the caption beside it, and on touch there is
+   no hover to correct the impression. Off is precisely the state that has to invite the press.
+
+   A hairline, not a fill: the resting chip has to read as a control without competing with the one that is
+   ON, which keeps `.composer-active`'s wash. The active border rides the brand rather than the line token so
+   a filled chip doesn't wear a grey ring. */
+.composer-toggle {
+    border: 1px solid var(--color-line);
+    transition:
+        background-color 0.15s,
+        border-color 0.15s,
+        color 0.15s;
+}
+.composer-toggle.composer-active {
+    border-color: color-mix(in srgb, var(--color-primary-500) 32%, transparent);
+}
+/* The composer wearing the AGENT's voice (ChatPane's voiceAgent): the whole box changes standing, not just a
+   pill, because being in this mode by accident is the one mistake worth paint — the words typed here land in
+   the transcript as the agent's own. Border over background alone so the state survives focus (focus-within
+   already owns the ring), and a faint wash so it reads armed even with the caret elsewhere. */
+.composer-voice {
+    border-color: var(--color-primary-500);
+    background: color-mix(in srgb, var(--color-primary-500) 6%, var(--color-overlay));
+}
+.composer-effort-seg {
+    height: 0.75rem;
+    width: 0.25rem;
+    box-sizing: content-box;
+    background-clip: content-box; /* keep the visible bar thin; the padding-right gap stays transparent */
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+    transition:
+        background-color 0.15s,
+        filter 0.15s;
+}
+/* The gap between two bars is a click target for the lower (left) level — it lives as this bar's
+   right-padding rather than a flex gap, so clicking the empty space snaps down, not up. */
+.composer-effort-seg:not(:last-child) {
+    padding-right: 0.125rem;
+}
+.composer-effort-seg:hover {
+    background-color: color-mix(in srgb, var(--color-content) 22%, transparent); /* unlit hover */
+    filter: brightness(1.15); /* lit-bar hover feedback (inline bg wins over class bg) */
+}
+/* Touch sizing, stated here rather than at the two call sites because the snap-down gap is a structural
+   selector (the bar's own right-padding, see above) and has nowhere in a class attribute to live. Deliberately
+   viewport-based (device class), unlike the @container variants in the template that thin out labels by panel
+   width — don't unify the two. */
+@media (max-width: 767.98px) {
+    .composer-effort-seg {
+        height: 1.1rem;
+        width: 0.5rem;
+        /* The bar has to stay a bar — it is a METER, and a meter whose rungs are 44px wide is a row of
+           buttons. So the target grows on ONE AXIS. Vertically it is a full thumb: 18px of bar in a composer
+           row is where the misses happen, and every rung gaining the same 44px strip costs nothing because
+           the strip is shared top to bottom. Horizontally it keeps the bar's own width plus the snap-down
+           gap above, because picking a rung is a precise act and the neighbour is a different answer, not a
+           near miss. Overlaying 44px sideways would simply hand every press to whichever rung is last in the
+           DOM. */
+        position: relative;
+    }
+    .composer-effort-seg:not(:last-child) {
+        padding-right: 0.3rem; /* chunkier snap-down gap for touch */
+    }
+}
+/* THE SAME LADDER AS A PICTURE — the spans ComposerEffort draws on a touch pointer, where the rungs are a
+   readout inside one button and the levels are picked from a sheet (that component carries the reasoning).
+   Same geometry and same ramp as the real thing, with every affordance taken back off: no pointer of its own,
+   and no hover, because it is not the control. */
+.composer-effort-seg-static {
+    display: inline-block;
+    cursor: default;
+    pointer-events: none;
+}
+.composer-effort-seg-static:hover {
+    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+    filter: none;
+}
+.composer-send {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    width: 2rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--color-primary-fill) 14%, transparent);
+    color: var(--color-primary-fill);
+    cursor: pointer;
+    transition:
+        background-color 0.15s,
+        opacity 0.15s;
+}
+.composer-send:hover {
+    background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
+}
+/* Every send glyph in the icon sets is a paper plane pointing up-right, so its ink mass sits
+   up-right of the viewBox centre and reads off-centre inside the round button (measured ~1px
+   each way at text-sm). Nudge it back. Stop shares .composer-send but its glyph is symmetric. */
+.composer-send:not(.composer-stop) svg {
+    translate: -1px 1px;
+}
+.composer-send:disabled {
+    background: var(--color-overlay);
+    color: var(--color-subtle);
+    cursor: default;
+}
+/* THE MOST-PRESSED CONTROL IN THE PRODUCT, and it was 32px. Send and Stop share this class, and Stop is the
+   one you reach for in a hurry — a turn is doing something you did not want — so both get the full 44. Grown
+   rather than overlaid, unlike every other control this sweep touched: these two are round, they sit at the
+   end of the composer row with the row's own padding beside them, and a 44px circle is exactly what a phone's
+   send button is everywhere else. Nothing is behind them for a bigger box to steal from. */
+@media (pointer: coarse) {
+    .composer-send {
+        height: 2.75rem;
+        width: 2.75rem;
+    }
+}
+.composer-stop {
+    background: var(--color-overlay);
+    color: var(--color-content);
+}
+.composer-stop:hover {
+    background: color-mix(in srgb, var(--color-content) 12%, var(--color-overlay));
+}
+.resize-handle {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 20;
+    touch-action: none;
+    transition: background-color 0.15s;
+}
+.resize-handle:hover,
+.chat-panel.is-resizing .resize-handle {
+    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+}
+.chat-panel.is-resizing {
+    user-select: none;
+}

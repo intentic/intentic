@@ -1,0 +1,119 @@
+// @vitest-environment jsdom
+import { reactive } from "vue";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ChatEnvelope, ChatNote } from "./chatChannel";
+import type { StoredTab } from "../tabs/tabSnapshot";
+
+// The sandbox id is the envelope's own scope: every case below is about whether a note is BELIEVED, and half
+// of that is which sandbox it names. useSandbox itself reaches window.env through useApi, which no test has.
+vi.mock("../../sandbox/client/useSandbox", async () => {
+    const { ref } = await import("vue");
+    const activeSandboxId = ref<string | undefined>(`sb1`);
+    return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
+});
+
+const posted: ChatEnvelope[] = [];
+
+// The chat's channel, and only that one: floating.ts opens a channel of its own under the same global. It copies
+// what it is handed the way the browser does, by structured clone, which is the one thing about a BroadcastChannel
+// a fake that merely kept the reference could never fail on: a Vue proxy in a note is a DataCloneError out there.
+class FakeChannel {
+    constructor(private readonly name: string) {}
+    postMessage(envelope: ChatEnvelope): void {
+        if (this.name === `intentic.chat`) {
+            posted.push(structuredClone(envelope));
+        }
+    }
+    addEventListener(): void {
+        // Notes arrive through receiveChatNote, the same door the channel listener uses.
+    }
+}
+
+vi.stubGlobal(`BroadcastChannel`, FakeChannel);
+
+const { onChatNote, postChatNote, receiveChatNote } = await import("./chatChannel");
+
+beforeEach(() => {
+    posted.length = 0;
+});
+
+/* ONE CHANNEL FOR EVERYTHING THE CHAT SAYS ACROSS WINDOWS, so what is pinned here is the envelope: every note
+ * goes out stamped with this window's sandbox, and a note about another sandbox's chats is dropped before any
+ * reader sees it, whatever kind it is. */
+describe(`the chat channel`, () => {
+    it(`stamps every note with the sandbox this window is pointed at`, () => {
+        postChatNote({ kind: `roll` });
+
+        expect(posted).toEqual([{ sandbox: `sb1`, note: { kind: `roll` } }]);
+    });
+
+    it(`hands a note to the reader of its kind, and to that reader alone`, () => {
+        const heard: ChatNote[] = [];
+        onChatNote(`closed-drafts`, (note) => heard.push(note));
+        onChatNote(`roll`, () => heard.push({ kind: `roll` }));
+
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `closed-drafts`, tabs: [] } });
+
+        expect(heard).toEqual([{ kind: `closed-drafts`, tabs: [] }]);
+    });
+
+    it(`drops a note about another sandbox's chats before any reader hears it`, () => {
+        const heard: ChatNote[] = [];
+        onChatNote(`roll`, (note) => heard.push(note));
+
+        receiveChatNote({ sandbox: `sb2`, note: { kind: `roll` } });
+
+        expect(heard).toEqual([]);
+    });
+
+    // A window that has not resolved its sandbox yet matches only another such window: `undefined` is a
+    // value here, not a wildcard, or a booting window would take the first note from any box at all.
+    it(`treats an unresolved sandbox as its own scope rather than as a wildcard`, () => {
+        const heard: ChatNote[] = [];
+        onChatNote(`roll`, (note) => heard.push(note));
+
+        receiveChatNote({ sandbox: undefined, note: { kind: `roll` } });
+
+        expect(heard).toEqual([]);
+    });
+
+    /* THE WIRE FORM IS JSON. A tab's snapshot carries the conversation's session, its displaced pick and its
+     * stopped turn as the refs hold them, which is as reactive proxies, and structured clone refuses a proxy: a
+     * summons for any chat with a session in it threw out of the click that made it, after the local apply and
+     * before any other window heard. Posted as JSON, the note arrives plain, and its absent fields arrive absent. */
+    it(`carries a note holding Vue-reactive state as the plain data a structured clone will take`, () => {
+        const tab: StoredTab = reactive({
+            conversationId: `cnv-1`,
+            isolated: true,
+            registered: true,
+            provider: `claude`,
+            harness: `native`,
+            session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-1` },
+            movedFrom: { provider: `codex`, value: `gpt-5-codex` },
+            title: undefined,
+            draft: ``,
+            attachments: [],
+            queued: [],
+        });
+
+        expect(() => postChatNote({ kind: `closed-drafts`, tabs: [tab] })).not.toThrow();
+
+        expect(posted[0]?.note).toStrictEqual({
+            kind: `closed-drafts`,
+            tabs: [
+                {
+                    conversationId: `cnv-1`,
+                    isolated: true,
+                    registered: true,
+                    provider: `claude`,
+                    harness: `native`,
+                    session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-1` },
+                    movedFrom: { provider: `codex`, value: `gpt-5-codex` },
+                    draft: ``,
+                    attachments: [],
+                    queued: [],
+                },
+            ],
+        });
+    });
+});

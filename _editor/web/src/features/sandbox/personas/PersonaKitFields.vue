@@ -1,0 +1,281 @@
+<script setup lang="ts">
+import type { SkillDraft, SkillSummary, SystemPromptMode } from "@intentic/sandbox-contract";
+import { DisclosureRow, Icon, MarkdownDocument, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
+import { computed, ref, watch } from "vue";
+import SkillForm from "../agent-settings/skills/SkillForm.vue";
+import SkillRow from "../agent-settings/skills/SkillRow.vue";
+import { usePersonaKit } from "./usePersonaKit";
+import { useDraft } from "../../../lib/useDraft";
+
+/* WHAT THIS PERSONA IS TOLD, AND WHAT IT ALONE KNOWS: the third of the card's questions, and the one that turns
+ * a persona from a label into a working posture.
+ *
+ * TWO THINGS, ONE TAB, because they are one folder and one decision: a release-notes writer is a prompt AND the
+ * house style it reads, and splitting them across the card would make the second look like an unrelated feature.
+ * The daemon keeps both in the card's own kit (`.intentic/config/personas/<id>/`), laid out so the agent's own loader
+ * reads them on the turns wearing this card and no others.
+ *
+ * THE SKILLS ARE THE SKILLS PAGE'S OWN ROWS AND ITS OWN EDITOR, and that is the whole of why this file is short.
+ * They were hand-rolled here first: a text link to add one, three bare inputs to write it, which put a second,
+ * worse way to write a skill two clicks from the real one: no markdown editor, no preview, no "why is the button
+ * grey", a different delete, a different everything. A skill is a skill wherever it is kept, so <SkillRow> and
+ * <SkillForm> render these exactly as Agent ▸ Skills renders the sandbox's, and the row that adds one is the
+ * same full-width `+` row that list uses rather than a link nothing else in the app has.
+ *
+ * WHAT THE ROWS ARE HANDED is a summary built here rather than one the daemon sends, because these skills are
+ * not in that inventory's shape: a kit skill has no switch (it is on exactly when its persona is worn) and no
+ * owner to name (the card it sits on is three lines up). Everything else: the mark, the chip, the open-in-place
+ * reading, the confirm before delete: comes free with the row.
+ *
+ * IT IS NOT PART OF THE CARD'S AUTOSAVE, and that is the point of it being a separate component with its own
+ * store. The rest of the form writes the whole card on a debounce: right for nine switches, wrong for a system
+ * prompt, where it would commit every intermediate sentence to a tracked file. So the MODE (a click) rides the
+ * card, and the TEXT commits on blur or from a Save button, exactly like the sandbox-wide prompt it stands in
+ * for. */
+
+const { personaId, mode } = defineProps<{
+    /** The saved card's id. A card is created before it is edited, so there is always one. */
+    personaId: string;
+    mode: SystemPromptMode | undefined;
+}>();
+const emit = defineEmits<{ "update:mode": [SystemPromptMode | undefined] }>();
+
+/* Four options, and the first is the default: a persona that says nothing about the prompt runs on the sandbox's,
+ * which is what every card meant before this field existed. The other three are the same bases the sandbox
+ * chooses between: the same three words, deliberately, because they mean the same three things. */
+const MODES = [
+    { label: `Sandbox's`, value: `inherit` },
+    { label: `Intentic`, value: `intentic` },
+    { label: `Claude`, value: `claude` },
+    { label: `Its own`, value: `custom` },
+] as const;
+const picked = computed(() => mode ?? `inherit`);
+const setMode = (value: string): void => emit(`update:mode`, value === `inherit` ? undefined : (value as SystemPromptMode));
+
+const PROMPT_MAX = 20000; // The route's own cap: the daemon refuses more.
+const { kit, error: kitError, isLoading, savePrompt, saveSkill, removeSkill, readSkill } = usePersonaKit(() => personaId);
+
+// Seeded from what is stored and followed across other windows' saves, never over an edit here (useDraft).
+const prompt = useDraft(() => kit.value.prompt);
+const error = ref<string | undefined>(undefined);
+
+const commitPrompt = async (text: string): Promise<void> => {
+    error.value = undefined;
+    try {
+        await savePrompt.mutateAsync(text.trim());
+    } catch (err) {
+        error.value = noticeFrom(err, `Couldn't save this persona's prompt.`).detail;
+    }
+};
+
+/* ── Its own skills ──────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * One row per skill, one of them open at a time, the Skills page's rule, for its reason: a list that renders
+ * every body at once costs the sum of its instructions to draw, and a card is not the place to discover that.
+ *
+ * A KIT SKILL IS ALWAYS THE OWNER'S, which is what makes these rows simpler than that page's. There is nothing
+ * here that arrived with an extension or a plugin, so every row is editable and removable and none is
+ * switchable, and <SkillRow> opens an editable skill straight into the form, so reading and editing are the
+ * same click. */
+const summaryOf = (skill: { name: string; description: string }): SkillSummary => ({
+    id: skill.name,
+    name: skill.name,
+    description: skill.description,
+    origin: `persona`,
+    enabled: true,
+    // On exactly when its persona is worn, so there is nothing here to switch; the owner's to rewrite and to
+    // delete, because they wrote it.
+    switchable: false,
+    editable: true,
+    removable: true,
+});
+
+// The rows need what the marks are drawn from. A kit skill belongs to no extension and no connection, so it
+// falls to its origin glyph, and asking for those lists would be two cached reads to answer "nothing".
+const NO_SOURCES = { capabilities: [], extensions: [] };
+
+// Which row is open, by name, and whether the new-skill form is. Separate flags rather than a sentinel name,
+// for the reason the skills list keeps them separate: a skill may be called anything.
+const openName = ref<string | undefined>(undefined);
+const adding = ref(false);
+// The open row's text, once it has arrived: its own ref, because a body is a fetch and the row is already on
+// screen. Undefined while it is in flight, which is what draws the row's "Reading…" line.
+const openBody = ref<string | undefined>(undefined);
+const bodyError = ref<string | undefined>(undefined);
+const busy = ref(false);
+
+const close = (): void => {
+    openName.value = undefined;
+    openBody.value = undefined;
+    bodyError.value = undefined;
+    adding.value = false;
+};
+
+// Open a row and fetch its text, or close it if it is the one already open. The name is set BEFORE the await so
+// the row shows it is opening rather than appearing to ignore the click for a round trip.
+const toggle = async (name: string): Promise<void> => {
+    if (openName.value === name) {
+        close();
+        return;
+    }
+    close();
+    openName.value = name;
+    try {
+        openBody.value = ((await readSkill(name)) as { body: string }).body;
+    } catch (err) {
+        bodyError.value = noticeFrom(err, `Couldn't read that skill.`).detail;
+    }
+};
+
+const startAdd = (): void => {
+    close();
+    adding.value = true;
+};
+
+const run = async (action: () => Promise<unknown>, whenItFails: string): Promise<void> => {
+    error.value = undefined;
+    busy.value = true;
+    try {
+        await action();
+        close();
+    } catch (err) {
+        error.value = noticeFrom(err, whenItFails).detail;
+    } finally {
+        busy.value = false;
+    }
+};
+
+const save = (skill: SkillDraft): Promise<void> => run(() => saveSkill.mutateAsync(skill), `Couldn't save that skill.`);
+const remove = (name: string): Promise<void> => run(() => removeSkill.mutateAsync(name), `Couldn't remove that skill.`);
+
+// Switching to a different card closes whatever was open on the last one: the accordion reuses this component,
+// and a body left on screen would belong to a persona nobody is looking at.
+watch(
+    () => personaId,
+    () => {
+        close();
+        error.value = undefined;
+    },
+);
+</script>
+
+<template>
+    <div class="flex flex-col gap-5">
+        <div class="flex flex-col gap-3">
+            <p class="text-xs text-subtle">
+                The instructions a session wearing this card carries, and the skills only its turns can reach. Every other chat in this sandbox is
+                unaffected.
+            </p>
+
+            <!-- The base, as a click. Same three words the sandbox setting uses, plus the one answer only a card
+                 can give: follow the sandbox, which is what an untouched card means. -->
+            <label class="flex flex-wrap items-center justify-between gap-3">
+                <span class="flex min-w-0 flex-col">
+                    <span class="flex items-center gap-2 text-sm text-content">
+                        <Icon name="pencil" class="w-4 shrink-0 text-center text-xs text-subtle" />
+                        System prompt
+                    </span>
+                    <span class="text-xs text-subtle">
+                        <template v-if="picked === `custom`">Its own words, replacing the sandbox's prompt on this persona's turns.</template>
+                        <template v-else-if="picked === `inherit`">Whatever the sandbox is set to: change it in Agent ▸ Instructions.</template>
+                        <template v-else>A built-in prompt, for this persona only.</template>
+                    </span>
+                </span>
+                <SegmentedControl :model-value="picked" :options="MODES" @update:model-value="setMode" />
+            </label>
+
+            <!-- THE SAME SURFACE AS THE SANDBOX'S OWN PROMPT, which is the whole point: these two fields choose
+                 between the same three bases, are read by the same runtime and are the same kind of document,
+                 and they used to be two different five-row monospace boxes with two hand-rolled Save buttons
+                 that behaved slightly differently. `save="explicit"` is the same declaration the sandbox
+                 prompt and the safety policy make, for the same reason: every turn this card wears reads it. -->
+            <div v-if="picked === `custom`" class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
+                <MarkdownDocument
+                    v-model="prompt"
+                    :editable="!isLoading"
+                    :stored="isLoading ? undefined : kit.prompt"
+                    :saving="savePrompt.isPending.value"
+                    save="explicit"
+                    label="This persona's system prompt"
+                    :max-chars="PROMPT_MAX"
+                    placeholder="Write what this persona is, who it is, what it does, how it answers."
+                    class="min-h-48"
+                    @save="commitPrompt"
+                >
+                    <!-- What Custom costs, scoped to the turns this card governs: a replacement drops what this
+                         app tells the assistant about its own cards and panels, and a reader who only sees
+                         "your text" will not guess that. -->
+                    <template #note>
+                        Replaces the whole prompt on this persona's turns, including what this app tells the assistant about its question cards,
+                        checklist panel and browser tools. Leave it empty to fall back to the sandbox's.
+                    </template>
+                </MarkdownDocument>
+            </div>
+        </div>
+
+        <!-- ITS OWN SKILLS, as the Skills page draws them. Shown whatever the prompt is set to: a persona on the
+             sandbox's prompt can still carry a checklist that only it reads, and those are independent answers.
+
+             Bordered and divided like a row group, because that is what it is: a small list inside a card. -->
+        <div class="flex flex-col gap-2">
+            <span class="flex items-center gap-2 text-sm text-content">
+                <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
+                Its own skills
+            </span>
+            <!-- A REAL <RowGroup>, which is what the line above always said this was ("bordered and divided like
+                 a row group, because that is what it is"). Hand-drawn, it was a surface with no tier on it, so
+                 the <SkillRow>s inside it had to carry their own — and a list whose rows each declare their size
+                 is the drift this whole change is about. The group says `compact` once and they read it. -->
+            <RowGroup>
+                <!-- The invitation is a ROW inside the list, not a line above it: the Skills page's shape. Above
+                     it, an empty list said the same thing twice: a paragraph explaining there is nothing, and a
+                     bordered box holding nothing but the button that would fix it. -->
+                <Row
+                    v-if="kit.skills.length === 0 && !adding"
+                    icon="book"
+                    description="None yet. A skill here is instructions the agent reads only while acting as this persona: a house style, a review checklist, the steps for one job."
+                />
+
+                <SkillRow
+                    v-for="skill in kit.skills"
+                    :key="skill.name"
+                    :skill="summaryOf(skill)"
+                    :expanded="openName === skill.name"
+                    :body="openName === skill.name ? openBody : undefined"
+                    :body-error="openName === skill.name ? bodyError : undefined"
+                    :sources="NO_SOURCES"
+                    :disabled="busy"
+                    @toggle="void toggle(skill.name)"
+                    @save="save"
+                    @remove="remove(skill.name)"
+                />
+
+                <!-- The new skill is written in the same place a written one is read, so the form is never a
+                     different screen from the list it joins: the Skills page's own arrangement.
+
+                     An open <DisclosureRow>, for the reason its twin on the agent's skills list is one: the
+                     header, the open wash, the hairline and the drawer's indent are all that component's, and
+                     they were five hand-restated values here. -->
+                <DisclosureRow v-if="adding" open body="drawer" icon="plus" title="New skill" @update:open="close">
+                    <template #below>
+                        <SkillForm :disabled="busy" @save="save" @cancel="close" />
+                    </template>
+                </DisclosureRow>
+
+                <!-- Hidden while something is open, so there is only ever one skill being written or read.
+                     <RowNote variant="action">, which is the app's one "add one to this list": it takes the
+                     chevron's column and size from the same table the rows above draw their arrows from. The
+                     hand-written version here and its twin on the agent's skills list were two guesses at that
+                     column, and neither landed in it — see the component's note. -->
+                <RowNote v-else-if="openName === undefined" variant="action" label="Write a skill" @click="startAdd" />
+            </RowGroup>
+        </div>
+
+        <Notice
+            v-if="kitError !== undefined"
+            :of="{ tone: `danger`, title: `Couldn't read this persona's own prompt and skills.`, detail: kitError }"
+        />
+        <Notice v-if="error !== undefined" tone="warning" class="text-2xs">{{ error }}</Notice>
+    </div>
+</template>

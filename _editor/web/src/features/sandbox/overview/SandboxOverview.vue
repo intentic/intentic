@@ -1,0 +1,424 @@
+<script setup lang="ts">
+import { AnchoredOverlay, Card, ui, StatusBadge, vAction } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
+import { computed, nextTick, ref } from "vue";
+import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
+import { useSandboxVersion } from "./useSandboxVersion";
+import { useSandbox } from "../client/useSandbox";
+import { useSandboxOutline } from "./useSandboxOutline";
+import { sandboxAvailabilityVisual } from "./availability";
+import { useSandboxAvailability } from "./useSandboxAvailability";
+import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
+import SandboxBehindCard from "./SandboxBehindCard.vue";
+import SandboxManifestCard from "./SandboxManifestCard.vue";
+import SandboxUpdateCard from "./SandboxUpdateCard.vue";
+
+/* The Sandbox hub's "Overview" tab: WHAT THIS BOX IS. Sandbox identity (the name, inline-editable by the
+ * owner, and the logo, which is a control in its own right), the self-reported image + version + URL, online
+ * status, and the non-blocking update prompt. The platform stores only the binding; the image/version/URL are
+ * relayed live via the daemon's /info.
+ *
+ * IT DOES NOT INDEX THE OTHER TABS. It used to end in an "at a glance" block: five rows deep-linking to Agent,
+ * Secrets, Capabilities, Status and Access, each with a status chip. Every one of those was a second way to say
+ * something already on screen: four of the five pointed at tabs in the strip directly above them, presence is
+ * in the rail, and missing secrets badge the sandbox chip. The fifth left the hub entirely, for a page the
+ * rail's "+" opens. What was left on a healthy sandbox read "Ready · Ready · 4 · 0 · -": five rows and a
+ * chevron each to report that nothing needs doing, which is the exact pattern this app rejects everywhere else
+ * (the rail's VPN indicator, the Extensions tab's silent nominal case). The one condition it carried that had
+ * no other home (nothing connected to run a turn with) is an attention item now (sandboxAttention), so it
+ * rides the chip badge with the other four instead of a row that says "Ready" for the rest of the sandbox's
+ * life.
+ *
+ * The Status tab it pointed at is gone for the same reason, one level up: its whole body was a running count
+ * that read "docker" on a healthy box. NOTHING REPLACES IT HERE. Overview is what this box IS, facts with a
+ * half-life of months, and a list that changes whenever a dev server restarts would only be that deleted block
+ * again with live numbers in it. What is running belongs where it can be acted on: the Preview panel and Ports
+ * for dev servers, a capability's own row for a service. */
+
+const sandbox = useSandbox();
+const { hasSnapshot } = useWorkspaceTree();
+const availability = useSandboxAvailability(hasSnapshot);
+const availabilityBadge = computed(() => sandboxAvailabilityVisual(availability.value));
+const { info, installed, latest, updateAvailable, isLoading: infoLoading } = useSandboxVersion();
+const outline = useSandboxOutline(infoLoading);
+
+const isOwner = computed(() => sandbox.active.value?.role === `owner`);
+const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
+// A platform-hosted (starter) sandbox, what the ladder card below keys on: the box is deliberately small,
+// so the honest next rung is a bigger machine that costs nothing, and it deserves saying where the owner
+// already is rather than only on a setup page they finished.
+const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
+
+// Inline renaming (owner only), strictly in place: its pencil and commit pair belong to the name, not to a
+// second page-level action column. The field and title share their box, and the controls remain no larger than
+// the text line they operate on, so entering edit mode cannot change the card's height.
+//
+// THE LOGO IS NOT PART OF THIS FORM, and that is the correction. It used to be reachable only from inside
+// name-edit mode: press Edit, then discover that the decorative-looking tile had become a file picker, so the
+// one question a fresh sandbox actually prompts ("that's a letter, where do I put my logo?") had its answer
+// hidden behind a control that says "rename". A logo is one click and one file, with nothing to validate and
+// nothing to type, so it needs no commit step of its own: the tile is live for owners at all times, picking
+// saves immediately (see `pickFile`), and the rail chip repaints in the same tick from the same cache write.
+const editing = ref(false);
+const name = ref(``);
+const fileInput = ref<HTMLInputElement | null>(null);
+const nameInput = ref<HTMLInputElement | null>(null);
+const nameTouched = ref(false);
+const busy = ref(false);
+const error = ref<string | undefined>(undefined);
+
+// The menu opens only over a tile that already HAS a logo, because only then are there two answers (replace,
+// remove) to choose between. An empty tile has exactly one thing to do, and a menu with a single row is a click
+// charged for nothing, so it opens the file dialog directly.
+// Anchored rather than a PrimeVue Popover, so every menu in the app measures its room the one way.
+const logoTrigger = ref<HTMLButtonElement | null>(null);
+const logoMenuOpen = ref(false);
+const logoBusy = ref(false);
+const logo = computed(() => sandbox.active.value?.image ?? undefined);
+const avatarLetter = computed(() => (editing.value ? name.value : (sandbox.active.value?.name ?? ``)).trim().charAt(0));
+const nameError = computed<string | undefined>(() => {
+    const trimmed = name.value.trim();
+    if (trimmed.length === 0) {
+        return `Name is required.`;
+    }
+    if (trimmed.length > 60) {
+        return `Name must be 60 characters or fewer.`;
+    }
+    return undefined;
+});
+const canSave = computed(() => {
+    const trimmed = name.value.trim();
+    return trimmed.length > 0 && trimmed.length <= 60 && trimmed !== sandbox.active.value?.name;
+});
+
+// The single line under the title, present in every state so nothing can grow or shrink beneath it: the
+// sandbox's status when idle, the rename hint while editing, and errors (from either control) in place of both.
+const subline = computed<{ text: string; tone: string }>(() => {
+    if (error.value !== undefined) {
+        return { text: error.value, tone: `text-danger` };
+    }
+    if (editing.value && nameTouched.value && nameError.value !== undefined) {
+        return { text: nameError.value, tone: `text-danger` };
+    }
+    if (editing.value) {
+        return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
+    }
+    if (availability.value === `busy`) {
+        return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
+    }
+    if (availability.value === `starting` || availability.value === `warming`) {
+        return { text: `Getting the workspace ready…`, tone: `text-muted` };
+    }
+    return { text: ``, tone: `text-muted` };
+});
+
+const startEdit = async (): Promise<void> => {
+    name.value = sandbox.active.value?.name ?? ``;
+    error.value = undefined;
+    nameTouched.value = false;
+    editing.value = true;
+    await nextTick();
+    nameInput.value?.select();
+};
+const cancelEdit = (): void => {
+    editing.value = false;
+    error.value = undefined;
+};
+
+// The tile's press: choose between replace and remove when there is something to remove, otherwise go straight
+// to the file dialog. Members never get here: the tile is disabled for them.
+const pressLogo = (): void => {
+    error.value = undefined;
+    if (logo.value === undefined) {
+        fileInput.value?.click();
+        return;
+    }
+    logoMenuOpen.value = !logoMenuOpen.value;
+};
+
+// Write a logo straight through; `null` clears it. sandbox.update's cache write is what makes this tile and the
+// rail chip change together, so there is nothing staged here to preview and nothing to reconcile afterwards.
+const writeLogo = async (image: string | null): Promise<void> => {
+    const id = sandbox.active.value?.id;
+    if (id === undefined) {
+        return;
+    }
+    logoBusy.value = true;
+    error.value = undefined;
+    try {
+        await sandbox.update(id, { image });
+    } catch (err) {
+        error.value = errorMessage(err, `Couldn't save the logo.`);
+    } finally {
+        logoBusy.value = false;
+    }
+};
+
+const pickFile = async (event: Event): Promise<void> => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ``;
+    if (file === undefined) {
+        return;
+    }
+    error.value = undefined;
+    // Contained rather than cropped: a sandbox logo is usually a mark or a wordmark, and a centre slice of a
+    // wordmark is not the wordmark. A failure here is the FILE, not the save, so it says so.
+    let square: string;
+    try {
+        square = await fileToSquareDataUrl(file, `contain`);
+    } catch {
+        error.value = `Couldn't read that file as an image.`;
+        return;
+    }
+    await writeLogo(square);
+};
+
+// Both menu rows dismiss it themselves: the file dialog is a separate window and the removal is instant, so a
+// menu still hanging over the tile afterwards would be the only thing left to tidy up by hand.
+const changeLogo = (): void => {
+    logoMenuOpen.value = false;
+    fileInput.value?.click();
+};
+
+const removeLogo = async (): Promise<void> => {
+    logoMenuOpen.value = false;
+    await writeLogo(null);
+};
+
+const save = async (): Promise<void> => {
+    const id = sandbox.active.value?.id;
+    const trimmed = name.value.trim();
+    if (id === undefined || busy.value || !canSave.value) {
+        return;
+    }
+    busy.value = true;
+    error.value = undefined;
+    try {
+        await sandbox.update(id, { name: trimmed });
+        editing.value = false;
+    } catch (err) {
+        error.value = errorMessage(err, `Couldn't save sandbox settings.`);
+    } finally {
+        busy.value = false;
+    }
+};
+</script>
+
+<template>
+    <div class="@container flex flex-col gap-6">
+        <!-- Identity: name + logo (owner-editable), self-reported image / version / URL, online status. -->
+        <Card class="flex flex-col gap-4">
+            <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
+                <div class="flex min-w-0 flex-1 items-center gap-3">
+                    <!-- The logo IS the control: no "Choose image" row to add, so the card never changes height.
+                         Live for owners in every state (a logo has nothing to commit), disabled and out of the
+                         tab order for members, who cannot change it. The overlay is the affordance: it rests at
+                         zero opacity so the tile reads as identity, and appears on hover, on keyboard focus and
+                         for the whole save: the same layer, so the tile's size is fixed in all three. -->
+                    <button
+                        ref="logoTrigger"
+                        type="button"
+                        :disabled="!isOwner || logoBusy"
+                        :aria-label="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
+                        v-tooltip.bottom="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
+                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line-subtle bg-card text-muted"
+                        :class="isOwner ? 'cursor-pointer hover:border-line-strong' : ''"
+                        @click="pressLogo"
+                    >
+                        <img v-if="logo" :src="logo" alt="" class="h-full w-full object-cover" />
+                        <span v-else-if="avatarLetter" class="text-lg font-semibold uppercase text-content">{{ avatarLetter }}</span>
+                        <Icon name="server" v-else class="text-lg" />
+                        <span
+                            v-if="isOwner"
+                            class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-content transition-opacity"
+                            :class="logoBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'"
+                        >
+                            <Icon :name="logoBusy ? `spinner` : `image`" :spin="logoBusy" class="text-base" />
+                        </span>
+                    </button>
+                    <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="pickFile" />
+
+                    <!-- Only ever opened over a tile that HAS a logo, so both rows always do something. -->
+                    <AnchoredOverlay v-model="logoMenuOpen" :anchor="logoTrigger ?? undefined" side="bottom" cross="start">
+                        <div class="flex w-44 flex-col gap-0.5">
+                            <button
+                                type="button"
+                                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
+                                @click="changeLogo"
+                            >
+                                <Icon name="image" class="shrink-0 text-sm text-muted" />Change logo…
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger transition-colors hover:bg-danger/10"
+                                v-action="removeLogo"
+                            >
+                                <Icon name="trash" class="shrink-0 text-sm" />Remove logo
+                            </button>
+                        </div>
+                    </AnchoredOverlay>
+
+                    <div class="-ml-2 min-w-0 flex-1 @2xl:max-w-md">
+                        <div class="flex items-center gap-2">
+                            <div class="flex min-w-0 items-center">
+                                <!-- Title and field share one box: same height, padding and type scale, so
+                                     switching modes only paints a border; the glyphs never move. The hidden
+                                     sizer keeps the field proportional to its text instead of turning rename
+                                     into a full-width form. -->
+                                <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
+                                    <template v-if="editing">
+                                        <span
+                                            aria-hidden="true"
+                                            class="invisible col-start-1 row-start-1 flex h-8 min-w-0 items-center truncate rounded-md border border-transparent px-2 text-lg font-semibold"
+                                            >{{ name === `` ? ` ` : name }}</span
+                                        >
+                                        <input
+                                            ref="nameInput"
+                                            v-model="name"
+                                            type="text"
+                                            aria-label="Sandbox name"
+                                            autocomplete="off"
+                                            maxlength="60"
+                                            class="ui-field-box col-start-1 row-start-1 h-8 w-full min-w-0 px-2 text-lg font-semibold"
+                                            :class="nameTouched && nameError ? 'ui-field-error-box' : ''"
+                                            @blur="nameTouched = true"
+                                            @keydown.enter.prevent="save"
+                                            @keydown.esc.prevent="cancelEdit"
+                                        />
+                                    </template>
+                                    <h2
+                                        v-else
+                                        class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-lg font-semibold"
+                                    >
+                                        <span class="truncate">{{ sandbox.active.value?.name ?? `Sandbox` }}</span>
+                                    </h2>
+                                </div>
+
+                                <!-- Rename is a property of the name, so its controls sit directly beside it: a
+                                     quiet pencil at rest, then compact check/cancel icons while editing. Labels
+                                     and key hints stay in accessibility text and tooltips rather than becoming
+                                     large buttons across the card. -->
+                                <div v-if="isOwner" class="flex shrink-0 items-center gap-1">
+                                    <template v-if="editing">
+                                        <button
+                                            type="button"
+                                            :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
+                                            :disabled="busy || !canSave"
+                                            aria-label="Save sandbox name"
+                                            v-tooltip.bottom="`Save · Enter`"
+                                            v-action="save"
+                                        >
+                                            <Icon :name="busy ? `spinner` : `check`" :spin="busy" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :class="ui.iconButton(`h-8 w-8 text-subtle`)"
+                                            :disabled="busy"
+                                            aria-label="Cancel rename"
+                                            v-tooltip.bottom="`Cancel · Esc`"
+                                            @click="cancelEdit"
+                                        >
+                                            <Icon name="times" />
+                                        </button>
+                                    </template>
+                                    <button
+                                        v-else
+                                        type="button"
+                                        :class="ui.iconButton(`h-8 w-8 text-subtle`)"
+                                        aria-label="Rename sandbox"
+                                        v-tooltip.bottom="`Rename sandbox`"
+                                        v-action="startEdit"
+                                    >
+                                        <Icon name="pencil" class="text-xs" />
+                                    </button>
+                                </div>
+                            </div>
+                            <StatusBadge class="shrink-0" :variant="availabilityBadge.variant" :label="availabilityBadge.label" dot />
+                        </div>
+                        <p v-if="subline.text" class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- The same block's outline while /info is still out. It is drawn at all because this panel
+                 APPEARS rather than fills: the identity above it comes from the platform and is on screen
+                 instantly, so without this the card silently grows a second half a moment after the reader has
+                 settled on it, moving everything below. Reserving the shape is what keeps the page still. -->
+            <div
+                v-if="sandbox.reachable.value && infoLoading && outline"
+                role="status"
+                aria-busy="true"
+                class="flex flex-col gap-2 rounded-lg bg-canvas px-3 py-2.5"
+            >
+                <span class="sr-only">Reading what this sandbox reports about itself…</span>
+                <div v-for="row in 2" :key="row" class="flex items-center justify-between gap-3" aria-hidden="true">
+                    <span class="skeleton block h-2 w-16" />
+                    <span class="skeleton block h-2" :class="row === 1 ? `w-48` : `w-32`" />
+                </div>
+            </div>
+
+            <!-- What the sandbox reports about itself (relayed via /info, never stored by the platform). -->
+            <dl
+                v-else-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
+                class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs"
+            >
+                <div v-if="info?.image" class="flex items-start justify-between gap-3">
+                    <dt class="text-subtle">Image</dt>
+                    <dd class="min-w-0 text-right">
+                        <div class="truncate font-mono text-content">{{ info.image }}</div>
+                        <div v-if="installed" class="mt-0.5 font-mono text-subtle">
+                            installed version {{ installed }}
+                            <span v-if="updateAvailable" class="text-warning">→ {{ latest }} available</span>
+                        </div>
+                    </dd>
+                </div>
+                <div v-else-if="installed" class="flex items-center justify-between gap-3">
+                    <dt class="text-subtle">Installed version</dt>
+                    <dd class="font-mono text-content">
+                        {{ installed }}
+                        <span v-if="updateAvailable" class="text-warning">→ {{ latest }} available</span>
+                    </dd>
+                </div>
+                <div v-if="agentUrl" class="flex items-center justify-between gap-3">
+                    <dt class="text-subtle">Sandbox URL</dt>
+                    <dd class="min-w-0">
+                        <!-- `touch-target`, which a link in flowing prose would not need: WCAG exempts one
+                             whose height is set by the line it sits on. This is not that: it is `inline-flex`
+                             (it carries an icon), it is the only thing on its row, and it opens the sandbox in
+                             a new tab. So it is a control that happens to be made of text, and it was 18px. -->
+                        <a
+                            :href="agentUrl"
+                            target="_blank"
+                            rel="noopener"
+                            class="touch-target inline-flex items-center gap-1 truncate font-mono text-link hover:underline"
+                        >
+                            {{ agentUrl }}<Icon name="external-link" class="text-2xs" />
+                        </a>
+                    </dd>
+                </div>
+            </dl>
+        </Card>
+
+        <!-- THE OTHER PLACE IT COULD RUN, on hosted sandboxes only (owners: a member can't create sandboxes
+             for the owner). The hosted box is deliberately small; when it starts feeling tight there is
+             exactly one upgrade, and it is free, because it is hardware the reader already owns. Points at
+             /setup, which is where moving a sandbox onto it happens. -->
+        <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
+            <div class="flex items-center gap-2 text-sm font-medium text-content"><Icon name="bolt" class="text-link" /> Need more power?</div>
+            <p class="text-xs leading-relaxed text-muted">
+                This sandbox is a small starter machine we host for you. When it feels tight, move it to
+                <span class="text-content">your own device</span>: no hour limit, nothing metered, and the only place your GPU is.
+            </p>
+            <RouterLink to="/setup" class="text-xs text-link hover:underline">Set it up there →</RouterLink>
+        </Card>
+
+        <!-- A newer sandbox image has shipped: the non-blocking, host-run update prompt (self-hides otherwise). -->
+        <SandboxUpdateCard />
+
+        <!-- This daemon predates routes the app knows: names the gap instead of letting them 404 unexplained.
+             Version-independent, so it also fires in local dev where every package is 0.0.0. Self-hides. -->
+        <SandboxBehindCard />
+        <SandboxManifestCard />
+    </div>
+</template>

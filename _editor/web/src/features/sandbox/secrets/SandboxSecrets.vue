@@ -1,0 +1,321 @@
+<script setup lang="ts">
+import { Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, RowNote, SegmentedControl, SkeletonRows } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
+import { computed, ref } from "vue";
+import { RouterLink } from "vue-router";
+import SecretEntryRow from "../../capabilities/connect/SecretEntryRow.vue";
+import SecretField from "../../capabilities/connect/SecretField.vue";
+import { useCapabilities } from "../../capabilities/connect/useCapabilities";
+import { useExtensions } from "../../extensions/useExtensions";
+import { readIntenticLines } from "../../../lib/intenticStream";
+import { sandboxRequest } from "../client/sandboxClient";
+import { jsonBody } from "../client/jsonBody";
+import { useSandboxOutline } from "../overview/useSandboxOutline";
+import { useSecretInventory } from "../../capabilities/connect/useSecrets";
+import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
+
+/* THE ONE PLACE EVERY CREDENTIAL IN THIS SANDBOX IS VISIBLE, and, past a dozen of them, a list built to be
+ * scanned rather than read. It is the Extensions tab's four rules over a different subject, because it is the
+ * same problem: a tab whose length is the number of things you own.
+ *
+ * IT HOLDS TWO KINDS OF THING AND ONLY ONE OF THEM IS WORK (see ./secretRows). The owner's own values can be
+ * missing, are set and rotated and removed here, and a deploy fails without them. Capability credentials belong
+ * to a connection: connected by construction, unsettable from here, and already managed one click away on the
+ * Capabilities tab. That list is what grows without limit, so once there are enough rows to bury the half that
+ * is work the first few stay visible and the rest sit behind the same toggle the Agent tab uses. AI provider
+ * accounts are not listed here at all; they live on the Agent tab.
+ *
+ * WHAT IS OWED IS PINNED, AND THE BANNER IS GONE. A strip at the top saying "3 required secrets are not set"
+ * named a number and then left the reader to find three rows scattered down five groups. The rows themselves
+ * rise into one group above everything instead, the extension tab's precedent, and the same argument: a
+ * summary of a problem is worth less than the problem, in a place you can act on it.
+ *
+ * THE INSTRUMENT ARRIVES WHEN IT IS EARNED. Below a handful of secrets the list IS the overview and a filter
+ * box is more chrome than the thing it filters; past that, finding beats scrolling, and the box matches what a
+ * row SHOWS (the account, the brand, what uses it) rather than only the key the daemon stored it under.
+ *
+ * Values stay in the sandbox: the only value-returning action anywhere here is the owner-only reveal. */
+
+const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// Below this many rows the list is its own overview. A display choice, so it lives here rather than in the row model.
+const FILTERABLE_FROM = 8;
+/* Same truncation as AiAccountSection: five fit comfortably; beyond that show the first three and a toggle for
+ * the rest, on capability credentials alone. */
+const COLLAPSE_THRESHOLD = 5;
+const VISIBLE_WHEN_COLLAPSED = 3;
+
+const { inventory, inventoryPending, refreshInventory } = useSecretInventory();
+const outline = useSandboxOutline(inventoryPending);
+const { capabilities } = useCapabilities();
+const { enabled: enabledExtensions } = useExtensions();
+
+// DevOps scaffolds the desired-state repo the env/generated secrets live in; until its capability reports
+// `active`, those groups are empty and every /secrets write 412s, so gate them on this signal (state, not
+// mere presence: a scaffolding devops sits at `pending`).
+const devopsActive = computed(() => capabilities.value.some((entry) => entry.kind === `devops` && entry.status.state === `active`));
+
+// Every secret as this tab reads it: named, marked, and sorted with whatever is unfinished first.
+// Provider accounts live on the Agent tab; they are excluded here so nothing downstream needs to filter them.
+const rows = computed<SecretRow[]>(() =>
+    secretRows(inventory.value, { capabilities: capabilities.value, extensions: enabledExtensions.value }).filter((row) => row.group !== `provider`),
+);
+
+const query = ref(``);
+const scope = ref<`all` | `missing`>(`all`);
+// One row open at a time: the list must not grow unpredictably under the pointer while it is being scanned.
+const opened = ref<string | undefined>(undefined);
+
+const filterable = computed(() => rows.value.length >= FILTERABLE_FROM);
+const missingCount = computed(() => rows.value.filter((row) => row.entry.status === `missing`).length);
+const scopeOptions = computed(() => [
+    { label: `All`, value: `all` as const, badge: rows.value.length },
+    { label: `Missing`, value: `missing` as const, badge: missingCount.value },
+]);
+const filtering = computed(() => query.value.trim() !== `` || scope.value !== `all`);
+const matches = computed<SecretRow[]>(() => {
+    const needle = query.value.trim().toLowerCase();
+    return rows.value.filter((row) => matchesSecret(row, needle, scope.value === `missing`));
+});
+
+/* WHAT IS OUTSTANDING, lifted out of the groups it belongs to. A missing required value and a copy CI never got
+ * are the two things this tab is opened in a hurry for, and either can sit under any heading. */
+const attention = computed(() => matches.value.filter((row) => row.attention));
+const held = (group: SecretGroup): SecretRow[] => matches.value.filter((row) => !row.attention && row.group === group);
+const required = computed(() => held(`required`));
+const yours = computed(() => held(`yours`));
+const generated = computed(() => held(`generated`));
+const credentials = computed(() => held(`credential`));
+
+// Empty groups keep their informative note at rest, but drop out entirely while filtering.
+const groupVisible = (list: readonly SecretRow[]): boolean => !filtering.value || list.length > 0;
+
+/* Capability credentials truncation: the same pattern AiAccountSection uses. Once the list is long enough to
+ * bury the rest of the tab, the first three stay visible and the rest sit behind a toggle. While filtering,
+ * every match shows and the toggle is hidden. */
+const credentialsExpanded = ref(false);
+const shouldCollapseCredentials = computed(() => credentials.value.length > COLLAPSE_THRESHOLD);
+const collapsedCredentialCount = computed(() => credentials.value.length - VISIBLE_WHEN_COLLAPSED);
+const visibleCredentials = computed(() => {
+    if (filtering.value || !shouldCollapseCredentials.value || credentialsExpanded.value) {
+        return credentials.value;
+    }
+    return credentials.value.slice(0, VISIBLE_WHEN_COLLAPSED);
+});
+
+const clearFilters = (): void => {
+    query.value = ``;
+    scope.value = `all`;
+};
+
+// Three different facts, and the wrong one is a lie the reader can see.
+const emptyNote = computed<string | undefined>(() => {
+    if (inventoryPending.value || matches.value.length > 0) {
+        return undefined;
+    }
+    return rows.value.length === 0 ? `Nothing in this sandbox holds a credential yet.` : `Nothing matches that filter.`;
+});
+
+// Add-a-secret (any env key the user wants available at apply time); collapsed until invoked.
+const adding = ref(false);
+const newKey = ref(``);
+const newKeyValid = computed(() => KEY_RE.test(newKey.value));
+const cancelAdd = (): void => {
+    adding.value = false;
+    newKey.value = ``;
+};
+
+// CI sync: once adopt recorded a push, stale entries get the "Push to CI" action (streams `intentic deploy secrets push`).
+const ciStale = computed(() => inventory.value.some((entry) => entry.ci !== undefined && !entry.ci.synced));
+const ciKnown = computed(() => inventory.value.some((entry) => entry.ci !== undefined));
+const pushing = ref(false);
+const pushError = ref<NoticeModel | undefined>(undefined);
+const pushToCi = async (): Promise<void> => {
+    pushing.value = true;
+    pushError.value = undefined;
+    try {
+        const response = await sandboxRequest(`/intentic`, jsonBody(`POST`, { args: [`deploy`, `secrets`, `push`] }));
+        if (!response.ok || !response.body) {
+            throw new Error(`Could not push secrets to CI (${response.status}).`);
+        }
+        for await (const line of readIntenticLines(response.body)) {
+            if (line[`kind`] === `error` && typeof line[`message`] === `string`) {
+                throw new Error(line[`message`]);
+            }
+        }
+        refreshInventory();
+    } catch (err) {
+        pushError.value = noticeFrom(err, `Could not push secrets to CI.`);
+    } finally {
+        pushing.value = false;
+    }
+};
+</script>
+
+<template>
+    <div class="flex flex-col gap-5">
+        <NoticeStack :of="[pushError]" />
+
+        <!-- TWO GATES, NOT ONE, and every loading state in this hub is built the same way. The CONTENT waits on
+             the read itself (`inventoryPending`), so a half-read inventory never renders as "no secrets"; the
+             OUTLINE waits on the reveal, so a warm daemon paints a blank beat and then the list rather than a
+             skeleton nobody had time to read. Collapsing them into one flag gives up whichever half you drop. -->
+        <template v-if="inventoryPending">
+            <!-- The shape of the list that is coming, rather than a spinner over an empty column. A credential
+                 list is long and uniform, so its outline is the one thing a placeholder here can honestly
+                 promise: rows, each with a key and the control that reveals it. The label rides INSIDE the
+                 reveal: an empty bordered surface with a heading over it is its own flash. -->
+            <RowGroup v-if="outline" label="Your secrets">
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">Reading your sandbox's secrets…</span>
+                    <SkeletonRows :rows="4" control />
+                </div>
+            </RowGroup>
+        </template>
+
+        <template v-else>
+            <!-- The tab's instrument, not any one group's: the filter and the scope narrow everything below and
+                 read as one control, while pushing the set to CI does not and stays chromeless beside them. -->
+            <div v-if="filterable || ciKnown" class="flex flex-wrap items-center justify-end gap-2">
+                <FilterBar
+                    v-if="filterable"
+                    v-model="query"
+                    placeholder="Key, account or what uses it…"
+                    :count="matches.length"
+                    class="min-w-0 flex-1"
+                >
+                    <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
+                </FilterBar>
+                <Button
+                    v-if="ciKnown"
+                    :label="ciStale ? `Push to CI` : `CI in sync`"
+                    size="small"
+                    :severity="ciStale ? undefined : `secondary`"
+                    :disabled="!ciStale"
+                    :loading="pushing"
+                    @click="pushToCi"
+                >
+                    <template #icon><Icon :name="ciStale ? `cloud-upload` : `check`" /></template>
+                </Button>
+            </div>
+
+            <!-- WHAT IS OWED, above everything and only while something is. This is the strip that used to say
+                 "3 required secrets are not set", except it is the three secrets. -->
+            <RowGroup v-if="attention.length > 0" label="Needs attention" :count="attention.length">
+                <SecretEntryRow
+                    v-for="row in attention"
+                    :key="row.entry.key"
+                    :row="row"
+                    :expanded="opened === row.entry.key"
+                    @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                />
+            </RowGroup>
+
+            <!-- The owner's own: what they must keep, what they chose to keep, what intentic keeps for them. -->
+            <div class="flex flex-col gap-6">
+                <RowGroup v-if="devopsActive && groupVisible(required)" label="Required by your intent" :count="required.length">
+                    <RowNote v-if="required.length === 0">Your intent declares no user-supplied secrets yet.</RowNote>
+                    <SecretEntryRow
+                        v-for="row in required"
+                        :key="row.entry.key"
+                        :row="row"
+                        :expanded="opened === row.entry.key"
+                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                    />
+                </RowGroup>
+
+                <!-- The gate sits on the group it gates rather than at the top of the page: with DevOps off,
+                     everything else on this tab works, and a banner over the whole thing said otherwise. -->
+                <!-- A line that GOES somewhere is a <Row>, wrapped in a <RouterLink> — the pattern <Row> itself
+                     documents for internal navigation, and what makes this sit at the list's own tier instead of
+                     the `px-4 py-3` it was hand-written at, which matches no tier at all. -->
+                <RowGroup v-else-if="!devopsActive && !filtering" label="Your secrets">
+                    <RouterLink to="/capabilities" class="block no-underline">
+                        <Row
+                            interactive
+                            chevron
+                            icon="exclamation-triangle"
+                            tone="warning"
+                            title="Keeping your own secrets here needs DevOps active."
+                        >
+                            <template #meta><span class="font-medium text-link">Activate</span></template>
+                        </Row>
+                    </RouterLink>
+                </RowGroup>
+
+                <RowGroup v-if="devopsActive && groupVisible(yours)" label="Your secrets" :count="yours.length">
+                    <SecretEntryRow
+                        v-for="row in yours"
+                        :key="row.entry.key"
+                        :row="row"
+                        :expanded="opened === row.entry.key"
+                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                    />
+                    <!-- The list's own "add one", at the list's own tier and with its plus in the column the
+                         chevrons above it are hung on: <RowNote action> rather than the fourth hand-written
+                         spelling of this line (see the component's note). -->
+                    <RowNote v-if="!filtering && !adding" variant="action" label="Add a secret" @click="adding = true" />
+                    <RowNote v-else-if="!filtering" variant="block">
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-start gap-2">
+                                <input
+                                    v-model="newKey"
+                                    placeholder="KEY_NAME"
+                                    autocapitalize="off"
+                                    spellcheck="false"
+                                    :class="ui.input('w-44 shrink-0 font-mono')"
+                                />
+                                <SecretField class="flex-1" :secret-key="newKey" :disabled="!newKeyValid" no-hint @saved="newKey = ``" />
+                            </div>
+                            <span v-if="newKey.length > 0 && !newKeyValid" class="text-2xs text-warning">
+                                Letters, digits and underscores; must not start with a digit.
+                            </span>
+                            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">Cancel</button>
+                        </div>
+                    </RowNote>
+                </RowGroup>
+
+                <RowGroup v-if="devopsActive && groupVisible(generated)" label="Generated by intentic" :count="generated.length">
+                    <RowNote v-if="generated.length === 0">Nothing generated yet: these appear after your first deploy.</RowNote>
+                    <SecretEntryRow
+                        v-for="row in generated"
+                        :key="row.entry.key"
+                        :row="row"
+                        :expanded="opened === row.entry.key"
+                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                    />
+                </RowGroup>
+
+                <!-- Capability credentials: the inventory the Capabilities page shows. Once there are enough rows
+                     to bury the rest of the tab, the first three stay visible and the rest sit behind the same
+                     toggle the Agent tab uses. -->
+                <RowGroup v-if="groupVisible(visibleCredentials)" label="Capability credentials" :count="credentials.length">
+                    <template #actions>
+                        <Button :as="RouterLink" to="/capabilities" label="Manage capabilities" size="small" severity="secondary" />
+                    </template>
+                    <SecretEntryRow
+                        v-for="row in visibleCredentials"
+                        :key="row.entry.key"
+                        :row="row"
+                        :expanded="opened === row.entry.key"
+                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                    />
+                    <Row v-if="shouldCollapseCredentials && !filtering" interactive @click="credentialsExpanded = !credentialsExpanded">
+                        <template #title>
+                            <span class="flex items-center gap-2 text-2xs font-medium text-link">
+                                <span class="flex w-[1.125rem] shrink-0 justify-center">
+                                    <Icon :name="credentialsExpanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                                </span>
+                                {{ credentialsExpanded ? `Show less` : `Show ${collapsedCredentialCount} more accounts` }}
+                            </span>
+                        </template>
+                    </Row>
+                </RowGroup>
+            </div>
+
+            <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
+                <span>{{ emptyNote }}</span>
+                <Button v-if="rows.length > 0" size="small" label="Clear filter" @click="clearFilters" />
+            </div>
+        </template>
+    </div>
+</template>
